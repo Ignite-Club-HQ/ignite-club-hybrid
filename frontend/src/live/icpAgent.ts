@@ -12,6 +12,7 @@ import { trackIcpQueryCall, trackIcpUpdateCall } from "./pendingCalls";
 const SILENT_BACKGROUND_UPDATES = new Set<string>([
   "ensure_broadcast_conversation",
   "ensure_club_admin_thread",
+  "ensure_competition_admin_thread",
   "ensure_club_conversations",
   "mark_read",
   "mark_all_read",

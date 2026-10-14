@@ -120,6 +120,8 @@ function SupabaseVaultPage() {
     hasProClub,
     canAccessVault,
     hasProButNoRole,
+    isCompetitionVaultMember,
+    isCompetitionVaultAdmin,
     isLoadingAccess,
   } = useVaultAccessModel({
     userId: user?.id,
@@ -366,7 +368,7 @@ function SupabaseVaultPage() {
   });
 
   const getCurrentFolderId = () => {
-    if (currentView.type === "club" || currentView.type === "team" || currentView.type === "mini-league") {
+    if (currentView.type === "club" || currentView.type === "team" || currentView.type === "mini-league" || currentView.type === "competition") {
       return currentView.folderId || null;
     }
     return null;
@@ -376,6 +378,7 @@ function SupabaseVaultPage() {
     if (currentView.type === "club") return currentView.clubId;
     if (currentView.type === "team") return currentView.clubId;
     if (currentView.type === "mini-league") return currentView.clubId;
+    if (currentView.type === "competition") return currentView.clubId;
     return null;
   };
 
@@ -642,19 +645,32 @@ function SupabaseVaultPage() {
   // Handle direct navigation via query parameters (?club=X or ?team=X)
   useEffect(() => {
     const loadFromQueryParams = async () => {
-      if (urlFolderId || initialLoadComplete || !userClubs || userClubs.length === 0) return;
+      const competitionId = searchParams.get("competition");
+      if (urlFolderId || initialLoadComplete || ((!userClubs || userClubs.length === 0) && !competitionId)) return;
 
       const clubId = searchParams.get("club");
       const teamId = searchParams.get("team");
       const miniLeagueId = searchParams.get("miniLeague");
+      const competitionName = searchParams.get("competitionName");
+      const competitionClubName = searchParams.get("clubName");
 
-      if (!clubId && !teamId && !miniLeagueId) {
+      if (!clubId && !teamId && !miniLeagueId && !competitionId) {
         setInitialLoadComplete(true);
         return;
       }
 
       try {
-        if (miniLeagueId) {
+        if (competitionId) {
+          if (!clubId) throw new Error("Competition organizer club is missing.");
+          setCurrentView({
+            type: "competition",
+            clubId,
+            clubName: competitionClubName || "Club",
+            competitionId,
+            competitionName: competitionName || "Competition",
+          });
+          setSearchParams({}, { replace: true });
+        } else if (miniLeagueId) {
           // Navigate directly to mini-league vault folder
           const league = await withFeatureBackend("mini_leagues", {
             supabase: async () => {
@@ -784,8 +800,16 @@ function SupabaseVaultPage() {
   const currentClub = useMemo(() => {
     if (currentView.type === "club") return userClubs?.find(c => c.id === currentView.clubId);
     if (currentView.type === "team") return userClubs?.find(c => c.id === currentView.clubId);
+    if (currentView.type === "competition") {
+      return userClubs?.find(c => c.id === currentView.clubId) ?? {
+        id: currentView.clubId,
+        name: currentView.clubName,
+        is_pro: currentClubHasPro ?? false,
+        storage_used_bytes: 0,
+      };
+    }
     return null;
-  }, [currentView, userClubs]);
+  }, [currentView, userClubs, currentClubHasPro]);
 
   // 5GB base storage limit for Pro tier (in bytes)
   const BASE_STORAGE_LIMIT = 5 * 1024 * 1024 * 1024;
@@ -945,6 +969,7 @@ function SupabaseVaultPage() {
   const canUpload = useMemo(() => {
     if (isStorageLimitReached) return false;
     if (!currentClub) return false;
+    if (currentView.type === "competition") return isCompetitionVaultAdmin;
     if (isAppAdmin) return true;
 
     // Role-based write access for the current context. Pro is NOT required here —
@@ -971,13 +996,14 @@ function SupabaseVaultPage() {
 
     // For club-level view, only club admins and committee members can upload (handled above)
     return false;
-  }, [isAppAdmin, currentClub, isStorageLimitReached, currentView, userRoles]);
+  }, [isAppAdmin, currentClub, isStorageLimitReached, currentView, userRoles, isCompetitionVaultAdmin]);
 
   // Pro-gated vault management (folders, link entries, Drive imports/sync).
   // Free users may upload from device but cannot create folders/links or pull from Drive.
   const canManageVaultPro = canUpload && currentContextHasPro;
 
   const canDeletePhoto = useCallback((photo: any) => {
+    if (currentView.type === "competition") return isCompetitionVaultAdmin;
     if (isAppAdmin) return true;
     if (photo.uploader_id === user?.id) return true;
     const clubId = currentView.type === "club" ? currentView.clubId : currentView.type === "team" ? currentView.clubId : currentView.type === "mini-league" ? currentView.clubId : null;
@@ -987,9 +1013,10 @@ function SupabaseVaultPage() {
     // Mini-league: league admins and coaches can delete
     if (currentView.type === "mini-league" && userRoles?.some(r => (r.role === "league_admin" || r.role === "coach") && r.club_id === clubId)) return true;
     return false;
-  }, [isAppAdmin, user?.id, currentView, userRoles]);
+  }, [isAppAdmin, user?.id, currentView, userRoles, isCompetitionVaultAdmin]);
 
   const canDeleteFile = useCallback((file: any) => {
+    if (currentView.type === "competition") return isCompetitionVaultAdmin;
     if (isAppAdmin) return true;
     // vault_files uses uploaded_by, not uploader_id
     if ((file.uploaded_by || file.uploader_id) === user?.id) return true;
@@ -1000,9 +1027,10 @@ function SupabaseVaultPage() {
     // Mini-league: league admins and coaches can delete
     if (currentView.type === "mini-league" && userRoles?.some(r => (r.role === "league_admin" || r.role === "coach") && r.club_id === clubId)) return true;
     return false;
-  }, [isAppAdmin, user?.id, currentView, userRoles]);
+  }, [isAppAdmin, user?.id, currentView, userRoles, isCompetitionVaultAdmin]);
 
   const canRenameFile = useCallback((file: any) => {
+    if (currentView.type === "competition") return isCompetitionVaultAdmin;
     if (isAppAdmin) return true;
     // vault_files uses uploaded_by, not uploader_id
     if ((file.uploaded_by || file.uploader_id) === user?.id) return true;
@@ -1013,9 +1041,10 @@ function SupabaseVaultPage() {
     // Mini-league: league admins and coaches can rename
     if (currentView.type === "mini-league" && userRoles?.some(r => (r.role === "league_admin" || r.role === "coach") && r.club_id === clubId)) return true;
     return false;
-  }, [isAppAdmin, user?.id, currentView, userRoles]);
+  }, [isAppAdmin, user?.id, currentView, userRoles, isCompetitionVaultAdmin]);
 
   const canRenamePhoto = useCallback((photo: any) => {
+    if (currentView.type === "competition") return isCompetitionVaultAdmin;
     if (isAppAdmin) return true;
     if (photo.uploader_id === user?.id) return true;
     const clubId = currentView.type === "club" ? currentView.clubId : currentView.type === "team" ? currentView.clubId : currentView.type === "mini-league" ? currentView.clubId : null;
@@ -1025,9 +1054,10 @@ function SupabaseVaultPage() {
     // Mini-league: league admins and coaches can rename
     if (currentView.type === "mini-league" && userRoles?.some(r => (r.role === "league_admin" || r.role === "coach") && r.club_id === clubId)) return true;
     return false;
-  }, [isAppAdmin, user?.id, currentView, userRoles]);
+  }, [isAppAdmin, user?.id, currentView, userRoles, isCompetitionVaultAdmin]);
 
   const canDeleteFolder = useCallback((folder: any) => {
+    if (currentView.type === "competition") return isCompetitionVaultAdmin;
     if (isAppAdmin) return true;
     if (folder.created_by === user?.id) return true;
     const clubId = getCurrentClubId();
@@ -1035,7 +1065,7 @@ function SupabaseVaultPage() {
     if (userRoles?.some(r => (r.role === "club_admin" || r.role === "committee_member") && r.club_id === clubId)) return true;
     if (teamId && userRoles?.some(r => r.role === "team_admin" && r.team_id === teamId)) return true;
     return false;
-  }, [isAppAdmin, user?.id, getCurrentClubId, getCurrentTeamId, userRoles]);
+  }, [isAppAdmin, user?.id, currentView, getCurrentClubId, getCurrentTeamId, userRoles, isCompetitionVaultAdmin]);
 
 
   const {
@@ -1349,7 +1379,7 @@ function SupabaseVaultPage() {
               onOpenChange={setUploadDialogOpen}
               onUpload={handleDialogUpload}
               isUploading={uploading}
-              targetName={currentView.folderName || (currentView.type === "team" ? currentView.teamName : currentView.type === "club" ? currentView.clubName : "Vault")}
+              targetName={currentView.folderName || (currentView.type === "team" ? currentView.teamName : currentView.type === "club" ? currentView.clubName : currentView.type === "competition" ? currentView.competitionName : "Vault")}
             />
             )}
           </Suspense>

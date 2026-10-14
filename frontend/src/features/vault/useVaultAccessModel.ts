@@ -6,6 +6,7 @@ import {
   fetchVaultAccessibleClubs,
   fetchVaultAnyProAccess,
   fetchVaultClubHasPro,
+  fetchVaultCompetitionAccess,
   fetchVaultTeamHasPro,
   fetchVaultUserRoles,
   type VaultClubSummary,
@@ -67,6 +68,8 @@ export interface UseVaultAccessModelResult {
   hasProClub: boolean;
   canAccessVault: boolean;
   hasProButNoRole: boolean;
+  isCompetitionVaultMember: boolean;
+  isCompetitionVaultAdmin: boolean;
   isLoadingAccess: boolean;
 }
 
@@ -154,8 +157,16 @@ export function useVaultAccessModel({
   // Get teams user has access to
   const userTeamIds = useMemo(() => getVaultTeamIds(userRoles), [userRoles]);
 
+  const competitionId = currentView.type === "competition" ? currentView.competitionId : null;
+  const { data: competitionAccess, isLoading: isLoadingCompetitionAccess } = useQuery({
+    queryKey: ["vault-competition-access", userId, competitionId],
+    queryFn: () => fetchVaultCompetitionAccess(competitionId!, userId!),
+    enabled: !!userId && !!competitionId,
+    staleTime: 30_000,
+  });
+
   const contextClubId =
-    currentView.type === "club" || currentView.type === "team" || currentView.type === "mini-league"
+    currentView.type === "club" || currentView.type === "team" || currentView.type === "mini-league" || currentView.type === "competition"
       ? currentView.clubId
       : null;
 
@@ -192,21 +203,27 @@ export function useVaultAccessModel({
   const hasProClub = proAccessInfo ?? false;
 
   const isLoadingAccess =
-    isLoadingAppAdmin || isLoadingProClub || isLoadingRoles || isLoadingClubHasPro || isLoadingTeamHasPro;
+    isLoadingAppAdmin || isLoadingProClub || isLoadingRoles || isLoadingClubHasPro || isLoadingTeamHasPro || isLoadingCompetitionAccess;
 
   // Vault access requires: 1) Pro subscription in current context AND 2) Admin/coach role
   const vaultAccessContextHasPro = currentView.type === "root" ? hasProClub : currentContextHasPro;
 
-  const canAccessVault = resolveCanAccessVault({
-    isAppAdmin: isAppAdmin ?? false,
-    hasRoleAccess: hasVaultRoleAccess,
-    hasAnyPro: hasProClub,
-    currentContextHasPro,
-    isRoot: currentView.type === "root",
-  });
+  const isCompetitionVaultMember = competitionId !== null && competitionAccess?.isMember === true;
+  const isCompetitionVaultAdmin = competitionId !== null && competitionAccess?.canManage === true;
+  const canAccessVault = currentView.type === "competition"
+    ? currentContextHasPro && isCompetitionVaultMember
+    : resolveCanAccessVault({
+        isAppAdmin: isAppAdmin ?? false,
+        hasRoleAccess: hasVaultRoleAccess,
+        hasAnyPro: hasProClub,
+        currentContextHasPro,
+        isRoot: currentView.type === "root",
+      });
 
   // Determine if it's a role issue or a Pro subscription issue
-  const hasProButNoRole = vaultAccessContextHasPro && !hasVaultRoleAccess;
+  const hasProButNoRole = currentView.type === "competition"
+    ? vaultAccessContextHasPro && !isCompetitionVaultMember
+    : vaultAccessContextHasPro && !hasVaultRoleAccess;
 
   return {
     isAppAdmin,
@@ -224,6 +241,8 @@ export function useVaultAccessModel({
     hasProClub,
     canAccessVault,
     hasProButNoRole,
+    isCompetitionVaultMember,
+    isCompetitionVaultAdmin,
     isLoadingAccess,
   };
 }

@@ -23,6 +23,7 @@ export const idlFactory = ({ IDL }) => {
     'created_at_ms' : IDL.Nat64,
     'parent_id' : IDL.Opt(IDL.Text),
     'deleted_by' : IDL.Opt(IDL.Principal),
+    'competition_id' : IDL.Opt(IDL.Text),
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
   });
   const BlobRef = IDL.Record({
@@ -43,6 +44,7 @@ export const idlFactory = ({ IDL }) => {
     'blob_ref' : IDL.Opt(BlobRef),
     'deleted_by' : IDL.Opt(IDL.Principal),
     'folder_id' : IDL.Text,
+    'competition_id' : IDL.Opt(IDL.Text),
     'is_external_link' : IDL.Bool,
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
     'uploaded_by' : IDL.Principal,
@@ -62,6 +64,7 @@ export const idlFactory = ({ IDL }) => {
           IDL.Text,
           IDL.Vec(IDL.Text),
           IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
           IDL.Nat32,
           IDL.Opt(IDL.Text),
           IDL.Opt(IDL.Text),
@@ -78,6 +81,11 @@ export const idlFactory = ({ IDL }) => {
     'delete_folder' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : VaultFolder, 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_competition_folder' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(VaultFolder), 'Err' : IDL.Text })],
         [],
       ),
     'get_file' : IDL.Func(
@@ -109,6 +117,21 @@ export const idlFactory = ({ IDL }) => {
           }),
         ],
         ['query'],
+      ),
+    'list_competition_files_with_folder' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(VaultFileWithFolder),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'list_competition_folders' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFolder), 'Err' : IDL.Text })],
+        [],
       ),
     'list_files' : IDL.Func(
         [IDL.Text],
@@ -163,6 +186,7 @@ export const idlFactory = ({ IDL }) => {
           IDL.Bool,
           IDL.Opt(BlobRef),
           IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
         ],
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
         [],
@@ -178,6 +202,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_competition_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

@@ -1,0 +1,191 @@
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, Copy, Link2, Loader2, Mail, QrCode, Share2, UserRoundCheck } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveCompetitionOfficialLink, listLiveCompetitionJoinLinks, revokeLiveCompetitionOfficialLink } from "@/live/features/competitions";
+import { useToast } from "@/hooks/use-toast";
+
+type OfficialRole = "referee" | "committee_member";
+type OfficialLink = { id: string; token: string; role: OfficialRole };
+const roles: { id: OfficialRole; label: string }[] = [
+  { id: "referee", label: "Referee" },
+  { id: "committee_member", label: "Committee" },
+];
+
+function newToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+export function CompetitionOfficialJoinLinksCard({
+  competitionId,
+  competitionName,
+}: {
+  competitionId: string;
+  competitionName: string;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [role, setRole] = useState<OfficialRole>("referee");
+  const [email, setEmail] = useState("");
+  const [showQr, setShowQr] = useState(false);
+  const queryKey = ["competition-official-join-links", competitionId];
+
+  const { data: links = [], isLoading } = useQuery({
+    queryKey,
+    enabled: !!competitionId,
+    queryFn: () => withFeatureBackend("competitions", {
+      supabase: async () => {
+        const { data, error } = await (supabase as any)
+          .from("competition_role_links")
+          .select("id, token, role")
+          .eq("competition_id", competitionId)
+          .is("revoked_at", null);
+        if (error) throw error;
+        return (data ?? []) as OfficialLink[];
+      },
+      icp: async (ctx) => (await listLiveCompetitionJoinLinks(ctx, competitionId))
+        .filter((link) => !link.revoked && link.team_id.length === 0 && roles.some((item) => item.id === link.role))
+        .map((link) => ({ id: `${link.competition_id}:${link.role}`, token: link.token, role: link.role as OfficialRole })),
+    }),
+  });
+  const activeLink = links.find((link) => link.role === role) ?? null;
+  const joinUrl = activeLink ? `${window.location.origin}/competitions/officials/join?token=${encodeURIComponent(activeLink.token)}` : "";
+
+  const createLink = useMutation({
+    mutationFn: () => {
+      const token = newToken();
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await (supabase as any).rpc("create_competition_role_link", {
+            _competition_id: competitionId,
+            _role: role,
+            _token: token,
+          });
+          if (error) throw error;
+          return data as OfficialLink;
+        },
+        icp: async (ctx) => createLiveCompetitionOfficialLink(ctx, competitionId, role, token),
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey });
+      setShowQr(false);
+      toast({ title: `${roles.find((item) => item.id === role)?.label} link ready` });
+    },
+    onError: (error: Error) => toast({ title: "Could not create link", description: error.message, variant: "destructive" }),
+  });
+
+  const revokeLink = useMutation({
+    mutationFn: () => withFeatureBackend("competitions", {
+      supabase: async () => {
+        const { error } = await (supabase as any).rpc("revoke_competition_role_link", {
+          _competition_id: competitionId,
+          _role: role,
+        });
+        if (error) throw error;
+      },
+      icp: async (ctx) => revokeLiveCompetitionOfficialLink(ctx, competitionId, role),
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey });
+      setShowQr(false);
+      toast({ title: "Official link revoked" });
+    },
+    onError: (error: Error) => toast({ title: "Could not revoke link", description: error.message, variant: "destructive" }),
+  });
+
+  const copyLink = async () => {
+    if (!joinUrl) return;
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+      toast({ title: "Official join link copied" });
+    } catch {
+      toast({ title: "Could not copy link", variant: "destructive" });
+    }
+  };
+
+  const shareLink = async () => {
+    if (!joinUrl) return;
+    if (!navigator.share) return copyLink();
+    try {
+      await navigator.share({ title: `Join ${competitionName}`, url: joinUrl });
+    } catch {
+      // Share cancellation is not an error.
+    }
+  };
+
+  const sendEmail = useMutation({
+    mutationFn: async () => {
+      if (!activeLink) throw new Error("Create a join link first.");
+      const recipient = email.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) throw new Error("Enter a valid email address.");
+      const roleLabel = roles.find((item) => item.id === role)?.label.toLowerCase() ?? "official";
+      const { error } = await supabase.functions.invoke("send-email", {
+        body: {
+          to: recipient,
+          subject: `Join ${competitionName} as a ${roleLabel}`,
+          html: `<p>You've been invited to join ${competitionName} as a ${roleLabel}.</p><p><a href="${joinUrl}">Accept the invitation</a></p>`,
+        },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setEmail("");
+      toast({ title: "Official invite emailed" });
+    },
+    onError: (error: Error) => toast({ title: "Could not email invite", description: error.message, variant: "destructive" }),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base"><Link2 className="h-4 w-4" /> Official join links</CardTitle>
+        <CardDescription>Share or email a role-specific link to a referee or committee member.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor={`official-role-${competitionId}`}>Official role</Label>
+          <Select value={role} onValueChange={(value) => { setRole(value as OfficialRole); setShowQr(false); }}>
+            <SelectTrigger id={`official-role-${competitionId}`}><SelectValue /></SelectTrigger>
+            <SelectContent>{roles.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        {isLoading ? <div className="flex justify-center"><Loader2 className="h-4 w-4 animate-spin" /></div> : activeLink ? (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Button className="flex-1" variant="outline" onClick={shareLink}><Share2 className="mr-2 h-4 w-4" /> Share</Button>
+              <Button className="flex-1" variant="outline" onClick={copyLink}><Copy className="mr-2 h-4 w-4" /> Copy</Button>
+              <Button variant="outline" size="icon" aria-label={showQr ? "Hide QR code" : "Show QR code"} onClick={() => setShowQr((value) => !value)}><QrCode className="h-4 w-4" /></Button>
+            </div>
+            {showQr && <div className="flex justify-center rounded-md border bg-white p-3"><QRCodeSVG value={joinUrl} size={176} /></div>}
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <Input aria-label="Invitee email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" />
+              <Button variant="outline" disabled={!email.trim() || sendEmail.isPending} onClick={() => sendEmail.mutate()}>
+                {sendEmail.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                <span className="ml-2">Email</span>
+              </Button>
+            </div>
+            <Button variant="ghost" size="sm" disabled={revokeLink.isPending} onClick={() => revokeLink.mutate()}>
+              {revokeLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
+              <span className="ml-2">Turn off this link</span>
+            </Button>
+          </div>
+        ) : (
+          <Button variant="outline" disabled={createLink.isPending} onClick={() => createLink.mutate()}>
+            {createLink.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
+            Create {roles.find((item) => item.id === role)?.label.toLowerCase()} link
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

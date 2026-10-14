@@ -243,7 +243,7 @@ export function useVaultFolderManagement({
   }, [moveFileMutation]);
 
   const navigateToFolder = useCallback((folder: VaultFolderPathEntry) => {
-    if (currentView.type === "club") {
+    if (currentView.type === "club" || currentView.type === "competition") {
       setFolderPath([...folderPath, folder]);
       setCurrentView({
         ...currentView,
@@ -271,7 +271,7 @@ export function useVaultFolderManagement({
       setFolderPath(newPath);
       const parentFolder = newPath[newPath.length - 1];
 
-      if (currentView.type === "club") {
+      if (currentView.type === "club" || currentView.type === "competition") {
         setCurrentView({
           ...currentView,
           folderId: parentFolder?.id,
@@ -341,12 +341,25 @@ export function useVaultFolderManagement({
     }
   }, [currentView, setCurrentView]);
 
+  const navigateToCompetition = useCallback(() => {
+    if (currentView.type === "competition") {
+      setFolderPath([]);
+      setCurrentView({
+        type: "competition",
+        clubId: currentView.clubId,
+        clubName: currentView.clubName,
+        competitionId: currentView.competitionId,
+        competitionName: currentView.competitionName,
+      });
+    }
+  }, [currentView, setCurrentView]);
+
   const navigateToFolderAtIndex = useCallback((index: number) => {
     const newPath = folderPath.slice(0, index + 1);
     const targetFolder = newPath[index];
     setFolderPath(newPath);
 
-    if (currentView.type === "club") {
+    if (currentView.type === "club" || currentView.type === "competition") {
       setCurrentView({
         ...currentView,
         folderId: targetFolder.id,
@@ -394,6 +407,14 @@ export function useVaultFolderManagement({
       });
     }
 
+    if (currentView.type === "competition") {
+      nodes.push({
+        key: "competition",
+        label: currentView.competitionName || "Competition",
+        onClick: navigateToCompetition,
+      });
+    }
+
     folderPath.forEach((folder, index) => {
       nodes.push({
         key: `folder-${folder.id}`,
@@ -403,7 +424,7 @@ export function useVaultFolderManagement({
     });
 
     return nodes;
-  }, [currentView, folderPath, navigateToRoot, navigateToClub, navigateToTeam, navigateToMiniLeague, navigateToFolderAtIndex]);
+  }, [currentView, folderPath, navigateToRoot, navigateToClub, navigateToTeam, navigateToMiniLeague, navigateToCompetition, navigateToFolderAtIndex]);
 
   return {
     folderPath,

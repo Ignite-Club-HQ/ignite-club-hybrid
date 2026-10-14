@@ -18,12 +18,15 @@ type VaultFileInsert = Database["public"]["Tables"]["vault_files"]["Insert"];
 
 export function getVaultUploadScope(view: VaultFolderView): Pick<
   VaultFileInsert,
-  "club_id" | "team_id" | "mini_league_id"
+  "club_id" | "team_id" | "mini_league_id" | "competition_id"
 > {
   if (view.type === "club") return { club_id: view.clubId };
   if (view.type === "team") return { club_id: view.clubId, team_id: view.teamId };
   if (view.type === "mini-league") {
     return { club_id: view.clubId, mini_league_id: view.miniLeagueId };
+  }
+  if (view.type === "competition") {
+    return { club_id: view.clubId, competition_id: view.competitionId };
   }
   return {};
 }
@@ -48,6 +51,9 @@ export function buildVaultUploadPath(options: {
   }
   if (options.view.type === "mini-league") {
     return `clubs/${options.view.clubId}/mini-leagues/${options.view.miniLeagueId}/${leaf}`;
+  }
+  if (options.view.type === "competition") {
+    return `clubs/${options.view.clubId}/competitions/${options.view.competitionId}/${leaf}`;
   }
   return `unassigned/${leaf}`;
 }
@@ -114,6 +120,7 @@ export async function uploadVaultItem(
     fileName: options.file.name,
   });
   const clubId = "clubId" in options.view ? options.view.clubId ?? null : null;
+  const storageBucket = options.view.type === "competition" ? "competition-vault" : "photos";
 
   // ICP mode: bytes go to the media_blob_store canister (encrypted) and the
   // metadata row to vault_domain — no Supabase writes at all. Fail closed
@@ -134,6 +141,7 @@ export async function uploadVaultItem(
           file: options.file,
           mime: options.file.type || "application/octet-stream",
           lock: "own",
+          competitionId: options.view.type === "competition" ? options.view.competitionId : undefined,
         })
       : null;
     if (!blobUpload) {
@@ -160,6 +168,7 @@ export async function uploadVaultItem(
           false,
           blobUpload.blobRef,
           options.view.type === "mini-league" ? options.view.miniLeagueId : null,
+          options.view.type === "competition" ? options.view.competitionId : null,
         );
       },
     });
@@ -177,6 +186,7 @@ export async function uploadVaultItem(
         file: options.file,
         mime: options.file.type || "application/octet-stream",
         lock: "own",
+        competitionId: options.view.type === "competition" ? options.view.competitionId : undefined,
       })
     : null;
 
@@ -186,7 +196,7 @@ export async function uploadVaultItem(
     // blob-store canister ID is configured, so this fallback is unreachable
     // for Internet Identity members in practice.
     const { error: uploadError } = await client.storage
-      .from("photos")
+      .from(storageBucket)
       .upload(storagePath, options.file, { cacheControl: "31536000" });
     if (uploadError) {
       await dependencies.settleStorage(reservationId, false);
@@ -195,9 +205,9 @@ export async function uploadVaultItem(
   }
 
   const insert: VaultFileInsert = {
-    file_url: blobUpload ? blobUpload.url : dependencies.buildStorageUrl(storagePath),
+    file_url: blobUpload ? blobUpload.url : dependencies.buildStorageUrl(storagePath, storageBucket),
     // On-chain bytes do not live in the Supabase bucket.
-    storage_bucket: blobUpload ? null : "photos",
+    storage_bucket: blobUpload ? null : storageBucket,
     storage_path: storagePath,
     uploaded_by: options.userId,
     name: options.name,
@@ -210,7 +220,7 @@ export async function uploadVaultItem(
   const { error: insertError } = await client.from("vault_files").insert(insert);
   if (insertError) {
     // Compensate: never leave an orphaned object billed against the club.
-    await dependencies.compensateUpload(storagePath);
+    await dependencies.compensateUpload(storagePath, storageBucket);
     await dependencies.settleStorage(reservationId, false);
     throw insertError;
   }

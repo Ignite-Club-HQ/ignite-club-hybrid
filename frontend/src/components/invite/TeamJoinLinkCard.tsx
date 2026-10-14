@@ -23,7 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { getCachedRoles } from "@/lib/rolesCache";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveTeamInviteLink, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink, getLiveTeam } from "@/live/features/club";
+import { createLiveTeamInviteLink, listLiveTeamInviteLinks, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink, getLiveTeam } from "@/live/features/club";
 
 const APP_URL = "https://reference.invalid";
 const DEFAULT_EXPIRY_DAYS = 30;
@@ -52,7 +52,10 @@ const SENSITIVE_ROLES: RoleVariant[] = ["coach", "team_admin"];
 interface TeamJoinLinkCardProps {
   teamId: string;
   teamName: string;
+  clubId?: string;
   teamType?: TeamType;
+  allowedRoles?: readonly RoleVariant[];
+  managerOverride?: boolean;
   /** Optional back affordance rendered in the card header (used by the invite sheet). */
   onBack?: () => void;
   /**
@@ -83,12 +86,22 @@ function generateShortToken(): string {
     .replace(/=/g, "");
 }
 
-export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed", onBack, autoCreateLink = false }: TeamJoinLinkCardProps) {
+export default function TeamJoinLinkCard({
+  teamId,
+  teamName,
+  clubId,
+  teamType = "mixed",
+  allowedRoles,
+  managerOverride = false,
+  onBack,
+  autoCreateLink = false,
+}: TeamJoinLinkCardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const roleOptions = ALL_ROLE_OPTIONS.filter(opt => {
+    if (allowedRoles && !allowedRoles.includes(opt.value)) return false;
     if (teamType === "junior") return !opt.seniorOnly;
     if (teamType === "senior") return !opt.juniorOnly;
     return true;
@@ -103,7 +116,7 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
   const [autoSelected, setAutoSelected] = useState(false);
 
   // Only admins/coaches can regenerate or revoke the link.
-  const isAdmin = useMemo(() => {
+  const hasCachedTeamAdmin = useMemo(() => {
     const roles = getCachedRoles();
     if (!roles) return false;
     return roles.some(
@@ -112,6 +125,7 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
         (r.team_id === teamId || (r.club_id && !r.team_id)),
     );
   }, [teamId]);
+  const isAdmin = managerOverride || hasCachedTeamAdmin;
 
   const queryKey = ["team-join-links", teamId];
 
@@ -119,23 +133,45 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
   // can reuse a previously generated link instead of regenerating.
   const { data: links, isLoading, isError, refetch } = useQuery({
     queryKey,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("team_invites")
-        .select("id, token, expires_at, uses_count, max_uses, created_at, metadata, role")
-        .eq("team_id", teamId)
-        .contains("metadata", { kind: TOKEN_METADATA_KIND })
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      const map: Record<RoleVariant, JoinLinkRow | null> = {
-        parent: null, player: null, coach: null, team_admin: null,
-      };
-      for (const row of (data ?? []) as any[]) {
-        const role = (row.metadata?.role_variant ?? row.role) as RoleVariant;
-        if (role && map[role] === null) map[role] = row as JoinLinkRow;
-      }
-      return map;
-    },
+    queryFn: () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("team_invites")
+          .select("id, token, expires_at, uses_count, max_uses, created_at, metadata, role")
+          .eq("team_id", teamId)
+          .contains("metadata", { kind: TOKEN_METADATA_KIND })
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        const map: Record<RoleVariant, JoinLinkRow | null> = {
+          parent: null, player: null, coach: null, team_admin: null,
+        };
+        for (const row of (data ?? []) as any[]) {
+          const role = (row.metadata?.role_variant ?? row.role) as RoleVariant;
+          if (role && map[role] === null) map[role] = row as JoinLinkRow;
+        }
+        return map;
+      },
+      icp: async (ctx) => {
+        const map: Record<RoleVariant, JoinLinkRow | null> = {
+          parent: null, player: null, coach: null, team_admin: null,
+        };
+        const rows = await listLiveTeamInviteLinks(ctx, teamId);
+        for (const row of rows) {
+          const role = row.role as RoleVariant;
+          if (row.revoked || !roleOptions.some((option) => option.value === role) || map[role]) continue;
+          map[role] = {
+            id: row.id,
+            token: row.token,
+            expires_at: null,
+            uses_count: 0,
+            max_uses: null,
+            created_at: new Date(Number(row.created_at_ms)).toISOString(),
+            metadata: { kind: TOKEN_METADATA_KIND, role_variant: role },
+          };
+        }
+        return map;
+      },
+    }),
     staleTime: 30_000,
   });
 
@@ -143,15 +179,19 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
   // alongside the link's joined-count.
   const { data: pendingCount } = useQuery({
     queryKey: ["team-pending-invite-count", teamId],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("pending_invites")
-        .select("id", { count: "exact", head: true })
-        .eq("team_id", teamId)
-        .eq("status", "pending");
-      if (error) throw error;
-      return count ?? 0;
-    },
+    enabled: !managerOverride,
+    queryFn: () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { count, error } = await supabase
+          .from("pending_invites")
+          .select("id", { count: "exact", head: true })
+          .eq("team_id", teamId)
+          .eq("status", "pending");
+        if (error) throw error;
+        return count ?? 0;
+      },
+      icp: async () => 0,
+    }),
     staleTime: 30_000,
   });
 
@@ -177,10 +217,13 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
           if (rotate && existing) {
             link = await rotateLiveTeamInviteLink(ctx, existing.id);
           } else {
-            const teamOpt = await getLiveTeam(ctx, teamId);
-            const team = teamOpt[0];
-            if (!team) throw new Error("Team not found");
-            link = await createLiveTeamInviteLink(ctx, team.club_id, teamId, role);
+            let teamClubId = clubId;
+            if (!teamClubId) {
+              const teamOpt = await getLiveTeam(ctx, teamId);
+              teamClubId = teamOpt[0]?.club_id;
+            }
+            if (!teamClubId) throw new Error("Team not found");
+            link = await createLiveTeamInviteLink(ctx, teamClubId, teamId, role);
           }
           const row: JoinLinkRow = {
             id: link.id,

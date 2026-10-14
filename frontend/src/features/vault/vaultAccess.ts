@@ -97,7 +97,7 @@ export function resolveVaultContextPro(
   teamHasPro: boolean | null | undefined,
 ): boolean {
   if (view.type === "team") return Boolean(clubHasPro || teamHasPro);
-  if (view.type === "club" || view.type === "mini-league") return Boolean(clubHasPro);
+  if (view.type === "club" || view.type === "mini-league" || view.type === "competition") return Boolean(clubHasPro);
   return false;
 }
 

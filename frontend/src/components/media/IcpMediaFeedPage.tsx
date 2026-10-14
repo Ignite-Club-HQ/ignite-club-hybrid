@@ -363,6 +363,7 @@ export function IcpMediaFeedPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
   const [searchParams, setSearchParams] = useSearchParams();
+  const competitionId = searchParams.get("competition");
   useEffect(() => {
     if (searchParams.get("upload") !== "1") return;
     setUploadOpen(true);
@@ -495,6 +496,7 @@ export function IcpMediaFeedPage() {
     const all = feedQuery.data?.posts ?? [];
     return all
       .filter((post) => {
+        if (competitionId && post.competitionId !== competitionId) return false;
         if (selectedClubId !== "all" && post.clubId !== selectedClubId) return false;
         if (selectedTeamId === "all") return true;
         if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
@@ -506,7 +508,7 @@ export function IcpMediaFeedPage() {
           resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id] } : a,
         ),
       }));
-  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls]);
+  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, competitionId, resolvedUrls]);
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
@@ -718,6 +720,7 @@ export function IcpMediaFeedPage() {
           miniLeagues={options.miniLeagues}
           competitions={options.competitions}
           defaultClubId={selectedClubId !== "all" ? selectedClubId : undefined}
+          defaultCompetitionId={competitionId ?? undefined}
         />
       )}
 

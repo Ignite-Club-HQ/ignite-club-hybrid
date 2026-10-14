@@ -379,6 +379,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    ensure_competition_admin_thread(competition_id: string, member: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: Conversation;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     ensure_conversation(club_id: string, team_id: string | null, participants: Array<Principal>): Promise<{
         __kind__: "Ok";
         Ok: Conversation;
@@ -519,6 +526,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_competition_admin_threads(competition_id: string): Promise<Array<{
+        id: string;
+        member: Principal;
+    }>>;
     list_deleted_groups(): Promise<{
         __kind__: "Ok";
         Ok: Array<GroupMetadata>;
@@ -776,6 +787,13 @@ export interface MainInterface {
         Err: string;
     }>;
     set_club_message_privacy(club_id: string, force_disable_previews: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_competition_domain_canister(id: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -1230,6 +1248,16 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.ensure_club_admin_thread(arg0, arg1);
         return from_candid_variant_n13(result);
     }
+    async ensure_competition_admin_thread(arg0: string, arg1: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: Conversation;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.ensure_competition_admin_thread(arg0, arg1);
+        return from_candid_variant_n13(result);
+    }
     async ensure_conversation(arg0: string, arg1: string | null, arg2: Array<Principal>): Promise<{
         __kind__: "Ok";
         Ok: Conversation;
@@ -1447,6 +1475,13 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.list_club_dm_settings();
         return from_candid_variant_n55(result);
+    }
+    async list_competition_admin_threads(arg0: string): Promise<Array<{
+        id: string;
+        member: Principal;
+    }>> {
+        const result = await this.actor.list_competition_admin_threads(arg0);
+        return result;
     }
     async list_deleted_groups(): Promise<{
         __kind__: "Ok";
@@ -1826,6 +1861,16 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_club_message_privacy(arg0, arg1);
+        return from_candid_variant_n1(result);
+    }
+    async set_competition_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_competition_domain_canister(arg0);
         return from_candid_variant_n1(result);
     }
     async set_dm_attachments_disabled(arg0: Principal, arg1: boolean): Promise<{

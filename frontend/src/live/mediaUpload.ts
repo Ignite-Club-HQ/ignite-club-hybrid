@@ -3,7 +3,7 @@ import { getActiveIcpTarget } from "./targetRegistry";
 import { isBlobStoreConfigured, uploadBytesToBlobStore } from "./blobStoreUpload";
 import { resolveAuthBackend } from "./authBackendMode";
 import { clubIdFromMediaPath, encryptClubMedia, encryptPiiValue, isClubMediaLockSupported } from "./piiVetKeys";
-import { grantLiveClubPiiRead, registerLivePii } from "./features/vault";
+import { grantLiveClubPiiRead, grantLivePiiReadCompetition, registerLivePii } from "./features/vault";
 import { MEDIA_BLOB_PII_FIELD } from "./mediaDecrypt";
 import type { LiveBlobRef } from "./mediaStorage";
 import { sha256Hex } from "./blobStoreProtocol";
@@ -54,6 +54,7 @@ export async function tryUploadMediaToBlobStore(args: {
   storagePath: string;
   file: File | Blob;
   mime: string;
+  competitionId?: string;
   /** "own" keeps the per-file lock even under clubs/ (e.g. vault files,
    * which only club staff may open — the club lock admits every member). */
   lock?: "club" | "own";
@@ -68,7 +69,7 @@ export async function tryUploadMediaToBlobStore(args: {
   // deployed canister supports it: no per-photo record, and readers need one
   // key per club per session. Others keep the per-photo lock.
   const clubId = clubIdFromMediaPath(args.storagePath);
-  if (clubId && args.lock !== "own" && (await isClubMediaLockSupported(ctx))) {
+  if (clubId && !args.competitionId && args.lock !== "own" && (await isClubMediaLockSupported(ctx))) {
     const ciphertext = await encryptClubMedia(ctx, clubId, bytes);
     return uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
   }
@@ -85,8 +86,11 @@ export async function tryUploadMediaToBlobStore(args: {
       new TextEncoder().encode(localHash),
       identity.getPrincipal(),
     );
-    if (clubId) {
+    if (clubId && !args.competitionId) {
       await grantLiveClubPiiRead(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubId);
+    }
+    if (args.competitionId) {
+      await grantLivePiiReadCompetition(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, args.competitionId);
     }
   })();
   const [result] = await Promise.all([

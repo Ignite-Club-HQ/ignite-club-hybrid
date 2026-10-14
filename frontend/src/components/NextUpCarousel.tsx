@@ -30,6 +30,7 @@ import { NextUpHeroRsvpSection } from "@/components/events/NextUpHeroRsvpSection
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
 import { getEventTypeLabel } from "@/lib/eventTypeLabel";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
+import { MyTeamDutyTag } from "@/components/events/MyTeamDutyTag";
 
 import { useEventMembership } from "@/hooks/useEventMembership";
 import { isParentFirstEvent } from "@/lib/rsvpAudience";
@@ -47,6 +48,7 @@ interface EventItem {
   suburb: string | null;
   club_id: string;
   team_id: string | null;
+  duty_team_id?: string | null;
   is_cancelled: boolean;
   is_bye?: boolean;
   opponent: string | null;
@@ -1192,6 +1194,7 @@ function CompactCard({ event }: { event: EventItem }) {
         aria-hidden="true"
       />
       <CardContent className="p-3.5 pr-7 space-y-2">
+        <MyTeamDutyTag event={event} />
         {/* Status: BYE / Cancelled */}
         {(event.is_cancelled || event.is_bye) && (
           <div className="flex items-center justify-end gap-1.5">

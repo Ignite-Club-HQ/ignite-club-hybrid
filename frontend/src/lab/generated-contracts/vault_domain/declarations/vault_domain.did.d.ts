@@ -25,6 +25,7 @@ export interface Main {
       string,
       Array<string>,
       [] | [string],
+      [] | [string],
       number,
       [] | [string],
       [] | [string],
@@ -44,6 +45,11 @@ export interface Main {
   'delete_folder' : ActorMethod<
     [string],
     { 'Ok' : VaultFolder } |
+      { 'Err' : string }
+  >,
+  'get_competition_folder' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [VaultFolder] } |
       { 'Err' : string }
   >,
   'get_file' : ActorMethod<
@@ -69,6 +75,16 @@ export interface Main {
   'list_club_files_with_folder' : ActorMethod<
     [string, [] | [string], [] | [string]],
     { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
+  'list_competition_files_with_folder' : ActorMethod<
+    [string, string],
+    { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
+  'list_competition_folders' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFolder> } |
       { 'Err' : string }
   >,
   'list_files' : ActorMethod<
@@ -114,6 +130,7 @@ export interface Main {
       boolean,
       [] | [BlobRef],
       [] | [string],
+      [] | [string],
     ],
     { 'Ok' : VaultFile } |
       { 'Err' : string }
@@ -129,6 +146,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_competition_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -162,6 +184,7 @@ export interface VaultFile {
   'blob_ref' : [] | [BlobRef],
   'deleted_by' : [] | [Principal],
   'folder_id' : string,
+  'competition_id' : [] | [string],
   'is_external_link' : boolean,
   'deleted_at_ms' : [] | [bigint],
   'uploaded_by' : Principal,
@@ -185,6 +208,7 @@ export interface VaultFolder {
   'created_at_ms' : bigint,
   'parent_id' : [] | [string],
   'deleted_by' : [] | [Principal],
+  'competition_id' : [] | [string],
   'deleted_at_ms' : [] | [bigint],
 }
 export interface _SERVICE extends Main {}

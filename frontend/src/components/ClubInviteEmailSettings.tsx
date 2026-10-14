@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Mail, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { setLiveClubInviteEmailStyle } from "@/live/features/club";
@@ -42,6 +45,7 @@ const OPTIONS: { value: InviteEmailStyle; title: string; description: string; sa
 
 export function ClubInviteEmailSettings({ clubId }: Props) {
   const queryClient = useQueryClient();
+  const [defaultMessageDraft, setDefaultMessageDraft] = useState("");
 
   const { data: club, isLoading } = useQuery({
     queryKey: ["club-invite-email-style", clubId],
@@ -63,6 +67,29 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
         },
       }),
   });
+
+  const { data: savedDefaultMessage = "", isLoading: isLoadingDefaultMessage } = useQuery({
+    queryKey: ["club-invite-message-default", clubId],
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_invite_message_defaults")
+            .select("message")
+            .eq("club_id", clubId)
+            .maybeSingle();
+          if (error) throw error;
+          return data?.message ?? "";
+        },
+        icp: async (ctx) => {
+          const { getLiveClubInviteMessageDefault } = await import("@/live/features/club");
+          const value = await getLiveClubInviteMessageDefault(ctx, clubId);
+          return value?.message ?? "";
+        },
+      }),
+  });
+
+  useEffect(() => setDefaultMessageDraft(savedDefaultMessage), [savedDefaultMessage]);
 
   const updateMutation = useMutation({
     mutationFn: async (invite_email_style: InviteEmailStyle) => {
@@ -93,6 +120,27 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
       if (c?.prev !== undefined) queryClient.setQueryData(["club-invite-email-style", clubId], c.prev);
       toast.error("Failed to update: " + e.message);
     },
+  });
+
+  const updateDefaultMessageMutation = useMutation({
+    mutationFn: async (message: string) =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_invite_message_defaults")
+            .upsert({ club_id: clubId, message: message.trim() }, { onConflict: "club_id" });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { setLiveClubInviteMessageDefault } = await import("@/live/features/club");
+          await setLiveClubInviteMessageDefault(ctx, clubId, message.trim());
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["club-invite-message-default", clubId] });
+      toast.success("Default invite message updated");
+    },
+    onError: (error: Error) => toast.error("Failed to update: " + error.message),
   });
 
   if (isLoading) {
@@ -143,6 +191,32 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
             </Label>
           ))}
         </RadioGroup>
+        <div className="mt-5 space-y-2 border-t pt-4">
+          <div className="space-y-1">
+            <Label htmlFor={`club-invite-message-${clubId}`}>Default invite message</Label>
+            <p className="text-xs text-muted-foreground">Pre-filled for team invites. Invite text can still be customized before sending.</p>
+          </div>
+          <Textarea
+            id={`club-invite-message-${clubId}`}
+            value={defaultMessageDraft}
+            onChange={(event) => setDefaultMessageDraft(event.target.value.slice(0, 2000))}
+            maxLength={2000}
+            rows={4}
+            disabled={isLoadingDefaultMessage || updateDefaultMessageMutation.isPending}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground">{defaultMessageDraft.length}/2000</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={isLoadingDefaultMessage || updateDefaultMessageMutation.isPending || defaultMessageDraft === savedDefaultMessage}
+              onClick={() => updateDefaultMessageMutation.mutate(defaultMessageDraft)}
+            >
+              {updateDefaultMessageMutation.isPending ? "Saving..." : "Save default"}
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

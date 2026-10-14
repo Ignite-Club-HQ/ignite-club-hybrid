@@ -77,6 +77,7 @@ import {
   EventSectionHeader,
   type EventRecurrencePattern,
 } from "@/components/event/EventFormShared";
+import { DutyTeamPicker } from "@/components/event/DutyTeamPicker";
 import { EventScheduleSection } from "@/components/event/EventScheduleSection";
 
 type EventType = "game" | "training" | "social" | "mini_league";
@@ -248,6 +249,7 @@ function SupabaseCreateEventPage() {
   const [type, setType] = useState<EventType>(presetType || (localStorage.getItem("lastEventType") as EventType) || "training");
   const [clubId, setClubId] = useState(presetClubId || "");
   const [teamId, setTeamId] = useState("");
+  const [dutyTeamId, setDutyTeamId] = useState<string | null>(null);
   const [miniLeagueId, setMiniLeagueId] = useState(presetMiniLeagueId || "");
   const [eventDateTime, setEventDateTime] = useState(() => {
     if (prefillDate) return prefillDate;
@@ -1120,6 +1122,7 @@ function SupabaseCreateEventPage() {
       type: type === "mini_league" ? "game" : type, // Store mini_league as game type
       club_id: clubId,
       team_id: type === "mini_league" ? null : (teamId || null),
+      duty_team_id: dutyTeamId,
       mini_league_id: type === "mini_league" ? miniLeagueId : null,
       address: address.trim() || null,
       suburb: null,
@@ -1672,6 +1675,14 @@ function SupabaseCreateEventPage() {
         onRecurrenceIntervalChange={setRecurrenceInterval}
         onRecurrenceEndDateChange={setRecurrenceEndDate}
       />
+
+      {clubId && (
+        <Card>
+          <CardContent className="pt-4">
+            <DutyTeamPicker clubId={clubId} value={dutyTeamId} onChange={setDutyTeamId} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Duties Section - Only for game events */}
       {type === "game" && (

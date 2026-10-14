@@ -46,6 +46,8 @@ persistent actor class Main(governorInit : Principal) {
 
   var profiles : [Types.ClubProfile];
   var settings : [Types.ClubSettings];
+  var inviteMessageDefaults : [Types.InviteMessageDefault];
+  var teamWelcomeEmails : [Types.TeamWelcomeEmail];
   var teams : [Types.ClubTeam];
   var sponsors : [Types.ClubSponsor];
   var clubListings : [(Text, Types.Listing)];
@@ -68,6 +70,7 @@ persistent actor class Main(governorInit : Principal) {
   var mutationLog : [(Text, Text, Types.Mutation)];
 
   var newsPosts : [Types.NewsPost];
+  var newsAudienceRecipients : [Types.NewsAudienceRecipient];
   var parentInvites : [Types.ParentInvite];
   var roleRequests : [Types.RoleRequest];
   var teamInvites : [Types.TeamInvite];
@@ -89,6 +92,8 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-set notification_queue canister id for the manual-payment fee
   // reminder fan-out (Phase 3 F6). Fail-closed while unset.
   var notificationQueueCanister : ?Principal;
+  var miniLeagueDomainCanister : ?Principal;
+  var competitionDomainCanister : ?Principal;
   // Governor-set downstream canister ids for the permanent-delete fan-out.
   // While unset, that domain's cross-canister cleanup is skipped (the local
   // purge still completes) — mirrored by the deploy script's wiring calls.
@@ -164,6 +169,29 @@ persistent actor class Main(governorInit : Principal) {
           (grant.team == ?team or grant.team == null))
       };
     }
+  };
+
+  func canInviteEntrantTeamPlayers(caller : Principal, club_id : Text, team_id : Text) : async Bool {
+    if (not acl.teams.any(func(team) = team.id == team_id and team.club == club_id)) return false;
+    switch (competitionDomainCanister) {
+      case null { false };
+      case (?canister) {
+        let competitionDomain : actor {
+          is_competition_invite_manager : shared query (Text, Principal) -> async Bool;
+        } = actor (Principal.toText(canister));
+        try {
+          await competitionDomain.is_competition_invite_manager(team_id, caller)
+        } catch (_) {
+          false
+        }
+      };
+    }
+  };
+
+  func canCreateTeamRosterInvite(caller : Principal, club_id : Text, team_id : Text, role : Text) : async Bool {
+    if (canManageTeam(caller, club_id, ?team_id)) return true;
+    if (role != "player" and role != "parent") return false;
+    await canInviteEntrantTeamPlayers(caller, club_id, team_id)
   };
 
   func validateDraft(draft : Types.Draft) : ?Text {
@@ -256,6 +284,80 @@ persistent actor class Main(governorInit : Principal) {
       if (s.club_id == club_id) return #Ok(?s);
     };
     #Ok(null)
+  };
+
+  public query ({ caller }) func get_club_invite_message_default(club_id : Text) : async { #Ok : ?Types.InviteMessageDefault; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Club membership required");
+    #Ok(inviteMessageDefaults.find(func(item) = item.club_id == club_id))
+  };
+
+  func welcomeEmailLimitsOk(subject : Text, message : Text) : Bool {
+    let trimmed = Text.trim(subject, #char ' ');
+    trimmed.size() > 0 and subject.size() <= 160 and message.size() <= 4000
+  };
+
+  public query ({ caller }) func get_team_welcome_email(team_id : Text) : async { #Ok : ?Types.TeamWelcomeEmail; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.id == team_id)) {
+      case null { #Ok(null) };
+      case (?team) {
+        if (not canManageTeam(caller, team.club_id, ?team_id)) return #Err("Team or club admin required");
+        #Ok(teamWelcomeEmails.find(func(item) = item.team_id == team_id))
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_team_welcome_email(team_id : Text, enabled : Bool, subject : Text, message : Text) : async { #Ok : Types.TeamWelcomeEmail; #Err : Text } {
+    auth(caller);
+    if (not welcomeEmailLimitsOk(subject, message)) return #Err("Invalid welcome email");
+    switch (teams.find(func(t) = t.id == team_id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not canManageTeam(caller, team.club_id, ?team_id)) return #Err("Team or club admin required");
+        let value : Types.TeamWelcomeEmail = { team_id; club_id = team.club_id; enabled; subject; message };
+        teamWelcomeEmails := teamWelcomeEmails.filter(func(item) = item.team_id != team_id).concat([value]);
+        #Ok(value)
+      };
+    }
+  };
+
+  // Read by the welcome-email edge function with no session. The invite id is
+  // the bearer secret (same trust as get_pending_invite); the job exists only
+  // for a recently accepted, team-scoped invite whose team enabled the email.
+  public query func get_welcome_email_job(invite_id : Text) : async { #Ok : Types.WelcomeEmailJob; #Err : Text } {
+    let invite = switch (pendingInvites.find(func(i) = i.id == invite_id)) {
+      case null { return #Err("Invite not found") };
+      case (?value) value;
+    };
+    if (invite.status != "accepted") return #Err("Invite not accepted");
+    let acceptedAt = switch (invite.accepted_at_ms) { case (?ms) ms; case null { return #Err("Invite not accepted") } };
+    if (nowMs() > acceptedAt + 3_600_000) return #Err("Welcome email window has passed");
+    let teamId = switch (invite.team_id) { case (?id) id; case null { return #Err("Invite has no team") } };
+    if (invite.email == "") return #Err("Invite has no email");
+    let team = switch (teams.find(func(t) = t.id == teamId)) { case (?value) value; case null { return #Err("Team not found") } };
+    let setting = switch (teamWelcomeEmails.find(func(item) = item.team_id == teamId and item.enabled)) {
+      case (?value) value;
+      case null { return #Err("Welcome email disabled") };
+    };
+    let clubName = switch (profiles.find(func(p) = p.id == team.club_id)) { case (?club) club.name; case null "your club" };
+    #Ok({
+      invite_id;
+      to = invite.email;
+      subject = setting.subject;
+      message = setting.message;
+      team_name = team.name;
+      club_name = clubName;
+    })
+  };
+
+  public shared ({ caller }) func set_club_invite_message_default(club_id : Text, message : Text) : async { #Ok : Types.InviteMessageDefault; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    if (club_id == "" or club_id.size() > 128 or message.size() > 2000) return #Err("Invalid invite message");
+    let value : Types.InviteMessageDefault = { club_id; message };
+    inviteMessageDefaults := inviteMessageDefaults.filter(func(item) = item.club_id != club_id).concat([value]);
+    #Ok(value)
   };
 
   public shared ({ caller }) func save_team(team : Types.ClubTeam) : async { #Ok : Types.ClubTeam; #Err : Text } {
@@ -452,19 +554,146 @@ persistent actor class Main(governorInit : Principal) {
     })
   };
 
+  public shared query ({ caller }) func is_user_on_any_team(team_ids : [Text], user : Principal) : async Bool {
+    if (user.equal(Principal.anonymous()) or team_ids.size() > 500) return false;
+    let isTrustedCaller = (switch (messagingDomainCanister) {
+      case (?canister) caller.equal(canister);
+      case null false;
+    }) or (switch (competitionDomainCanister) {
+      case (?canister) caller.equal(canister);
+      case null false;
+    });
+    isTrustedCaller and team_ids.any(func(teamId) =
+      teamId != "" and teamId.size() <= 128 and
+      acl.teams.any(func(team) = team.id == teamId) and isOnTeam(user, teamId)
+    )
+  };
+
+  func addNewsPrincipal(recipients : [Principal], user : Principal) : [Principal] {
+    if (user.equal(Principal.anonymous()) or recipients.any(func(existing) = existing.equal(user))) recipients
+    else recipients.concat([user])
+  };
+
+  func competitionNewsRecipients(audience : { club_id : Text; competition_id : Text; team_ids : [Text]; recipients : [Principal]; can_publish : Bool }) : [Principal] {
+    var recipients = audience.recipients;
+    for (grant in acl.roles.values()) {
+      if (switch (grant.team) { case (?teamId) audience.team_ids.any(func(id) = id == teamId); case null false }) {
+        recipients := addNewsPrincipal(recipients, grant.user);
+      };
+    };
+    for (child in acl.children.values()) {
+      if (child.teams.any(func(teamId) = audience.team_ids.any(func(id) = id == teamId))) {
+        switch (child.parent) { case (?parent) recipients := addNewsPrincipal(recipients, parent); case null {} };
+        for (guardian in acl.guardians.values()) {
+          if (guardian.child == child.id) recipients := addNewsPrincipal(recipients, guardian.user);
+        };
+      };
+    };
+    recipients
+  };
+
   // Club admins see every post; members see published posts, and
   // team-targeted posts only when they belong to one of the target teams.
   func canSeeNewsPost(caller : Principal, post : Types.NewsPost) : Bool {
     if (isAdmin(caller, post.club_id)) return true;
-    if (not isMember(caller, post.club_id)) return false;
     if (post.status != "published") return false;
+    switch (post.target_mini_league_id) {
+      // Mini-league visibility is revalidated through mini_league_domain by
+      // list_news_authorized; never trust the creation-time notification snapshot.
+      case (?_) { return false };
+      case null {};
+    };
+    if (post.target_competition_id != null) return false;
+    if (not isMember(caller, post.club_id)) return false;
     switch (post.target_team_ids) {
       case null { true };
       case (?teamIds) { teamIds.any(func(teamId) = isOnTeam(caller, teamId)) };
     }
   };
 
-  func validateNewsExtras(club_id : Text, target_team_ids : ?[Text], image_url : ?Text, attachments : [Types.NewsAttachment]) : ?Text {
+  func resolveNewsAudience(caller : Principal, club_id : Text, target_team_ids : ?[Text], target_mini_league_id : ?Text, target_competition_id : ?Text) : async { #Ok : [Principal]; #Err : Text } {
+    let teamTargeted = switch (target_team_ids) { case (?ids) ids.size() > 0; case null false };
+    let audienceCount = (if (teamTargeted) 1 else 0) + (if (target_mini_league_id != null) 1 else 0) + (if (target_competition_id != null) 1 else 0);
+    if (audienceCount > 1) return #Err("Choose one news audience");
+    switch (target_competition_id) {
+      case (?competition_id) {
+        let canister = switch (competitionDomainCanister) {
+          case (?id) id;
+          case null return #Err("Competition domain not configured");
+        };
+        let competitionDomain : actor {
+          get_news_audience : shared (Text, Principal) -> async { #Ok : { competition_id : Text; club_id : Text; team_ids : [Text]; recipients : [Principal]; can_publish : Bool }; #Err : Text };
+        } = actor (Principal.toText(canister));
+        let result = try {
+          await competitionDomain.get_news_audience(competition_id, caller)
+        } catch (_) {
+          return #Err("Competition audience lookup failed");
+        };
+        switch (result) {
+          case (#Err(err)) return #Err(err);
+          case (#Ok(audience)) {
+            if (audience.club_id != club_id or audience.competition_id != competition_id) return #Err("Competition does not belong to this club");
+            if (not audience.can_publish) return #Err("Competition admin required");
+            if (audience.team_ids.size() > 100) return #Err("Competition audience exceeds 100 teams");
+            let recipients = competitionNewsRecipients(audience);
+            if (recipients.size() > 500) return #Err("Competition audience exceeds 500 members");
+            return #Ok(recipients);
+          };
+        }
+      };
+      case null {};
+    };
+    switch (target_mini_league_id) {
+      case null { #Ok([]) };
+      case (?mini_league_id) {
+        let canister = switch (miniLeagueDomainCanister) {
+          case (?id) id;
+          case null return #Err("Mini-league domain not configured");
+        };
+        let miniLeague : actor {
+          get_news_audience : shared query (Text, Principal) -> async { #Ok : { club_id : Text; recipients : [Principal] }; #Err : Text };
+        } = actor (Principal.toText(canister));
+        let result = try {
+          await miniLeague.get_news_audience(mini_league_id, caller)
+        } catch (_) {
+          return #Err("Mini-league audience lookup failed");
+        };
+        switch (result) {
+          case (#Err(e)) { #Err(e) };
+          case (#Ok(audience)) {
+            if (audience.club_id != club_id) return #Err("Mini league does not belong to this club");
+            if (audience.recipients.size() > 500) return #Err("Mini-league audience exceeds 500 members");
+            #Ok(audience.recipients)
+          };
+        }
+      };
+    }
+  };
+
+  func fanOutTargetedNews(post : Types.NewsPost, send_push : Bool) : async () {
+    if (not send_push or post.status != "published" or (post.target_mini_league_id == null and post.target_competition_id == null)) return;
+    switch (notificationQueueCanister) {
+      case null {};
+      case (?queueId) {
+        let recipients = newsAudienceRecipients
+          .filter(func(item) = item.news_id == post.id and not item.user.equal(post.created_by))
+          .map(func(item) = Principal.toText(item.user));
+        if (recipients.size() == 0) return;
+        let queue : actor {
+          fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
+        } = actor (Principal.toText(queueId));
+        let keyPrefix = "club_news:" # post.id;
+        try {
+          ignore await queue.fan_out(recipients, post.club_id, "club_news", "New news: " # post.title, keyPrefix, ?post.id)
+        } catch (_) {};
+      };
+    }
+  };
+
+  func validateNewsExtras(club_id : Text, target_team_ids : ?[Text], target_mini_league_id : ?Text, target_competition_id : ?Text, image_url : ?Text, attachments : [Types.NewsAttachment]) : ?Text {
+    let teamTargeted = switch (target_team_ids) { case (?ids) ids.size() > 0; case null false };
+    let audienceCount = (if (teamTargeted) 1 else 0) + (if (target_mini_league_id != null) 1 else 0) + (if (target_competition_id != null) 1 else 0);
+    if (audienceCount > 1) return ?"Choose one news audience";
     switch (target_team_ids) {
       case null {};
       case (?teamIds) {
@@ -487,32 +716,41 @@ persistent actor class Main(governorInit : Principal) {
     null
   };
 
-  public shared ({ caller }) func create_news_post(club_id : Text, title : Text, body : Text, status : Text, target_team_ids : ?[Text], is_important : Bool, image_url : ?Text, attachments : [Types.NewsAttachment]) : async { #Ok : Types.NewsPost; #Err : Text } {
+  public shared ({ caller }) func create_news_post(club_id : Text, title : Text, body : Text, status : Text, target_team_ids : ?[Text], target_mini_league_id : ?Text, target_competition_id : ?Text, send_push : Bool, is_important : Bool, image_url : ?Text, attachments : [Types.NewsAttachment]) : async { #Ok : Types.NewsPost; #Err : Text } {
     auth(caller);
-    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    if (target_competition_id == null and not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (club_id == "" or club_id.size() > 128) return #Err("Invalid club");
     if (title == "" or title.size() > 200) return #Err("Invalid title");
     if (body.size() > 8000) return #Err("Invalid body");
     if (not validNewsStatus(status)) return #Err("Invalid status");
-    switch (validateNewsExtras(club_id, target_team_ids, image_url, attachments)) {
+    switch (validateNewsExtras(club_id, target_team_ids, target_mini_league_id, target_competition_id, image_url, attachments)) {
       case (?err) return #Err(err);
       case null {};
     };
+    let audienceRecipients = switch (await resolveNewsAudience(caller, club_id, target_team_ids, target_mini_league_id, target_competition_id)) {
+      case (#Err(err)) return #Err(err);
+      case (#Ok(recipients)) recipients;
+    };
+    if (target_competition_id == null and not isAdmin(caller, club_id)) return #Err("Club admin required");
     let now = nowMs();
     let post : Types.NewsPost = {
-      id = "news-" # club_id # "-" # Nat.toText(newsPosts.size() + 1);
+      id = "news-" # club_id # "-" # Nat64.toText(nowNs());
       club_id; title; body; status;
       created_by = caller;
       created_at_ms = now;
       updated_at_ms = now;
       revision = 1;
-      target_team_ids; is_important; image_url; attachments;
+      target_team_ids; target_mini_league_id; target_competition_id; is_important; image_url; attachments;
     };
     newsPosts := newsPosts.concat([post]);
+    if (target_mini_league_id != null or target_competition_id != null) {
+      newsAudienceRecipients := newsAudienceRecipients.concat(audienceRecipients.map(func(user) = { news_id = post.id; user }));
+    };
+    await fanOutTargetedNews(post, send_push);
     #Ok(post)
   };
 
-  public shared ({ caller }) func update_news_post(id : Text, title : Text, body : Text, status : Text, target_team_ids : ?[Text], is_important : Bool, image_url : ?Text, attachments : [Types.NewsAttachment], expected_revision : Nat64) : async { #Ok : Types.NewsPost; #Err : Text } {
+  public shared ({ caller }) func update_news_post(id : Text, title : Text, body : Text, status : Text, target_team_ids : ?[Text], target_mini_league_id : ?Text, target_competition_id : ?Text, send_push : Bool, is_important : Bool, image_url : ?Text, attachments : [Types.NewsAttachment], expected_revision : Nat64) : async { #Ok : Types.NewsPost; #Err : Text } {
     auth(caller);
     if (title == "" or title.size() > 200) return #Err("Invalid title");
     if (body.size() > 8000) return #Err("Invalid body");
@@ -520,14 +758,24 @@ persistent actor class Main(governorInit : Principal) {
     switch (newsPosts.find(func(p) = p.id == id)) {
       case null { #Err("News post not found") };
       case (?current) {
-        if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        if (not isAdmin(caller, current.club_id) and current.target_competition_id == null) return #Err("Club admin required");
         if (current.revision != expected_revision) return #Err("News post revision conflict");
-        switch (validateNewsExtras(current.club_id, target_team_ids, image_url, attachments)) {
+        switch (validateNewsExtras(current.club_id, target_team_ids, target_mini_league_id, target_competition_id, image_url, attachments)) {
           case (?err) return #Err(err);
           case null {};
         };
-        let updated : Types.NewsPost = { current with title; body; status; target_team_ids; is_important; image_url; attachments; updated_at_ms = nowMs(); revision = current.revision + 1 };
+        let audienceRecipients = switch (await resolveNewsAudience(caller, current.club_id, target_team_ids, target_mini_league_id, target_competition_id)) {
+          case (#Err(err)) return #Err(err);
+          case (#Ok(recipients)) recipients;
+        };
+        if (target_competition_id == null and not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        let updated : Types.NewsPost = { current with title; body; status; target_team_ids; target_mini_league_id; target_competition_id; is_important; image_url; attachments; updated_at_ms = nowMs(); revision = current.revision + 1 };
         newsPosts := newsPosts.map(func(p) = if (p.id == id) updated else p);
+        newsAudienceRecipients := newsAudienceRecipients.filter(func(item) = item.news_id != id);
+        if (target_mini_league_id != null or target_competition_id != null) {
+          newsAudienceRecipients := newsAudienceRecipients.concat(audienceRecipients.map(func(user) = { news_id = id; user }));
+        };
+        await fanOutTargetedNews(updated, send_push);
         #Ok(updated)
       };
     }
@@ -538,8 +786,16 @@ persistent actor class Main(governorInit : Principal) {
     switch (newsPosts.find(func(p) = p.id == id)) {
       case null { #Err("News post not found") };
       case (?current) {
-        if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        if (current.target_competition_id == null) {
+          if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        } else {
+          switch (await resolveNewsAudience(caller, current.club_id, null, null, current.target_competition_id)) {
+            case (#Err(err)) return #Err(err);
+            case (#Ok(_)) {};
+          };
+        };
         newsPosts := newsPosts.filter(func(p) = p.id != id);
+        newsAudienceRecipients := newsAudienceRecipients.filter(func(item) = item.news_id != id);
         #Ok
       };
     }
@@ -548,7 +804,7 @@ persistent actor class Main(governorInit : Principal) {
   // Admins see every post (including drafts); members see published posts
   // visible to them (whole-club, or team-targeted to a team they belong to).
   public query ({ caller }) func list_news(club_id : Text) : async { #Ok : [Types.NewsPost]; #Err : Text } {
-    if (not isMember(caller, club_id) and not isAdmin(caller, club_id)) return #Err("Forbidden");
+    if (not isMember(caller, club_id) and not isAdmin(caller, club_id) and not newsAudienceRecipients.any(func(item) = item.user.equal(caller) and newsPosts.any(func(post) = post.id == item.news_id and post.club_id == club_id))) return #Err("Forbidden");
     #Ok(newsPosts.filter(func(p) = p.club_id == club_id and canSeeNewsPost(caller, p)))
   };
 
@@ -557,9 +813,84 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_news_multi(club_ids : [Text]) : async { #Ok : [Types.NewsPost]; #Err : Text } {
     auth(caller);
     if (club_ids.size() > 50) return #Err("Too many clubs");
-    let visible = club_ids.filter(func(club) = isMember(caller, club) or isAdmin(caller, club));
+    let visible = club_ids.filter(func(club) = isMember(caller, club) or isAdmin(caller, club) or newsAudienceRecipients.any(func(item) = item.user.equal(caller) and newsPosts.any(func(post) = post.id == item.news_id and post.club_id == club)));
     #Ok(newsPosts.filter(func(p) =
       visible.any(func(club) = club == p.club_id) and canSeeNewsPost(caller, p)))
+  };
+
+  func currentNewsAudienceAccess(caller : Principal, post : Types.NewsPost) : async Bool {
+    if (isAdmin(caller, post.club_id)) return true;
+    if (caller.equal(Principal.anonymous())) return false;
+    if (post.target_competition_id != null) {
+      let competition_id = switch (post.target_competition_id) { case (?id) id; case null "" };
+      let canister = switch (competitionDomainCanister) {
+        case (?id) id;
+        case null return false;
+      };
+      let competitionDomain : actor {
+        get_news_audience : shared (Text, Principal) -> async { #Ok : { competition_id : Text; club_id : Text; team_ids : [Text]; recipients : [Principal]; can_publish : Bool }; #Err : Text };
+      } = actor (Principal.toText(canister));
+      let result = try {
+        await competitionDomain.get_news_audience(competition_id, caller)
+      } catch (_) {
+        return false;
+      };
+      return switch (result) {
+        case (#Err(_)) false;
+        case (#Ok(audience)) {
+          audience.club_id == post.club_id and (
+            audience.can_publish or
+            (post.status == "published" and (
+              audience.recipients.any(func(user) = user.equal(caller)) or
+              audience.team_ids.any(func(teamId) = isOnTeam(caller, teamId))
+            ))
+          )
+        };
+      };
+    };
+    if (post.status != "published") return false;
+    switch (post.target_mini_league_id) {
+      case null { canSeeNewsPost(caller, post) };
+      case (?mini_league_id) {
+        let canister = switch (miniLeagueDomainCanister) {
+          case (?id) id;
+          case null return false;
+        };
+        let miniLeague : actor {
+          get_news_audience : shared query (Text, Principal) -> async { #Ok : { club_id : Text; recipients : [Principal] }; #Err : Text };
+        } = actor (Principal.toText(canister));
+        let result = try {
+          await miniLeague.get_news_audience(mini_league_id, caller)
+        } catch (_) {
+          return false;
+        };
+        switch (result) {
+          case (#Err(_)) false;
+          case (#Ok(audience)) {
+            audience.club_id == post.club_id and audience.recipients.any(func(user) = user.equal(caller))
+          };
+        }
+      };
+    }
+  };
+
+  // Update call because current mini-league membership is verified by a
+  // trusted inter-canister query; query methods cannot make that call.
+  public shared ({ caller }) func list_news_authorized(club_ids : [Text]) : async { #Ok : [Types.NewsPost]; #Err : Text } {
+    auth(caller);
+    if (club_ids.size() > 50) return #Err("Too many clubs");
+    let candidatePosts = newsPosts.filter(func(post) =
+      club_ids.any(func(club) = club == post.club_id) or post.target_competition_id != null
+    );
+    let targetedPosts = candidatePosts.filter(func(post) = post.target_mini_league_id != null or post.target_competition_id != null);
+    if (targetedPosts.size() > 100) return #Err("Too many targeted news posts; narrow the feed scope");
+    var visiblePosts : [Types.NewsPost] = [];
+    for (post in candidatePosts.values()) {
+      if (await currentNewsAudienceAccess(caller, post)) {
+        visiblePosts := visiblePosts.concat([post]);
+      };
+    };
+    #Ok(visiblePosts)
   };
 
   // Parent invites: a club/team admin mints a token for a child; the
@@ -1272,7 +1603,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func create_team_invite(club_id : Text, team_id : Text, email : Text, role : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
     auth(caller);
-    if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
+    if (not (await canCreateTeamRosterInvite(caller, club_id, team_id, role))) return #Err("Team or competition admin required for player/parent invites");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
     if (role == "") return #Err("Invalid role");
     let now = nowMs();
@@ -1430,7 +1761,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func create_team_invite_link(club_id : Text, team_id : Text, role : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
     auth(caller);
-    if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
+    if (not (await canCreateTeamRosterInvite(caller, club_id, team_id, role))) return #Err("Team or competition admin required for player/parent invites");
     if (role == "") return #Err("Invalid role");
     let now = nowMs();
     let link : Types.TeamInviteLink = {
@@ -1446,12 +1777,28 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(link)
   };
 
+  public shared ({ caller }) func list_team_invite_links(team_id : Text) : async { #Ok : [Types.TeamInviteLink]; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(team) = team.id == team_id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (canManageTeam(caller, team.club_id, ?team_id)) {
+          #Ok(teamInviteLinks.filter(func(link) = link.team_id == team_id))
+        } else if (await canInviteEntrantTeamPlayers(caller, team.club_id, team_id)) {
+          #Ok(teamInviteLinks.filter(func(link) = link.team_id == team_id and (link.role == "player" or link.role == "parent")))
+        } else {
+          #Err("Team or competition admin required")
+        }
+      };
+    }
+  };
+
   public shared ({ caller }) func rotate_team_invite_link(id : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
     auth(caller);
     switch (teamInviteLinks.find(func(l) = l.id == id)) {
       case null { #Err("Invite link not found") };
       case (?link) {
-        if (not canManageTeam(caller, link.club_id, ?link.team_id)) return #Err("Team or club admin required");
+        if (not (await canCreateTeamRosterInvite(caller, link.club_id, link.team_id, link.role))) return #Err("Team or competition admin required for player/parent invites");
         let updated : Types.TeamInviteLink = { link with token = await genToken("tok"); rotated_at_ms = ?nowMs() };
         teamInviteLinks := teamInviteLinks.map(func(l) = if (l.id == id) updated else l);
         #Ok(updated)
@@ -1464,7 +1811,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (teamInviteLinks.find(func(l) = l.id == id)) {
       case null { #Err("Invite link not found") };
       case (?link) {
-        if (not canManageTeam(caller, link.club_id, ?link.team_id)) return #Err("Team or club admin required");
+        if (not (await canCreateTeamRosterInvite(caller, link.club_id, link.team_id, link.role))) return #Err("Team or competition admin required for player/parent invites");
         let updated : Types.TeamInviteLink = { link with revoked = true };
         teamInviteLinks := teamInviteLinks.map(func(l) = if (l.id == id) updated else l);
         #Ok
@@ -1524,7 +1871,19 @@ persistent actor class Main(governorInit : Principal) {
     if (kind != "team" and kind != "club" and kind != "guardian") return #Err("Invalid invite kind");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
     switch (team_id) {
-      case (?team) { if (not canManageTeam(caller, club_id, ?team)) return #Err("Team or club admin required") };
+      case (?team) {
+        let directAccess = canManageTeam(caller, club_id, ?team);
+        let compRoleAllowed = switch (role) {
+          case (?value) { value == "player" or value == "parent" };
+          case null false;
+        };
+        let compInvite = if (kind == "team" and compRoleAllowed) {
+          await canInviteEntrantTeamPlayers(caller, club_id, team)
+        } else {
+          false
+        };
+        if (not directAccess and not compInvite) return #Err("Team or competition admin required for player/parent invites");
+      };
       case null { if (not isAdmin(caller, club_id)) return #Err("Club admin required") };
     };
     let now = nowMs();
@@ -2522,6 +2881,22 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  public shared ({ caller }) func set_mini_league_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid mini_league_domain canister id");
+    miniLeagueDomainCanister := ?id;
+    #Ok
+  };
+
+  public shared ({ caller }) func set_competition_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid competition_domain canister id");
+    competitionDomainCanister := ?id;
+    #Ok
+  };
+
   // ---- Permanent-delete fan-out + 30-day auto-purge ----
   // Soft-deleted clubs/teams stay restorable for 30 days; a daily timer then
   // purges them permanently (same window as the Supabase purge job).
@@ -2588,6 +2963,7 @@ persistent actor class Main(governorInit : Principal) {
   // theme preferences, and app config are not club-scoped.
   func purgeClubLocal(id : Text) {
     let clubTeamIds = teams.filter(func(t) = t.club_id == id).map(func(t) = t.id);
+    let clubNewsIds = newsPosts.filter(func(post) = post.club_id == id).map(func(post) = post.id);
     func isClubTeam(teamId : Text) : Bool { clubTeamIds.any(func(t) = t == teamId) };
     profiles := profiles.filter(func(p) = p.id != id);
     settings := settings.filter(func(s) = s.club_id != id);
@@ -2605,6 +2981,7 @@ persistent actor class Main(governorInit : Principal) {
       roles = acl.roles.filter(func(r) = r.club != ?id and (switch (r.team) { case (?t) { not isClubTeam(t) }; case null { true } }));
     };
     accountRoles := accountRoles.filter(func(r) = r.club != ?id and (switch (r.team) { case (?t) { not isClubTeam(t) }; case null { true } }));
+    newsAudienceRecipients := newsAudienceRecipients.filter(func(item) = not clubNewsIds.any(func(newsId) = newsId == item.news_id));
     newsPosts := newsPosts.filter(func(n) = n.club_id != id);
     parentInvites := parentInvites.filter(func(i) = i.club_id != id);
     roleRequests := roleRequests.filter(func(r) = r.club != id);

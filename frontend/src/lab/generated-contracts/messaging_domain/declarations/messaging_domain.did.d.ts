@@ -221,6 +221,11 @@ export interface Main {
     { 'Ok' : Conversation } |
       { 'Err' : string }
   >,
+  'ensure_competition_admin_thread' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : Conversation } |
+      { 'Err' : string }
+  >,
   'ensure_conversation' : ActorMethod<
     [string, [] | [string], Array<Principal>],
     { 'Ok' : Conversation } |
@@ -320,6 +325,10 @@ export interface Main {
     [],
     { 'Ok' : Array<ClubDmSettings> } |
       { 'Err' : string }
+  >,
+  'list_competition_admin_threads' : ActorMethod<
+    [string],
+    Array<{ 'id' : string, 'member' : Principal }>
   >,
   'list_deleted_groups' : ActorMethod<
     [],
@@ -505,6 +514,11 @@ export interface Main {
   >,
   'set_club_message_privacy' : ActorMethod<
     [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_competition_domain_canister' : ActorMethod<
+    [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

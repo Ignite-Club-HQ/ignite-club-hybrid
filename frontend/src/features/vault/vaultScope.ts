@@ -9,13 +9,14 @@ export const GENERIC_CHAT_FOLDER_NAMES = ["Chat Images", "Chat Links"] as const;
 
 export function getVaultScope(view: VaultFolderView): VaultScope {
   if (view.type === "root") {
-    return { clubId: null, teamId: null, miniLeagueId: null, folderId: null };
+    return { clubId: null, teamId: null, miniLeagueId: null, competitionId: null, folderId: null };
   }
 
   return {
     clubId: view.clubId,
     teamId: view.type === "team" ? view.teamId : null,
     miniLeagueId: view.type === "mini-league" ? view.miniLeagueId : null,
+    competitionId: view.type === "competition" ? view.competitionId : null,
     folderId: view.folderId ?? null,
   };
 }

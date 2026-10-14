@@ -45,14 +45,15 @@ describe("vault trash repository", () => {
   it("propagates a trash-read provider failure instead of returning an empty result", async () => {
     const client = {
       from: () => ({
-        select: () => ({
-          eq: () => ({
-            not: () => ({
-              order: async () => ({ data: null, error: new Error("trash read denied") }),
-            }),
-          }),
-        }),
+        select: () => query,
       }),
+      storage: { from: () => ({ createSignedUrl: async () => ({ data: null, error: null }) }) },
+    };
+    const query = {
+      eq: () => query,
+      is: () => query,
+      not: () => query,
+      order: async () => ({ data: null, error: new Error("trash read denied") }),
     };
 
     await expect(fetchVaultTrashItems("club-1", client as never)).rejects.toThrow("trash read denied");

@@ -159,6 +159,32 @@ export async function revokeLivePiiReadClub(
   return unwrapCandid(actor.revoke_pii_read_club(piiId, fieldId, clubId), "Revoke PII read from club");
 }
 
+export async function grantLivePiiReadCompetition(
+  ctx: FeatureBackendContext,
+  piiId: string,
+  fieldId: string,
+  competitionId: string,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.grant_pii_read_competition(piiId, fieldId, competitionId),
+    "Grant PII read to competition",
+  );
+}
+
+export async function revokeLivePiiReadCompetition(
+  ctx: FeatureBackendContext,
+  piiId: string,
+  fieldId: string,
+  competitionId: string,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.revoke_pii_read_competition(piiId, fieldId, competitionId),
+    "Revoke PII read from competition",
+  );
+}
+
 /**
  * Best-effort club-scoped read grant for one PII field. Logged, never
  * thrown — the grant can be retried later by the record owner.
@@ -332,8 +358,12 @@ export async function listLiveVaultFolders(
   clubId: string,
   teamId: string | null,
   miniLeagueId: string | null = null,
+  competitionId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  if (competitionId) {
+    return unwrapCandid(actor.list_competition_folders(competitionId), "List competition vault folders");
+  }
   return unwrapCandid(
     actor.list_folders(clubId, teamId ? [teamId] : [], miniLeagueId ? [miniLeagueId] : []),
     "List vault folders",
@@ -353,8 +383,9 @@ export async function getLiveVaultFile(ctx: FeatureBackendContext, fileId: strin
 }
 
 /** Single folder read; null when the folder is missing or the caller cannot view it. */
-export async function getLiveVaultFolder(ctx: FeatureBackendContext, folderId: string) {
+export async function getLiveVaultFolder(ctx: FeatureBackendContext, folderId: string, competitionId: string | null = null) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  if (competitionId) return unwrapCandid(actor.get_competition_folder(folderId), "Get competition vault folder");
   const row = await unwrapCandid(actor.get_folder(folderId), "Get vault folder");
   return row.length ? row[0] : null;
 }
@@ -380,8 +411,15 @@ export async function listLiveVaultClubFiles(
 export async function listLiveVaultFilesWithFolder(
   ctx: FeatureBackendContext,
   folderId: string,
+  competitionId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  if (competitionId) {
+    return unwrapCandid(
+      actor.list_competition_files_with_folder(folderId, competitionId),
+      "List competition vault files with folder",
+    );
+  }
   return unwrapCandid(
     actor.list_files_with_folder(folderId),
     "List vault files with folder",
@@ -393,8 +431,15 @@ export async function listLiveVaultClubFilesWithFolder(
   clubId: string,
   teamId: string | null,
   miniLeagueId: string | null = null,
+  competitionId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  if (competitionId) {
+    return unwrapCandid(
+      actor.list_competition_files_with_folder("", competitionId),
+      "List competition vault root files",
+    );
+  }
   return unwrapCandid(
     actor.list_club_files_with_folder(
       clubId,
@@ -444,6 +489,7 @@ export async function createLiveVaultFolder(
   name: string,
   restrictedRoles: string[],
   miniLeagueId: string | null = null,
+  competitionId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(
@@ -455,6 +501,7 @@ export async function createLiveVaultFolder(
       name,
       restrictedRoles,
       candidOpt(miniLeagueId),
+      candidOpt(competitionId),
       0,
       [],
       [],
@@ -507,6 +554,7 @@ export async function registerLiveVaultFile(
   isExternalLink: boolean,
   blobRef: LiveVaultBlobRef | null,
   miniLeagueId: string | null = null,
+  competitionId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(
@@ -523,6 +571,7 @@ export async function registerLiveVaultFile(
       isExternalLink,
       candidOpt(blobRef),
       candidOpt(miniLeagueId),
+      candidOpt(competitionId),
     ),
     "Register vault file",
   );

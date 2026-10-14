@@ -94,6 +94,7 @@ interface DriblImportMapperProps {
   driblRows: DriblRow[];
   teams: Team[];
   clubName: string; // Your club's name for home/away detection
+  warnings?: string[];
   onConfirm: (fixtures: DriblFixture[], mappings: TeamMapping[]) => void;
   onCancel: () => void;
 }
@@ -331,6 +332,7 @@ export function DriblImportMapper({
   driblRows, 
   teams, 
   clubName,
+  warnings = [],
   onConfirm, 
   onCancel 
 }: DriblImportMapperProps) {
@@ -524,6 +526,17 @@ export function DriblImportMapper({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {warnings.length > 0 && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <span className="font-medium">Some rows were skipped:</span>
+                <ul className="mt-1 list-disc pl-4">
+                  {warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
           <p className="text-sm text-muted-foreground">
             Which club code represents your club in this export?
           </p>

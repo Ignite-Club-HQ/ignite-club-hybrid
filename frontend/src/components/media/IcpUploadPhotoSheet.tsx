@@ -37,6 +37,7 @@ interface IcpUploadPhotoSheetProps {
   miniLeagues: IcpUploadNamedOption[];
   competitions: IcpUploadNamedOption[];
   defaultClubId?: string;
+  defaultCompetitionId?: string;
 }
 
 const SCOPE_UNSUPPORTED = /set_asset_scope|has no update method|not found/i;
@@ -50,6 +51,7 @@ export function IcpUploadPhotoSheet({
   miniLeagues,
   competitions,
   defaultClubId,
+  defaultCompetitionId,
 }: IcpUploadPhotoSheetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -64,7 +66,8 @@ export function IcpUploadPhotoSheet({
   useEffect(() => {
     if (!open) return;
     setClubId((prev) => prev || defaultClubId || clubs[0]?.id || "");
-  }, [open, defaultClubId, clubs]);
+    if (defaultCompetitionId) setCompetitionId(defaultCompetitionId);
+  }, [open, defaultClubId, defaultCompetitionId, clubs]);
 
   useEffect(() => {
     if (!open) {
@@ -138,6 +141,7 @@ export function IcpUploadPhotoSheet({
               storagePath,
               file: prepared.file,
               mime,
+              competitionId: competitionId || undefined,
             });
             if (!uploaded) {
               throw new Error("Media upload canisters are not configured");

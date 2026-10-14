@@ -189,6 +189,7 @@ export const idlFactory = ({ IDL }) => {
     'title' : IDL.Text,
     'target_team_ids' : IDL.Opt(IDL.Vec(IDL.Text)),
     'image_url' : IDL.Opt(IDL.Text),
+    'target_mini_league_id' : IDL.Opt(IDL.Text),
     'body' : IDL.Text,
     'updated_at_ms' : IDL.Nat64,
     'created_by' : IDL.Principal,
@@ -197,6 +198,7 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
     'attachments' : IDL.Vec(NewsAttachment),
+    'target_competition_id' : IDL.Opt(IDL.Text),
   });
   const InvitePayload = IDL.Record({
     'to' : IDL.Text,
@@ -274,6 +276,10 @@ export const idlFactory = ({ IDL }) => {
     'contact_email' : IDL.Opt(IDL.Text),
     'logo_url' : IDL.Opt(IDL.Text),
   });
+  const InviteMessageDefault = IDL.Record({
+    'message' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
   const ClubSubscription = IDL.Record({
     'activated_at_ms' : IDL.Opt(IDL.Nat64),
     'trial_ends_at_ms' : IDL.Opt(IDL.Nat64),
@@ -336,6 +342,21 @@ export const idlFactory = ({ IDL }) => {
     'minutes_per_half' : IDL.Opt(IDL.Nat32),
     'disable_position_swaps' : IDL.Bool,
     'disable_team_pom_rewards' : IDL.Bool,
+  });
+  const TeamWelcomeEmail = IDL.Record({
+    'subject' : IDL.Text,
+    'team_id' : IDL.Text,
+    'enabled' : IDL.Bool,
+    'message' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
+  const WelcomeEmailJob = IDL.Record({
+    'to' : IDL.Text,
+    'subject' : IDL.Text,
+    'invite_id' : IDL.Text,
+    'team_name' : IDL.Text,
+    'message' : IDL.Text,
+    'club_name' : IDL.Text,
   });
   const HttpRequest = IDL.Record({
     'url' : IDL.Text,
@@ -560,6 +581,9 @@ export const idlFactory = ({ IDL }) => {
           IDL.Text,
           IDL.Text,
           IDL.Opt(IDL.Vec(IDL.Text)),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
           IDL.Bool,
           IDL.Opt(IDL.Text),
           IDL.Vec(NewsAttachment),
@@ -684,6 +708,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubBranding, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_club_invite_message_default' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(InviteMessageDefault),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_club_link' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(Link), 'Err' : IDL.Text })],
@@ -779,9 +813,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamSubscription), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_team_welcome_email' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(TeamWelcomeEmail), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_teams' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_welcome_email_job' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : WelcomeEmailJob, 'Err' : IDL.Text })],
         ['query'],
       ),
     'has_club_staff_role' : IDL.Func(
@@ -813,6 +857,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'is_member_removed' : IDL.Func(
         [IDL.Text, IDL.Principal],
+        [IDL.Bool],
+        ['query'],
+      ),
+    'is_user_on_any_team' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Principal],
         [IDL.Bool],
         ['query'],
       ),
@@ -876,6 +925,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'list_news_authorized' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
+        [],
       ),
     'list_news_multi' : IDL.Func(
         [IDL.Vec(IDL.Text)],
@@ -946,6 +1000,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamFolder), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'list_team_invite_links' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamInviteLink), 'Err' : IDL.Text })],
+        [],
       ),
     'list_team_invites' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
@@ -1217,6 +1276,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_invite_message_default' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : InviteMessageDefault, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_logo_only_mode' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
@@ -1250,12 +1314,22 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'set_competition_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_events_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_messaging_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_mini_league_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
@@ -1293,6 +1367,11 @@ export const idlFactory = ({ IDL }) => {
     'set_team_sponsor_allocation' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_welcome_email' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamWelcomeEmail, 'Err' : IDL.Text })],
         [],
       ),
     'set_theme_preference' : IDL.Func(
@@ -1342,6 +1421,9 @@ export const idlFactory = ({ IDL }) => {
           IDL.Text,
           IDL.Text,
           IDL.Opt(IDL.Vec(IDL.Text)),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
           IDL.Bool,
           IDL.Opt(IDL.Text),
           IDL.Vec(NewsAttachment),

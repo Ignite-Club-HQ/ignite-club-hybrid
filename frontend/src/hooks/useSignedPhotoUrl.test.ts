@@ -31,6 +31,8 @@ const PRIVATE_URL_B =
   "https://reference.invalid/storage/v1/object/public/photos/img-2.jpg";
 const PRIVATE_URL_DENIED =
   "https://reference.invalid/storage/v1/object/public/photos/img-3.jpg";
+const PRIVATE_COMPETITION_URL =
+  "https://reference.invalid/storage/v1/object/public/competition-vault/clubs/club-a/competitions/comp-a/rules.pdf";
 const PUBLIC_URL = "https://reference.invalid/static/logo.png";
 const SIGNED_A = "https://reference.invalid/storage/v1/object/sign/photos/img-1.jpg?token=a";
 const SIGNED_B = "https://reference.invalid/storage/v1/object/sign/photos/img-2.jpg?token=b";
@@ -71,6 +73,16 @@ describe("getSignedPhotoUrls — batch fail-closed behaviour", () => {
     });
     const result = await getSignedPhotoUrls([PRIVATE_URL_A]);
     expect(result[PRIVATE_URL_A]).toBe(SIGNED_A);
+  });
+
+  it("signs competition-vault objects instead of returning the private bucket URL", async () => {
+    const signedCompetitionUrl = "https://reference.invalid/storage/v1/object/sign/competition-vault/rules.pdf?token=comp";
+    createSignedUrlMock.mockResolvedValueOnce({ data: { signedUrl: signedCompetitionUrl }, error: null });
+    await expect(resolveSignedUrl(PRIVATE_COMPETITION_URL)).resolves.toBe(signedCompetitionUrl);
+    expect(createSignedUrlMock).toHaveBeenCalledWith(
+      "clubs/club-a/competitions/comp-a/rules.pdf",
+      3600,
+    );
   });
 
   it("omits (does NOT return the raw URL for) a private URL when both direct signing and edge fallback fail", async () => {

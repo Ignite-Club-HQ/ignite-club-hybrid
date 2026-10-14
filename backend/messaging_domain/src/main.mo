@@ -67,6 +67,10 @@ persistent actor class Main(governorInit : Principal) {
   // Fail-closed while unset: delete_club_data/delete_team_data reject every
   // caller until the deploy script wires this.
   var clubDomainCanister : ?Principal;
+  // Governor-set competition_domain canister id for the competition-admin inbox,
+  // where the member thread participants are derived from the competition's
+  // admin-role list rather than browser-supplied input.
+  var competitionDomainCanister : ?Principal;
 
   // Global broadcast conversation id. Mirrors the Supabase broadcast_messages
   // feed: one platform-wide stream that every signed-in member can read, with
@@ -78,11 +82,25 @@ persistent actor class Main(governorInit : Principal) {
   // and send by an id it already knows.
   func clubAdminConversationId(club_id : Text) : Text { "club-admin-" # club_id };
 
+  // Competition-admin room id is derived from the competition id and the
+  // participant principal, mirroring the club-admin thread pattern.
+  func competitionAdminConversationId(competition_id : Text) : Text { "competition-admin-" # competition_id };
+  func competitionAdminThreadId(competition_id : Text, member : Principal) : Text {
+    competitionAdminConversationId(competition_id) # "-" # Principal.toText(member)
+  };
+
   // Typed view of the club_domain queries this canister needs. Fail-closed
   // while the club_domain canister id is unset (set_club_domain_canister).
   type ClubDomainRef = actor {
     is_app_admin : shared query (Principal) -> async Bool;
     list_club_admins : shared query (Text) -> async [Principal];
+    is_user_on_any_team : shared query ([Text], Principal) -> async Bool;
+  };
+
+  type CompetitionDomainRef = actor {
+    list_competition_roles : shared query (Text) -> async [Types.RoleGrant];
+    list_entries : shared query (Text) -> async { #Ok : [{ club_id : Text; competition_id : Text; division_id : ?Text; status : Text; team_id : Text }]; #Err : Text };
+    is_competition_admin : shared query (Text) -> async Bool;
   };
 
   func clubDomainRef() : async ?ClubDomainRef {
@@ -90,6 +108,16 @@ persistent actor class Main(governorInit : Principal) {
       case null { null };
       case (?cd) {
         let ref : ClubDomainRef = actor (Principal.toText(cd));
+        ?ref
+      };
+    };
+  };
+
+  func competitionDomainRef() : async ?CompetitionDomainRef {
+    switch (competitionDomainCanister) {
+      case null { null };
+      case (?cd) {
+        let ref : CompetitionDomainRef = actor (Principal.toText(cd));
         ?ref
       };
     };
@@ -475,7 +503,113 @@ persistent actor class Main(governorInit : Principal) {
     };
   };
 
+  // A competition member's inbox to the competition admins. Only the member
+  // themselves, the current admin set for the competition, or the governor can
+  // create/list these threads; the admin set is re-read from competition_domain
+  // on every open so role changes take effect without browser-supplied lists.
+  public shared ({ caller }) func ensure_competition_admin_thread(competition_id : Text, member : Principal) : async { #Ok : Types.Conversation; #Err : Text } {
+    auth(caller);
+    if (not valid(competition_id) or member.equal(Principal.anonymous())) return #Err("Invalid competition");
+    if (not caller.equal(member)) return #Err("Only the thread member can open their conversation");
+    let competitionDomain = await competitionDomainRef();
+    switch (competitionDomain) {
+      case null { return #Err("competition_domain canister not configured") };
+      case (?cd) {
+        let roles = await cd.list_competition_roles(competition_id);
+        let adminPrincipals = roles
+          .filter(func(grant) = grant.role == "competition_admin" or grant.role == "admin" or grant.role == "owner")
+          .map(func(grant) = grant.user);
+        let isAdmin = adminPrincipals.any(func(p) = p.equal(caller));
+        var isMember = roles.any(func(grant) = grant.user.equal(caller));
+        if (not isMember and not isAdmin and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) {
+          let clubDomain = await clubDomainRef();
+          let club = switch (clubDomain) {
+            case null { return #Err("club_domain canister not configured") };
+            case (?value) value;
+          };
+          let entries = switch (await cd.list_entries(competition_id)) {
+            case (#Err(message)) { return #Err(message) };
+            case (#Ok(value)) value;
+          };
+          if (entries.size() > 500) return #Err("Competition has too many entries to verify membership");
+          let teamIds = entries
+            .filter(func(entry) = entry.status == "accepted" or entry.status == "registered")
+            .map(func(entry) = entry.team_id);
+          isMember := try {
+            await club.is_user_on_any_team(teamIds, caller)
+          } catch (_) {
+            false
+          };
+        };
+        if (not isMember and not isAdmin and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Competition membership required");
+        var participants : [Principal] = [member];
+        for (p in adminPrincipals.values()) {
+          if (not participants.any(func(exist) = exist.equal(p))) {
+            participants := participants.concat([p]);
+          };
+        };
+        let conversationId = competitionAdminThreadId(competition_id, member);
+        switch (findConversationIndex(conversationId)) {
+          case (?i) {
+            let updated : Types.Conversation = { conversations[i] with participants };
+            conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == i) { updated } else { conversations[pos] });
+            #Ok(updated)
+          };
+          case null {
+            let conversation : Types.Conversation = {
+              id = conversationId;
+              club_id = "competition-" # competition_id;
+              team_id = null;
+              participants;
+              next_sequence = 1;
+            };
+            conversations := conversations.concat([conversation]);
+            let meta : Types.GroupMetadata = {
+              conversation_id = conversationId;
+              name = "Competition admins";
+              kind = "competition_admin";
+              club_id = null;
+              team_id = null;
+              members = participants;
+              created_at_ms = nowMs();
+              avatar = null;
+              description = null;
+              deleted = false;
+              admin_only_posting = false;
+              deleted_at_ms = null;
+              deleted_by = null;
+            };
+            groupMetadata := groupMetadata.concat([meta]);
+            #Ok(conversation)
+          };
+        };
+      };
+    };
+  };
 
+  public shared ({ caller }) func list_competition_admin_threads(competition_id : Text) : async [{ id : Text; member : Principal }] {
+    auth(caller);
+    if (not valid(competition_id)) return [];
+    let competitionDomain = await competitionDomainRef();
+    switch (competitionDomain) {
+      case null { [] };
+      case (?cd) {
+        let roles = await cd.list_competition_roles(competition_id);
+        let adminPrincipals = roles
+          .filter(func(grant) = grant.role == "competition_admin" or grant.role == "admin" or grant.role == "owner")
+          .map(func(grant) = grant.user);
+        if (not adminPrincipals.any(func(p) = p.equal(caller)) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return [];
+        let prefix = competitionAdminConversationId(competition_id) # "-";
+        var out : [{ id : Text; member : Principal }] = [];
+        for (c in conversations.values()) {
+          if (Text.startsWith(c.id, #text prefix) and c.participants.size() > 0) {
+            out := out.concat([{ id = c.id; member = c.participants[0] }]);
+          };
+        };
+        out
+      };
+    };
+  };
 
   func findConversationIndex(conversation_id : Text) : ?Nat {
     var idx = 0;
@@ -540,6 +674,14 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor only");
     if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
     clubDomainCanister := ?id;
+    #Ok
+  };
+
+  public shared ({ caller }) func set_competition_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    competitionDomainCanister := ?id;
     #Ok
   };
 

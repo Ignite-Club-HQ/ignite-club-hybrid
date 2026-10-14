@@ -32,7 +32,7 @@ function scriptedClient(script: Record<string, Result[]>) {
 }
 
 const noFilters = {
-  clubId: null, teamId: null, eventId: null, dateFrom: null, dateTo: null,
+  clubId: null, teamId: null, eventId: null, competitionId: null, dateFrom: null, dateTo: null,
   cardId: null, cardPhotoIds: undefined,
 };
 
@@ -50,6 +50,7 @@ describe("Media read repository", () => {
     const { client, calls } = scriptedClient({ photos: [{ data: photos, error: null }] });
     await expect(fetchMediaFeedPage({
       clubId: "club-a", teamId: "team-a", eventId: "event-a",
+      competitionId: "competition-a",
       dateFrom: "from", dateTo: "to", cardId: "card-a", cardPhotoIds: ["photo-a"],
       offset: 9, pageSize: 9,
     }, client)).resolves.toEqual({ photos, nextCursor: 18 });
@@ -60,6 +61,7 @@ describe("Media read repository", () => {
       { table: "photos", method: "eq", args: ["club_id", "club-a"] },
       { table: "photos", method: "eq", args: ["team_id", "team-a"] },
       { table: "photos", method: "eq", args: ["event_id", "event-a"] },
+      { table: "photos", method: "eq", args: ["competition_id", "competition-a"] },
       { table: "photos", method: "gte", args: ["created_at", "from"] },
       { table: "photos", method: "lte", args: ["created_at", "to"] },
       { table: "photos", method: "range", args: [9, 17] },

@@ -413,6 +413,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
         [],
       ),
+    'ensure_competition_admin_thread' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
     'ensure_conversation' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
@@ -537,6 +542,11 @@ export const idlFactory = ({ IDL }) => {
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubDmSettings), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'list_competition_admin_threads' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Record({ 'id' : IDL.Text, 'member' : IDL.Principal }))],
+        [],
       ),
     'list_deleted_groups' : IDL.Func(
         [],
@@ -755,6 +765,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_club_message_privacy' : IDL.Func(
         [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_competition_domain_canister' : IDL.Func(
+        [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

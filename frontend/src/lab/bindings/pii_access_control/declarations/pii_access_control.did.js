@@ -85,6 +85,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'grant_pii_read_competition' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
     'pii_vetkey_verification_key' : IDL.Func([], [IDL.Vec(IDL.Nat8)], []),
     'purge_club_grants' : IDL.Func(
@@ -112,7 +117,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'revoke_pii_read_competition' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_competition_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

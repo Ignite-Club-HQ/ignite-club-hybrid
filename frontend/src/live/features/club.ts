@@ -59,6 +59,34 @@ export async function getLiveClubSettings(ctx: FeatureBackendContext, clubId: st
   return unwrapCandid(actor.get_club_settings(clubId), "Get club settings");
 }
 
+export async function getLiveClubInviteMessageDefault(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_club_invite_message_default(clubId), "Get club invite message default");
+}
+
+export async function setLiveClubInviteMessageDefault(ctx: FeatureBackendContext, clubId: string, message: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_club_invite_message_default(clubId, message), "Set club invite message default");
+}
+
+export async function getLiveTeamWelcomeEmail(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const value = await unwrapCandid(actor.get_team_welcome_email(teamId), "Get team welcome email");
+  return value[0] ?? null;
+}
+
+export async function setLiveTeamWelcomeEmail(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  input: { enabled: boolean; subject: string; message: string },
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_team_welcome_email(teamId, input.enabled, input.subject, input.message),
+    "Set team welcome email",
+  );
+}
+
 export type LiveClubSubscription = Parameters<ClubDomainActor["save_club_subscription"]>[0];
 
 /** Club subscription row (Pro flags, plan, points-module state); null when unset. Member-readable canister-side. */
@@ -316,6 +344,9 @@ export async function setLiveTeamSponsorAllocation(
 export interface LiveNewsPostExtras {
   /** null = whole club; otherwise the post targets only these teams. */
   targetTeamIds: string[] | null;
+  targetMiniLeagueId?: string | null;
+  targetCompetitionId?: string | null;
+  sendPush?: boolean;
   isImportant: boolean;
   imageUrl: string | null;
   attachments: Array<{
@@ -331,6 +362,9 @@ export interface LiveNewsPostExtras {
 const toCandidNewsExtras = (extras: LiveNewsPostExtras) =>
   [
     candidOpt(extras.targetTeamIds),
+    candidOpt(extras.targetMiniLeagueId),
+    candidOpt(extras.targetCompetitionId),
+    extras.sendPush ?? true,
     extras.isImportant,
     candidOpt(extras.imageUrl),
     extras.attachments.map((a) => ({
@@ -386,13 +420,13 @@ export async function deleteLiveNewsPost(ctx: FeatureBackendContext, postId: str
 
 export async function listLiveNews(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_news(clubId), "List news");
+  return unwrapCandid(actor.list_news_authorized([clubId]), "List news");
 }
 
-/** Cross-club feed: published posts from clubs the caller belongs to. */
+/** Cross-club feed: published posts authorized by club or mini-league membership. */
 export async function listLiveNewsMulti(ctx: FeatureBackendContext, clubIds: string[]) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_news_multi(clubIds), "List news");
+  return unwrapCandid(actor.list_news_authorized(clubIds), "List news");
 }
 
 /**
@@ -539,6 +573,14 @@ export async function createLiveTeamInviteLink(
     actor.create_team_invite_link(clubId, teamId, role),
     "Create team invite link",
   );
+}
+
+export async function listLiveTeamInviteLinks(
+  ctx: FeatureBackendContext,
+  teamId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_team_invite_links(teamId), "List team invite links");
 }
 
 export async function rotateLiveTeamInviteLink(ctx: FeatureBackendContext, linkId: string) {

@@ -25,6 +25,8 @@ module {
     updated_at_ms : Nat64;
   };
 
+  public type MiniLeagueNewsAudience = { club_id : Text; recipients : [Principal] };
+
   // Mirrors public.mini_league_sessions (14 cols).
   public type MiniLeagueSession = {
     id : Text;

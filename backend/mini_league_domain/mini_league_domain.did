@@ -124,6 +124,11 @@ type MiniLeague =
    team_size: nat16;
    updated_at_ms: nat64;
  };
+type MiniLeagueNewsAudience =
+ record {
+   club_id: text;
+   recipients: vec principal;
+ };
 type Main = 
  service {
    add_admin: (mini_league_id: text, user_id: principal) ->
@@ -239,6 +244,11 @@ type Main =
        Err: text;
        Ok: PlayerGuardianStatus;
      }) query;
+    get_news_audience: (mini_league_id: text, requester: principal) ->
+     (variant {
+       Err: text;
+       Ok: MiniLeagueNewsAudience;
+      }) query;
    grant_role: ("principal": principal, role: text, club_id: text, team_id:
     opt text) -> (variant {
                     Err: text;
@@ -336,6 +346,10 @@ type Main =
        Err: text;
        Ok: MiniLeague;
      });
+   set_club_domain_canister: (id: principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
    set_session_status: (id: text, status: text) ->
     (variant {
        Err: text;

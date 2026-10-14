@@ -19,6 +19,7 @@ type RsvpOption = { value: RsvpStatus; label: string; icon: string };
 
 type EventRsvpResponseSectionProps = {
   event: any;
+  canRespond: boolean;
   userId: string | undefined;
   useIcpLab: boolean;
   isMiniLeagueEvent: boolean;
@@ -51,6 +52,7 @@ type EventRsvpResponseSectionProps = {
 
 export function EventRsvpResponseSection({
   event,
+  canRespond,
   userId,
   useIcpLab,
   isMiniLeagueEvent,
@@ -76,6 +78,8 @@ export function EventRsvpResponseSection({
   setNoteTarget,
   handlePayNow,
 }: EventRsvpResponseSectionProps) {
+  if (!canRespond) return null;
+
   const audience = resolveRsvpAudience(
     event.rsvp_audience,
     event.teams?.default_rsvp_audience,

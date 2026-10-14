@@ -24,12 +24,22 @@ export type VaultFolderView =
       miniLeagueName: string;
       folderId?: string;
       folderName?: string;
+    }
+  | {
+      type: "competition";
+      clubId: string;
+      clubName: string;
+      competitionId: string;
+      competitionName: string;
+      folderId?: string;
+      folderName?: string;
     };
 
 export type VaultScope = {
   clubId: string | null;
   teamId: string | null;
   miniLeagueId: string | null;
+  competitionId: string | null;
   folderId: string | null;
 };
 

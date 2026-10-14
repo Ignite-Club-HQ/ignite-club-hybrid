@@ -18,6 +18,29 @@ import {
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
+async function permanentlyDeleteCompetitionVaultObject(
+  itemId: string,
+  client: IgniteSupabaseClient,
+): Promise<boolean> {
+  const { data, error } = await client
+    .from("vault_files")
+    .select("storage_bucket, storage_path")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (error) throw error;
+  if (data?.storage_bucket !== "competition-vault") return false;
+  if (!data.storage_path) throw new Error("Competition Vault file has no storage path");
+
+  const { error: storageError } = await client.storage
+    .from("competition-vault")
+    .remove([data.storage_path]);
+  if (storageError) throw storageError;
+
+  const { error: rowError } = await client.from("vault_files").delete().eq("id", itemId);
+  if (rowError) throw rowError;
+  return true;
+}
+
 async function updateName(
   table: "vault_folders" | "vault_files",
   id: string,
@@ -108,6 +131,9 @@ export async function createVaultFolder(
       } else if (options.view.type === "team") {
         insert.club_id = options.view.clubId;
         insert.team_id = options.view.teamId;
+      } else if (options.view.type === "competition") {
+        insert.club_id = options.view.clubId;
+        insert.competition_id = options.view.competitionId;
       }
 
       const { error } = await client.from("vault_folders").insert(insert);
@@ -117,10 +143,11 @@ export async function createVaultFolder(
       // Provisional mapping: mini-league views pass a placeholder club id
       // (the canister scopes by mini_league_id) — verify the club/team id
       // mapping against the live canister post-deploy.
-      const clubId = options.view.type === "club" || options.view.type === "team"
+      const clubId = options.view.type === "club" || options.view.type === "team" || options.view.type === "competition"
         ? options.view.clubId
         : "";
       const teamId = options.view.type === "team" ? options.view.teamId : null;
+      const competitionId = options.view.type === "competition" ? options.view.competitionId : null;
       await createLiveVaultFolder(
         ctx,
         crypto.randomUUID(),
@@ -130,6 +157,7 @@ export async function createVaultFolder(
         options.name,
         [],
         options.view.type === "mini-league" ? options.view.miniLeagueId : null,
+        competitionId,
       );
     },
   });
@@ -166,6 +194,7 @@ export async function createVaultLinkFile(
       if (scope.clubId) insert.club_id = scope.clubId;
       if (scope.teamId) insert.team_id = scope.teamId;
       if (scope.miniLeagueId) insert.mini_league_id = scope.miniLeagueId;
+      if (scope.competitionId) insert.competition_id = scope.competitionId;
 
       const { error } = await client.from("vault_files").insert(insert);
       if (error) throw error;
@@ -174,10 +203,11 @@ export async function createVaultLinkFile(
       // Provisional mapping: mini-league views pass a placeholder club id
       // (the canister scopes by mini_league_id) — verify against the live
       // canister post-deploy, matching createVaultFolder's convention above.
-      const clubId = options.view.type === "club" || options.view.type === "team"
+      const clubId = options.view.type === "club" || options.view.type === "team" || options.view.type === "competition"
         ? options.view.clubId
         : "";
       const teamId = options.view.type === "team" ? options.view.teamId : null;
+      const competitionId = options.view.type === "competition" ? options.view.competitionId : null;
       await registerLiveVaultFile(
         ctx,
         crypto.randomUUID(),
@@ -191,6 +221,7 @@ export async function createVaultLinkFile(
         true,
         null,
         options.view.type === "mini-league" ? options.view.miniLeagueId : null,
+        competitionId,
       );
     },
   });
@@ -261,6 +292,7 @@ export async function permanentlyDeleteVaultPhoto(
 ): Promise<string> {
   return withFeatureBackend("vault", {
     supabase: async () => {
+      if (await permanentlyDeleteCompetitionVaultObject(itemId, client)) return itemId;
       const { data: vaultFile } = await client
         .from("vault_files")
         .select("file_url")
@@ -299,6 +331,7 @@ export async function permanentlyDeleteVaultFile(
 ): Promise<void> {
   return withFeatureBackend("vault", {
     supabase: async () => {
+      if (await permanentlyDeleteCompetitionVaultObject(itemId, client)) return;
       const response = await client.functions.invoke("permanent-delete-photos", {
         body: { fileIds: [itemId], deletionType: "permanent" },
       });

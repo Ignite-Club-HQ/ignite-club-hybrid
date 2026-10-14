@@ -67,7 +67,7 @@ describe("Vault upload/file-name/quota-reservation behavior contract", () => {
     const hasInlineCompensation = /await compensateVaultUpload\(storagePath\);\s*await settleVaultStorage\(reservationId, false\);/.test(
       clusterSource,
     );
-    const hasServiceCompensation = /await dependencies\.compensateUpload\(storagePath\);\s*await dependencies\.settleStorage\(reservationId, false\);/.test(
+    const hasServiceCompensation = /await dependencies\.compensateUpload\(storagePath(?:, storageBucket)?\);\s*await dependencies\.settleStorage\(reservationId, false\);/.test(
       uploadServiceSource,
     );
     expect(hasInlineCompensation || hasServiceCompensation).toBe(true);
@@ -80,7 +80,7 @@ describe("Vault upload/file-name/quota-reservation behavior contract", () => {
   });
 
   it("builds the public storage URL and scopes the insert to club/team/mini-league exactly like the Add Link flow", () => {
-    expect(clusterSource).toMatch(/(?:buildVaultStorageUrl|dependencies\.buildStorageUrl)\(storagePath\)/);
+    expect(clusterSource).toMatch(/(?:buildVaultStorageUrl|dependencies\.buildStorageUrl)\(storagePath(?:, storageBucket)?\)/);
     // Photo uploads set file_type; the file-name path never does.
     if (!uploadHookSource) {
       expect(vaultPageSource).toContain("file_type: file.type,");

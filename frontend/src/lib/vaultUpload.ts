@@ -9,9 +9,9 @@ export function vaultStorageOrigin(): string {
   return url.replace(/\/$/, "");
 }
 
-export function buildVaultStorageUrl(storagePath: string): string {
+export function buildVaultStorageUrl(storagePath: string, bucket: string = VAULT_BUCKET): string {
   const encoded = storagePath.split("/").map(encodeURIComponent).join("/");
-  return `${vaultStorageOrigin()}/storage/v1/object/public/${VAULT_BUCKET}/${encoded}`;
+  return `${vaultStorageOrigin()}/storage/v1/object/public/${bucket}/${encoded}`;
 }
 
 /**
@@ -53,9 +53,9 @@ export async function settleVaultStorage(reservationId: string | null, committed
 
 /** Best-effort removal of an orphaned object after a failed metadata insert. */
 // icp-guard: allow compensation for the Supabase media-bytes upload path only, which is gated upstream (media bytes stay Supabase by design)
-export async function compensateVaultUpload(storagePath: string) {
+export async function compensateVaultUpload(storagePath: string, bucket: string = VAULT_BUCKET) {
   try {
-    await supabase.storage.from(VAULT_BUCKET).remove([storagePath]);
+    await supabase.storage.from(bucket).remove([storagePath]);
   } catch (err) {
     console.warn("[vaultUpload] failed to remove orphaned object", err);
   }

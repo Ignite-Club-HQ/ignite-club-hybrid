@@ -13,6 +13,7 @@
  */
 import { supabase as defaultClient } from "@/integrations/supabase/client";
 import { isVaultImageItem } from "./vaultItemClassification";
+import { resolveCompetitionVaultFileUrls } from "./vaultReadRepository";
 
 type Client = typeof defaultClient;
 
@@ -20,6 +21,7 @@ export interface VaultExportScope {
   folderId: string | null;
   clubId: string | null;
   teamId: string | null;
+  competitionId?: string | null;
 }
 
 export interface VaultFolderContents {
@@ -38,11 +40,13 @@ export interface VaultExportContents {
 export const hasVaultExportScope = (scope: {
   clubId: string | null;
   teamId: string | null;
-}) => Boolean(scope.teamId || scope.clubId);
+  competitionId?: string | null;
+}) => Boolean(scope.teamId || scope.competitionId || scope.clubId);
 
-const applyScope = (query: any, clubId: string | null, teamId: string | null) => {
+const applyScope = (query: any, clubId: string | null, teamId: string | null, competitionId: string | null = null) => {
   if (teamId) return query.eq("team_id", teamId);
-  return query.eq("club_id", clubId).is("team_id", null);
+  if (competitionId) return query.eq("club_id", clubId).eq("competition_id", competitionId);
+  return query.eq("club_id", clubId).is("team_id", null).is("competition_id", null);
 };
 
 /** Map a `vault_files` image row to the photo-like shape the export UI expects. */
@@ -55,17 +59,17 @@ const toPhotoShape = (row: any, path: string) => ({
 });
 
 export const fetchVaultFolderContents = async (
-  { folderId, clubId, teamId }: VaultExportScope,
+  { folderId, clubId, teamId, competitionId = null }: VaultExportScope,
   path: string = "",
   client: Client = defaultClient,
 ): Promise<VaultFolderContents> => {
   // Fail closed — no scope means no export.
-  if (!hasVaultExportScope({ clubId, teamId })) {
+  if (!hasVaultExportScope({ clubId, teamId, competitionId })) {
     return { photos: [], files: [], subfolders: [] };
   }
 
   let itemsQuery = client.from("vault_files").select("*").is("deleted_at", null);
-  itemsQuery = applyScope(itemsQuery, clubId, teamId);
+  itemsQuery = applyScope(itemsQuery, clubId, teamId, competitionId);
   itemsQuery = folderId
     ? itemsQuery.eq("folder_id", folderId)
     : itemsQuery.is("folder_id", null);
@@ -75,13 +79,13 @@ export const fetchVaultFolderContents = async (
     .from("vault_folders")
     .select("*")
     .is("deleted_at", null);
-  subfoldersQuery = applyScope(subfoldersQuery, clubId, teamId);
+  subfoldersQuery = applyScope(subfoldersQuery, clubId, teamId, competitionId);
   subfoldersQuery = folderId
     ? subfoldersQuery.eq("parent_id", folderId)
     : subfoldersQuery.is("parent_id", null);
   const { data: childFolders } = await subfoldersQuery;
 
-  const all = rows || [];
+  const all = await resolveCompetitionVaultFileUrls((rows || []) as any[], client);
   return {
     photos: all.filter(isVaultImageItem).map(r => toPhotoShape(r, path)),
     files: all.filter(r => !isVaultImageItem(r)).map(f => ({ ...f, path })),

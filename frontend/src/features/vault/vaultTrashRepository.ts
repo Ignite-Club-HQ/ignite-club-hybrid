@@ -3,6 +3,7 @@ import {
   partitionVaultItems,
   type VaultFileRow,
   type VaultPhotoItem,
+  resolveCompetitionVaultFileUrls,
 } from "./vaultReadRepository";
 
 type IgniteSupabaseClient = typeof supabase;
@@ -30,8 +31,9 @@ export function partitionVaultTrashItems(items: VaultTrashFile[]): VaultTrashIte
 export async function fetchVaultTrashItems(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
+  competitionId: string | null = null,
 ): Promise<VaultTrashItems> {
-  const { data, error } = await client
+  let query = client
     .from("vault_files")
     .select(`
       *,
@@ -39,9 +41,13 @@ export async function fetchVaultTrashItems(
       team:teams(id, name)
     `)
     .eq("club_id", clubId)
-    .not("deleted_at", "is", null)
-    .order("deleted_at", { ascending: false });
+    .not("deleted_at", "is", null);
+  query = competitionId
+    ? query.eq("competition_id", competitionId)
+    : query.is("competition_id", null);
+  const { data, error } = await query.order("deleted_at", { ascending: false });
 
   if (error) throw error;
-  return partitionVaultTrashItems((data ?? []) as VaultTrashFile[]);
+  const resolved = await resolveCompetitionVaultFileUrls((data ?? []) as VaultTrashFile[], client);
+  return partitionVaultTrashItems(resolved as VaultTrashFile[]);
 }

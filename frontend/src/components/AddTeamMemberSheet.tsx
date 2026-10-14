@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import { UserPlus, Search, Loader2, Mail, X, Check, Send, Users, Plus, Upload, Baby, MessageSquare, AlertTriangle, Share2, Pencil } from "lucide-react";
 import TeamJoinLinkCard from "@/components/invite/TeamJoinLinkCard";
@@ -225,6 +225,96 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [customMessage, setCustomMessage] = useState("");
   const [showMessageEditor, setShowMessageEditor] = useState(false);
+
+  const { data: defaultInviteMessage = "" } = useQuery({
+    queryKey: ["club-invite-message-default", clubId],
+    enabled: !!clubId && open,
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_invite_message_defaults")
+            .select("message")
+            .eq("club_id", clubId)
+            .maybeSingle();
+          if (error) throw error;
+          return data?.message ?? "";
+        },
+        icp: async (ctx) => {
+          const { getLiveClubInviteMessageDefault } = await import("@/live/features/club");
+          const row = await getLiveClubInviteMessageDefault(ctx, clubId).catch(() => null);
+          return row?.message ?? "";
+        },
+      }),
+  });
+
+  const { data: canSaveDefaultInviteMessage = false } = useQuery({
+    queryKey: ["can-save-club-invite-message-default", clubId, user?.id],
+    enabled: !!clubId && !!user && open,
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("user_roles")
+            .select("user_id")
+            .eq("user_id", user!.id)
+            .eq("club_id", clubId)
+            .eq("role", "club_admin")
+            .maybeSingle();
+          if (error) throw error;
+          return !!data;
+        },
+        icp: async (ctx) => {
+          const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+          const grants = await getLiveMyRoleGrants(ctx);
+          return grants.some((grant: any) => grant.role === "club_admin" && grant.club?.[0] === clubId);
+        },
+      }),
+  });
+
+  const inviteMessageClubIdRef = useRef(clubId);
+  useEffect(() => {
+    if (inviteMessageClubIdRef.current === clubId) return;
+    inviteMessageClubIdRef.current = clubId;
+    setCustomMessage("");
+    setShowMessageEditor(false);
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!showMessageEditor || customMessage.trim()) return;
+    if (defaultInviteMessage) {
+      setCustomMessage(defaultInviteMessage);
+    }
+  }, [showMessageEditor, defaultInviteMessage, customMessage]);
+
+  const updateDefaultInviteMessage = useMutation({
+    mutationFn: async (message: string) => {
+      const trimmed = message.trim();
+      if (!trimmed) throw new Error("A default invite message is required before saving.");
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_invite_message_defaults")
+            .upsert({ club_id: clubId, message: trimmed }, { onConflict: "club_id" });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { setLiveClubInviteMessageDefault } = await import("@/live/features/club");
+          await setLiveClubInviteMessageDefault(ctx, clubId, trimmed);
+        },
+      });
+      return trimmed;
+    },
+    onSuccess: (message) => {
+      queryClient.invalidateQueries({ queryKey: ["club-invite-message-default", clubId] });
+      setCustomMessage(message);
+      toast({ title: "Default invite message saved" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Could not save default", description: error.message, variant: "destructive" });
+    },
+  });
+
   // Second parent fields (for parent role)
   const [secondParentName, setSecondParentName] = useState("");
   const [secondParentEmail, setSecondParentEmail] = useState("");
@@ -1115,13 +1205,29 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
                     </Button>
                   </div>
                   {showMessageEditor && (
-                    <Textarea
-                      placeholder={`Add a personal note (optional). Example:\n\nHi! We're using Ignite Club HQ to keep everything organised — fixtures, chat, and team updates all in one place. Tap the link to join.`}
-                      value={customMessage}
-                      onChange={(e) => setCustomMessage(e.target.value)}
-                      rows={4}
-                      className="text-sm resize-none"
-                    />
+                    <>
+                      <Textarea
+                        placeholder={`Add a personal note (optional). Example:\n\nHi! We're using Ignite Club HQ to keep everything organised — fixtures, chat, and team updates all in one place. Tap the link to join.`}
+                        value={customMessage}
+                        onChange={(e) => setCustomMessage(e.target.value)}
+                        rows={4}
+                        className="text-sm resize-none"
+                      />
+                      {canSaveDefaultInviteMessage && <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (!customMessage.trim()) return;
+                            updateDefaultInviteMessage.mutate(customMessage);
+                          }}
+                          disabled={updateDefaultInviteMessage.isPending}
+                        >
+                          {defaultInviteMessage ? "Update saved default" : "Save as default"}
+                        </Button>
+                      </div>}
+                    </>
                   )}
                 </div>
               </>
@@ -1256,6 +1362,20 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
                     rows={4}
                     className="text-sm resize-none"
                   />
+                  {canSaveDefaultInviteMessage && <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (!customMessage.trim()) return;
+                        updateDefaultInviteMessage.mutate(customMessage);
+                      }}
+                      disabled={updateDefaultInviteMessage.isPending}
+                    >
+                      {defaultInviteMessage ? "Update saved default" : "Save as default"}
+                    </Button>
+                  </div>}
                   <p className="text-xs text-muted-foreground">
                     This message will appear in all invite emails
                   </p>

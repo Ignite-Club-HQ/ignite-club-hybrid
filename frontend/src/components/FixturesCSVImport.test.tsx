@@ -67,6 +67,11 @@ const ESCAPE_CSV = [
   HEADER,
   "Round 1,2099-03-15,10:00,U12 Red,Eagles",
 ].join("\n");
+const PLAYHQ_CSV = [
+  "Game ID,Competition,Round,Game Date,Game Time,Playing Surface,Grade,Home Team,Away Team,Game Status",
+  "game-1,Summer,Grand Final,17-18/10/2026,09:00;10:30,Oval 1,U12,Stirling U12 White,TBD,Scheduled",
+  "game-2,Summer,3,19/10/2026,11:00,Oval 2,U10,Stirling U10 Blue,Visitors U10 Red,Cancelled",
+].join("\n");
 
 function csvFile(content: string) {
   return new File([content], "fixtures.csv", { type: "text/csv" });
@@ -143,6 +148,24 @@ describe("validateFixtureImportAuthorization", () => {
 });
 
 describe("FixturesCSVImport authorization", () => {
+  it("routes PlayHQ advanced exports to mapping and shows skipped row reasons", async () => {
+    const { container } = render(
+      <FixturesCSVImport
+        clubId="club-1"
+        clubName="Stirling Cricket Club"
+        teams={TEAMS}
+        onImportComplete={vi.fn()}
+        isClubAdmin
+      />,
+    );
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File([PLAYHQ_CSV], "playhq.csv", { type: "text/csv" })] } });
+
+    expect(await screen.findByText("Map Teams")).toBeInTheDocument();
+    expect(screen.getByText(/cancelled, or forfeited game skipped/i)).toBeInTheDocument();
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
   it("(1)(2)(3) non-admin multi-team CSV: error shown, button disabled, no insert", async () => {
     const { container } = render(
       <FixturesCSVImport

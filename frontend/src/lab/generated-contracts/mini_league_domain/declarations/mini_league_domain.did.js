@@ -124,6 +124,10 @@ export const idlFactory = ({ IDL }) => {
     'updated_at_ms' : IDL.Nat64,
     'created_at_ms' : IDL.Nat64,
   });
+  const MiniLeagueNewsAudience = IDL.Record({
+    'recipients' : IDL.Vec(IDL.Principal),
+    'club_id' : IDL.Text,
+  });
   const PlayerGuardianStatus = IDL.Record({
     'pending' : IDL.Bool,
     'parent_linked' : IDL.Bool,
@@ -277,6 +281,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeague), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_news_audience' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : MiniLeagueNewsAudience, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_player_guardian_status' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : PlayerGuardianStatus, 'Err' : IDL.Text })],
@@ -401,6 +410,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_mini_league_status' : IDL.Func(

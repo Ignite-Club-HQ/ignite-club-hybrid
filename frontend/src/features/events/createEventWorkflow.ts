@@ -81,6 +81,7 @@ export async function createEventTransaction(
       };
 
       const reminderHours = eventRecord.reminder_hours_before as number | null | undefined;
+      const dutyTeamId = eventRecord.duty_team_id as string | null | undefined;
       const durationMs = Math.max(endsAtMs - startsAtMs, 0) || 3_600_000;
 
       // Recurring: the browser already computed the exact occurrence dates
@@ -118,9 +119,11 @@ export async function createEventTransaction(
           .filter((ms) => ms !== startsAtMs);
         runInBackground([
           ...dutiesFor(first.id),
+          ...(dutyTeamId ? [() => setLiveEventDutyTeam(ctx, first.id, dutyTeamId)] : []),
           ...(reminderHours ? [() => setLiveEventAutoReminder(ctx, first.id, reminderHours)] : []),
           ...childStarts.map((childStart) => async () => {
             const occ = await addLiveSeriesOccurrence(ctx, seriesId, childStart, childStart + durationMs);
+            if (dutyTeamId) await setLiveEventDutyTeam(ctx, occ.id, dutyTeamId);
             if (reminderHours) await setLiveEventAutoReminder(ctx, occ.id, reminderHours);
           }),
         ], input.onBackgroundDone);
@@ -142,6 +145,7 @@ export async function createEventTransaction(
           duty.assigned_to
             ? setLiveEventDuty(ctx, created.id, duty.assigned_to, duty.name)
             : createLiveOpenDuty(ctx, created.id, duty.name)),
+        ...(dutyTeamId ? [() => setLiveEventDutyTeam(ctx, created.id, dutyTeamId)] : []),
         ...(reminderHours ? [() => setLiveEventAutoReminder(ctx, created.id, reminderHours)] : []),
       ], input.onBackgroundDone);
 

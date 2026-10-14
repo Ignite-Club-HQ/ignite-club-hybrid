@@ -193,6 +193,7 @@ export interface HttpResponse {
   'headers' : Array<[string, string]>,
   'status_code' : number,
 }
+export interface InviteMessageDefault { 'message' : string, 'club_id' : string }
 export interface InvitePayload {
   'to' : string,
   'subject' : string,
@@ -315,6 +316,9 @@ export interface Main {
       string,
       string,
       [] | [Array<string>],
+      [] | [string],
+      [] | [string],
+      boolean,
       boolean,
       [] | [string],
       Array<NewsAttachment>,
@@ -415,6 +419,11 @@ export interface Main {
     { 'Ok' : ClubBranding } |
       { 'Err' : string }
   >,
+  'get_club_invite_message_default' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [InviteMessageDefault] } |
+      { 'Err' : string }
+  >,
   'get_club_link' : ActorMethod<
     [string],
     { 'Ok' : [] | [Link] } |
@@ -506,9 +515,19 @@ export interface Main {
     { 'Ok' : Array<TeamSubscription> } |
       { 'Err' : string }
   >,
+  'get_team_welcome_email' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [TeamWelcomeEmail] } |
+      { 'Err' : string }
+  >,
   'get_teams' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
+  'get_welcome_email_job' : ActorMethod<
+    [string],
+    { 'Ok' : WelcomeEmailJob } |
       { 'Err' : string }
   >,
   'has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
@@ -531,6 +550,7 @@ export interface Main {
   'is_app_admin' : ActorMethod<[Principal], boolean>,
   'is_club_member' : ActorMethod<[Principal, string], boolean>,
   'is_member_removed' : ActorMethod<[string, Principal], boolean>,
+  'is_user_on_any_team' : ActorMethod<[Array<string>, Principal], boolean>,
   'link_guardian' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |
@@ -585,6 +605,11 @@ export interface Main {
   'list_my_children' : ActorMethod<[], Array<Child>>,
   'list_news' : ActorMethod<
     [string],
+    { 'Ok' : Array<NewsPost> } |
+      { 'Err' : string }
+  >,
+  'list_news_authorized' : ActorMethod<
+    [Array<string>],
     { 'Ok' : Array<NewsPost> } |
       { 'Err' : string }
   >,
@@ -651,6 +676,11 @@ export interface Main {
   'list_team_folders' : ActorMethod<
     [string],
     { 'Ok' : Array<TeamFolder> } |
+      { 'Err' : string }
+  >,
+  'list_team_invite_links' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamInviteLink> } |
       { 'Err' : string }
   >,
   'list_team_invites' : ActorMethod<
@@ -892,6 +922,11 @@ export interface Main {
     { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,
+  'set_club_invite_message_default' : ActorMethod<
+    [string, string],
+    { 'Ok' : InviteMessageDefault } |
+      { 'Err' : string }
+  >,
   'set_club_logo_only_mode' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubSettings } |
@@ -925,12 +960,22 @@ export interface Main {
     { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,
+  'set_competition_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_events_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_messaging_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_mini_league_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -968,6 +1013,11 @@ export interface Main {
   'set_team_sponsor_allocation' : ActorMethod<
     [string, string, boolean],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_team_welcome_email' : ActorMethod<
+    [string, boolean, string, string],
+    { 'Ok' : TeamWelcomeEmail } |
       { 'Err' : string }
   >,
   'set_theme_preference' : ActorMethod<
@@ -1017,6 +1067,9 @@ export interface Main {
       string,
       string,
       [] | [Array<string>],
+      [] | [string],
+      [] | [string],
+      boolean,
       boolean,
       [] | [string],
       Array<NewsAttachment>,
@@ -1054,6 +1107,7 @@ export interface NewsPost {
   'title' : string,
   'target_team_ids' : [] | [Array<string>],
   'image_url' : [] | [string],
+  'target_mini_league_id' : [] | [string],
   'body' : string,
   'updated_at_ms' : bigint,
   'created_by' : Principal,
@@ -1062,6 +1116,7 @@ export interface NewsPost {
   'revision' : bigint,
   'club_id' : string,
   'attachments' : Array<NewsAttachment>,
+  'target_competition_id' : [] | [string],
 }
 export type Operation = {
     'SetActive' : { 'id' : string, 'active' : boolean }
@@ -1260,6 +1315,21 @@ export interface TeamSubscription {
   'minutes_per_half' : [] | [number],
   'disable_position_swaps' : boolean,
   'disable_team_pom_rewards' : boolean,
+}
+export interface TeamWelcomeEmail {
+  'subject' : string,
+  'team_id' : string,
+  'enabled' : boolean,
+  'message' : string,
+  'club_id' : string,
+}
+export interface WelcomeEmailJob {
+  'to' : string,
+  'subject' : string,
+  'invite_id' : string,
+  'team_name' : string,
+  'message' : string,
+  'club_name' : string,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

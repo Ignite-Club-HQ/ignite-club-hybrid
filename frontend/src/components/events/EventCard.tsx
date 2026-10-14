@@ -56,6 +56,7 @@ import {
 } from "@/lib/rsvpAudience";
 import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { getEventEligibleTeamIds, eventTargetTeamKey } from "@/lib/eventAudience";
+import { MyTeamDutyTag } from "@/components/events/MyTeamDutyTag";
 
 type RsvpStatus = "going" | "maybe" | "not_going";
 
@@ -70,6 +71,8 @@ export interface EventCardEvent {
   location_name: string | null;
   club_id: string;
   team_id: string | null;
+  duty_team_id?: string | null;
+  duty_team_label?: string | null;
   mini_league_id: string | null;
   is_cancelled: boolean;
   is_bye?: boolean | null;
@@ -1017,6 +1020,8 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
             </div>
           )}
         </div>
+
+        <MyTeamDutyTag event={event} />
 
 
         {myDuties && myDuties.length > 0 && (

@@ -36,10 +36,11 @@ function getClubId(view: VaultFolderView): string | null {
 export function getVaultTrashQueryScope(
   currentView: VaultFolderView,
   showTrash: boolean,
-): { clubId: string | null; enabled: boolean } {
+): { clubId: string | null; competitionId: string | null; enabled: boolean } {
   const clubId = getClubId(currentView);
   return {
     clubId,
+    competitionId: currentView.type === "competition" ? currentView.competitionId : null,
     enabled: showTrash && currentView.type !== "root",
   };
 }
@@ -54,10 +55,10 @@ export function useVaultTrashWorkflow({
   onFileSoftDeleteSuccess,
 }: VaultTrashWorkflowOptions) {
   const queryClient = useQueryClient();
-  const { clubId, enabled } = getVaultTrashQueryScope(currentView, showTrash);
+  const { clubId, competitionId, enabled } = getVaultTrashQueryScope(currentView, showTrash);
   const { data: trashItems, isLoading: isLoadingTrash } = useQuery({
-    queryKey: vaultKeys.trashForClub(clubId),
-    queryFn: () => fetchVaultTrashItems(clubId!),
+    queryKey: vaultKeys.trashForClub(clubId, competitionId),
+    queryFn: () => fetchVaultTrashItems(clubId!, undefined, competitionId),
     // Vault trash reads Supabase photos/vault_files rows directly with no
     // canister counterpart — stay silent (empty) when the club is ICP-routed
     // rather than querying the wrong backend.

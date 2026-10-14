@@ -293,6 +293,15 @@ export function liveClubAdminThreadId(clubId: string, member: string): string {
 }
 
 /**
+ * Thread id formula for a competition admin thread: a member's thread to the
+ * competition admins. Derived on both sides so the inbox opens without a
+ * server lookup.
+ */
+export function liveCompetitionAdminThreadId(competitionId: string, member: string): string {
+  return `competition-admin-${competitionId}-${member}`;
+}
+
+/**
  * Open (and re-sync) one member's thread with their club's admins. Canister-side
  * the caller must be that member or one of the club's admins; membership is
  * re-read from club_domain on every call, so admin changes take effect on the
@@ -323,6 +332,34 @@ export async function listLiveClubAdminThreads(
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   // Returns a plain array (not a Result variant), so no unwrapCandid.
   const raw = await actor.list_club_admin_threads(clubId);
+  return raw.map((entry) => ({ id: entry.id, member: entry.member.toText() }));
+}
+
+/**
+ * Open (and re-sync) one member's thread to the competition admins. The
+ * canister resolves admin principals from the competition-domain role store
+ * and keeps the participant list stable by thread id; the UI never supplies an
+ * allow-list.
+ */
+export async function ensureLiveCompetitionAdminThread(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  member: string,
+): Promise<string> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const conversation = await unwrapCandid(
+    actor.ensure_competition_admin_thread(competitionId, Principal.fromText(member)),
+    "Ensure competition admin thread",
+  );
+  return conversation.id;
+}
+
+export async function listLiveCompetitionAdminThreads(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+): Promise<Array<{ id: string; member: string }>> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await actor.list_competition_admin_threads(competitionId);
   return raw.map((entry) => ({ id: entry.id, member: entry.member.toText() }));
 }
 

@@ -119,6 +119,24 @@ export async function listLiveEvents(
   return actor.list_events(candidOpt(clubId), candidOpt(teamId));
 }
 
+export async function listLiveEventDutyTeams(
+  ctx: FeatureBackendContext,
+  eventIds: string[],
+): Promise<Array<{ event_id: string; team_id: string }>> {
+  const ids = Array.from(new Set(eventIds.filter(Boolean)));
+  if (ids.length === 0) return [];
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const assignments: Array<{ event_id: string; team_id: string }> = [];
+  for (let offset = 0; offset < ids.length; offset += 300) {
+    const page = await unwrapCandid(
+      actor.list_event_duty_teams(ids.slice(offset, offset + 300)),
+      "List event duty teams",
+    );
+    assignments.push(...page);
+  }
+  return assignments;
+}
+
 /**
  * The caller's own RSVPs (events_domain `my_rsvps` query). Caller-scoped
  * counterpart of the governor-gated export_state snapshot, for member-facing
@@ -1925,4 +1943,21 @@ export async function getLiveEventAutoReminder(ctx: FeatureBackendContext, event
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   const result = await actor.get_event_auto_reminder(eventId);
   return result[0] ?? null;
+}
+export async function getLiveEventDutyTeam(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const result = unwrapCandid(actor.get_event_duty_team(eventId), "Get event duty team");
+  return result[0]?.team_id ?? null;
+}
+
+export async function setLiveEventDutyTeam(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  teamId: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_event_duty_team(eventId, candidOpt(teamId)),
+    "Set event duty team",
+  );
 }

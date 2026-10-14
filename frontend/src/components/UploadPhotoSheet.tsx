@@ -21,7 +21,7 @@ import { syncGalleryPhotoToVault } from "@/lib/galleryVaultSync";
 import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { registerLiveAsset } from "@/live/features/media";
+import { registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
 import { recordLivePhotoUpload } from "@/live/features/insights";
 import { getLiveClubProfile, getLiveClubSubscription, getLiveTeam, listLiveTeams } from "@/live/features/club";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
@@ -47,6 +47,7 @@ interface UploadPhotoSheetProps {
   defaultClubId?: string | null;
   defaultTeamId?: string | null;
   defaultEventId?: string | null;
+  defaultCompetitionId?: string | null;
 }
 
 interface Club {
@@ -88,6 +89,7 @@ export function UploadPhotoSheet({
   defaultClubId,
   defaultTeamId,
   defaultEventId,
+  defaultCompetitionId,
 }: UploadPhotoSheetProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -97,6 +99,7 @@ export function UploadPhotoSheet({
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [selectedMiniLeagueId, setSelectedMiniLeagueId] = useState<string>("");
   const [selectedEventId, setSelectedEventId] = useState<string>("");
+  const [selectedCompetitionId, setSelectedCompetitionId] = useState<string>("");
   const [caption, setCaption] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
@@ -438,6 +441,7 @@ export function UploadPhotoSheet({
     if (defaultClubId) setSelectedClubId((prev) => prev || defaultClubId);
     if (defaultTeamId) setSelectedTeamId((prev) => prev || defaultTeamId);
     if (defaultEventId) setSelectedEventId((prev) => prev || defaultEventId);
+    if (defaultCompetitionId) setSelectedCompetitionId(defaultCompetitionId);
 
     if (defaultTeamId && !defaultClubId) {
       let cancelled = false;
@@ -461,7 +465,7 @@ export function UploadPhotoSheet({
       })().catch((error) => console.warn("Could not resolve photo team club", error));
       return () => { cancelled = true; };
     }
-  }, [open, defaultClubId, defaultTeamId, defaultEventId]);
+  }, [open, defaultClubId, defaultTeamId, defaultEventId, defaultCompetitionId]);
 
   useEffect(() => {
     if (!open) {
@@ -475,7 +479,7 @@ export function UploadPhotoSheet({
     };
   }, []);
 
-  const uploadSinglePhoto = async (file: File, clubId: string, teamId: string, miniLeagueId: string, eventId: string, photoCaption: string, albumId: string | null): Promise<{ url: string; photoId: string }> => {
+  const uploadSinglePhoto = async (file: File, clubId: string, teamId: string, miniLeagueId: string, eventId: string, competitionId: string, photoCaption: string, albumId: string | null): Promise<{ url: string; photoId: string }> => {
     // Fail closed for Internet Identity members until the media_blob_store
     // canister is configured: without it the only byte path is plaintext
     // Supabase storage, which ICP sessions must never write. The entry
@@ -548,7 +552,7 @@ export function UploadPhotoSheet({
           const checksum = blobUpload
             ? blobUpload.blobRef.content_hash
             : await sha256Hex(new Uint8Array(await file.arrayBuffer()));
-          return registerLiveAsset(ctx, {
+          const asset = await registerLiveAsset(ctx, {
             clubId,
             kind: "photo",
             mime: file.type || "application/octet-stream",
@@ -558,6 +562,8 @@ export function UploadPhotoSheet({
             contentLength: file.size,
             blobRef: blobUpload?.blobRef,
           });
+          if (competitionId) await setLiveAssetScope(ctx, asset.id, { competitionId });
+          return asset;
         },
       });
       return { url: storageUrl, photoId: asset.id };
@@ -569,6 +575,7 @@ export function UploadPhotoSheet({
       club_id: clubId || null,
       team_id: teamId || null,
       mini_league_id: miniLeagueId || null,
+      competition_id: competitionId || null,
       event_id: eventId || null,
       file_size: file.size,
       title: photoCaption || null,
@@ -633,6 +640,7 @@ export function UploadPhotoSheet({
     setSelectedTeamId("");
     setSelectedMiniLeagueId("");
     setSelectedEventId("");
+    setSelectedCompetitionId("");
     setCaption("");
     setSelectedPhotos([]);
     setUploading(false);
@@ -925,7 +933,7 @@ export function UploadPhotoSheet({
       );
       
       try {
-        const { url, photoId } = await uploadSinglePhoto(photo.file, clubId, teamId, miniLeagueId, eventId, photoCaption, albumId);
+        const { url, photoId } = await uploadSinglePhoto(photo.file, clubId, teamId, miniLeagueId, eventId, selectedCompetitionId, photoCaption, albumId);
         uploadedUrls.push(url);
         uploadedPhotoIds.push(photoId);
         successCount++;
@@ -1043,6 +1051,7 @@ export function UploadPhotoSheet({
     setSelectedTeamId("");
     setSelectedMiniLeagueId("");
     setSelectedEventId("");
+    setSelectedCompetitionId("");
     setCaption("");
     setSelectedPhotos([]);
     setUploading(false);

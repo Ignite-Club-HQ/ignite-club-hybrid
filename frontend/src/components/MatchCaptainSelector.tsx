@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface MatchCaptainSelectorProps {
   eventId: string;
@@ -89,6 +90,41 @@ export default function MatchCaptainSelector({
     enabled: !!teamId && !isIcp,
   });
 
+  const { data: seasonCaptain, isLoading: isSeasonCaptainLoading } = useQuery({
+    queryKey: ["team-season-captain", teamId, isIcp],
+    enabled: !!teamId,
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("team_captains")
+          .select("user_id")
+          .eq("team_id", teamId!)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data?.user_id) return null;
+        const { data: profile } = await selectCachedProfileById(data.user_id);
+        return { user_id: data.user_id, profiles: profile, isSeasonCaptain: true };
+      },
+      icp: async (ctx) => {
+        const [{ listLiveTeamCaptains }, { listLiveProfilesByIds }] = await Promise.all([
+          import("@/live/features/club"),
+          import("@/live/features/identityAccessClient"),
+        ]);
+        const captains = await listLiveTeamCaptains(ctx, teamId!);
+        const principal = captains[0]?.user?.toText?.() ?? String(captains[0]?.user ?? "");
+        if (!principal) return null;
+        const [profile] = await listLiveProfilesByIds(ctx, [principal]);
+        return {
+          user_id: principal,
+          profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_ref?.[0] ?? null } : null,
+          isSeasonCaptain: true,
+        };
+      },
+    }),
+  });
+
   const assignMutation = useMutation({
     mutationFn: async ({ userId, childId }: { userId?: string; childId?: string }) => {
       // Replace any existing captain for this event
@@ -138,7 +174,7 @@ export default function MatchCaptainSelector({
     (r) => !r.child_id && r.user_id && playerUserIds.includes(r.user_id)
   );
 
-  if (isLoading) {
+  if (isLoading || isSeasonCaptainLoading) {
     return (
       <Card>
         <CardContent className="p-4 flex justify-center">
@@ -147,6 +183,8 @@ export default function MatchCaptainSelector({
       </Card>
     );
   }
+
+  const displayedCaptain = captain ?? seasonCaptain;
 
   return (
     <>
@@ -158,26 +196,27 @@ export default function MatchCaptainSelector({
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          {captain ? (
+          {displayedCaptain ? (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10 ring-2 ring-blue-500">
-                  {captain.profiles?.avatar_url && (
-                    <AvatarImage src={captain.profiles.avatar_url} />
+                  {displayedCaptain.profiles?.avatar_url && (
+                    <AvatarImage src={displayedCaptain.profiles.avatar_url} />
                   )}
                   <AvatarFallback className="bg-blue-500/20 text-blue-600">
-                    {(captain.profiles?.display_name || captain.children?.name || "?")
+                    {(displayedCaptain.profiles?.display_name || displayedCaptain.children?.name || "?")
                       .charAt(0)
                       .toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">
-                    {captain.profiles?.display_name || captain.children?.name}
+                    {displayedCaptain.profiles?.display_name || displayedCaptain.children?.name || "Team captain"}
                   </span>
+                  {displayedCaptain.isSeasonCaptain && <Badge variant="secondary">Season captain</Badge>}
                 </div>
               </div>
-              {effectiveIsAdmin && (
+              {effectiveIsAdmin && !displayedCaptain.isSeasonCaptain && (
                 <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"

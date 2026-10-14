@@ -30,8 +30,12 @@ persistent actor class Main(governorInit : Principal) {
   var competitionJoinLinks : [Types.CompetitionJoinLink];
   var eoiSubmissions : [Types.EoiSubmission];
   var divisionSettings : [Types.DivisionSetting];
+  var competitionLadderSettings : [Types.CompetitionLadderSetting];
   var broadcasts : [Types.Broadcast];
   var clubDomainCanister : ?Principal;
+  var eventsDomainCanister : ?Principal;
+  var vaultDomainCanister : ?Principal;
+  var piiAccessControlCanister : ?Principal;
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
@@ -89,6 +93,46 @@ persistent actor class Main(governorInit : Principal) {
     let competition : Types.Competition = { id; club_id; name; season; status = "open"; description = null; visibility = "private"; points_win = 3; points_draw = 1; points_loss = 0; revision = 1 };
     competitions := competitions.concat([competition]);
     #Ok(competition)
+  };
+
+  public shared ({ caller }) func create_competition_event(
+    operation_id : Text,
+    competition_id : Text,
+    title : Text,
+    description : Text,
+    event_type : Text,
+    location : ?Text,
+    starts_at_ms : Nat64,
+    ends_at_ms : Nat64,
+  ) : async { #Ok : Nat16; #Err : Text } {
+    auth(caller);
+    await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not valid(operation_id) or not valid(title) or description.size() > 2000 or not valid(event_type) or starts_at_ms >= ends_at_ms) return #Err("Invalid competition event");
+    switch (location) { case (?value) { if (value.size() > 256) return #Err("Location too long") }; case null {} };
+    let competitionClub = switch (competitions.find(func(item) = item.id == competition_id)) {
+      case null return #Err("Competition not found");
+      case (?competition) competition.club_id;
+    };
+    let targets = entries
+      .filter(func(entry) = entry.competition_id == competition_id and (entry.status == "accepted" or entry.status == "registered"))
+      .map(func(entry) = { team_id = entry.team_id; club_id = entry.club_id });
+    if (targets.size() == 0) return #Ok(0);
+    let eventsCanister = switch (eventsDomainCanister) {
+      case null return #Err("events_domain canister not configured");
+      case (?value) value;
+    };
+    let eventDomain : actor {
+      create_competition_events : shared (Text, Text, Principal, Text, [{ team_id : Text; club_id : Text }], Text, Text, Text, ?Text, Nat64, Nat64) -> async { #Ok : [Text]; #Err : Text };
+    } = actor (Principal.toText(eventsCanister));
+    try {
+      switch (await eventDomain.create_competition_events(operation_id, competition_id, caller, competitionClub, targets, title, description, event_type, location, starts_at_ms, ends_at_ms)) {
+        case (#Err(error)) #Err(error);
+        case (#Ok(eventIds)) #Ok(Nat.toNat16(eventIds.size()));
+      }
+    } catch (_) {
+      #Err("Competition event fan-out failed; retry with the same operation id")
+    }
   };
 
   // Competition settings (name, description, status, visibility, ladder
@@ -179,6 +223,30 @@ persistent actor class Main(governorInit : Principal) {
         canManageEntryTeam(caller, item.club_id, team_id) or canManageCompetition(caller, item.competition_id)
       )
     }))
+  };
+
+  public query ({ caller }) func can_invite_players_to_team(team_id : Text) : async Bool {
+    auth(caller);
+    if (not valid(team_id)) return false;
+    entries.any(func(entry) =
+      entry.team_id == team_id and
+      (entry.status == "accepted" or entry.status == "registered") and
+      canManageCompetition(caller, entry.competition_id)
+    )
+  };
+
+  public shared query ({ caller }) func is_competition_invite_manager(team_id : Text, requester : Principal) : async Bool {
+    if (requester.equal(Principal.anonymous()) or not valid(team_id)) return false;
+    switch (clubDomainCanister) {
+      case null { false };
+      case (?clubDomain) {
+        caller.equal(clubDomain) and entries.any(func(entry) =
+          entry.team_id == team_id and
+          (entry.status == "accepted" or entry.status == "registered") and
+          canManageCompetition(requester, entry.competition_id)
+        )
+      };
+    }
   };
 
   // Assigns a registered team to a division (null clears the assignment).
@@ -398,6 +466,11 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(competitions.filter(func(item) = club_ids.any(func(id) = id == item.club_id)))
   };
 
+  public query ({ caller }) func list_my_news_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
+    auth(caller);
+    #Ok(competitions.filter(func(item) = canManageCompetition(caller, item.id)))
+  };
+
   public query ({ caller }) func list_entries(competition_id : Text) : async { #Ok : [Types.TeamEntry]; #Err : Text } {
     auth(caller);
     #Ok(entries.filter(func(item) = item.competition_id == competition_id))
@@ -562,7 +635,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not valid(role)) return #Err("Invalid role");
-    if (competitionJoinLinks.any(func(item) = item.competition_id == competition_id and not item.revoked)) return #Err("Active join link already exists");
+    if (competitionJoinLinks.any(func(item) = item.competition_id == competition_id and item.role == role and not item.revoked)) return #Err("Active join link already exists");
     let link : Types.CompetitionJoinLink = {
       competition_id;
       token = "cjl-" # competition_id # "-" # Nat.toText(competitionJoinLinks.size() + 1);
@@ -575,6 +648,41 @@ persistent actor class Main(governorInit : Principal) {
     };
     competitionJoinLinks := competitionJoinLinks.concat([link]);
     #Ok(link)
+  };
+
+  public shared ({ caller }) func create_competition_official_link(competition_id : Text, role : Text, token : Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (role != "referee" and role != "committee_member") return #Err("Invalid official role");
+    if (token.size() < 32 or token.size() > 128 or not valid(token)) return #Err("Invalid role link token");
+    if (competitionJoinLinks.any(func(item) = item.token == token and item.competition_id != competition_id)) return #Err("Role link token already exists");
+    let now = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    switch (competitionJoinLinks.find(func(item) = item.competition_id == competition_id and item.role == role and item.team_id == null and not item.revoked)) {
+      case (?current) {
+        let updated : Types.CompetitionJoinLink = { current with token; created_by = caller; created_at_ms = now; revision = current.revision + 1 };
+        competitionJoinLinks := competitionJoinLinks.map(func(item) = if (item.competition_id == competition_id and item.role == role and item.team_id == null and not item.revoked) updated else item);
+        #Ok(updated)
+      };
+      case null {
+        let link : Types.CompetitionJoinLink = {
+          competition_id; token; role; team_id = null; revoked = false;
+          created_by = caller; created_at_ms = now; revision = 1;
+        };
+        competitionJoinLinks := competitionJoinLinks.concat([link]);
+        #Ok(link)
+      };
+    }
+  };
+
+  public shared ({ caller }) func revoke_competition_official_link(competition_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (role != "referee" and role != "committee_member") return #Err("Invalid official role");
+    competitionJoinLinks := competitionJoinLinks.map(func(item) =
+      if (item.competition_id == competition_id and item.role == role and item.team_id == null and not item.revoked)
+      { { item with revoked = true } } else item
+    );
+    #Ok
   };
 
   public shared ({ caller }) func rotate_competition_join_link(competition_id : Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {
@@ -643,6 +751,7 @@ persistent actor class Main(governorInit : Principal) {
         };
         #Ok({
           competition_id = competition.id;
+          role = link.role;
           name = competition.name;
           club_id = competition.club_id;
           season = competition.season;
@@ -992,12 +1101,99 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  public shared ({ caller }) func set_events_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    eventsDomainCanister := ?id;
+    #Ok
+  };
+
+  public shared ({ caller }) func set_vault_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    vaultDomainCanister := ?id;
+    #Ok
+  };
+
+  public shared ({ caller }) func set_pii_access_control_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    piiAccessControlCanister := ?id;
+    #Ok
+  };
+
   /// Refreshes the caller's mirrored club-admin role for a competition's
   /// organiser club so later management queries see it.
   public shared ({ caller }) func sync_my_competition_access(competition_id : Text) : async { #Ok : Bool; #Err : Text } {
     auth(caller);
     await syncForCompetition(caller, competition_id);
     #Ok(canManageCompetition(caller, competition_id))
+  };
+
+  public shared ({ caller }) func get_news_audience(competition_id : Text, requester : Principal) : async { #Ok : Types.CompetitionNewsAudience; #Err : Text } {
+    switch (clubDomainCanister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?clubDomain) { if (not caller.equal(clubDomain)) return #Err("club_domain only") };
+    };
+    auth(requester);
+    await syncForCompetition(requester, competition_id);
+    let competition = switch (competitions.find(func(item) = item.id == competition_id)) {
+      case null return #Err("Competition not found");
+      case (?item) item;
+    };
+    let teams = entries
+      .filter(func(entry) = entry.competition_id == competition_id and (entry.status == "accepted" or entry.status == "registered"))
+      .map(func(entry) = entry.team_id);
+    if (teams.size() > 100) return #Err("Competition audience exceeds 100 teams");
+    let allowedRoles = ["competition_admin", "admin", "owner", "league_admin", "competition_official", "referee", "committee_member"];
+    var recipients : [Principal] = [];
+    for (role in roles.values()) {
+      if (role.competition_id == competition_id and allowedRoles.any(func(value) = value == role.role) and not recipients.any(func(user) = user.equal(role.user))) {
+        recipients := recipients.concat([role.user]);
+      };
+    };
+    if (recipients.size() > 500) return #Err("Competition audience exceeds 500 officials");
+    #Ok({ competition_id; club_id = competition.club_id; team_ids = teams; recipients; can_publish = canManageCompetition(requester, competition_id) })
+  };
+
+  public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {
+    let isTrustedCaller = (switch (vaultDomainCanister) {
+      case (?vaultDomain) caller.equal(vaultDomain);
+      case null false;
+    }) or (switch (piiAccessControlCanister) {
+      case (?piiCanister) caller.equal(piiCanister);
+      case null false;
+    });
+    if (not isTrustedCaller) return #Err("Trusted vault or PII canister only");
+    auth(requester);
+    await syncForCompetition(requester, competition_id);
+    let competition = switch (competitions.find(func(item) = item.id == competition_id)) {
+      case null return #Err("Competition not found");
+      case (?item) item;
+    };
+    let canManage = canManageCompetition(requester, competition_id);
+    var isMember = canManage or roles.any(func(grant) = grant.competition_id == competition_id and grant.user.equal(requester));
+    if (not isMember) {
+      let teamIds = entries
+        .filter(func(entry) = entry.competition_id == competition_id and (entry.status == "accepted" or entry.status == "registered"))
+        .map(func(entry) = entry.team_id);
+      if (teamIds.size() > 500) return #Err("Competition has too many entries to verify membership");
+      switch (clubDomainCanister) {
+        case null { return #Err("club_domain canister not configured") };
+        case (?clubDomain) {
+          let club : actor { is_user_on_any_team : shared query ([Text], Principal) -> async Bool } = actor (Principal.toText(clubDomain));
+          isMember := try {
+            await club.is_user_on_any_team(teamIds, requester)
+          } catch (_) {
+            false
+          };
+        };
+      };
+    };
+    #Ok({ club_id = competition.club_id; is_member = isMember; can_manage = canManage })
   };
 
   // ---------------- Division ladder visibility ----------------
@@ -1013,6 +1209,22 @@ persistent actor class Main(governorInit : Principal) {
     let value : Types.DivisionSetting = { competition_id; division; hide_ladder };
     divisionSettings := divisionSettings.filter(func(item) = not (item.competition_id == competition_id and item.division == division)).concat([value]);
     #Ok(value)
+  };
+
+  public query func get_competition_hide_ladder(competition_id : Text) : async { #Ok : Bool; #Err : Text } {
+    if (not competitions.any(func(item) = item.id == competition_id)) return #Err("Competition not found");
+    #Ok(competitionLadderSettings.any(func(item) = item.competition_id == competition_id and item.hide_ladder))
+  };
+
+  public shared ({ caller }) func set_competition_hide_ladder(competition_id : Text, hide_ladder : Bool) : async { #Ok; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not competitions.any(func(item) = item.id == competition_id)) return #Err("Competition not found");
+    competitionLadderSettings := competitionLadderSettings.filter(func(item) = item.competition_id != competition_id);
+    if (hide_ladder) {
+      competitionLadderSettings := competitionLadderSettings.concat([{ competition_id; hide_ladder }]);
+    };
+    #Ok
   };
 
   // ---------------- Competition broadcasts ----------------

@@ -112,6 +112,12 @@ persistent actor class Main(governorInit : Principal) {
     club_id : Text;
   };
 
+  public type CompetitionReadGrant = {
+    pii_id : Text;
+    field_id : Text;
+    competition_id : Text;
+  };
+
   // ==================== Constants ====================
 
   // vetKD domain separator (context) and the marker stored in each record's
@@ -164,11 +170,13 @@ persistent actor class Main(governorInit : Principal) {
   // the record. Lets club staff (e.g. a coach viewing an event roster) read
   // child/guest names without a per-principal grant.
   var club_read_grants : [ClubReadGrant];
+  var competition_read_grants : [CompetitionReadGrant];
 
   // Principal of the club_domain canister used to verify club membership
   // for club-scoped read grants. Set post-deploy by the governor via
   // set_club_domain_canister; while unset, club grants never authorize.
   var club_domain_canister : ?Principal;
+  var competition_domain_canister : ?Principal;
 
   // ==================== Helper Functions ====================
 
@@ -242,6 +250,50 @@ persistent actor class Main(governorInit : Principal) {
     )
   };
 
+  func competitionIdsForRecords(pii_ids : [Text], field_id : Text) : [Text] {
+    var ids : [Text] = [];
+    for (grant in competition_read_grants.values()) {
+      if (grant.field_id == field_id and pii_ids.any(func(id) = id == grant.pii_id) and not ids.any(func(id) = id == grant.competition_id)) {
+        ids := ids.concat([grant.competition_id]);
+      };
+    };
+    ids
+  };
+
+  func resolveAllowedCompetitions(caller : Principal, pii_ids : [Text], field_id : Text) : async [Text] {
+    let competitionIds = competitionIdsForRecords(pii_ids, field_id);
+    if (competitionIds.size() == 0 or competitionIds.size() > 25) return [];
+    switch (competition_domain_canister) {
+      case null { [] };
+      case (?canister) {
+        let competitionDomain : actor {
+          get_vault_access : shared (Text, Principal) -> async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text };
+        } = actor (Principal.toText(canister));
+        var allowed : [Text] = [];
+        for (competitionId in competitionIds.values()) {
+          let result = try {
+            await competitionDomain.get_vault_access(competitionId, caller)
+          } catch (_) {
+            continue;
+          };
+          switch (result) {
+            case (#Ok(access)) {
+              if (access.is_member) allowed := allowed.concat([competitionId]);
+            };
+            case (#Err(_)) {};
+          };
+        };
+        allowed
+      };
+    }
+  };
+
+  func canReadViaCompetition(r : PiiRecord, allowedCompetitions : [Text]) : Bool {
+    competition_read_grants.any(
+      func(grant) = grant.pii_id == r.pii_id and grant.field_id == r.field_id and allowedCompetitions.any(func(id) = id == grant.competition_id)
+    )
+  };
+
   func log_audit(requesting_principal : Principal, pii_id : Text, field_id : Text, operation : Text, allowed : Bool, purpose : Text) {
     let record : AuditRecord = {
       timestamp = now_ns();
@@ -300,11 +352,12 @@ persistent actor class Main(governorInit : Principal) {
     if (pii_ids.size() > 25) return #Err("Batch too large");
     if (transport_public_key.size() == 0) return #Err("Invalid transport key");
     let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
+    let allowedCompetitions = await resolveAllowedCompetitions(caller, pii_ids, field_id);
     var out : [?Blob] = [];
     for (pii_id in pii_ids.values()) {
       switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
         case (?r) {
-          let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs);
+          let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs) or canReadViaCompetition(r, allowedCompetitions);
           log_audit(caller, pii_id, field_id, "vetkey_derive", allowed, "PII vetKey derivation");
           if (allowed) {
             let encryptedKey = await ManagementCanister.vetKdDeriveKey(
@@ -437,11 +490,12 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (pii_ids.size() > 100) return #Err("Batch too large");
     let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
+    let allowedCompetitions = await resolveAllowedCompetitions(caller, pii_ids, field_id);
     var out : [EncryptedPii] = [];
     for (pii_id in pii_ids.values()) {
       switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
         case (?r) {
-          let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs);
+          let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs) or canReadViaCompetition(r, allowedCompetitions);
           log_audit(caller, pii_id, field_id, operation, allowed, purpose);
           if (allowed) {
             out := out.concat([{
@@ -558,6 +612,64 @@ persistent actor class Main(governorInit : Principal) {
     if (canister.equal(Principal.anonymous())) return #Err("Invalid canister");
     club_domain_canister := ?canister;
     #Ok
+  };
+
+  public shared ({ caller }) func set_competition_domain_canister(canister : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (canister.equal(Principal.anonymous())) return #Err("Invalid canister");
+    competition_domain_canister := ?canister;
+    #Ok
+  };
+
+  public shared ({ caller }) func grant_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (field_id != "blob" or competition_id == "" or competition_id.size() > 128) return #Err("Invalid competition grant");
+    switch (pii_records.find(func(record) = record.pii_id == pii_id and record.field_id == field_id)) {
+      case null { #Err("PII not found") };
+      case (?record) {
+        if (not isGovernor(caller) and not caller.equal(record.domain_owner)) return #Err("Domain owner authorization required");
+        let canister = switch (competition_domain_canister) {
+          case null { return #Err("competition_domain canister not configured") };
+          case (?value) value;
+        };
+        let competitionDomain : actor {
+          get_vault_access : shared (Text, Principal) -> async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text };
+        } = actor (Principal.toText(canister));
+        let access = try {
+          await competitionDomain.get_vault_access(competition_id, caller)
+        } catch (_) {
+          return #Err("Competition authorization unavailable");
+        };
+        let organizer = switch (access) {
+          case (#Err(_)) { return #Err("Competition authorization unavailable") };
+          case (#Ok(value)) {
+            if (not value.can_manage) return #Err("Competition admin required");
+            value.club_id
+          };
+        };
+        let prefix = "clubs/" # organizer # "/competitions/" # competition_id # "/";
+        if (not Text.startsWith(pii_id, #text prefix)) return #Err("PII record is outside the competition vault");
+        if (not competition_read_grants.any(func(grant) = grant.pii_id == pii_id and grant.field_id == field_id and grant.competition_id == competition_id)) {
+          competition_read_grants := competition_read_grants.concat([{ pii_id; field_id; competition_id }]);
+        };
+        log_audit(caller, pii_id, field_id, "grant_read_competition", true, "Competition vault grant created");
+        #Ok
+      };
+    }
+  };
+
+  public shared ({ caller }) func revoke_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (pii_records.find(func(record) = record.pii_id == pii_id and record.field_id == field_id)) {
+      case null { #Err("PII not found") };
+      case (?record) {
+        if (not isGovernor(caller) and not caller.equal(record.domain_owner)) return #Err("Domain owner authorization required");
+        competition_read_grants := competition_read_grants.filter(func(grant) = not (grant.pii_id == pii_id and grant.field_id == field_id and grant.competition_id == competition_id));
+        log_audit(caller, pii_id, field_id, "revoke_read_competition", true, "Competition vault grant revoked");
+        #Ok
+      };
+    }
   };
 
   // Grants every member of `club_id` (verified via club_domain at read
@@ -684,6 +796,7 @@ persistent actor class Main(governorInit : Principal) {
     audit_log := [];
     guardian_relationships := [];
     club_read_grants := [];
+    competition_read_grants := [];
 
     log_audit(caller, "system", "emergency", "shutdown", true, "Emergency shutdown executed");
     #Ok

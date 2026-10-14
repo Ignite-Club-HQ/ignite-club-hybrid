@@ -49,6 +49,7 @@ import { LadderView } from "@/components/competition/CompetitionLadderView";
 import { FixturePreview } from "@/components/competition/FixturePreview";
 import { AddFinalsRoundMenuItem } from "@/components/competition/AddFinalsRoundMenuItem";
 import { EditMatchDetailsDialog } from "@/components/competition/EditMatchDetailsDialog";
+import { ImportPlayHQFixturesDialog } from "@/components/competitions/ImportPlayHQFixturesDialog";
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -101,16 +102,64 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
   const [roundDateOverrides, setRoundDateOverrides] = useState<Map<number, string>>(new Map());
 
   const { data: matches = [], isLoading, isError } = useQuery({
-    queryKey: ["competition-matches", competitionId],
+    queryKey: ["competition-matches", competitionId, entries.length],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("competition_matches")
-        .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name)")
-        .eq("competition_id", competitionId)
-        .order("round_number", { ascending: true, nullsFirst: false })
-        .order("scheduled_at", { ascending: true, nullsFirst: false });
-      if (error) throw error;
-      return data ?? [];
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("competition_matches")
+            .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name)")
+            .eq("competition_id", competitionId)
+            .order("round_number", { ascending: true, nullsFirst: false })
+            .order("scheduled_at", { ascending: true, nullsFirst: false });
+          if (error) throw error;
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const { listLiveCompetitionMatches } = await import("@/live/features/competitions");
+          const rows = await listLiveCompetitionMatches(ctx, competitionId) as any[];
+          const opt = (value: any) => Array.isArray(value) ? value[0] ?? null : value ?? null;
+          const entryByTeam = new Map(entries.map((entry: any) => [entry.team_id, entry.teams]));
+          return rows.map((match) => {
+            const homeTeamId = match.home_team as string;
+            const awayTeamId = match.away_team as string;
+            const divisionValue = opt(match.division_id) as string | null;
+            const division = divisions.find((item: any) => item.id === divisionValue || item.name === divisionValue);
+            const scheduledAt = opt(match.scheduled_at_ms);
+            const round = opt(match.round_number);
+            const duration = opt(match.duration_minutes);
+            const arrival = opt(match.arrival_minutes_before);
+            return {
+              id: match.id,
+              competition_id: match.competition_id,
+              division_id: division?.id ?? divisionValue,
+              round_number: round == null ? null : Number(round),
+              home_team_id: homeTeamId,
+              away_team_id: awayTeamId,
+              home: entryByTeam.get(homeTeamId) ?? { id: homeTeamId, name: homeTeamId, logo_url: null },
+              away: entryByTeam.get(awayTeamId) ?? { id: awayTeamId, name: awayTeamId, logo_url: null },
+              home_score: Number(match.home_score),
+              away_score: Number(match.away_score),
+              status: match.status,
+              scheduled_at: scheduledAt == null ? null : new Date(Number(scheduledAt)).toISOString(),
+              venue: opt(match.venue),
+              pitch_number: opt(match.pitch_number),
+              duration_minutes: duration == null ? null : Number(duration),
+              arrival_minutes_before: arrival == null ? null : Number(arrival),
+              notes: opt(match.notes),
+              source: "manual",
+              external_id: null,
+              manually_overridden_at: null,
+              revision: Number(match.revision),
+              competition_divisions: division ? { name: division.name } : null,
+            };
+          }).sort((a, b) =>
+            (a.round_number ?? Number.MAX_SAFE_INTEGER) - (b.round_number ?? Number.MAX_SAFE_INTEGER) ||
+            (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
+          );
+        },
+      });
     },
   });
 
@@ -472,6 +521,13 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
                     <CalendarPlus className="h-4 w-4 mr-2" /> Generate round-robin
                   </DropdownMenuItem>
                   <AddMatchMenuItem competitionId={competitionId} entries={entries} divisions={divisions} />
+                  <ImportPlayHQFixturesDialog
+                    competitionId={competitionId}
+                    entries={entries}
+                    divisions={divisions}
+                    existingMatches={matches as any[]}
+                    onImported={() => qc.invalidateQueries({ queryKey: ["competition-matches", competitionId] })}
+                  />
                   <AddFinalsRoundMenuItem competitionId={competitionId} divisions={divisions} supabaseClient={supabase} />
 
                 </DropdownMenuContent>

@@ -48,6 +48,8 @@ type Main =
        Err: text;
        Ok;
      });
+  grant_pii_read_competition: (pii_id: text, field_id: text,
+   competition_id: text) -> (variant { Err: text; Ok });
    my_guardian_children: () -> (vec text) query;
    pii_vetkey_verification_key: () -> (blob);
    purge_club_grants: (club_id: text) -> (variant {
@@ -74,11 +76,15 @@ type Main =
        Err: text;
        Ok;
      });
+   revoke_pii_read_competition: (pii_id: text, field_id: text,
+    competition_id: text) -> (variant { Err: text; Ok });
    set_club_domain_canister: (canister: principal) ->
     (variant {
        Err: text;
        Ok;
      });
+   set_competition_domain_canister: (canister: principal) ->
+    (variant { Err: text; Ok });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;

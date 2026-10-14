@@ -65,6 +65,13 @@ export interface CompetitionJoinLink {
   'revision' : bigint,
   'competition_id' : string,
 }
+export interface CompetitionNewsAudience {
+  'team_ids' : Array<string>,
+  'can_publish' : boolean,
+  'recipients' : Array<Principal>,
+  'competition_id' : string,
+  'club_id' : string,
+}
 export interface DivisionSetting {
   'division' : string,
   'competition_id' : string,
@@ -129,6 +136,7 @@ export interface EoiTeamSuggestion {
 export interface JoinLinkPreview {
   'competition_status' : string,
   'name' : string,
+  'role' : string,
   'season' : string,
   'divisions' : Array<string>,
   'competition_id' : string,
@@ -179,6 +187,7 @@ export interface Main {
     { 'Ok' : { 'ok' : bigint, 'fail' : bigint } } |
       { 'Err' : string }
   >,
+  'can_invite_players_to_team' : ActorMethod<[string], boolean>,
   'claim_eoi_by_token' : ActorMethod<
     [string],
     { 'Ok' : EoiSubmission } |
@@ -204,6 +213,11 @@ export interface Main {
     { 'Ok' : Competition } |
       { 'Err' : string }
   >,
+  'create_competition_event' : ActorMethod<
+    [string, string, string, string, string, [] | [string], bigint, bigint],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'create_competition_invite' : ActorMethod<
     [string, Principal, string, [] | [string]],
     { 'Ok' : CompetitionInvite } |
@@ -211,6 +225,11 @@ export interface Main {
   >,
   'create_competition_join_link' : ActorMethod<
     [string, string, [] | [string]],
+    { 'Ok' : CompetitionJoinLink } |
+      { 'Err' : string }
+  >,
+  'create_competition_official_link' : ActorMethod<
+    [string, string, string],
     { 'Ok' : CompetitionJoinLink } |
       { 'Err' : string }
   >,
@@ -241,6 +260,11 @@ export interface Main {
     { 'Ok' : ChatSettings } |
       { 'Err' : string }
   >,
+  'get_competition_hide_ladder' : ActorMethod<
+    [string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
   'get_eoi_stats' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : EoiStats } |
@@ -254,6 +278,22 @@ export interface Main {
   'get_my_pending_eois' : ActorMethod<
     [],
     { 'Ok' : Array<EoiSubmission> } |
+      { 'Err' : string }
+  >,
+  'get_news_audience' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : CompetitionNewsAudience } |
+      { 'Err' : string }
+  >,
+  'get_vault_access' : ActorMethod<
+    [string, Principal],
+    {
+        'Ok' : {
+          'can_manage' : boolean,
+          'is_member' : boolean,
+          'club_id' : string,
+        }
+      } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -271,6 +311,7 @@ export interface Main {
     { 'Ok' : boolean } |
       { 'Err' : string }
   >,
+  'is_competition_invite_manager' : ActorMethod<[string, Principal], boolean>,
   'issue_join_token' : ActorMethod<
     [string, string, bigint],
     { 'Ok' : JoinToken } |
@@ -351,6 +392,11 @@ export interface Main {
     { 'Ok' : Array<Match> } |
       { 'Err' : string }
   >,
+  'list_my_news_competitions' : ActorMethod<
+    [],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
   'list_seasons' : ActorMethod<
     [string],
     { 'Ok' : Array<Season> } |
@@ -391,6 +437,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'revoke_competition_official_link' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'rotate_competition_join_link' : ActorMethod<
     [string],
     { 'Ok' : CompetitionJoinLink } |
@@ -411,14 +462,29 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_competition_hide_ladder' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_division_hide_ladder' : ActorMethod<
     [string, string, boolean],
     { 'Ok' : DivisionSetting } |
       { 'Err' : string }
   >,
+  'set_events_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_match_result' : ActorMethod<
     [string, number, number, bigint],
     { 'Ok' : Match } |
+      { 'Err' : string }
+  >,
+  'set_pii_access_control_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_season_divisions' : ActorMethod<
@@ -429,6 +495,11 @@ export interface Main {
   'set_season_status' : ActorMethod<
     [string, string, bigint],
     { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
+  'set_vault_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'suggest_eoi_teams' : ActorMethod<

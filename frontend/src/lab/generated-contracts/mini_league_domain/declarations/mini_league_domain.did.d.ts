@@ -146,6 +146,11 @@ export interface Main {
     { 'Ok' : Array<MiniLeague> } |
       { 'Err' : string }
   >,
+  'get_news_audience' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : MiniLeagueNewsAudience } |
+      { 'Err' : string }
+  >,
   'get_player_guardian_status' : ActorMethod<
     [string],
     { 'Ok' : PlayerGuardianStatus } |
@@ -238,6 +243,11 @@ export interface Main {
   'set_availability' : ActorMethod<
     [string, string, string],
     { 'Ok' : MiniLeagueSessionAvailability } |
+      { 'Err' : string }
+  >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_mini_league_status' : ActorMethod<
@@ -372,6 +382,10 @@ export interface MiniLeagueJoinLink {
   'created_by' : Principal,
   'created_at_ms' : bigint,
   'revision' : bigint,
+}
+export interface MiniLeagueNewsAudience {
+  'recipients' : Array<Principal>,
+  'club_id' : string,
 }
 export interface MiniLeaguePlayer {
   'id' : string,

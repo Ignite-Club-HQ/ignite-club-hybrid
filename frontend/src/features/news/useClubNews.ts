@@ -25,6 +25,8 @@ function liveNewsPostToRow(post: {
   created_by: { toText?: () => string };
   created_at_ms: bigint;
   target_team_ids?: [] | [string[]];
+  target_mini_league_id?: [] | [string];
+  target_competition_id?: [] | [string];
   is_important?: boolean;
   image_url?: [] | [string];
   attachments?: Array<{
@@ -44,6 +46,8 @@ function liveNewsPostToRow(post: {
     image_url: opt(post.image_url),
     author_id: post.created_by?.toText?.() ?? String(post.created_by),
     target_team_ids: opt(post.target_team_ids),
+    target_mini_league_id: opt(post.target_mini_league_id),
+    target_competition_id: opt(post.target_competition_id),
     is_important: post.is_important ?? false,
     published_at: new Date(Number(post.created_at_ms)).toISOString(),
     attachments: (post.attachments ?? []).map((a) => ({
@@ -74,13 +78,15 @@ export interface ClubNewsRow {
   image_url: string | null;
   author_id: string | null;
   target_team_ids: string[] | null;
+  target_mini_league_id?: string | null;
+  target_competition_id?: string | null;
   is_important: boolean;
   published_at: string;
   attachments?: unknown;
 }
 
 const NEWS_COLUMNS =
-  "id, club_id, title, content, image_url, author_id, target_team_ids, is_important, published_at, attachments";
+  "id, club_id, title, content, image_url, author_id, target_team_ids, target_mini_league_id, target_competition_id, is_important, published_at, attachments";
 
 
 /** Canister tombstone check — soft-deleted clubs keep deleted_at_ms set. */
@@ -105,7 +111,16 @@ export function useClubNewsFeed(clubId?: string | null, limit = 50) {
             .order("published_at", { ascending: false })
             .limit(limit);
 
-          if (clubId) query = query.eq("club_id", clubId);
+          if (clubId) {
+            const { data: competitionIds, error: audienceError } = await supabase.rpc("club_news_competition_ids", {
+              _club_id: clubId,
+            });
+            if (audienceError) throw audienceError;
+            const ids = (competitionIds ?? []).filter(Boolean);
+            query = ids.length > 0
+              ? query.or(`club_id.eq.${clubId},target_competition_id.in.(${ids.join(",")})`)
+              : query.eq("club_id", clubId);
+          }
 
           const { data, error } = await query;
           if (error) throw error;
@@ -129,9 +144,18 @@ export function useClubNewsFeed(clubId?: string | null, limit = 50) {
             // Provisional: with no club filter the feed unions the clubs
             // visible to the caller (list_clubs is caller-scoped), minus
             // soft-deleted tombstones.
-            const { listLiveMembershipClubs } = await import("@/live/features/membership");
-            const clubs = await listLiveMembershipClubs(ctx);
-            const clubIds = clubs.filter((c) => !isLiveClubDeleted(c)).map((c) => c.id);
+            const [{ listLiveMembershipClubs }, { listMyLiveMiniLeagues }] = await Promise.all([
+              import("@/live/features/membership"),
+              import("@/live/features/miniLeagues"),
+            ]);
+            const [clubs, miniLeagues] = await Promise.all([
+              listLiveMembershipClubs(ctx),
+              listMyLiveMiniLeagues(ctx),
+            ]);
+            const clubIds = Array.from(new Set([
+              ...clubs.filter((c) => !isLiveClubDeleted(c)).map((c) => c.id),
+              ...miniLeagues.map((league: any) => league.club_id),
+            ]));
             if (clubIds.length === 0) return [];
             return listLiveNewsMulti(ctx, clubIds);
           })();
@@ -178,9 +202,18 @@ export function useClubNewsPost(newsId?: string | null) {
         icp: async (ctx) => {
           // The canister has no get-by-id; resolve the post via the caller's
           // clubs (role grants) and filter. Provisional — verify post-deploy.
-          const { listLiveMembershipClubs } = await import("@/live/features/membership");
-          const clubs = await listLiveMembershipClubs(ctx);
-          const clubIds = clubs.filter((c) => !isLiveClubDeleted(c)).map((c) => c.id);
+          const [{ listLiveMembershipClubs }, { listMyLiveMiniLeagues }] = await Promise.all([
+            import("@/live/features/membership"),
+            import("@/live/features/miniLeagues"),
+          ]);
+          const [clubs, miniLeagues] = await Promise.all([
+            listLiveMembershipClubs(ctx),
+            listMyLiveMiniLeagues(ctx),
+          ]);
+          const clubIds = Array.from(new Set([
+            ...clubs.filter((c) => !isLiveClubDeleted(c)).map((c) => c.id),
+            ...miniLeagues.map((league: any) => league.club_id),
+          ]));
           if (clubIds.length === 0) return null;
           const posts = await listLiveNewsMulti(ctx, clubIds);
           const post = (posts as Array<Parameters<typeof liveNewsPostToRow>[0]>)
@@ -266,6 +299,116 @@ export function useClubTeamsForNews(clubId?: string | null) {
       });
     },
     enabled: !!clubId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useClubMiniLeaguesForNews(clubId?: string | null) {
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  return useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["club-mini-leagues-for-news", clubId],
+    queryFn: async () => {
+      if (useIcpLab || !clubId) return [];
+      return withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_leagues")
+            .select("id, name")
+            .eq("club_id", clubId)
+            .eq("status", "active")
+            .order("name");
+          if (error) throw error;
+          return (data ?? []) as Array<{ id: string; name: string }>;
+        },
+        icp: async (ctx) => {
+          const { listLiveMiniLeaguesByClub } = await import("@/live/features/miniLeagues");
+          const leagues = await listLiveMiniLeaguesByClub(ctx, clubId);
+          return leagues.filter((league: any) => league.status === "active").map((league: any) => ({ id: league.id, name: league.name }));
+        },
+      });
+    },
+    enabled: !!clubId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export interface NewsCompetitionOption {
+  id: string;
+  name: string;
+  organizer_club_id: string;
+}
+
+export function useNewsPublishableCompetitions() {
+  const { user } = useAuth();
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  return useQuery<NewsCompetitionOption[]>({
+    queryKey: ["news-publishable-competitions", user?.id],
+    queryFn: async () => {
+      if (useIcpLab) return [];
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const [roleResult, clubRoleResult] = await Promise.all([
+            supabase.from("competition_roles")
+              .select("competition_id")
+              .eq("user_id", user!.id)
+              .in("role", ["competition_admin", "admin", "owner"]),
+            supabase.from("user_roles")
+              .select("club_id")
+              .eq("user_id", user!.id)
+              .eq("role", "club_admin"),
+          ]);
+          if (roleResult.error) throw roleResult.error;
+          if (clubRoleResult.error) throw clubRoleResult.error;
+          const roleIds = (roleResult.data ?? []).map((row) => row.competition_id);
+          const clubIds = (clubRoleResult.data ?? []).map((row) => row.club_id).filter(Boolean) as string[];
+          let query = supabase
+            .from("competitions")
+            .select("id, name, organizer_club_id")
+            .order("name");
+          if (roleIds.length && clubIds.length) {
+            query = query.or(`id.in.(${roleIds.join(",")}),organizer_club_id.in.(${clubIds.join(",")})`);
+          } else if (roleIds.length) {
+            query = query.in("id", roleIds);
+          } else if (clubIds.length) {
+            query = query.in("organizer_club_id", clubIds);
+          } else {
+            return [];
+          }
+          const { data, error } = await query;
+          if (error) throw error;
+          return (data ?? []) as NewsCompetitionOption[];
+        },
+        icp: async (ctx) => {
+          const [{ getLiveMyRoleGrants }, { listLiveCompetitionsMulti, listLiveMyNewsCompetitions }, { listLiveMembershipClubs }] = await Promise.all([
+            import("@/live/features/membership"),
+            import("@/live/features/competitions"),
+            import("@/live/features/membership"),
+          ]);
+          const grants = await getLiveMyRoleGrants(ctx);
+          const clubIds = Array.from(new Set(
+            grants.filter((grant: any) => grant.role === "club_admin").flatMap((grant: any) => grant.club),
+          ));
+          const [managed, clubs] = await Promise.all([
+            listLiveMyNewsCompetitions(ctx),
+            listLiveMembershipClubs(ctx),
+          ]);
+          const clubAdminCompetitions = clubIds.length
+            ? await listLiveCompetitionsMulti(ctx, clubIds)
+            : [];
+          const allowedIds = new Set([...managed, ...clubAdminCompetitions].map((item: any) => item.id));
+          return [...new Map(
+            [...managed, ...clubAdminCompetitions]
+              .filter((item: any) => allowedIds.has(item.id))
+              .map((item: any) => [item.id, {
+                id: item.id,
+                name: item.name,
+                organizer_club_id: item.organizer_club_id ?? item.club_id,
+              }]),
+          ).values()].filter((item) => clubs.length === 0 || clubIds.includes(item.organizer_club_id) || managed.some((entry: any) => entry.id === item.id));
+        },
+      });
+    },
+    enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
 }

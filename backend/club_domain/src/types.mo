@@ -1,5 +1,15 @@
 module {
   public type RoleGrant = { user : Principal; role : Text; club : ?Text; team : ?Text };
+  public type InviteMessageDefault = { club_id : Text; message : Text };
+  public type TeamWelcomeEmail = { team_id : Text; club_id : Text; enabled : Bool; subject : Text; message : Text };
+  public type WelcomeEmailJob = {
+    invite_id : Text;
+    to : Text;
+    subject : Text;
+    message : Text;
+    team_name : Text;
+    club_name : Text;
+  };
   public type Team = { id : Text; club : Text };
   public type Child = { id : Text; teams : [Text]; parent : ?Principal; club_id : ?Text };
   public type Guardian = { child : Text; user : Principal };
@@ -275,10 +285,13 @@ module {
     revision : Nat64;
     // null = whole club; otherwise the post targets only these teams.
     target_team_ids : ?[Text];
+    target_mini_league_id : ?Text;
+    target_competition_id : ?Text;
     is_important : Bool;
     image_url : ?Text;
     attachments : [NewsAttachment];
   };
+  public type NewsAudienceRecipient = { news_id : Text; user : Principal };
   // A parent invite links a second parent/guardian to a child (and
   // optionally a team) in one atomic accept — the canister equivalent of
   // the Supabase parent-invite RPCs. id doubles as the share token.

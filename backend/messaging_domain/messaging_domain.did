@@ -271,6 +271,11 @@ type Main =
        Err: text;
        Ok: Conversation;
      });
+   ensure_competition_admin_thread: (competition_id: text, member:
+    principal) -> (variant {
+                     Err: text;
+                     Ok: Conversation;
+                   });
    ensure_conversation: (club_id: text, team_id: opt text, participants:
     vec principal) -> (variant {
                          Err: text;
@@ -380,6 +385,11 @@ type Main =
        Err: text;
        Ok: vec ClubDmSettings;
      }) query;
+   list_competition_admin_threads: (competition_id: text) ->
+    (vec record {
+           id: text;
+           member: principal;
+         });
    list_deleted_groups: () ->
     (variant {
        Err: text;
@@ -570,6 +580,11 @@ type Main =
                 Err: text;
                 Ok;
               });
+   set_competition_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_dm_attachments_disabled: (user: principal, disabled: bool) ->
     (variant {
        Err: text;

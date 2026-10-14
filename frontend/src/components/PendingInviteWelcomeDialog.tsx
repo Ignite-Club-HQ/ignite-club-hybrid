@@ -16,6 +16,7 @@ import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { acceptPendingLiveInvite } from "@/live/features/club";
+import { acceptIcpInviteAndWelcome } from "@/features/membership/acceptIcpInviteAndWelcome";
 
 /** Best-effort "child added" email for a second parent. Never blocks acceptance. */
 async function notifySecondParent(
@@ -250,9 +251,9 @@ export function PendingInviteWelcomeDialog() {
             // never fall through to the Supabase acceptance logic below.
             await withFeatureBackend("membership", {
               supabase: async () => {},
-              icp: async (ctx) => {
+              icp: async () => {
                 try {
-                  await acceptPendingLiveInvite(ctx, invite.id);
+                  await acceptIcpInviteAndWelcome(invite.id);
                   console.log("[InviteAutoAccept] Accepted pending invite via canister:", invite.id);
                 } catch (icpError) {
                   console.error(

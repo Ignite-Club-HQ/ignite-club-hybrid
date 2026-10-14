@@ -67,6 +67,12 @@ persistent actor class Main(governorInit : Principal) {
   var clubDomainCanister : ?Principal;
   // Scheduled RSVP reminders (hours before start); swept by _reminderTimer.
   var autoReminders : [{ event_id : Text; hours_before : Nat16; sent : Bool }];
+  var eventDutyTeams : [Types.EventDutyTeam];
+  var dutyTeamReminderSent : [Text];
+  var pointsReminderSent : [Text];
+  var individualDutyReminderSent : [Text];
+  var competitionDomainCanister : ?Principal;
+  var competitionEventOperations : [Types.CompetitionEventOperation];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -201,6 +207,71 @@ persistent actor class Main(governorInit : Principal) {
     };
     associationEvents := associationEvents.concat([parent]);
     #Ok(Nat.toNat16(created.size()))
+  };
+
+  public shared ({ caller }) func create_competition_events(
+    operation_id : Text,
+    competition_id : Text,
+    creator : Principal,
+    competition_club_id : Text,
+    targets : [Types.CompetitionEventTarget],
+    title : Text,
+    description : Text,
+    event_type : Text,
+    location : ?Text,
+    starts_at_ms : Nat64,
+    ends_at_ms : Nat64,
+  ) : async { #Ok : [Text]; #Err : Text } {
+    auth(caller);
+    switch (competitionDomainCanister) {
+      case null return #Err("competition_domain canister not configured");
+      case (?configured) { if (not caller.equal(configured)) return #Err("competition_domain only"); };
+    };
+    if (not valid(operation_id) or not valid(competition_id) or creator.equal(Principal.anonymous()) or not valid(competition_club_id) or not valid(title) or description.size() > 2000 or not validEventType(event_type) or not validLocation(location) or starts_at_ms >= ends_at_ms or targets.size() > 500) return #Err("Invalid competition event");
+    switch (competitionEventOperations.find(func(item) = item.operation_id == operation_id)) {
+      case (?existing) {
+        if (existing.competition_id != competition_id) return #Err("Operation id already used");
+        return #Ok(existing.event_ids);
+      };
+      case null {};
+    };
+    var seenTeams : [Text] = [];
+    for (target in targets.values()) {
+      if (not valid(target.team_id) or not valid(target.club_id) or seenTeams.any(func(teamId) = teamId == target.team_id)) return #Err("Invalid or duplicate competition team");
+      seenTeams := seenTeams.concat([target.team_id]);
+    };
+    let now = nowMs();
+    let startIndex = events.size();
+    var created : [Types.Event] = [];
+    var targetIndex = 0;
+    for (target in targets.values()) {
+      let event : Types.Event = {
+        id = "evt-" # target.club_id # "-" # Nat.toText(startIndex + targetIndex);
+        club_id = target.club_id;
+        team_id = ?target.team_id;
+        title;
+        description;
+        event_type;
+        location;
+        cancelled = false;
+        creator;
+        starts_at_ms;
+        ends_at_ms;
+        series_id = null;
+        revision = 1 : Nat64;
+        deleted = false;
+        opponent = null;
+        address = null;
+        mini_league_id = null;
+        updated_at_ms = now;
+      };
+      created := created.concat([event]);
+      targetIndex += 1;
+    };
+    events := events.concat(created);
+    let eventIds = created.map(func(event) = event.id);
+    competitionEventOperations := competitionEventOperations.concat([{ operation_id; competition_id; event_ids = eventIds }]);
+    #Ok(eventIds)
   };
 
   // Association panel read (Phase 3, F5): parents for one association,
@@ -568,6 +639,14 @@ persistent actor class Main(governorInit : Principal) {
           club_ids.any(func(c) = c == item.club_id)
             or (switch (item.team_id) { case (?t) team_ids.any(func(x) = x == t); case null false })
         )
+    ))
+  };
+
+  public query ({ caller }) func list_events_for_duty_teams(team_ids : [Text]) : async { #Ok : [Types.Event]; #Err : Text } {
+    if (team_ids.size() > 100) return #Err("Too many duty teams");
+    #Ok(events.filter(func(event) =
+      not event.deleted and canView(caller, event) and
+      eventDutyTeams.any(func(assignment) = assignment.event_id == event.id and team_ids.any(func(id) = id == assignment.team_id))
     ))
   };
 
@@ -1787,6 +1866,14 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  public shared ({ caller }) func set_competition_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    competitionDomainCanister := ?id;
+    #Ok
+  };
+
   // Removes every event, series, RSVP, attendance, duty, roster, lineup,
   // game, and training-pause record in scope. `club` additionally clears
   // club-keyed state (series, training pauses, child team assignments);
@@ -1818,6 +1905,11 @@ persistent actor class Main(governorInit : Principal) {
     eventGroups := eventGroups.filter(func(g) = not inDoomed(g.event_id));
     eventGroupPlayers := eventGroupPlayers.filter(func(p) = not inDoomedGroup(p.group_id));
     eventGroupDuties := eventGroupDuties.filter(func(d) = not inDoomedGroup(d.group_id));
+    autoReminders := autoReminders.filter(func(r) = not inDoomed(r.event_id));
+    eventDutyTeams := eventDutyTeams.filter(func(item) = not inDoomed(item.event_id) and not inDoomedTeam(item.team_id));
+    dutyTeamReminderSent := dutyTeamReminderSent.filter(func(id) = not inDoomed(id));
+    pointsReminderSent := pointsReminderSent.filter(func(id) = not inDoomed(id));
+    individualDutyReminderSent := individualDutyReminderSent.filter(func(id) = not inDoomed(id));
     gameSummaries := gameSummaries.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
     gamePlayerStats := gamePlayerStats.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
     gameResults := gameResults.filter(func(g) = (switch (g.event_id) { case (?e) { not inDoomed(e) }; case null { true } }) and not inDoomedTeam(g.team_id));
@@ -1861,6 +1953,63 @@ persistent actor class Main(governorInit : Principal) {
       case (#Err(e)) return #Err(e);
       case (#Ok(event)) { await fanOutReminder(event) };
     };
+  };
+
+  public query ({ caller }) func get_event_duty_team(event_id : Text) : async { #Ok : ?Types.EventDutyTeam; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        #Ok(eventDutyTeams.find(func(item) = item.event_id == event_id))
+      };
+    }
+  };
+
+  public query ({ caller }) func list_event_duty_teams(event_ids : [Text]) : async { #Ok : [Types.EventDutyTeam]; #Err : Text } {
+    if (event_ids.size() > 300) return #Err("Too many event ids");
+    let visibleIds = visibleEventIds(caller, event_ids);
+    #Ok(eventDutyTeams.filter(func(item) = visibleIds.any(func(id) = id == item.event_id)))
+  };
+
+  public shared ({ caller }) func set_event_duty_team(event_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    let event = switch (requireManage(caller, event_id)) {
+      case (#Err(error)) return #Err(error);
+      case (#Ok(value)) value;
+    };
+    switch (team_id) {
+      case null {};
+      case (?team) {
+        let clubCanister = switch (clubDomainCanister) {
+          case null return #Err("club_domain canister not configured");
+          case (?value) value;
+        };
+        let club : actor {
+          get_team : shared query (Text) -> async { #Ok : ?{ id : Text; club_id : Text; is_active : Bool; deleted_at_ms : ?Nat64; archived : Bool; is_shell : Bool }; #Err : Text };
+        } = actor (Principal.toText(clubCanister));
+        let teamResult = try { await club.get_team(team) } catch (_) { return #Err("Could not validate duty team") };
+        switch (teamResult) {
+          case (#Err(_)) return #Err("Could not validate duty team");
+          case (#Ok(null)) return #Err("Duty team not found");
+          case (#Ok(?value)) {
+            if (value.club_id != event.club_id or not value.is_active or value.archived or value.deleted_at_ms != null or value.is_shell) {
+              return #Err("Duty team must be an active team in this club");
+            };
+          };
+        };
+      };
+    };
+    switch (requireManage(caller, event_id)) {
+      case (#Err(error)) return #Err(error);
+      case (#Ok(_)) {};
+    };
+    eventDutyTeams := eventDutyTeams.filter(func(item) = item.event_id != event_id);
+    dutyTeamReminderSent := dutyTeamReminderSent.filter(func(id) = id != event_id);
+    switch (team_id) {
+      case null {};
+      case (?team) { eventDutyTeams := eventDutyTeams.concat([{ event_id; team_id = team }]) };
+    };
+    #Ok
   };
 
   func fanOutReminder(event : Types.Event) : async { #Ok : Nat16; #Err : Text } {
@@ -1967,6 +2116,113 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
+    for (assignment in eventDutyTeams.values()) {
+      if (not dutyTeamReminderSent.any(func(id) = id == assignment.event_id)) {
+        switch (events.find(func(e) = e.id == assignment.event_id)) {
+          case null { dutyTeamReminderSent := dutyTeamReminderSent.concat([assignment.event_id]) };
+          case (?event) {
+            let dueAt = if (event.starts_at_ms > 86_400_000) event.starts_at_ms - 86_400_000 else (0 : Nat64);
+            if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
+              dutyTeamReminderSent := dutyTeamReminderSent.concat([assignment.event_id]);
+            } else if (now >= dueAt) {
+              switch (await fanOutDutyTeamReminder(event, assignment.team_id)) {
+                case (#Ok(_)) {
+                  if (eventDutyTeams.any(func(item) = item.event_id == assignment.event_id and item.team_id == assignment.team_id) and not dutyTeamReminderSent.any(func(id) = id == assignment.event_id)) {
+                    dutyTeamReminderSent := dutyTeamReminderSent.concat([assignment.event_id]);
+                  };
+                };
+                case (#Err(_)) {};
+              };
+            };
+          };
+        };
+      };
+    };
+    for (event in events.values()) {
+      if (event.event_type == "game" and event.mini_league_id == null and not pointsReminderSent.any(func(id) = id == event.id)) {
+        let dueAt : Nat64 = if (event.starts_at_ms > 345_600_000) event.starts_at_ms - 345_600_000 else (0 : Nat64);
+        if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
+          pointsReminderSent := pointsReminderSent.concat([event.id]);
+        } else if (now >= dueAt) {
+          var recipients : [Text] = [];
+          for (grant in roles.values()) {
+            let going = rsvps.any(func(r) = r.event_id == event.id and r.account_id == grant.user.toText() and r.state == "going");
+            if (grant.club_id == event.club_id and (grant.team_id == event.team_id or grant.team_id == null) and not going and recipients.size() < 500) {
+              let user = grant.user.toText();
+              if (not recipients.any(func(id) = id == user)) recipients := recipients.concat([user]);
+            };
+          };
+          switch (await fanOutScheduledNotice(event, recipients, "Please RSVP for \"" # event.title # "\" to earn your game points", "event-points-" # event.id)) {
+            case (#Ok(_)) {
+              if (not pointsReminderSent.any(func(id) = id == event.id)) pointsReminderSent := pointsReminderSent.concat([event.id]);
+            };
+            case (#Err(_)) {};
+          };
+        };
+      };
+      if (not individualDutyReminderSent.any(func(id) = id == event.id)) {
+        let dueAt : Nat64 = if (event.starts_at_ms > 86_400_000) event.starts_at_ms - 86_400_000 else (0 : Nat64);
+        if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
+          individualDutyReminderSent := individualDutyReminderSent.concat([event.id]);
+        } else if (now >= dueAt) {
+          let recipients = duties
+            .filter(func(d) = d.event_id == event.id and not d.completed and d.account_id != "")
+            .map(func(d) = d.account_id);
+          switch (await fanOutScheduledNotice(event, recipients, "Reminder: you are assigned a duty for \"" # event.title # "\"", "event-duty-individual-" # event.id)) {
+            case (#Ok(_)) {
+              if (not individualDutyReminderSent.any(func(id) = id == event.id)) individualDutyReminderSent := individualDutyReminderSent.concat([event.id]);
+            };
+            case (#Err(_)) {};
+          };
+        };
+      };
+    };
+  };
+
+  func fanOutScheduledNotice(event : Types.Event, recipients : [Text], body : Text, keyPrefix : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (recipients.size() == 0) return #Ok(0);
+    switch (notificationQueueCanister) {
+      case null { #Err("Notification queue not configured") };
+      case (?queueCanister) {
+        let queue : actor {
+          fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
+        } = actor (Principal.toText(queueCanister));
+        try {
+          await queue.fan_out(recipients, event.club_id, "event_reminder", body, keyPrefix, ?event.id)
+        } catch (_) { #Err("Scheduled reminder queue call failed") }
+      };
+    }
+  };
+
+  func fanOutDutyTeamReminder(event : Types.Event, team_id : Text) : async { #Ok : Nat16; #Err : Text } {
+    switch (notificationQueueCanister) {
+      case null { #Err("Notification queue not configured") };
+      case (?queueCanister) {
+        var recipients : [Text] = [];
+        for (grant in roles.values()) {
+          if (grant.club_id == event.club_id and grant.team_id == ?team_id and recipients.size() < 500) {
+            let accountId = grant.user.toText();
+            if (not recipients.any(func(id) = id == accountId)) recipients := recipients.concat([accountId]);
+          };
+        };
+        for (assignment in childTeamAssignments.values()) {
+          if (assignment.club_id == event.club_id and assignment.team_id == team_id) {
+            for (guardian in childGuardians.values()) {
+              if (guardian.child_id == assignment.child_id and recipients.size() < 500 and not recipients.any(func(id) = id == guardian.guardian_id)) {
+                recipients := recipients.concat([guardian.guardian_id]);
+              };
+            };
+          };
+        };
+        if (recipients.size() == 0) return #Ok(0);
+        let queue : actor {
+          fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
+        } = actor (Principal.toText(queueCanister));
+        try {
+          await queue.fan_out(recipients, event.club_id, "duty_reminder", "Your team is on duty for \"" # event.title # "\"", "event-duty-team-" # event.id, ?event.id)
+        } catch (_) { #Err("Duty reminder queue call failed") }
+      };
+    }
   };
 
   func markReminderSent(event_id : Text) {
@@ -1975,8 +2231,8 @@ persistent actor class Main(governorInit : Principal) {
 
   transient let _reminderTimer = Timer.recurringTimer<system>(#seconds(900), func() : async () { await sweepAutoReminders() });
 
-  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp]; childTeamAssignments : [Types.ChildTeamAssignment] }; #Err : Text } {
+  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp]; childTeamAssignments : [Types.ChildTeamAssignment]; eventDutyTeams : [Types.EventDutyTeam]; dutyTeamReminderSent : [Text]; pointsReminderSent : [Text]; individualDutyReminderSent : [Text]; competitionEventOperations : [Types.CompetitionEventOperation] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
-    #Ok({ schema = 5; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps; childTeamAssignments })
+    #Ok({ schema = 8; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps; childTeamAssignments; eventDutyTeams; dutyTeamReminderSent; pointsReminderSent; individualDutyReminderSent; competitionEventOperations })
   };
 };

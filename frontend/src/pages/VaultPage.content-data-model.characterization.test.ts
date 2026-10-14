@@ -81,7 +81,7 @@ describe("VaultPage content/folder/item/search data-model contract", () => {
   });
 
   it("only builds a folder tree for club or team scopes, scoping club trees to null-team folders", () => {
-    expect(clusterSource).toMatch(/if \(options\.view\.type !== "club" && options\.view\.type !== "team"\) return empty\(\);/);
+    expect(clusterSource).toMatch(/if \(options\.view\.type !== "club" && options\.view\.type !== "team" && options\.view\.type !== "competition"\) return empty\(\);/);
     expect(clusterSource).toContain('query.eq("club_id", options.view.clubId).is("team_id", null)');
   });
 

@@ -76,6 +76,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'grant_pii_read_competition' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'my_guardian_children' : ActorMethod<[], Array<string>>,
   'pii_vetkey_verification_key' : ActorMethod<[], Uint8Array>,
   'purge_club_grants' : ActorMethod<
@@ -103,7 +108,17 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'revoke_pii_read_competition' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_competition_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }

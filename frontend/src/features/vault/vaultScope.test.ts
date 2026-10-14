@@ -12,6 +12,7 @@ describe("Vault scope rules", () => {
       clubId: null,
       teamId: null,
       miniLeagueId: null,
+      competitionId: null,
       folderId: null,
     });
   });
@@ -26,18 +27,19 @@ describe("Vault scope rules", () => {
       clubId: "club-a",
       teamId: null,
       miniLeagueId: null,
+      competitionId: null,
       folderId: "folder-a",
     });
   });
 
-  it("keeps exact team and mini-league scopes mutually exclusive", () => {
+  it("keeps exact team, mini-league, and competition scopes mutually exclusive", () => {
     expect(getVaultScope({
       type: "team",
       clubId: "club-a",
       clubName: "Club A",
       teamId: "team-a",
       teamName: "Team A",
-    })).toMatchObject({ teamId: "team-a", miniLeagueId: null });
+    })).toMatchObject({ teamId: "team-a", miniLeagueId: null, competitionId: null });
 
     expect(getVaultScope({
       type: "mini-league",
@@ -45,7 +47,15 @@ describe("Vault scope rules", () => {
       clubName: "Club A",
       miniLeagueId: "league-a",
       miniLeagueName: "League A",
-    })).toMatchObject({ teamId: null, miniLeagueId: "league-a" });
+    })).toMatchObject({ teamId: null, miniLeagueId: "league-a", competitionId: null });
+
+    expect(getVaultScope({
+      type: "competition",
+      clubId: "club-a",
+      clubName: "Club A",
+      competitionId: "comp-a",
+      competitionName: "Winter Comp",
+    })).toMatchObject({ teamId: null, miniLeagueId: null, competitionId: "comp-a" });
   });
 
   it("collects only roles belonging to the current club", () => {

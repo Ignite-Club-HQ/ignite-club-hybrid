@@ -32,6 +32,7 @@ persistent actor class Main(governorInit : Principal) {
   var joinLinks : [Types.MiniLeagueJoinLink];
   var children : [Types.MiniLeagueChild];
   var guardians : [Types.MiniLeagueGuardian];
+  var clubDomainCanister : ?Principal;
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -143,6 +144,14 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid club_domain canister id");
+    clubDomainCanister := ?id;
+    #Ok
+  };
+
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");
@@ -203,6 +212,61 @@ persistent actor class Main(governorInit : Principal) {
 
   public query ({ caller }) func list_mini_leagues_by_club(club_id : Text) : async [Types.MiniLeague] {
     leagues.filter(func(item) = item.club_id == club_id and canViewLeague(caller, item))
+  };
+
+  func addNewsRecipient(recipients : [Principal], candidate : ?Principal) : [Principal] {
+    switch (candidate) {
+      case null { recipients };
+      case (?user) {
+        if (user.equal(Principal.anonymous()) or recipients.any(func(existing) = existing.equal(user))) recipients
+        else recipients.concat([user])
+      };
+    }
+  };
+
+  public query ({ caller }) func get_news_audience(mini_league_id : Text, requester : Principal) : async { #Ok : Types.MiniLeagueNewsAudience; #Err : Text } {
+    switch (clubDomainCanister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?clubDomain) { if (not caller.equal(clubDomain)) return #Err("club_domain only") };
+    };
+    if (requester.equal(Principal.anonymous())) return #Err("Authenticated requester required");
+    switch (findLeague(mini_league_id)) {
+      case null { #Err("Mini-league not found") };
+      case (?league) {
+        // The caller is the configured club_domain canister, which checks the
+        // user's club-admin role before asking for this recipient snapshot.
+        if (requester.equal(Principal.anonymous())) return #Err("Authenticated requester required");
+        var recipients = addNewsRecipient([], ?league.created_by);
+        for (admin in admins.values()) {
+          if (admin.mini_league_id == mini_league_id) recipients := addNewsRecipient(recipients, ?admin.user_id);
+        };
+        for (grant in roles.values()) {
+          if (grant.club_id == league.club_id and grant.role == "club_admin") recipients := addNewsRecipient(recipients, ?grant.user);
+        };
+        for (player in players.values()) {
+          if (player.mini_league_id == mini_league_id) {
+            recipients := addNewsRecipient(recipients, player.claimed_by);
+            switch (player.child_id) {
+              case (?childId) {
+                switch (findChild(childId)) {
+                  case (?child) {
+                    recipients := addNewsRecipient(recipients, child.parent_user_id);
+                    recipients := addNewsRecipient(recipients, child.claimed_by);
+                  };
+                  case null {};
+                };
+                for (guardian in guardians.values()) {
+                  if (guardian.child_id == childId) recipients := addNewsRecipient(recipients, ?guardian.guardian_user_id);
+                };
+              };
+              case null {};
+            };
+            if (recipients.size() > 500) return #Err("Mini-league news audience exceeds 500 members");
+          };
+        };
+        #Ok({ club_id = league.club_id; recipients })
+      };
+    }
   };
 
   // ---- Batched reads (same canViewLeague visibility; capped) ----

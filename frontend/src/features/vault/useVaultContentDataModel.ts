@@ -18,6 +18,7 @@ import {
   type VaultSearchFolder,
 } from "./vaultReadRepository";
 import { vaultKeys } from "./vaultQueryKeys";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type {
   VaultFileRow,
@@ -139,8 +140,10 @@ export function useVaultContentDataModel({
   //    available instantly across searches.
   //  - Push the name filter to Postgres via ilike so the payload only
   //    contains matches, not the entire vault.
+  const useIcpVault = isFeatureRoutedToIcp("vault");
   const recursiveEnabled =
-    debouncedVaultSearchQuery.trim().length > 0 && currentView.type !== "root" && !showTrash;
+    debouncedVaultSearchQuery.trim().length > 0 && currentView.type !== "root" && !showTrash &&
+    !(useIcpVault && currentView.type === "competition");
   const recursiveScope = useMemo(() => {
     const scope = getVaultScope(currentView);
     return {
@@ -148,6 +151,7 @@ export function useVaultContentDataModel({
       clubId: scope.clubId,
       teamId: scope.teamId,
       miniLeagueId: scope.miniLeagueId,
+      competitionId: scope.competitionId,
       startFolderId: scope.folderId,
     };
   }, [currentView]);
@@ -158,6 +162,7 @@ export function useVaultContentDataModel({
       recursiveScope.type,
       recursiveScope.clubId,
       recursiveScope.teamId,
+      recursiveScope.competitionId,
       isClubAdmin,
       isAppAdmin,
       clubRoleSignature,
@@ -168,7 +173,7 @@ export function useVaultContentDataModel({
         isPrivilegedViewer: (isAppAdmin ?? false) || isClubAdmin,
         clubRoles: userClubRoleSet,
       }),
-    enabled: recursiveScope.type === "club" || recursiveScope.type === "team",
+    enabled: recursiveScope.type === "club" || recursiveScope.type === "team" || (recursiveScope.type === "competition" && !useIcpVault),
     staleTime: 60_000,
   });
 

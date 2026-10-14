@@ -9,6 +9,7 @@ import {
   fetchVaultTrash,
   isVaultImage,
   partitionVaultItems,
+  resolveCompetitionVaultFileUrls,
   searchVaultContents,
   type VaultFolderTreeRow,
 } from "./vaultReadRepository";
@@ -106,6 +107,7 @@ function trashClient(data: unknown[]) {
   };
   query.select = record("select");
   query.eq = record("eq");
+  query.is = record("is");
   query.not = record("not");
   query.order = async (...args: unknown[]) => {
     calls.push({ table: "vault_files", method: "order", args });
@@ -423,6 +425,23 @@ describe("Vault recursive folder tree", () => {
     expect(fake.calls).toContainEqual({ table: "vault_folders", method: "eq", args: ["team_id", "team-a"] });
     expect(fake.calls.some((call) => call.method === "eq" && call.args[0] === "club_id")).toBe(false);
   });
+
+  it("queries a competition tree by organizer club and competition", async () => {
+    const fake = treeClient([]);
+    await fetchVaultFolderTree({
+      view: {
+        type: "competition",
+        clubId: "club-a",
+        clubName: "Club A",
+        competitionId: "competition-a",
+        competitionName: "Competition A",
+      },
+      isPrivilegedViewer: true,
+      clubRoles: new Set(),
+    }, fake.client);
+    expect(fake.calls).toContainEqual({ table: "vault_folders", method: "eq", args: ["club_id", "club-a"] });
+    expect(fake.calls).toContainEqual({ table: "vault_folders", method: "eq", args: ["competition_id", "competition-a"] });
+  });
 });
 
 describe("Vault recursive content search", () => {
@@ -504,6 +523,40 @@ describe("Vault recursive content search", () => {
         folder_path: "Public Policies / Match Folder",
       }),
     ]);
+  });
+});
+
+describe("competition Vault signed URLs", () => {
+  it("signs only competition-vault objects", async () => {
+    const calls: Array<{ bucket: string; path: string; expiresIn: number }> = [];
+    const client = {
+      storage: {
+        from: (bucket: string) => ({
+          createSignedUrl: async (path: string, expiresIn: number) => {
+            calls.push({ bucket, path, expiresIn });
+            return { data: { signedUrl: "https://signed.invalid/file" }, error: null };
+          },
+        }),
+      },
+    } as unknown as IgniteSupabaseClient;
+
+    const rows = await resolveCompetitionVaultFileUrls([
+      {
+        id: "private",
+        file_url: "storage://competition-vault/clubs/a/competitions/b/file.pdf",
+        storage_bucket: "competition-vault",
+        storage_path: "clubs/a/competitions/b/file.pdf",
+      },
+      { id: "public", file_url: "https://example.com/public.pdf", storage_bucket: "photos" },
+    ], client);
+
+    expect(rows[0].file_url).toBe("https://signed.invalid/file");
+    expect(rows[1].file_url).toBe("https://example.com/public.pdf");
+    expect(calls).toEqual([{
+      bucket: "competition-vault",
+      path: "clubs/a/competitions/b/file.pdf",
+      expiresIn: 3600,
+    }]);
   });
 });
 

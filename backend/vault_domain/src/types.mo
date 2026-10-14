@@ -20,6 +20,7 @@ module {
     deleted_at_ms : ?Nat64;
     deleted_by : ?Principal;
     mini_league_id : ?Text;
+    competition_id : ?Text;
     // Display metadata mirroring the Supabase team_folders columns.
     sort_order : Nat32;
     description : ?Text;
@@ -40,6 +41,7 @@ module {
     deleted_at_ms : ?Nat64;
     deleted_by : ?Principal;
     mini_league_id : ?Text;
+    competition_id : ?Text;
     is_external_link : Bool;
     blob_ref : ?BlobRef;
   };

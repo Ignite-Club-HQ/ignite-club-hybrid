@@ -3,12 +3,9 @@ import { toast } from "sonner";
 import { collectVaultExportContents, fetchVaultFolderContents } from "./vaultExportRepository";
 import { excludeVaultExportFolders, resolveSelectedVaultExportItems, summarizeVaultExport, toggleVaultExportSelection } from "./vaultExportSelection";
 import { runZipExport, summarizeZipExport, type ZipExportItem } from "./vaultZipExport";
+import type { VaultFolderView } from "./types";
 
-export type FolderView =
-  | { type: "root" }
-  | { type: "club"; clubId: string; clubName: string; folderId?: string; folderName?: string }
-  | { type: "team"; clubId: string; clubName: string; teamId: string; teamName: string; folderId?: string; folderName?: string }
-  | { type: "mini-league"; clubId: string; clubName: string; miniLeagueId: string; miniLeagueName: string; folderId?: string; folderName?: string };
+export type FolderView = VaultFolderView;
 
 export interface VaultExportPhoto {
   id: string;
@@ -66,12 +63,13 @@ const scopeForView = (currentView: FolderView) => ({
   folderId: currentView.type === "root" ? null : currentView.folderId || null,
   clubId: currentView.type === "root" ? null : currentView.clubId,
   teamId: currentView.type === "team" ? currentView.teamId : null,
+  competitionId: currentView.type === "competition" ? currentView.competitionId : null,
 });
 
 const folderNameForView = (currentView: FolderView, selected = false) => {
   if (selected) return "selected-files";
   if (currentView.type === "root") return "vault";
-  return currentView.folderName || (currentView.type === "team" ? currentView.teamName : currentView.clubName) || "export";
+  return currentView.folderName || (currentView.type === "team" ? currentView.teamName : currentView.type === "competition" ? currentView.competitionName : currentView.clubName) || "export";
 };
 
 export function useVaultExport({

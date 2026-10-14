@@ -46,11 +46,13 @@ export const vaultKeys = {
   ) => ["vault-files", view, isClubAdmin, isCoachOrTeamAdmin] as const,
   folders: () => ["vault-folders"] as const,
   trash: () => ["vault-trash"] as const,
-  trashForClub: (clubId: string | null) => ["vault-trash", clubId] as const,
+  trashForClub: (clubId: string | null, competitionId: string | null = null) =>
+    competitionId ? ["vault-trash", clubId, competitionId] as const : ["vault-trash", clubId] as const,
   folderTree: (
     scopeType: VaultFolderView["type"],
     clubId: string | null,
     teamId: string | null,
+    competitionId: string | null,
     isClubAdmin: boolean,
     isAppAdmin: boolean | undefined,
     clubRoleSignature: string,
@@ -59,6 +61,7 @@ export const vaultKeys = {
     scopeType,
     clubId,
     teamId,
+    competitionId,
     isClubAdmin,
     isAppAdmin,
     clubRoleSignature,

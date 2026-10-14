@@ -97,6 +97,13 @@ module {
   // a set of competitions over a time window. broadcasts always reports 0 —
   // broadcast records stay in Supabase (competition_broadcasts) by design.
   public type CompetitionEngagementSummary = { competition_id : Text; active_teams : Nat; total_matches : Nat; results_entered : Nat; broadcasts : Nat };
+  public type CompetitionNewsAudience = {
+    competition_id : Text;
+    club_id : Text;
+    team_ids : [Text];
+    recipients : [Principal];
+    can_publish : Bool;
+  };
   // Public, anonymous-readable preview behind a competition join link —
   // mirrors the Supabase SECURITY DEFINER RPCs (get_competition_by_join_token,
   // list_divisions_by_join_token, get_competition_join_token_status,
@@ -104,6 +111,7 @@ module {
   // entered_team_ids covers entries with status accepted|invited.
   public type JoinLinkPreview = {
     competition_id : Text;
+    role : Text;
     name : Text;
     club_id : Text;
     season : Text;
@@ -126,5 +134,6 @@ module {
     eoiSubmissions : [EoiSubmission];
   };
   public type DivisionSetting = { competition_id : Text; division : Text; hide_ladder : Bool };
+  public type CompetitionLadderSetting = { competition_id : Text; hide_ladder : Bool };
   public type Broadcast = { id : Text; competition_id : Text; sender : Principal; title : Text; body : Text; created_at_ms : Nat64 };
 }

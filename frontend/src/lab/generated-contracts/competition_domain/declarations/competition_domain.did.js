@@ -169,11 +169,19 @@ export const idlFactory = ({ IDL }) => {
   const JoinLinkPreview = IDL.Record({
     'competition_status' : IDL.Text,
     'name' : IDL.Text,
+    'role' : IDL.Text,
     'season' : IDL.Text,
     'divisions' : IDL.Vec(IDL.Text),
     'competition_id' : IDL.Text,
     'club_id' : IDL.Text,
     'entered_team_ids' : IDL.Vec(IDL.Text),
+  });
+  const CompetitionNewsAudience = IDL.Record({
+    'team_ids' : IDL.Vec(IDL.Text),
+    'can_publish' : IDL.Bool,
+    'recipients' : IDL.Vec(IDL.Principal),
+    'competition_id' : IDL.Text,
+    'club_id' : IDL.Text,
   });
   const Broadcast = IDL.Record({
     'id' : IDL.Text,
@@ -235,6 +243,7 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'can_invite_players_to_team' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'claim_eoi_by_token' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
@@ -265,6 +274,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Competition, 'Err' : IDL.Text })],
         [],
       ),
+    'create_competition_event' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_competition_invite' : IDL.Func(
         [IDL.Text, IDL.Principal, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],
@@ -272,6 +295,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'create_competition_join_link' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_competition_official_link' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
         [],
       ),
@@ -311,6 +339,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ChatSettings, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_competition_hide_ladder' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_eoi_stats' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : EoiStats, 'Err' : IDL.Text })],
@@ -326,6 +359,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(EoiSubmission), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_news_audience' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : CompetitionNewsAudience, 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_vault_access' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'can_manage' : IDL.Bool,
+              'is_member' : IDL.Bool,
+              'club_id' : IDL.Text,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -339,6 +391,11 @@ export const idlFactory = ({ IDL }) => {
     'is_competition_admin' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'is_competition_invite_manager' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Bool],
         ['query'],
       ),
     'issue_join_token' : IDL.Func(
@@ -426,6 +483,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(Match), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_my_news_competitions' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_seasons' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
@@ -466,6 +528,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'revoke_competition_official_link' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'rotate_competition_join_link' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
@@ -486,14 +553,29 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_competition_hide_ladder' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_division_hide_ladder' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : DivisionSetting, 'Err' : IDL.Text })],
         [],
       ),
+    'set_events_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_match_result' : IDL.Func(
         [IDL.Text, IDL.Nat16, IDL.Nat16, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_pii_access_control_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_season_divisions' : IDL.Func(
@@ -504,6 +586,11 @@ export const idlFactory = ({ IDL }) => {
     'set_season_status' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_vault_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'suggest_eoi_teams' : IDL.Func(

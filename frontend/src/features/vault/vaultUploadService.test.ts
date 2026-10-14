@@ -12,7 +12,7 @@ import {
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
 describe("Vault upload scope and storage paths", () => {
-  it("builds exact club, team, and mini-league scope fields", () => {
+  it("builds exact club, team, mini-league, and competition scope fields", () => {
     expect(getVaultUploadScope({ type: "club", clubId: "club-a", clubName: "Club A" }))
       .toEqual({ club_id: "club-a" });
     expect(getVaultUploadScope({
@@ -22,6 +22,10 @@ describe("Vault upload scope and storage paths", () => {
       type: "mini-league", clubId: "club-a", clubName: "Club A",
       miniLeagueId: "league-a", miniLeagueName: "League A",
     })).toEqual({ club_id: "club-a", mini_league_id: "league-a" });
+    expect(getVaultUploadScope({
+      type: "competition", clubId: "club-a", clubName: "Club A",
+      competitionId: "competition-a", competitionName: "Competition A",
+    })).toEqual({ club_id: "club-a", competition_id: "competition-a" });
     expect(getVaultUploadScope({ type: "root" })).toEqual({});
   });
 
@@ -37,7 +41,7 @@ describe("Vault upload scope and storage paths", () => {
     })).toBe("clubs/club-a/teams/team-a/user-a/123-xjylrx.pdf");
   });
 
-  it("builds club, mini-league, and unassigned paths without cross-scope IDs", () => {
+  it("builds club, mini-league, competition, and unassigned paths without cross-scope IDs", () => {
     const stable = { userId: "user-a", fileName: "photo.jpg", timestamp: 123, randomValue: 0.5 };
     expect(buildVaultUploadPath({
       ...stable, view: { type: "club", clubId: "club-a", clubName: "Club A" },
@@ -49,6 +53,13 @@ describe("Vault upload scope and storage paths", () => {
         miniLeagueId: "league-a", miniLeagueName: "League A",
       },
     })).toBe("clubs/club-a/mini-leagues/league-a/user-a/123-.jpg");
+    expect(buildVaultUploadPath({
+      ...stable,
+      view: {
+        type: "competition", clubId: "club-a", clubName: "Club A",
+        competitionId: "competition-a", competitionName: "Competition A",
+      },
+    })).toBe("clubs/club-a/competitions/competition-a/user-a/123-.jpg");
     expect(buildVaultUploadPath({ ...stable, view: { type: "root" } }))
       .toBe("unassigned/user-a/123-.jpg");
   });
@@ -105,6 +116,22 @@ describe("Vault external-link creation", () => {
     expect(fake.inserts[0]).not.toHaveProperty("team_id");
   });
 
+  it("applies competition scope without inventing a team ID", async () => {
+    const fake = insertClient();
+    await createVaultExternalLink({
+      url: "https://example.com/rules",
+      name: "Competition rules",
+      userId: "user-a",
+      folderId: null,
+      view: {
+        type: "competition", clubId: "club-a", clubName: "Club A",
+        competitionId: "competition-a", competitionName: "Competition A",
+      },
+    }, fake.client);
+    expect(fake.inserts[0]).toMatchObject({ club_id: "club-a", competition_id: "competition-a" });
+    expect(fake.inserts[0]).not.toHaveProperty("team_id");
+  });
+
   it("propagates insertion failures", async () => {
     const denied = { message: "permission denied", code: "42501" };
     const fake = insertClient(denied);
@@ -121,12 +148,13 @@ describe("Vault external-link creation", () => {
 function uploadTransaction(options: { uploadError?: unknown; insertError?: unknown } = {}) {
   const events: string[] = [];
   const inserts: unknown[] = [];
+  const uploadBuckets: string[] = [];
   const upload = vi.fn(async () => {
     events.push("upload");
     return { data: null, error: options.uploadError ?? null };
   });
   const client = {
-    storage: { from: () => ({ upload }) },
+    storage: { from: (bucket: string) => { uploadBuckets.push(bucket); return { upload }; } },
     from: () => ({
       insert: async (payload: unknown) => {
         events.push("insert");
@@ -148,7 +176,7 @@ function uploadTransaction(options: { uploadError?: unknown; insertError?: unkno
     }),
     buildStorageUrl: vi.fn((path) => `local://${path}`),
   };
-  return { client, dependencies, events, inserts, upload };
+  return { client, dependencies, events, inserts, upload, uploadBuckets };
 }
 
 describe("Vault upload transaction", () => {
@@ -187,6 +215,33 @@ describe("Vault upload transaction", () => {
       team_id: "team-a",
       file_type: "image/jpeg",
     }]);
+  });
+
+  it("stores competition files in the private competition bucket with competition metadata", async () => {
+    const fake = uploadTransaction();
+    const file = new File(["rules"], "rules.pdf", { type: "application/pdf" });
+    await uploadVaultItem({
+      kind: "file",
+      file,
+      name: "Competition rules",
+      userId: "user-a",
+      folderId: null,
+      view: {
+        type: "competition",
+        clubId: "club-a",
+        clubName: "Club A",
+        competitionId: "competition-a",
+        competitionName: "Competition A",
+      },
+    }, fake.client, fake.dependencies);
+
+    expect(fake.uploadBuckets).toEqual(["competition-vault"]);
+    expect(fake.upload.mock.calls[0][0]).toContain("clubs/club-a/competitions/competition-a/");
+    expect(fake.inserts[0]).toMatchObject({
+      club_id: "club-a",
+      competition_id: "competition-a",
+      storage_bucket: "competition-vault",
+    });
   });
 
   it("preserves a custom document name and omits photo-only MIME metadata", async () => {

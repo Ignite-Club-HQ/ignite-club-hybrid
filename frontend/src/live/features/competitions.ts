@@ -21,6 +21,35 @@ export async function createLiveCompetition(
   );
 }
 
+export async function createLiveCompetitionEvent(
+  ctx: FeatureBackendContext,
+  input: {
+    operationId: string;
+    competitionId: string;
+    title: string;
+    description: string;
+    eventType: string;
+    location?: string | null;
+    startsAtMs: number | Date;
+    endsAtMs: number | Date;
+  },
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_competition_event(
+      input.operationId,
+      input.competitionId,
+      input.title,
+      input.description,
+      input.eventType,
+      candidOpt(input.location),
+      toNat64(input.startsAtMs),
+      toNat64(input.endsAtMs),
+    ),
+    "Create event for competition teams",
+  );
+}
+
 export async function createLiveSeason(
   ctx: FeatureBackendContext,
   competitionId: string,
@@ -243,6 +272,11 @@ export async function listLiveCompetitionsMulti(
   return unwrapCandid(actor.list_competitions_multi(clubIds), "List competitions");
 }
 
+export async function listLiveMyNewsCompetitions(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_my_news_competitions(), "List publishable competitions");
+}
+
 /** ICP counterpart of the Supabase `is_competition_admin` RPC. */
 export async function isLiveCompetitionAdmin(
   ctx: FeatureBackendContext,
@@ -401,6 +435,31 @@ export async function createLiveCompetitionJoinLink(
   );
 }
 
+export async function createLiveCompetitionOfficialLink(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  role: "referee" | "committee_member",
+  token: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_competition_official_link(competitionId, role, token),
+    "Create competition official link",
+  );
+}
+
+export async function revokeLiveCompetitionOfficialLink(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  role: "referee" | "committee_member",
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.revoke_competition_official_link(competitionId, role),
+    "Revoke competition official link",
+  );
+}
+
 export async function rotateLiveCompetitionJoinLink(ctx: FeatureBackendContext, competitionId: string) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.rotate_competition_join_link(competitionId), "Rotate competition join link");
@@ -436,7 +495,7 @@ export async function getLiveJoinLinkPreview(
   ctx: FeatureBackendContext,
   token: string,
 ): Promise<
-  | { status: "ok"; preview: { competition_id: string; name: string; club_id: string; season: string; competition_status: string; divisions: string[]; entered_team_ids: string[] } }
+  | { status: "ok"; preview: { competition_id: string; role: string; name: string; club_id: string; season: string; competition_status: string; divisions: string[]; entered_team_ids: string[] } }
   | { status: string; preview: null }
 > {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
@@ -667,6 +726,16 @@ export async function listLiveDivisionSettings(ctx: FeatureBackendContext, compe
 export async function setLiveDivisionHideLadder(ctx: FeatureBackendContext, competitionId: string, division: string, hide: boolean) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.set_division_hide_ladder(competitionId, division, hide), "Update ladder visibility");
+}
+
+export async function getLiveCompetitionHideLadder(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_competition_hide_ladder(competitionId), "Get competition ladder visibility");
+}
+
+export async function setLiveCompetitionHideLadder(ctx: FeatureBackendContext, competitionId: string, hide: boolean) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_competition_hide_ladder(competitionId, hide), "Update competition ladder visibility");
 }
 
 export async function sendLiveCompetitionBroadcast(ctx: FeatureBackendContext, competitionId: string, title: string, body: string) {

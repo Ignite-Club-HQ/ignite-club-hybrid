@@ -167,6 +167,7 @@ const PublicEoiFormPage = lazyWithRetry(() => import("./pages/PublicEoiFormPage"
 const EoiCompletePage = lazyWithRetry(() => import("./pages/EoiCompletePage"));
 const ClaimTeamPage = lazyWithRetry(() => import("./pages/ClaimTeamPage"));
 const CompetitionJoinPage = lazyWithRetry(() => import("./pages/CompetitionJoinPage"));
+const CompetitionOfficialJoinPage = lazyWithRetry(() => import("./pages/CompetitionOfficialJoinPage"));
 const EmbeddedEoiFormPage = lazyWithRetry(() => import("./pages/EmbeddedEoiFormPage"));
 // WatchLiveTeamPage archived: only served basketball/netball spectator view (archive/sports/pages/)
 const LeaderboardPage = lazyWithRetry(() => import("./pages/LeaderboardPage"));
@@ -519,6 +520,7 @@ const App = () => {
 <Route path="/eoi-complete/:token" element={<EoiCompletePage />} />
 <Route path="/claim-team" element={<ClaimTeamPage />} />
 <Route path="/competitions/join" element={<CompetitionJoinPage />} />
+<Route path="/competitions/officials/join" element={<CompetitionOfficialJoinPage />} />
                 <Route path="/index" element={<Navigate to="/" replace />} />
                 <Route path="/index.html" element={<Navigate to="/" replace />} />
                 <Route path="/live-index.html" element={<Navigate to="/" replace />} />

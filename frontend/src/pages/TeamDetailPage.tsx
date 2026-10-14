@@ -116,6 +116,7 @@ import {
   RemoveTeamMemberDialog,
 } from "@/components/team/TeamRemoveMemberDialogs";
 import { TeamMembersSection } from "@/components/team/TeamMembersSection";
+import { WelcomeEmailSettingsCard } from "@/components/WelcomeEmailSettingsCard";
 import { TeamAdminAccordionSection, TeamAppAdminAccordionSection } from "@/components/team/TeamAdminAccordionSections";
 import { ProLockedAccordionSection } from "@/components/team/ProLockedAccordionSection";
 import { TeamLeaveDialog } from "@/components/team/TeamLeaveDialog";
@@ -1950,6 +1951,10 @@ export default function TeamDetailPage() {
 
       {/* Competitions Section */}
       <TeamCompetitionsSection teamId={id!} canManage={isAdmin || isCoachOrAdmin || isClubAdmin} />
+
+      {canEditTeamSettings && (
+        <WelcomeEmailSettingsCard scopeKind="team" scopeId={id!} />
+      )}
 
       {/* Pitch Board Modal — soccer */}
       {showPitchBoard && pitchBoardAccessGranted && createPortal(

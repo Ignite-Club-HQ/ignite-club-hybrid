@@ -35,7 +35,8 @@ import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/membership";
 import { getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink, joinLiveMiniLeagueByToken } from "@/live/features/miniLeagues";
-import { getLivePendingInvite, getLiveTeamInviteLinkByToken, acceptPendingLiveInvite, acceptLiveTeamInviteLink, getLiveClubProfile, getLiveTeam } from "@/live/features/club";
+import { getLivePendingInvite, getLiveTeamInviteLinkByToken, acceptLiveTeamInviteLink, getLiveClubProfile, getLiveTeam } from "@/live/features/club";
+import { acceptIcpInviteAndWelcome } from "@/features/membership/acceptIcpInviteAndWelcome";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -1293,6 +1294,19 @@ function SupabaseJoinTeamPage() {
       }
     }
 
+    if (!isIcpAccount && !skipSupabaseRoleInsert && invite.team_id && rolesToAdd.length > 0) {
+      const { error: welcomeEmailError } = await supabase.functions.invoke("send-welcome-email", {
+        body: {
+          scopeKind: "team",
+          scopeId: invite.team_id,
+          recipientUserId: user.id,
+        },
+      });
+      if (welcomeEmailError) {
+        console.error("[JoinTeam] Welcome email request failed:", welcomeEmailError);
+      }
+    }
+
     // Handle child auto-creation for regular team invites with metadata.
     // Kept Supabase-only by design (children/child_team_assignments/
     // child_guardians have no canister shape yet) even when the invite
@@ -1491,8 +1505,8 @@ function SupabaseJoinTeamPage() {
         if ((pendingInviteData?.metadata as { icp_pending_invite?: boolean } | null)?.icp_pending_invite) {
           return withFeatureBackend("membership", {
             supabase: async () => [] as AppRole[],
-            icp: async (ctx) => {
-              await acceptPendingLiveInvite(ctx, token!);
+            icp: async () => {
+              await acceptIcpInviteAndWelcome(token!);
               return [(pendingInviteData?.role ?? "player") as AppRole];
             },
           });

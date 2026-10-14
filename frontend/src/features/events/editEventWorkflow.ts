@@ -99,6 +99,28 @@ export async function updateEventTransaction(
           location: optText(updates.address ?? updates.location_name ?? current?.location?.[0]),
           fromMs: new Date(input.selectedEventDate).getTime(),
         });
+        if ("duty_team_id" in updates) {
+          const fromMs = new Date(input.selectedEventDate).getTime();
+          const futureOccurrences = (snapshot.events as Array<{
+            id: string;
+            series_id: [] | [string];
+            starts_at_ms: bigint;
+            deleted: boolean;
+          }>).filter((occurrence) =>
+            occurrence.series_id[0] === seriesId &&
+            !occurrence.deleted &&
+            Number(occurrence.starts_at_ms) >= fromMs,
+          );
+          const { setLiveEventDutyTeam } = await import("@/live/features/events");
+          const dutyTeamId = (updates.duty_team_id as string | null | undefined) ?? null;
+          for (let index = 0; index < futureOccurrences.length; index += 4) {
+            await Promise.all(
+              futureOccurrences.slice(index, index + 4).map((occurrence) =>
+                setLiveEventDutyTeam(ctx, occurrence.id, dutyTeamId),
+              ),
+            );
+          }
+        }
         return;
       }
 
@@ -122,6 +144,10 @@ export async function updateEventTransaction(
         // The canister requires end > start; no/invalid end -> one hour.
         endsAtMs: endsAtMs > startsAtMs ? endsAtMs : startsAtMs + 3_600_000,
       });
+      if ("duty_team_id" in updates) {
+        const { setLiveEventDutyTeam } = await import("@/live/features/events");
+        await setLiveEventDutyTeam(ctx, input.eventId, (updates.duty_team_id as string | null | undefined) ?? null);
+      }
       if ("reminder_hours_before" in updates) {
         const { setLiveEventAutoReminder } = await import("@/live/features/events");
         const hours = updates.reminder_hours_before as number | null | undefined;

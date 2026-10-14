@@ -97,6 +97,7 @@ export interface EventAttendance {
   'notes' : string,
   'event_id' : string,
 }
+export interface EventDutyTeam { 'team_id' : string, 'event_id' : string }
 export interface EventGroup {
   'id' : string,
   'pitch_name' : [] | [string],
@@ -320,6 +321,23 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'create_competition_events' : ActorMethod<
+    [
+      string,
+      string,
+      Principal,
+      string,
+      Array<{ 'team_id' : string, 'club_id' : string }>,
+      string,
+      string,
+      string,
+      [] | [string],
+      bigint,
+      bigint,
+    ],
+    { 'Ok' : Array<string> } |
+      { 'Err' : string }
+  >,
   'create_event' : ActorMethod<
     [
       string,
@@ -451,9 +469,13 @@ export interface Main {
           'eventGroupPlayers' : Array<EventGroupPlayer>,
           'coachNotes' : Array<CoachNote>,
           'childTeamAssignments' : Array<ChildTeamAssignment>,
+          'individualDutyReminderSent' : Array<string>,
+          'eventDutyTeams' : Array<EventDutyTeam>,
           'series' : Array<EventSeries>,
           'eventGroups' : Array<EventGroup>,
           'children' : Array<Child>,
+          'pointsReminderSent' : Array<string>,
+          'dutyTeamReminderSent' : Array<string>,
           'recurrences' : Array<Recurrence>,
           'reminderLogs' : Array<ReminderLog>,
           'attendance' : Array<Attendance>,
@@ -494,6 +516,11 @@ export interface Main {
   'get_event_child' : ActorMethod<
     [string, string],
     { 'Ok' : Child } |
+      { 'Err' : string }
+  >,
+  'get_event_duty_team' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [EventDutyTeam] } |
       { 'Err' : string }
   >,
   'get_event_roster' : ActorMethod<
@@ -583,6 +610,11 @@ export interface Main {
     { 'Ok' : Array<Duty> } |
       { 'Err' : string }
   >,
+  'list_event_duty_teams' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<EventDutyTeam> } |
+      { 'Err' : string }
+  >,
   'list_event_groups' : ActorMethod<
     [string],
     { 'Ok' : Array<EventGroup> } |
@@ -594,6 +626,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_events' : ActorMethod<[[] | [string], [] | [string]], Array<Event>>,
+  'list_events_for_duty_teams' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Event> } |
+      { 'Err' : string }
+  >,
   'list_events_multi' : ActorMethod<
     [Array<string>, Array<string>],
     { 'Ok' : Array<Event> } |
@@ -820,6 +857,11 @@ export interface Main {
     { 'Ok' : CoachNote } |
       { 'Err' : string }
   >,
+  'set_competition_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_duty' : ActorMethod<
     [string, string, string],
     { 'Ok' : Duty } |
@@ -833,6 +875,11 @@ export interface Main {
   'set_event_cancelled' : ActorMethod<
     [string, boolean],
     { 'Ok' : Event } |
+      { 'Err' : string }
+  >,
+  'set_event_duty_team' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_event_group_appearance' : ActorMethod<

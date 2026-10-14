@@ -10,13 +10,14 @@ import {
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
-const MEDIA_PHOTO_SELECT = "id, file_url, image_url, title, caption, created_at, club_id, team_id, event_id, mini_league_id, uploader_id, album_id, clubs!club_id(name, is_pro), teams(name, club_id, clubs!club_id(name)), mini_leagues(name, club_id, clubs!club_id(name))";
-const HIGHLIGHTED_PHOTO_SELECT = "id, file_url, image_url, title, caption, created_at, club_id, team_id, event_id, mini_league_id, uploader_id, clubs!club_id(name, is_pro), teams(name, club_id, clubs!club_id(name)), mini_leagues(name, club_id, clubs!club_id(name))";
+const MEDIA_PHOTO_SELECT = "id, file_url, image_url, title, caption, created_at, club_id, team_id, event_id, mini_league_id, competition_id, uploader_id, album_id, clubs!club_id(name, is_pro), teams(name, club_id, clubs!club_id(name)), mini_leagues(name, club_id, clubs!club_id(name))";
+const HIGHLIGHTED_PHOTO_SELECT = "id, file_url, image_url, title, caption, created_at, club_id, team_id, event_id, mini_league_id, competition_id, uploader_id, clubs!club_id(name, is_pro), teams(name, club_id, clubs!club_id(name)), mini_leagues(name, club_id, clubs!club_id(name))";
 
 export type MediaFeedFilters = {
   clubId: string | null;
   teamId: string | null;
   eventId: string | null;
+  competitionId: string | null;
   dateFrom: string | null;
   dateTo: string | null;
   cardId: string | null;
@@ -54,6 +55,7 @@ export async function fetchMediaFeedPage(
       if (options.clubId) query = query.eq("club_id", options.clubId);
       if (options.teamId) query = query.eq("team_id", options.teamId);
       if (options.eventId) query = query.eq("event_id", options.eventId);
+      if (options.competitionId) query = query.eq("competition_id", options.competitionId);
       if (options.dateFrom) query = query.gte("created_at", options.dateFrom);
       if (options.dateTo) query = query.lte("created_at", options.dateTo);
 
@@ -90,6 +92,7 @@ export async function fetchMediaFeedPage(
           team_id: null,
           event_id: null,
           mini_league_id: null,
+          competition_id: asset.competition_id[0] ?? null,
           uploader_id: asset.owner.toText(),
           album_id: null,
           clubs: null,

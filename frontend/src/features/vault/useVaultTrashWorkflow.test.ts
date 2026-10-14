@@ -5,26 +5,34 @@ describe("Vault trash workflow query scope", () => {
   it("uses the owning club for every non-root scope and never enables root trash", () => {
     expect(getVaultTrashQueryScope({ type: "root" }, true)).toEqual({
       clubId: null,
+      competitionId: null,
       enabled: false,
     });
     expect(getVaultTrashQueryScope({
       type: "club",
       clubId: "club-1",
       clubName: "Synthetic Club",
-    }, true)).toEqual({ clubId: "club-1", enabled: true });
+    }, true)).toEqual({ clubId: "club-1", competitionId: null, enabled: true });
+    expect(getVaultTrashQueryScope({
+      type: "competition",
+      clubId: "club-1",
+      clubName: "Synthetic Club",
+      competitionId: "competition-1",
+      competitionName: "Synthetic Cup",
+    }, true)).toEqual({ clubId: "club-1", competitionId: "competition-1", enabled: true });
     expect(getVaultTrashQueryScope({
       type: "team",
       clubId: "club-1",
       clubName: "Synthetic Club",
       teamId: "team-1",
       teamName: "U10 Blue",
-    }, true)).toEqual({ clubId: "club-1", enabled: true });
+    }, true)).toEqual({ clubId: "club-1", competitionId: null, enabled: true });
     expect(getVaultTrashQueryScope({
       type: "mini-league",
       clubId: "club-1",
       clubName: "Synthetic Club",
       miniLeagueId: "league-1",
       miniLeagueName: "Synthetic League",
-    }, false)).toEqual({ clubId: "club-1", enabled: false });
+    }, false)).toEqual({ clubId: "club-1", competitionId: null, enabled: false });
   });
 });

@@ -25,6 +25,7 @@ function mapLiveVaultFolder(folder: any): VaultFolderRow {
     club_id: folder.club,
     team_id: folder.team[0] ?? null,
     mini_league_id: folder.mini_league_id?.[0] ?? null,
+    competition_id: folder.competition_id?.[0] ?? null,
     parent_id: folder.parent_id[0] ?? null,
     restricted_roles: folder.restricted_roles ?? [],
     created_at: new Date(Number(folder.created_at_ms)).toISOString(),
@@ -58,6 +59,7 @@ function mapLiveVaultFile(file: any): VaultFileRow {
     club_id: file.club,
     team_id: file.team[0] ?? null,
     mini_league_id: file.mini_league_id?.[0] ?? null,
+    competition_id: file.competition_id?.[0] ?? null,
     name: file.name,
     file_url: file.file_url,
     file_size: Number(file.size),
@@ -90,6 +92,21 @@ export type VaultFolderTree = {
   descendantIds: string[];
 };
 export type VaultSearchFolder = VaultFolderTreeRow & { folder_path: string };
+export async function resolveCompetitionVaultFileUrls<T extends {
+  file_url: string;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+}>(rows: readonly T[], client: IgniteSupabaseClient = supabase): Promise<T[]> {
+  return Promise.all(rows.map(async (row) => {
+    if (row.storage_bucket !== "competition-vault" || !row.storage_path) return row;
+    const { data, error } = await client.storage
+      .from("competition-vault")
+      .createSignedUrl(row.storage_path, 3600);
+    if (error || !data?.signedUrl) throw error ?? new Error("Could not sign competition Vault file");
+    return { ...row, file_url: data.signedUrl };
+  }));
+}
+
 export type VaultSearchFile = Pick<
   VaultFileRow,
   | "id"
@@ -216,6 +233,8 @@ export async function fetchVaultSubfolders(
 
       if (view.type === "club") {
         query = query.eq("club_id", view.clubId).is("team_id", null);
+      } else if (view.type === "competition") {
+        query = query.eq("club_id", view.clubId).eq("competition_id", view.competitionId);
       } else {
         query = query.eq("team_id", view.teamId);
       }
@@ -234,6 +253,8 @@ export async function fetchVaultSubfolders(
         ctx,
         view.clubId,
         view.type === "team" ? view.teamId : null,
+        null,
+        view.type === "competition" ? view.competitionId : null,
       );
       const children = (folders as any[])
         .map(mapLiveVaultFolder)
@@ -270,6 +291,8 @@ export async function fetchVaultItems(
         if (!options.isClubAdmin && options.isCoachOrTeamAdmin && !scope.folderId) return [];
       } else if (view.type === "team") {
         query = query.eq("team_id", view.teamId);
+      } else if (view.type === "competition") {
+        query = query.eq("club_id", view.clubId).eq("competition_id", view.competitionId);
       } else {
         query = query.eq("mini_league_id", view.miniLeagueId);
       }
@@ -278,7 +301,7 @@ export async function fetchVaultItems(
         ? query.eq("folder_id", scope.folderId)
         : query.is("folder_id", null);
       const { data } = await query.order("created_at", { ascending: false });
-      return data ?? [];
+      return resolveCompetitionVaultFileUrls((data ?? []) as VaultFileRow[], client);
     },
     // Provisional: mini-league views resolve through the canister's
     // mini_league_id scope; verify against the deployed canister post-deploy.
@@ -288,12 +311,17 @@ export async function fetchVaultItems(
         if (!options.isClubAdmin && options.isCoachOrTeamAdmin && !scope.folderId) return [];
       }
       const files = scope.folderId
-        ? await listLiveVaultFilesWithFolder(ctx, scope.folderId)
+        ? await listLiveVaultFilesWithFolder(
+            ctx,
+            scope.folderId,
+            view.type === "competition" ? view.competitionId : null,
+          )
         : await listLiveVaultClubFilesWithFolder(
             ctx,
             view.clubId,
             view.type === "team" ? view.teamId : null,
             view.type === "mini-league" ? view.miniLeagueId : null,
+            view.type === "competition" ? view.competitionId : null,
           );
       const rows = (files as any[]).map(unwrapLiveVaultFileWithFolder).map(mapLiveVaultFile);
       return scope.folderId ? rows : rows.filter((row) => !row.folder_id);
@@ -314,15 +342,19 @@ export async function fetchVaultFolderTree(
     pathById: new Map(),
     descendantIds: [],
   });
-  if (options.view.type !== "club" && options.view.type !== "team") return empty();
+  if (options.view.type !== "club" && options.view.type !== "team" && options.view.type !== "competition") return empty();
 
   const scope = getVaultScope(options.view);
   let query = client
     .from("vault_folders")
     .select("id,name,parent_id,restricted_roles");
-  query = options.view.type === "club"
-    ? query.eq("club_id", options.view.clubId).is("team_id", null)
-    : query.eq("team_id", options.view.teamId);
+  if (options.view.type === "club") {
+    query = query.eq("club_id", options.view.clubId).is("team_id", null);
+  } else if (options.view.type === "team") {
+    query = query.eq("team_id", options.view.teamId);
+  } else {
+    query = query.eq("club_id", options.view.clubId).eq("competition_id", options.view.competitionId);
+  }
   const { data } = await query;
   return buildVaultFolderTree(data ?? [], scope.folderId, options);
 }
@@ -356,6 +388,8 @@ export async function searchVaultContents(
       .is("mini_league_id", null);
   } else if (options.view.type === "team") {
     query = query.eq("team_id", options.view.teamId);
+  } else if (options.view.type === "competition") {
+    query = query.eq("club_id", options.view.clubId).eq("competition_id", options.view.competitionId);
   } else {
     query = query.eq("mini_league_id", options.view.miniLeagueId);
   }
@@ -373,8 +407,12 @@ export async function searchVaultContents(
     }));
 
   const { data } = await query.order("created_at", { ascending: false });
+  const resolvedData = await resolveCompetitionVaultFileUrls(
+    (data ?? []) as VaultFileRow[],
+    client,
+  );
   const visibleFolderIds = new Set(options.tree.descendantIds);
-  const files = (data ?? [])
+  const files = resolvedData
     .filter(
       (file) =>
         !file.folder_id ||
@@ -402,7 +440,7 @@ export async function fetchVaultTrash(
 
   return withFeatureBackend("vault", {
     supabase: async () => {
-      const { data } = await client
+      let query = client
         .from("vault_files")
         .select(`
           *,
@@ -410,10 +448,14 @@ export async function fetchVaultTrash(
           team:teams(id, name)
         `)
         .eq("club_id", view.clubId)
-        .not("deleted_at", "is", null)
-        .order("deleted_at", { ascending: false });
+        .not("deleted_at", "is", null);
+      query = view.type === "competition"
+        ? query.eq("competition_id", view.competitionId)
+        : query.is("competition_id", null);
+      const { data } = await query.order("deleted_at", { ascending: false });
 
-      return partitionVaultItems(data as unknown as VaultFileRow[] | null);
+      const resolved = await resolveCompetitionVaultFileUrls((data ?? []) as unknown as VaultFileRow[], client);
+      return partitionVaultItems(resolved);
     },
     // Provisional: no folder/team name joins on the canister.
     icp: async (ctx) => {

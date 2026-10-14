@@ -2,7 +2,7 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useQuery, useQueryClient, onlineManager } from "@tanstack/react-query";
-import { Calendar as CalendarIcon, List, CalendarDays, Filter, CalendarPlus, RefreshCw } from "lucide-react";
+import { Calendar as CalendarIcon, List, CalendarDays, Filter, CalendarPlus, RefreshCw, ChevronRight } from "lucide-react";
 import { exportEventsIcs } from "@/lib/icsExport";
 import { getEventTypeLabel } from "@/lib/eventTypeLabel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -51,11 +51,13 @@ import { useUserEventViews } from "@/hooks/useEventViews";
 import { ScheduleDateStrip } from "@/components/events/ScheduleDateStrip";
 import { ClubDaySummary } from "@/components/events/ClubDaySummary";
 import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
+import { fetchViewableCompetitionMatchIds, makeCompetitionFixtureVisibility } from "@/features/events/competitionFixtureVisibility";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { getLiveAccountRosterScope, listLiveEvents } from "@/live/features/events";
+import { getLiveAccountRosterScope, listLiveEventDutyTeams, listLiveEvents } from "@/live/features/events";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
+import { listLiveCompetitionMatches, listLiveCompetitionsMulti, listLiveMyNewsCompetitions } from "@/live/features/competitions";
 
 /** Derive the memberships shape the schedule filters need from the caller's
  * club_domain role grants + events_domain roster scope (live ICP path).
@@ -137,6 +139,8 @@ interface Event {
   location_name: string | null;
   club_id: string;
   team_id: string | null;
+  competition_match_id?: string | null;
+  duty_team_id?: string | null;
   mini_league_id: string | null;
   is_cancelled: boolean;
   is_bye?: boolean | null;
@@ -145,6 +149,39 @@ interface Event {
   opponent: string | null;
   teams: { name: string } | null;
   clubs: { name: string; sport: string | null };
+  competition_id?: string | null;
+  is_competition_fixture?: boolean;
+}
+
+function CompetitionFixtureCard({ event }: { event: Event }) {
+  const navigate = useNavigate();
+  return (
+    <Card
+      className="cursor-pointer border-border/50 shadow-sm transition-colors hover:border-primary/40"
+      onClick={() => event.competition_id && navigate(`/competitions/${event.competition_id}`)}
+    >
+      <CardContent className="flex items-center gap-3 p-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{event.opponent}</p>
+          <p className="truncate text-xs text-muted-foreground">{event.title} · {formatCompactDateTime(event.start_time || event.event_date)}</p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          aria-label="Open competition fixtures"
+          title="Open competition fixtures"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (event.competition_id) navigate(`/competitions/${event.competition_id}`);
+          }}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 
@@ -637,13 +674,21 @@ export default function EventsPage() {
     placeholderData: (prev) => prev,
   });
 
+  const viewerRoleScope = (userMemberships?.roles ?? [])
+    .map((role: { role: string; club_id: string | null; team_id: string | null }) => `${role.role}:${role.club_id ?? ""}:${role.team_id ?? ""}`)
+    .sort()
+    .join(",");
+  const viewerRoleScope = (userMemberships?.roles ?? [])
+    .map((role: { role: string; club_id: string | null; team_id: string | null }) => `${role.role}:${role.club_id ?? ""}:${role.team_id ?? ""}`)
+    .sort()
+    .join(",");
   const eventsScopeKey = useMemo(
-    () => `${user?.id || "anon"}_${filter}_${teamFilter || "all"}_${clubFilter || "all"}`,
-    [user?.id, filter, teamFilter, clubFilter]
+    () => `${user?.id || "anon"}_${filter}_${teamFilter || "all"}_${clubFilter || "all"}_${viewerRoleScope}`,
+    [user?.id, filter, teamFilter, clubFilter, viewerRoleScope]
   );
 
   const { data: eventsData, isLoading, isFetching, isError: eventsIsError, refetch: refetchEvents } = useQuery({
-    queryKey: ["events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, userMemberships?.miniLeagueIds],
+    queryKey: ["events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, userMemberships?.miniLeagueIds, viewerRoleScope],
     queryFn: async () => {
       const overall = performance.now();
       diagLog("events:start", { hasMemberships: !!userMemberships });
@@ -716,6 +761,9 @@ export default function EventsPage() {
             const rowsByClub = await Promise.all(
               scopeClubIds.map((clubId) => listLiveEvents(ctx, clubId, selectedTeamId)),
             );
+            const visibleEventRows = rowsByClub.flatMap((rows) => (rows as any[]).filter((event) => !event.deleted));
+            const dutyTeams = await listLiveEventDutyTeams(ctx, visibleEventRows.map((event) => event.id)).catch(() => []);
+            const dutyTeamByEventId = new Map(dutyTeams.map((assignment) => [assignment.event_id, assignment.team_id]));
             const neededTeamIds = new Set<string>();
             const neededClubIds = new Set<string>();
             for (const rows of rowsByClub) {
@@ -754,6 +802,7 @@ export default function EventsPage() {
                   location_name: (ev.location?.[0] ?? null) as string | null,
                   club_id: ev.club_id,
                   team_id: teamId,
+                  duty_team_id: dutyTeamByEventId.get(ev.id) ?? null,
                   mini_league_id: (ev.mini_league_id?.[0] ?? null) as string | null,
                   is_cancelled: !!ev.cancelled,
                   is_bye: false,
@@ -775,14 +824,77 @@ export default function EventsPage() {
 
             const finalEvents: Event[] =
               viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
-            cacheEventsList(eventsScopeKey, finalEvents, user?.id);
-            diagLog("events:icp-end", { count: finalEvents.length });
-            return finalEvents;
+
+            if (filter === "all" || filter === "game") {
+              const leagueClubIds = userMemberships?.leagueAdminClubIds ?? [];
+              const [managed, leagueClubCompetitions] = await Promise.all([
+                listMyLiveNewsCompetitions(ctx).catch(() => [] as any[]),
+                leagueClubIds.length > 0
+                  ? listLiveCompetitionsMulti(ctx, leagueClubIds).catch(() => [] as any[])
+                  : Promise.resolve([] as any[]),
+              ]);
+              const competitions = [...new Map([...managed, ...leagueClubCompetitions]
+                .filter((competition: any) => competition.status !== "archived")
+                .filter((competition: any) => !clubFilter || competition.club_id === clubFilter)
+                .map((competition: any) => [competition.id, competition])).values()];
+              const fixtures = await Promise.all(competitions.map(async (competition: any) => {
+                const matches = await listLiveCompetitionMatches(ctx, competition.id).catch(() => [] as any[]);
+                const scheduled = matches.filter((match: any) => {
+                  const raw = Array.isArray(match.scheduled_at_ms) ? match.scheduled_at_ms[0] : match.scheduled_at_ms;
+                  if (raw == null || match.status === "cancelled") return false;
+                  const startsAt = new Date(Number(raw));
+                  return startsAt >= thirtyDaysAgo && startsAt <= upperBound &&
+                    (!selectedTeamId || match.home_team === selectedTeamId || match.away_team === selectedTeamId);
+                });
+                const teamIdsForMatches = new Set<string>(scheduled.flatMap((match: any) => [match.home_team, match.away_team]));
+                await Promise.all([...teamIdsForMatches].map(getTeamName));
+                const club = await getClubInfo(competition.club_id);
+                return scheduled.map((match: any) => {
+                  const raw = Array.isArray(match.scheduled_at_ms) ? match.scheduled_at_ms[0] : match.scheduled_at_ms;
+                  const start = new Date(Number(raw));
+                  const home = getTeamName(match.home_team) ?? "Home team";
+                  const away = getTeamName(match.away_team) ?? "Away team";
+                  return {
+                    id: `competition-fixture-${match.id}`,
+                    title: competition.name,
+                    type: "game" as EventType,
+                    event_date: start.toISOString(),
+                    start_time: start.toISOString(),
+                    address: match.venue?.[0] ?? null,
+                    suburb: null,
+                    location_name: match.venue?.[0] ?? null,
+                    club_id: competition.club_id,
+                    team_id: null,
+                    mini_league_id: null,
+                    is_cancelled: false,
+                    is_bye: false,
+                    is_recurring: false,
+                    parent_event_id: null,
+                    opponent: `${home} vs ${away}`,
+                    teams: null,
+                    clubs: club,
+                    competition_id: competition.id,
+                    is_competition_fixture: true,
+                  } satisfies Event;
+                });
+              }));
+              all.push(...fixtures.flat());
+              all.sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
+            }
+
+            const scheduleEvents: Event[] = viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
+            cacheEventsList(eventsScopeKey, scheduleEvents, user?.id);
+            diagLog("events:icp-end", { count: scheduleEvents.length });
+            return scheduleEvents;
           },
         });
       }
 
-      if (teamIds.length === 0 && clubIds.length === 0) {
+      const viewableCompetitionMatchIds = await fetchViewableCompetitionMatchIds(supabase).catch((error) => {
+        console.warn("[EventsPage] competition fixture scope unavailable", error);
+        return [];
+      });
+      if (teamIds.length === 0 && clubIds.length === 0 && viewableCompetitionMatchIds.length === 0) {
         diagLog("events:end-empty-memberships");
         return [];
       }
@@ -824,6 +936,7 @@ export default function EventsPage() {
           location_name,
           club_id,
           team_id,
+          competition_match_id,
           mini_league_id,
           target_team_ids,
           is_cancelled,
@@ -832,6 +945,7 @@ export default function EventsPage() {
           parent_event_id,
           opponent,
           arrival_minutes_before,
+          duty_team_id,
           rsvp_audience,
           adults_only,
           updated_at,
@@ -893,6 +1007,11 @@ export default function EventsPage() {
       });
 
       const { clubAdminClubIds } = userMemberships;
+      const isVisibleTeamEvent = makeCompetitionFixtureVisibility(
+        teamIds,
+        viewableCompetitionMatchIds,
+        filteredData,
+      );
       filteredData = filteredData.filter(event => {
         if (event.mini_league_id) {
           // When explicitly filtering by a mini-league, the SQL `eq` already restricted us.
@@ -902,7 +1021,7 @@ export default function EventsPage() {
           if (selectedTeamIdFilter && selectedTeamIdFilter === event.team_id && clubAdminClubIds.includes(event.club_id)) {
             return true;
           }
-          return teamIds.includes(event.team_id);
+          return isVisibleTeamEvent(event);
         } else {
           return clubIds.includes(event.club_id);
         }
@@ -1564,9 +1683,9 @@ export default function EventsPage() {
               </Card>
             ) : (
               <>
-                {upcomingEvents?.slice(0, 10).map((event, idx) => (
-                  <EventCard key={event.id} event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />
-                ))}
+                {upcomingEvents?.slice(0, 10).map((event, idx) => event.is_competition_fixture
+                  ? <CompetitionFixtureCard key={event.id} event={event} />
+                  : <EventCard key={event.id} event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />)}
                 {(upcomingEvents?.length || 0) > 10 && (
                   <p className="text-center text-xs text-muted-foreground py-2">
                     +{upcomingEvents!.length - 10} more upcoming events
@@ -1593,9 +1712,9 @@ export default function EventsPage() {
               </Card>
             ) : (
               <>
-                {pastEvents?.map((event, idx) => (
-                  <EventCard key={event.id} event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />
-                ))}
+                {pastEvents?.map((event, idx) => event.is_competition_fixture
+                  ? <CompetitionFixtureCard key={event.id} event={event} />
+                  : <EventCard key={event.id} event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />)}
                 {pastDaysBack < 365 && (
                   <div className="pt-2 pb-1 flex justify-center">
                     <Button

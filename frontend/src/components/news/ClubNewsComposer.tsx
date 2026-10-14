@@ -23,7 +23,8 @@ import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/m
 import { createLiveNewsPost } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
-import { useClubTeamsForNews, useNewsPublishableClubs } from "@/features/news/useClubNews";
+import { useClubMiniLeaguesForNews, useClubTeamsForNews, useNewsPublishableClubs, useNewsPublishableCompetitions } from "@/features/news/useClubNews";
+import { resolveNewsAudienceTarget, type NewsAudience } from "@/features/news/newsAudience";
 import {
   attachmentToken,
   formatFileSize,
@@ -44,8 +45,6 @@ interface Props {
   defaultClubId?: string | null;
 }
 
-type Audience = "club" | "teams";
-
 /**
  * Club News composer. Reuses the existing club-admin role model for
  * permissions, the existing `club-logos` public bucket for images, and the
@@ -56,6 +55,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: clubs = [] } = useNewsPublishableClubs();
+  const { data: competitions = [] } = useNewsPublishableCompetitions();
 
   const initialClub = useMemo(() => {
     if (defaultClubId && clubs.some((c) => c.id === defaultClubId)) return defaultClubId;
@@ -65,11 +65,14 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
   const [clubId, setClubId] = useState(initialClub);
   const effectiveClubId = clubId || initialClub;
   const { data: teams = [] } = useClubTeamsForNews(effectiveClubId || null);
+  const { data: miniLeagues = [] } = useClubMiniLeaguesForNews(effectiveClubId || null);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [audience, setAudience] = useState<Audience>("club");
+  const [audience, setAudience] = useState<NewsAudience>("club");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [miniLeagueId, setMiniLeagueId] = useState("");
+  const [competitionId, setCompetitionId] = useState("");
   const [important, setImportant] = useState(false);
   const [sendPush, setSendPush] = useState(true);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -119,6 +122,8 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
     setContent("");
     setAudience("club");
     setTeamIds([]);
+    setMiniLeagueId("");
+    setCompetitionId("");
     setImportant(false);
     setSendPush(true);
     setImageFile(null);
@@ -198,15 +203,21 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
 
   const publish = useMutation({
     mutationFn: async () => {
-      if (!effectiveClubId) throw new Error("Select a club");
+      const selectedCompetition = competitions.find((item) => item.id === competitionId);
+      const target = resolveNewsAudienceTarget({
+        audience,
+        clubId: effectiveClubId,
+        teamIds,
+        miniLeagueId,
+        competitionId,
+        competitionClubId: selectedCompetition?.organizer_club_id,
+      });
+      const postClubId = target.clubId;
       if (!title.trim()) throw new Error("Add a title");
-      if (audience === "teams" && teamIds.length === 0) {
-        throw new Error("Select at least one team");
-      }
 
       let imageUrl: string | null = null;
       if (imageFile) {
-        imageUrl = await uploadToBucket(imageFile, effectiveClubId);
+        imageUrl = await uploadToBucket(imageFile, postClubId);
       }
 
       const body = content.trim();
@@ -214,7 +225,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
       for (const item of extraImages) {
         attachments.push({
           kind: "image",
-          url: await uploadToBucket(item.file, effectiveClubId),
+          url: await uploadToBucket(item.file, postClubId),
           name: item.file.name,
           size: item.file.size,
           mimeType: item.file.type || null,
@@ -224,7 +235,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
       for (const item of docFiles) {
         attachments.push({
           kind: "file",
-          url: await uploadToBucket(item.file, effectiveClubId),
+          url: await uploadToBucket(item.file, postClubId),
           name: item.file.name,
           size: item.file.size,
           mimeType: item.file.type || null,
@@ -241,12 +252,14 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
           const { data, error } = await supabase
             .from("club_news")
             .insert({
-              club_id: effectiveClubId,
+              club_id: postClubId,
               title: title.trim().slice(0, TITLE_MAX),
               content: content.trim(),
               image_url: imageUrl,
               author_id: user?.id ?? null,
-              target_team_ids: audience === "teams" ? teamIds : null,
+              target_team_ids: target.targetTeamIds,
+              target_mini_league_id: target.targetMiniLeagueId,
+              target_competition_id: target.targetCompetitionId,
               is_important: important,
               attachments: attachments as unknown as never,
             })
@@ -263,12 +276,15 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
           // Push notifications and the chat share below stay Supabase-only.
           const post = await createLiveNewsPost(
             ctx,
-            effectiveClubId,
+            postClubId,
             title.trim().slice(0, TITLE_MAX),
             content.trim(),
             "published",
             {
-              targetTeamIds: audience === "teams" ? teamIds : null,
+              targetTeamIds: target.targetTeamIds,
+              targetMiniLeagueId: target.targetMiniLeagueId,
+              targetCompetitionId: target.targetCompetitionId,
+              sendPush,
               isImportant: important,
               imageUrl,
               attachments: attachments.map((a) => ({
@@ -290,10 +306,12 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
       // the post went to the canister to avoid Supabase RPCs on canister ids.
       if (isIcpBackend) return data.id;
 
-      const { error: notifyErr } = await supabase.rpc("notify_club_news", {
-        _news_id: data.id,
-        _send_push: sendPush,
-      });
+      const notificationResult = audience === "mini_league"
+        ? await supabase.rpc("notify_mini_league_news", { _news_id: data.id, _send_push: sendPush })
+        : audience === "competition"
+          ? await supabase.rpc("notify_competition_news", { _news_id: data.id, _send_push: sendPush })
+          : await supabase.rpc("notify_club_news", { _news_id: data.id, _send_push: sendPush });
+      const notifyErr = notificationResult.error;
       if (notifyErr) {
         // The post is published; notification failure must not lose the post.
         console.warn("[ClubNews] notify failed", notifyErr.message);
@@ -302,7 +320,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
       // Share the post in the relevant chat: club chat for whole-club news,
       // each targeted team's chat for team-specific news. Idempotent server
       // side, and a failure here must never lose the published post.
-      try {
+      if (audience === "club" || audience === "teams") try {
         const { error: chatErr } = await supabase.functions.invoke(
           "auto-post-news-to-chat",
           { body: { newsId: data.id } },
@@ -569,11 +587,13 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
 
           <div className="space-y-2">
             <Label>Who's this for?</Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className={`grid gap-2 ${competitions.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
               {(
                 [
-                  { key: "club" as Audience, label: "Entire club" },
-                  { key: "teams" as Audience, label: "Selected teams" },
+                  { key: "club" as NewsAudience, label: "Entire club" },
+                  { key: "teams" as NewsAudience, label: "Selected teams" },
+                  { key: "mini_league" as NewsAudience, label: "Mini league" },
+                  ...(competitions.length > 0 ? [{ key: "competition" as NewsAudience, label: "Competition" }] : []),
                 ]
               ).map((o) => (
                 <button
@@ -610,6 +630,24 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
                   ))
                 )}
               </div>
+            )}
+            {audience === "mini_league" && (
+              <MobileCardSelect
+                label="Mini league"
+                value={miniLeagueId}
+                onValueChange={setMiniLeagueId}
+                options={miniLeagues.map((league) => ({ value: league.id, label: league.name }))}
+                placeholder="Select mini league"
+              />
+            )}
+            {audience === "competition" && (
+              <MobileCardSelect
+                label="Competition"
+                value={competitionId}
+                onValueChange={setCompetitionId}
+                options={competitions.map((competition) => ({ value: competition.id, label: competition.name }))}
+                placeholder="Select competition"
+              />
             )}
           </div>
 

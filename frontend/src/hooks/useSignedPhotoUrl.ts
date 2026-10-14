@@ -11,7 +11,7 @@ const LS_KEY = "signed-url-cache-v1";
 const CACHE_DURATION_MS = 50 * 60 * 1000;
 const SIGNED_URL_EXPIRES_IN_SECONDS = 3600;
 const REQUEST_TIMEOUT_MS = 5000;
-const PRIVATE_BUCKETS = ["photos", "chat-attachments", "avatars"] as const;
+const PRIVATE_BUCKETS = ["photos", "chat-attachments", "avatars", "competition-vault"] as const;
 
 type PrivateBucket = (typeof PRIVATE_BUCKETS)[number];
 

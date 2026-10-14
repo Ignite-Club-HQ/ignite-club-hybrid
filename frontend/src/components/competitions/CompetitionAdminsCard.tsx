@@ -18,6 +18,7 @@ import {
   listLiveCompetitionRoles,
   removeLiveCompetitionRole,
 } from "@/live/features/competitions";
+import { CompetitionAdminInboxCard } from "@/components/competitions/CompetitionAdminInboxCard";
 
 interface CompetitionAdminsCardProps {
   competitionId: string;
@@ -212,6 +213,7 @@ export function CompetitionAdminsCard({
   const admins = roles.filter((r) => r.role === "admin");
 
   return (
+    <div className="space-y-4">
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Competition admins</CardTitle>
@@ -349,5 +351,7 @@ export function CompetitionAdminsCard({
         </div>
       </CardContent>
     </Card>
+    <CompetitionAdminInboxCard competitionId={competitionId} />
+    </div>
   );
 }

@@ -72,6 +72,7 @@ import {
   EventSectionHeader,
   type EventRecurrencePattern,
 } from "@/components/event/EventFormShared";
+import { DutyTeamPicker } from "@/components/event/DutyTeamPicker";
 
 type EventType = "game" | "training" | "social";
 
@@ -259,6 +260,7 @@ function SupabaseEditEventPage() {
   // Team/Club selection
   const [selectedClubId, setSelectedClubId] = useState<string>("");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const [dutyTeamId, setDutyTeamId] = useState<string | null>(null);
 
   // Reminder settings
   const [reminderEnabled, setReminderEnabled] = useState(false);
@@ -779,6 +781,7 @@ function SupabaseEditEventPage() {
       setPaidEvent(Number(event.amount ?? 0) > 0);
       setSelectedClubId(event.club_id);
       setSelectedTeamId(event.team_id || "");
+      setDutyTeamId((event as any).duty_team_id ?? null);
       setOpponent((event as any).opponent || "");
       setIsBye((event as any).is_bye === true);
       setArrivalMinutesBefore((event as any).arrival_minutes_before != null ? String((event as any).arrival_minutes_before) : "");
@@ -937,6 +940,7 @@ function SupabaseEditEventPage() {
         amount: type === "social" ? parsedPrice : null,
         club_id: selectedClubId,
         team_id: selectedTeamId || null,
+        duty_team_id: dutyTeamId,
         opponent: type === "game" && !isBye ? opponent.trim() || null : null,
         arrival_minutes_before: type === "game" && !isBye && arrivalMinutesBefore.trim() !== "" ? parseInt(arrivalMinutesBefore, 10) : null,
         rsvp_audience: rsvpAudience,
@@ -1359,6 +1363,14 @@ function SupabaseEditEventPage() {
           />
         ) : null}
       />
+
+      {selectedClubId && (
+        <Card>
+          <CardContent className="pt-4">
+            <DutyTeamPicker clubId={selectedClubId} value={dutyTeamId} onChange={setDutyTeamId} disabled={!canEdit} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Duties Section - Only for game events */}
       {type === "game" && (

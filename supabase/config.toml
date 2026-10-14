@@ -1,3 +1,9 @@
 project_id = "cdrxmelhysdqrccttsjg"
 [functions.verify-iap-receipt-icp]
 verify_jwt = false
+
+[functions.send-welcome-email]
+verify_jwt = true
+
+[functions.send-welcome-email-icp]
+verify_jwt = false

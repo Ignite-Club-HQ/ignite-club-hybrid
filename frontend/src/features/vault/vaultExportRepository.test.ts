@@ -15,6 +15,9 @@ interface Row {
   folder_id: string | null;
   club_id?: string | null;
   team_id?: string | null;
+  competition_id?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
   deleted_at?: string | null;
 }
 
@@ -24,7 +27,16 @@ interface Row {
  */
 const makeClient = (data: { vault_files: Row[]; vault_folders: any[] }) => {
   const calls: { table: string; filters: string[] }[] = [];
+  const signedPaths: string[] = [];
   const client: any = {
+    storage: {
+      from: (bucket: string) => ({
+        createSignedUrl: async (path: string) => {
+          signedPaths.push(`${bucket}:${path}`);
+          return { data: { signedUrl: `https://signed.invalid/${path}` }, error: null };
+        },
+      }),
+    },
     from(table: string) {
       const entry = { table, filters: [] as string[] };
       calls.push(entry);
@@ -46,6 +58,7 @@ const makeClient = (data: { vault_files: Row[]; vault_folders: any[] }) => {
       return builder;
     },
     calls,
+    signedPaths,
   };
   return client;
 };
@@ -97,6 +110,35 @@ describe("Vault export folder reads", () => {
     const res = await fetchVaultFolderContents({ folderId: null, clubId: CLUB, teamId: "team-1" }, "", client);
     expect(client.calls[0].filters).toContain("team_id=team-1");
     expect(res.photos.map(p => p.id)).toEqual(["team-row"]);
+  });
+
+  it("filters competition exports by organizer and competition and signs private files", async () => {
+    const client = makeClient({
+      vault_files: [
+        {
+          id: "comp-file", name: "rules.pdf", file_url: "storage://competition-vault/rules.pdf",
+          file_type: "application/pdf", folder_id: null, club_id: CLUB,
+          competition_id: "comp-a", storage_bucket: "competition-vault", storage_path: "clubs/club-1/competitions/comp-a/rules.pdf",
+        },
+        {
+          id: "other-comp", name: "other.pdf", file_url: "public://other.pdf",
+          file_type: "application/pdf", folder_id: null, club_id: CLUB,
+          competition_id: "comp-b", storage_bucket: "competition-vault", storage_path: "clubs/club-1/competitions/comp-b/other.pdf",
+        },
+      ],
+      vault_folders: [],
+    });
+    const result = await fetchVaultFolderContents({
+      folderId: null,
+      clubId: CLUB,
+      teamId: null,
+      competitionId: "comp-a",
+    }, "", client);
+    expect(result.files.map((file) => file.id)).toEqual(["comp-file"]);
+    expect(result.files[0].file_url).toBe("https://signed.invalid/clubs/club-1/competitions/comp-a/rules.pdf");
+    expect(client.calls[0].filters).toContain(`club_id=${CLUB}`);
+    expect(client.calls[0].filters).toContain("competition_id=comp-a");
+    expect(client.signedPaths).toEqual(["competition-vault:clubs/club-1/competitions/comp-a/rules.pdf"]);
   });
 
   it("uses exact nested-folder scope and preserves its export path", async () => {

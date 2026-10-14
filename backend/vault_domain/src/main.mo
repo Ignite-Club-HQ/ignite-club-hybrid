@@ -18,6 +18,7 @@ persistent actor class Main(governorInit : Principal) {
   var files : [Types.VaultFile];
   var roles : [Types.RoleGrant];
   var club_domain_canister : ?Principal;
+  var competition_domain_canister : ?Principal;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -61,10 +62,42 @@ persistent actor class Main(governorInit : Principal) {
       (team == null or grant.team_id == team or grant.team_id == null))
   };
 
+  type CompetitionVaultAccess = { club_id : Text; is_member : Bool; can_manage : Bool };
+
+  func getCompetitionAccess(caller : Principal, competitionId : Text) : async ?CompetitionVaultAccess {
+    switch (competition_domain_canister) {
+      case null { null };
+      case (?canister) {
+        let competitionDomain : actor {
+          get_vault_access : shared (Text, Principal) -> async { #Ok : CompetitionVaultAccess; #Err : Text };
+        } = actor (Principal.toText(canister));
+        let result = try {
+          await competitionDomain.get_vault_access(competitionId, caller)
+        } catch (_) {
+          return null;
+        };
+        switch (result) {
+          case (#Ok(access)) { ?access };
+          case (#Err(_)) { null };
+        }
+      };
+    }
+  };
+
   // Write access: governor, a local vault role grant, or any role in the
   // club on club_domain (same check pii_access_control uses). Fail-closed
   // while club_domain is unwired.
-  func canWrite(caller : Principal, club : Text, team : ?Text) : async Bool {
+  func canWrite(caller : Principal, club : Text, team : ?Text, competitionId : ?Text) : async Bool {
+    switch (competitionId) {
+      case (?id) {
+        let access = await getCompetitionAccess(caller, id);
+        return switch (access) {
+          case null { false };
+          case (?value) { value.club_id == club and value.is_member and value.can_manage };
+        };
+      };
+      case null {};
+    };
     if (isGovernor(caller) or hasRole(caller, club, team)) return true;
     switch (club_domain_canister) {
       case null { false };
@@ -79,6 +112,14 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Only governor can set club_domain canister");
     club_domain_canister := ?canister;
+    #Ok
+  };
+
+  public shared ({ caller }) func set_competition_domain_canister(canister : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Only governor can set competition_domain canister");
+    if (canister.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    competition_domain_canister := ?canister;
     #Ok
   };
 
@@ -146,16 +187,28 @@ persistent actor class Main(governorInit : Principal) {
     name : Text,
     restricted_roles : [Text],
     mini_league_id : ?Text,
+    competition_id : ?Text,
     sort_order : Nat32,
     description : ?Text,
     color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
     auth(caller);
-    if (not (await canWrite(caller, club, team))) return #Err("Club role required");
+    if (not (await canWrite(caller, club, team, competition_id))) return #Err("Club or competition admin required");
     if (not valid(id) or not valid(club) or not validLong(name, 160)) return #Err("Invalid folder fields");
     if (not validRoles(restricted_roles)) return #Err("Invalid restricted roles");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
     switch (mini_league_id) { case (?m) { if (not valid(m)) return #Err("Invalid mini league") }; case null {} };
+    switch (competition_id) {
+      case (?competitionId) {
+        if (not valid(competitionId) or team != null or mini_league_id != null) return #Err("Invalid competition scope");
+        let access = await getCompetitionAccess(caller, competitionId);
+        switch (access) {
+          case null { return #Err("Competition access unavailable") };
+          case (?value) { if (value.club_id != club or not value.can_manage) return #Err("Competition admin required") };
+        };
+      };
+      case null {};
+    };
     switch (description) { case (?d) { if (not validLong(d, 500)) return #Err("Invalid description") }; case null {} };
     switch (color) { case (?c) { if (not validLong(c, 32)) return #Err("Invalid color") }; case null {} };
     switch (parent_id) {
@@ -165,6 +218,7 @@ persistent actor class Main(governorInit : Principal) {
           case null { return #Err("Parent folder not found") };
           case (?parentFolder) {
             if (parentFolder.club != club) return #Err("Parent belongs to another club");
+            if (parentFolder.competition_id != competition_id) return #Err("Parent belongs to another vault scope");
           };
         };
       };
@@ -178,6 +232,7 @@ persistent actor class Main(governorInit : Principal) {
       deleted_at_ms = null;
       deleted_by = null;
       mini_league_id;
+      competition_id;
       sort_order;
       description;
       color;
@@ -202,7 +257,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("Folder not found") };
       case (?folder) {
-        if (not (await canWrite(caller, folder.club, folder.team))) return #Err("Club role required");
+        if (not (await canWrite(caller, folder.club, folder.team, folder.competition_id))) return #Err("Club or competition admin required");
         let updated : Types.VaultFolder = { folder with name; restricted_roles; sort_order; description; color };
         folders := folders.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -217,7 +272,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("Folder not found") };
       case (?folder) {
-        if (not (await canWrite(caller, folder.club, folder.team))) return #Err("Club role required");
+        if (not (await canWrite(caller, folder.club, folder.team, folder.competition_id))) return #Err("Club or competition admin required");
         if (folders.any(func(item) = item.parent_id == ?id and item.deleted_at_ms == null)) return #Err("Folder has subfolders");
         if (files.any(func(item) = item.folder_id == id and item.deleted_at_ms == null)) return #Err("Folder has files");
         let updated : Types.VaultFolder = { folder with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
@@ -234,6 +289,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     #Ok(folders.filter(func(item) =
       item.club == club and
+      item.competition_id == null and
       item.deleted_at_ms == null and
       (team == null or item.team == team or item.team == null) and
       (mini_league_id == null or item.mini_league_id == mini_league_id) and
@@ -247,8 +303,46 @@ persistent actor class Main(governorInit : Principal) {
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Ok(null) };
       case (?folder) {
+        if (folder.competition_id != null) return #Ok(null);
         if (not canViewFolder(caller, folder)) return #Ok(null);
         #Ok(?folder)
+      };
+    }
+  };
+
+  public shared ({ caller }) func list_competition_folders(competition_id : Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
+    auth(caller);
+    let access = switch (await getCompetitionAccess(caller, competition_id)) {
+      case null { return #Err("Competition access unavailable") };
+      case (?value) value;
+    };
+    if (not access.is_member) return #Err("Competition membership required");
+    #Ok(folders.filter(func(folder) =
+      folder.competition_id == ?competition_id and
+      folder.club == access.club_id and
+      folder.deleted_at_ms == null and
+      (folder.restricted_roles.size() == 0 or access.can_manage)
+    ))
+  };
+
+  public shared ({ caller }) func get_competition_folder(id : Text) : async { #Ok : ?Types.VaultFolder; #Err : Text } {
+    auth(caller);
+    switch (folders.find(func(folder) = folder.id == id and folder.deleted_at_ms == null and folder.competition_id != null)) {
+      case null { #Ok(null) };
+      case (?folder) {
+        let competitionId = switch (folder.competition_id) {
+          case null { return #Ok(null) };
+          case (?value) value;
+        };
+        let access = await getCompetitionAccess(caller, competitionId);
+        switch (access) {
+          case null { #Err("Competition access unavailable") };
+          case (?value) {
+            if (value.club_id != folder.club or not value.is_member) return #Ok(null);
+            if (folder.restricted_roles.size() > 0 and not value.can_manage) return #Ok(null);
+            #Ok(?folder)
+          };
+        }
       };
     }
   };
@@ -265,20 +359,33 @@ persistent actor class Main(governorInit : Principal) {
     is_external_link : Bool,
     blob_ref : ?Types.BlobRef,
     mini_league_id : ?Text,
+    competition_id : ?Text,
   ) : async { #Ok : Types.VaultFile; #Err : Text } {
     auth(caller);
-    if (not (await canWrite(caller, club, team))) return #Err("Club role required");
+    if (not (await canWrite(caller, club, team, competition_id))) return #Err("Club or competition admin required");
     // folder_id "" = vault root (same convention as move_file).
     if (not valid(id) or folder_id.size() > 128 or not valid(club)) return #Err("Invalid file fields");
     if (not validLong(name, 160) or not validLong(file_url, 2048) or not validLong(mime, 128)) return #Err("Invalid file fields");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
     switch (mini_league_id) { case (?m) { if (not valid(m)) return #Err("Invalid mini league") }; case null {} };
+    switch (competition_id) {
+      case (?competitionId) {
+        if (not valid(competitionId) or team != null or mini_league_id != null) return #Err("Invalid competition scope");
+        let access = await getCompetitionAccess(caller, competitionId);
+        switch (access) {
+          case null { return #Err("Competition access unavailable") };
+          case (?value) { if (value.club_id != club or not value.can_manage) return #Err("Competition admin required") };
+        };
+      };
+      case null {};
+    };
     switch (blob_ref) { case (?ref) { if (not validBlobRef(ref)) return #Err("Invalid blob ref") }; case null {} };
     if (folder_id != "") {
       switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
         case null { return #Err("Folder not found") };
         case (?folder) {
           if (folder.club != club) return #Err("Folder belongs to another club");
+          if (folder.competition_id != competition_id) return #Err("Folder belongs to another vault scope");
         };
       };
     };
@@ -290,6 +397,7 @@ persistent actor class Main(governorInit : Principal) {
       deleted_at_ms = null;
       deleted_by = null;
       mini_league_id;
+      competition_id;
       is_external_link; blob_ref;
     };
     files := files.concat([file]);
@@ -304,6 +412,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Ok(null) };
       case (?file) {
+        if (file.competition_id != null) return #Ok(null);
         switch (folders.find(func(item) = item.id == file.folder_id and item.deleted_at_ms == null)) {
           case (?folder) { if (not canViewFolder(caller, folder)) return #Ok(null) };
           case null {};
@@ -316,10 +425,12 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_files(folder_id : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
     switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
-      case (?folder) { if (not canViewFolder(caller, folder)) return #Ok([]) };
+      case (?folder) {
+        if (folder.competition_id != null or not canViewFolder(caller, folder)) return #Ok([]);
+      };
       case null {};
     };
-    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null))
+    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null))
   };
 
   // Folder-joined counterpart of list_files for the vault browser's folder
@@ -327,16 +438,42 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_files_with_folder(folder_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
     auth(caller);
     switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
-      case (?folder) { if (not canViewFolder(caller, folder)) return #Ok([]) };
+      case (?folder) {
+        if (folder.competition_id != null or not canViewFolder(caller, folder)) return #Ok([]);
+      };
       case null {};
     };
-    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null).map(withFolderJoin))
+    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null).map(withFolderJoin))
+  };
+
+  public shared ({ caller }) func list_competition_files_with_folder(folder_id : Text, competition_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    auth(caller);
+    let access = switch (await getCompetitionAccess(caller, competition_id)) {
+      case null { return #Err("Competition access unavailable") };
+      case (?value) value;
+    };
+    if (not access.is_member) return #Err("Competition membership required");
+    if (folder_id != "") {
+      switch (folders.find(func(folder) = folder.id == folder_id and folder.deleted_at_ms == null)) {
+        case null { return #Err("Folder not found") };
+        case (?folder) {
+          if (folder.competition_id != ?competition_id or folder.club != access.club_id) return #Err("Competition folder scope mismatch");
+          if (folder.restricted_roles.size() > 0 and not access.can_manage) return #Err("Folder access forbidden");
+        };
+      };
+    };
+    #Ok(files.filter(func(file) =
+      file.competition_id == ?competition_id and
+      file.folder_id == folder_id and
+      file.deleted_at_ms == null
+    ).map(withFolderJoin))
   };
 
   public query ({ caller }) func list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
     #Ok(files.filter(func(item) =
       item.club == club and
+      item.competition_id == null and
       item.deleted_at_ms == null and
       (team == null or item.team == team or item.team == null) and
       (mini_league_id == null or item.mini_league_id == mini_league_id) and
@@ -351,6 +488,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     #Ok(files.filter(func(item) =
       item.club == club and
+      item.competition_id == null and
       item.deleted_at_ms == null and
       (team == null or item.team == team or item.team == null) and
       (mini_league_id == null or item.mini_league_id == mini_league_id) and
@@ -365,7 +503,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("File not found") };
       case (?file) {
-        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         let updated : Types.VaultFile = { file with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -378,7 +516,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms != null)) {
       case null { #Err("Trashed file not found") };
       case (?file) {
-        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         let updated : Types.VaultFile = { file with deleted_at_ms = null; deleted_by = null };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -392,7 +530,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("File not found") };
       case (?file) {
-        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         let updated : Types.VaultFile = { file with name = name };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -409,7 +547,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("File not found") };
       case (?file) {
-        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         if (folder_id == "") {
           let updated : Types.VaultFile = { file with folder_id = "" };
           files := files.map(func(item) = if (item.id == id) { updated } else { item });
@@ -437,7 +575,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id)) {
       case null { #Err("File not found") };
       case (?file) {
-        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         files := files.filter(func(item) = item.id != id);
         #Ok
       };
@@ -446,13 +584,13 @@ persistent actor class Main(governorInit : Principal) {
 
   public query ({ caller }) func list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
-    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null))
+    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null))
   };
 
   // Folder-joined counterpart of list_trashed_files, for the trash view's
   // "was in <folder>" breadcrumb.
   public query ({ caller }) func list_trashed_files_with_folder(club : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
     auth(caller);
-    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null).map(withFolderJoin))
+    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null).map(withFolderJoin))
   };
 };

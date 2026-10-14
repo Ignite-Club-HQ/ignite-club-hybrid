@@ -95,6 +95,7 @@ type Main =
              ok: nat;
            };
      });
+   can_invite_players_to_team: (team_id: text) -> (bool) query;
    claim_eoi_by_token: (token: text) ->
     (variant {
        Err: text;
@@ -120,12 +121,24 @@ type Main =
        Err: text;
        Ok: Competition;
      });
+   create_competition_event: (operation_id: text, competition_id: text,
+    title: text, description: text, event_type: text, location: opt text,
+    starts_at_ms: nat64, ends_at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: nat16;
+     });
    create_competition_invite: (competition_id: text, invitee: principal,
     role: text, team_id: opt text) ->
     (variant {
        Err: text;
        Ok: CompetitionInvite;
      });
+   create_competition_official_link: (competition_id: text, role: text,
+    token: text) -> (variant {
+                       Err: text;
+                       Ok: CompetitionJoinLink;
+                     });
    create_competition_join_link: (competition_id: text, role: text, team_id:
     opt text) -> (variant {
                     Err: text;
@@ -165,6 +178,11 @@ type Main =
        Err: text;
        Ok: ChatSettings;
      }) query;
+   get_competition_hide_ladder: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     }) query;
    get_eoi_stats: (club_id: text, season_id: opt text) ->
     (variant {
        Err: text;
@@ -180,6 +198,20 @@ type Main =
        Err: text;
        Ok: vec EoiSubmission;
      }) query;
+   get_news_audience: (competition_id: text, requester: principal) ->
+    (variant {
+       Err: text;
+       Ok: CompetitionNewsAudience;
+     });
+   get_vault_access: (competition_id: text, requester: principal) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             can_manage: bool;
+             club_id: text;
+             is_member: bool;
+           };
+     });
    grant_role: ("principal": principal, role: text, competition_id: text,
     team_id: opt text) -> (variant {
                              Err: text;
@@ -195,6 +227,8 @@ type Main =
        Err: text;
        Ok: bool;
      }) query;
+   is_competition_invite_manager: (team_id: text, requester: principal) ->
+    (bool) query;
    issue_join_token: (competition_id: text, team_id: text, expires_at_ms:
     nat64) -> (variant {
                  Err: text;
@@ -275,6 +309,11 @@ type Main =
        Err: text;
        Ok: vec Match;
      }) query;
+   list_my_news_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
    list_seasons: (competition_id: text) ->
     (variant {
        Err: text;
@@ -314,6 +353,11 @@ type Main =
        Err: text;
        Ok;
      });
+   revoke_competition_official_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    rotate_competition_join_link: (competition_id: text) ->
     (variant {
        Err: text;
@@ -334,16 +378,30 @@ type Main =
                                                    Err: text;
                                                    Ok;
                                                  });
+   set_competition_hide_ladder: (competition_id: text, hide_ladder: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_division_hide_ladder: (competition_id: text, division: text,
     hide_ladder: bool) -> (variant {
                              Err: text;
                              Ok: DivisionSetting;
                            });
+   set_events_domain_canister: (id: principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    set_match_result: (match_id: text, home_score: nat16, away_score: 
     nat16, expected_revision: nat64) -> (variant {
                                            Err: text;
                                            Ok: Match;
                                          });
+   set_pii_access_control_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_season_divisions: (competition_id: text, name: text, divisions:
     vec text) -> (variant {
                     Err: text;
@@ -354,6 +412,10 @@ type Main =
                  Err: text;
                  Ok: Season;
                });
+   set_vault_domain_canister: (id: principal) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
    suggest_eoi_teams: (season_id: text) ->
     (variant {
        Err: text;
@@ -420,6 +482,7 @@ type JoinLinkPreview =
    divisions: vec text;
    entered_team_ids: vec text;
    name: text;
+   role: text;
    season: text;
  };
 type EoiTeamSuggestion = 
@@ -486,6 +549,14 @@ type DivisionSetting =
    competition_id: text;
    division: text;
    hide_ladder: bool;
+ };
+type CompetitionNewsAudience =
+ record {
+   can_publish: bool;
+   club_id: text;
+   competition_id: text;
+   recipients: vec principal;
+   team_ids: vec text;
  };
 type CompetitionJoinLink = 
  record {

@@ -186,12 +186,25 @@ export async function createGeneratedMatches(
     icp: async (ctx) => {
       try {
         for (const row of rows) {
-          await recordLiveMatch(
+          const match = await recordLiveMatch(
             ctx,
             String(row.competition_id),
             String(row.home_team_id),
             String(row.away_team_id),
           );
+          await updateLiveMatchDetails(ctx, match.id, {
+            homeTeamId: String(row.home_team_id),
+            awayTeamId: String(row.away_team_id),
+            divisionId: (row.division_id as string | null | undefined) ?? null,
+            scheduledAtMs: row.scheduled_at ? new Date(row.scheduled_at as string).getTime() : null,
+            venue: (row.venue as string | null | undefined) ?? null,
+            pitchNumber: (row.pitch_number as string | null | undefined) ?? null,
+            roundNumber: typeof row.round_number === "number" ? row.round_number : null,
+            durationMinutes: typeof row.duration_minutes === "number" ? row.duration_minutes : null,
+            arrivalMinutesBefore: typeof row.arrival_minutes_before === "number" ? row.arrival_minutes_before : null,
+            notes: (row.notes as string | null | undefined) ?? null,
+            expectedRevision: Number(match.revision),
+          });
         }
         return { error: null };
       } catch (e) {

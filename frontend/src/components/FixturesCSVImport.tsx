@@ -18,6 +18,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { FixturePreviewEditor } from "@/components/FixturePreviewEditor";
 import { DriblImportMapper, isDriblFormat, parseDriblRows } from "@/components/DriblImportMapper";
 import { validateFixtureImportAuthorization } from "@/lib/fixtureImportAuthorization";
+import { isPlayHQFormat, playHQToDriblShape } from "@/lib/playhqFixtureImport";
+import { createEventTransaction } from "@/features/events/createEventWorkflow";
+import { withFeatureBackend } from "@/live/featureRouter";
 import ExcelJS from "exceljs";
 
 interface Team {
@@ -101,6 +104,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
   // Dribl-specific state
   const [driblMode, setDriblMode] = useState(false);
   const [driblRawData, setDriblRawData] = useState<{ headers: string[]; rows: string[][] } | null>(null);
+  const [driblWarnings, setDriblWarnings] = useState<string[]>([]);
 
   // Per-team exclusion: team names the user has un-checked in the "Will be imported" list
   const [excludedTeams, setExcludedTeams] = useState<Set<string>>(new Set());
@@ -342,11 +346,27 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
 
   const processFixtures = async (fixtures: ParsedFixture[], parseErrors: ValidationError[], selectedFile: File) => {
     if (fixtures.length > 0) {
-      const { data: existingEvents } = await supabase
-        .from('events')
-        .select('id, title, event_date, team_id')
-        .eq('club_id', clubId)
-        .eq('type', 'game');
+      const existingEvents = await withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("events")
+            .select("id, title, event_date, team_id")
+            .eq("club_id", clubId)
+            .eq("type", "game");
+          if (error) throw error;
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const { listLiveEvents } = await import("@/live/features/events");
+          const rows = await listLiveEvents(ctx, clubId, null) as any[];
+          return rows.filter((event) => event.event_type === "game").map((event) => ({
+            id: event.id,
+            title: event.title,
+            event_date: new Date(Number(event.starts_at_ms)).toISOString(),
+            team_id: event.team_id?.[0] ?? null,
+          }));
+        },
+      });
       
       if (existingEvents) {
         const newFixtures: ParsedFixture[] = [];
@@ -422,6 +442,18 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
         }
         
         const headers = rows[0].map(h => h?.toString() || '');
+
+        if (isPlayHQFormat(headers)) {
+          const converted = playHQToDriblShape(
+            headers,
+            rows.slice(1).map((row) => row.map((cell) => cell?.toString() || "")),
+          );
+          setFile(selectedFile);
+          setDriblMode(true);
+          setDriblRawData({ headers: converted.headers, rows: converted.rows });
+          setDriblWarnings(converted.skipped.map(({ row, message }) => `Row ${row}: ${message}`));
+          return;
+        }
         
         // Check if this is a Dribl export
         if (isDriblFormat(headers)) {
@@ -437,6 +469,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
           
           setFile(selectedFile);
           setDriblMode(true);
+          setDriblWarnings([]);
           setDriblRawData({
             headers,
             rows: rows.slice(1).map((row) => row.map((cell) => cell?.toString() || '')),
@@ -573,16 +606,31 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
           return d.toISOString();
         })();
 
-        const { data: liveExisting, error: checkError } = await supabase
-          .from('events')
-          .select('id, event_date, team_id')
-          .eq('club_id', clubId)
-          .eq('type', 'game')
-          .in('team_id', fixtureTeamIds)
-          .gte('event_date', startIso)
-          .lte('event_date', endIso);
-
-        if (checkError) throw checkError;
+        const liveExisting = await withFeatureBackend("events", {
+          supabase: async () => {
+            const { data, error } = await supabase
+              .from("events")
+              .select("id, event_date, team_id")
+              .eq("club_id", clubId)
+              .eq("type", "game")
+              .in("team_id", fixtureTeamIds)
+              .gte("event_date", startIso)
+              .lte("event_date", endIso);
+            if (error) throw error;
+            return data ?? [];
+          },
+          icp: async (ctx) => {
+            const { listLiveEvents } = await import("@/live/features/events");
+            const rows = await listLiveEvents(ctx, clubId, null) as any[];
+            return rows.filter((event) => event.event_type === "game" && fixtureTeamIds.includes(event.team_id?.[0] ?? ""))
+              .map((event) => ({
+                id: event.id,
+                event_date: new Date(Number(event.starts_at_ms)).toISOString(),
+                team_id: event.team_id?.[0] ?? null,
+              }))
+              .filter((event) => event.event_date >= startIso && event.event_date <= endIso);
+          },
+        });
 
         const localDateKey = (iso: string) => {
           const d = new Date(iso);
@@ -590,7 +638,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
         };
 
         const conflictKeys = new Set(
-          (liveExisting || []).map(e => `${e.team_id}|${localDateKey(e.event_date)}`)
+          liveExisting.map(e => `${e.team_id}|${localDateKey(e.event_date)}`)
         );
 
         const blocked = fixturesToInsert.filter(f => {
@@ -629,11 +677,22 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
         };
       });
 
-      const { error: insertError } = await supabase
-        .from('events')
-        .insert(eventsToInsert);
-
-      if (insertError) throw insertError;
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error } = await supabase.from("events").insert(eventsToInsert);
+          if (error) throw error;
+        },
+        icp: async () => {
+          for (const event of eventsToInsert) {
+            await createEventTransaction(supabase, {
+              event,
+              eventDate: String(event.event_date),
+              childDates: null,
+              duties: [],
+            });
+          }
+        },
+      });
 
       toast({
         title: "Fixtures imported",
@@ -666,6 +725,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
     setUpdateDuplicates(false);
     setDriblMode(false);
     setDriblRawData(null);
+    setDriblWarnings([]);
     setExcludedTeams(new Set());
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -717,6 +777,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
     // Exit Dribl mode and process fixtures normally
     setDriblMode(false);
     setDriblRawData(null);
+    setDriblWarnings([]);
     
     // Process fixtures for duplicates
     await processFixtures(fixtures, [], file!);
@@ -802,6 +863,7 @@ Round 2 vs Tigers,${formatDate(followingSaturday)},14:30,Tigers United,456 Stadi
         driblRows={driblRows}
         teams={teams}
         clubName={clubName}
+        warnings={driblWarnings}
         onConfirm={handleDriblConfirm}
         onCancel={handleClear}
       />

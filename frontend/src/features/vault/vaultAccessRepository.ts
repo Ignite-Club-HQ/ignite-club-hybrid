@@ -187,6 +187,42 @@ export async function fetchVaultTeamHasPro(
   });
 }
 
+export interface VaultCompetitionAccess {
+  isMember: boolean;
+  canManage: boolean;
+}
+
+export async function fetchVaultCompetitionAccess(
+  competitionId: string,
+  userId: string,
+  client: IgniteSupabaseClient = supabase,
+): Promise<VaultCompetitionAccess> {
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const [{ data: canAccess, error: accessError }, { data: canManage, error: manageError }] = await Promise.all([
+        client.rpc("can_access_competition_vault", { _competition_id: competitionId }),
+        client.rpc("is_competition_admin", { _user_id: userId, _competition_id: competitionId }),
+      ]);
+      if (accessError) throw accessError;
+      if (manageError) throw manageError;
+      return { isMember: Boolean(canAccess), canManage: Boolean(canManage) };
+    },
+    icp: async (ctx) => {
+      const [{ listLiveVaultFolders }, { isLiveCompetitionAdmin }] = await Promise.all([
+        import("@/live/features/vault"),
+        import("@/live/features/competitions"),
+      ]);
+      try {
+        await listLiveVaultFolders(ctx, "", null, null, competitionId);
+      } catch {
+        return { isMember: false, canManage: false };
+      }
+      const canManage = await isLiveCompetitionAdmin(ctx, competitionId).catch(() => false);
+      return { isMember: true, canManage };
+    },
+  });
+}
+
 export async function fetchVaultAnyProAccess(
   userId: string,
   client: IgniteSupabaseClient = supabase,

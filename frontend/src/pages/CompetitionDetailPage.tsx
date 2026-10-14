@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams, Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Trophy, Plus, Loader2, Check, X, Shield, Megaphone, Send, Settings, CircleCheck, Circle, ChevronDown, Users, Sparkles, CloudRain, CalendarClock, Bell, Pencil, Copy } from "lucide-react";
+import { ArrowLeft, Trophy, Plus, Loader2, Check, X, Shield, Megaphone, Send, Settings, CircleCheck, Circle, ChevronDown, Users, Sparkles, CloudRain, CalendarClock, Bell, Pencil, Copy, Images, MessageCircle, FolderOpen } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,16 +21,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveCompetitionTeam, isLiveCompetitionAdmin, assignLiveDivision } from "@/live/features/competitions";
+import { ensureLiveCompetitionAdminThread } from "@/live/features/messaging";
 import { createLiveShellTeamInvite } from "@/live/features/membership";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { CompetitionFixturesPanel, CompetitionLadderPanel } from "@/components/CompetitionFixturesPanel";
 import CompetitionPlayerStatsPanel from "@/components/competitions/CompetitionPlayerStatsPanel";
+import { CreateCompetitionEventButton } from "@/components/competitions/CreateCompetitionEventButton";
 import { CompetitionShareJoinLink } from "@/components/CompetitionShareJoinLink";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { Crown } from "lucide-react";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { IcpCompetitionContent } from "@/components/competition/IcpCompetitionContent";
+import TeamJoinLinkCard from "@/components/invite/TeamJoinLinkCard";
 import {
   createLocalCompetitionSeason,
   getLocalCompetitionState,
@@ -322,6 +325,21 @@ function SupabaseCompetitionDetailPage() {
   const organizerClubId = (competition as any)?.organizer_club_id ?? null;
   const { hasPro: organizerHasPro, isLoading: proLoading } = useClubProAccess(organizerClubId);
   const canManage = isAdmin && organizerHasPro;
+  const contactCompetitionAdmins = useMutation({
+    mutationFn: async () => {
+      if (!id || !user?.id) throw new Error("Sign in to contact competition admins.");
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("ensure_competition_admin_thread", { _competition_id: id });
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => ensureLiveCompetitionAdminThread(ctx, id, user.id),
+      });
+    },
+    onSuccess: (conversationId) => navigate(`/groups/${encodeURIComponent(conversationId)}`),
+    onError: (error: Error) => toast({ title: "Could not open competition inbox", description: error.message, variant: "destructive" }),
+  });
 
   const { data: divisions = [], isLoading: divisionsLoading } = useQuery({
     queryKey: ["competition-divisions", id, isIcp],
@@ -347,6 +365,29 @@ function SupabaseCompetitionDetailPage() {
         .eq("competition_id", id!)
         .order("sort_order");
       return data ?? [];
+    },
+  });
+
+  const { data: hideCompetitionLadder = false, isLoading: competitionLadderSettingLoading } = useQuery({
+    queryKey: ["competition-hide-ladder", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("competitions")
+            .select("hide_ladder")
+            .eq("id", id!)
+            .maybeSingle();
+          if (error) throw error;
+          return data?.hide_ladder ?? false;
+        },
+        icp: async (ctx) => {
+          const { getLiveCompetitionHideLadder } = await import("@/live/features/competitions");
+          return getLiveCompetitionHideLadder(ctx, id!);
+        },
+      });
     },
   });
 
@@ -494,6 +535,18 @@ function SupabaseCompetitionDetailPage() {
       toast({ title: "Failed to update", description: error.message, variant: "destructive" });
       return;
     }
+    if (status === "accepted" && user?.id) {
+      const { error: welcomeEmailError } = await supabase.functions.invoke("send-welcome-email", {
+        body: {
+          scopeKind: "competition",
+          scopeId: id!,
+          recipientUserId: user.id,
+        },
+      });
+      if (welcomeEmailError) {
+        console.error("[CompetitionDetail] Welcome email request failed:", welcomeEmailError);
+      }
+    }
     toast({ title: status === "accepted" ? "Invite accepted" : "Invite declined" });
     qc.invalidateQueries({ queryKey: ["competition-entries", id] });
     qc.invalidateQueries({ queryKey: ["competition-pending-invites"] });
@@ -514,9 +567,9 @@ function SupabaseCompetitionDetailPage() {
     );
   }
 
-  const ladderVisibilityLoading = (!!user && isAdminLoading) || divisionsLoading;
+  const ladderVisibilityLoading = (!!user && isAdminLoading) || divisionsLoading || competitionLadderSettingLoading;
   const hasHiddenDivisionLadder = divisions.some((d: any) => !!d.hide_ladder);
-  const canViewLadder = !ladderVisibilityLoading && (isAdmin || !hasHiddenDivisionLadder);
+  const canViewLadder = !ladderVisibilityLoading && (isAdmin || (!hideCompetitionLadder && !hasHiddenDivisionLadder));
 
   return (
     <div className="container max-w-3xl mx-auto px-4 py-4 space-y-4">
@@ -526,6 +579,20 @@ function SupabaseCompetitionDetailPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-lg sm:text-xl font-bold break-words flex-1 min-w-0 leading-tight">{competition.name}</h1>
+            {user && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 min-h-11 sm:min-h-9 px-2.5 sm:px-3 gap-1.5 shrink-0 whitespace-nowrap"
+                aria-label="Contact competition admins"
+                title="Contact competition admins"
+                disabled={contactCompetitionAdmins.isPending}
+                onClick={() => contactCompetitionAdmins.mutate()}
+              >
+                {contactCompetitionAdmins.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                <span className="hidden sm:inline">Contact admins</span>
+              </Button>
+            )}
           {canManage && !(competition.source === "playhq" && competition.clubs?.kind !== "association") && (
             <Sheet>
               <SheetTrigger asChild>
@@ -559,6 +626,19 @@ function SupabaseCompetitionDetailPage() {
               <Link to={`/competitions/${id}/settings`}><Settings className="h-[18px] w-[18px]" /></Link>
             </Button>
           )}
+          <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-1.5">
+            <Link
+              to={`/vault?competition=${encodeURIComponent(id!)}&club=${encodeURIComponent(organizerClubId ?? "")}&competitionName=${encodeURIComponent(competition.name)}&clubName=${encodeURIComponent(competition.clubs?.name ?? "Club")}`}
+              aria-label="Open competition vault"
+            >
+              <FolderOpen className="h-4 w-4" /> Vault
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-1.5">
+            <Link to={`/media?competition=${encodeURIComponent(id!)}&club=${encodeURIComponent(organizerClubId ?? "")}`} aria-label="Open competition media">
+              <Images className="h-4 w-4" /> Media
+            </Link>
+          </Button>
         </div>
         {(() => {
           const acceptedTeams = entries.filter((e: any) => e.status === "accepted").length;
@@ -575,6 +655,13 @@ function SupabaseCompetitionDetailPage() {
           ) : null;
         })()}
       </header>
+
+      {canManage && (
+        <CreateCompetitionEventButton
+          competitionId={id!}
+          teamCount={entries.filter((entry: any) => entry.status === "accepted" || entry.status === "registered").length}
+        />
+      )}
 
       {isAdmin && !organizerHasPro && !proLoading && organizerClubId && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-start gap-3">
@@ -677,6 +764,7 @@ function SupabaseCompetitionDetailPage() {
               myAdminTeamIds={myAdminTeamIds}
               onRespond={respondToInvite}
               isAdmin={canManage}
+              isCompetitionAdmin={isAdmin}
             />
           </TabsContent>
         )}
@@ -820,6 +908,7 @@ function TeamsByDivision({
   myAdminTeamIds,
   onRespond,
   isAdmin,
+  isCompetitionAdmin,
 }: {
   competitionId: string;
   divisions: any[];
@@ -827,6 +916,7 @@ function TeamsByDivision({
   myAdminTeamIds: string[];
   onRespond: (entryId: string, status: "accepted" | "declined") => void;
   isAdmin: boolean;
+  isCompetitionAdmin: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -842,6 +932,7 @@ function TeamsByDivision({
   } | null>(null);
   const [clearFixtures, setClearFixtures] = useState(true);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
 
   const requestAssignDivision = async (entry: any, divisionId: string | null) => {
     if ((entry.division_id ?? null) === (divisionId ?? null)) return;
@@ -1014,6 +1105,17 @@ function TeamsByDivision({
                       <div className="shrink-0">{statusBadge}</div>
                     </div>
 
+                    {isCompetitionAdmin && (e.status === "accepted" || e.status === "registered") && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setInviteTeamId(e.team_id)}
+                      >
+                        Invite players or parents
+                      </Button>
+                    )}
+
                     {(canRespond || (isAdmin && divisions.length > 0 && e.status !== "declined")) && (
                       <div className="flex items-center gap-2">
                         {canRespond && (
@@ -1063,6 +1165,29 @@ function TeamsByDivision({
           )}
         </div>
       ))}
+      {inviteTeamId && (() => {
+        const team = entries.find((entry: any) => entry.team_id === inviteTeamId);
+        if (!team) return null;
+        return (
+          <Dialog open onOpenChange={(open) => { if (!open) setInviteTeamId(null); }}>
+            <DialogContent className="max-h-[90dvh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Invite players or parents</DialogTitle>
+                <DialogDescription>
+                  Create or manage player and parent join links for {team.teams?.name ?? "this team"}.
+                </DialogDescription>
+              </DialogHeader>
+              <TeamJoinLinkCard
+                teamId={team.team_id}
+                teamName={team.teams?.name ?? "Team"}
+                clubId={team.club_id ?? team.teams?.club_id}
+                allowedRoles={["player", "parent"]}
+                managerOverride
+              />
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
       <Dialog open={!!moveConfirm} onOpenChange={(o) => { if (!o && !confirmBusy) setMoveConfirm(null); }}>
         <DialogContent>
           <DialogHeader>

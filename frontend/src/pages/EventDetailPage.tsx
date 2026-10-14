@@ -50,6 +50,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { useEventGroupMap } from "@/hooks/useEventGroupMap";
 import { useEventViewTracking } from "@/hooks/useEventViews";
+import { useEventMembership } from "@/hooks/useEventMembership";
 import { resolveRsvpAudience } from "@/lib/rsvpAudience";
 import { resolveRsvpChildren, resolveEventChildRoster } from "@/lib/resolveEventChildScope";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
@@ -60,6 +61,7 @@ import { PostRsvpNotificationPrompt } from "@/components/PostRsvpNotificationPro
 import { EventNoteSection } from "@/components/event/EventNoteSection";
 import { EventOverviewSection } from "@/components/event/EventOverviewSection";
 import { EventDutiesSection } from "@/components/event/EventDutiesSection";
+import { EventDutyTeamAssignment } from "@/components/event/DutyTeamPicker";
 import { EventMatchAwardsSection } from "@/components/event/EventMatchAwardsSection";
 import { EventPitchBoardPortal } from "@/components/event/EventPitchBoardPortal";
 import { EventDetailActionDialogs } from "@/components/event/EventDetailActionDialogs";
@@ -1124,6 +1126,13 @@ export default function EventDetailPage() {
   const isSocialEvent = event?.type === "social";
   const effectiveShowAll = isSocialEvent ? true : showAllRoles;
   const isMiniLeagueEvent = !!event?.mini_league_id;
+  const { data: isEventMember = false } = useEventMembership({
+    id,
+    team_id: event?.team_id ?? null,
+    club_id: event?.club_id ?? "",
+    target_team_ids: (event as any)?.target_team_ids ?? null,
+  });
+  const canRespondToEvent = useIcpLab || isMiniLeagueEvent || isEventMember;
   const eventTypeLabel = isMiniLeagueEvent ? "Match Day" : getEventTypeLabel(event?.type);
 
   const restrictedEventRoles = Array.isArray((event as any)?.restricted_to_roles)
@@ -1882,6 +1891,7 @@ export default function EventDetailPage() {
 
       <EventRsvpResponseSection
         event={event}
+        canRespond={canRespondToEvent}
         userId={user?.id}
         useIcpLab={useIcpLab}
         isMiniLeagueEvent={isMiniLeagueEvent}
@@ -1932,6 +1942,8 @@ export default function EventDetailPage() {
         }
         onUpgrade={() => navigate(`/clubs/${event.club_id}/upgrade`)}
       />
+
+      <EventDutyTeamAssignment eventId={id!} clubId={event.club_id} canEdit={canManageEvent} />
 
       <EventDutiesSection
         event={event}

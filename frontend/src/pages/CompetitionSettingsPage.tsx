@@ -20,7 +20,9 @@ import { cn } from "@/lib/utils";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { CompetitionAdminsCard } from "@/components/competitions/CompetitionAdminsCard";
+import { CompetitionOfficialsCard } from "@/components/competitions/CompetitionOfficialsCard";
 import { CompetitionMemberChatCard } from "@/components/competitions/CompetitionMemberChatCard";
+import { WelcomeEmailSettingsCard } from "@/components/WelcomeEmailSettingsCard";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabCompetitionSettings } from "@/lab/fixtureDataLayer";
 import { getLocalCompetition, isLocalCompetitionCanisterUnavailable } from "@/lab/localCompetitionService";
@@ -281,6 +283,12 @@ function LiveIcpCompetitionSettingsPage() {
       <DivisionLadderVisibility competitionId={id!} />
 
       <CompetitionAdminsCard
+        competitionId={id!}
+        competitionName={competition.name}
+        organizerClubId={competition.club_id ?? null}
+      />
+
+      <CompetitionOfficialsCard
         competitionId={id!}
         competitionName={competition.name}
         organizerClubId={competition.club_id ?? null}
@@ -646,6 +654,8 @@ function SupabaseCompetitionSettingsPage() {
         organizerClubId={(competition as any).organizer_club_id ?? null}
       />
 
+      <WelcomeEmailSettingsCard scopeKind="competition" scopeId={id!} />
+
       {/* 6. Competition-wide chat — opt-in thread for all members of entered teams */}
       <CompetitionMemberChatCard competitionId={id!} />
 
@@ -680,6 +690,28 @@ function SupabaseCompetitionSettingsPage() {
 function DivisionLadderVisibility({ competitionId }: { competitionId: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [savingCompetitionVisibility, setSavingCompetitionVisibility] = useState(false);
+  const { data: hideCompetitionLadder = false, isLoading: competitionVisibilityLoading } = useQuery({
+    queryKey: ["competition-hide-ladder", competitionId],
+    queryFn: async () => {
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("competitions")
+            .select("hide_ladder")
+            .eq("id", competitionId)
+            .maybeSingle();
+          if (error) throw error;
+          return data?.hide_ladder ?? false;
+        },
+        icp: async (ctx) => {
+          const { getLiveCompetitionHideLadder } = await import("@/live/features/competitions");
+          return getLiveCompetitionHideLadder(ctx, competitionId);
+        },
+      });
+    },
+  });
   const { data: divisions = [], isLoading } = useQuery({
     queryKey: ["competition-divisions", competitionId, isIcpPageMode()],
     queryFn: async () => {
@@ -704,6 +736,33 @@ function DivisionLadderVisibility({ competitionId }: { competitionId: string }) 
       return data ?? [];
     },
   });
+
+  const toggleCompetitionVisibility = async (hide: boolean) => {
+    setSavingCompetitionVisibility(true);
+    try {
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("competitions")
+            .update({ hide_ladder: hide })
+            .eq("id", competitionId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { setLiveCompetitionHideLadder } = await import("@/live/features/competitions");
+          await setLiveCompetitionHideLadder(ctx, competitionId, hide);
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["competition-hide-ladder", competitionId] });
+      qc.invalidateQueries({ queryKey: ["competition-ladder", competitionId] });
+      toast({ title: "Ladder visibility updated" });
+    } catch (error) {
+      toast({ title: "Could not update", description: error instanceof Error ? error.message : "Update failed", variant: "destructive" });
+    } finally {
+      setSavingCompetitionVisibility(false);
+    }
+  };
 
   const toggle = async (divisionId: string, hide: boolean) => {
     if (isIcpPageMode()) {
@@ -740,6 +799,18 @@ function DivisionLadderVisibility({ competitionId }: { competitionId: string }) 
         <CardDescription>Choose which divisions or grades show a ladder. Fixtures and results stay visible.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Hide entire competition ladder</div>
+            <div className="text-xs text-muted-foreground">Fixtures and results remain visible.</div>
+          </div>
+          <Switch
+            checked={hideCompetitionLadder}
+            disabled={competitionVisibilityLoading || savingCompetitionVisibility}
+            onCheckedChange={toggleCompetitionVisibility}
+            aria-label="Hide entire competition ladder"
+          />
+        </div>
         {isLoading ? (
           <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin" /></div>
         ) : divisions.length === 0 ? (

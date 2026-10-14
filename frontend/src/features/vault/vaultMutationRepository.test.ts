@@ -382,6 +382,7 @@ describe("Vault permanent single-item deletion", () => {
     await expect(permanentlyDeleteVaultPhoto("file-a", fake.client)).resolves.toBe("file-a");
 
     expect(fake.reads).toEqual([
+      { table: "vault_files", select: "storage_bucket, storage_path", filters: [["id", "file-a"]] },
       { table: "vault_files", select: "file_url", filters: [["id", "file-a"]] },
       { table: "photos", select: "id", filters: [["image_url", "https://files/photo-a.jpg"]] },
     ]);
@@ -408,6 +409,7 @@ describe("Vault permanent single-item deletion", () => {
     await permanentlyDeleteVaultPhoto("file-a", fake.client);
 
     expect(fake.reads).toEqual([
+      { table: "vault_files", select: "storage_bucket, storage_path", filters: [["id", "file-a"]] },
       { table: "vault_files", select: "file_url", filters: [["id", "file-a"]] },
     ]);
   });
@@ -418,7 +420,9 @@ describe("Vault permanent single-item deletion", () => {
 
     await permanentlyDeleteVaultFile("file-a", fake.client);
 
-    expect(fake.reads).toEqual([]);
+    expect(fake.reads).toEqual([
+      { table: "vault_files", select: "storage_bucket, storage_path", filters: [["id", "file-a"]] },
+    ]);
     expect(fake.invoke).toHaveBeenCalledWith("permanent-delete-photos", {
       body: { fileIds: ["file-a"], deletionType: "permanent" },
     });

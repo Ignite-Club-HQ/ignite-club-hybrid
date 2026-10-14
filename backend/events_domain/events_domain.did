@@ -193,6 +193,14 @@ type Main =
                  Err: text;
                  Ok: Event;
                });
+   create_competition_events: (operation_id: text, competition_id: text,
+    creator: principal, competition_club_id: text,
+    targets: vec record { club_id: text; team_id: text }, title: text,
+    description: text, event_type: text, location: opt text,
+    starts_at_ms: nat64, ends_at_ms: nat64) -> (variant {
+       Err: text;
+       Ok: vec text;
+     });
    create_event_group: (event_id: text, name: text, team_letter: opt text,
     colour: opt text, ability_band: opt text, pitch_name: opt text) ->
     (variant {
@@ -283,11 +291,14 @@ type Main =
           children: vec Child;
           coachNotes: vec CoachNote;
           duties: vec Duty;
+          dutyTeamReminderSent: vec text;
+          individualDutyReminderSent: vec text;
           eventAttendance: vec EventAttendance;
           eventGroupDuties: vec EventGroupDuty;
           eventGroupPlayers: vec EventGroupPlayer;
           eventGroups: vec EventGroup;
           eventGuests: vec EventGuest;
+          eventDutyTeams: vec EventDutyTeam;
           eventViews: vec EventView;
           events: vec Event;
           governor: principal;
@@ -296,6 +307,7 @@ type Main =
           miniLeagueRsvps: vec MiniLeagueRsvp;
           openDuties: vec OpenDuty;
           pushReachability: vec PushReachability;
+          pointsReminderSent: vec text;
           recurrences: vec Recurrence;
           reminderLogs: vec ReminderLog;
           roles: vec RoleGrant;
@@ -326,6 +338,16 @@ type Main =
            hours_before: nat16;
            sent: bool;
          }) query;
+   get_event_duty_team: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventDutyTeam;
+     }) query;
+   list_event_duty_teams: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventDutyTeam;
+     }) query;
    get_event_child: (event_id: text, child_id: text) ->
     (variant {
        Err: text;
@@ -432,6 +454,11 @@ type Main =
      }) query;
    list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
    list_events_multi: (club_ids: vec text, team_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Event;
+     }) query;
+   list_events_for_duty_teams: (team_ids: vec text) ->
     (variant {
        Err: text;
        Ok: vec Event;
@@ -619,6 +646,10 @@ type Main =
                                                    Err: text;
                                                    Ok;
                                                  });
+   set_competition_domain_canister: (id: principal) -> (variant {
+       Err: text;
+       Ok;
+     });
    set_coach_note: (event_id: text, note: text) ->
     (variant {
        Err: text;
@@ -630,6 +661,11 @@ type Main =
        Ok: Duty;
      });
    set_event_auto_reminder: (event_id: text, hours_before: opt nat16) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_event_duty_team: (event_id: text, team_id: opt text) ->
     (variant {
        Err: text;
        Ok;
@@ -942,6 +978,7 @@ type Event =
    title: text;
    updated_at_ms: nat64;
  };
+type EventDutyTeam = record { event_id: text; team_id: text };
 type Duty = 
  record {
    account_id: text;

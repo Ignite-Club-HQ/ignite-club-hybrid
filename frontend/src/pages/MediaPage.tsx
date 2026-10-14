@@ -227,6 +227,7 @@ function SupabaseMediaPage() {
   const urlTeamId = searchParams.get("team");
   const urlClubId = searchParams.get("club");
   const urlEventId = searchParams.get("event");
+  const urlCompetitionId = searchParams.get("competition");
 
   // Sync club filter with theme - reset to "all" when theme is cleared
   useEffect(() => {
@@ -537,8 +538,8 @@ function SupabaseMediaPage() {
   const dateToKey = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
   const cardPhotoIdsKey = cardPhotoIds?.join(",") ?? "";
   const photosQueryKey = useMemo(
-    () => ["photos", user?.id, selectedClubFilter, selectedTeamFilter, urlEventId ?? null, dateFromKey, dateToKey, cardId, cardPhotoIdsKey] as const,
-    [user?.id, selectedClubFilter, selectedTeamFilter, urlEventId, dateFromKey, dateToKey, cardId, cardPhotoIdsKey]
+    () => ["photos", user?.id, selectedClubFilter, selectedTeamFilter, urlEventId ?? null, urlCompetitionId ?? null, dateFromKey, dateToKey, cardId, cardPhotoIdsKey] as const,
+    [user?.id, selectedClubFilter, selectedTeamFilter, urlEventId, urlCompetitionId, dateFromKey, dateToKey, cardId, cardPhotoIdsKey]
   );
 
   const { 
@@ -576,6 +577,7 @@ function SupabaseMediaPage() {
           clubId: selectedClubFilter,
           teamId: selectedTeamFilter,
           eventId: urlEventId ?? null,
+          competitionId: urlCompetitionId ?? null,
           dateFrom: dateFromKey,
           dateTo: dateToKey,
           cardId: cardId ?? null,
@@ -595,7 +597,7 @@ function SupabaseMediaPage() {
       if (error) throw error;
 
       // Cache first page results for offline access
-      if (pageParam === 0 && data && !selectedClubFilter && !selectedTeamFilter && !urlEventId && !dateFromKey && !dateToKey && !cardId) {
+      if (pageParam === 0 && data && !selectedClubFilter && !selectedTeamFilter && !urlEventId && !urlCompetitionId && !dateFromKey && !dateToKey && !cardId) {
         cachePhotos(null, null, null, data.map(p => ({
           id: p.id,
           file_url: p.file_url || p.image_url,
@@ -754,6 +756,9 @@ function SupabaseMediaPage() {
     if (urlEventId) {
       filtered = filtered.filter(photo => photo.event_id === urlEventId);
     }
+    if (urlCompetitionId) {
+      filtered = filtered.filter(photo => photo.competition_id === urlCompetitionId);
+    }
     
     // Filter by date range
     if (dateRange.from || dateRange.to) {
@@ -802,7 +807,7 @@ function SupabaseMediaPage() {
     }
 
     return filtered;
-  }, [allPhotos, selectedClubId, selectedTeamId, dateRange, cardId, cardPhotoIds, urlEventId]);
+  }, [allPhotos, selectedClubId, selectedTeamId, dateRange, cardId, cardPhotoIds, urlEventId, urlCompetitionId]);
 
   // Club auto-applied via club-theme mode shouldn't count as a user-applied filter.
   const clubFilterIsUserApplied =
@@ -1340,6 +1345,7 @@ function SupabaseMediaPage() {
             onUploadingCountChange={setUploadingCount}
             defaultTeamId={searchParams.get("team")}
             defaultEventId={searchParams.get("event")}
+            defaultCompetitionId={urlCompetitionId}
           />
           </Suspense>
 

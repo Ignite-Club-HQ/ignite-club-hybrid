@@ -121,6 +121,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    grant_pii_read_competition(pii_id: string, field_id: string, competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     my_guardian_children(): Promise<Array<string>>;
     pii_vetkey_verification_key(): Promise<Uint8Array>;
     purge_club_grants(club_id: string): Promise<{
@@ -158,7 +165,21 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    revoke_pii_read_competition(pii_id: string, field_id: string, competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_club_domain_canister(canister: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_competition_domain_canister(canister: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -319,6 +340,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.grant_pii_read_club(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
+    async grant_pii_read_competition(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.grant_pii_read_competition(arg0, arg1, arg2);
+        return from_candid_variant_n1(result);
+    }
     async my_guardian_children(): Promise<Array<string>> {
         const result = await this.actor.my_guardian_children();
         return result;
@@ -377,6 +408,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.revoke_pii_read_club(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
+    async revoke_pii_read_competition(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.revoke_pii_read_competition(arg0, arg1, arg2);
+        return from_candid_variant_n1(result);
+    }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -385,6 +426,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n1(result);
+    }
+    async set_competition_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_competition_domain_canister(arg0);
         return from_candid_variant_n1(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
