@@ -275,6 +275,20 @@ export async function listLiveSponsors(ctx: FeatureBackendContext, clubId: strin
   );
 }
 
+/**
+ * Club-level Pro check for sponsor display: the club's own subscription row
+ * (paid / promo / admin override) or, as a fallback, the viewer's personal
+ * entitlement. Sponsors belong to the club, so a free member of a Pro club
+ * must still see them.
+ */
+export async function isLiveClubPro(ctx: FeatureBackendContext, clubId: string): Promise<boolean> {
+  const sub = await getLiveClubSubscription(ctx, clubId).catch(() => null);
+  if (sub?.is_pro || sub?.admin_pro_override) return true;
+  const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
+  const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target).catch(() => null);
+  return !!summary?.isPro;
+}
+
 export async function saveLiveSponsor(ctx: FeatureBackendContext, sponsor: LiveClubSponsor) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.save_sponsor(sponsor), "Save sponsor");

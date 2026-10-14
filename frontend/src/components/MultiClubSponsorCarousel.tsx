@@ -6,6 +6,7 @@ import { writeHomeSponsorHint } from "@/lib/homeSponsorHint";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
   getLiveClubProfile,
+  isLiveClubPro,
   listLiveSponsors,
   listLiveTeams,
   listLiveTeamSponsorAllocations,
@@ -129,15 +130,6 @@ export function MultiClubSponsorCarousel() {
           return result;
         },
         icp: async (ctx) => {
-          // Pro gate in ICP mode is per-account (identity_access
-          // entitlements) — there is no per-club subscription table.
-          const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
-          const summary = await fetchIcpEntitlements(
-            ctx.identity,
-            ctx.identity.getPrincipal().toText(),
-            ctx.target,
-          );
-          if (!summary.isPro) return [];
 
           // Caller-scoped club set from my_role_grants.
           const grants = await myLiveRoleGrants(ctx);
@@ -149,6 +141,7 @@ export function MultiClubSponsorCarousel() {
 
           const perClub = await Promise.all(
             Array.from(clubIds).map(async (clubId) => {
+              if (!(await isLiveClubPro(ctx, clubId))) return [] as SponsorCarouselItem[];
               const profile = await getLiveClubProfile(ctx, clubId);
               const club = profile[0];
               if (!club) return [] as SponsorCarouselItem[];
