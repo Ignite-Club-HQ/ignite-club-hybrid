@@ -261,6 +261,19 @@ export async function setLiveEventRsvp(
   return unwrapCandid(actor.set_rsvp(eventId, accountId, state, notes), "Set RSVP");
 }
 
+/** Parent RSVPs their own child — counterpart of the Supabase childRsvpMutation write. */
+export async function setLiveChildRsvp(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+  childId: string,
+  state: string,
+  notes = "",
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_child_rsvp(eventId, accountId, childId, state, notes), "Set child RSVP");
+}
+
 export async function setLiveEventAttendance(
   ctx: FeatureBackendContext,
   eventId: string,
