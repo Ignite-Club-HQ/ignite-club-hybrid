@@ -30,7 +30,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { listLivePointsHistory, listLiveRedemptions, subjectForUser } from "@/live/features/points";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
-import { getLiveClubProfile, getLiveTeam } from "@/live/features/club";
+import { getLiveClubProfile, getLiveClubSubscription, getLiveTeam, getLiveTeamSubscription, listLiveTeams } from "@/live/features/club";
 
 import igniteIcon from "@/assets/ignite-icon.png";
 
@@ -497,8 +497,37 @@ export default function ProfilePage() {
   const displayedRank = selectedSeasonId !== "all" ? seasonRankData : rankData;
 
   const { data: upgradableClubs } = useQuery({
-    queryKey: ["upgradable-clubs", user?.id, activeClubFilter],
+    queryKey: ["upgradable-clubs", user?.id, activeClubFilter, providerKey],
     queryFn: async () => {
+      if (useIcpLab || isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const isAppAdminUser = grants.some((g) => g.role === "app_admin");
+            let clubIds = [...new Set(
+              grants
+                .filter((g) => g.role === "club_admin" && g.club[0])
+                .map((g) => g.club[0]!),
+            )];
+            if (activeClubFilter) {
+              if (!isAppAdminUser && !clubIds.includes(activeClubFilter)) return [];
+              clubIds = [activeClubFilter];
+            }
+            const out: { id: string; name: string; sport: string | null; subscription: unknown }[] = [];
+            for (const id of clubIds) {
+              const [profileRow, sub] = await Promise.all([
+                getLiveClubProfile(ctx, id).catch(() => []),
+                getLiveClubSubscription(ctx, id).catch(() => null),
+              ]);
+              const p = profileRow.length ? profileRow[0] : null;
+              if (!p || p.deleted_at_ms.length) continue;
+              out.push({ id: p.id, name: p.name, sport: p.sport[0] ?? null, subscription: sub });
+            }
+            return out;
+          },
+        });
+      }
       const { data: appAdminRole } = await supabase
         .from("user_roles")
         .select("role")
