@@ -233,10 +233,32 @@ export function ManagePlayersDialog({
     queryKey: ["mini-league-additional-guardians", miniLeagueId, childIdsForGuardians],
     queryFn: async () => {
       if (childIdsForGuardians.length === 0) return [] as { child_id: string; guardian_id: string; display_name: string | null }[];
-      const { data: gRows } = await supabase
-        .from("child_guardians")
-        .select("child_id, guardian_id")
-        .in("child_id", childIdsForGuardians);
+      const gRows = await withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("child_guardians")
+            .select("child_id, guardian_id")
+            .in("child_id", childIdsForGuardians);
+          if (error) throw error;
+          return (data || []) as { child_id: string; guardian_id: string }[];
+        },
+        // ICP: guardians live on club_domain (list_child_guardians). Children
+        // the caller can't read are skipped rather than failing the dialog.
+        icp: async (ctx) => {
+          const { listLiveChildGuardians } = await import("@/live/features/club");
+          const lists = await Promise.all(
+            childIdsForGuardians.map(async (childId) => {
+              try {
+                const principals = (await listLiveChildGuardians(ctx, childId)) as Principal[];
+                return principals.map((p) => ({ child_id: childId, guardian_id: p.toText() }));
+              } catch {
+                return [] as { child_id: string; guardian_id: string }[];
+              }
+            }),
+          );
+          return lists.flat();
+        },
+      });
       const guardianIds = [...new Set((gRows || []).map(g => g.guardian_id))];
       if (guardianIds.length === 0) return [];
       const { data: profs } = await selectCachedProfilesByIds(guardianIds);
