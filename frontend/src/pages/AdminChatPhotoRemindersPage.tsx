@@ -138,14 +138,28 @@ export default function AdminChatPhotoRemindersPage() {
 
   const handleRunNow = async () => {
     setRunning(true);
-    const { data, error } = await supabase.functions.invoke("chat-photo-gallery-reminders", {
-      body: {},
-    });
-    setRunning(false);
-    if (error) {
-      toast.error("Run failed: " + error.message);
+    let data: { scanned?: number; posted?: number; skipped?: number } | null = null;
+    try {
+      data = await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase.functions.invoke("chat-photo-gallery-reminders", { body: {} });
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const { runLiveChatPhotoGalleryReminders } = await import("@/live/features/messaging");
+          return runLiveChatPhotoGalleryReminders(
+            ctx, Date.now(),
+            form.window_start_hours, form.window_end_hours, form.cooldown_days,
+          );
+        },
+      });
+    } catch (e) {
+      setRunning(false);
+      toast.error("Run failed: " + (e as Error).message);
       return;
     }
+    setRunning(false);
     toast.success(
       `Done — scanned ${data?.scanned ?? 0}, posted ${data?.posted ?? 0}, skipped ${data?.skipped ?? 0}`,
     );

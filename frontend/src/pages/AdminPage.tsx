@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Ticket, CreditCard, MessageSquare, UserCog, FileArchive, BarChart3, Megaphone, Bell, Settings, FileText, Smartphone, Send, Activity, KeyRound, Sparkles, Paperclip, TrendingUp, Image as ImageIcon, Bug, RotateCcw, Globe2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -166,15 +167,24 @@ function SupabaseAdminPage() {
   // Check if user is team admin or coach (for player stats access)
   const { data: teamAdminCoachTeamIds = [] } = useQuery({
     queryKey: ["team-admin-coach-team-ids", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("team_id")
-        .eq("user_id", user!.id)
-        .in("role", ["team_admin", "coach"])
-        .not("team_id", "is", null);
-      return ((data || []).map((r: any) => r.team_id).filter(Boolean)) as string[];
-    },
+    queryFn: async () => withFeatureBackend<string[]>("membership", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("team_id")
+          .eq("user_id", user!.id)
+          .in("role", ["team_admin", "coach"])
+          .not("team_id", "is", null);
+        return ((data || []).map((r: any) => r.team_id).filter(Boolean)) as string[];
+      },
+      icp: async (ctx) => {
+        const { myLiveRoleGrants } = await import("@/live/features/club");
+        const grants = await myLiveRoleGrants(ctx);
+        return Array.from(new Set(grants
+          .filter((g) => (g.role === "team_admin" || g.role === "coach") && g.team.length > 0)
+          .map((g) => g.team[0] as string)));
+      },
+    }),
     enabled: !!user,
   });
   const isTeamAdminOrCoach = teamAdminCoachTeamIds.length > 0;
@@ -185,7 +195,21 @@ function SupabaseAdminPage() {
     queryKey: ["has-pro-football-for-team-admin-teams", user?.id, teamAdminCoachTeamIds],
     enabled: !!user && teamAdminCoachTeamIds.length > 0,
     staleTime: 60_000,
-    queryFn: async () => {
+    queryFn: async () => withFeatureBackend<boolean>("membership", {
+      icp: async (ctx) => {
+        const { getLiveTeam, getLiveClubSubscription } = await import("@/live/features/club");
+        const teams = await Promise.all(teamAdminCoachTeamIds.map((id) => getLiveTeam(ctx, id).catch(() => [] as const)));
+        const clubIds = Array.from(new Set(teams.map((t: any) => t?.[0]?.club_id).filter(Boolean))) as string[];
+        const subs = await Promise.all(clubIds.map((id) => getLiveClubSubscription(ctx, id).catch(() => null)));
+        const nowMs = Date.now();
+        return subs.some((s: any) => {
+          if (!s) return false;
+          const on = Boolean(s.is_pro_football) || Boolean(s.admin_pro_football_override?.[0] ?? s.admin_pro_football_override === true);
+          const exp = Array.isArray(s.expires_at_ms) ? s.expires_at_ms[0] : s.expires_at_ms;
+          return on && (exp == null || Number(exp) > nowMs);
+        });
+      },
+      supabase: async () => {
       const { data: teams } = await supabase
         .from("teams")
         .select("club_id")
@@ -201,21 +225,31 @@ function SupabaseAdminPage() {
           (s.is_pro_football || s.admin_pro_football_override) &&
           (!s.expires_at || new Date(s.expires_at) > new Date()),
       );
-    },
+      },
+    }),
   });
 
   // Check if user is club admin (for club-scoped tools like restoring deleted chats)
   const { data: clubAdminClubIds = [] } = useQuery({
     queryKey: ["club-admin-club-ids", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("club_id")
-        .eq("user_id", user!.id)
-        .eq("role", "club_admin")
-        .not("club_id", "is", null);
-      return (data || []).map((r: any) => r.club_id).filter(Boolean) as string[];
-    },
+    queryFn: async () => withFeatureBackend<string[]>("membership", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("club_id")
+          .eq("user_id", user!.id)
+          .eq("role", "club_admin")
+          .not("club_id", "is", null);
+        return (data || []).map((r: any) => r.club_id).filter(Boolean) as string[];
+      },
+      icp: async (ctx) => {
+        const { myLiveRoleGrants } = await import("@/live/features/club");
+        const grants = await myLiveRoleGrants(ctx);
+        return Array.from(new Set(grants
+          .filter((g) => g.role === "club_admin" && g.club.length > 0)
+          .map((g) => g.club[0] as string)));
+      },
+    }),
     enabled: !!user,
   });
   const isClubAdmin = clubAdminClubIds.length > 0;
