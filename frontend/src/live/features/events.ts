@@ -2134,3 +2134,39 @@ export async function runLivePhotoPrompts(ctx: FeatureBackendContext): Promise<n
   const sent = await unwrapCandid(actor.run_photo_prompts(), "Run photo prompts");
   return Number(sent);
 }
+
+/** Imports a linked team's PlayHQ fixtures as on-chain game events. */
+export async function importLivePlayHQTeamFixtures(
+  ctx: FeatureBackendContext,
+  input: { clubId: string; teamId: string; competitionId: string; playhqTeamId: string },
+): Promise<{ created: number; updated: number; cancelled: number }> {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const r = await unwrapCandid(
+    actor.import_playhq_team_fixtures(input.clubId, input.teamId, input.competitionId, input.playhqTeamId),
+    "Import PlayHQ fixtures",
+  );
+  return { created: Number(r.created), updated: Number(r.updated), cancelled: Number(r.cancelled) };
+}
+
+/** Records (or clears) a team's PlayHQ link + auto-sync flag on-chain. */
+export async function setLivePlayHQTeamSync(
+  ctx: FeatureBackendContext,
+  input: { clubId: string; teamId: string; competitionId: string | null; playhqTeamId: string | null; auto: boolean },
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_playhq_team_sync(input.clubId, input.teamId, candidOpt(input.competitionId), candidOpt(input.playhqTeamId), input.auto),
+    "Save PlayHQ sync",
+  );
+}
+
+/** Governor-only: whether a PlayHQ key is stored (never returns the key). */
+export async function getLivePlayHQConfigStatus(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const r = await unwrapCandid(actor.get_playhq_config_status(), "Load PlayHQ settings");
+  return {
+    configured: r.configured,
+    baseUrl: r.base_url[0] ?? null,
+    updatedAt: r.updated_at_ms.length ? new Date(Number(r.updated_at_ms[0])).toISOString() : null,
+  };
+}
