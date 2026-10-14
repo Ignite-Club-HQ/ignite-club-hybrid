@@ -596,7 +596,7 @@ export function IcpMediaFeedPage() {
           ? profile?.avatar_url ?? post.ownerAvatarUrl
           : post.ownerAvatarUrl,
         assets: post.assets.map((a) =>
-          resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id] } : a,
+          resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id], loading: false } : a,
         ),
       }));
   }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url]);
@@ -767,7 +767,13 @@ export function IcpMediaFeedPage() {
                   onTouchCancel={cancelLongPress}
                 >
                   <AlbumCarousel
-                    photos={post.assets.map((asset) => ({ id: asset.id, file_url: asset.url }))}
+                    photos={post.assets.map((asset) => ({
+                      id: asset.id,
+                      // Still-unlocked photos pass no URL so the carousel's
+                      // LazyImage renders its pulsing skeleton until the
+                      // decrypted bytes arrive.
+                      file_url: asset.loading ? null : asset.url,
+                    }))}
                     onTap={(i) => openPostLightbox(post, i)}
                     priority={index < 2}
                   />
