@@ -455,11 +455,15 @@ export default function ProfilePage() {
             points: row.points as number,
           };
         },
-        // The canister's `get_leaderboard` returns a ranked top-N list but no
-        // dedicated "this user's rank" RPC — computing an exact rank would
-        // require pulling the full leaderboard client-side, which isn't a
-        // reasonable default for a profile badge. Gate to no-rank on ICP.
-        icp: async () => null,
+        // No dedicated "my rank" canister method — rank within the club's
+        // top-1000 all-time leaderboard (members outside it show no badge).
+        icp: async (ctx) => {
+          const { getLiveLeaderboard } = await import("@/live/features/points");
+          const entries = await getLiveLeaderboard(ctx, activeClubFilter, "User", "all", 1000);
+          const idx = entries.findIndex((e) => e.subject_id === user.id);
+          if (idx < 0) return null;
+          return { rank: idx + 1, total: entries.length, points: entries[idx].points };
+        },
       });
     },
     enabled: !!user && hasProAccess === true && !!activeClubFilter,
