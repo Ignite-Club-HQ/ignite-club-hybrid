@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { MessageSquare, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 const SCOPE_LABEL: Record<string, string> = {
   all_members: "Competition chat (all members)",
@@ -24,6 +25,15 @@ export function CompetitionChatsCard({ competitionId }: { competitionId: string 
   const { data: chats = [] } = useQuery({
     queryKey: ["competition-chats-links", competitionId],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("competitions")) {
+        // On-chain: chats recorded on competition_domain per scope.
+        const [{ icpCtx }, { listLiveOfficialChats }] = await Promise.all([
+          import("@/lib/icpClubTeamLookup"),
+          import("@/live/features/competitions"),
+        ]);
+        const rows = await listLiveOfficialChats(await icpCtx(), competitionId);
+        return rows.map((c) => ({ id: c.conversation_id, name: c.scope, competition_scope: c.scope, deleted_at: null as string | null }));
+      }
       const { data, error } = await (supabase.from("chat_groups") as any)
         .select("id, name, competition_scope, deleted_at")
         .eq("competition_id", competitionId);

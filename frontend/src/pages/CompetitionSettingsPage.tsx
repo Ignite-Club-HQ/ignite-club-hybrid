@@ -292,6 +292,14 @@ function LiveIcpCompetitionSettingsPage() {
 
       <CompetitionMemberChatCard competitionId={id!} />
 
+      <CompetitionChatsCard competitionId={id!} />
+
+      <CompetitionOfficialsCard
+        competitionId={id!}
+        competitionName={competition.name}
+        organizerClubId={competition.club_id || null}
+      />
+
       <div
         className={cn(
           "fixed inset-x-0 z-[45] border-t bg-background shadow-lg transition-transform",

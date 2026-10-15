@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+
+async function liveComp() {
+  const [{ icpCtx }, comp] = await Promise.all([import("@/lib/icpClubTeamLookup"), import("@/live/features/competitions")]);
+  return { ctx: await icpCtx(), comp };
+}
 
 const APP_URL = "https://igniteclubhq.app";
 type OfficialRole = "referee" | "committee";
@@ -35,12 +41,18 @@ export function CompetitionRoleLinkPanel({
   const qc = useQueryClient();
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
-  const key = ["competition-role-link", competitionId, role];
+  const isIcp = isFeatureRoutedToIcp("competitions");
+  const key = ["competition-role-link", competitionId, role, isIcp];
   const db = supabase as any;
 
   const { data: link, isLoading } = useQuery({
     queryKey: key,
     queryFn: async () => {
+      if (isIcp) {
+        const { ctx, comp } = await liveComp();
+        const l = await comp.getLiveRoleLink(ctx, competitionId, role);
+        return l ? { id: l.token, token: l.token } : null;
+      }
       const { data, error } = await db
         .from("competition_role_links")
         .select("id, token")
@@ -54,6 +66,11 @@ export function CompetitionRoleLinkPanel({
 
   const create = useMutation({
     mutationFn: async () => {
+      if (isIcp) {
+        const { ctx, comp } = await liveComp();
+        await comp.createLiveRoleLink(ctx, competitionId, role);
+        return;
+      }
       if (link) await db.from("competition_role_links").delete().eq("id", link.id);
       const { error } = await db.from("competition_role_links").insert({
         competition_id: competitionId,
@@ -70,6 +87,11 @@ export function CompetitionRoleLinkPanel({
   const revoke = useMutation({
     mutationFn: async () => {
       if (!link) return;
+      if (isIcp) {
+        const { ctx, comp } = await liveComp();
+        await comp.revokeLiveRoleLink(ctx, competitionId, role);
+        return;
+      }
       const { error } = await db.from("competition_role_links").delete().eq("id", link.id);
       if (error) throw error;
     },
