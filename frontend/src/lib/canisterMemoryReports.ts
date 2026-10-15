@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
 
 /** One canister's reading inside a report. */
 export type MemoryReading = { name: string; memory_mb: number | null; cycles_t?: number | null; note?: string };
@@ -26,7 +26,7 @@ const reportsIdl = ({ IDL }: any) =>
     add_memory_report: IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
   });
 
-async function reportsActor(ctx: Parameters<Parameters<typeof withFeatureBackend>[1]["icp"]>[0]) {
+async function reportsActor(ctx: FeatureBackendContext) {
   const { createLiveActor } = await import("@/live/icpAgent");
   const { actor } = await createLiveActor<ReportsActor>(ctx.target, ctx.identity, "insights_domain", "Insights", reportsIdl);
   return actor;
