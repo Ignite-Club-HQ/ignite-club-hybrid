@@ -3088,6 +3088,100 @@ export type Database = {
           },
         ]
       }
+      competition_role_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_user_id: string | null
+          competition_id: string
+          created_at: string
+          email: string
+          id: string
+          invited_by: string
+          invited_name: string | null
+          role: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          competition_id: string
+          created_at?: string
+          email: string
+          id?: string
+          invited_by: string
+          invited_name?: string | null
+          role: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          competition_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          invited_by?: string
+          invited_name?: string | null
+          role?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competition_role_invites_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      competition_role_links: {
+        Row: {
+          competition_id: string
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          id: string
+          max_uses: number | null
+          role: string
+          token: string
+          use_count: number
+        }
+        Insert: {
+          competition_id: string
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          id?: string
+          max_uses?: number | null
+          role: string
+          token: string
+          use_count?: number
+        }
+        Update: {
+          competition_id?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          id?: string
+          max_uses?: number | null
+          role?: string
+          token?: string
+          use_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competition_role_links_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       competition_roles: {
         Row: {
           competition_id: string
@@ -10801,6 +10895,14 @@ export type Database = {
         Args: { p_invite_id: string; p_user_id: string }
         Returns: Json
       }
+      accept_competition_role_link: {
+        Args: { p_token: string }
+        Returns: {
+          chat_group_id: string
+          competition_id: string
+          status: string
+        }[]
+      }
       accept_current_legal_terms: { Args: never; Returns: undefined }
       accept_guardian_parent_invite: {
         Args: { _invite_id: string }
@@ -11720,6 +11822,15 @@ export type Database = {
         Args: { p_token: string }
         Returns: string
       }
+      get_competition_role_link_status: {
+        Args: { p_token: string }
+        Returns: {
+          competition_id: string
+          competition_name: string
+          role: string
+          status: string
+        }[]
+      }
       get_engagement_streak: {
         Args: { _club_id: string; _user_id: string }
         Returns: number
@@ -12214,6 +12325,15 @@ export type Database = {
       }
       internal_functions_base_url: { Args: never; Returns: string }
       internal_service_role_key: { Args: never; Returns: string }
+      invite_competition_official: {
+        Args: {
+          p_competition_id: string
+          p_email: string
+          p_name: string
+          p_role: string
+        }
+        Returns: Json
+      }
       invite_shell_team_to_competition: {
         Args: {
           p_club_name: string

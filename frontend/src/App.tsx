@@ -117,6 +117,7 @@ const ManageFeedbackPage = lazyWithRetry(() => import("./pages/ManageFeedbackPag
 const ManageUsersPage = lazyWithRetry(() => import("./pages/ManageUsersPage"));
 const ManageBackupsPage = lazyWithRetry(() => import("./pages/ManageBackupsPage"));
 const JoinTeamPage = lazyWithRetry(() => import("./pages/JoinTeamPage"));
+const CompetitionOfficialJoinPage = lazyWithRetry(() => import("./pages/CompetitionOfficialJoinPage"));
 const JoinClubPage = lazyWithRetry(() => import("./pages/JoinClubPage"));
 const TermsOfServicePage = lazyWithRetry(() => import("./pages/TermsOfServicePage"));
 const PrivacyPolicyPage = lazyWithRetry(() => import("./pages/PrivacyPolicyPage"));
@@ -510,6 +511,7 @@ const App = () => {
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/verify-reset-code" element={<VerifyResetCodePage />} />
                 <Route path="/complete-profile" element={<CompleteProfilePage />} />
+                <Route path="/competitions/officials/join" element={<NativeOnlyGate><WithDeepLinkGate><CompetitionOfficialJoinPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/join/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/join/p/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/j/:code" element={<NativeOnlyGate><WithDeepLinkGate><ShortInviteRedirect /></WithDeepLinkGate></NativeOnlyGate>} />
