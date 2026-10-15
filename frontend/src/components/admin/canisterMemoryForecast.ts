@@ -42,3 +42,38 @@ export function forecastMemory(live: LiveMem[], history: MemoryReport[], now = D
   });
 }
 
+
+export const SPIKE_MIN_MB = 100;
+export const SPIKE_PCT = 0.15;
+
+export type SeriesPoint = { at: number; mb: number };
+export type Spike = { key: string; at: number; fromMb: number; toMb: number };
+
+/** Per-canister memory series, oldest first, from saved reports + an optional live point. */
+export function memorySeries(history: MemoryReport[], live: LiveMem[] = [], now = Date.now()): Record<string, SeriesPoint[]> {
+  const out: Record<string, SeriesPoint[]> = {};
+  for (const r of history) {
+    const at = Date.parse(r.at);
+    if (!Number.isFinite(at)) continue;
+    for (const x of r.readings) {
+      if (typeof x.memory_mb !== "number") continue;
+      (out[x.name] ??= []).push({ at, mb: x.memory_mb });
+    }
+  }
+  for (const l of live) if (l.memoryMb !== null) (out[l.key] ??= []).push({ at: now, mb: l.memoryMb });
+  for (const k of Object.keys(out)) out[k].sort((a, b) => a.at - b.at);
+  return out;
+}
+
+/** A spike = jump between consecutive readings of at least 100 MB AND 15%. */
+export function detectSpikes(series: Record<string, SeriesPoint[]>): Spike[] {
+  const spikes: Spike[] = [];
+  for (const [key, pts] of Object.entries(series)) {
+    for (let i = 1; i < pts.length; i++) {
+      const d = pts[i].mb - pts[i - 1].mb;
+      if (d >= SPIKE_MIN_MB && d >= pts[i - 1].mb * SPIKE_PCT)
+        spikes.push({ key, at: pts[i].at, fromMb: pts[i - 1].mb, toMb: pts[i].mb });
+    }
+  }
+  return spikes.sort((a, b) => b.at - a.at);
+}

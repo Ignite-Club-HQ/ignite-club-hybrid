@@ -67,17 +67,17 @@ export async function listMemoryReports(limit = 20): Promise<MemoryReport[]> {
 }
 
 /** Hand-entered reading, picked up by the next AI analysis run. */
-export async function addManualMemoryReading(readings: MemoryReading[]): Promise<void> {
+export async function addManualMemoryReading(readings: MemoryReading[], source = "manual"): Promise<void> {
   return withFeatureBackend("admin", {
     supabase: async () => {
       const { data: auth } = await supabase.auth.getUser();
       const { error } = await (supabase as any)
         .from("canister_memory_reports")
-        .insert({ source: "manual", readings, created_by: auth.user?.id });
+        .insert({ source, readings, created_by: auth.user?.id });
       if (error) throw error;
     },
     icp: async (ctx) => {
-      const res = await (await reportsActor(ctx)).add_memory_report("manual", JSON.stringify(readings), "");
+      const res = await (await reportsActor(ctx)).add_memory_report(source, JSON.stringify(readings), "");
       if ("Err" in res) throw new Error(res.Err);
     },
   });
