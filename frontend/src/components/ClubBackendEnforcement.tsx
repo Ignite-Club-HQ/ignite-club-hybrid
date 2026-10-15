@@ -50,6 +50,17 @@ import { clearUserClubIds, setUserClubIds } from "@/live/userClubs";
  */
 
 const ENFORCED_KEY = "ignite.clubBackendEnforced";
+// Remembers, per account, that this device already passed the club
+// sign-in-method check, so returning to the app never waits on it again
+// (the check still runs in the background and can still switch a member).
+const VERIFIED_KEY = "ignite.clubBackendVerified";
+
+function isVerified(userId: string): boolean {
+  try { return localStorage.getItem(VERIFIED_KEY) === userId; } catch { return false; }
+}
+function markVerified(userId: string) {
+  try { localStorage.setItem(VERIFIED_KEY, userId); } catch { /* ignore */ }
+}
 
 async function fetchSupabaseMembership(
   userId: string,
@@ -100,9 +111,12 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
     }
     // A new signed-in user must re-run the pin check before the route tree
     // renders again.
-    if (hasClubPins()) setSettled(false);
+    const alreadyVerified = isVerified(user.id);
+    if (hasClubPins() && !alreadyVerified) setSettled(false);
+    else setSettled(true);
     let cancelled = false;
     const settle = () => {
+      markVerified(user.id);
       if (!cancelled) setSettled(true);
     };
     void (async () => {
@@ -220,6 +234,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
           return;
         }
         sessionStorage.setItem(ENFORCED_KEY, "1");
+        try { localStorage.removeItem(VERIFIED_KEY); } catch { /* ignore */ }
         toast({
           title: "Switching sign-in method",
           description:
@@ -256,7 +271,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
 
   // Fast path: with no club pins configured nothing can force a backend
   // switch, so never hold the route tree on the membership fetch.
-  if (!user || settled || !hasClubPins()) {
+  if (!user || settled || !hasClubPins() || isVerified(user.id)) {
     return <>{children}</>;
   }
   return <AppSplash message="Signing you in..." />;
