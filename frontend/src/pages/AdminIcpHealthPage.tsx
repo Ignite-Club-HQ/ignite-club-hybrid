@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { listMemoryReports, addManualMemoryReading, type MemoryReading } from "@/lib/canisterMemoryReports";
+import { CanisterMemoryTrendCard } from "@/components/admin/CanisterMemoryTrendCard";
 import { CanisterMemoryForecastCard } from "@/components/admin/CanisterMemoryForecastCard";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -284,9 +285,28 @@ function HealthContent() {
 }
 
 function ForecastSection({ rows }: { rows: Row[] }) {
-  const reports = useQuery({ queryKey: ["canister-memory-reports"], queryFn: () => listMemoryReports(20) });
+  const qc = useQueryClient();
+  const reports = useQuery({ queryKey: ["canister-memory-reports"], queryFn: () => listMemoryReports(200) });
+  // Auto-record live readings (throttled to every 3h) so history builds without a workflow run.
+  const autoSaved = useRef(false);
+  useEffect(() => {
+    if (autoSaved.current || !reports.isSuccess) return;
+    const readings = rows.filter((r) => r.memoryMb !== null).map((r) => ({ name: r.key, memory_mb: Math.round(r.memoryMb!), cycles_t: r.cyclesT }));
+    if (!readings.length) return;
+    autoSaved.current = true;
+    const latest = Math.max(0, ...(reports.data ?? []).map((r) => Date.parse(r.at) || 0));
+    if (Date.now() - latest < 3 * 60 * 60 * 1000) return;
+    addManualMemoryReading(readings, "auto")
+      .then(() => qc.invalidateQueries({ queryKey: ["canister-memory-reports"] }))
+      .catch(() => {});
+  }, [rows, reports.isSuccess, reports.data, qc]);
   if (!rows.length) return null;
-  return <CanisterMemoryForecastCard live={rows} history={reports.data ?? []} />;
+  return (
+    <>
+      <CanisterMemoryTrendCard live={rows} history={reports.data ?? []} />
+      <CanisterMemoryForecastCard live={rows} history={reports.data ?? []} />
+    </>
+  );
 }
 
 function fmtMb(v: number | null): string {
@@ -296,7 +316,7 @@ function fmtMb(v: number | null): string {
 
 function MemoryReportsCard({ liveRows }: { liveRows: Row[] }) {
   const qc = useQueryClient();
-  const reports = useQuery({ queryKey: ["canister-memory-reports"], queryFn: () => listMemoryReports(20) });
+  const reports = useQuery({ queryKey: ["canister-memory-reports"], queryFn: () => listMemoryReports(200) });
   const [name, setName] = useState("");
   const [mb, setMb] = useState("");
   const [note, setNote] = useState("");
