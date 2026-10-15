@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { listMemoryReports, addManualMemoryReading, type MemoryReading } from "@/lib/canisterMemoryReports";
+import { CanisterMemoryForecastCard } from "@/components/admin/CanisterMemoryForecastCard";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Actor, HttpAgent, AnonymousIdentity } from "@icp-sdk/core/agent";
@@ -276,9 +277,16 @@ function HealthContent() {
           )}
         </CardContent>
       </Card>
+      <ForecastSection rows={rows} />
       <MemoryReportsCard liveRows={rows} />
     </div>
   );
+}
+
+function ForecastSection({ rows }: { rows: Row[] }) {
+  const reports = useQuery({ queryKey: ["canister-memory-reports"], queryFn: () => listMemoryReports(20) });
+  if (!rows.length) return null;
+  return <CanisterMemoryForecastCard live={rows} history={reports.data ?? []} />;
 }
 
 function fmtMb(v: number | null): string {
