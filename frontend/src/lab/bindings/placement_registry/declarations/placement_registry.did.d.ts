@@ -146,6 +146,10 @@ export interface _SERVICE {
   >,
   'list_audit' : ActorMethod<[[] | [bigint], number], result_audit_page>,
   'list_placements' : ActorMethod<[[] | [string], number], result_page>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'revoke_operator' : ActorMethod<[Principal], result_unit>,
   'set_availability' : ActorMethod<
     [backend_kind, boolean, bigint],

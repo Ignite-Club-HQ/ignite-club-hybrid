@@ -208,6 +208,17 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'is_pro' : IDL.Func([IDL.Principal], [Result_5], ['query']),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'my_roles' : IDL.Func([], [Result_11], ['query']),
     'my_terms_acceptance' : IDL.Func([], [Result_10], ['query']),
     'redeem_entitlement' : IDL.Func(

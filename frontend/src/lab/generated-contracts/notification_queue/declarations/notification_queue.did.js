@@ -307,6 +307,17 @@ export const idlFactory = ({ IDL }) => {
     'mark_failed' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'mark_read' : IDL.Func([IDL.Text], [Result], []),
     'mark_sent' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'merge_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],

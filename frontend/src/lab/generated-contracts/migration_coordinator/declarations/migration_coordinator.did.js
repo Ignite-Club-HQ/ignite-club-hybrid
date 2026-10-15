@@ -38,6 +38,17 @@ export const idlFactory = ({ IDL }) => {
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'markExported' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
     'markImported' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'orchestrateExport' : IDL.Func([IDL.Nat], [Migration], []),
     'orchestrateVerify' : IDL.Func([IDL.Nat], [Migration], []),
     'status' : IDL.Func(

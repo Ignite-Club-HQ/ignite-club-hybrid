@@ -883,6 +883,11 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -1072,6 +1077,13 @@ export interface MainInterface {
     set_attendance(event_id: string, account_id: string, present: boolean, note: string): Promise<{
         __kind__: "Ok";
         Ok: Attendance;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_child_rsvp(event_id: string, account_id: string, child_id: string, state: string, notes: string): Promise<{
+        __kind__: "Ok";
+        Ok: Rsvp;
     } | {
         __kind__: "Err";
         Err: string;
@@ -2379,6 +2391,14 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.mark_attendance(arg0, arg1);
         return from_candid_variant_n83(result);
     }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
+    }
     async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -2661,6 +2681,16 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.set_attendance(arg0, arg1, arg2, arg3);
         return from_candid_variant_n178(result);
+    }
+    async set_child_rsvp(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string): Promise<{
+        __kind__: "Ok";
+        Ok: Rsvp;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_child_rsvp(arg0, arg1, arg2, arg3, arg4);
+        return from_candid_variant_n15(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";

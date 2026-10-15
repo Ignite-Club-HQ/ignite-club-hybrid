@@ -177,6 +177,11 @@ export interface MainInterface {
     mark_failed(id: string, error: string): Promise<ScheduledResult>;
     mark_read(id: string): Promise<Result>;
     mark_sent(id: string, sent_message_id: string): Promise<ScheduledResult>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -517,6 +522,14 @@ export class Notification_queue implements notification_queueInterface {
     async mark_sent(arg0: string, arg1: string): Promise<ScheduledResult> {
         const result = await this.actor.mark_sent(arg0, arg1);
         return from_candid_ScheduledResult_n8(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";

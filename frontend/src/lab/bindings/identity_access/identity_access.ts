@@ -332,6 +332,11 @@ export interface identity_accessInterface {
     grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2>;
     grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2>;
     is_pro(arg0: Principal): Promise<Result_5>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     my_roles(): Promise<Result_11>;
     my_terms_acceptance(): Promise<Result_10>;
     redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12>;
@@ -433,6 +438,14 @@ export class Identity_access implements identity_accessInterface {
     async is_pro(arg0: Principal): Promise<Result_5> {
         const result = await this.actor.is_pro(arg0);
         return from_candid_Result_5_n16(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async my_roles(): Promise<Result_11> {
         const result = await this.actor.my_roles();

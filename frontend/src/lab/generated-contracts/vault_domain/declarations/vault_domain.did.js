@@ -203,6 +203,17 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'move_file' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],

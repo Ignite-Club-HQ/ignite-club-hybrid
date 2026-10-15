@@ -138,7 +138,12 @@ export interface MainInterface {
     list_comments(asset_id: string): Promise<Array<Comment>>;
     list_gallery_chat_cards(club_id: string, team_id: string): Promise<Array<GalleryChatCard>>;
     list_reactions(asset_id: string): Promise<Array<Reaction>>;
-    merge_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -152,7 +157,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -410,6 +415,14 @@ export class Media_metadata implements media_metadataInterface {
     }
     async list_reactions(arg0: string): Promise<Array<Reaction>> {
         const result = await this.actor.list_reactions(arg0);
+        return result;
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
         return result;
     }
     async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{

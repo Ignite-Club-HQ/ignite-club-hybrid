@@ -188,6 +188,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(AdEventSummary), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'add_memory_report' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'append_audit_log' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text), IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -352,9 +357,34 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'list_memory_reports' : IDL.Func(
+        [IDL.Nat],
+        [
+          IDL.Vec(
+            IDL.Record({
+              'at' : IDL.Int,
+              'analysis_json' : IDL.Text,
+              'source' : IDL.Text,
+              'readings_json' : IDL.Text,
+            })
+          ),
+        ],
+        ['query'],
+      ),
     'list_user_activity' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
         [IDL.Variant({ 'Ok' : IDL.Vec(UserActivityEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
         ['query'],
       ),
     'my_feedback' : IDL.Func([], [IDL.Vec(Feedback)], ['query']),

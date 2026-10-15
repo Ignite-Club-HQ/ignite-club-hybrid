@@ -998,6 +998,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(EventAttendance), 'Err' : IDL.Text })],
         [],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'merge_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
@@ -1194,6 +1205,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Attendance, 'Err' : IDL.Text })],
         [],
       ),
+    'set_child_rsvp' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -1289,11 +1305,6 @@ export const idlFactory = ({ IDL }) => {
     'set_roster' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : RosterEntry, 'Err' : IDL.Text })],
-        [],
-      ),
-    'set_child_rsvp' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
-        [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
         [],
       ),
     'set_rsvp' : IDL.Func(

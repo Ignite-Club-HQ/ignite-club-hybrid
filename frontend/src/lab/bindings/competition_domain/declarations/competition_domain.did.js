@@ -101,6 +101,14 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
     'competition_id' : IDL.Text,
   });
+  const RoleLink = IDL.Record({
+    'token' : IDL.Text,
+    'revoked' : IDL.Bool,
+    'role' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'competition_id' : IDL.Text,
+  });
   const Season = IDL.Record({
     'status' : IDL.Text,
     'name' : IDL.Text,
@@ -175,6 +183,11 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'entered_team_ids' : IDL.Vec(IDL.Text),
   });
+  const RoleLinkPreview = IDL.Record({
+    'name' : IDL.Text,
+    'role' : IDL.Text,
+    'competition_id' : IDL.Text,
+  });
   const Broadcast = IDL.Record({
     'id' : IDL.Text,
     'title' : IDL.Text,
@@ -188,6 +201,11 @@ export const idlFactory = ({ IDL }) => {
     'competition_id' : IDL.Text,
     'hide_ladder' : IDL.Bool,
   });
+  const OfficialChat = IDL.Record({
+    'conversation_id' : IDL.Text,
+    'scope' : IDL.Text,
+    'competition_id' : IDL.Text,
+  });
   const EoiTeamSuggestion = IDL.Record({
     'player_count' : IDL.Nat,
     'avg_skill' : IDL.Float64,
@@ -198,6 +216,11 @@ export const idlFactory = ({ IDL }) => {
     'accept_competition_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'accept_role_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : RoleGrant, 'Err' : IDL.Text })],
         [],
       ),
     'addBulkAccessPrincipal' : IDL.Func(
@@ -280,6 +303,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Competition, 'Err' : IDL.Text })],
         [],
       ),
+    'create_role_link' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : RoleLink, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_season' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
@@ -329,6 +357,16 @@ export const idlFactory = ({ IDL }) => {
     'get_my_pending_eois' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(EoiSubmission), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_role_link' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(RoleLink), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_role_link_preview' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : RoleLinkPreview, 'Err' : IDL.Text })],
         ['query'],
       ),
     'grant_role' : IDL.Func(
@@ -436,9 +474,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_official_chats' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(OfficialChat), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_seasons' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
         ['query'],
       ),
     'record_match' : IDL.Func(
@@ -481,6 +535,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'revoke_role_link' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'rotate_competition_join_link' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
@@ -509,6 +568,11 @@ export const idlFactory = ({ IDL }) => {
     'set_match_result' : IDL.Func(
         [IDL.Text, IDL.Nat16, IDL.Nat16, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_official_chat' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_season_divisions' : IDL.Func(

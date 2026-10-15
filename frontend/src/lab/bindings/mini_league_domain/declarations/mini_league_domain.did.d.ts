@@ -218,6 +218,10 @@ export interface Main {
     { 'Ok' : Array<MiniLeagueSession> } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'my_availability' : ActorMethod<[], Array<MiniLeagueSessionAvailability>>,
   'my_leagues' : ActorMethod<[], Array<MiniLeague>>,
   'rekey_principal' : ActorMethod<

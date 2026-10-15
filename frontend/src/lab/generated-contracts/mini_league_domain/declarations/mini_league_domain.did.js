@@ -377,6 +377,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeagueSession), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'my_availability' : IDL.Func(
         [],
         [IDL.Vec(MiniLeagueSessionAvailability)],

@@ -29,12 +29,33 @@ type Season =
    revision: nat64;
    status: text;
  };
+type RoleLinkPreview = 
+ record {
+   competition_id: text;
+   name: text;
+   role: text;
+ };
+type RoleLink = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   revoked: bool;
+   role: text;
+   token: text;
+ };
 type RoleGrant = 
  record {
    competition_id: text;
    role: text;
    team_id: opt text;
    user: principal;
+ };
+type OfficialChat = 
+ record {
+   competition_id: text;
+   conversation_id: text;
+   scope: text;
  };
 type Match = 
  record {
@@ -62,6 +83,10 @@ type Main =
        Err: text;
        Ok: CompetitionInvite;
      });
+   accept_role_link: (token: text) -> (variant {
+                                         Err: text;
+                                         Ok: RoleGrant;
+                                       });
    addBulkAccessPrincipal: ("principal": principal) ->
     (variant {
        Err: text;
@@ -136,6 +161,11 @@ type Main =
        Err: text;
        Ok: Competition;
      });
+   create_role_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleLink;
+     });
    create_season: (competition_id: text, name: text) ->
     (variant {
        Err: text;
@@ -143,7 +173,6 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
-   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    decline_competition_invite: (invite_id: text) ->
     (variant {
        Err: text;
@@ -185,6 +214,16 @@ type Main =
     (variant {
        Err: text;
        Ok: vec EoiSubmission;
+     }) query;
+   get_role_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: opt RoleLink;
+     }) query;
+   get_role_link_preview: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleLinkPreview;
      }) query;
    grant_role: ("principal": principal, role: text, competition_id: text,
     team_id: opt text) -> (variant {
@@ -286,10 +325,21 @@ type Main =
        Err: text;
        Ok: vec Competition;
      }) query;
+   list_official_chats: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec OfficialChat;
+     }) query;
    list_seasons: (competition_id: text) ->
     (variant {
        Err: text;
        Ok: vec Season;
+     }) query;
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
      }) query;
    record_match: (competition_id: text, home_team: text, away_team: text) ->
     (variant {
@@ -330,6 +380,11 @@ type Main =
        Err: text;
        Ok;
      });
+   revoke_role_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    rotate_competition_join_link: (competition_id: text) ->
     (variant {
        Err: text;
@@ -360,6 +415,11 @@ type Main =
                                            Err: text;
                                            Ok: Match;
                                          });
+   set_official_chat: (competition_id: text, scope: text, conversation_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    set_season_divisions: (competition_id: text, name: text, divisions:
     vec text) -> (variant {
                     Err: text;

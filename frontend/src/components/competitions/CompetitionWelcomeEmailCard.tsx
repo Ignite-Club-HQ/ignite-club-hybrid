@@ -1,3 +1,4 @@
+// icp-guard: allow rendered only on the Supabase competition settings page (email sign-in).
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Mail, Loader2, FileText, Upload, Trash2 } from "lucide-react";

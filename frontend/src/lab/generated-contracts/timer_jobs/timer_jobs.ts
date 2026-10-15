@@ -157,6 +157,11 @@ export interface timer_jobsInterface {
     import_state(arg0: snapshot): Promise<result_unit>;
     initialize(): Promise<result_unit>;
     list_jobs(arg0: string | null, arg1: number): Promise<result_page>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     reconcile(arg0: snapshot): Promise<result_reconciliation>;
     recover_expired(arg0: bigint): Promise<result_nat16>;
     recover_interrupted(): Promise<result_nat16>;
@@ -225,6 +230,14 @@ export class Timer_jobs implements timer_jobsInterface {
     async list_jobs(arg0: string | null, arg1: number): Promise<result_page> {
         const result = await this.actor.list_jobs(to_candid_opt_n34(arg0), arg1);
         return from_candid_result_page_n35(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async reconcile(arg0: snapshot): Promise<result_reconciliation> {
         const result = await this.actor.reconcile(to_candid_snapshot_n25(arg0));

@@ -133,6 +133,17 @@ export const idlFactory = ({ IDL }) => {
         [result_page],
         ['query'],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'version' : IDL.Func([], [IDL.Nat64], ['query']),
   });
 };

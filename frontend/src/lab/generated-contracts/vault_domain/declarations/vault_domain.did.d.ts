@@ -134,6 +134,10 @@ export interface Main {
     { 'Ok' : Array<VaultFileWithFolder> } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'move_file' : ActorMethod<
     [string, string],
     { 'Ok' : VaultFile } |
