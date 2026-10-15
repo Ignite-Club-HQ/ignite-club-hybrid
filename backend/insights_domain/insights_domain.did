@@ -131,6 +131,7 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
+   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_ad: (id: text) -> (variant {
                                Err: text;
                                Ok;
@@ -165,6 +166,8 @@ type Main =
                     Err: text;
                     Ok;
                   });
+   add_memory_report: (text, text, text) -> (variant { Ok; Err: text });
+   list_memory_reports: (nat) -> (vec record { at: int; source: text; readings_json: text; analysis_json: text }) query;
    is_app_admin: () -> (bool) query;
    list_active_ads: () -> (vec AppAd) query;
    list_ad_settings: () -> (variant {

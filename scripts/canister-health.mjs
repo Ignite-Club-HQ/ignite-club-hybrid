@@ -11,7 +11,7 @@
 // Requires the icp CLI with the deployer identity selected.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -104,3 +104,11 @@ console.log(
     ? "All canisters look healthy."
     : `${problems} canister(s) need attention — see warnings above.`,
 );
+
+// Hand the readings to the memory-analysis step when the workflow asks.
+if (process.env.HEALTH_JSON_OUT) {
+  writeFileSync(
+    process.env.HEALTH_JSON_OUT,
+    JSON.stringify(rows.map((r) => ({ name: r.name, memory_mb: r.memoryGB == null ? null : Math.round(r.memoryGB * 1000), cycles_t: r.balanceT }))),
+  );
+}

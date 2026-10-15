@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Float "mo:core/Float";
@@ -14,6 +15,14 @@ import Types "types";
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
 
   var governor : Principal;
 
@@ -544,6 +553,27 @@ persistent actor class Main(governorInit : Principal) {
       let ctr = if (impressions == 0) 0.0 else Int.toFloat(Nat32.toNat(clicks)) / Int.toFloat(Nat32.toNat(impressions));
       { sponsor_id; impressions; clicks; unique_reach; ctr }
     }))
+  };
+
+  // ================= Canister memory reports (app-admin only) =================
+  // Readings + AI analysis written by the Canister health workflow (governor)
+  // or added by hand by app admins. JSON kept as Text; capped at 200 entries.
+  var memoryReports : [{ at : Int; source : Text; readings_json : Text; analysis_json : Text; author : Principal }] = [];
+
+  public shared ({ caller }) func add_memory_report(source : Text, readings_json : Text, analysis_json : Text) : async { #Ok; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admins only");
+    if (readings_json.size() > 20_000 or analysis_json.size() > 20_000) return #Err("Report too large");
+    let entry = { at = Time.now(); source; readings_json; analysis_json; author = caller };
+    let all = memoryReports.concat([entry]);
+    memoryReports := if (all.size() > 200) all.sliceToArray(all.size() - 200, all.size()) else all;
+    #Ok
+  };
+
+  public query ({ caller }) func list_memory_reports(limit : Nat) : async [{ at : Int; source : Text; readings_json : Text; analysis_json : Text }] {
+    if (not isAppAdmin(caller)) return [];
+    let n = memoryReports.size();
+    let start = if (n > limit) n - limit : Nat else 0;
+    memoryReports.sliceToArray(start, n).map(func(r) = { at = r.at; source = r.source; readings_json = r.readings_json; analysis_json = r.analysis_json })
   };
 
   public query ({ caller }) func is_app_admin() : async Bool {
