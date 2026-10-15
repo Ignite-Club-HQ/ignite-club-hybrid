@@ -24,8 +24,28 @@ export default function CompetitionOfficialJoinPage() {
   const [problem, setProblem] = useState<string | null>(null);
   const [done, setDone] = useState<null | "joined" | "already">(null);
 
+  // "crl-" tokens are on-chain (competition_domain) links.
+  const isIcpLink = token.startsWith("crl-");
+
   useEffect(() => {
     (async () => {
+      if (isIcpLink) {
+        try {
+          const [{ AnonymousIdentity }, { getActiveIcpTarget }, { getLiveRoleLinkPreview }] = await Promise.all([
+            import("@icp-sdk/core/agent"),
+            import("@/live/targetRegistry"),
+            import("@/live/features/competitions"),
+          ]);
+          const p = await getLiveRoleLinkPreview({ identity: new AnonymousIdentity(), target: getActiveIcpTarget() } as any, token);
+          setInfo(p
+            ? { status: "valid", competition_id: p.competition_id, competition_name: p.name, role: p.role }
+            : { status: "invalid", competition_id: null, competition_name: null, role: null });
+        } catch {
+          setInfo({ status: "invalid", competition_id: null, competition_name: null, role: null });
+        }
+        setLoading(false);
+        return;
+      }
       if (!token) { setInfo({ status: "invalid", competition_id: null, competition_name: null, role: null }); setLoading(false); return; }
       const { data, error } = await (supabase as any).rpc("get_competition_role_link_status", { p_token: token });
       const row = (data as Info[] | null)?.[0];
@@ -45,6 +65,24 @@ export default function CompetitionOfficialJoinPage() {
     }
     setJoining(true);
     setProblem(null);
+    if (isIcpLink) {
+      try {
+        const [{ icpCtx }, { acceptLiveRoleLink }] = await Promise.all([
+          import("@/lib/icpClubTeamLookup"),
+          import("@/live/features/competitions"),
+        ]);
+        const grant = await acceptLiveRoleLink(await icpCtx(), token);
+        try { localStorage.removeItem("ignite_pending_official_link"); } catch { /* ignore */ }
+        setJoining(false);
+        setDone("joined");
+        // Chat membership is added by the organisers' app on their next visit.
+        setTimeout(() => navigate(`/competitions/${grant.competition_id}`, { replace: true }), 1200);
+      } catch {
+        setJoining(false);
+        setProblem("Something went wrong. Please try again.");
+      }
+      return;
+    }
     const { data, error } = await (supabase as any).rpc("accept_competition_role_link", { p_token: token });
     setJoining(false);
     const row = (data as { status: OfficialLinkStatus | "joined" | "already"; competition_id: string | null; chat_group_id: string | null }[] | null)?.[0];
@@ -75,7 +113,7 @@ export default function CompetitionOfficialJoinPage() {
             <>
               <CheckCircle2 className="h-10 w-10 text-primary" />
               <p className="font-semibold">{done === "already" ? `You're already a ${role}` : "You're in!"}</p>
-              <p className="text-sm text-muted-foreground">Taking you to the {info?.role === "referee" ? "referees" : "committee"} chat…</p>
+              <p className="text-sm text-muted-foreground">{isIcpLink ? "Taking you to the competition. The chat appears once the organisers open their settings." : `Taking you to the ${info?.role === "referee" ? "referees" : "committee"} chat…`}</p>
             </>
           ) : linkProblem || problem ? (
             <>
