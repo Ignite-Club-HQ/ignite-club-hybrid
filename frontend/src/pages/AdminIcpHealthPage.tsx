@@ -378,7 +378,7 @@ function MemoryReportsCard({ liveRows }: { liveRows: Row[] }) {
           <div className="border-t pt-3">
             <p className="text-sm font-medium mb-1">History</p>
             <ul className="text-xs space-y-1 max-h-64 overflow-auto">
-              {reports.data.map((r, i) => (
+              {reports.data.slice(0, 20).map((r, i) => (
                 <li key={i} className="text-muted-foreground">
                   {new Date(r.at).toLocaleString()} · {r.source === "manual" ? "added by admin" : "weekly check"} ·{" "}
                   {r.readings.slice(0, 4).map((x) => `${x.name} ${fmtMb(x.memory_mb)}`).join(", ")}

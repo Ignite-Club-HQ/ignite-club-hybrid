@@ -30,3 +30,18 @@ describe("forecastMemory", () => {
     expect(f.level).toBe("ok");
   });
 });
+
+import { detectSpikes, memorySeries } from "./canisterMemoryForecast";
+
+describe("detectSpikes", () => {
+  const rep = (d: number, mb: number) => ({ at: daysAgo(d), source: "auto", readings: [{ name: "a", memory_mb: mb }], analysis: null });
+  it("flags a jump of 100 MB and 15%", () => {
+    expect(detectSpikes(memorySeries([rep(2, 500), rep(1, 650)], [], now))).toHaveLength(1);
+  });
+  it("ignores a 100 MB jump that is under 15%", () => {
+    expect(detectSpikes(memorySeries([rep(2, 2000), rep(1, 2150)], [], now))).toHaveLength(0);
+  });
+  it("ignores a 15% jump under 100 MB", () => {
+    expect(detectSpikes(memorySeries([rep(2, 100), rep(1, 180)], [], now))).toHaveLength(0);
+  });
+});
