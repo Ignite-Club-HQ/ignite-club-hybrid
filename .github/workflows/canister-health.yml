@@ -67,12 +67,3 @@ jobs:
           cd "$RUNNER_TEMP/icp-no-project"
           HEALTH_JSON_OUT="$RUNNER_TEMP/health.json" node "$RUNNER_TEMP/canister-health.mjs"
 
-      - name: AI memory analysis
-        env:
-          LOVABLE_API_KEY: ${{ secrets.LOVABLE_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          cp scripts/canister-memory-ai.mjs "$RUNNER_TEMP/canister-memory-ai.mjs"
-          cd "$RUNNER_TEMP/icp-no-project"
-          HEALTH_JSON_OUT="$RUNNER_TEMP/health.json" node "$RUNNER_TEMP/canister-memory-ai.mjs"
