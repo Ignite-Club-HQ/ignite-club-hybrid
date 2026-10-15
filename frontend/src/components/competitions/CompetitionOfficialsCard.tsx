@@ -532,7 +532,7 @@ export function CompetitionOfficialsCard({
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </CardContent>
     </Card>
   );
