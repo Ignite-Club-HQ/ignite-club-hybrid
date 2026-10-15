@@ -670,6 +670,33 @@ export type Database = {
           },
         ]
       }
+      canister_memory_reports: {
+        Row: {
+          analysis: Json | null
+          created_at: string
+          created_by: string | null
+          id: string
+          readings: Json
+          source: string
+        }
+        Insert: {
+          analysis?: Json | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          readings?: Json
+          source?: string
+        }
+        Update: {
+          analysis?: Json | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          readings?: Json
+          source?: string
+        }
+        Relationships: []
+      }
       chat_group_join_requests: {
         Row: {
           created_at: string
