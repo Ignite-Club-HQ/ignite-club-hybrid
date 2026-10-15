@@ -20,9 +20,8 @@ import { DEPLOYED_MAINNET_CANISTER_IDS } from "@/live/generated/deployedCanister
  * (no sign-in needed — it reveals nothing private) and estimates burn rate
  * from snapshots kept on this device.
  *
- * Memory comes live from each canister's public `memory_stats` query. The
- * AI growth analysis is produced server-side by the Canister health workflow
- * (AI key never reaches the browser) and is readable by app admins only.
+ * Memory comes live from each canister's public `memory_stats` query, and
+ * saved readings build a history so growth is visible over time.
  */
 
 const LOW_CYCLES_T = 1; // warn below 1 trillion cycles (≈ US$1.30)
