@@ -924,14 +924,14 @@ function SupabaseMediaPage() {
       console.warn("[MediaDiag] pro-gate-watchdog", { t: new Date().toISOString(), abortedInFlight: aborted });
       setProGateTimedOut(true);
       queryClient.refetchQueries({ queryKey: ["has-pro-access"] });
-    }, 6000);
+    }, isIcpMode ? 2500 : 6000);
     return () => clearInterval(timer);
-  }, [proGateStuck, queryClient]);
+  }, [proGateStuck, queryClient, isIcpMode]);
 
   // Only show loading state on initial resolution — never on refetch/resume.
   // Offline, the pro check can never resolve, so it must not gate rendering:
   // cached photos are shown instead of an indefinite skeleton/blank area.
-  const isCheckingProAccess = isOnline && !proAccessEverResolved.current && !proGateTimedOut && (!user || loadingProAccess || activeClubProLoading || loadingRoles || waitingOnRolesWithoutFallback || proQueryNotYetResolved);
+  const isCheckingProAccess = isOnline && !(isIcpMode && (allPhotos?.length ?? 0) > 0) && !proAccessEverResolved.current && !proGateTimedOut && (!user || loadingProAccess || activeClubProLoading || loadingRoles || waitingOnRolesWithoutFallback || proQueryNotYetResolved);
 
   // Get ALL loaded photo IDs (not filtered) for fetching reactions/comments
   const allPhotoIds = useMemo(() => allPhotos?.map(p => p.id) || [], [allPhotos]);
@@ -1272,7 +1272,7 @@ function SupabaseMediaPage() {
   // pro check can never hold the whole page on skeletons.
   // Offline never shows skeletons — we render cached photos or a friendly
   // offline empty state instead of an indefinite shimmer.
-  const showSkeletons = isOnline && (loadingPhotos || (loadingProAccess && !proGateTimedOut)) && allPhotos.length === 0;
+  const showSkeletons = isOnline && (loadingPhotos || (!isIcpMode && loadingProAccess && !proGateTimedOut)) && allPhotos.length === 0;
 
   // Diagnostic: log what's blocking the skeleton from clearing.
   useEffect(() => {

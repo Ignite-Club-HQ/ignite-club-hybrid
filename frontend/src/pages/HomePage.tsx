@@ -2149,11 +2149,14 @@ export default function HomePage() {
   useEffect(() => {
     setRevealTimedOut(false);
     if (!initialized || computedShowContent || hasRevealed) return;
-    const timer = setTimeout(() => setRevealTimedOut(true), 10000);
+    const timer = setTimeout(() => setRevealTimedOut(true), resolveAuthBackend() === "icp" ? 2500 : 10000);
     return () => clearTimeout(timer);
   }, [initialized, computedShowContent, hasRevealed, user?.id, activeClubFilter]);
 
-  const showContent = computedShowContent || hasRevealed || revealTimedOut;
+  // ICP reads are slow on cold start; when we already have a last-seen
+  // snapshot, show it immediately instead of waiting for every section.
+  const icpCachedReveal = resolveAuthBackend() === "icp" && initialized && (!!nextUpCachedSnapshot || events.length > 0);
+  const showContent = computedShowContent || hasRevealed || revealTimedOut || icpCachedReveal;
 
   // Empty-state gate: only show the "Find or Join a Club" welcome once we
   // authoritatively know the user has zero clubs AND zero teams. The
