@@ -148,6 +148,7 @@ const EventGroupPitchPage = lazyWithRetry(() => import("./pages/EventGroupPitchP
 const AppSettingsPage = lazyWithRetry(() => import("./pages/AppSettingsPage"));
 const AdminAICatchUpPage = lazyWithRetry(() => import("./pages/AdminAICatchUpPage"));
 const AdminIcpLlmTestPage = lazyWithRetry(() => import("./pages/AdminIcpLlmTestPage"));
+const AdminIcpDataPage = lazyWithRetry(() => import("./pages/AdminIcpDataPage"));
 const PlacementAdminSettingsPage = lazyWithRetry(() => import("./pages/PlacementAdminSettingsPage"));
 const AdMobSettingsPage = lazyWithRetry(() => import("./pages/AdMobSettingsPage"));
 const ClassEnrolmentPage = lazyWithRetry(() => import("./pages/ClassEnrolmentPage"));
@@ -617,6 +618,7 @@ const App = () => {
                   <Route path="/admin/placement-settings" element={<PlacementAdminSettingsPage />} />
                   <Route path="/admin/ai-catch-up" element={<AdminAICatchUpPage />} />
                   <Route path="/admin/icp-llm-test" element={<AdminIcpLlmTestPage />} />
+                  <Route path="/admin/icp-data" element={<AdminIcpDataPage />} />
                   <Route path="/admin/icp-canisters" element={<Navigate to="/admin/placement-settings" replace />} />
                   <Route path="/admin/admob" element={<AdMobSettingsPage />} />
                  <Route path="/admin/send-update-reminder" element={<SendUpdateReminderPage />} />
