@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forecastMemory } from "./CanisterMemoryForecastCard";
+import { forecastMemory } from "./canisterMemoryForecast";
 
 const now = Date.parse("2026-10-16T00:00:00Z");
 const daysAgo = (d: number) => new Date(now - d * 86_400_000).toISOString();
