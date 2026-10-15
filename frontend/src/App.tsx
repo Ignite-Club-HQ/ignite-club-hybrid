@@ -510,6 +510,7 @@ const App = () => {
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/verify-reset-code" element={<VerifyResetCodePage />} />
                 <Route path="/complete-profile" element={<CompleteProfilePage />} />
+                <Route path="/competitions/officials/join" element={<NativeOnlyGate><WithDeepLinkGate><CompetitionOfficialJoinPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/join/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/join/p/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/j/:code" element={<NativeOnlyGate><WithDeepLinkGate><ShortInviteRedirect /></WithDeepLinkGate></NativeOnlyGate>} />
