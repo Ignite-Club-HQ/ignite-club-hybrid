@@ -127,4 +127,10 @@ module {
   };
   public type DivisionSetting = { competition_id : Text; division : Text; hide_ladder : Bool };
   public type Broadcast = { id : Text; competition_id : Text; sender : Principal; title : Text; body : Text; created_at_ms : Nat64 };
+  // Reusable referee/committee join link (one active per competition+role).
+  public type RoleLink = { competition_id : Text; role : Text; token : Text; revoked : Bool; created_by : Principal; created_at_ms : Nat64 };
+  public type RoleLinkPreview = { competition_id : Text; name : Text; role : Text };
+  // Messaging_domain group created for a competition chat scope
+  // ("referees" | "committee" | "coordinators" | "all_members").
+  public type OfficialChat = { competition_id : Text; scope : Text; conversation_id : Text };
 }

@@ -100,6 +100,84 @@ persistent actor class Main(governorInit : Principal) {
   var broadcasts : [Types.Broadcast];
   var clubDomainCanister : ?Principal;
   var personalCompetitionOwners : [(Text, Principal)];
+  var roleLinks : [Types.RoleLink];
+  var officialChats : [Types.OfficialChat];
+
+  // ---------------- Referee / committee officials ----------------
+
+  func isOfficialRole(role : Text) : Bool { role == "referee" or role == "committee" };
+  func isChatScope(scope : Text) : Bool { scope == "referees" or scope == "committee" or scope == "coordinators" or scope == "all_members" };
+
+  func competitionName(competition_id : Text) : ?Text {
+    switch (competitions.find(func(c) = c.id == competition_id)) { case (?c) ?c.name; case null null }
+  };
+
+  // Replaces any active link for (competition, role) with a fresh
+  // unguessable token; the old link stops working immediately.
+  public shared ({ caller }) func create_role_link(competition_id : Text, role : Text) : async { #Ok : Types.RoleLink; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not isOfficialRole(role)) return #Err("Invalid role");
+    if (competitionName(competition_id) == null) return #Err("Competition not found");
+    let hex = eoiHex(await Random.blob());
+    let link : Types.RoleLink = { competition_id; role; token = "crl-" # hex; revoked = false; created_by = caller; created_at_ms = nowMs() };
+    roleLinks := roleLinks.filter(func(l) = not (l.competition_id == competition_id and l.role == role)).concat([link]);
+    #Ok(link)
+  };
+
+  public shared ({ caller }) func revoke_role_link(competition_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    roleLinks := roleLinks.filter(func(l) = not (l.competition_id == competition_id and l.role == role));
+    #Ok
+  };
+
+  public query ({ caller }) func get_role_link(competition_id : Text, role : Text) : async { #Ok : ?Types.RoleLink; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    #Ok(roleLinks.find(func(l) = l.competition_id == competition_id and l.role == role and not l.revoked))
+  };
+
+  // Public: what the join page shows before sign-in.
+  public query func get_role_link_preview(token : Text) : async { #Ok : Types.RoleLinkPreview; #Err : Text } {
+    switch (roleLinks.find(func(l) = l.token == token and not l.revoked)) {
+      case null #Err("Link not found");
+      case (?l) switch (competitionName(l.competition_id)) {
+        case null #Err("Competition not found");
+        case (?name) #Ok({ competition_id = l.competition_id; name; role = l.role });
+      };
+    }
+  };
+
+  public shared ({ caller }) func accept_role_link(token : Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
+    auth(caller);
+    switch (roleLinks.find(func(l) = l.token == token and not l.revoked)) {
+      case null #Err("Link not found or turned off");
+      case (?l) {
+        let grant : Types.RoleGrant = { user = caller; role = l.role; competition_id = l.competition_id; team_id = null };
+        if (not roles.any(func(r) = r.user.equal(caller) and r.role == l.role and r.competition_id == l.competition_id and r.team_id == null)) {
+          roles := roles.concat([grant]);
+        };
+        #Ok(grant)
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_official_chat(competition_id : Text, scope : Text, conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not isChatScope(scope) or not valid(conversation_id)) return #Err("Invalid chat");
+    officialChats := officialChats.filter(func(c) = not (c.competition_id == competition_id and c.scope == scope)).concat([{ competition_id; scope; conversation_id }]);
+    #Ok
+  };
+
+  // Readable by competition managers and anyone holding a role in it.
+  public query ({ caller }) func list_official_chats(competition_id : Text) : async { #Ok : [Types.OfficialChat]; #Err : Text } {
+    auth(caller);
+    let hasRole = roles.any(func(r) = r.user.equal(caller) and r.competition_id == competition_id);
+    if (not canManageCompetition(caller, competition_id) and not hasRole) return #Err("Forbidden");
+    #Ok(officialChats.filter(func(c) = c.competition_id == competition_id))
+  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
