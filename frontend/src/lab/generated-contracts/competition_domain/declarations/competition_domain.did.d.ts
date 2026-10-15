@@ -149,6 +149,11 @@ export interface Main {
     { 'Ok' : CompetitionInvite } |
       { 'Err' : string }
   >,
+  'accept_role_link' : ActorMethod<
+    [string],
+    { 'Ok' : RoleGrant } |
+      { 'Err' : string }
+  >,
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -219,6 +224,11 @@ export interface Main {
     { 'Ok' : Competition } |
       { 'Err' : string }
   >,
+  'create_role_link' : ActorMethod<
+    [string, string],
+    { 'Ok' : RoleLink } |
+      { 'Err' : string }
+  >,
   'create_season' : ActorMethod<
     [string, string],
     { 'Ok' : Season } |
@@ -259,6 +269,16 @@ export interface Main {
   'get_my_pending_eois' : ActorMethod<
     [],
     { 'Ok' : Array<EoiSubmission> } |
+      { 'Err' : string }
+  >,
+  'get_role_link' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [RoleLink] } |
+      { 'Err' : string }
+  >,
+  'get_role_link_preview' : ActorMethod<
+    [string],
+    { 'Ok' : RoleLinkPreview } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -361,10 +381,19 @@ export interface Main {
     { 'Ok' : Array<Competition> } |
       { 'Err' : string }
   >,
+  'list_official_chats' : ActorMethod<
+    [string],
+    { 'Ok' : Array<OfficialChat> } |
+      { 'Err' : string }
+  >,
   'list_seasons' : ActorMethod<
     [string],
     { 'Ok' : Array<Season> } |
       { 'Err' : string }
+  >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
   >,
   'record_match' : ActorMethod<
     [string, string, string],
@@ -406,6 +435,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'revoke_role_link' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'rotate_competition_join_link' : ActorMethod<
     [string],
     { 'Ok' : CompetitionJoinLink } |
@@ -434,6 +468,11 @@ export interface Main {
   'set_match_result' : ActorMethod<
     [string, number, number, bigint],
     { 'Ok' : Match } |
+      { 'Err' : string }
+  >,
+  'set_official_chat' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_season_divisions' : ActorMethod<
@@ -543,10 +582,28 @@ export interface Match {
   'arrival_minutes_before' : [] | [number],
   'competition_id' : string,
 }
+export interface OfficialChat {
+  'conversation_id' : string,
+  'scope' : string,
+  'competition_id' : string,
+}
 export interface RoleGrant {
   'role' : string,
   'user' : Principal,
   'team_id' : [] | [string],
+  'competition_id' : string,
+}
+export interface RoleLink {
+  'token' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'competition_id' : string,
+}
+export interface RoleLinkPreview {
+  'name' : string,
+  'role' : string,
   'competition_id' : string,
 }
 export interface Season {
