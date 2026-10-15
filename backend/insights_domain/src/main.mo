@@ -555,6 +555,27 @@ persistent actor class Main(governorInit : Principal) {
     }))
   };
 
+  // ================= Canister memory reports (app-admin only) =================
+  // Readings + AI analysis written by the Canister health workflow (governor)
+  // or added by hand by app admins. JSON kept as Text; capped at 200 entries.
+  var memoryReports : [{ at : Int; source : Text; readings_json : Text; analysis_json : Text; author : Principal }] = [];
+
+  public shared ({ caller }) func add_memory_report(source : Text, readings_json : Text, analysis_json : Text) : async { #Ok; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admins only");
+    if (readings_json.size() > 20_000 or analysis_json.size() > 20_000) return #Err("Report too large");
+    let entry = { at = Time.now(); source; readings_json; analysis_json; author = caller };
+    let all = memoryReports.concat([entry]);
+    memoryReports := if (all.size() > 200) all.sliceToArray(all.size() - 200, all.size()) else all;
+    #Ok
+  };
+
+  public query ({ caller }) func list_memory_reports(limit : Nat) : async [{ at : Int; source : Text; readings_json : Text; analysis_json : Text }] {
+    if (not isAppAdmin(caller)) return [];
+    let n = memoryReports.size();
+    let start = if (n > limit) n - limit : Nat else 0;
+    memoryReports.sliceToArray(start, n).map(func(r) = { at = r.at; source = r.source; readings_json = r.readings_json; analysis_json = r.analysis_json })
+  };
+
   public query ({ caller }) func is_app_admin() : async Bool {
     isAppAdmin(caller)
   };
