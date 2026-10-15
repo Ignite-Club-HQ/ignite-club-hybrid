@@ -37,8 +37,10 @@ writeFileSync(
         // Club website (separate project) signs in as this canister too, so
         // one person gets the same principal on the app and the website.
         "https://igniteclubhq.com",
+        "https://www.igniteclubhq.com",
         "https://ignite-club-heart.lovable.app",
         "https://pjx2u-tiaaa-aaaac-qhj3a-cai.icp0.io",
+        "https://id-preview--4b755d42-e84b-4c9c-a8c7-5afa433410a4.lovable.app",
       ],
     },
     null,
