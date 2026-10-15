@@ -60,6 +60,13 @@ async function resolveChatRoute(
   if (conversationId.startsWith("club-admin-")) {
     return `/messages/club-admin/${conversationId}${suffix}`;
   }
+  // DM conversations are created as `dm-<n>` (see messaging_domain's
+  // send_welcome_message / send_system_message) and have no group metadata,
+  // so recognise the shape directly — otherwise welcome/support DM taps
+  // landed back on the message list the user was already viewing.
+  if (conversationId.startsWith("dm-")) {
+    return `/messages/dm/${conversationId}${suffix}`;
+  }
   return "/messages";
 }
 
