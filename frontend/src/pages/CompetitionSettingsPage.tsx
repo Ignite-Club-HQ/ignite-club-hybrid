@@ -20,6 +20,10 @@ import { cn } from "@/lib/utils";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { CompetitionAdminsCard } from "@/components/competitions/CompetitionAdminsCard";
+import { CompetitionOfficialsCard } from "@/components/competitions/CompetitionOfficialsCard";
+import { CompetitionChatsCard } from "@/components/competitions/CompetitionChatsCard";
+import { InviteMessageDefaultCard } from "@/components/invite/InviteMessageDefaultCard";
+import { CompetitionWelcomeEmailCard } from "@/components/competitions/CompetitionWelcomeEmailCard";
 import { CompetitionMemberChatCard } from "@/components/competitions/CompetitionMemberChatCard";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabCompetitionSettings } from "@/lab/fixtureDataLayer";
@@ -647,6 +651,18 @@ function SupabaseCompetitionSettingsPage() {
       />
 
       {/* 6. Competition-wide chat — opt-in thread for all members of entered teams */}
+      <CompetitionChatsCard competitionId={id!} />
+
+      <CompetitionOfficialsCard
+        competitionId={id!}
+        competitionName={competition.name}
+        organizerClubId={(competition as any).organizer_club_id ?? null}
+      />
+
+      <InviteMessageDefaultCard scope="competition" scopeId={id!} />
+
+      <CompetitionWelcomeEmailCard competitionId={id!} />
+
       <CompetitionMemberChatCard competitionId={id!} />
 
 

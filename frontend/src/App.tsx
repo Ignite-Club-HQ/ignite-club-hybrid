@@ -117,6 +117,7 @@ const ManageFeedbackPage = lazyWithRetry(() => import("./pages/ManageFeedbackPag
 const ManageUsersPage = lazyWithRetry(() => import("./pages/ManageUsersPage"));
 const ManageBackupsPage = lazyWithRetry(() => import("./pages/ManageBackupsPage"));
 const JoinTeamPage = lazyWithRetry(() => import("./pages/JoinTeamPage"));
+const CompetitionOfficialJoinPage = lazyWithRetry(() => import("./pages/CompetitionOfficialJoinPage"));
 const JoinClubPage = lazyWithRetry(() => import("./pages/JoinClubPage"));
 const TermsOfServicePage = lazyWithRetry(() => import("./pages/TermsOfServicePage"));
 const PrivacyPolicyPage = lazyWithRetry(() => import("./pages/PrivacyPolicyPage"));
