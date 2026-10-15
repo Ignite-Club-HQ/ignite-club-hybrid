@@ -323,6 +323,12 @@ function SupabaseAdminPage() {
               description="Browse clubs, teams, members, events, news and sponsors stored on the canisters"
               onClick={() => navigate("/admin/icp-data")}
             />
+            <AdminMenuItem
+              icon={Globe2}
+              label="Canister Health"
+              description="Live cycle balances, burn rate and days remaining for every canister"
+              onClick={() => navigate("/admin/icp-health")}
+            />
           </CardContent>
         </Card>
       )}
