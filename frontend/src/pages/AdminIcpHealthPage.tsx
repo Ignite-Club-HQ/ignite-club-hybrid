@@ -34,10 +34,16 @@ type Row = {
   burnTPerDay: number | null;
   daysLeft: number | null;
   error: string | null;
+  memoryMb: number | null; // null until the memory_stats deploy lands
 };
 
 const cyclesIdl: IDL.InterfaceFactory = ({ IDL }) =>
-  IDL.Service({ cycles_balance: IDL.Func([], [IDL.Nat], ["query"]) });
+  IDL.Service({
+    cycles_balance: IDL.Func([], [IDL.Nat], ["query"]),
+    memory_stats: IDL.Func([], [IDL.Record({ heap_bytes: IDL.Nat, memory_bytes: IDL.Nat, stable_bytes: IDL.Nat })], ["query"]),
+  });
+type MemStats = { heap_bytes: bigint; memory_bytes: bigint; stable_bytes: bigint };
+const WARN_MEMORY_MB = 3000;
 
 function loadSnapshots(): Snapshot[] {
   try {
@@ -89,11 +95,12 @@ async function fetchHealth(): Promise<Row[]> {
   const keys = Object.keys(ids).sort();
   const results = await Promise.allSettled(
     keys.map(async (key) => {
-      const actor = Actor.createActor<{ cycles_balance: () => Promise<bigint> }>(cyclesIdl, {
+      const actor = Actor.createActor<{ cycles_balance: () => Promise<bigint>; memory_stats: () => Promise<MemStats> }>(cyclesIdl, {
         agent,
         canisterId: Principal.fromText(ids[key]),
       });
-      return { key, balance: await actor.cycles_balance() };
+      const [balance, mem] = await Promise.all([actor.cycles_balance(), actor.memory_stats().catch(() => null)]);
+      return { key, balance, memoryMb: mem ? Number(mem.memory_bytes) / 1e6 : null };
     }),
   );
 
@@ -109,6 +116,7 @@ async function fetchHealth(): Promise<Row[]> {
         burnTPerDay: null,
         daysLeft: null,
         error: null,
+        memoryMb: r.value.memoryMb,
       };
     }
     return {
@@ -118,6 +126,7 @@ async function fetchHealth(): Promise<Row[]> {
       burnTPerDay: null,
       daysLeft: null,
       error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      memoryMb: null,
     };
   });
 
