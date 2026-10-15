@@ -763,6 +763,10 @@ export interface Main {
     { 'Ok' : Array<EventAttendance> } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'merge_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
@@ -935,6 +939,11 @@ export interface Main {
     { 'Ok' : Attendance } |
       { 'Err' : string }
   >,
+  'set_child_rsvp' : ActorMethod<
+    [string, string, string, string, string],
+    { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
   'set_club_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -1034,11 +1043,6 @@ export interface Main {
   'set_roster' : ActorMethod<
     [string, string, [] | [string]],
     { 'Ok' : RosterEntry } |
-      { 'Err' : string }
-  >,
-  'set_child_rsvp' : ActorMethod<
-    [string, string, string, string, string],
-    { 'Ok' : Rsvp } |
       { 'Err' : string }
   >,
   'set_rsvp' : ActorMethod<

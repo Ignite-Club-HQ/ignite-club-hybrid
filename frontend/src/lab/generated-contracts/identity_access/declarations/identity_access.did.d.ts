@@ -249,6 +249,10 @@ export interface _SERVICE {
    * any authenticated principal (boolean only, no entitlement detail leaked).
    */
   'is_pro' : ActorMethod<[Principal], Result_5>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   /**
    * Every role grant held by the caller, across all clubs/teams.
    */

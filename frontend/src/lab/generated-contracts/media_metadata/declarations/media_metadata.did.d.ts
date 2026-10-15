@@ -127,6 +127,10 @@ export interface Main {
     Array<GalleryChatCard>
   >,
   'list_reactions' : ActorMethod<[string], Array<Reaction>>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'merge_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |

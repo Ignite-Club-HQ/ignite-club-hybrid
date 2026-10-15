@@ -108,6 +108,10 @@ export interface _SERVICE {
   'get_migration' : ActorMethod<[string], result_opt_migration>,
   'get_route' : ActorMethod<[string], result_opt_route>,
   'list_routes' : ActorMethod<[[] | [string], number], result_page>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'version' : ActorMethod<[], bigint>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

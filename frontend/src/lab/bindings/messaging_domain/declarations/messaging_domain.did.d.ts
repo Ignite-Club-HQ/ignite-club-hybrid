@@ -429,6 +429,10 @@ export interface Main {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'merge_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |

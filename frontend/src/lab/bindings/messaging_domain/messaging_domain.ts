@@ -572,6 +572,11 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -1717,6 +1722,14 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.mark_read(arg0, arg1);
         return from_candid_variant_n79(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
