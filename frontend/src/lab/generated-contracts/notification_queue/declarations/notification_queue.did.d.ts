@@ -107,6 +107,10 @@ export interface Main {
   'mark_failed' : ActorMethod<[string, string], ScheduledResult>,
   'mark_read' : ActorMethod<[string], Result>,
   'mark_sent' : ActorMethod<[string, string], ScheduledResult>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'merge_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |

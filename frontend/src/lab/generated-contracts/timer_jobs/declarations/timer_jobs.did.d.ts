@@ -68,6 +68,10 @@ export interface _SERVICE {
   'import_state' : ActorMethod<[snapshot], result_unit>,
   'initialize' : ActorMethod<[], result_unit>,
   'list_jobs' : ActorMethod<[[] | [string], number], result_page>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'reconcile' : ActorMethod<[snapshot], result_reconciliation>,
   'recover_expired' : ActorMethod<[bigint], result_nat16>,
   'recover_interrupted' : ActorMethod<[], result_nat16>,

@@ -230,6 +230,11 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     redeem_reward(club_id: string, subject: Subject, reward_id: string, idempotency_key: string | null): Promise<{
         __kind__: "Ok";
         Ok: RewardRedemption;
@@ -615,6 +620,14 @@ export class Club_points_domain implements club_points_domainInterface {
     }> {
         const result = await this.actor.list_rewards(arg0, to_candid_opt_n10(arg1), arg2);
         return from_candid_variant_n41(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async redeem_reward(arg0: string, arg1: Subject, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";

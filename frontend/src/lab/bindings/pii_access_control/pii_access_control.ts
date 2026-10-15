@@ -121,7 +121,12 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    merge_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -144,7 +149,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -332,6 +337,14 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.grant_pii_read_club(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";

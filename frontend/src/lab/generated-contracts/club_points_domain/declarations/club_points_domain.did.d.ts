@@ -199,6 +199,10 @@ export interface Main {
     { 'Ok' : Array<ClubReward> } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'redeem_reward' : ActorMethod<
     [string, Subject, string, [] | [string]],
     { 'Ok' : RewardRedemption } |

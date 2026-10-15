@@ -74,6 +74,11 @@ export interface MainInterface {
         Err: string;
     }>;
     list_workloads(): Promise<Array<WorkloadIdentity>>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     register_workload(workload_principal: Principal, workload_name: string, allowed_scopes: Array<string>): Promise<{
         __kind__: "Ok";
         Ok: WorkloadIdentity;
@@ -169,6 +174,14 @@ export class Secret_workload_identity implements secret_workload_identityInterfa
     async list_workloads(): Promise<Array<WorkloadIdentity>> {
         const result = await this.actor.list_workloads();
         return from_candid_vec_n11(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async register_workload(arg0: Principal, arg1: string, arg2: Array<string>): Promise<{
         __kind__: "Ok";

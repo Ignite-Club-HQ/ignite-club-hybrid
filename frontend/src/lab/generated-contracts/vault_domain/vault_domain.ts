@@ -189,6 +189,11 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     move_file(id: string, folder_id: string): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -203,7 +208,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -536,6 +541,14 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.list_trashed_files_with_folder(arg0);
         return from_candid_variant_n27(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async move_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";

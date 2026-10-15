@@ -60,6 +60,17 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_workloads' : IDL.Func([], [IDL.Vec(WorkloadIdentity)], ['query']),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'register_workload' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : WorkloadIdentity, 'Err' : IDL.Text })],

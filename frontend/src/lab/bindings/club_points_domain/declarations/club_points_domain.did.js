@@ -276,6 +276,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubReward), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'redeem_reward' : IDL.Func(
         [IDL.Text, Subject, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],

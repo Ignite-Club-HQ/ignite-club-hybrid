@@ -136,6 +136,11 @@ export interface Main {
     { 'Ok' : Array<AdEventSummary> } |
       { 'Err' : string }
   >,
+  'add_memory_report' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'append_audit_log' : ActorMethod<
     [string, string, [] | [string], [] | [string], string],
     { 'Ok' : null } |
@@ -265,10 +270,25 @@ export interface Main {
     { 'Ok' : { 'total' : number, 'items' : Array<Feedback> } } |
       { 'Err' : string }
   >,
+  'list_memory_reports' : ActorMethod<
+    [bigint],
+    Array<
+      {
+        'at' : bigint,
+        'analysis_json' : string,
+        'source' : string,
+        'readings_json' : string,
+      }
+    >
+  >,
   'list_user_activity' : ActorMethod<
     [[] | [string], bigint, bigint],
     { 'Ok' : Array<UserActivityEntry> } |
       { 'Err' : string }
+  >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
   >,
   'my_feedback' : ActorMethod<[], Array<Feedback>>,
   'perf_aggregate' : ActorMethod<

@@ -305,6 +305,11 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     my_availability(): Promise<Array<MiniLeagueSessionAvailability>>;
     my_leagues(): Promise<Array<MiniLeague>>;
     rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
@@ -884,6 +889,14 @@ export class Mini_league_domain implements mini_league_domainInterface {
     }> {
         const result = await this.actor.list_sessions(arg0);
         return from_candid_variant_n57(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async my_availability(): Promise<Array<MiniLeagueSessionAvailability>> {
         const result = await this.actor.my_availability();
