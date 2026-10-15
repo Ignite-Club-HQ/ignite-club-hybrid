@@ -1,10 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { listMemoryReports, addManualMemoryReading, type MemoryReading } from "@/lib/canisterMemoryReports";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Actor, HttpAgent, AnonymousIdentity } from "@icp-sdk/core/agent";
 import { IDL } from "@icp-sdk/core/candid";
 import { Principal } from "@icp-sdk/core/principal";
-import { ArrowLeft, Loader2, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { tryGetActiveIcpTarget } from "@/live/loadBackendRouting";
@@ -16,9 +20,9 @@ import { DEPLOYED_MAINNET_CANISTER_IDS } from "@/live/generated/deployedCanister
  * (no sign-in needed — it reveals nothing private) and estimates burn rate
  * from snapshots kept on this device.
  *
- * Memory size is not exposed by the canisters yet, so this page reports
- * cycles only; the GitHub "Canister health" workflow remains the source for
- * memory until a `memory_size` query is deployed.
+ * Memory comes live from each canister's public `memory_stats` query. The
+ * AI growth analysis is produced server-side by the Canister health workflow
+ * (AI key never reaches the browser) and is readable by app admins only.
  */
 
 const LOW_CYCLES_T = 1; // warn below 1 trillion cycles (≈ US$1.30)
@@ -34,10 +38,16 @@ type Row = {
   burnTPerDay: number | null;
   daysLeft: number | null;
   error: string | null;
+  memoryMb: number | null; // null until the memory_stats deploy lands
 };
 
 const cyclesIdl: IDL.InterfaceFactory = ({ IDL }) =>
-  IDL.Service({ cycles_balance: IDL.Func([], [IDL.Nat], ["query"]) });
+  IDL.Service({
+    cycles_balance: IDL.Func([], [IDL.Nat], ["query"]),
+    memory_stats: IDL.Func([], [IDL.Record({ heap_bytes: IDL.Nat, memory_bytes: IDL.Nat, stable_bytes: IDL.Nat })], ["query"]),
+  });
+type MemStats = { heap_bytes: bigint; memory_bytes: bigint; stable_bytes: bigint };
+const WARN_MEMORY_MB = 3000;
 
 function loadSnapshots(): Snapshot[] {
   try {
@@ -89,11 +99,12 @@ async function fetchHealth(): Promise<Row[]> {
   const keys = Object.keys(ids).sort();
   const results = await Promise.allSettled(
     keys.map(async (key) => {
-      const actor = Actor.createActor<{ cycles_balance: () => Promise<bigint> }>(cyclesIdl, {
+      const actor = Actor.createActor<{ cycles_balance: () => Promise<bigint>; memory_stats: () => Promise<MemStats> }>(cyclesIdl, {
         agent,
         canisterId: Principal.fromText(ids[key]),
       });
-      return { key, balance: await actor.cycles_balance() };
+      const [balance, mem] = await Promise.all([actor.cycles_balance(), actor.memory_stats().catch(() => null)]);
+      return { key, balance, memoryMb: mem ? Number(mem.memory_bytes) / 1e6 : null };
     }),
   );
 
@@ -109,6 +120,7 @@ async function fetchHealth(): Promise<Row[]> {
         burnTPerDay: null,
         daysLeft: null,
         error: null,
+        memoryMb: r.value.memoryMb,
       };
     }
     return {
@@ -118,6 +130,7 @@ async function fetchHealth(): Promise<Row[]> {
       burnTPerDay: null,
       daysLeft: null,
       error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      memoryMb: null,
     };
   });
 
@@ -150,6 +163,13 @@ function fmtDays(v: number): string {
 }
 
 export default function AdminIcpHealthPage() {
+  const { isAppAdmin, isLoading: adminLoading } = useIsAppAdmin();
+  if (adminLoading) return <Loader2 className="h-5 w-5 animate-spin mx-auto my-10" />;
+  if (!isAppAdmin) return <p className="text-sm text-muted-foreground text-center py-10">App admins only.</p>;
+  return <HealthContent />;
+}
+
+function HealthContent() {
   const navigate = useNavigate();
   const q = useQuery({ queryKey: ["admin-icp-health"], queryFn: fetchHealth, staleTime: 5 * 60 * 1000 });
 
@@ -167,8 +187,8 @@ export default function AdminIcpHealthPage() {
           <CardTitle>Canister health</CardTitle>
           <CardDescription>
             Live cycle balances for every canister, read straight from the Internet Computer — no workflow needed.
-            A canister below {LOW_CYCLES_T} trillion cycles (≈ US$1.30) needs a top-up soon. Memory size isn't
-            reported on-chain yet; the GitHub Canister health workflow still covers that.
+            A canister below {LOW_CYCLES_T} trillion cycles (≈ US$1.30) needs a top-up soon. Memory is live too;
+            each canister's ceiling is 4 GB, and over 3 GB is flagged.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -217,6 +237,7 @@ export default function AdminIcpHealthPage() {
                       <th className="text-right font-medium px-2 py-1">Cycles (T)</th>
                       <th className="text-right font-medium px-2 py-1">Burn/day</th>
                       <th className="text-right font-medium px-2 py-1">Days left</th>
+                      <th className="text-right font-medium px-2 py-1">Memory</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -227,7 +248,7 @@ export default function AdminIcpHealthPage() {
                           <td className={`px-2 py-1 font-medium ${low ? "text-destructive" : ""}`}>{r.key}</td>
                           <td className="px-2 py-1 text-muted-foreground">{r.canisterId}</td>
                           {r.error ? (
-                            <td colSpan={3} className="px-2 py-1 text-destructive" title={r.error}>
+                            <td colSpan={4} className="px-2 py-1 text-destructive" title={r.error}>
                               unreadable
                             </td>
                           ) : (
@@ -241,6 +262,9 @@ export default function AdminIcpHealthPage() {
                               <td className={`px-2 py-1 text-right ${r.daysLeft !== null && r.daysLeft < 14 ? "text-destructive font-medium" : ""}`}>
                                 {r.daysLeft !== null ? fmtDays(r.daysLeft) : "—"}
                               </td>
+                              <td className={`px-2 py-1 text-right ${r.memoryMb !== null && r.memoryMb > WARN_MEMORY_MB ? "text-destructive font-medium" : ""}`}>
+                                {fmtMb(r.memoryMb)}
+                              </td>
                             </>
                           )}
                         </tr>
@@ -253,6 +277,113 @@ export default function AdminIcpHealthPage() {
           )}
         </CardContent>
       </Card>
+      <MemoryReportsCard liveRows={rows} />
     </div>
+  );
+}
+
+function fmtMb(v: number | null): string {
+  if (v === null) return "—";
+  return v >= 1000 ? `${(v / 1000).toFixed(2)} GB` : `${Math.round(v)} MB`;
+}
+
+const STATUS_STYLE: Record<string, string> = {
+  attention: "text-destructive",
+  watch: "text-primary",
+  ok: "text-muted-foreground",
+};
+
+function MemoryReportsCard({ liveRows }: { liveRows: Row[] }) {
+  const qc = useQueryClient();
+  const reports = useQuery({ queryKey: ["canister-memory-reports"], queryFn: () => listMemoryReports(20) });
+  const [name, setName] = useState("");
+  const [mb, setMb] = useState("");
+  const [note, setNote] = useState("");
+  const add = useMutation({
+    mutationFn: (readings: MemoryReading[]) => addManualMemoryReading(readings),
+    onSuccess: () => {
+      toast.success("Reading saved — it's included in the next analysis.");
+      setMb("");
+      setNote("");
+      qc.invalidateQueries({ queryKey: ["canister-memory-reports"] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const liveReadings: MemoryReading[] = liveRows
+    .filter((r) => r.memoryMb !== null)
+    .map((r) => ({ name: r.key, memory_mb: Math.round(r.memoryMb!), cycles_t: r.cyclesT }));
+  const latest = reports.data?.find((r) => r.analysis);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4" />Memory growth analysis</CardTitle>
+        <CardDescription>
+          Every Monday the Canister health check saves each canister's memory and AI looks for unusual growth.
+          Readings you save here are included in the next run.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {reports.isLoading ? (
+          <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+        ) : reports.error ? (
+          <p className="text-sm text-destructive">{(reports.error as Error).message}</p>
+        ) : latest?.analysis ? (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Analysed {new Date(latest.at).toLocaleString()}</p>
+            <p className="text-sm">{latest.analysis.summary}</p>
+            <ul className="space-y-1">
+              {latest.analysis.canisters.map((c) => (
+                <li key={c.name} className="text-sm">
+                  <span className={`font-medium ${STATUS_STYLE[c.status] ?? ""}`}>{c.name} · {c.status}</span>
+                  <span className="text-muted-foreground"> — {c.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No analysis yet — it appears after the next Canister health run.</p>
+        )}
+
+        <div className="border-t pt-3 space-y-2">
+          <p className="text-sm font-medium">Add a reading</p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!liveReadings.length || add.isPending}
+            onClick={() => add.mutate(liveReadings)}
+          >
+            Save all live readings now
+          </Button>
+          <div className="flex flex-wrap gap-2 items-end">
+            <Input className="w-44" placeholder="Canister (e.g. media_blob_store)" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input className="w-28" type="number" placeholder="Memory MB" value={mb} onChange={(e) => setMb(e.target.value)} />
+            <Input className="flex-1 min-w-32" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <Button
+              size="sm"
+              disabled={!name.trim() || !(Number(mb) >= 0) || mb === "" || add.isPending}
+              onClick={() => add.mutate([{ name: name.trim(), memory_mb: Number(mb), note: note.trim() || undefined }])}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+
+        {!!reports.data?.length && (
+          <div className="border-t pt-3">
+            <p className="text-sm font-medium mb-1">History</p>
+            <ul className="text-xs space-y-1 max-h-64 overflow-auto">
+              {reports.data.map((r, i) => (
+                <li key={i} className="text-muted-foreground">
+                  {new Date(r.at).toLocaleString()} · {r.source === "manual" ? "added by admin" : "weekly check"} ·{" "}
+                  {r.readings.slice(0, 4).map((x) => `${x.name} ${fmtMb(x.memory_mb)}`).join(", ")}
+                  {r.readings.length > 4 ? ` +${r.readings.length - 4} more` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
