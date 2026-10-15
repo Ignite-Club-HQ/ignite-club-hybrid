@@ -30,6 +30,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+
+async function liveCtx() {
+  const { icpCtx } = await import("@/lib/icpClubTeamLookup");
+  return icpCtx();
+}
 
 type OfficialRole = "referee" | "committee";
 
@@ -73,12 +79,40 @@ export function CompetitionOfficialsCard({
   const [inviteEmail, setInviteEmail] = useState("");
   const debouncedSearch = useDebounce(search, 300);
 
-  const rolesQueryKey = ["competition-roles", competitionId];
+  const isIcp = isFeatureRoutedToIcp("competitions");
+  const rolesQueryKey = ["competition-roles", competitionId, isIcp];
 
   const { data: roles = [], isLoading } = useQuery({
     queryKey: rolesQueryKey,
     enabled: !!competitionId,
     queryFn: async () => {
+      if (isIcp) {
+        // Canister role grants are keyed by principal; names come from the
+        // on-chain profile directory. Opening this list also brings the
+        // referees/committee chats up to date (people who joined by link).
+        const ctx = await liveCtx();
+        const { listLiveCompetitionRoles, syncLiveOfficialChats } = await import("@/live/features/competitions");
+        const grants = (await listLiveCompetitionRoles(ctx, competitionId)).filter(
+          (g) => g.role === "referee" || g.role === "committee",
+        );
+        syncLiveOfficialChats(ctx, competitionId, organizerClubId, competitionName)
+          .then(() => queryClient.invalidateQueries({ queryKey: ["competition-chats-links", competitionId] }))
+          .catch((e) => console.warn("[officials] chat sync failed", e));
+        const names = new Map<string, string | null>();
+        try {
+          const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+          const profiles = await listLiveProfilesByIds(ctx, grants.map((g) => g.user.toText()));
+          for (const p of profiles) names.set(p.account_id, p.display_name ?? null);
+        } catch {
+          // Names are cosmetic.
+        }
+        return grants.map((g) => ({
+          id: `${g.user.toText()}:${g.role}`,
+          user_id: g.user.toText(),
+          role: g.role,
+          profile: { display_name: names.get(g.user.toText()) ?? null, avatar_url: null },
+        })) as RoleRow[];
+      }
       const { data: roleRows, error } = await supabase
         .from("competition_roles")
         .select("id, user_id, role")
@@ -119,6 +153,12 @@ export function CompetitionOfficialsCard({
     queryKey: ["competition-official-search", competitionId, debouncedSearch],
     enabled: debouncedSearch.trim().length >= 2,
     queryFn: async () => {
+      if (isIcp) {
+        const ctx = await liveCtx();
+        const { searchLiveInvitableProfiles } = await import("@/live/features/membership");
+        const rows = await searchLiveInvitableProfiles(ctx, debouncedSearch.trim(), 8);
+        return rows.map((p: any) => ({ id: p.id, display_name: (p.display_name as string | null) ?? null, avatar_url: null }));
+      }
       const { data, error } = await supabase.rpc("search_invitable_profiles", {
         _query: debouncedSearch.trim(),
         _limit: 8,
@@ -137,6 +177,17 @@ export function CompetitionOfficialsCard({
   const addMutation = useMutation({
     mutationFn: async (target: { id: string; display_name: string | null }) => {
       const role = pendingRole;
+      if (isIcp) {
+        const ctx = await liveCtx();
+        const [{ Principal }, comp] = await Promise.all([
+          import("@icp-sdk/core/principal"),
+          import("@/live/features/competitions"),
+        ]);
+        await comp.addLiveCompetitionRole(ctx, competitionId, Principal.fromText(target.id), role);
+        await comp.syncLiveOfficialChats(ctx, competitionId, organizerClubId, competitionName);
+        queryClient.invalidateQueries({ queryKey: ["competition-chats-links", competitionId] });
+        return { target, role };
+      }
       const { error } = await supabase.from("competition_roles").insert({
         competition_id: competitionId,
         user_id: target.id,
@@ -174,6 +225,16 @@ export function CompetitionOfficialsCard({
 
   const removeMutation = useMutation({
     mutationFn: async (row: RoleRow) => {
+      if (isIcp) {
+        const ctx = await liveCtx();
+        const [{ Principal }, comp] = await Promise.all([
+          import("@icp-sdk/core/principal"),
+          import("@/live/features/competitions"),
+        ]);
+        await comp.removeLiveCompetitionRole(ctx, competitionId, Principal.fromText(row.user_id), row.role);
+        await comp.removeFromLiveOfficialChat(ctx, competitionId, row.role as OfficialRole, row.user_id);
+        return row;
+      }
       const { error } = await supabase.from("competition_roles").delete().eq("id", row.id);
       if (error) throw error;
       return row;
@@ -194,7 +255,7 @@ export function CompetitionOfficialsCard({
   const invitesKey = ["competition-role-invites", competitionId];
   const { data: pendingInvites = [] } = useQuery({
     queryKey: invitesKey,
-    enabled: !!competitionId,
+    enabled: !!competitionId && !isIcp,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("competition_role_invites")
@@ -411,7 +472,7 @@ export function CompetitionOfficialsCard({
           />
         </div>
 
-        <div className="space-y-2 border-t pt-4">
+        {!isIcp && <div className="space-y-2 border-t pt-4">
           <p className="text-sm font-medium flex items-center gap-2">
             <Mail className="h-4 w-4" /> Not on Ignite yet? Invite by email
           </p>
