@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Actor, HttpAgent, AnonymousIdentity } from "@icp-sdk/core/agent";
 import { IDL } from "@icp-sdk/core/candid";
 import { Principal } from "@icp-sdk/core/principal";
-import { ArrowLeft, Loader2, RefreshCw, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { tryGetActiveIcpTarget } from "@/live/loadBackendRouting";
@@ -287,12 +287,6 @@ function fmtMb(v: number | null): string {
   return v >= 1000 ? `${(v / 1000).toFixed(2)} GB` : `${Math.round(v)} MB`;
 }
 
-const STATUS_STYLE: Record<string, string> = {
-  attention: "text-destructive",
-  watch: "text-primary",
-  ok: "text-muted-foreground",
-};
-
 function MemoryReportsCard({ liveRows }: { liveRows: Row[] }) {
   const qc = useQueryClient();
   const reports = useQuery({ queryKey: ["canister-memory-reports"], queryFn: () => listMemoryReports(20) });
@@ -302,7 +296,7 @@ function MemoryReportsCard({ liveRows }: { liveRows: Row[] }) {
   const add = useMutation({
     mutationFn: (readings: MemoryReading[]) => addManualMemoryReading(readings),
     onSuccess: () => {
-      toast.success("Reading saved — it's included in the next analysis.");
+      toast.success("Reading saved.");
       setMb("");
       setNote("");
       qc.invalidateQueries({ queryKey: ["canister-memory-reports"] });
@@ -312,15 +306,14 @@ function MemoryReportsCard({ liveRows }: { liveRows: Row[] }) {
   const liveReadings: MemoryReading[] = liveRows
     .filter((r) => r.memoryMb !== null)
     .map((r) => ({ name: r.key, memory_mb: Math.round(r.memoryMb!), cycles_t: r.cyclesT }));
-  const latest = reports.data?.find((r) => r.analysis);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4" />Memory growth analysis</CardTitle>
+        <CardTitle>Memory readings history</CardTitle>
         <CardDescription>
-          Every Monday the Canister health check saves each canister's memory and AI looks for unusual growth.
-          Readings you save here are included in the next run.
+          Saved snapshots of canister memory, so you can spot growth over time. Anything over 3 GB needs attention —
+          the ceiling is 4 GB.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -328,22 +321,7 @@ function MemoryReportsCard({ liveRows }: { liveRows: Row[] }) {
           <Loader2 className="h-5 w-5 animate-spin mx-auto" />
         ) : reports.error ? (
           <p className="text-sm text-destructive">{(reports.error as Error).message}</p>
-        ) : latest?.analysis ? (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Analysed {new Date(latest.at).toLocaleString()}</p>
-            <p className="text-sm">{latest.analysis.summary}</p>
-            <ul className="space-y-1">
-              {latest.analysis.canisters.map((c) => (
-                <li key={c.name} className="text-sm">
-                  <span className={`font-medium ${STATUS_STYLE[c.status] ?? ""}`}>{c.name} · {c.status}</span>
-                  <span className="text-muted-foreground"> — {c.explanation}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">No analysis yet — it appears after the next Canister health run.</p>
-        )}
+        ) : null}
 
         <div className="border-t pt-3 space-y-2">
           <p className="text-sm font-medium">Add a reading</p>
