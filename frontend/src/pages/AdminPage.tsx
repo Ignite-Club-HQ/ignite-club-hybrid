@@ -317,6 +317,12 @@ function SupabaseAdminPage() {
               description="Test LLM inference via the Internet Computer"
               onClick={() => navigate("/admin/icp-llm-test")}
             />
+            <AdminMenuItem
+              icon={Globe2}
+              label="On-chain Data"
+              description="Browse clubs, teams, members, events, news and sponsors stored on the canisters"
+              onClick={() => navigate("/admin/icp-data")}
+            />
           </CardContent>
         </Card>
       )}
