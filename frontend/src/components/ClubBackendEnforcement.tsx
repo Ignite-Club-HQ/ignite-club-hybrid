@@ -271,7 +271,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
 
   // Fast path: with no club pins configured nothing can force a backend
   // switch, so never hold the route tree on the membership fetch.
-  if (!user || settled || !hasClubPins()) {
+  if (!user || settled || !hasClubPins() || isVerified(user.id)) {
     return <>{children}</>;
   }
   return <AppSplash message="Signing you in..." />;
