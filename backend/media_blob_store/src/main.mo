@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
@@ -38,6 +39,14 @@ import Timer "mo:core/Timer";
 persistent actor MediaBlobStore {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
 
 
   // ==================== Types (mirror media_blob_store.did) ====================

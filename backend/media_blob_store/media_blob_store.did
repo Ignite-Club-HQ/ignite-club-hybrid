@@ -63,6 +63,7 @@ service : {
    nat32) -> (ResultUploadId);
   /// Public: remaining cycles (shown in admin settings).
   cycles_balance: () -> (nat) query;
+   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
   delete_blob: (path: text) -> (Result);
   finalize_upload: (upload_id: text) -> (ResultFinalized);
   get_club_media_usage: (club_id: text) -> (vec MediaUsage) query;

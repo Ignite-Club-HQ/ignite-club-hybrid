@@ -153,6 +153,7 @@ service : (Init) -> {
   check_field_access : (text, text) -> (Result_5) query;
   // Public: remaining cycles (shown in admin settings).
   cycles_balance : () -> (nat) query;
+   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
   erase_account : (text) -> (Result_2);
   export_state : () -> (Result_6) query;
   get_external_bindings : (text) -> (Result_7) query;

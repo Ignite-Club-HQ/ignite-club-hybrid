@@ -14,6 +14,7 @@ type Main =
    club_media_lock_version: () -> (nat) query;
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
+   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_pii: (pii_id: text, field_id: text) ->
     (variant {
        Err: text;

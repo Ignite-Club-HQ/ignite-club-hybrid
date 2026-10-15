@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 /// PII Access Control Canister
 /// Mediates access to personally identifiable information (PII) with
 /// field-level access policies and an audit trail.
@@ -43,6 +44,14 @@ import ManagementCanister "mo:ic-vetkeys/ManagementCanister";
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
 
 
   // ==================== Types ====================

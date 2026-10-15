@@ -212,6 +212,7 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
+   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_mini_league: (mini_league_id: text) -> (variant {
                                                     Err: text;
                                                     Ok;

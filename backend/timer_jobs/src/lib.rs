@@ -1017,6 +1017,20 @@ fn cycles_balance() -> candid::Nat {
     candid::Nat::from(ic_cdk::api::canister_cycle_balance())
 }
 
+#[derive(candid::CandidType)]
+struct MemoryStats { heap_bytes: candid::Nat, memory_bytes: candid::Nat, stable_bytes: candid::Nat }
+
+/// Public: live memory reading for the admin health page.
+#[ic_cdk::query]
+fn memory_stats() -> MemoryStats {
+    #[cfg(target_arch = "wasm32")]
+    let heap = core::arch::wasm32::memory_size(0) as u64 * 65536;
+    #[cfg(not(target_arch = "wasm32"))]
+    let heap = 0u64;
+    let stable = ic_cdk::stable::stable_size() * 65536;
+    MemoryStats { heap_bytes: heap.into(), memory_bytes: (heap + stable).into(), stable_bytes: stable.into() }
+}
+
 ic_cdk::export_candid!();
 
 #[cfg(test)]
