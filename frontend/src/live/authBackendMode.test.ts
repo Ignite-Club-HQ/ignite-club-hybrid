@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isAuthChoiceOverrideOrigin, resolveAuthBackend, useIcpAuthScreen } from "./authBackendMode";
 import { applyBackendRoutingConfig, cacheClubBackendHint } from "./backendRouting";
 import { applyIcpAdminOverrides } from "./icpAdminOverrides";
@@ -129,6 +129,7 @@ describe("resolveAuthBackend ignores retired per-club overrides", () => {
   it("still needs configured canisters before routing a visitor to ICP", () => {
     applyBackendRoutingConfig({ ...clubPinnedConfig, countryRules: { DE: "icp" as const } });
     setProfileCountry("DE");
+    vi.stubEnv("IGNITE_LIVE_ICP_CANISTER_IDS_JSON", "{}");
     expect(resolveAuthBackend()).toBe("supabase");
   });
 });
@@ -192,6 +193,7 @@ describe("resolveAuthBackend with the ?auth= device override", () => {
   });
 
   it("?auth=icp cannot force ICP before canisters exist", () => {
+    vi.stubEnv("IGNITE_LIVE_ICP_CANISTER_IDS_JSON", "{}");
     applyIcpAdminOverrides(null);
     setUrlSearch("?auth=icp");
     expect(resolveAuthBackend()).toBe("supabase");

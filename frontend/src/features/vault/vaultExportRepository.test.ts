@@ -1,4 +1,22 @@
 import { describe, it, expect, vi } from "vitest";
+
+const liveMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  listLiveVaultFolders: vi.fn(),
+  listLiveVaultClubFilesWithFolder: vi.fn(),
+  listLiveVaultFilesWithFolder: vi.fn(),
+}));
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    liveMocks.mode === "icp" ? providers.icp({}) : providers.supabase(),
+}));
+vi.mock("@/live/features/vault", () => ({
+  listLiveVaultFolders: liveMocks.listLiveVaultFolders,
+  listLiveVaultClubFilesWithFolder: liveMocks.listLiveVaultClubFilesWithFolder,
+  listLiveVaultFilesWithFolder: liveMocks.listLiveVaultFilesWithFolder,
+}));
+
 import {
   fetchVaultFolderContents,
   collectVaultExportContents,
@@ -79,7 +97,7 @@ const folders = [
   { id: "f1", name: "Gallery Uploads", parent_id: null, club_id: CLUB, team_id: null, deleted_at: null },
 ];
 
-describe("Vault export folder reads", () => {
+describe.runIf(liveMocks.mode === "supabase")("Vault export folder reads — Supabase", () => {
   it("never queries public.photos", async () => {
     const client = makeClient({ vault_files: baseRows, vault_folders: folders });
     await collectVaultExportContents({ folderId: null, clubId: CLUB, teamId: null }, "", [], client);
@@ -166,5 +184,24 @@ describe("Vault export folder reads", () => {
     expect(res).toEqual({ photos: [], files: [], subfolders: [], folderBreakdown: [] });
     expect(client.calls).toHaveLength(0);
     expect(hasVaultExportScope({ clubId: null, teamId: null })).toBe(false);
+  });
+});
+
+describe.runIf(liveMocks.mode === "icp")("Vault export folder reads — ICP", () => {
+  it("uses competition-specific canister folder and file reads", async () => {
+    liveMocks.listLiveVaultFolders.mockResolvedValue([]);
+    liveMocks.listLiveVaultFilesWithFolder.mockResolvedValue([]);
+
+    const result = await fetchVaultFolderContents({
+      folderId: null,
+      clubId: CLUB,
+      teamId: null,
+      competitionId: "comp-a",
+    });
+
+    expect(result).toEqual({ photos: [], files: [], subfolders: [] });
+    expect(liveMocks.listLiveVaultFolders).toHaveBeenCalledWith({}, CLUB, null, null, "comp-a");
+    expect(liveMocks.listLiveVaultFilesWithFolder).toHaveBeenCalledWith({}, "", "comp-a");
+    expect(liveMocks.listLiveVaultClubFilesWithFolder).not.toHaveBeenCalled();
   });
 });
