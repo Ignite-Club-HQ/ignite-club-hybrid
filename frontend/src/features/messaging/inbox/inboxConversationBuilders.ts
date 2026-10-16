@@ -130,6 +130,7 @@ export function buildGroupInboxConversation(options: {
     ...(options.avatarUrl !== undefined ? { avatarUrl: options.avatarUrl } : {}),
     link: options.isLocked && options.lockedLink ? options.lockedLink : identity.link,
     lastActivity: options.lastMessage?.created_at || "",
+    createdAt: (options.group as { created_at?: string | null }).created_at ?? null,
     lastMessage: options.lastMessage,
     unreadCount: options.unreadCount,
     isMuted: options.isMuted,

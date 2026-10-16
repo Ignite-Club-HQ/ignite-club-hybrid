@@ -22,6 +22,11 @@ import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { compressImage } from "@/lib/imageCompression";
 
+// Profile photos render at most ~96px in the UI — 384px covers high-DPR
+// screens with headroom, and the small file keeps the encrypted on-chain
+// upload to one fast chunk instead of several round trips.
+const AVATAR_COMPRESS_OPTIONS = { maxWidth: 384, maxHeight: 384, quality: 0.82 };
+
 export default function EditProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
   const useIcpLab = isFeatureRoutedToIcp("membership");
@@ -47,6 +52,28 @@ export default function EditProfilePage() {
 
   const isNative = shouldUseNativePicker();
 
+  // ICP: save the new photo to the profile straight away (no need to tap
+  // Save) and show it instantly from the local copy instead of waiting for
+  // a download + decrypt.
+  const persistIcpAvatar = async (url: string, localFile: Blob) => {
+    if (!user) throw new Error("You need to sign in again.");
+    const { localUploadPreviews } = await import("@/components/media/localUploadPreviews");
+    localUploadPreviews.set(url, URL.createObjectURL(localFile));
+    setAvatarUrl(url);
+    if (!isIcpLive) return;
+    const [{ getCurrentInternetIdentity }, { saveIcpIdentityProfile }] = await Promise.all([
+      import("@/live/internetIdentityAuth"),
+      import("@/live/identityProfile"),
+    ]);
+    const identity = await getCurrentInternetIdentity();
+    if (!identity) throw new Error("You need to sign in again.");
+    await saveIcpIdentityProfile(identity, user.id, {
+      displayName: (displayName.trim() || profile?.display_name || "").trim(),
+      avatarRef: url,
+    });
+    await refreshProfile();
+  };
+
   const handleNativeAvatarPick = async () => {
     if (!user) return;
     // CRITICAL: Do NOT set uploading state before Camera.getPhoto —
@@ -61,7 +88,9 @@ export default function EditProfilePage() {
       let uploadBlob: Blob = result.blob;
       try {
         const asFile = new File([result.blob], `avatar.${mimeToExtension(result.mimeType) || "jpg"}`, { type: result.mimeType });
-        const compressed = await compressImage(asFile);
+        // Avatars render small everywhere — 384px is plenty and keeps the
+        // encrypted on-chain upload to a single fast chunk.
+        const compressed = await compressImage(asFile, AVATAR_COMPRESS_OPTIONS);
         if (compressed.file.size < uploadBlob.size) uploadBlob = compressed.file;
       } catch {
         // keep original if compression fails
@@ -76,12 +105,23 @@ export default function EditProfilePage() {
       setAvatarPreview(URL.createObjectURL(uploadBlob));
       const ext = mimeToExtension(uploadBlob.type || result.mimeType) || "jpg";
       if (useIcpLab) {
-        // ICP mode: encrypt + store on the blob-store canister, keep the
-        // on-chain URL as the avatar reference.
-        const { uploadIcpAvatar } = await import("@/live/avatarUpload");
-        const url = await uploadIcpAvatar({ file: uploadBlob, mime: uploadBlob.type || result.mimeType, ext });
-        setAvatarUrl(url);
-        toast({ title: "Photo uploaded!" });
+        // ICP mode: the photo is already on screen — encrypt + store on the
+        // blob-store canister in the BACKGROUND so the picker feels instant.
+        // The canister round trips (~10s) no longer block the page.
+        setUploadingAvatar(false);
+        void (async () => {
+          try {
+            const { uploadIcpAvatar } = await import("@/live/avatarUpload");
+            const url = await uploadIcpAvatar({ file: uploadBlob, mime: uploadBlob.type || result.mimeType, ext });
+            await persistIcpAvatar(url, uploadBlob);
+            await refreshProfile();
+            toast({ title: "Photo saved!" });
+          } catch (error) {
+            setAvatarPreview("");
+            toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Could not upload photo", variant: "destructive" });
+          }
+        })();
+        return;
       } else {
         const fileName = `${user.id}-${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
@@ -91,6 +131,7 @@ export default function EditProfilePage() {
 
         const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
         setAvatarUrl(publicUrlData.publicUrl);
+        await refreshProfile();
         toast({ title: "Photo uploaded!" });
       }
     } catch (error: any) {
@@ -120,7 +161,7 @@ export default function EditProfilePage() {
     // Resize on-device so any photo (even a 5MB camera shot) fits the budget.
     let uploadFile: File = file;
     try {
-      const compressed = await compressImage(file);
+      const compressed = await compressImage(file, AVATAR_COMPRESS_OPTIONS);
       if (compressed.file.size < uploadFile.size) uploadFile = compressed.file;
     } catch {
       // keep original if compression fails
@@ -133,32 +174,36 @@ export default function EditProfilePage() {
         variant: "destructive",
       });
       return;
-    setAvatarPreview(URL.createObjectURL(uploadFile));
     }
+    setAvatarPreview(URL.createObjectURL(uploadFile));
 
     setUploadingAvatar(true);
 
     if (useIcpLab) {
-      // ICP mode: encrypt + store on the blob-store canister, keep the
-      // on-chain URL as the avatar reference.
-      try {
-        const { uploadIcpAvatar } = await import("@/live/avatarUpload");
-        const url = await uploadIcpAvatar({
-          file: uploadFile,
-          mime: uploadFile.type || "image/jpeg",
-          ext: uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg"),
-        });
-        setAvatarUrl(url);
-        toast({ title: "Photo uploaded!" });
-      } catch (error) {
-        setAvatarPreview("");
-        toast({
-          title: "Upload failed",
-          description: error instanceof Error ? error.message : "Could not upload photo",
-          variant: "destructive",
-        });
-      }
+      // ICP mode: the photo is already on screen — encrypt + store on the
+      // blob-store canister in the BACKGROUND so the upload feels instant.
+      // The canister round trips (~10s) no longer block the page.
       setUploadingAvatar(false);
+      void (async () => {
+        try {
+          const { uploadIcpAvatar } = await import("@/live/avatarUpload");
+          const url = await uploadIcpAvatar({
+            file: uploadFile,
+            mime: uploadFile.type || "image/jpeg",
+            ext: uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg"),
+          });
+          await persistIcpAvatar(url, uploadFile);
+          await refreshProfile();
+          toast({ title: "Photo saved!" });
+        } catch (error) {
+          setAvatarPreview("");
+          toast({
+            title: "Upload failed",
+            description: error instanceof Error ? error.message : "Could not upload photo",
+            variant: "destructive",
+          });
+        }
+      })();
       return;
     }
 
@@ -178,7 +223,8 @@ export default function EditProfilePage() {
       
       const storageUrl = publicUrlData.publicUrl;
       setAvatarUrl(storageUrl);
-      toast({ title: "Photo uploaded!" });
+      await refreshProfile();
+        toast({ title: "Photo uploaded!" });
     } catch (error) {
       setAvatarPreview("");
       toast({
@@ -192,6 +238,7 @@ export default function EditProfilePage() {
   };
 
   const handleSave = async () => {
+    if (uploadingAvatar || saving || !user) return;
     if (!displayName.trim()) {
       toast({
         title: "Display name required",
@@ -202,7 +249,7 @@ export default function EditProfilePage() {
 
     setSaving(true);
 
-    if (useIcpLab) {
+    if (useIcpLab && !isIcpLive) {
       setSaving(false);
       toast({ title: "Profile changes are local to this lab session" });
       navigate(-1);
@@ -217,7 +264,7 @@ export default function EditProfilePage() {
         ]);
         const identity = await getCurrentInternetIdentity();
         if (!identity) throw new Error("You need to sign in again.");
-        await saveIcpIdentityProfile(identity, user!.id, {
+        await saveIcpIdentityProfile(identity, user.id, {
           displayName: displayName.trim(),
           avatarRef: avatarUrl.trim() || null,
         });
@@ -248,8 +295,8 @@ export default function EditProfilePage() {
         return;
       }
 
-      setSaving(false);
       await refreshProfile();
+      setSaving(false);
       toast({ title: "Profile updated!" });
       navigate("/profile");
       return;
@@ -430,7 +477,7 @@ export default function EditProfilePage() {
           <Button
             className="w-full"
             onClick={handleSave}
-            disabled={saving || !displayName.trim()}
+            disabled={saving || uploadingAvatar || !displayName.trim()}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
           </Button>

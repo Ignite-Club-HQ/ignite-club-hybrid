@@ -150,12 +150,22 @@ export async function getLiveEngagementStreak(
   return Number(result.Ok);
 }
 
-/** Per-club points-module settings (kill switch + display name); null when unset (defaults). */
+/**
+ * Per-club points-module settings: kill switch, display name, points icon
+ * blob ref, and the team-level Player of Match reward override lock; null
+ * when unset (defaults).
+ */
 export async function getLiveClubPointsSettings(
   ctx: FeatureBackendContext,
   clubId: string,
-): Promise<{ display_name: [] | [string]; disabled: boolean } | null> {
+): Promise<{
+  display_name: [] | [string];
+  disabled: boolean;
+  points_icon_url: [] | [string];
+  disable_team_pom_rewards: boolean;
+} | null> {
   const a = await actor(ctx);
+  await unwrapCandid(a.refresh_club_roles(clubId), "Verify club membership");
   const row = await unwrapCandid(a.get_club_points_settings(clubId), "Get club points settings");
   return row.length ? row[0] : null;
 }
@@ -165,9 +175,20 @@ export async function saveLiveClubPointsSettings(
   clubId: string,
   displayName: string | null,
   disabled: boolean,
+  pointsIconUrl?: string | null,
+  disableTeamPomRewards?: boolean,
 ): Promise<void> {
   const a = await actor(ctx);
-  unwrapCandid(a.save_club_points_settings(clubId, candidOpt(displayName ?? null), disabled), "Save club points settings");
+  await unwrapCandid(
+    a.save_club_points_settings(
+      clubId,
+      candidOpt(displayName ?? null),
+      disabled,
+      candidOpt(pointsIconUrl ?? null),
+      disableTeamPomRewards ?? false,
+    ),
+    "Save club points settings",
+  );
 }
 
 export async function getLiveUserPoints(
@@ -223,6 +244,7 @@ export async function listLiveClubRewards(
   activeOnly: boolean,
 ): Promise<ClubReward[]> {
   const a = await actor(ctx);
+  await unwrapCandid(a.refresh_club_roles(clubId), "Verify club membership");
   return unwrapCandid(a.list_rewards(clubId, candidOpt(teamId), activeOnly), "List club rewards");
 }
 
@@ -379,4 +401,93 @@ export async function getLiveChildPointsBatch(
   const a = await actor(ctx);
   const rows = await unwrapCandid(a.get_child_points_batch(clubId, childIds), "Get child points (batch)");
   return rows.map(([childId, points]) => ({ childId, points }));
+}
+
+// ---------------------------------------------------------------------
+// Team leaderboards (club-side aggregation; no canister method exists for
+// team-level point totals, so this sums the existing User/Child
+// leaderboards over each team's current roster, same shape the retired
+// Supabase get_teams_leaderboard/get_team_leaderboard RPCs returned).
+// ---------------------------------------------------------------------
+
+export interface LiveTeamLeaderboardRow {
+  team_id: string;
+  team_name: string;
+  points: number;
+}
+
+async function liveTeamRosterSubjectIds(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+): Promise<{ userIds: string[]; childIds: string[] }> {
+  const { listLiveTeamRoleGrants } = await import("./membership");
+  const { listLiveChildTeamAssignments } = await import("./events");
+  const [grants, assignments] = await Promise.all([
+    listLiveTeamRoleGrants(ctx, teamId).catch(() => []),
+    listLiveChildTeamAssignments(ctx, clubId, teamId).catch(() => []),
+  ]);
+  const userIds = [...new Set(
+    (grants as Array<{ role: string; account_id: string }>)
+      .filter((g) => g.role === "player" || g.role === "parent")
+      .map((g) => g.account_id),
+  )];
+  const childIds = [...new Set((assignments as Array<{ child_id: string }>).map((a) => a.child_id))];
+  return { userIds, childIds };
+}
+
+/**
+ * Participation leaderboard across every team in a club — sums each team's
+ * roster (players + children) against the club's User/Child point
+ * leaderboards. Mirrors the retired Supabase `get_teams_leaderboard` RPC
+ * shape so LeaderboardPage/TeamRankCard need no further branching.
+ */
+export async function computeLiveTeamLeaderboard(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  window: string,
+): Promise<LiveTeamLeaderboardRow[]> {
+  const { listLiveTeams } = await import("./club");
+  const [teams, userEntries, childEntries] = await Promise.all([
+    listLiveTeams(ctx, clubId).then((rows) => rows.filter((t) => !t.deleted_at_ms.length)),
+    getLiveLeaderboard(ctx, clubId, "User", window, 1000),
+    getLiveLeaderboard(ctx, clubId, "Child", window, 1000),
+  ]);
+  const userPoints = new Map(userEntries.map((e) => [e.subject_id, e.points]));
+  const childPoints = new Map(childEntries.map((e) => [e.subject_id, e.points]));
+
+  const rows = await Promise.all(
+    teams.map(async (team) => {
+      const { userIds, childIds } = await liveTeamRosterSubjectIds(ctx, clubId, team.id);
+      const points =
+        userIds.reduce((sum, id) => sum + (userPoints.get(id) ?? 0), 0) +
+        childIds.reduce((sum, id) => sum + (childPoints.get(id) ?? 0), 0);
+      return { team_id: team.id, team_name: team.name, points };
+    }),
+  );
+
+  return rows.sort((a, b) => b.points - a.points);
+}
+
+/**
+ * Club leaderboard entries restricted to one team's roster — the ICP
+ * counterpart of the retired Supabase `get_team_leaderboard` RPC. Re-ranks
+ * locally since the canister's leaderboard is club-wide.
+ */
+export async function computeLiveTeamMemberLeaderboard(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+  window: string,
+): Promise<LeaderboardEntry[]> {
+  const { userIds, childIds } = await liveTeamRosterSubjectIds(ctx, clubId, teamId);
+  const wantedUsers = new Set(userIds);
+  const wantedChildren = new Set(childIds);
+  const [userEntries, childEntries] = await Promise.all([
+    getLiveLeaderboard(ctx, clubId, "User", window, 1000),
+    getLiveLeaderboard(ctx, clubId, "Child", window, 1000),
+  ]);
+  return [...userEntries.filter((e) => wantedUsers.has(e.subject_id)), ...childEntries.filter((e) => wantedChildren.has(e.subject_id))].sort(
+    (a, b) => b.points - a.points,
+  );
 }

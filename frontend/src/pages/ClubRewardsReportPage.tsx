@@ -45,7 +45,7 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubDetail, getLocalLabRewardRedemptions, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLiveProAccess } from "@/live/features/proAccess";
 import { listLiveRedemptions } from "@/live/features/points";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
@@ -80,13 +80,17 @@ export default function ClubRewardsReportPage() {
     queryKey: ["club-subscription", clubId],
     queryFn: async () => {
       if (useIcpLab) return { is_pro: true, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false };
-      if (isFeatureRoutedToIcp("membership")) return { is_pro: true }; // NEEDS-CANISTER: default to Pro for ICP for now
-      const { data } = await supabase
-        .from("club_subscriptions")
-        .select("*")
-        .eq("club_id", clubId!)
-        .maybeSingle();
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("club_subscriptions")
+            .select("*")
+            .eq("club_id", clubId!)
+            .maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => ({ is_pro: await resolveLiveProAccess(ctx, { clubId: clubId! }), is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false }),
+      });
     },
     enabled: !!clubId,
   });

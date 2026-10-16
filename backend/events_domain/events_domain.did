@@ -9,6 +9,16 @@ type TeamTrainingPause =
    starts_at_ms: nat64;
    team_id: text;
  };
+type SavedLocation = 
+ record {
+   account_id: text;
+   address: text;
+   created_at_ms: nat64;
+   id: text;
+   lat: float64;
+   lng: float64;
+   location_label: text;
+ };
 type RsvpWithChild = 
  record {
    child: opt Child;
@@ -63,12 +73,38 @@ type PushReachability =
    updated_at_ms: nat64;
    user: principal;
  };
+type PlayerStatRow = 
+ record {
+   captain_count: nat32;
+   goalkeeper_count: nat32;
+   mvp_count: nat32;
+   ref_id: text;
+   ref_kind: text;
+   vice_count: nat32;
+ };
+type PlayHQTeamSync = 
+ record {
+   auto: bool;
+   club_id: text;
+   competition_id: text;
+   last_error: opt text;
+   last_synced_at_ms: opt nat64;
+   playhq_team_id: text;
+   team_id: text;
+   updated_by: principal;
+ };
 type PlayHQMatch = 
  record {
    away_team_name: opt text;
    external_away_team_id: opt text;
    external_home_team_id: opt text;
    home_team_name: opt text;
+ };
+type PlayHQImportResult = 
+ record {
+   cancelled: nat32;
+   created: nat32;
+   updated: nat32;
  };
 type PlayHQConfig = 
  record {
@@ -112,6 +148,24 @@ type MiniLeagueRsvp =
    subject: RsvpSubject;
    updated_at_ms: nat64;
  };
+type MatchGoalkeeperAssignment = 
+ record {
+   assigned_by: principal;
+   event_id: text;
+   period: text;
+   ref_id: text;
+   ref_kind: text;
+   updated_at_ms: nat64;
+ };
+type MatchCaptainAssignment = 
+ record {
+   assigned_by: principal;
+   event_id: text;
+   ref_id: text;
+   ref_kind: text;
+   role: text;
+   updated_at_ms: nat64;
+ };
 type Main = 
  service {
    addBulkAccessPrincipal: ("principal": principal) ->
@@ -124,6 +178,10 @@ type Main =
        Err: text;
        Ok: EventGuest;
      });
+   add_favourite_event_title: (title: text) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
    add_group_player: (group_id: text, account_id: text, team_letter:
     opt text) -> (variant {
                     Err: text;
@@ -263,6 +321,10 @@ type Main =
                                               Err: text;
                                               Ok;
                                             });
+   delete_saved_location: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
    delete_series: (id: text, from_ms: nat64) ->
     (variant {
        Err: text;
@@ -364,6 +426,16 @@ type Main =
        Err: text;
        Ok: vec RosterEntry;
      }) query;
+   get_event_sponsors: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     }) query;
+   get_event_timer: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventTimer;
+     }) query;
    get_event_view_count: (event_id: text) ->
     (variant {
        Err: text;
@@ -389,6 +461,27 @@ type Main =
        Err: text;
        Ok: opt PitchBoardSettings;
      }) query;
+   get_player_stats_report: (club_id: text, team_id: opt text, from_ms:
+    nat64, to_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec PlayerStatRow;
+     }) query;
+   get_playhq_config_status: () ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          base_url: opt text;
+          configured: bool;
+          updated_at_ms: opt nat64;
+        };
+     }) query;
+   get_playhq_team_sync: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PlayHQTeamSync;
+     }) query;
    get_push_reachable: ("principal": principal) ->
     (variant {
        Err: text;
@@ -402,11 +495,25 @@ type Main =
              sent_at_ms: opt nat64;
            };
      }) query;
+   get_rsvp_created_at: (event_id: text, account_id: text) ->
+    (opt nat64) query;
+   get_training_default: (club_id: text, team_id: text, child_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: opt text;
+                  }) query;
    grant_role: ("principal": principal, role: text, club_id: text, team_id:
     opt text) -> (variant {
                     Err: text;
                     Ok;
                   });
+   /// Imports the linked team's PlayHQ fixtures as game events now.
+   import_playhq_team_fixtures: (club_id: text, team_id: text,
+    competition_id: text, playhq_team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PlayHQImportResult;
+     });
    is_guardian_of: ("principal": principal, child_id: text) -> (bool) query;
    is_paused: (club_id: text, team_id: text, at_ms: nat64) ->
     (variant {
@@ -424,6 +531,19 @@ type Main =
        Err: text;
        Ok: vec principal;
      }) query;
+   list_active_game_write_rates: (since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 nat32;
+               };
+     });
+   list_active_games: (since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec ActiveGame;
+     });
    list_association_events: (association_id: text) ->
     (variant {
        Err: text;
@@ -469,6 +589,7 @@ type Main =
        Err: text;
        Ok: vec Event;
      }) query;
+   list_favourite_event_titles: () -> (vec text) query;
    list_game_player_stats: (event_id: text) ->
     (variant {
        Err: text;
@@ -483,6 +604,16 @@ type Main =
     (variant {
        Err: text;
        Ok: vec EventGroupPlayer;
+     }) query;
+   list_match_captains: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchCaptainAssignment;
+     }) query;
+   list_match_goalkeepers: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchGoalkeeperAssignment;
      }) query;
    list_mini_league_rsvps: (event_id: text) ->
     (variant {
@@ -514,6 +645,7 @@ type Main =
        Err: text;
        Ok: vec ReminderLog;
      }) query;
+   list_saved_locations: () -> (vec SavedLocation) query;
    list_series: (club_id: opt text, team_id: opt text) ->
     (vec EventSeries) query;
    list_series_occurrences: (series_id: text) ->
@@ -538,6 +670,17 @@ type Main =
        Err: text;
        Ok: vec EventAttendance;
      });
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
+   merge_principal: (old: principal, new_principal: principal, dry_run:
+    bool) -> (variant {
+                err: text;
+                ok: nat;
+              });
    move_group_player: (from_group_id: text, to_group_id: text, account_id:
     text, team_letter: opt text) -> (variant {
                                        Err: text;
@@ -566,6 +709,11 @@ type Main =
        Err: text;
        Ok: ReminderLog;
      });
+   rekey_principal: (old: principal, new_principal: principal, dry_run:
+    bool) -> (variant {
+                err: text;
+                ok: nat;
+              });
    removeBulkAccessPrincipal: ("principal": principal) ->
     (variant {
        Err: text;
@@ -585,12 +733,26 @@ type Main =
                                         Err: text;
                                         Ok;
                                       });
+   remove_favourite_event_title: (title: text) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    remove_group_duty: (group_id: text, duty: text) ->
     (variant {
        Err: text;
        Ok;
      });
    remove_group_player: (group_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_match_captain: (event_id: text, ref_kind: text, ref_id: text, role:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   remove_match_goalkeeper: (event_id: text, period: text) ->
     (variant {
        Err: text;
        Ok;
@@ -605,6 +767,11 @@ type Main =
                                  Err: text;
                                  Ok: vec text;
                                });
+   /// App admins: run the photo-prompt sweep now (also runs every 15 min).
+   run_photo_prompts: () -> (variant {
+                               Err: text;
+                               Ok: nat;
+                             });
    save_game_player_stats: (event_id: text, team_id: text, stats:
     vec GamePlayerStatInput) -> (variant {
                                    Err: text;
@@ -630,6 +797,11 @@ type Main =
                                      Err: text;
                                      Ok: LineupSnapshot;
                                    });
+   save_location: (location_label: text, address: text, lat: float64, lng:
+    float64) -> (variant {
+                   Err: text;
+                   Ok: SavedLocation;
+                 });
    save_pitch_board_settings: (team_id: text, rotation_speed: nat16,
     disable_position_swaps: bool, disable_batch_subs: bool,
     rotate_gk_at_halftime: bool, minutes_per_half: nat16, max_spread_minutes:
@@ -648,6 +820,11 @@ type Main =
                 Err: text;
                 Ok: Attendance;
               });
+   set_child_rsvp: (event_id: text, account_id: text, child_id: text, state:
+    text, notes: text) -> (variant {
+                             Err: text;
+                             Ok: Rsvp;
+                           });
    set_club_domain_canister: (id: principal) -> (variant {
                                                    Err: text;
                                                    Ok;
@@ -688,11 +865,31 @@ type Main =
                                    Err: text;
                                    Ok: EventGroup;
                                  });
+   set_event_sponsors: (event_id: text, sponsor_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_event_timer: (event_id: text, action: text, minutes_per_half:
+    opt nat16, adjust_ms: opt int64) -> (variant {
+                                           Err: text;
+                                           Ok: EventTimer;
+                                         });
    set_group_duty: (group_id: text, duty: text, account_id: opt text) ->
     (variant {
        Err: text;
        Ok: EventGroupDuty;
      });
+   set_match_captain: (event_id: text, ref_kind: text, ref_id: text, role:
+    text) -> (variant {
+                Err: text;
+                Ok: MatchCaptainAssignment;
+              });
+   set_match_goalkeeper: (event_id: text, ref_kind: text, ref_id: text,
+    period: text) -> (variant {
+                        Err: text;
+                        Ok: MatchGoalkeeperAssignment;
+                      });
    set_mini_league_rsvp: (event_id: text, subject: RsvpSubject, state:
     text) -> (variant {
                 Err: text;
@@ -707,6 +904,14 @@ type Main =
                                                        Err: text;
                                                        Ok;
                                                      });
+   /// Records (or clears, when either id is null) the team's PlayHQ link and
+   /// auto-sync flag so the 6-hourly sweep can keep its fixtures current.
+   set_playhq_team_sync: (club_id: text, team_id: text, competition_id:
+    opt text, playhq_team_id: opt text, auto: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_push_reachable: (reachable: bool) ->
     (variant {
        Err: text;
@@ -737,6 +942,11 @@ type Main =
                  Err: text;
                  Ok: nat32;
                });
+   set_training_default: (club_id: text, team_id: text, child_id: opt text,
+    default_rsvp: text) -> (variant {
+                              Err: text;
+                              Ok;
+                            });
    soft_delete_series: (id: text) -> (variant {
                                         Err: text;
                                         Ok: EventSeries;
@@ -783,6 +993,13 @@ type Main =
                         Err: text;
                         Ok: EventSeries;
                       });
+   /// Public: aggregate record counts (shown in admin settings). Counts only —
+   /// no record contents, so no PII is exposed.
+   usage_stats: () -> (record {
+                         children: nat;
+                         events: nat;
+                         rsvps: nat;
+                       }) query;
  };
 type LineupSnapshot = 
  record {
@@ -901,6 +1118,21 @@ type EventView =
    event_id: text;
    viewed_at_ms: nat64;
    viewer: principal;
+ };
+type EventTimer = 
+ record {
+   accumulated_pause_ms: nat64;
+   current_half: nat8;
+   event_id: text;
+   half_ended_at_ms: opt nat64;
+   half_paused_at_ms: opt nat64;
+   half_started_at_ms: opt nat64;
+   is_game_finished: bool;
+   is_running: bool;
+   last_event_at_ms: nat64;
+   minutes_per_half: nat16;
+   schema_version: nat8;
+   updated_by: principal;
  };
 type EventSeries = 
  record {

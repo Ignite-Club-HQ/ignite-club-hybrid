@@ -53,6 +53,7 @@ function record_opt_to_undefined<T>(arg: T | null): T | undefined {
 }
 export interface Account {
     id: string;
+    status: AccountStatus;
     version: bigint;
     principals: Array<Principal>;
 }
@@ -65,7 +66,7 @@ export type Result_2 = {
 };
 export type Result_13 = {
     __kind__: "Ok";
-    Ok: Array<ProfileSearchResult>;
+    Ok: bigint;
 } | {
     __kind__: "Err";
     Err: string;
@@ -90,11 +91,31 @@ export interface LinkChallenge {
 export interface Init {
     governor: Principal;
 }
+export type Result_5 = {
+    __kind__: "Ok";
+    Ok: boolean;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export interface Profile {
     account_id: string;
+    /**
+     * Millisecond timestamp of when the caller dismissed the one-shot club
+     * switcher coach-mark, so the dismissal follows the account across
+     * devices. `#[serde(default)]` keeps older profiles decodable as
+     * `None` (never dismissed).
+     */
+    club_switcher_hint_seen_at?: bigint;
     avatar_ref?: string;
     updated_at_ns: bigint;
     display_name: string;
+    /**
+     * UI theme preference ("light" or "dark"); `#[serde(default)]` keeps
+     * profiles stored before this field existed decodable as `None`
+     * (caller falls back to the local DOM/localStorage theme).
+     */
+    theme_preference?: string;
 }
 export interface PrivacyConsent {
     account_id: string;
@@ -109,16 +130,9 @@ export type Result_1 = {
     __kind__: "Err";
     Err: string;
 };
-export interface RoleGrant {
-    account_id: string;
-    club?: string;
-    role: string;
-    team?: string;
-    site_id?: string;
-}
-export type Result_5 = {
+export type Result_16 = {
     __kind__: "Ok";
-    Ok: boolean;
+    Ok: TermsAcceptance;
 } | {
     __kind__: "Err";
     Err: string;
@@ -137,6 +151,13 @@ export type Result_4 = {
     __kind__: "Err";
     Err: string;
 };
+export interface RoleGrant {
+    account_id: string;
+    club?: string;
+    role: string;
+    team?: string;
+    site_id?: string;
+}
 export interface TermsAcceptance {
     account_id: string;
     terms_version: number;
@@ -156,7 +177,7 @@ export interface ProfileSearchResult {
 }
 export type Result_14 = {
     __kind__: "Ok";
-    Ok: PrivacyConsent;
+    Ok: Array<ProfileSearchResult>;
 } | {
     __kind__: "Err";
     Err: string;
@@ -190,6 +211,10 @@ export interface State {
      * empty.
      */
     attestation_secret: Uint8Array;
+    /**
+     * Empty on schema-5+ slim blobs (accounts live in their own stable map);
+     * `#[serde(default)]` keeps those decodable through the legacy shape.
+     */
     accounts: Array<Account>;
     governor: Principal;
     exclusions: Array<Exclusion>;
@@ -248,13 +273,6 @@ export type Result = {
     __kind__: "Err";
     Err: string;
 };
-export type Result_10 = {
-    __kind__: "Ok";
-    Ok: TermsAcceptance | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export interface Access {
     account_id: string;
     app_admin: boolean;
@@ -262,16 +280,23 @@ export interface Access {
     guardian: boolean;
     team_member: boolean;
 }
-export type Result_3 = {
+export type Result_10 = {
     __kind__: "Ok";
-    Ok: LinkChallenge;
+    Ok: TermsAcceptance | null;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_15 = {
     __kind__: "Ok";
-    Ok: TermsAcceptance;
+    Ok: PrivacyConsent;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_3 = {
+    __kind__: "Ok";
+    Ok: LinkChallenge;
 } | {
     __kind__: "Err";
     Err: string;
@@ -283,6 +308,10 @@ export type Result_8 = {
     __kind__: "Err";
     Err: string;
 };
+export enum AccountStatus {
+    Active = "Active",
+    Suspended = "Suspended"
+}
 export interface identity_accessInterface {
     accept_link(arg0: bigint): Promise<Result>;
     access(arg0: string | null, arg1: string | null, arg2: string | null): Promise<Result_1>;
@@ -303,24 +332,35 @@ export interface identity_accessInterface {
     grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2>;
     grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2>;
     is_pro(arg0: Principal): Promise<Result_5>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     my_roles(): Promise<Result_11>;
     my_terms_acceptance(): Promise<Result_10>;
     redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12>;
     register_account(): Promise<Result>;
+    rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_13>;
     remove_verifier(arg0: Principal): Promise<Result_2>;
     revoke(arg0: Principal, arg1: bigint): Promise<Result>;
-    search_profiles(arg0: string, arg1: number): Promise<Result_13>;
+    revoke_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2>;
+    revoke_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2>;
+    search_profiles(arg0: string, arg1: number): Promise<Result_14>;
+    set_account_status(arg0: string, arg1: AccountStatus): Promise<Result>;
     set_attestation_secret(arg0: Uint8Array): Promise<Result_2>;
+    set_club_switcher_hint_seen(): Promise<Result_9>;
     set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_12>;
     set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_2>;
     set_exclusion_scoped(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<Result_2>;
     set_family(arg0: string, arg1: string): Promise<Result_2>;
-    set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_14>;
+    set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_15>;
     set_profile(arg0: string, arg1: string | null): Promise<Result_9>;
-    set_terms_acceptance(arg0: number): Promise<Result_15>;
+    set_terms_acceptance(arg0: number): Promise<Result_16>;
+    set_theme_preference(arg0: string | null): Promise<Result_9>;
     whoami(): Promise<Result>;
 }
-import type { Access as _Access, Account as _Account, Entitlement as _Entitlement, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, LinkChallenge as _LinkChallenge, PrivacyConsent as _PrivacyConsent, Profile as _Profile, ProfileSearchResult as _ProfileSearchResult, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance } from "./declarations/identity_access.did";
+import type { Access as _Access, Account as _Account, AccountStatus as _AccountStatus, Entitlement as _Entitlement, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, LinkChallenge as _LinkChallenge, PrivacyConsent as _PrivacyConsent, Profile as _Profile, ProfileSearchResult as _ProfileSearchResult, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance } from "./declarations/identity_access.did";
 export class Identity_access implements identity_accessInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async accept_link(arg0: bigint): Promise<Result> {
@@ -328,28 +368,28 @@ export class Identity_access implements identity_accessInterface {
         return from_candid_Result_n1(result);
     }
     async access(arg0: string | null, arg1: string | null, arg2: string | null): Promise<Result_1> {
-        const result = await this.actor.access(to_candid_opt_n3(arg0), to_candid_opt_n3(arg1), to_candid_opt_n3(arg2));
-        return from_candid_Result_1_n4(result);
+        const result = await this.actor.access(to_candid_opt_n7(arg0), to_candid_opt_n7(arg1), to_candid_opt_n7(arg2));
+        return from_candid_Result_1_n8(result);
     }
     async access_scoped(arg0: string | null, arg1: string | null, arg2: string | null, arg3: string | null): Promise<Result_1> {
-        const result = await this.actor.access_scoped(to_candid_opt_n3(arg0), to_candid_opt_n3(arg1), to_candid_opt_n3(arg2), to_candid_opt_n3(arg3));
-        return from_candid_Result_1_n4(result);
+        const result = await this.actor.access_scoped(to_candid_opt_n7(arg0), to_candid_opt_n7(arg1), to_candid_opt_n7(arg2), to_candid_opt_n7(arg3));
+        return from_candid_Result_1_n8(result);
     }
     async add_verifier(arg0: Principal): Promise<Result_2> {
         const result = await this.actor.add_verifier(arg0);
-        return from_candid_Result_2_n6(result);
+        return from_candid_Result_2_n10(result);
     }
     async begin_link(arg0: Principal): Promise<Result_3> {
         const result = await this.actor.begin_link(arg0);
-        return from_candid_Result_3_n8(result);
+        return from_candid_Result_3_n12(result);
     }
     async bind_external_site(arg0: string, arg1: string, arg2: string): Promise<Result_4> {
         const result = await this.actor.bind_external_site(arg0, arg1, arg2);
-        return from_candid_Result_4_n10(result);
+        return from_candid_Result_4_n14(result);
     }
     async check_field_access(arg0: string, arg1: string): Promise<Result_5> {
         const result = await this.actor.check_field_access(arg0, arg1);
-        return from_candid_Result_5_n12(result);
+        return from_candid_Result_5_n16(result);
     }
     async cycles_balance(): Promise<bigint> {
         const result = await this.actor.cycles_balance();
@@ -357,183 +397,227 @@ export class Identity_access implements identity_accessInterface {
     }
     async erase_account(arg0: string): Promise<Result_2> {
         const result = await this.actor.erase_account(arg0);
-        return from_candid_Result_2_n6(result);
+        return from_candid_Result_2_n10(result);
     }
     async export_state(): Promise<Result_6> {
         const result = await this.actor.export_state();
-        return from_candid_Result_6_n14(result);
+        return from_candid_Result_6_n18(result);
     }
     async get_external_bindings(arg0: string): Promise<Result_7> {
         const result = await this.actor.get_external_bindings(arg0);
-        return from_candid_Result_7_n28(result);
+        return from_candid_Result_7_n34(result);
     }
     async get_my_entitlements(): Promise<Result_8> {
         const result = await this.actor.get_my_entitlements();
-        return from_candid_Result_8_n30(result);
+        return from_candid_Result_8_n36(result);
     }
     async get_privacy_consent(arg0: string, arg1: string): Promise<Result_5> {
         const result = await this.actor.get_privacy_consent(arg0, arg1);
-        return from_candid_Result_5_n12(result);
+        return from_candid_Result_5_n16(result);
     }
     async get_profile(): Promise<Result_9> {
         const result = await this.actor.get_profile();
-        return from_candid_Result_9_n32(result);
+        return from_candid_Result_9_n38(result);
     }
     async get_profiles_by_ids(arg0: Array<string>): Promise<Array<Profile>> {
         const result = await this.actor.get_profiles_by_ids(arg0);
-        return from_candid_vec_n22(result);
+        return from_candid_vec_n27(result);
     }
     async get_terms_acceptance(arg0: string): Promise<Result_10> {
         const result = await this.actor.get_terms_acceptance(arg0);
-        return from_candid_Result_10_n34(result);
+        return from_candid_Result_10_n40(result);
     }
     async grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2> {
-        const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n3(arg2), to_candid_opt_n3(arg3));
-        return from_candid_Result_2_n6(result);
+        const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n7(arg2), to_candid_opt_n7(arg3));
+        return from_candid_Result_2_n10(result);
     }
     async grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2> {
-        const result = await this.actor.grant_role_scoped(arg0, arg1, to_candid_opt_n3(arg2), to_candid_opt_n3(arg3), to_candid_opt_n3(arg4));
-        return from_candid_Result_2_n6(result);
+        const result = await this.actor.grant_role_scoped(arg0, arg1, to_candid_opt_n7(arg2), to_candid_opt_n7(arg3), to_candid_opt_n7(arg4));
+        return from_candid_Result_2_n10(result);
     }
     async is_pro(arg0: Principal): Promise<Result_5> {
         const result = await this.actor.is_pro(arg0);
-        return from_candid_Result_5_n12(result);
+        return from_candid_Result_5_n16(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async my_roles(): Promise<Result_11> {
         const result = await this.actor.my_roles();
-        return from_candid_Result_11_n37(result);
+        return from_candid_Result_11_n43(result);
     }
     async my_terms_acceptance(): Promise<Result_10> {
         const result = await this.actor.my_terms_acceptance();
-        return from_candid_Result_10_n34(result);
+        return from_candid_Result_10_n40(result);
     }
     async redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12> {
         const result = await this.actor.redeem_entitlement(arg0, arg1, arg2, arg3, arg4);
-        return from_candid_Result_12_n39(result);
+        return from_candid_Result_12_n45(result);
     }
     async register_account(): Promise<Result> {
         const result = await this.actor.register_account();
         return from_candid_Result_n1(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_13> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_Result_13_n47(result);
+    }
     async remove_verifier(arg0: Principal): Promise<Result_2> {
         const result = await this.actor.remove_verifier(arg0);
-        return from_candid_Result_2_n6(result);
+        return from_candid_Result_2_n10(result);
     }
     async revoke(arg0: Principal, arg1: bigint): Promise<Result> {
         const result = await this.actor.revoke(arg0, arg1);
         return from_candid_Result_n1(result);
     }
-    async search_profiles(arg0: string, arg1: number): Promise<Result_13> {
+    async revoke_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2> {
+        const result = await this.actor.revoke_role(arg0, arg1, to_candid_opt_n7(arg2), to_candid_opt_n7(arg3));
+        return from_candid_Result_2_n10(result);
+    }
+    async revoke_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2> {
+        const result = await this.actor.revoke_role_scoped(arg0, arg1, to_candid_opt_n7(arg2), to_candid_opt_n7(arg3), to_candid_opt_n7(arg4));
+        return from_candid_Result_2_n10(result);
+    }
+    async search_profiles(arg0: string, arg1: number): Promise<Result_14> {
         const result = await this.actor.search_profiles(arg0, arg1);
-        return from_candid_Result_13_n41(result);
+        return from_candid_Result_14_n49(result);
+    }
+    async set_account_status(arg0: string, arg1: AccountStatus): Promise<Result> {
+        const result = await this.actor.set_account_status(arg0, to_candid_AccountStatus_n54(arg1));
+        return from_candid_Result_n1(result);
     }
     async set_attestation_secret(arg0: Uint8Array): Promise<Result_2> {
         const result = await this.actor.set_attestation_secret(arg0);
-        return from_candid_Result_2_n6(result);
+        return from_candid_Result_2_n10(result);
+    }
+    async set_club_switcher_hint_seen(): Promise<Result_9> {
+        const result = await this.actor.set_club_switcher_hint_seen();
+        return from_candid_Result_9_n38(result);
     }
     async set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_12> {
         const result = await this.actor.set_entitlement(arg0, arg1, arg2, arg3, arg4);
-        return from_candid_Result_12_n39(result);
+        return from_candid_Result_12_n45(result);
     }
     async set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_2> {
-        const result = await this.actor.set_exclusion(arg0, arg1, to_candid_opt_n3(arg2));
-        return from_candid_Result_2_n6(result);
+        const result = await this.actor.set_exclusion(arg0, arg1, to_candid_opt_n7(arg2));
+        return from_candid_Result_2_n10(result);
     }
     async set_exclusion_scoped(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<Result_2> {
-        const result = await this.actor.set_exclusion_scoped(arg0, to_candid_opt_n3(arg1), arg2, to_candid_opt_n3(arg3));
-        return from_candid_Result_2_n6(result);
+        const result = await this.actor.set_exclusion_scoped(arg0, to_candid_opt_n7(arg1), arg2, to_candid_opt_n7(arg3));
+        return from_candid_Result_2_n10(result);
     }
     async set_family(arg0: string, arg1: string): Promise<Result_2> {
         const result = await this.actor.set_family(arg0, arg1);
-        return from_candid_Result_2_n6(result);
+        return from_candid_Result_2_n10(result);
     }
-    async set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_14> {
+    async set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_15> {
         const result = await this.actor.set_privacy_consent(arg0, arg1, arg2);
-        return from_candid_Result_14_n46(result);
+        return from_candid_Result_15_n56(result);
     }
     async set_profile(arg0: string, arg1: string | null): Promise<Result_9> {
-        const result = await this.actor.set_profile(arg0, to_candid_opt_n3(arg1));
-        return from_candid_Result_9_n32(result);
+        const result = await this.actor.set_profile(arg0, to_candid_opt_n7(arg1));
+        return from_candid_Result_9_n38(result);
     }
-    async set_terms_acceptance(arg0: number): Promise<Result_15> {
+    async set_terms_acceptance(arg0: number): Promise<Result_16> {
         const result = await this.actor.set_terms_acceptance(arg0);
-        return from_candid_Result_15_n48(result);
+        return from_candid_Result_16_n58(result);
+    }
+    async set_theme_preference(arg0: string | null): Promise<Result_9> {
+        const result = await this.actor.set_theme_preference(to_candid_opt_n7(arg0));
+        return from_candid_Result_9_n38(result);
     }
     async whoami(): Promise<Result> {
         const result = await this.actor.whoami();
         return from_candid_Result_n1(result);
     }
 }
-function from_candid_Exclusion_n19(value: _Exclusion): Exclusion {
-    return from_candid_record_n20(value);
+function from_candid_AccountStatus_n5(value: _AccountStatus): AccountStatus {
+    return from_candid_variant_n6(value);
 }
-function from_candid_ProfileSearchResult_n44(value: _ProfileSearchResult): ProfileSearchResult {
-    return from_candid_record_n45(value);
+function from_candid_Account_n3(value: _Account): Account {
+    return from_candid_record_n4(value);
 }
-function from_candid_Profile_n23(value: _Profile): Profile {
-    return from_candid_record_n24(value);
+function from_candid_Exclusion_n24(value: _Exclusion): Exclusion {
+    return from_candid_record_n25(value);
 }
-function from_candid_Result_10_n34(value: _Result_10): Result_10 {
-    return from_candid_variant_n35(value);
+function from_candid_ProfileSearchResult_n52(value: _ProfileSearchResult): ProfileSearchResult {
+    return from_candid_record_n53(value);
 }
-function from_candid_Result_11_n37(value: _Result_11): Result_11 {
-    return from_candid_variant_n38(value);
+function from_candid_Profile_n28(value: _Profile): Profile {
+    return from_candid_record_n29(value);
 }
-function from_candid_Result_12_n39(value: _Result_12): Result_12 {
-    return from_candid_variant_n40(value);
+function from_candid_Result_10_n40(value: _Result_10): Result_10 {
+    return from_candid_variant_n41(value);
 }
-function from_candid_Result_13_n41(value: _Result_13): Result_13 {
-    return from_candid_variant_n42(value);
+function from_candid_Result_11_n43(value: _Result_11): Result_11 {
+    return from_candid_variant_n44(value);
 }
-function from_candid_Result_14_n46(value: _Result_14): Result_14 {
-    return from_candid_variant_n47(value);
+function from_candid_Result_12_n45(value: _Result_12): Result_12 {
+    return from_candid_variant_n46(value);
 }
-function from_candid_Result_15_n48(value: _Result_15): Result_15 {
-    return from_candid_variant_n49(value);
+function from_candid_Result_13_n47(value: _Result_13): Result_13 {
+    return from_candid_variant_n48(value);
 }
-function from_candid_Result_1_n4(value: _Result_1): Result_1 {
-    return from_candid_variant_n5(value);
+function from_candid_Result_14_n49(value: _Result_14): Result_14 {
+    return from_candid_variant_n50(value);
 }
-function from_candid_Result_2_n6(value: _Result_2): Result_2 {
-    return from_candid_variant_n7(value);
+function from_candid_Result_15_n56(value: _Result_15): Result_15 {
+    return from_candid_variant_n57(value);
 }
-function from_candid_Result_3_n8(value: _Result_3): Result_3 {
+function from_candid_Result_16_n58(value: _Result_16): Result_16 {
+    return from_candid_variant_n59(value);
+}
+function from_candid_Result_1_n8(value: _Result_1): Result_1 {
     return from_candid_variant_n9(value);
 }
-function from_candid_Result_4_n10(value: _Result_4): Result_4 {
+function from_candid_Result_2_n10(value: _Result_2): Result_2 {
     return from_candid_variant_n11(value);
 }
-function from_candid_Result_5_n12(value: _Result_5): Result_5 {
+function from_candid_Result_3_n12(value: _Result_3): Result_3 {
     return from_candid_variant_n13(value);
 }
-function from_candid_Result_6_n14(value: _Result_6): Result_6 {
+function from_candid_Result_4_n14(value: _Result_4): Result_4 {
     return from_candid_variant_n15(value);
 }
-function from_candid_Result_7_n28(value: _Result_7): Result_7 {
-    return from_candid_variant_n29(value);
+function from_candid_Result_5_n16(value: _Result_5): Result_5 {
+    return from_candid_variant_n17(value);
 }
-function from_candid_Result_8_n30(value: _Result_8): Result_8 {
-    return from_candid_variant_n31(value);
+function from_candid_Result_6_n18(value: _Result_6): Result_6 {
+    return from_candid_variant_n19(value);
 }
-function from_candid_Result_9_n32(value: _Result_9): Result_9 {
-    return from_candid_variant_n33(value);
+function from_candid_Result_7_n34(value: _Result_7): Result_7 {
+    return from_candid_variant_n35(value);
+}
+function from_candid_Result_8_n36(value: _Result_8): Result_8 {
+    return from_candid_variant_n37(value);
+}
+function from_candid_Result_9_n38(value: _Result_9): Result_9 {
+    return from_candid_variant_n39(value);
 }
 function from_candid_Result_n1(value: _Result): Result {
     return from_candid_variant_n2(value);
 }
-function from_candid_RoleGrant_n26(value: _RoleGrant): RoleGrant {
-    return from_candid_record_n27(value);
+function from_candid_RoleGrant_n32(value: _RoleGrant): RoleGrant {
+    return from_candid_record_n33(value);
 }
-function from_candid_State_n16(value: _State): State {
-    return from_candid_record_n17(value);
+function from_candid_State_n20(value: _State): State {
+    return from_candid_record_n21(value);
 }
-function from_candid_opt_n21(value: [] | [string]): string | null {
+function from_candid_opt_n26(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n36(value: [] | [_TermsAcceptance]): TermsAcceptance | null {
+function from_candid_opt_n30(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n17(value: {
+function from_candid_opt_n42(value: [] | [_TermsAcceptance]): TermsAcceptance | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n21(value: {
     privacy_consents: Array<_PrivacyConsent>;
     schema: number;
     verifiers: Array<Principal>;
@@ -571,20 +655,20 @@ function from_candid_record_n17(value: {
         schema: value.schema,
         verifiers: value.verifiers,
         attestation_secret: value.attestation_secret,
-        accounts: value.accounts,
+        accounts: from_candid_vec_n22(value.accounts),
         governor: value.governor,
-        exclusions: from_candid_vec_n18(value.exclusions),
+        exclusions: from_candid_vec_n23(value.exclusions),
         external_bindings: value.external_bindings,
         entitlements: value.entitlements,
         families: value.families,
         challenges: value.challenges,
-        profiles: from_candid_vec_n22(value.profiles),
-        roles: from_candid_vec_n25(value.roles),
+        profiles: from_candid_vec_n27(value.profiles),
+        roles: from_candid_vec_n31(value.roles),
         terms_acceptances: value.terms_acceptances,
         next_challenge: value.next_challenge
     };
 }
-function from_candid_record_n20(value: {
+function from_candid_record_n25(value: {
     account_id: string;
     club: string;
     team: [] | [string];
@@ -598,29 +682,35 @@ function from_candid_record_n20(value: {
     return {
         account_id: value.account_id,
         club: value.club,
-        team: record_opt_to_undefined(from_candid_opt_n21(value.team)),
-        site_id: record_opt_to_undefined(from_candid_opt_n21(value.site_id))
+        team: record_opt_to_undefined(from_candid_opt_n26(value.team)),
+        site_id: record_opt_to_undefined(from_candid_opt_n26(value.site_id))
     };
 }
-function from_candid_record_n24(value: {
+function from_candid_record_n29(value: {
     account_id: string;
+    club_switcher_hint_seen_at: [] | [bigint];
     avatar_ref: [] | [string];
     updated_at_ns: bigint;
     display_name: string;
+    theme_preference: [] | [string];
 }): {
     account_id: string;
+    club_switcher_hint_seen_at?: bigint;
     avatar_ref?: string;
     updated_at_ns: bigint;
     display_name: string;
+    theme_preference?: string;
 } {
     return {
         account_id: value.account_id,
-        avatar_ref: record_opt_to_undefined(from_candid_opt_n21(value.avatar_ref)),
+        club_switcher_hint_seen_at: record_opt_to_undefined(from_candid_opt_n30(value.club_switcher_hint_seen_at)),
+        avatar_ref: record_opt_to_undefined(from_candid_opt_n26(value.avatar_ref)),
         updated_at_ns: value.updated_at_ns,
-        display_name: value.display_name
+        display_name: value.display_name,
+        theme_preference: record_opt_to_undefined(from_candid_opt_n26(value.theme_preference))
     };
 }
-function from_candid_record_n27(value: {
+function from_candid_record_n33(value: {
     account_id: string;
     club: [] | [string];
     role: string;
@@ -635,13 +725,31 @@ function from_candid_record_n27(value: {
 } {
     return {
         account_id: value.account_id,
-        club: record_opt_to_undefined(from_candid_opt_n21(value.club)),
+        club: record_opt_to_undefined(from_candid_opt_n26(value.club)),
         role: value.role,
-        team: record_opt_to_undefined(from_candid_opt_n21(value.team)),
-        site_id: record_opt_to_undefined(from_candid_opt_n21(value.site_id))
+        team: record_opt_to_undefined(from_candid_opt_n26(value.team)),
+        site_id: record_opt_to_undefined(from_candid_opt_n26(value.site_id))
     };
 }
-function from_candid_record_n45(value: {
+function from_candid_record_n4(value: {
+    id: string;
+    status: _AccountStatus;
+    version: bigint;
+    principals: Array<Principal>;
+}): {
+    id: string;
+    status: AccountStatus;
+    version: bigint;
+    principals: Array<Principal>;
+} {
+    return {
+        id: value.id,
+        status: from_candid_AccountStatus_n5(value.status),
+        version: value.version,
+        principals: value.principals
+    };
+}
+function from_candid_record_n53(value: {
     account_id: string;
     principal: Principal;
     avatar_ref: [] | [string];
@@ -655,17 +763,17 @@ function from_candid_record_n45(value: {
     return {
         account_id: value.account_id,
         principal: value.principal,
-        avatar_ref: record_opt_to_undefined(from_candid_opt_n21(value.avatar_ref)),
+        avatar_ref: record_opt_to_undefined(from_candid_opt_n26(value.avatar_ref)),
         display_name: value.display_name
     };
 }
 function from_candid_variant_n11(value: {
-    Ok: _ExternalSiteBinding;
+    Ok: null;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: ExternalSiteBinding;
+    Ok: null;
 } | {
     __kind__: "Err";
     Err: string;
@@ -679,272 +787,6 @@ function from_candid_variant_n11(value: {
     } : value;
 }
 function from_candid_variant_n13(value: {
-    Ok: boolean;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: boolean;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n15(value: {
-    Ok: _State;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: State;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_State_n16(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n2(value: {
-    Ok: _Account;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Account;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n29(value: {
-    Ok: Array<_ExternalSiteBinding>;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Array<ExternalSiteBinding>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n31(value: {
-    Ok: Array<_Entitlement>;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Array<Entitlement>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n33(value: {
-    Ok: _Profile;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Profile;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_Profile_n23(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n35(value: {
-    Ok: [] | [_TermsAcceptance];
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: TermsAcceptance | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_opt_n36(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n38(value: {
-    Ok: Array<_RoleGrant>;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Array<RoleGrant>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_vec_n25(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n40(value: {
-    Ok: _Entitlement;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Entitlement;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n42(value: {
-    Ok: Array<_ProfileSearchResult>;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Array<ProfileSearchResult>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_vec_n43(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n47(value: {
-    Ok: _PrivacyConsent;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: PrivacyConsent;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n49(value: {
-    Ok: _TermsAcceptance;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: TermsAcceptance;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n5(value: {
-    Ok: _Access;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Access;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n7(value: {
-    Ok: null;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n9(value: {
     Ok: _LinkChallenge;
 } | {
     Err: string;
@@ -963,20 +805,329 @@ function from_candid_variant_n9(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n18(value: Array<_Exclusion>): Array<Exclusion> {
-    return value.map((x)=>from_candid_Exclusion_n19(x));
+function from_candid_variant_n15(value: {
+    Ok: _ExternalSiteBinding;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: ExternalSiteBinding;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
 }
-function from_candid_vec_n22(value: Array<_Profile>): Array<Profile> {
-    return value.map((x)=>from_candid_Profile_n23(x));
+function from_candid_variant_n17(value: {
+    Ok: boolean;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: boolean;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
 }
-function from_candid_vec_n25(value: Array<_RoleGrant>): Array<RoleGrant> {
-    return value.map((x)=>from_candid_RoleGrant_n26(x));
+function from_candid_variant_n19(value: {
+    Ok: _State;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: State;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_State_n20(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
 }
-function from_candid_vec_n43(value: Array<_ProfileSearchResult>): Array<ProfileSearchResult> {
-    return value.map((x)=>from_candid_ProfileSearchResult_n44(x));
+function from_candid_variant_n2(value: {
+    Ok: _Account;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Account;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_Account_n3(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
 }
-function to_candid_opt_n3(value: string | null): [] | [string] {
+function from_candid_variant_n35(value: {
+    Ok: Array<_ExternalSiteBinding>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<ExternalSiteBinding>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n37(value: {
+    Ok: Array<_Entitlement>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<Entitlement>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n39(value: {
+    Ok: _Profile;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Profile;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_Profile_n28(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n41(value: {
+    Ok: [] | [_TermsAcceptance];
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: TermsAcceptance | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_opt_n42(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n44(value: {
+    Ok: Array<_RoleGrant>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<RoleGrant>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_vec_n31(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n46(value: {
+    Ok: _Entitlement;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Entitlement;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n48(value: {
+    Ok: bigint;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: bigint;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n50(value: {
+    Ok: Array<_ProfileSearchResult>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<ProfileSearchResult>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_vec_n51(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n57(value: {
+    Ok: _PrivacyConsent;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: PrivacyConsent;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n59(value: {
+    Ok: _TermsAcceptance;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: TermsAcceptance;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n6(value: {
+    Active: null;
+} | {
+    Suspended: null;
+}): AccountStatus {
+    return "Active" in value ? AccountStatus.Active : "Suspended" in value ? AccountStatus.Suspended : value;
+}
+function from_candid_variant_n9(value: {
+    Ok: _Access;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Access;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_vec_n22(value: Array<_Account>): Array<Account> {
+    return value.map((x)=>from_candid_Account_n3(x));
+}
+function from_candid_vec_n23(value: Array<_Exclusion>): Array<Exclusion> {
+    return value.map((x)=>from_candid_Exclusion_n24(x));
+}
+function from_candid_vec_n27(value: Array<_Profile>): Array<Profile> {
+    return value.map((x)=>from_candid_Profile_n28(x));
+}
+function from_candid_vec_n31(value: Array<_RoleGrant>): Array<RoleGrant> {
+    return value.map((x)=>from_candid_RoleGrant_n32(x));
+}
+function from_candid_vec_n51(value: Array<_ProfileSearchResult>): Array<ProfileSearchResult> {
+    return value.map((x)=>from_candid_ProfileSearchResult_n52(x));
+}
+function to_candid_AccountStatus_n54(value: AccountStatus): _AccountStatus {
+    return to_candid_variant_n55(value);
+}
+function to_candid_opt_n7(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_variant_n55(value: AccountStatus): {
+    Active: null;
+} | {
+    Suspended: null;
+} {
+    return value == AccountStatus.Active ? {
+        Active: null
+    } : value == AccountStatus.Suspended ? {
+        Suspended: null
+    } : value;
 }
 export interface CreateActorOptions {
     agent?: Agent;

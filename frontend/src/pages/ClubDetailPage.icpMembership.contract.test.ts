@@ -21,4 +21,9 @@ describe("ClubDetailPage ICP membership wiring", () => {
     expect(source).toContain('withFeatureBackend("membership", {');
     expect(source).toContain("icp: async (ctx) => { await requestLiveRole(ctx, id!, selectedRole); }");
   });
+
+  it("does not block Internet Identity users from club role requests or schedule broadcasts", () => {
+    expect(source).not.toContain("Club role requests are unavailable in ICP lab mode.");
+    expect(source).not.toContain("Schedule broadcasts are unavailable in ICP lab mode");
+  });
 });

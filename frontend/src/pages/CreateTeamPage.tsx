@@ -22,7 +22,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { saveLiveMembershipTeam, addLiveRoleGrant, getLiveMyRoleGrants } from "@/live/features/membership";
-import { checkLiveTeamNameUnique, getLiveClubProfile, listLiveTeams, getLiveClubSubscription, listLiveTeamFolders } from "@/live/features/club";
+import { checkLiveTeamNameUnique, getLiveClubProfile, listLiveTeams, getLiveClubSubscription, listLiveTeamFolders, requestLiveTeamCreation, createLivePendingInvite, saveLiveTeam } from "@/live/features/club";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { Principal } from "@icp-sdk/core/principal";
 import { AssignTeamAdminSection, TeamAdminAssignment } from "@/components/AssignTeamAdminSection";
@@ -66,9 +66,14 @@ export default function CreateTeamPage() {
   
   // Invite dialog state no longer needed - we navigate immediately with state
 
+  const isPersonalIcp = clubId === "__personal__";
+
   const { data: club } = useQuery({
     queryKey: ["club", clubId, "create-team", providerKey],
     queryFn: async () => {
+      if (isPersonalIcp) {
+        return { name: "Personal", logo_url: null, class_mode_enabled: false, contact_email: null };
+      }
       if (useIcpLab) {
         const fixture = getLocalLabClubDetail(clubId!);
         return fixture ? {
@@ -88,7 +93,7 @@ export default function CreateTeamPage() {
               ? {
                   name: p.name,
                   logo_url: p.logo_url[0] ?? null,
-                  class_mode_enabled: false,
+                  class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, clubId!))?.classModeEnabled ?? false,
                   contact_email: null,
                 }
               : null;
@@ -110,6 +115,7 @@ export default function CreateTeamPage() {
   const { data: isClubAdmin, isLoading: isCheckingAdmin } = useQuery({
     queryKey: ["is-club-admin", clubId, user?.id, providerKey],
     queryFn: async () => {
+      if (isPersonalIcp) return true;
       if (useIcpLab) return true;
       return withFeatureBackend("membership", {
         supabase: async () => {
@@ -145,6 +151,7 @@ export default function CreateTeamPage() {
   const { data: teamCount = 0 } = useQuery({
     queryKey: ["club-team-count", clubId, providerKey],
     queryFn: async () => {
+      if (isPersonalIcp) return 0;
       if (useIcpLab) {
         return getLocalLabTeamList().filter((team) => team.club_id === clubId).length;
       }
@@ -170,6 +177,7 @@ export default function CreateTeamPage() {
   const { data: clubSubscription } = useQuery({
     queryKey: ["club-subscription", clubId, providerKey],
     queryFn: async () => {
+      if (isPersonalIcp) return null;
       if (useIcpLab) return null;
       if (isFeatureRoutedToIcp("membership")) {
         return withFeatureBackend("membership", {
@@ -196,6 +204,7 @@ export default function CreateTeamPage() {
   const { data: folders = [] } = useQuery({
     queryKey: ["team-folders", clubId, providerKey],
     queryFn: async () => {
+      if (isPersonalIcp) return [];
       if (useIcpLab) return [];
       if (isFeatureRoutedToIcp("membership")) {
         return withFeatureBackend("membership", {
@@ -247,19 +256,6 @@ export default function CreateTeamPage() {
   };
 
 
-  // Non-admin team requests have no canister counterpart — hide the whole
-  // form for ICP-routed clubs rather than offering a submit that fails.
-  if (!isClubAdmin && isFeatureRoutedToIcp("membership") && !useIcpLab) {
-    return (
-      <div className="container max-w-lg mx-auto px-4 py-12 text-center space-y-3">
-        <h1 className="text-xl font-semibold">Team requests</h1>
-        <p className="text-muted-foreground">
-          Ask a club admin to create the team directly.
-        </p>
-      </div>
-    );
-  }
-
   const handleSubmit = async () => {
     const label = entityLabelLower(club);
     if (!name.trim()) {
@@ -289,20 +285,57 @@ export default function CreateTeamPage() {
       return;
     }
 
-    // NEEDS-CANISTER: the non-admin request flow (team_creation_requests
-    // insert + request-logo upload) has no club_domain counterpart — the
-    // canister only lists/approves/rejects requests. Fail closed so an
-    // ICP-routed club's request never lands in Supabase.
-    if (!isClubAdmin && isFeatureRoutedToIcp("membership")) {
-      toast({
-        title: "Team requests are not available yet for Internet Identity clubs",
-        description: "Ask a club admin to create the team directly.",
-        variant: "destructive",
-      });
+    setSaving(true);
+
+    if (isPersonalIcp) {
+      try {
+        const id = crypto.randomUUID();
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            await saveLiveTeam(ctx, {
+              id,
+              name: name.trim(),
+              division: [],
+              gender: [],
+              is_active: true,
+              club_id: "",
+              age_group: levelAge.trim() ? [levelAge.trim()] : [],
+              description: description.trim() ? [description.trim()] : [],
+              logo_url: [],
+              folder_id: [],
+              team_type: teamType ? [teamType] : [],
+              archived: false,
+              is_shell: false,
+              shell_invited_by: [],
+              shell_contact_name: [],
+              shell_claim_token: [],
+              shell_claimed_at_ms: [],
+              shell_contact_email: [],
+              shell_claimed_by: [],
+              deleted_at_ms: [],
+              playhq_team_id: [],
+              playhq_competition_id: [],
+              playhq_auto_create_events: false,
+            });
+          },
+        });
+        setSaving(false);
+        toast({
+          title: "Personal team created",
+          description: `"${name.trim()}" is ready to go.`,
+        });
+        navigate(`/team/${id}`);
+      } catch (error) {
+        setSaving(false);
+        toast({
+          title: "Error",
+          description: "Failed to create personal team. Please try again.",
+          variant: "destructive",
+        });
+      }
       return;
     }
-
-    setSaving(true);
 
     // Check for duplicate team name in the same club
     const { data: existingTeam } = await withFeatureBackend("membership", {
@@ -333,6 +366,52 @@ export default function CreateTeamPage() {
 
     // Non-admin flow: submit as a team creation request
     if (!isClubAdmin) {
+      if (isFeatureRoutedToIcp("membership")) {
+        // club_domain's TeamCreationRequest only carries name/division/age_group
+        // — no logo, description, folder, team_type, or class fields. Attempt
+        // the logo upload (best-effort, surfaced to the admin separately once
+        // the canister gains a field for it) but never let it block the
+        // request itself.
+        if (logoFile) {
+          try {
+            const fileExt = logoFile.name.split('.').pop();
+            const storagePath = `club-logos/team-requests/${clubId}/${crypto.randomUUID()}.${fileExt}`;
+            await tryUploadMediaToBlobStore({
+              storagePath,
+              file: logoFile,
+              mime: logoFile.type,
+            });
+          } catch (error) {
+            console.error('Logo upload error:', error);
+          }
+        }
+
+        try {
+          await withFeatureBackend("membership", {
+            supabase: async () => { throw new Error("unreachable"); },
+            icp: (ctx) => requestLiveTeamCreation(
+              ctx,
+              clubId!,
+              name.trim(),
+              null,
+              levelAge.trim() || null,
+            ),
+          });
+        } catch (error) {
+          setSaving(false);
+          toast({
+            title: "Error",
+            description: `Failed to submit ${entityLabelLower(club)} request. Please try again.`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setSaving(false);
+        navigate(-1);
+        return;
+      }
+
       // Upload logo first if provided
       let logoUrl: string | null = null;
       if (logoFile) {
@@ -567,16 +646,42 @@ export default function CreateTeamPage() {
       await invalidateTeamLists(queryClient, user?.id);
       navigate(`/teams/${team.id}`);
     } else if (adminAssignment?.type === 'email_invite' && adminAssignment.inviteEmail && adminAssignment.inviteName && membershipOnIcp) {
-      // Email invites have no club_domain equivalent yet (no invite-send
-      // capability on the canister) — stay Supabase-only and surface a clear
-      // message instead of silently dropping the invite.
-      setSaving(false);
-      toast({
-        title: `${entityLabel(club)} created`,
-        description: "Email invites for team admins aren't available for Internet Identity accounts yet.",
-      });
-      await invalidateTeamLists(queryClient, user?.id);
-      navigate(`/teams/${team.id}`);
+      // club_domain has no email-sending capability; create a pending invite
+      // record (PII email registered via createLivePendingInvite) and show
+      // the admin the share link, same pattern as JoinClubPage invites.
+      try {
+        const result = await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: (ctx) => createLivePendingInvite(ctx, {
+            kind: "team",
+            clubId: clubId!,
+            teamId: team.id,
+            email: adminAssignment.inviteEmail!,
+            role: "team_admin",
+          }),
+        });
+        const inviteId = (result as { invite?: { id?: string } } | undefined)?.invite?.id;
+        setSaving(false);
+        await invalidateTeamLists(queryClient, user?.id);
+        navigate(`/teams/${team.id}`, {
+          state: {
+            showAdminInvite: true,
+            inviteName: adminAssignment.inviteName,
+            inviteEmail: adminAssignment.inviteEmail,
+            teamName: team.name,
+            inviteLink: inviteId ? `${window.location.origin}/join/p/${inviteId}` : undefined,
+          },
+        });
+      } catch (error) {
+        setSaving(false);
+        toast({
+          title: `${entityLabel(club)} created but couldn't create invite.`,
+          description: "Team created but the admin invite could not be sent. Please try again from the team page.",
+          variant: "destructive",
+        });
+        await invalidateTeamLists(queryClient, user?.id);
+        navigate(`/teams/${team.id}`);
+      }
     } else if (adminAssignment?.type === 'email_invite' && adminAssignment.inviteEmail && adminAssignment.inviteName) {
       // Create pending invite with email
       const inviteToken = crypto.randomUUID();

@@ -26,9 +26,10 @@ export async function ensureLiveDefaultClubChats(
   ctx: FeatureBackendContext,
   clubId: string,
   opts: { force?: boolean } = {},
-): Promise<void> {
-  if (!clubId) return;
-  if (!opts.force && syncedThisSession.has(clubId)) return;
+): Promise<string[]> {
+  const failures: string[] = [];
+  if (!clubId) return failures;
+  if (!opts.force && syncedThisSession.has(clubId)) return failures;
   syncedThisSession.add(clubId);
 
   const self = ctx.identity.getPrincipal();
@@ -57,6 +58,10 @@ export async function ensureLiveDefaultClubChats(
     } catch (err) {
       // Best-effort: callers without manage rights just skip the top-up.
       console.warn(`[defaultClubChats] ${def.name} sync failed`, err);
+      if (!group) failures.push(`${def.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
     }
   }
+  // A failed creation must be retried on the next load, not skipped all session.
+  if (failures.length) syncedThisSession.delete(clubId);
+  return failures;
 }

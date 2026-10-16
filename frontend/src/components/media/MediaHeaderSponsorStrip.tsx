@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings } from "@/live/features/club";
+import { getLiveClubSettings, isLiveClubPro, listLiveSponsors } from "@/live/features/club";
+import { getLiveAdSetting, listLiveActiveAds } from "@/live/features/insights";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdAnalytics } from "@/hooks/useAdAnalytics";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -91,24 +92,28 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
     queryKey: ["club-is-pro", clubId],
     enabled: !!clubId,
     staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro")
-        .eq("club_id", clubId!)
-        .eq("is_pro", true)
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return !!data?.is_pro;
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro")
+            .eq("club_id", clubId!)
+            .eq("is_pro", true)
+            .limit(1)
+            .maybeSingle();
+          if (error) throw error;
+          return !!data?.is_pro;
+        },
+        icp: async (ctx) => isLiveClubPro(ctx, clubId!),
+      }),
   });
 
   // Pro toggle — any Pro club that has opted in
   const { data: clubFlag, isSuccess: clubFlagOk } = useQuery({
     queryKey: ["media-header-sponsors-enabled", clubId],
     enabled: !!clubId && isProClub === true,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
     queryFn: async () => {
       const enabled = await withFeatureBackend("membership", {
         supabase: async () => {
@@ -136,14 +141,29 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
     enabled: proEnabled,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, website_url, tier")
-        .eq("club_id", clubId!)
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return (data || []) as SponsorLite[];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, website_url, tier")
+            .eq("club_id", clubId!)
+            .eq("is_active", true)
+            .order("name");
+          if (error) throw error;
+          return (data || []) as SponsorLite[];
+        },
+        icp: async (ctx) =>
+          (await listLiveSponsors(ctx, clubId!))
+            .filter((r) => r.is_active && !r.is_team_only)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((r): SponsorLite => ({
+              id: r.id,
+              name: r.name,
+              logo_url: r.logo_url[0] ?? null,
+              website_url: r.website_url[0] ?? null,
+              tier: r.tier as SponsorTier,
+            })),
+      });
     },
   });
 
@@ -152,15 +172,22 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
     queryKey: ["app-ad-settings", "media-header"],
     enabled: isProClub === false,
     staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ad_settings")
-        .select("is_enabled")
-        .eq("location", "media-header")
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ad_settings")
+            .select("is_enabled")
+            .eq("location", "media-header")
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const s = await getLiveAdSetting(ctx, "media-header");
+          return s ? { is_enabled: s.is_enabled } : null;
+        },
+      }),
   });
   const freePlacementEnabled = !!placementSettings?.is_enabled;
 
@@ -169,15 +196,30 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
     queryKey: ["media-header-app-ads"],
     enabled: isProClub === false && freePlacementEnabled,
     staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ads")
-        .select("id, name, image_url, link_url, ad_type, logo_url, headline")
-        .eq("is_active", true)
-        .order("display_order", { ascending: true });
-      if (error) throw error;
-      return (data || []) as AppAdLite[];
-    },
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ads")
+            .select("id, name, image_url, link_url, ad_type, logo_url, headline")
+            .eq("is_active", true)
+            .order("display_order", { ascending: true });
+          if (error) throw error;
+          return (data || []) as AppAdLite[];
+        },
+        icp: async (ctx) =>
+          (await listLiveActiveAds(ctx)).map(
+            (a): AppAdLite => ({
+              id: a.id,
+              name: a.name,
+              image_url: a.image_url[0] ?? null,
+              link_url: a.link_url[0] ?? null,
+              ad_type: a.ad_type as AppAdLite["ad_type"],
+              logo_url: a.logo_url[0] ?? null,
+              headline: a.headline[0] ?? null,
+            }),
+          ),
+      }),
   });
 
   // Tier-weighted Pro playlist

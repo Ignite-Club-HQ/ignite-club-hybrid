@@ -16,6 +16,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { softDeleteLiveGroup } from "@/live/features/messaging";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { WifiOff } from "lucide-react";
@@ -184,6 +186,39 @@ export default function MessagesPage() {
   // borrow Pro access from another club the user belongs to.
   const { hasAICatchUpClub, recapVisible, resolved: aiCatchUpResolved } = useUserHasAnyAICatchUpClub(effectiveClubFilter ?? null);
   const location = useLocation();
+  // ICP push-notification deep link: the push worker can't tell team/club/
+  // DM/group conversations apart, so it links here with ?conversation=<id>
+  // (&message=<id>). Resolve the canonical chat route from on-chain
+  // conversation metadata (same as the notifications inbox tap) and replace
+  // this URL so the chat page's normal ?message= jump takes over.
+  useEffect(() => {
+    if (!useIcpLab || !initialized || !user) return;
+    const params = new URLSearchParams(location.search);
+    const conversationId = params.get("conversation");
+    if (!conversationId) return;
+    const messageId = params.get("message");
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getIcpNotificationRoute } = await import("@/lib/icpNotificationRoute");
+        await withFeatureBackend("messaging", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            const route = await getIcpNotificationRoute(ctx, {
+              kind: "message_chat",
+              relatedId: conversationId,
+              club: conversationId,
+              messageId,
+            });
+            if (!cancelled) navigate(route, { replace: true });
+          },
+        });
+      } catch {
+        // Resolution failed (offline, canister error) — stay on the inbox.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [useIcpLab, initialized, user, location.search, navigate]);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     let changed = false;
@@ -295,18 +330,26 @@ export default function MessagesPage() {
     initialized && !useIcpLab ? user?.id : null,
   );
 
-  // Delete group mutation (soft-delete so an app admin can restore later)
+  // Delete group mutation (soft-delete so an app admin can restore later).
+  // Routed through withFeatureBackend so Internet Identity (ICP-live) users
+  // hit messaging_domain.soft_delete_group instead of being blocked.
   const deleteGroupMutation = useMutation({
     mutationFn: async (groupId: string) => {
-      if (useIcpLab) throw new Error("Group chat deletion is unavailable in ICP lab mode.");
-      const { error } = await supabase
-        .from("chat_groups")
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_by: user?.id ?? null,
-        } as any)
-        .eq("id", groupId);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("chat_groups")
+            .update({
+              deleted_at: new Date().toISOString(),
+              deleted_by: user?.id ?? null,
+            } as any)
+            .eq("id", groupId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await softDeleteLiveGroup(ctx, groupId);
+        },
+      });
     },
     onSuccess: () => {
       toast({ title: "Chat removed. An app admin can restore it if needed." });
@@ -450,7 +493,7 @@ export default function MessagesPage() {
     queryKey: ["my-chat-groups-with-messages", user?.id],
     refetchOnReconnect: "always",
     queryFn: () => fetchChatGroupsWithMessages(supabase, user!.id),
-    enabled: !!user && initialized && !useIcpLab,
+    enabled: !!user && initialized,
     // Matches the sibling inbox queries. The 25s REST GET timeout in
     // `supabaseAuthRetry.ts` otherwise surfaces transient RLS-heavy timeouts
     // as hard errors after a single attempt.
@@ -1478,6 +1521,12 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
   // Filter chat groups by user's roles
   const displayChatGroups = useMemo(() => {
     if (isAppAdmin || isCommitteeMember) return allChatGroups;
+    // Secure sign-in: the canister only returns groups the caller is an
+    // explicit member of (no role-based groups), so membership is already
+    // enforced. The role filter below reads Supabase user_roles, which is
+    // always empty for these accounts — it was hiding every club chat
+    // (Coaches / Team Admins / Club Committee / sub-committees).
+    if (useIcpLab) return allChatGroups;
 
     // Offline with no roles loaded: the cached groups were already RLS- and
     // role-filtered for THIS user when they were written (cache is
@@ -1892,6 +1941,22 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
         onOpenNewMessage={() => setShowNewMessageSheet(true)}
         onNavigateToUpgrade={navigate}
       />
+
+      {(chatGroupsWithMessages as { setupErrors?: string[] } | undefined)?.setupErrors?.length ? (
+        <div className="mx-4 mt-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          <p className="font-medium text-foreground">Some club chats couldn't be set up.</p>
+          <p className="mt-1 break-words text-xs text-muted-foreground">
+            {(chatGroupsWithMessages as { setupErrors?: string[] }).setupErrors!.slice(0, 3).join(" · ")}
+          </p>
+          <button
+            type="button"
+            className="mt-2 text-xs font-medium text-primary underline"
+            onClick={() => queryClient.refetchQueries({ queryKey: ["my-chat-groups-with-messages", user?.id] })}
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
 
       <QueryErrorBanner
         // Only alarm the user when there is genuinely nothing to show. A

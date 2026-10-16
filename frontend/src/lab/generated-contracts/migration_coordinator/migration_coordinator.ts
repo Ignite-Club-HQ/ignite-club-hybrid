@@ -61,6 +61,11 @@ export interface MainInterface {
     cycles_balance(): Promise<bigint>;
     markExported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
     markImported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     orchestrateExport(id: bigint): Promise<Migration>;
     orchestrateVerify(id: bigint): Promise<Migration>;
     status(): Promise<[Migration | null, Array<Migration>]>;
@@ -113,6 +118,14 @@ export class Migration_coordinator implements migration_coordinatorInterface {
     async markImported(arg0: bigint, arg1: bigint, arg2: string): Promise<Migration> {
         const result = await this.actor.markImported(arg0, arg1, arg2);
         return from_candid_Migration_n1(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async orchestrateExport(arg0: bigint): Promise<Migration> {
         const result = await this.actor.orchestrateExport(arg0);

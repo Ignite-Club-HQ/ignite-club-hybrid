@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isLiveClubPro } from "@/live/features/club";
+import { getLiveClubMediaUsage } from "@/live/blobStoreUpload";
 
 const REFRESH_EVENT = "club-free-usage:refresh";
 
@@ -15,7 +18,6 @@ export function notifyClubFreeUsageChanged(clubId?: string | null) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(REFRESH_EVENT, { detail: { clubId: clubId ?? null } }));
 }
-
 
 export const FREE_PHOTO_UPLOADS_PER_CYCLE = 10;
 export const FREE_CHAT_PHOTOS_PER_CYCLE = 10;
@@ -87,13 +89,6 @@ export function resolveClubFreeUsage(row: Record<string, unknown>): ClubFreeUsag
   };
 }
 
-/**
- * Last-known meter snapshot persisted per club so cold-start pages (Media)
- * can paint the usage meter at its final size immediately instead of popping
- * it in ~130px tall once the RPC returns (which reads as a page "shake").
- * Display-only — never used for cap enforcement. `ignite_` prefix so
- * `clearUserScopedCaches()` sweeps it on sign-out / account switch.
- */
 export interface ClubFreeUsageSnapshot {
   isPro: boolean;
   photoUsed: number;
@@ -143,11 +138,46 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     queryFn: async (): Promise<ClubFreeUsage | null> => {
-      // NEEDS-CANISTER: the Free-tier usage meter (get_club_free_usage RPC)
-      // has no canister equivalent. Internet Identity users must never hit
-      // Supabase, so the meter stays unresolved (callers treat null as
-      // "no cap info") until a usage-counter canister exists.
-      if (resolveAuthBackend() === "icp") return null;
+      if (resolveAuthBackend() === "icp") {
+        const live = await withFeatureBackend("membership", {
+          icp: async (ctx) => {
+            const [isPro, media] = await Promise.all([
+              isLiveClubPro(ctx, clubId!).catch(() => false),
+              getLiveClubMediaUsage(ctx.target, ctx.identity, clubId!),
+            ]);
+            return { isPro, media };
+          },
+          supabase: async () => null,
+        });
+        if (!live) return null;
+
+        // Media caps are enforced by the photo-store canister per 30-day
+        // cycle; polls are not capped on-chain.
+        const { isPro, media } = live;
+        const count = (c: string) => (isPro ? 0 : media[c]?.count ?? 0);
+        const bytes = (c: string) => (isPro ? 0 : media[c]?.bytes ?? 0);
+        const photoUsed = count("gallery_photo");
+        const chatPhotoUsed = count("chat_photo");
+        const fileUsed = count("vault");
+        const fileBytes = bytes("vault");
+        const chatFileUsed = count("chat_file");
+        const chatFileBytes = bytes("chat_file");
+        const fileCountCap = fileUsed >= FREE_FILE_COUNT;
+        const fileStoreCap = fileBytes >= FREE_FILE_STORAGE_BYTES;
+        const chatFileCountCap = chatFileUsed >= FREE_CHAT_FILE_COUNT;
+        const chatFileStoreCap = chatFileBytes >= FREE_CHAT_FILE_STORAGE_BYTES;
+        return {
+          isPro,
+          cycleStart: null,
+          cycleEnd: null,
+          photo: { used: photoUsed, limit: FREE_PHOTO_UPLOADS_PER_CYCLE, atCountCap: photoUsed >= FREE_PHOTO_UPLOADS_PER_CYCLE, atCap: photoUsed >= FREE_PHOTO_UPLOADS_PER_CYCLE },
+          chatPhoto: { used: chatPhotoUsed, limit: FREE_CHAT_PHOTOS_PER_CYCLE, atCap: chatPhotoUsed >= FREE_CHAT_PHOTOS_PER_CYCLE },
+          file: { used: fileUsed, limit: FREE_FILE_COUNT, storageUsed: fileBytes, storageLimit: FREE_FILE_STORAGE_BYTES, atCountCap: fileCountCap, atStorageCap: fileStoreCap, atCap: fileCountCap || fileStoreCap },
+          chatFile: { used: chatFileUsed, limit: FREE_CHAT_FILE_COUNT, storageUsed: chatFileBytes, storageLimit: FREE_CHAT_FILE_STORAGE_BYTES, atCountCap: chatFileCountCap, atStorageCap: chatFileStoreCap, atCap: chatFileCountCap || chatFileStoreCap },
+          poll: { used: 0, limit: FREE_POLLS_PER_CYCLE, atCap: false },
+        };
+      }
+
       const { data, error } = await supabase.rpc("get_club_free_usage", {
         _club_id: clubId!,
       });
@@ -170,9 +200,6 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
     },
   });
 
-  // Refresh immediately when an upload/poll-create elsewhere in the app
-  // dispatches the global refresh event. Matches on clubId when supplied,
-  // otherwise refetches for all mounted instances.
   useEffect(() => {
     if (!enabled) return;
     const onRefresh = (e: Event) => {
@@ -187,7 +214,6 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
 
   return { usage: data ?? null, isLoading, refetch };
 }
-
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

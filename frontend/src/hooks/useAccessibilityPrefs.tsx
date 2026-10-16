@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export type AccessibilityPrefs = {
@@ -69,7 +69,7 @@ type Ctx = {
 const AccessibilityCtx = createContext<Ctx | null>(null);
 
 export function AccessibilityPrefsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const user = useOptionalAuth()?.user ?? null;
   const [prefs, setPrefsState] = useState<AccessibilityPrefs>(() => {
     const initial = readLocal();
     applyToDom(initial);
@@ -84,16 +84,29 @@ export function AccessibilityPrefsProvider({ children }: { children: React.React
   // Hydrate from server on login (server is source of truth).
   useEffect(() => {
     if (!user?.id) return;
-    if (resolveAuthBackend() === "icp") return;
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("accessibility_prefs")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (cancelled || error || !data?.accessibility_prefs) return;
-      const remote = data.accessibility_prefs as Partial<AccessibilityPrefs>;
+      let remote: Partial<AccessibilityPrefs> | null = null;
+      if (resolveAuthBackend() === "icp") {
+        try {
+          const { withFeatureBackend } = await import("@/live/featureRouter");
+          const json = await withFeatureBackend("membership", {
+            supabase: async () => null,
+            icp: async (ctx) => (await import("@/live/features/club")).getLiveAccessibilityPrefs(ctx),
+          });
+          remote = json ? (JSON.parse(json) as Partial<AccessibilityPrefs>) : null;
+        } catch {
+          remote = null;
+        }
+      } else {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("accessibility_prefs")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (!error && data?.accessibility_prefs) remote = data.accessibility_prefs as Partial<AccessibilityPrefs>;
+      }
+      if (cancelled || !remote) return;
       const merged: AccessibilityPrefs = {
         textScale: clampScale(Number(remote.textScale ?? 1)),
         highContrast: !!remote.highContrast,
@@ -115,7 +128,17 @@ export function AccessibilityPrefsProvider({ children }: { children: React.React
       try {
         localStorage.setItem(LS_KEY, JSON.stringify(next));
       } catch {}
-      if (user?.id && resolveAuthBackend() !== "icp") {
+      if (user?.id && resolveAuthBackend() === "icp") {
+        try {
+          const { withFeatureBackend } = await import("@/live/featureRouter");
+          await withFeatureBackend("membership", {
+            supabase: async () => undefined,
+            icp: async (ctx) => (await import("@/live/features/club")).saveLiveAccessibilityPrefs(ctx, JSON.stringify(next)),
+          });
+        } catch (e) {
+          console.warn("[a11y] on-chain save failed", e);
+        }
+      } else if (user?.id) {
         await supabase
           .from("profiles")
           .update({ accessibility_prefs: next as any })

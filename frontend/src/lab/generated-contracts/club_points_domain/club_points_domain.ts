@@ -230,12 +230,31 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     redeem_reward(club_id: string, subject: Subject, reward_id: string, idempotency_key: string | null): Promise<{
         __kind__: "Ok";
         Ok: RewardRedemption;
     } | {
         __kind__: "Err";
         Err: string;
+    }>;
+    refresh_club_roles(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
     }>;
     removeBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
@@ -244,9 +263,16 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    save_club_points_settings(club_id: string, display_name: string | null, disabled: boolean): Promise<{
+    save_club_points_settings(club_id: string, display_name: string | null, disabled: boolean, points_icon_url: string | null, disable_team_pom_rewards: boolean): Promise<{
         __kind__: "Ok";
         Ok: ClubPointsSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_club_domain_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -312,10 +338,12 @@ export interface HistoryPage {
     items: Array<PointsHistoryEntry>;
 }
 export interface ClubPointsSettings {
+    points_icon_url?: string;
     updated_at_ms: bigint;
     display_name?: string;
     disabled: boolean;
     club_id: string;
+    disable_team_pom_rewards: boolean;
 }
 export interface UserClubPoints {
     updated_at_ms: bigint;
@@ -593,6 +621,14 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.list_rewards(arg0, to_candid_opt_n10(arg1), arg2);
         return from_candid_variant_n41(result);
     }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
+    }
     async redeem_reward(arg0: string, arg1: Subject, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
         Ok: RewardRedemption;
@@ -602,6 +638,26 @@ export class Club_points_domain implements club_points_domainInterface {
     }> {
         const result = await this.actor.redeem_reward(arg0, to_candid_Subject_n8(arg1), arg2, to_candid_opt_n10(arg3));
         return from_candid_variant_n2(result);
+    }
+    async refresh_club_roles(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.refresh_club_roles(arg0);
+        return from_candid_variant_n1(result);
+    }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n42(result);
     }
     async removeBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -613,15 +669,25 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.removeBulkAccessPrincipal(arg0);
         return from_candid_variant_n1(result);
     }
-    async save_club_points_settings(arg0: string, arg1: string | null, arg2: boolean): Promise<{
+    async save_club_points_settings(arg0: string, arg1: string | null, arg2: boolean, arg3: string | null, arg4: boolean): Promise<{
         __kind__: "Ok";
         Ok: ClubPointsSettings;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2);
-        return from_candid_variant_n42(result);
+        const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2, to_candid_opt_n10(arg3), arg4);
+        return from_candid_variant_n43(result);
+    }
+    async set_club_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n1(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -819,21 +885,27 @@ function from_candid_record_n24(value: {
     };
 }
 function from_candid_record_n31(value: {
+    points_icon_url: [] | [string];
     updated_at_ms: bigint;
     display_name: [] | [string];
     disabled: boolean;
     club_id: string;
+    disable_team_pom_rewards: boolean;
 }): {
+    points_icon_url?: string;
     updated_at_ms: bigint;
     display_name?: string;
     disabled: boolean;
     club_id: string;
+    disable_team_pom_rewards: boolean;
 } {
     return {
+        points_icon_url: record_opt_to_undefined(from_candid_opt_n6(value.points_icon_url)),
         updated_at_ms: value.updated_at_ms,
         display_name: record_opt_to_undefined(from_candid_opt_n6(value.display_name)),
         disabled: value.disabled,
-        club_id: value.club_id
+        club_id: value.club_id,
+        disable_team_pom_rewards: value.disable_team_pom_rewards
     };
 }
 function from_candid_record_n39(value: {
@@ -1177,6 +1249,25 @@ function from_candid_variant_n41(value: {
     } : value;
 }
 function from_candid_variant_n42(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n43(value: {
     Ok: _ClubPointsSettings;
 } | {
     Err: string;

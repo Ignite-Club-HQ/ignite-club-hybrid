@@ -26,8 +26,11 @@ import { isCachedAppAdmin } from "@/lib/rolesCache";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { createLiveClub } from "@/live/features/club";
+import { createLiveClub, getLiveClubProfile, saveLiveClubProfile, setLiveClubGeneralSettings } from "@/live/features/club";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { slugifyClubName } from "@/lib/eoiUtils";
+import { ISO_COUNTRY_CODES, countryName } from "@/lib/countries";
+import { getCurrentCountry } from "@/live/userCountry";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 
@@ -43,6 +46,7 @@ export default function CreateClubPage() {
   const [description, setDescription] = useState("");
   
   const [sport, setSport] = useState("");
+  const [homeCountry, setHomeCountry] = useState<string>(() => getCurrentCountry().country?.toUpperCase() ?? "AU");
   const [saving, setSaving] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -190,8 +194,6 @@ export default function CreateClubPage() {
     try {
       const clubId = await withFeatureBackend("membership", {
         icp: async (ctx) => {
-          // Class-mode and logo upload still have no club_domain counterpart
-          // on this path (NEEDS-CANISTER); sport now persists via create_club.
           const profile = await createLiveClub(
             ctx,
             crypto.randomUUID(),
@@ -199,7 +201,36 @@ export default function CreateClubPage() {
             slugifyClubName(name.trim()) || `club-${Date.now()}`,
             description.trim() || "",
             sport || null,
+            homeCountry,
           );
+          try {
+            await setLiveClubGeneralSettings(ctx, profile.id, {
+              classModeEnabled: isClassModeSport(sport),
+              allowGuestsDefault: false,
+              maxGuestsPerMemberDefault: 2,
+              eventsSponsorStripEnabled: false,
+            });
+          } catch (err) {
+            console.warn("[CreateClub] class mode setting failed", err);
+          }
+          if (logoFile) {
+            try {
+              const { compressImage } = await import("@/lib/imageCompression");
+              const compressed = await compressImage(logoFile);
+              const ext = (compressed.file.name.split(".").pop() || "jpg").toLowerCase();
+              const upload = await tryUploadMediaToBlobStore({
+                storagePath: `club-logos/${profile.id}/${Date.now()}.${ext}`,
+                file: compressed.file,
+                mime: compressed.file.type || logoFile.type || "image/jpeg",
+              });
+              if (upload) {
+                const current = (await getLiveClubProfile(ctx, profile.id))[0] ?? profile;
+                await saveLiveClubProfile(ctx, { ...current, logo_url: [upload.url] });
+              }
+            } catch (err) {
+              console.warn("[CreateClub] logo upload failed", err);
+            }
+          }
           try {
             const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
             await ensureLiveDefaultClubChats(ctx, profile.id, { force: true });
@@ -230,7 +261,9 @@ export default function CreateClubPage() {
               sport: sport || null,
               created_by: user!.id,
               class_mode_enabled: isClassModeSport(sport),
-            })
+              home_country: homeCountry,
+              backend: "supabase",
+            } as any)
             .select()
             .single();
 
@@ -451,6 +484,22 @@ export default function CreateClubPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Home country — decides where the club's data is kept, permanently. */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Club's country</Label>
+                  <Select value={homeCountry} onValueChange={setHomeCountry}>
+                    <SelectTrigger className="w-full h-12 text-base bg-muted/50 border-muted-foreground/20 focus:bg-background transition-colors">
+                      <SelectValue>{countryName(homeCountry)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[40vh]" position="popper" sideOffset={4}>
+                      {[...ISO_COUNTRY_CODES].sort((a, b) => countryName(a).localeCompare(countryName(b))).map((c) => (
+                        <SelectItem key={c} value={c}>{countryName(c)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Your club's data is kept in line with this country's rules. It can't be changed later.</p>
                 </div>
 
                 {/* Optional details — collapsed to keep the initial form focused. */}

@@ -1,4 +1,5 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
+import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
 import { resolveChatJumpTarget } from "@/lib/resolveChatJumpTarget";
@@ -310,14 +311,26 @@ function SupabaseClubAdminChatPage() {
   // Fetch member profile (for admin view)
   const { data: memberProfile } = useQuery({
     queryKey: ["club-admin-member-profile", conversation?.member_user_id],
-    queryFn: async () => { if (resolveAuthBackend() === "icp") return null; 
+    queryFn: async () => {
       const memberId = conversation?.member_user_id;
       if (!memberId) return null;
+      if (resolveAuthBackend() === "icp") {
+        return await withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+            const [profile] = await listLiveProfilesByIds(ctx, [memberId]);
+            return profile
+              ? { id: memberId, display_name: profile.display_name, avatar_url: (profile as any).avatar_ref?.[0] ?? (profile as any).avatar_url ?? null }
+              : null;
+          },
+        });
+      }
       const { data, error } = await selectCachedProfileById(memberId);
       if (error) throw error;
       return data;
     },
-    enabled: !!conversation?.member_user_id && authReady && resolveAuthBackend() !== "icp",
+    enabled: !!conversation?.member_user_id && authReady,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -851,6 +864,7 @@ function SupabaseClubAdminChatPage() {
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({ text, imageUrl, replyToId }: { text: string; imageUrl: string | null; replyToId?: string | null }) => {
+      imageUrl = (await resolveChatUploadUrl(imageUrl)) as typeof imageUrl;
       // Offline path: queue the message instead of failing
       if (!navigator.onLine) {
         const queued = queueMessage({

@@ -84,10 +84,12 @@ export const idlFactory = ({ IDL }) => {
     'points' : IDL.Int32,
   });
   const ClubPointsSettings = IDL.Record({
+    'points_icon_url' : IDL.Opt(IDL.Text),
     'updated_at_ms' : IDL.Nat64,
     'display_name' : IDL.Opt(IDL.Text),
     'disabled' : IDL.Bool,
     'club_id' : IDL.Text,
+    'disable_team_pom_rewards' : IDL.Bool,
   });
   const LeaderboardEntry = IDL.Record({
     'subject_id' : IDL.Text,
@@ -274,9 +276,30 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubReward), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'redeem_reward' : IDL.Func(
         [IDL.Text, Subject, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],
+        [],
+      ),
+    'refresh_club_roles' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
     'removeBulkAccessPrincipal' : IDL.Func(
@@ -285,8 +308,13 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'save_club_points_settings' : IDL.Func(
-        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool],
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool, IDL.Opt(IDL.Text), IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubPointsSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'transfer_governorship' : IDL.Func(

@@ -11,10 +11,10 @@ import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStora
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getEffectiveBackendForFeature } from "@/live/loadBackendRouting";
 import {
+  acceptLiveRoleLink,
   acceptLiveCompetitionOfficialEmailInvite,
   getLiveCompetitionOfficialEmailInvitePreview,
-  getLiveJoinLinkPreview,
-  joinLiveCompetitionByToken,
+  getLiveRoleLinkPreview,
 } from "@/live/features/competitions";
 import { hashOfficialInviteCode, hashOfficialInviteEmail } from "@/features/competitions/officialEmailInvite";
 
@@ -42,6 +42,7 @@ export default function CompetitionOfficialJoinPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const nextPath = `/competitions/officials/join?token=${encodeURIComponent(token)}`;
+  const isIcpLink = !emailInvite && token.startsWith("crl-");
 
   useEffect(() => {
     let active = true;
@@ -54,6 +55,27 @@ export default function CompetitionOfficialJoinPage() {
         return;
       }
       try {
+        if (isIcpLink) {
+          const [{ AnonymousIdentity }, { getActiveIcpTarget }] = await Promise.all([
+            import("@icp-sdk/core/agent"),
+            import("@/live/targetRegistry"),
+          ]);
+          const preview = await getLiveRoleLinkPreview(
+            { identity: new AnonymousIdentity(), target: getActiveIcpTarget() } as any,
+            token,
+          );
+          if (active) {
+            setInfo(preview
+              ? {
+                  status: "valid",
+                  competitionId: preview.competition_id,
+                  competitionName: preview.name,
+                  role: preview.role as OfficialRole,
+                }
+              : { status: "invalid", competitionId: null, competitionName: null, role: null });
+          }
+          return;
+        }
         const result = await withFeatureBackend("competitions", {
           supabase: async () => {
             if (emailInvite) {
@@ -101,22 +123,7 @@ export default function CompetitionOfficialJoinPage() {
                 role: preview.role as OfficialRole,
               } satisfies LinkInfo;
             }
-            const result = await getLiveJoinLinkPreview(ctx, token);
-            const preview = result.preview;
-            if (!preview || !["referee", "committee_member"].includes(preview.role)) {
-              return {
-                status: result.status === "archived" ? "archived" : "invalid",
-                competitionId: null,
-                competitionName: null,
-                role: null,
-              } as LinkInfo;
-            }
-            return {
-              status: "valid",
-              competitionId: preview.competition_id,
-              competitionName: preview.name,
-              role: preview.role as OfficialRole,
-            } satisfies LinkInfo;
+            return { status: "invalid", competitionId: null, competitionName: null, role: null } satisfies LinkInfo;
           },
         });
         if (active) setInfo(result);
@@ -127,7 +134,7 @@ export default function CompetitionOfficialJoinPage() {
       }
     })();
     return () => { active = false; };
-  }, [token, emailInvite]);
+  }, [token, emailInvite, isIcpLink]);
 
   const join = async () => {
     if (!user) {
@@ -179,7 +186,7 @@ export default function CompetitionOfficialJoinPage() {
           const row = data?.[0];
           if (!row || !["joined", "already"].includes(row.status)) throw new Error("This official link is no longer valid.");
         },
-        icp: async (ctx) => { await joinLiveCompetitionByToken(ctx, token); },
+        icp: async (ctx) => { await acceptLiveRoleLink(ctx, token); },
       });
       setJoined(true);
       navigate(`/competitions/${info.competitionId}`, { replace: true });

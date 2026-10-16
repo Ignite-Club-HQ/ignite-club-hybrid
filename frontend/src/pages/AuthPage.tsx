@@ -18,8 +18,10 @@ import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 import { resolveKeyboardCssHeight } from "@/lib/keyboardCssHeight";
 import { isIcpAuthAvailable, useIcpAuthScreen } from "@/live/authBackendMode";
+import { GOOGLE_SIGN_IN_ENABLED } from "@/lib/authProviderFlags";
 import { describeIcpSignInError } from "@/lib/internetIdentitySignInHelp";
 import { IcpSignInScreen } from "@/components/IcpSignInScreen";
+import { AuthLegalLinks } from "@/components/AuthLegalLinks";
 
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
@@ -147,7 +149,14 @@ export default function AuthPage() {
   // honoured when canisters are actually configured.
   const authParam = new URLSearchParams(window.location.search).get("auth");
   const forceIcpAuth = authParam === "icp" && isIcpAuthAvailable();
-  const useIcpLab = forceIcpAuth || useIcpAuthScreen();
+  // `?auth=email` is the opposite hatch: show the email/Google screen even
+  // when routing would pick Internet Identity (e.g. on the on-chain copy of
+  // the app, where a single ICP-pinned club otherwise decides for every new
+  // visitor).
+  // (persisted device-wide in authBackendMode.readAuthChoice).
+  const forceEmailAuth = authParam === "email" || authParam === "supabase";
+  const icpScreen = useIcpAuthScreen();
+  const useIcpLab = !forceEmailAuth && (forceIcpAuth || icpScreen);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -400,6 +409,10 @@ export default function AuthPage() {
   // Reserve the button slot on native until checks resolve so the layout
   // doesn't shift up/down when the biometric button finally renders.
   const reserveBiometricSlot = isNativePlatform && !biometricSlotReady;
+  // Google sign-in is gated on GOOGLE_SIGN_IN_ENABLED (the provider is not
+  // enabled on this Supabase instance) and on running in a browser.
+  const showGoogleButton = GOOGLE_SIGN_IN_ENABLED && !isNativePlatform;
+  const showSignInDivider = showGoogleButton || showBiometricButton;
 
   useEffect(() => {
     if (!isNativePlatform) return;
@@ -834,6 +847,11 @@ export default function AuthPage() {
         native={isNativePlatform}
         online={isOnline}
         error={authError}
+        onUseEmail={() => {
+          const params = new URLSearchParams(searchParams);
+          params.set("auth", "email");
+          setSearchParams(params, { replace: true });
+        }}
       />
     );
   }
@@ -995,17 +1013,21 @@ export default function AuthPage() {
                   
                   {!isSignInKeyboardOpen && (
                     <>
-                      <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                          <span className="w-full border-t" />
+                      {showSignInDivider && (
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t" />
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-card px-2 text-muted-foreground">Or</span>
+                          </div>
                         </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                          <span className="bg-card px-2 text-muted-foreground">Or</span>
-                        </div>
-                      </div>
+                      )}
                       
-                      {/* Hide Google sign-in on native apps - OAuth redirects outside the app */}
-                      {!Capacitor.isNativePlatform() && (
+                      {/* Google sign-in is switched off: the provider isn't
+                          enabled on this Supabase instance (see
+                          lib/authProviderFlags.ts). */}
+                      {showGoogleButton && (
                         <Button 
                           type="button"
                           variant="outline" 
@@ -1094,7 +1116,7 @@ export default function AuthPage() {
                         setSearchParams(params, { replace: true });
                       }}
                     >
-                      Club member? Sign in with Internet Identity instead
+                      Sign in with Internet Identity instead
                     </button>
                   )}
                 </form>
@@ -1300,8 +1322,9 @@ export default function AuthPage() {
                     </div>
                   )}
                   
-                  {/* Hide Google sign-up on native apps - OAuth redirects outside the app */}
-                  {!Capacitor.isNativePlatform() && (
+                  {/* Google sign-up is switched off: the provider isn't enabled
+                      on this Supabase instance (see lib/authProviderFlags.ts). */}
+                  {showGoogleButton && (
                     <>
                       <div className="relative">
                         <div className="absolute inset-0 flex items-center">
@@ -1378,29 +1401,7 @@ export default function AuthPage() {
 
         {/* Footer Links — hidden when keyboard is open on native sign-in */}
         {!isFormKeyboardOpen && (
-          <div className="text-center text-xs text-muted-foreground space-y-2">
-            <div className="flex justify-center gap-4">
-              {Capacitor.isNativePlatform() ? (
-                <>
-                  <Link to="/terms" className="hover:text-foreground hover:underline">Terms</Link>
-                  <Link to="/privacy" className="hover:text-foreground hover:underline">Privacy</Link>
-                  <Link to="/cancellation" className="hover:text-foreground hover:underline">Cancellation</Link>
-                </>
-              ) : (
-                <>
-                  <a href="https://reference.invalid" onClick={(e) => { e.preventDefault(); import("@/lib/safeOpenUrl").then(({ safeOpenUrl }) => safeOpenUrl("https://reference.invalid")); }} className="hover:text-foreground hover:underline cursor-pointer">Terms</a>
-                  <a href="https://reference.invalid" onClick={(e) => { e.preventDefault(); import("@/lib/safeOpenUrl").then(({ safeOpenUrl }) => safeOpenUrl("https://reference.invalid")); }} className="hover:text-foreground hover:underline cursor-pointer">Privacy</a>
-                  <a href="https://reference.invalid" onClick={(e) => { e.preventDefault(); import("@/lib/safeOpenUrl").then(({ safeOpenUrl }) => safeOpenUrl("https://reference.invalid")); }} className="hover:text-foreground hover:underline cursor-pointer">Cancellation</a>
-                </>
-              )}
-            </div>
-            {!Capacitor.isNativePlatform() && (
-              <div className="flex justify-center gap-4">
-                <a href="mailto:redacted@example.invalid" className="hover:text-foreground hover:underline">Contact</a>
-                <a href="mailto:redacted@example.invalid" className="hover:text-foreground hover:underline">Support</a>
-              </div>
-            )}
-          </div>
+          <AuthLegalLinks />
         )}
       </div>
       </div>

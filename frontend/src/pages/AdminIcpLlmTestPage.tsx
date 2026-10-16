@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const MODELS = [
@@ -89,13 +88,9 @@ Coach Ben: "Yes Terry — DM me and I'll connect you with the treasurer."`,
   },
 ];
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { callDfinityLlmChat } from "@/live/dfinityLlm";
 
 export default function AdminIcpLlmTestPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
-    return <IcpUnavailablePage title="LLM testing is unavailable in ICP lab mode" description="LLM credentials and inference remain outside ordinary canister and frontend state." />;
-  }
   return <SupabaseAdminIcpLlmTestPage />;
 }
 
@@ -120,13 +115,13 @@ function SupabaseAdminIcpLlmTestPage() {
     setLoading(true);
     setResult(null);
     try {
-      // icp-guard: allow app-admin diagnostic tooling stays Supabase-only by design
-      const { data, error } = await supabase.functions.invoke("icp-llm-test", {
-        body: { prompt, system: system || undefined, model },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).detail || (data as any).error);
-      setResult({ response: (data as any).response, elapsedMs: (data as any).elapsedMs });
+      const messages = system.trim()
+        ? [{ role: "system" as const, content: system }, { role: "user" as const, content: prompt }]
+        : [{ role: "user" as const, content: prompt }];
+      const startedAt = performance.now();
+      const response = await callDfinityLlmChat(model, messages);
+      const elapsedMs = Math.round(performance.now() - startedAt);
+      setResult({ response, elapsedMs });
     } catch (e: any) {
       toast.error(e?.message ?? "ICP LLM call failed");
     } finally {

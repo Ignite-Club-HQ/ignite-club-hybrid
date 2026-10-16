@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
@@ -23,6 +24,20 @@ import Types "types";
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
+
+  /// Public: aggregate record counts (shown in admin settings). Counts only —
+  /// no record contents, so no PII is exposed.
+  public query func usage_stats() : async { conversations : Nat; messages : Nat; scheduled_messages : Nat } {
+    { conversations = conversations.size(); messages = messages.size(); scheduled_messages = scheduledMessages.size() };
+  };
 
   var governor : Principal;
 
@@ -58,7 +73,10 @@ persistent actor class Main(governorInit : Principal) {
   var blockedUsers : [Types.BlockedUser];
   var typingPings : [Types.TypingPing];
   var pinnedMessages : [Types.PinnedMessage];
+  var contentReports : [Types.ContentReport];
   var groupJoinPolicies : [{ conversation_id : Text; join_policy : Text; category : ?Text }];
+  // Cooldown log for run_chat_photo_gallery_reminders (admin "run now").
+  var chatPhotoReminderLog : [Types.ChatPhotoReminderLog];
   // Governor-set notification_queue canister id for the chat notify fan-out
   // hook. Fail-closed while unset: messages send fine, no chat notifications
   // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
@@ -121,6 +139,76 @@ persistent actor class Main(governorInit : Principal) {
         ?ref
       };
     };
+  };
+
+  // ===================== On-chain LLM canister (chat recap) =====================
+  // DFINITY's free, key-free LLM canister on mainnet. Inference runs on ICP
+  // nodes — no HTTPS outcall, no API key. See
+  // https://docs.internetcomputer.org/guides/backends/ai-inference/.
+  // The wire shapes below mirror the `mo:llm` library's chat.mo exactly
+  // (same variant tags / field names), so they interop with the real
+  // canister without taking the mops dependency.
+  transient let LLM_CANISTER_ID = "w36hm-eqaaa-aaaal-qr76a-cai";
+  transient let LLM_MODEL = "llama3.1:8b";
+
+  type LlmChatMessage = {
+    #user : { content : Text };
+    #system_ : { content : Text };
+    #assistant : { content : ?Text; tool_calls : [LlmToolCall] };
+    #tool : { content : Text; tool_call_id : Text };
+  };
+  type LlmToolCallArgument = { name : Text; value : Text };
+  type LlmToolCall = { id : Text; function : { name : Text; arguments : [LlmToolCallArgument] } };
+  type LlmRequest = { model : Text; messages : [LlmChatMessage]; tools : ?[{ #function : { name : Text; description : ?Text; parameters : ?{ type_ : Text; properties : ?[{ type_ : Text; name : Text; description : ?Text; enum_ : ?[Text] }]; required : ?[Text] } } }] };
+  type LlmResponse = { message : { content : ?Text; tool_calls : [LlmToolCall] } };
+  type LlmCanisterRef = actor { v1_chat : (LlmRequest) -> async LlmResponse };
+
+  func llmCanister() : LlmCanisterRef { actor (LLM_CANISTER_ID) : LlmCanisterRef };
+
+  // Per-caller recap rate limit (1 per 20s). Transient: abuse protection only,
+  // resetting on upgrade is fine and avoids needing a migration for it.
+  transient var lastRecapAtByCaller : [(Principal, Nat64)] = [];
+  transient let RECAP_RATE_LIMIT_MS : Nat64 = 20_000;
+
+  func checkAndMarkRecapRateLimit(caller : Principal) : Bool {
+    let now = nowMs();
+    switch (lastRecapAtByCaller.find(func((p, _) : (Principal, Nat64)) : Bool = p.equal(caller))) {
+      case (?(_, last)) {
+        if (now < last + RECAP_RATE_LIMIT_MS) return false;
+        lastRecapAtByCaller := lastRecapAtByCaller.map<(Principal, Nat64), (Principal, Nat64)>(func(entry) = if (entry.0.equal(caller)) (entry.0, now) else entry);
+      };
+      case null {
+        lastRecapAtByCaller := lastRecapAtByCaller.concat([(caller, now)]);
+      };
+    };
+    true
+  };
+
+  // Shared recap instruction: concise bullet recap, action items, and open
+  // questions — never invent facts not present in the transcript.
+  transient let RECAP_SYSTEM_PROMPT = "You are summarising a club team group chat for a member who has been away. Read the transcript and reply ONLY with concise markdown bullet points covering: (1) a short recap of what happened, (2) any action items (who needs to do what), (3) any open questions. Use only information present in the transcript — never invent names, dates, or facts that are not there. If a section has nothing to report, omit it.";
+
+  func runRecapCompletion(transcript : Text) : async { #Ok : Text; #Err : Text } {
+    if (transcript == "") return #Err("No new messages to recap");
+    let request : LlmRequest = {
+      model = LLM_MODEL;
+      messages = [
+        #system_({ content = RECAP_SYSTEM_PROMPT }),
+        #user({ content = transcript }),
+      ];
+      tools = null;
+    };
+    try {
+      let response = await (with timeout = 300) llmCanister().v1_chat(request);
+      switch (response.message.content) {
+        case (?text) { if (text == "") #Err("Recap model returned an empty response") else #Ok(truncateText(text, 4000)) };
+        case null { #Err("Recap model returned no content") };
+      }
+    } catch (e) {
+      // Outcall-style failures (traps, cross-subnet timeouts) surface as
+      // catchable errors — never trap the caller's request.
+      #Err("Recap request failed: " # Error.message(e))
+    }
   };
 
   // Platform -> minimum required version/build, set by the governor. Read by
@@ -742,6 +830,111 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(purgeConversations(func(c) = c.team_id == ?team_id, null))
   };
 
+  // ===================== Chat photo gallery reminder sweep =====================
+  // On-chain counterpart of the Supabase chat-photo-gallery-reminders edge
+  // function / AdminChatPhotoRemindersPage "Run now" button. Scans team chat
+  // messages with an image/photo attachment whose age falls in
+  // [window_end_hours, window_start_hours] ago, skips an (team, author) pair
+  // still inside its cooldown, and nudges the uploader through
+  // notification_queue.fan_out. App-admin gated (governor or club_domain's
+  // app_admin grant), matching this canister's existing admin pattern (see
+  // isGovernor / clubDomainRef / is_app_admin above).
+  func isPhotoAttachment(attachment : ?Types.Attachment) : Bool {
+    switch (attachment) {
+      case (?a) { a.kind == "image" or a.kind == "photo" };
+      case null { false };
+    }
+  };
+
+  func lastRemindedMs(team_id : Text, author : Principal) : ?Nat64 {
+    for (entry in chatPhotoReminderLog.values()) {
+      if (entry.team_id == team_id and entry.author.equal(author)) { return ?entry.last_reminded_ms };
+    };
+    null
+  };
+
+  func recordReminded(team_id : Text, author : Principal, now_ms : Nat64) {
+    var found = false;
+    chatPhotoReminderLog := chatPhotoReminderLog.map(func(entry : Types.ChatPhotoReminderLog) : Types.ChatPhotoReminderLog {
+      if (entry.team_id == team_id and entry.author.equal(author)) { found := true; { entry with last_reminded_ms = now_ms } } else { entry }
+    });
+    if (not found) {
+      chatPhotoReminderLog := chatPhotoReminderLog.concat([{ team_id; author; last_reminded_ms = now_ms }]);
+    };
+  };
+
+  public shared ({ caller }) func run_chat_photo_gallery_reminders(
+    now_ms : Nat64,
+    window_start_hours : Nat32,
+    window_end_hours : Nat32,
+    cooldown_days : Nat32,
+  ) : async Types.ChatPhotoReminderResult {
+    auth(caller);
+    if (not isGovernor(caller)) {
+      let clubDomain = await clubDomainRef();
+      switch (clubDomain) {
+        case null { return #Err("club_domain canister not configured") };
+        case (?cd) { if (not (await cd.is_app_admin(caller))) { return #Err("App admin required") } };
+      };
+    };
+    if (window_end_hours <= window_start_hours) return #Err("window_end_hours must exceed window_start_hours");
+    let startDeltaMs = Nat64.fromNat(Nat32.toNat(window_start_hours)) * 3_600_000;
+    let endDeltaMs = Nat64.fromNat(Nat32.toNat(window_end_hours)) * 3_600_000;
+    let newestEligibleMs : Nat64 = if (now_ms > startDeltaMs) { now_ms - startDeltaMs } else { 0 };
+    let oldestEligibleMs : Nat64 = if (now_ms > endDeltaMs) { now_ms - endDeltaMs } else { 0 };
+    let cooldownMs = Nat64.fromNat(Nat32.toNat(cooldown_days)) * 86_400_000;
+    var scanned : Nat32 = 0;
+    var posted : Nat32 = 0;
+    var skipped : Nat32 = 0;
+    let queueRef : ?(actor { fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text } }) = switch (notificationQueueCanister) {
+      case (?nq) { ?(actor (Principal.toText(nq))) };
+      case null { null };
+    };
+    for (msg in messages.values()) {
+      if (isPhotoAttachment(msg.attachment) and msg.created_at_ms >= oldestEligibleMs and msg.created_at_ms <= newestEligibleMs) {
+        var teamId : ?Text = null;
+        var clubId : ?Text = null;
+        for (c in conversations.values()) {
+          if (c.id == msg.conversation_id) { teamId := c.team_id; clubId := ?c.club_id };
+        };
+        switch (teamId) {
+          case null {}; // only team chats are in scope
+          case (?team) {
+            scanned += 1;
+            let onCooldown = switch (lastRemindedMs(team, msg.sender)) {
+              case (?last) { now_ms < last + cooldownMs };
+              case null { false };
+            };
+            if (onCooldown) {
+              skipped += 1;
+            } else {
+              switch (queueRef, clubId) {
+                case (?queue, ?club) {
+                  try {
+                    let result = await queue.fan_out(
+                      [Principal.toText(msg.sender)],
+                      club,
+                      "media_chat_photo_reminder",
+                      "You shared a photo in team chat — add it to the team gallery so everyone can see it.",
+                      "chat-photo-reminder-" # msg.id,
+                      ?msg.conversation_id,
+                    );
+                    switch (result) {
+                      case (#Ok(_)) { posted += 1; recordReminded(team, msg.sender, now_ms) };
+                      case (#Err(_)) { skipped += 1 };
+                    };
+                  } catch (_) { skipped += 1 };
+                };
+                case (_, _) { skipped += 1 };
+              };
+            };
+          };
+        };
+      };
+    };
+    #Ok({ scanned; posted; skipped });
+  };
+
   func chatNotifyPreview(body : Text, attachment : ?Types.Attachment) : Text {
     if (body == "") {
       switch (attachment) {
@@ -842,6 +1035,22 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
+    await* sendAs(caller, conversation_id, body, idempotency_key, attachment, reply_to_id)
+  };
+
+  // Scheduled-message delivery: notification_queue's timer posts a due
+  // scheduled message as its author. Only the configured notification_queue
+  // canister may call this; the author still goes through every send_message
+  // check (membership, blocks, admin-only posting, broadcast admin), so a
+  // scheduled message can never post where its author could not post live.
+  public shared ({ caller }) func deliver_scheduled_message(sender : Principal, conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
+    let trusted = switch (notificationQueueCanister) { case (?nq) { nq.equal(caller) }; case null { false } };
+    if (not trusted) return #Err("Only notification_queue may deliver scheduled messages");
+    if (sender.equal(Principal.anonymous())) return #Err("Invalid sender");
+    await* sendAs(sender, conversation_id, body, idempotency_key, attachment, reply_to_id)
+  };
+
+  func sendAs(caller : Principal, conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async* { #Ok : Types.Message; #Err : Text } {
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     // The broadcast conversation is open-read, so the check above passes for
     // every signed-in member; only platform admins (club_domain's app_admin
@@ -1097,6 +1306,25 @@ persistent actor class Main(governorInit : Principal) {
   };
 
 
+  // Case-insensitive substring search over a conversation's message bodies,
+  // newest matches first. Mirrors the Supabase chat-history search used by
+  // chatHistorySearchFetcher.ts so ICP-routed threads get the same feature.
+  public query ({ caller }) func search_messages(conversation_id : Text, needle : Text, limit : Nat16) : async { #Ok : [Types.Message]; #Err : Text } {
+    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (limit == 0 or limit > 100) return #Err("Invalid page size");
+    let lower_needle = Text.toLower(needle);
+    var matches : [Types.Message] = [];
+    var i = messages.size();
+    while (i > 0 and matches.size() < Nat16.toNat(limit)) {
+      i -= 1;
+      let m = messages[i];
+      if (m.conversation_id == conversation_id and Text.contains(Text.toLower(m.body), #text lower_needle)) {
+        matches := matches.concat([m]);
+      };
+    };
+    #Ok(matches)
+  };
+
   // Full reaction rows (user + emoji) for a conversation so clients can
   // render "who reacted" and restore reactions on refetch. list_messages_page
   // intentionally stays lightweight; reactions are fetched alongside it.
@@ -1111,6 +1339,58 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok(result)
+  };
+
+  // One round trip for a chat screen opening: the newest message page, the
+  // reactions on those messages, and the conversation's pins. Pins are null
+  // when the caller may read messages but not pins (anonymous / no
+  // conversation access); clients then fall back to list_pinned_messages.
+  public query ({ caller }) func open_conversation(conversation_id : Text, limit : Nat16) : async {
+    #Ok : { page : Types.MessagePage; reactions : [Types.Reaction]; pins : ?[Types.PinnedMessage] };
+    #Err : Text;
+  } {
+    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (limit == 0 or limit > 100) return #Err("Invalid page size");
+    let latest = conversationLatestSequence(conversation_id);
+    var matching : Nat = 0;
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id) { matching += 1 };
+    };
+    let limit_n = Nat16.toNat(limit);
+    let skip = if (matching > limit_n) { matching - limit_n } else { 0 };
+    var page_messages : [Types.Message] = [];
+    var seen : Nat = 0;
+    var oldest_in_page : Nat64 = 0;
+    var oldest_set = false;
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id) {
+        if (seen >= skip) {
+          page_messages := page_messages.concat([m]);
+          if (not oldest_set or m.sequence < oldest_in_page) {
+            oldest_in_page := m.sequence;
+            oldest_set := true;
+          };
+        };
+        seen += 1;
+      };
+    };
+    var page_reactions : [Types.Reaction] = [];
+    for (r in reactions.values()) {
+      if (page_messages.find(func(m : Types.Message) : Bool { m.id == r.message_id }) != null) {
+        page_reactions := page_reactions.concat([r]);
+      };
+    };
+    let pins : ?[Types.PinnedMessage] = if (caller.equal(Principal.anonymous()) or not canAccessConversation(caller, conversation_id)) {
+      null
+    } else {
+      ?pinnedMessages.filter(func(p) = p.conversation_id == conversation_id)
+    };
+    let next_seq : ?Nat64 = if (skip > 0 and oldest_set) ?oldest_in_page else null;
+    #Ok({
+      page = { messages = page_messages; next_sequence = next_seq; latest_sequence = latest };
+      reactions = page_reactions;
+      pins;
+    })
   };
 
   public query ({ caller }) func unread_count(conversation_id : Text) : async { #Ok : Types.Unread; #Err : Text } {
@@ -1161,7 +1441,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings; typingPings; pinnedMessages })
+    #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings; typingPings; pinnedMessages; contentReports })
   };
 
   func validKind(kind : Text) : Bool {
@@ -2266,80 +2546,77 @@ persistent actor class Main(governorInit : Principal) {
     null
   };
 
-  public shared ({ caller }) func generate_chat_recap(conversation_id : Text, since_ms : Nat64) : async { #Ok : Text; #Err : Text } {
-    auth(caller);
-    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+  // Builds the transcript text for a conversation: newest messages first up
+  // to ~80 messages / ~6000 chars, then reversed to chronological order for
+  // the prompt (recency cap keeps the LLM call small and fast).
+  func buildRecapTranscript(conversation_id : Text, since_ms : Nat64) : Text {
+    let MAX_MESSAGES = 80;
+    let MAX_CHARS = 6000;
+    var picked : [Types.Message] = [];
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id and m.created_at_ms > since_ms) {
+        picked := picked.concat([m]);
+      };
+    };
+    // Newest first, capped, then reversed back to chronological order.
+    let sorted = picked.sort(func(a, b) = Nat64.compare(b.created_at_ms, a.created_at_ms));
+    let cap = if (sorted.size() < MAX_MESSAGES) sorted.size() else MAX_MESSAGES;
+    let newest = Array.tabulate<Types.Message>(cap, func(i) = sorted[i]);
+    let chronological = Array.tabulate<Types.Message>(cap, func(i) = newest[cap - 1 - i]);
+    var transcript = "";
+    for (m in chronological.values()) {
+      let line = Principal.toText(m.sender) # ": " # truncateText(m.body, 400) # "\n";
+      if (transcript.size() + line.size() <= MAX_CHARS) {
+        transcript := transcript # line;
+      };
+    };
+    transcript
+  };
+
+  // Caller must be a member of the conversation (reuses the same read-access
+  // check as the rest of the messaging surface) and have AI catch-up enabled.
+  func authorizeRecapCaller(caller : Principal, conversation_id : Text) : ?Text {
+    if (not canReadTeamMessages(caller, conversation_id)) return ?"Conversation access forbidden";
     let settings = userMessagingSettings.find(func(s) = s.user.equal(caller));
     let catchupEnabled = switch (settings) { case (?s) { s.ai_catchup_enabled }; case null { false } };
-    if (not catchupEnabled and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("AI catch-up is disabled for this member");
-    let config = switch (recapConfig) {
-      case null { return #Err("Recap not configured") };
-      case (?c) { c };
+    if (not catchupEnabled and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return ?"AI catch-up is disabled for this member";
+    null
+  };
+
+  // Generates a chat recap for `scope_id` (a conversation id) from messages
+  // stored on this canister since `since_ms` (defaults to 7 days back when
+  // omitted). Uses DFINITY's free on-chain LLM canister — no HTTPS outcall,
+  // no API key, no third-party data sharing.
+  public shared ({ caller }) func generate_chat_recap(scope_id : Text, since_ms : ?Nat64) : async { #Ok : Text; #Err : Text } {
+    auth(caller);
+    switch (authorizeRecapCaller(caller, scope_id)) {
+      case (?err) { return #Err(err) };
+      case null {};
     };
-
-    var transcript = "";
-    var count = 0;
-    for (m in messages.values()) {
-      if (m.conversation_id == conversation_id and m.created_at_ms > since_ms and count < 50) {
-        transcript := transcript # Principal.toText(m.sender) # ": " # truncateText(m.body, 280) # "\n";
-        count += 1;
-      };
+    if (not checkAndMarkRecapRateLimit(caller)) return #Err("Please wait a moment before requesting another recap");
+    let SEVEN_DAYS_MS : Nat64 = 7 * 24 * 3600 * 1000;
+    let effectiveSince = switch (since_ms) {
+      case (?s) { s };
+      case null { let now : Nat64 = nowMs(); if (now > SEVEN_DAYS_MS) (now - SEVEN_DAYS_MS) else (0 : Nat64) };
     };
-    if (count == 0) return #Err("No new messages to recap");
+    let transcript = buildRecapTranscript(scope_id, effectiveSince);
+    if (transcript == "") return #Err("No new messages to recap");
+    await runRecapCompletion(transcript)
+  };
 
-    let instruction = "You are summarising a club team group chat for a member who has been away. Read the transcript and reply with a brief bullet-point catch-up: key decisions, upcoming events with dates/times, and anything that needs the reader's action. Be concise.\n\n";
-    let payload = "{"
-      # "\"model\":\"" # jsonEscape(config.model) # "\","
-      # "\"messages\":[{\"role\":\"user\",\"content\":\"" # jsonEscape(instruction # transcript) # "\"}]"
-      # "}";
-
-    let request : IC.HttpRequestArgs = {
-      url = config.endpoint_url;
-      // Sized for response headers + body; a recap is short prose.
-      max_response_bytes = ?(32_000 : Nat64);
-      headers = [
-        { name = "Content-Type"; value = "application/json" },
-        { name = "Authorization"; value = "Bearer " # config.api_key },
-        // Lets the endpoint dedupe retries for the same recap request.
-        { name = "Idempotency-Key"; value = conversation_id # "-" # Nat64.toText(since_ms) },
-      ];
-      body = ?Text.encodeUtf8(payload);
-      method = #post;
-      transform = ?{
-        function = recapTransform;
-        context = Blob.fromArray([]);
-      };
-      // Non-replicated: this POST is a paid, non-idempotent AI request.
-      // Replicated mode would fire one paid request per subnet node (~13
-      // duplicate charges per recap); a single node sends it instead, at
-      // the documented cost of trusting that node's response.
-      is_replicated = ?false;
+  // Variant for scopes whose message bodies are client-encrypted (PII), where
+  // this canister cannot read plaintext: the caller supplies an
+  // already-decrypted transcript. Same membership + rate-limit gating as
+  // generate_chat_recap.
+  public shared ({ caller }) func summarize_transcript(scope_id : Text, transcript : Text) : async { #Ok : Text; #Err : Text } {
+    auth(caller);
+    switch (authorizeRecapCaller(caller, scope_id)) {
+      case (?err) { return #Err(err) };
+      case null {};
     };
-
-    try {
-      let response = await Call.httpRequest(request);
-      if (response.status < 200 or response.status >= 300) {
-        return #Err("Recap endpoint returned status " # Nat.toText(response.status));
-      };
-      let bodyText = switch (Text.decodeUtf8(response.body)) {
-        case (?t) { t };
-        case null { return #Err("Recap response was not valid UTF-8") };
-      };
-      switch (findJsonStringValue(bodyText, "summary")) {
-        case (?summary) { #Ok(truncateText(summary, 4000)) };
-        case null {
-          switch (findJsonStringValue(bodyText, "text")) {
-            case (?text) { #Ok(truncateText(text, 4000)) };
-            // Tolerant fallback: surface the raw body so a differently
-            // shaped endpoint still yields something readable.
-            case null { #Ok(truncateText(bodyText, 2000)) };
-          }
-        };
-      }
-    } catch (e) {
-      // Outcall timeouts and rejects surface as catchable errors — never trap.
-      #Err("Recap request failed: " # Error.message(e))
-    }
+    if (transcript == "") return #Err("No new messages to recap");
+    if (not checkAndMarkRecapRateLimit(caller)) return #Err("Please wait a moment before requesting another recap");
+    await runRecapCompletion(truncateText(transcript, 6000))
   };
 
   // ===================== Presence (online count) =====================
@@ -2567,9 +2844,41 @@ persistent actor class Main(governorInit : Principal) {
   // call (chat link previews are a member feature); the URL must be a public
   // https:// address. Replicated GET: reads are idempotent, so consensus
   // mode is safe and the cheaper default.
+  // Link previews serve every app user (secure sign-in and email accounts —
+  // the latter call anonymously, replacing the old Netlify endpoint). Results
+  // are cached per URL for 24h so repeat links cost no outcall; anonymous
+  // callers share an hourly outcall budget to cap cycle spend from abuse.
+  transient let PREVIEW_CACHE_MS : Nat64 = 86_400_000;
+  transient let PREVIEW_CACHE_MAX = 2_000;
+  transient let ANON_PREVIEW_PER_HOUR = 300;
+  transient var previewCache : [(Text, Nat64, Types.LinkPreview)] = [];
+  transient var anonPreviewWindowStart : Nat64 = 0;
+  transient var anonPreviewCount = 0;
+
+  func cachedPreview(url : Text) : ?Types.LinkPreview {
+    let now = nowMs();
+    switch (Array.find<(Text, Nat64, Types.LinkPreview)>(previewCache, func((u, t, _)) { u == url and now - t < PREVIEW_CACHE_MS })) {
+      case (?(_, _, p)) { ?p };
+      case null { null };
+    };
+  };
+
+  func rememberPreview(url : Text, p : Types.LinkPreview) {
+    let now = nowMs();
+    let kept = Array.filter<(Text, Nat64, Types.LinkPreview)>(previewCache, func((u, t, _)) { u != url and now - t < PREVIEW_CACHE_MS });
+    let trimmed = if (kept.size() >= PREVIEW_CACHE_MAX) Array.sliceToArray(kept, kept.size() - PREVIEW_CACHE_MAX + 1, kept.size()) else kept;
+    previewCache := trimmed.concat([(url, now, p)]);
+  };
+
   public shared ({ caller }) func fetch_link_preview(url : Text) : async { #Ok : Types.LinkPreview; #Err : Text } {
-    auth(caller);
     if (not Text.startsWith(url, #text "https://") or url.size() > 2048) return #Err("URL must be a public https:// address");
+    switch (cachedPreview(url)) { case (?p) { return #Ok(p) }; case null {} };
+    if (caller.equal(Principal.anonymous())) {
+      let now = nowMs();
+      if (now - anonPreviewWindowStart >= 3_600_000) { anonPreviewWindowStart := now; anonPreviewCount := 0 };
+      if (anonPreviewCount >= ANON_PREVIEW_PER_HOUR) return #Err("Preview limit reached, try again later");
+      anonPreviewCount += 1;
+    };
     let request : IC.HttpRequestArgs = {
       url;
       max_response_bytes = ?(64_000 : Nat64);
@@ -2602,12 +2911,14 @@ persistent actor class Main(governorInit : Principal) {
         case (?d) { ?d };
         case null { findMetaContent(bodyText, "description") };
       };
-      #Ok({
+      let preview : Types.LinkPreview = {
         title = switch (title) { case (?t) { ?truncateText(t, 300) }; case null { null } };
         description = switch (description) { case (?d) { ?truncateText(d, 500) }; case null { null } };
         image = findMetaContent(bodyText, "og:image");
         site_name = findMetaContent(bodyText, "og:site_name");
-      })
+      };
+      rememberPreview(url, preview);
+      #Ok(preview)
     } catch (e) {
       #Err("Preview fetch failed: " # Error.message(e))
     }
@@ -2706,6 +3017,63 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(pinnedMessages.filter(func(p) = p.conversation_id == conversation_id))
   };
 
+  // ===================== Content reports (moderation) =====================
+  // Generic report store backing ReportContentDialog for any reportable
+  // surface (chat message, user, club, photo, ...). subject_kind/subject_id
+  // are opaque to this canister; admins resolve them client-side. Listing and
+  // resolution are app_admin/governor only — reporters cannot read others'
+  // reports.
+
+  public shared ({ caller }) func submit_content_report(
+    subject_kind : Text,
+    subject_id : Text,
+    conversation_id : ?Text,
+    reason : Text,
+    details : ?Text,
+  ) : async { #Ok : Types.ContentReport; #Err : Text } {
+    auth(caller);
+    if (subject_kind.size() == 0 or subject_id.size() == 0 or reason.size() == 0) return #Err("Missing required fields");
+    if (reason.size() > 200) return #Err("Reason too long");
+    switch (details) {
+      case (?d) { if (d.size() > 1000) return #Err("Details too long") };
+      case null {};
+    };
+    let report : Types.ContentReport = {
+      id = "report-" # Nat64.toText(Nat64.fromIntWrap(Time.now())) # "-" # Nat.toText(contentReports.size());
+      reporter = caller;
+      subject_kind;
+      subject_id;
+      conversation_id;
+      reason;
+      details;
+      created_at_ms = nowMs();
+      status = "open";
+    };
+    contentReports := contentReports.concat([report]);
+    #Ok(report)
+  };
+
+  public query ({ caller }) func list_content_reports(status : ?Text) : async { #Ok : [Types.ContentReport]; #Err : Text } {
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    switch (status) {
+      case null { #Ok(contentReports) };
+      case (?s) { #Ok(contentReports.filter(func(r) = r.status == s)) };
+    }
+  };
+
+  public shared ({ caller }) func resolve_content_report(id : Text, status : Text) : async { #Ok : Types.ContentReport; #Err : Text } {
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    if (status != "open" and status != "reviewed" and status != "dismissed") return #Err("Invalid status");
+    var found : ?Types.ContentReport = null;
+    contentReports := contentReports.map(func(r) {
+      if (r.id == id) { let updated = { r with status }; found := ?updated; updated } else { r }
+    });
+    switch (found) {
+      case (?r) { #Ok(r) };
+      case null { #Err("Report not found") };
+    }
+  };
+
   // ===================== User blocking =====================
 
   public shared ({ caller }) func block_user(user : Principal) : async { #Ok; #Err : Text } {
@@ -2735,4 +3103,167 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func has_blocked(user : Principal) : async Bool {
     blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user))
   };
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, false)
+  };
+
+  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
+  // both IDs' records end up under the new one (keyed duplicates keep the new row).
+  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, true)
+  };
+
+  func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    // Conflict guard: count NON-EPHEMERAL records that already reference `new`.
+    // Ephemeral/excluded: presence (online pings), typingPings (typing indicators).
+    var conflicts = 0;
+    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
+    conflicts += conversations.filter(func(c) = c.participants.any(func(p) = p.equal(new))).size();
+    conflicts += messages.filter(func(m) = m.sender.equal(new)).size();
+    conflicts += receipts.filter(func(r) = r.user.equal(new)).size();
+    conflicts += unread.filter(func(u) = u.user.equal(new)).size();
+    conflicts += (if (bulkAccessPrincipals.any(func(p) = p.equal(new))) 1 else 0);
+    conflicts += groupMetadata.filter(func(g) = g.members.any(func(p) = p.equal(new)) or (switch (g.deleted_by) { case (?p) p.equal(new); case null false })).size();
+    conflicts += clubMemberships.filter(func(m) = m.user.equal(new)).size();
+    conflicts += competitionAdmins.filter(func(c) = c.user.equal(new)).size();
+    conflicts += (if (dmAttachmentsDisabled.any(func(p) = p.equal(new))) 1 else 0);
+    conflicts += groupRoles.filter(func(g) = g.user.equal(new)).size();
+    conflicts += joinRequests.filter(func(j) = j.user.equal(new)).size();
+    conflicts += polls.filter(func(p) = p.creator.equal(new)).size();
+    conflicts += pollVotes.filter(func(v) = v.user.equal(new)).size();
+    conflicts += mutePreferences.filter(func(m) = m.user.equal(new)).size();
+    conflicts += dmLinks.filter(func(d) = d.a.equal(new) or d.b.equal(new)).size();
+    conflicts += forwardRecords.filter(func(f) = f.original_sender.equal(new)).size();
+    conflicts += scheduledMessages.filter(func(s) = s.sender.equal(new)).size();
+    conflicts += attachmentMetadata.filter(func(a) = a.uploader.equal(new)).size();
+    conflicts += reactions.filter(func(r) = r.user.equal(new)).size();
+    conflicts += userMessagingSettings.filter(func(u) = u.user.equal(new)).size();
+    conflicts += blockedUsers.filter(func(b) = b.blocker.equal(new) or b.blocked.equal(new)).size();
+    conflicts += pinnedMessages.filter(func(p) = p.pinned_by.equal(new)).size();
+    conflicts += contentReports.filter(func(r) = r.reporter.equal(new)).size();
+    if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in messaging_domain");
+
+    var changed = 0;
+
+    let rolesOld = roles.filter(func(r) = r.user.equal(old)).size();
+    changed += rolesOld;
+    let convOld = conversations.filter(func(c) = c.participants.any(func(p) = p.equal(old))).size();
+    changed += convOld;
+    let msgOld = messages.filter(func(m) = m.sender.equal(old)).size();
+    changed += msgOld;
+    let receiptOld = receipts.filter(func(r) = r.user.equal(old)).size();
+    changed += receiptOld;
+    let unreadOld = unread.filter(func(u) = u.user.equal(old)).size();
+    changed += unreadOld;
+    let bulkOld = bulkAccessPrincipals.any(func(p) = p.equal(old));
+    if (bulkOld) changed += 1;
+    let groupMetaOld = groupMetadata.filter(func(g) = g.members.any(func(p) = p.equal(old)) or (switch (g.deleted_by) { case (?p) p.equal(old); case null false })).size();
+    changed += groupMetaOld;
+    let clubMemOld = clubMemberships.filter(func(m) = m.user.equal(old)).size();
+    changed += clubMemOld;
+    let compAdminOld = competitionAdmins.filter(func(c) = c.user.equal(old)).size();
+    changed += compAdminOld;
+    let dmAttachOld = dmAttachmentsDisabled.any(func(p) = p.equal(old));
+    if (dmAttachOld) changed += 1;
+    let groupRoleOld = groupRoles.filter(func(g) = g.user.equal(old)).size();
+    changed += groupRoleOld;
+    let joinReqOld = joinRequests.filter(func(j) = j.user.equal(old)).size();
+    changed += joinReqOld;
+    let pollOld = polls.filter(func(p) = p.creator.equal(old)).size();
+    changed += pollOld;
+    let pollVoteOld = pollVotes.filter(func(v) = v.user.equal(old)).size();
+    changed += pollVoteOld;
+    let muteOld = mutePreferences.filter(func(m) = m.user.equal(old)).size();
+    changed += muteOld;
+    let dmLinkOld = dmLinks.filter(func(d) = d.a.equal(old) or d.b.equal(old)).size();
+    changed += dmLinkOld;
+    let forwardOld = forwardRecords.filter(func(f) = f.original_sender.equal(old)).size();
+    changed += forwardOld;
+    let schedOld = scheduledMessages.filter(func(s) = s.sender.equal(old)).size();
+    changed += schedOld;
+    let attachOld = attachmentMetadata.filter(func(a) = a.uploader.equal(old)).size();
+    changed += attachOld;
+    let reactOld = reactions.filter(func(r) = r.user.equal(old)).size();
+    changed += reactOld;
+    let settingsOld = userMessagingSettings.filter(func(u) = u.user.equal(old)).size();
+    changed += settingsOld;
+    let blockOld = blockedUsers.filter(func(b) = b.blocker.equal(old) or b.blocked.equal(old)).size();
+    changed += blockOld;
+    let pinOld = pinnedMessages.filter(func(p) = p.pinned_by.equal(old)).size();
+    changed += pinOld;
+
+    // Merge: drop OLD keyed rows that collide with an existing NEW row (keep new).
+    if (allowMerge and not dry_run) {
+      receipts := receipts.filter(func(r) = not (r.user.equal(old) and receipts.any(func(x) = x.user.equal(new) and x.conversation_id == r.conversation_id and x.message_id == r.message_id)));
+      unread := unread.filter(func(r) = not (r.user.equal(old) and unread.any(func(x) = x.user.equal(new) and x.conversation_id == r.conversation_id)));
+      clubMemberships := clubMemberships.filter(func(r) = not (r.user.equal(old) and clubMemberships.any(func(x) = x.user.equal(new) and x.club_id == r.club_id)));
+      groupRoles := groupRoles.filter(func(r) = not (r.user.equal(old) and groupRoles.any(func(x) = x.user.equal(new) and x.conversation_id == r.conversation_id)));
+      pollVotes := pollVotes.filter(func(r) = not (r.user.equal(old) and pollVotes.any(func(x) = x.user.equal(new) and x.poll_id == r.poll_id)));
+      mutePreferences := mutePreferences.filter(func(r) = not (r.user.equal(old) and mutePreferences.any(func(x) = x.user.equal(new) and x.conversation_id == r.conversation_id)));
+      reactions := reactions.filter(func(r) = not (r.user.equal(old) and reactions.any(func(x) = x.user.equal(new) and x.message_id == r.message_id and x.emoji == r.emoji)));
+      if (userMessagingSettings.any(func(x) = x.user.equal(new))) userMessagingSettings := userMessagingSettings.filter(func(r) = not r.user.equal(old));
+    };
+
+    // Ephemeral: presence pings — keep NEW row on conflict, drop OLD.
+    let presenceOldHas = presence.any(func(p) = p.user.equal(old));
+    if (presenceOldHas) changed += 1;
+    // Ephemeral: typing pings — keep NEW (conversation_id, user) row on conflict, drop OLD.
+    let typingOldCount = typingPings.filter(func(t) = t.user.equal(old)).size();
+    if (typingOldCount > 0) changed += typingOldCount;
+
+    if (not dry_run) {
+      if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
+      if (convOld > 0) conversations := conversations.map(func(c) = if (c.participants.any(func(p) = p.equal(old))) ({ c with participants = Array.filterMap<Principal, Principal>(c.participants, func(p) = if (p.equal(old)) null else ?p).concat(if (c.participants.any(func(p) = p.equal(new))) [] else [new]) }) else c);
+      if (msgOld > 0) messages := messages.map(func(m) = if (m.sender.equal(old)) ({ m with sender = new }) else m);
+      if (receiptOld > 0) receipts := receipts.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
+      if (unreadOld > 0) unread := unread.map(func(u) = if (u.user.equal(old)) ({ u with user = new }) else u);
+      if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new]);
+      if (groupMetaOld > 0) groupMetadata := groupMetadata.map(func(g) {
+        let members2 = if (g.members.any(func(p) = p.equal(old))) {
+          Array.filterMap<Principal, Principal>(g.members, func(p) = if (p.equal(old)) null else ?p).concat(if (g.members.any(func(p) = p.equal(new))) [] else [new])
+        } else g.members;
+        let deletedBy2 = switch (g.deleted_by) { case (?p) if (p.equal(old)) ?new else ?p; case null null };
+        { g with members = members2; deleted_by = deletedBy2 }
+      });
+      if (clubMemOld > 0) clubMemberships := clubMemberships.map(func(m) = if (m.user.equal(old)) ({ m with user = new }) else m);
+      if (compAdminOld > 0) competitionAdmins := competitionAdmins.map(func(c) = if (c.user.equal(old)) ({ c with user = new }) else c);
+      if (dmAttachOld) dmAttachmentsDisabled := dmAttachmentsDisabled.filter(func(p) = not p.equal(old)).concat([new]);
+      if (groupRoleOld > 0) groupRoles := groupRoles.map(func(g) = if (g.user.equal(old)) ({ g with user = new }) else g);
+      if (joinReqOld > 0) joinRequests := joinRequests.map(func(j) = if (j.user.equal(old)) ({ j with user = new }) else j);
+      if (pollOld > 0) polls := polls.map(func(p) = if (p.creator.equal(old)) ({ p with creator = new }) else p);
+      if (pollVoteOld > 0) pollVotes := pollVotes.map(func(v) = if (v.user.equal(old)) ({ v with user = new }) else v);
+      if (muteOld > 0) mutePreferences := mutePreferences.map(func(m) = if (m.user.equal(old)) ({ m with user = new }) else m);
+      if (dmLinkOld > 0) dmLinks := dmLinks.map(func(d) = { d with a = (if (d.a.equal(old)) new else d.a); b = (if (d.b.equal(old)) new else d.b) });
+      if (forwardOld > 0) forwardRecords := forwardRecords.map(func(f) = if (f.original_sender.equal(old)) ({ f with original_sender = new }) else f);
+      if (schedOld > 0) scheduledMessages := scheduledMessages.map(func(s) = if (s.sender.equal(old)) ({ s with sender = new }) else s);
+      if (attachOld > 0) attachmentMetadata := attachmentMetadata.map(func(a) = if (a.uploader.equal(old)) ({ a with uploader = new }) else a);
+      if (reactOld > 0) reactions := reactions.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
+      if (settingsOld > 0) userMessagingSettings := userMessagingSettings.map(func(u) = if (u.user.equal(old)) ({ u with user = new }) else u);
+      if (blockOld > 0) blockedUsers := blockedUsers.map(func(b) = { b with blocker = (if (b.blocker.equal(old)) new else b.blocker); blocked = (if (b.blocked.equal(old)) new else b.blocked) });
+      if (pinOld > 0) pinnedMessages := pinnedMessages.map(func(p) = if (p.pinned_by.equal(old)) ({ p with pinned_by = new }) else p);
+
+      if (presenceOldHas) {
+        let newHas = presence.any(func(p) = p.user.equal(new));
+        if (newHas) {
+          presence := presence.filter(func(p) = not p.user.equal(old));
+        } else {
+          presence := presence.map(func(p) = if (p.user.equal(old)) ({ p with user = new }) else p);
+        };
+      };
+      if (typingOldCount > 0) {
+        typingPings := typingPings.filter(func(t) = not (t.user.equal(old) and typingPings.any(func(u) = u.conversation_id == t.conversation_id and u.user.equal(new))))
+          .map(func(t) = if (t.user.equal(old)) ({ t with user = new }) else t);
+      };
+    };
+
+    #ok(changed)
+  };
+
 };

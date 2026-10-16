@@ -178,6 +178,17 @@ export const idlFactory = ({ IDL }) => {
         [result_page],
         ['query'],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'revoke_operator' : IDL.Func([IDL.Principal], [result_unit], []),
     'set_availability' : IDL.Func(
         [backend_kind, IDL.Bool, IDL.Nat64],

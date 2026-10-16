@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserCheck } from "lucide-react";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { adminLinkLiveChildToParent } from "@/live/features/club";
+import { adminLinkLiveChildToParent, setLiveGuardianRelationship } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 
 interface LinkChildToParentSheetProps {
@@ -61,15 +61,34 @@ export default function LinkChildToParentSheet({
     mutationFn: async (parentId: string) => {
       await withFeatureBackend("membership", {
         icp: async (ctx) => {
-          // NEEDS-CANISTER: admin_link_child_to_parent only links an existing
-          // child id on club_domain — creating a brand-new child record by
-          // name and marking pending invites accepted stay Supabase-only
-          // concepts until the canister grows them.
+          // admin_link_child_to_parent only links an existing child id on
+          // club_domain. When the child already has a club_domain id we link
+          // + set the guardian relationship directly. When it doesn't yet
+          // (a brand-new child entered by name), there's no canister op to
+          // materialise the child record itself, so the closest real
+          // equivalent is landing a "guardian" kind pending invite for the
+          // selected parent so they can claim guardianship once the child
+          // record exists.
           const childId = existingChildId;
           if (!childId) {
-            throw new Error("Linking a brand-new child requires a club_domain child record first.");
+            const selectedParent = parentOptions.find((p) => p.id === parentId);
+            const parentEmail = (selectedParent as { email?: string } | undefined)?.email?.trim().toLowerCase();
+            if (!parentEmail) {
+              throw new Error("Linking a brand-new child requires a club_domain child record first.");
+            }
+            const { createLivePendingInvite } = await import("@/live/features/club");
+            await createLivePendingInvite(ctx, {
+              kind: "guardian",
+              clubId,
+              email: parentEmail,
+              childId: null,
+            });
+            return;
           }
-          await adminLinkLiveChildToParent(ctx, childId, Principal.fromText(parentId));
+          const parent = Principal.fromText(parentId);
+          await adminLinkLiveChildToParent(ctx, childId, parent);
+          // Admin-linked parent is treated as the primary guardian relationship.
+          await setLiveGuardianRelationship(ctx, childId, parent, "parent", true);
         },
         supabase: async () => {
           const { error } = await supabase.rpc("admin_link_child_to_parent", {

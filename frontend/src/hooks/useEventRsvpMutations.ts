@@ -6,7 +6,7 @@ import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { setLocalEventRsvp } from "@/lab/localEventsService";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus, setLiveRsvpNote } from "@/live/features/events";
+import { setLiveEventRsvp, setLiveChildRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus, setLiveRsvpNote } from "@/live/features/events";
 import { recordLiveRsvpCompleted } from "@/live/features/insights";
 
 export type RsvpStatus = "going" | "not_going" | "maybe";
@@ -203,8 +203,21 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
         return;
       }
 
+      // Hybrid routing: a parent RSVPing their own child writes to the
+      // events_domain canister when events are ICP-routed (keyed by
+      // event+account+child so it never overwrites the parent's own RSVP).
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!id || !user?.id) throw new Error("Missing event or user ID");
+          await setLiveChildRsvp(ctx, id, user.id, childId, status, existingRsvp?.notes ?? "");
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       let rsvpId: string | null = null;
-      
+
       if (existingRsvp) {
         const { error } = await supabase
           .from("rsvps")

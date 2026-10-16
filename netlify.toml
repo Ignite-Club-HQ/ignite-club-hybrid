@@ -19,11 +19,6 @@
   directory = "netlify/functions"
 
 [[redirects]]
-  from = "/api/giphy-search"
-  to = "/.netlify/functions/giphy-search"
-  status = 200
-
-[[redirects]]
   from = "/api/fetch-link-preview"
   to = "/.netlify/functions/fetch-link-preview"
   status = 200
@@ -39,4 +34,4 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
-    Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.giphy.com; font-src 'self'; connect-src 'self' https://cdrxmelhysdqrccttsjg.supabase.co https://icp-api.io https://id.ai; frame-src https://id.ai; object-src 'none'; worker-src 'self'; base-uri 'none'; form-action 'none'; manifest-src 'none'; media-src 'self' blob:"
+    Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.giphy.com; font-src 'self'; connect-src 'self' https://api.giphy.com https://cdrxmelhysdqrccttsjg.supabase.co https://icp-api.io https://id.ai; frame-src https://id.ai; object-src 'none'; worker-src 'self'; base-uri 'none'; form-action 'none'; manifest-src 'none'; media-src 'self' blob:"

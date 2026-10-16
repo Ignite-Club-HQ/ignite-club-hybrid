@@ -12,7 +12,7 @@ import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { getLiveMyRoleGrants, listLiveMembershipClubs, listLiveMembershipTeams } from "@/live/features/membership";
-import { listLiveLatestMessagesPage, recentLiveConversations } from "@/live/features/messaging";
+import { listLiveLatestMessagesPage } from "@/live/features/messaging";
 import { resolveInboxAuthorNames, toInboxPreviewMessage } from "./inboxPreviewHydration";
 
 async function getIcpFeatureBackendContext(): Promise<FeatureBackendContext> {
@@ -34,28 +34,23 @@ async function getIcpFeatureBackendContext(): Promise<FeatureBackendContext> {
 async function fetchIcpLatestMessagesByScope(
   ctx: FeatureBackendContext,
   scopeIds: ReadonlySet<string>,
-  kind: "club" | "team",
 ): Promise<Record<string, InboxPreview>> {
   if (scopeIds.size === 0) return {};
-  const principal = ctx.identity.getPrincipal();
-  const conversations = await recentLiveConversations(ctx, principal, 100);
-  const relevant = conversations.filter(
-    (conversation: any) => conversation.kind === kind && scopeIds.has(conversation.conversation_id),
-  );
-  if (relevant.length === 0) return {};
+  // Read known member scopes directly: legacy club chats have inferred kinds,
+  // and the recent rail is capped. Message reads enforce canister access.
 
   const latestByScope = new Map<string, { body: string; createdAtMs: number; sender: any; imageUrl: string | null }>();
   await Promise.all(
-    relevant.map(async (conversation: any) => {
+    Array.from(scopeIds).map(async (scopeId) => {
       try {
         // Newest-first read: the newest message is page[0]. (The old forward
         // read cursored on the sequence number, which the canister treats as
         // a different cursor, so it returned nothing and previews vanished.)
-        const page: any = await listLiveLatestMessagesPage(ctx, conversation.conversation_id, null, 1);
+        const page: any = await listLiveLatestMessagesPage(ctx, scopeId, null, 1);
         const message = page.messages?.[0];
         if (!message) return;
         const attachment = message.attachment?.[0] ?? null;
-        latestByScope.set(conversation.conversation_id, {
+        latestByScope.set(scopeId, {
           body: (message.body ?? "").trim(),
           createdAtMs: Number(message.created_at_ms),
           sender: message.sender,
@@ -70,10 +65,11 @@ async function fetchIcpLatestMessagesByScope(
   const senderIds = Array.from(new Set(
     Array.from(latestByScope.values()).map((entry) => entry.sender.toText()),
   ));
-  const profiles = senderIds.length > 0 ? await listLiveProfilesByIds(ctx, senderIds) : [];
+  // Missing sender names must not discard successfully fetched photos.
+  const profiles = senderIds.length > 0 ? await listLiveProfilesByIds(ctx, senderIds).catch(() => []) : [];
   const nameByPrincipal: Record<string, string> = {};
   for (const profile of profiles as any[]) {
-    const principalText = profile.principal?.toText?.() ?? profile.id;
+    const principalText = profile.account_id ?? profile.principal?.toText?.() ?? profile.id;
     if (principalText && profile.display_name) nameByPrincipal[principalText] = profile.display_name;
   }
 
@@ -83,7 +79,7 @@ async function fetchIcpLatestMessagesByScope(
       text: entry.body,
       author: nameByPrincipal[entry.sender.toText()] ?? "",
       created_at: new Date(entry.createdAtMs).toISOString(),
-      image_url: null,
+      image_url: entry.imageUrl,
     };
   }
   return latestMessages;
@@ -149,7 +145,7 @@ export async function fetchMemberClubsWithMessages(
         logo_url: club.logo_url?.[0] ?? null,
         sport: null,
       }));
-    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(clubs.map((c) => c.id)), "club");
+    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(clubs.map((c) => c.id)));
     return { clubs, latestMessages };
   }
   if (useIcpLab) {
@@ -256,7 +252,7 @@ export async function fetchTeamsWithMessages(
         });
       }
     }
-    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(teams.map((t) => t.id)), "team");
+    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(teams.map((t) => t.id)));
     return { teams, latestMessages };
   }
   if (useIcpLab) {
@@ -336,7 +332,74 @@ export async function fetchTeamsWithMessages(
   }
 }
 
+/**
+ * Secure-sign-in counterpart of the chat_groups read: club groups live on
+ * messaging_domain. Also self-heals the default Coaches / Team Admins / Club
+ * Committee chats for clubs the user administers (idempotent, once per session).
+ */
+async function fetchIcpChatGroupsWithMessages() {
+  const ctx = await getIcpFeatureBackendContext();
+  const roleGrants = (await getLiveMyRoleGrants(ctx)) as any[];
+  const clubOf = (g: any) => g.club?.[0] ?? g.club_id?.[0] ?? g.club_id ?? null;
+  const clubIds = [...new Set(roleGrants.map(clubOf).filter(Boolean))] as string[];
+  if (clubIds.length === 0) return { groups: [] as any[], latestMessages: {} as Record<string, InboxPreview> };
+  const allClubs = (await listLiveMembershipClubs(ctx)) as any[];
+  const liveClubs = allClubs.filter((c) => clubIds.includes(c.id) && c.deleted_at_ms?.[0] === undefined);
+  const adminClubIds = new Set(roleGrants.filter((g) => g.role === "club_admin").map(clubOf));
+  const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
+  const { listLiveGroupsByClub } = await import("@/live/features/messaging");
+  const setupErrors: string[] = [];
+  await Promise.all(liveClubs.filter((c) => adminClubIds.has(c.id)).map(async (c) => {
+    try {
+      const failed = await ensureLiveDefaultClubChats(ctx, c.id);
+      failed.forEach((f) => setupErrors.push(`${c.name}: ${f}`));
+    } catch (err) {
+      setupErrors.push(`${c.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
+    }
+  }));
+  const perClub = await Promise.all(liveClubs.map(async (club) => {
+    const rows = await listLiveGroupsByClub(ctx, club.id).catch((err) => {
+      if (adminClubIds.has(club.id)) setupErrors.push(`${club.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
+      return [];
+    });
+    return rows
+      .filter((g) => g.isMember && !g.teamId && g.kind === "group")
+      .map((g) => ({
+        id: g.conversationId,
+        name: g.name,
+        description: g.description,
+        avatar_url: g.avatar,
+        club_id: club.id,
+        team_id: null,
+        mini_league_id: null,
+        allowed_roles: [],
+        created_at: new Date(Number(club.created_at_ms ?? 0)).toISOString(),
+        deleted_at: null,
+        teams: null,
+        clubs: { name: club.name, logo_url: club.logo_url?.[0] ?? null, deleted_at: null, purged_at: null },
+      }));
+  }));
+  const groups = perClub.flat();
+  const latestMessages: Record<string, InboxPreview> = {};
+  await Promise.all(groups.map(async (group) => {
+    try {
+      const page: any = await listLiveLatestMessagesPage(ctx, group.id, null, 1);
+      const m = page.messages?.[0];
+      if (!m) return;
+      const att = m.attachment?.[0] ?? null;
+      latestMessages[group.id] = {
+        text: (m.body ?? "").trim(),
+        author_display_name: null,
+        created_at: new Date(Number(m.created_at_ms)).toISOString(),
+        image_url: att?.kind === "image" ? (att.url?.[0] ?? att.ref_id ?? null) : null,
+      } as unknown as InboxPreview;
+    } catch { /* one unreadable chat must not blank the rest */ }
+  }));
+  return { groups, latestMessages, setupErrors };
+}
+
 export async function fetchChatGroupsWithMessages(client: InboxDataClient, userId: string) {
+  if (resolveAuthBackend() === "icp") return fetchIcpChatGroupsWithMessages();
   let accessibleIds: string[] | null = null;
   try {
     if (typeof window === "undefined" || window.localStorage.getItem("msg_accessible_ids_rpc") !== "0") {

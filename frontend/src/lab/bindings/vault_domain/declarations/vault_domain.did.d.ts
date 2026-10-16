@@ -10,12 +10,38 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Backup {
+  'id' : string,
+  'files' : Array<VaultFile>,
+  'backup_label' : string,
+  'folders' : Array<VaultFolder>,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+}
+export interface BackupSummary {
+  'id' : string,
+  'backup_label' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'file_count' : bigint,
+  'folder_count' : bigint,
+}
 export interface BlobRef {
   'path' : string,
   'content_hash' : string,
   'canister' : string,
 }
 export interface Main {
+  'clear_pinned_vault' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'create_backup' : ActorMethod<
+    [string],
+    { 'Ok' : Backup } |
+      { 'Err' : string }
+  >,
   'create_folder' : ActorMethod<
     [
       string,
@@ -37,6 +63,7 @@ export interface Main {
    * / Public: remaining cycles (shown in admin settings).
    */
   'cycles_balance' : ActorMethod<[], bigint>,
+  'delete_backup' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'delete_file_permanent' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -47,6 +74,7 @@ export interface Main {
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,
+  'get_backup' : ActorMethod<[string], { 'Ok' : Backup } | { 'Err' : string }>,
   'get_competition_folder' : ActorMethod<
     [string],
     { 'Ok' : [] | [VaultFolder] } |
@@ -62,9 +90,19 @@ export interface Main {
     { 'Ok' : [] | [VaultFolder] } |
       { 'Err' : string }
   >,
+  'get_pinned_vault' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [PinnedVault] } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, [] | [string], [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'list_backups' : ActorMethod<
+    [],
+    { 'Ok' : Array<BackupSummary> } |
       { 'Err' : string }
   >,
   'list_club_files' : ActorMethod<
@@ -112,6 +150,10 @@ export interface Main {
     { 'Ok' : Array<VaultFileWithFolder> } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'move_file' : ActorMethod<
     [string, string],
     { 'Ok' : VaultFile } |
@@ -135,9 +177,19 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'rename_file' : ActorMethod<
     [string, string],
     { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'restore_backup' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'restore_file' : ActorMethod<
@@ -155,6 +207,20 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_pinned_vault' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      boolean,
+    ],
+    { 'Ok' : PinnedVault } |
+      { 'Err' : string }
+  >,
   'transfer_governorship' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -170,6 +236,18 @@ export interface Main {
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,
+}
+export interface PinnedVault {
+  'root_id' : [] | [string],
+  'root_scope' : [] | [string],
+  'club' : string,
+  'updated_at_ms' : bigint,
+  'set_by' : Principal,
+  'enabled' : boolean,
+  'vault_folder_id' : [] | [string],
+  'chat_id' : string,
+  'vault_file_id' : [] | [string],
+  'chat_type' : string,
 }
 export interface VaultFile {
   'id' : string,

@@ -1,18 +1,21 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useOptionalAuth } from "@/hooks/useAuth";
+import { AppSplash } from "@/components/AppSplash";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  getCurrentInternetIdentity,
+  getCurrentInternetIdentityConfirmed,
   signOutInternetIdentity,
 } from "@/live/internetIdentityAuth";
 // features/membership is imported lazily at the call site so the ICP SDK
 // stays out of the entry chunk (this component mounts at app start).
 import { getActiveIcpTarget } from "@/live/targetRegistry";
-import { isIcpAuthAvailable } from "@/live/authBackendMode";
+import { isIcpAuthAvailable, readAuthChoice } from "@/live/authBackendMode";
 import {
   cacheClubBackendHint,
+  deriveClubBackendsFromHomeCountries,
   getBackendRoutingConfig,
+  isClubHomeCountryRoutingActive,
   resolveBackendForUser,
   resolveClubBackendOverride,
   type BackendProvider,
@@ -47,6 +50,17 @@ import { clearUserClubIds, setUserClubIds } from "@/live/userClubs";
  */
 
 const ENFORCED_KEY = "ignite.clubBackendEnforced";
+// Remembers, per account, that this device already passed the club
+// sign-in-method check, so returning to the app never waits on it again
+// (the check still runs in the background and can still switch a member).
+const VERIFIED_KEY = "ignite.clubBackendVerified";
+
+function isVerified(userId: string): boolean {
+  try { return localStorage.getItem(VERIFIED_KEY) === userId; } catch { return false; }
+}
+function markVerified(userId: string) {
+  try { localStorage.setItem(VERIFIED_KEY, userId); } catch { /* ignore */ }
+}
 
 async function fetchSupabaseMembership(
   userId: string,
@@ -74,7 +88,14 @@ async function fetchSupabaseMembership(
 }
 
 function hasClubPins(): boolean {
-  return Object.keys(getBackendRoutingConfig().clubBackendOverrides).length > 0;
+  return isClubHomeCountryRoutingActive(getBackendRoutingConfig());
+}
+
+async function fetchSupabaseHomeCountries(clubIds: string[]): Promise<Record<string, string | null>> {
+  if (clubIds.length === 0) return {};
+  const { data, error } = await supabase.from("clubs").select("id, home_country").in("id", clubIds);
+  if (error) throw error;
+  return Object.fromEntries((data ?? []).map((c: any) => [c.id, c.home_country ?? null]));
 }
 
 export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
@@ -90,15 +111,29 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
     }
     // A new signed-in user must re-run the pin check before the route tree
     // renders again.
-    if (hasClubPins()) setSettled(false);
+    const alreadyVerified = isVerified(user.id);
+    if (hasClubPins() && !alreadyVerified) setSettled(false);
+    else setSettled(true);
     let cancelled = false;
     const settle = () => {
+      markVerified(user.id);
       if (!cancelled) setSettled(true);
     };
     void (async () => {
       try {
-        const identity = await getCurrentInternetIdentity();
-        const provider: BackendProvider = identity ? "icp" : "supabase";
+        // Decide the provider from the signed-in account, not from whether the
+        // II client answered yet: a momentary null (client still restoring or
+        // re-minting) used to classify an ICP member as "supabase", sign them
+        // out and reload the page.
+        const isIcpUser = (user as { app_metadata?: { provider?: string } }).app_metadata?.provider === "icp";
+        // An email (Supabase) account never uses an Internet Identity, even if
+        // an old one is still stored on this device.
+        const identity = isIcpUser ? await getCurrentInternetIdentityConfirmed() : null;
+        if (isIcpUser && !identity) {
+          settle();
+          return;
+        }
+        const provider: BackendProvider = isIcpUser ? "icp" : "supabase";
         let clubIds: string[] = [];
         // App admins administer the whole app (Placement Settings, routing
         // config) from Supabase-backed screens, so a club pin must never sign
@@ -115,6 +150,9 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
             const { getLiveMyRoleGrants } = await import("@/live/features/membership");
             const grants = await getLiveMyRoleGrants({ identity, target: getActiveIcpTarget() });
             clubIds = [...new Set(grants.map(g => g.club[0]).filter((id): id is string => !!id))];
+            // App admins may sign in with either method — a club pin must
+            // never force them onto the other backend.
+            isAppAdmin = grants.some(g => g.role === "app_admin");
           } catch (error) {
             // Canister unreachable or not deployed: keep memberships empty so
             // routing falls back to country rules / the cached hint.
@@ -129,7 +167,25 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         if (cancelled) return;
         setUserClubIds(clubIds);
 
+        // A club's backend follows its home country, using the same country
+        // rules as the sign-in screen.
         const config = getBackendRoutingConfig();
+        let homeCountries: Record<string, string | null> = {};
+        try {
+          if (identity) {
+            const { getLiveClubHomeCountries } = await import("@/live/features/club");
+            homeCountries = await getLiveClubHomeCountries({ identity, target: getActiveIcpTarget() }, clubIds);
+          } else {
+            homeCountries = await fetchSupabaseHomeCountries(clubIds);
+          }
+        } catch (error) {
+          membershipKnown = false;
+          console.warn("[club-backend] Could not load club home countries.", error);
+        }
+        if (cancelled) return;
+        config.clubBackendOverrides = deriveClubBackendsFromHomeCountries(
+          config, homeCountries, isIcpAuthAvailable(),
+        );
         const pin = resolveClubBackendOverride(config, clubIds);
         if (membershipKnown) cacheClubBackendHint(pin);
         if (pin === null) {
@@ -140,6 +196,13 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         const { country } = getCurrentCountry();
         const required = resolveBackendForUser(config, country, clubIds, isIcpAuthAvailable());
         if (required === provider) {
+          sessionStorage.removeItem(ENFORCED_KEY);
+          settle();
+          return;
+        }
+        // The person deliberately picked email sign-in on this device
+        // (?auth=email): honour it — their data is read from Supabase.
+        if (provider === "supabase" && readAuthChoice() === "supabase") {
           sessionStorage.removeItem(ENFORCED_KEY);
           settle();
           return;
@@ -171,6 +234,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
           return;
         }
         sessionStorage.setItem(ENFORCED_KEY, "1");
+        try { localStorage.removeItem(VERIFIED_KEY); } catch { /* ignore */ }
         toast({
           title: "Switching sign-in method",
           description:
@@ -190,6 +254,8 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         // Reload the ROOT, not the current URL: the published/preview hosting
         // has no SPA fallback, so reloading a deep path (e.g. /auth) answers
         // a plain "Not Found" instead of the app.
+        // Drop any device-level ?auth= choice so the club's method wins.
+        try { localStorage.removeItem("ignite.authChoice"); } catch { /* ignore */ }
         window.location.replace("/");
       } catch (error) {
         console.warn("[club-backend] Enforcement check failed.", error);
@@ -205,12 +271,8 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
 
   // Fast path: with no club pins configured nothing can force a backend
   // switch, so never hold the route tree on the membership fetch.
-  if (!user || settled || !hasClubPins()) {
+  if (!user || settled || !hasClubPins() || isVerified(user.id)) {
     return <>{children}</>;
   }
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="animate-pulse text-2xl font-bold text-gradient-emerald">Ignite</div>
-    </div>
-  );
+  return <AppSplash message="Signing you in..." />;
 }

@@ -61,4 +61,45 @@ module {
     club_id : ?Text;
     team_id : ?Text;
   };
+
+  // A vault folder/file (or whole club/team vault root) pinned to the top of
+  // a chat. Counterpart of the Supabase chat_pinned_vault table; keyed by
+  // (chat_type, chat_id). root_scope is "team" or "club" when a whole vault
+  // root is pinned instead of a single file/folder.
+  public type PinnedVault = {
+    chat_type : Text;
+    chat_id : Text;
+    club : Text;
+    vault_file_id : ?Text;
+    vault_folder_id : ?Text;
+    root_scope : ?Text;
+    root_id : ?Text;
+    enabled : Bool;
+    set_by : Principal;
+    updated_at_ms : Nat64;
+  };
+
+  // Governor/app-admin snapshot of folder+file metadata (blob refs only,
+  // no decrypted bytes — metadata lives here, bytes stay in the blob store
+  // or Supabase storage). Counterpart of the Supabase `vault-backup` edge
+  // function's manifest, but kept fully on-chain: no decryption happens.
+  public type Backup = {
+    id : Text;
+    backup_label : Text;
+    created_at_ms : Nat64;
+    created_by : Principal;
+    folders : [VaultFolder];
+    files : [VaultFile];
+  };
+
+  // Lightweight listing row so list_backups doesn't ship every folder/file
+  // in the snapshot over the wire.
+  public type BackupSummary = {
+    id : Text;
+    backup_label : Text;
+    created_at_ms : Nat64;
+    created_by : Principal;
+    folder_count : Nat;
+    file_count : Nat;
+  };
 };

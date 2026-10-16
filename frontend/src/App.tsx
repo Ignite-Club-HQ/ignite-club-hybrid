@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useState, Fragment, type ReactNode } from "react";
-import { NavigationProgress } from "@/components/NavigationProgress";
 import { restoreQueryCache, startQueryCachePersistence } from "@/lib/queryCachePersistence";
+import { installPendingSendKeeper } from "@/lib/pendingSendKeeper";
+
 import NativeOnlyGate from "@/components/NativeOnlyGate";
 import { Capacitor } from "@capacitor/core";
 // Force publish - Firebase upgraded to v12.7.0 for Capacitor 8 compatibility
@@ -12,7 +13,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } fr
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { AuthProvider, IcpAuthProvider } from "@/hooks/useAuth";
 import { ClubBackendEnforcement } from "@/components/ClubBackendEnforcement";
-import { useIcpAuthScreen } from "@/live/authBackendMode";
+import { useIcpAuthScreen, subscribeAuthChoice } from "@/live/authBackendMode";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ThemeProvider } from "next-themes";
 import { ClubThemeProvider } from "@/hooks/useClubTheme";
@@ -40,10 +41,9 @@ import { StatusBarManager } from "@/components/StatusBarManager";
 import { NotifDebugOverlay } from "@/components/NotifDebugOverlay";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { DevRibbon } from "@/components/DevRibbon";
-import { IcpNavActivityTracker } from "@/components/IcpNavActivityTracker";
-import { IcpPendingBar } from "@/components/IcpPendingBar";
 import { IcsPreviewFallbackDialog } from "@/components/IcsPreviewFallbackDialog";
 import { Loader2 } from "lucide-react";
+import { AppSplash } from "@/components/AppSplash";
 
 // OAuth callback capture is now handled in main.tsx (runs earlier)
 
@@ -117,6 +117,7 @@ const ManageFeedbackPage = lazyWithRetry(() => import("./pages/ManageFeedbackPag
 const ManageUsersPage = lazyWithRetry(() => import("./pages/ManageUsersPage"));
 const ManageBackupsPage = lazyWithRetry(() => import("./pages/ManageBackupsPage"));
 const JoinTeamPage = lazyWithRetry(() => import("./pages/JoinTeamPage"));
+const CompetitionOfficialJoinPage = lazyWithRetry(() => import("./pages/CompetitionOfficialJoinPage"));
 const JoinClubPage = lazyWithRetry(() => import("./pages/JoinClubPage"));
 const TermsOfServicePage = lazyWithRetry(() => import("./pages/TermsOfServicePage"));
 const PrivacyPolicyPage = lazyWithRetry(() => import("./pages/PrivacyPolicyPage"));
@@ -148,6 +149,8 @@ const EventGroupPitchPage = lazyWithRetry(() => import("./pages/EventGroupPitchP
 const AppSettingsPage = lazyWithRetry(() => import("./pages/AppSettingsPage"));
 const AdminAICatchUpPage = lazyWithRetry(() => import("./pages/AdminAICatchUpPage"));
 const AdminIcpLlmTestPage = lazyWithRetry(() => import("./pages/AdminIcpLlmTestPage"));
+const AdminIcpDataPage = lazyWithRetry(() => import("./pages/AdminIcpDataPage"));
+const AdminIcpHealthPage = lazyWithRetry(() => import("./pages/AdminIcpHealthPage"));
 const PlacementAdminSettingsPage = lazyWithRetry(() => import("./pages/PlacementAdminSettingsPage"));
 const AdMobSettingsPage = lazyWithRetry(() => import("./pages/AdMobSettingsPage"));
 const ClassEnrolmentPage = lazyWithRetry(() => import("./pages/ClassEnrolmentPage"));
@@ -235,6 +238,8 @@ const queryClient = new QueryClient({
 // Paint the last-seen data for every page instantly on launch, then refresh.
 restoreQueryCache(queryClient);
 startQueryCachePersistence(queryClient);
+// Still-sending chat messages survive leaving and re-opening the chat.
+installPendingSendKeeper(queryClient);
 
 // Download the main pages' code while the app is idle so the first tap on
 // any of them does not wait for a code download.
@@ -367,6 +372,15 @@ const App = () => {
   // the auth boundary below (Supabase vs Internet Identity) is chosen from
   // these settings, and the provider must not be swapped after mount.
   const [placementReady, setPlacementReady] = useState(false);
+  // Re-pick the auth provider when the device sign-in choice flips
+  // (?auth=icp / ?auth=email links on the sign-in screens). App sits outside
+  // the router, so without this subscription the URL change re-renders /auth
+  // but never swaps the mounted provider — the new screen's button would run
+  // the old system's sign-in. Must live above the placementReady early return
+  // to keep hook order stable.
+  const [authChoiceTick, setAuthChoiceTick] = useState(0);
+  useEffect(() => subscribeAuthChoice(() => setAuthChoiceTick((t) => t + 1)), []);
+  void authChoiceTick; // re-render trigger only; useIcpAuthScreen re-reads the choice
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -462,11 +476,7 @@ const App = () => {
   // screen matches Admin → Infrastructure / Placement Settings from the
   // start, instead of flashing the Supabase form and then swapping.
   if (!placementReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="animate-pulse text-2xl font-bold text-gradient-emerald">Ignite</div>
-      </div>
-    );
+    return <AppSplash />;
   }
 
   const useIcpAuth = useIcpAuthScreen();
@@ -480,15 +490,12 @@ const App = () => {
         <ClubThemeProvider>
           <TooltipProvider>
           <DevRibbon />
-          <IcpPendingBar />
           <Toaster />
           <Sonner />
           <IcsPreviewFallbackDialog />
           <NotifDebugOverlay />
           <BrowserRouter>
-            <NavigationProgress />
             <AppNavigatorBridge />
-            <IcpNavActivityTracker />
             <ScrollToTop />
             <PWAPendingInviteHandler />
 
@@ -505,6 +512,7 @@ const App = () => {
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/verify-reset-code" element={<VerifyResetCodePage />} />
                 <Route path="/complete-profile" element={<CompleteProfilePage />} />
+                <Route path="/competitions/officials/join" element={<NativeOnlyGate><WithDeepLinkGate><CompetitionOfficialJoinPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/join/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/join/p/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/j/:code" element={<NativeOnlyGate><WithDeepLinkGate><ShortInviteRedirect /></WithDeepLinkGate></NativeOnlyGate>} />
@@ -615,6 +623,8 @@ const App = () => {
                   <Route path="/admin/placement-settings" element={<PlacementAdminSettingsPage />} />
                   <Route path="/admin/ai-catch-up" element={<AdminAICatchUpPage />} />
                   <Route path="/admin/icp-llm-test" element={<AdminIcpLlmTestPage />} />
+                  <Route path="/admin/icp-data" element={<AdminIcpDataPage />} />
+                  <Route path="/admin/icp-health" element={<AdminIcpHealthPage />} />
                   <Route path="/admin/icp-canisters" element={<Navigate to="/admin/placement-settings" replace />} />
                   <Route path="/admin/admob" element={<AdMobSettingsPage />} />
                  <Route path="/admin/send-update-reminder" element={<SendUpdateReminderPage />} />

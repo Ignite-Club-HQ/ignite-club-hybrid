@@ -52,9 +52,11 @@ export function useAddBulkTeamMembersMutation({
   /**
    * ICP path: mirrors the single-member mutations' locked-decision shape —
    * `addLiveRoleGrant` for an existing-user match, `createLivePendingInvite`
-   * for a fresh invite. Second-parent linking and email delivery have no
-   * club_domain counterpart and are skipped per that same decision.
-   * NEEDS-CANISTER: bulk second-parent invite composition + email delivery.
+   * for a fresh invite. Second-parent linking uses `createLivePendingInvite`
+   * with kind "guardian" against the member's first existing child id, so
+   * each bulk row's second parent gets a real canister invite. Email
+   * delivery has no club_domain counterpart and is skipped per that same
+   * decision.
    */
   const mutationIcp = async (ctx: FeatureBackendContext, membersToAdd?: BulkMember[]) => {
     const { Principal } = await import("@icp-sdk/core/principal");
@@ -63,6 +65,8 @@ export function useAddBulkTeamMembersMutation({
     if (validMembers.length === 0) throw new Error("Please enter at least one name");
 
     const results: { name: string; email: string; link: string; sent: boolean; role: string; childrenCount: number }[] = [];
+    const secondParentFailures: string[] = [];
+    const secondParentInvited: string[] = [];
 
     for (const member of validMembers) {
       const validChildren = member.children.filter((c) => c.name.trim());
@@ -104,9 +108,27 @@ export function useAddBulkTeamMembersMutation({
       } catch (error) {
         console.error("[BulkAdd][ICP] pending invite failed for", member.name, error);
       }
+
+      const secondParentEmail = (member.secondParentEmail || "").trim().toLowerCase();
+      if (secondParentEmail) {
+        try {
+          const { createLivePendingInvite: createLiveGuardianInvite } = await import("@/live/features/club");
+          const childId = validChildren.find((c) => c.existingChildId)?.existingChildId || null;
+          await createLiveGuardianInvite(ctx, {
+            kind: "guardian",
+            clubId,
+            email: secondParentEmail,
+            childId,
+          });
+          secondParentInvited.push(member.secondParentName?.trim() || secondParentEmail);
+        } catch (error) {
+          console.error("[BulkAdd][ICP] second parent guardian invite failed for", member.name, error);
+          secondParentFailures.push(member.secondParentName?.trim() || secondParentEmail);
+        }
+      }
     }
 
-    return { results, secondParentFailures: [] as string[], secondParentInvited: [] as string[], secondParentAdded: [] as string[] };
+    return { results, secondParentFailures, secondParentInvited, secondParentAdded: [] as string[] };
   };
 
   return useMutation({

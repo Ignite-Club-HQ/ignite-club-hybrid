@@ -1,7 +1,7 @@
 import type { Identity } from "@icp-sdk/core/agent";
 import { isFeatureCanisterConfigured, type FeatureArea } from "./featureBackend";
-import { getCurrentInternetIdentity } from "./internetIdentityAuth";
-import { getEffectiveBackendForFeature, tryGetActiveIcpTarget } from "./loadBackendRouting";
+import { getCurrentInternetIdentity, getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
+import { getEffectiveBackendForFeature, isSignedInWithEmail, tryGetActiveIcpTarget } from "./loadBackendRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 
 /**
@@ -33,6 +33,7 @@ export async function withFeatureBackend<T>(
   feature: FeatureArea,
   providers: FeatureBackendProviders<T>,
 ): Promise<T> {
+  if (isSignedInWithEmail()) return providers.supabase();
   if (getEffectiveBackendForFeature(feature) !== "icp") {
     // An Internet Identity user has no Supabase account or data: if routing
     // momentarily resolves to Supabase (club-membership pin not loaded yet,
@@ -46,7 +47,14 @@ export async function withFeatureBackend<T>(
     }
     return providers.supabase();
   }
-  const identity = await getCurrentInternetIdentity();
+  // Signed in with email (Supabase session, no Internet Identity): an ICP
+  // club pin can't be served without an identity, so read their Supabase data
+  // instead of failing every request.
+  if (hasSupabaseSession() && !(await getCurrentInternetIdentity().catch(() => null))) {
+    return providers.supabase();
+  }
+  // Ride out the brief "no session" gap while the session renews itself.
+  const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
   if (!identity) {
     throw new Error(
       `The "${feature}" feature is routed to the Internet Computer backend, ` +
@@ -54,4 +62,14 @@ export async function withFeatureBackend<T>(
     );
   }
   return providers.icp({ identity, target: getActiveIcpTarget() });
+}
+
+function hasSupabaseSession(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("sb-") && k.endsWith("-auth-token") && localStorage.getItem(k)) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
 }

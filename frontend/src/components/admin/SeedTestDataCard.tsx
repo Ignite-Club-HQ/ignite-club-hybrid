@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { isIcpSession } from "@/lib/icpClubTeamLookup";
+import { icpListMyAdminClubs, isIcpSession } from "@/lib/icpClubTeamLookup";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** App-admin tool: create a synthetic club with teams, events, chats and photos (ICP mode). */
 export function SeedTestDataCard() {
@@ -18,8 +19,48 @@ export function SeedTestDataCard() {
   const [photos, setPhotos] = useState(12);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ label: string; done: number; total: number } | null>(null);
+  const [clubs, setClubs] = useState<Array<{ id: string; name: string }>>([]);
+  const [fillClubId, setFillClubId] = useState<string>("");
+
+  useEffect(() => {
+    if (!isIcpSession()) return;
+    icpListMyAdminClubs()
+      .then((list) => {
+        setClubs(list);
+        const rd = list.find((c) => /riverdogs/i.test(c.name));
+        if (rd) setFillClubId(rd.id);
+      })
+      .catch(() => setClubs([]));
+  }, []);
 
   if (!isIcpSession()) return null;
+
+  const fillExisting = async () => {
+    if (!fillClubId) return;
+    setRunning(true);
+    try {
+      const { seedIcpTestData } = await import("@/live/seedIcpTestData");
+      const res = await seedIcpTestData({
+        clubName: clubs.find((c) => c.id === fillClubId)?.name ?? "Club",
+        existingClubId: fillClubId,
+        messagesPerTeamChat: 20,
+        clubChatMessages: 20,
+        photos: 10,
+        files: 6,
+        onProgress: (label, done, total) => setProgress({ label, done, total }),
+      });
+      qc.invalidateQueries();
+      if (res.failures.length) {
+        toast.warning(`${res.summary}. ${res.failures.length} problems — first: ${res.failures[0]}`, { duration: 20000 });
+      } else {
+        toast.success(res.summary);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't add demo content");
+    } finally {
+      setRunning(false);
+    }
+  };
 
   const run = async () => {
     setRunning(true);
@@ -50,6 +91,21 @@ export function SeedTestDataCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <Label>Fill with demo content</Label>
+          <p className="text-sm text-muted-foreground">
+            Adds 2 teams with a month of games and trainings, about 60 chat messages across 3 chats, 10 gallery photos and 6 vault files to a club you manage.
+          </p>
+          <Select value={fillClubId} onValueChange={setFillClubId} disabled={running}>
+            <SelectTrigger><SelectValue placeholder={clubs.length ? "Choose a club" : "Loading your clubs…"} /></SelectTrigger>
+            <SelectContent>
+              {clubs.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button onClick={fillExisting} disabled={running || !fillClubId}>
+            {running && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Fill with demo content
+          </Button>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2 space-y-1">
             <Label htmlFor="seed-club">Club name</Label>

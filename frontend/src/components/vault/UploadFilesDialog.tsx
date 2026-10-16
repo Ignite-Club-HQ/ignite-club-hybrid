@@ -196,10 +196,13 @@ export function UploadFilesDialog({
   };
 
   const handleUploadAreaClick = () => {
-    if (shouldUseNativePhotoPicker) {
+    // The native photo picker only handles photos. For "File" uploads the
+    // hidden file input must open the device file browser even on native —
+    // otherwise tapping "Tap to select file" silently opens the photo
+    // library (or nothing) instead.
+    if (shouldUseNativePhotoPicker && uploadType === "photo") {
       void handleNativePhotoPick();
     } else {
-      // For non-native: trigger the hidden file input manually
       fileInputRef.current?.click();
     }
   };

@@ -51,6 +51,11 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
+export interface FinalizedBlob {
+    path: string;
+    content_hash: string;
+    content_length: bigint;
+}
 export type ResultUploadId = {
     __kind__: "Ok";
     Ok: string;
@@ -93,12 +98,14 @@ export interface HttpRequest {
     body: Uint8Array;
     headers: Array<HeaderField>;
 }
-export type HeaderField = [string, string];
-export interface FinalizedBlob {
-    path: string;
-    content_hash: string;
-    content_length: bigint;
+export interface MediaUsage {
+    count: bigint;
+    count_limit: bigint;
+    bytes_limit?: bigint;
+    category: string;
+    bytes: bigint;
 }
+export type HeaderField = [string, string];
 export interface media_blob_storeInterface {
     abort_upload(upload_id: string): Promise<Result>;
     begin_upload(path: string, mime: string, total_size: bigint, chunk_count: number): Promise<ResultUploadId>;
@@ -108,15 +115,30 @@ export interface media_blob_storeInterface {
     cycles_balance(): Promise<bigint>;
     delete_blob(path: string): Promise<Result>;
     finalize_upload(upload_id: string): Promise<ResultFinalized>;
+    get_club_media_usage(club_id: string): Promise<Array<MediaUsage>>;
     get_content_hash(path: string): Promise<string | null>;
     get_usage(): Promise<Usage>;
     health(): Promise<Health>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     set_capacity_limit(limit_bytes: bigint): Promise<Result>;
     set_club_domain_canister(canister_id: Principal): Promise<Result>;
 }
-import type { FinalizedBlob as _FinalizedBlob, Result as _Result, ResultFinalized as _ResultFinalized, ResultUploadId as _ResultUploadId } from "./declarations/media_blob_store.did";
+import type { FinalizedBlob as _FinalizedBlob, MediaUsage as _MediaUsage, Result as _Result, ResultFinalized as _ResultFinalized, ResultUploadId as _ResultUploadId } from "./declarations/media_blob_store.did";
 export class Media_blob_store implements media_blob_storeInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async abort_upload(arg0: string): Promise<Result> {
@@ -139,9 +161,13 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.finalize_upload(arg0);
         return from_candid_ResultFinalized_n5(result);
     }
+    async get_club_media_usage(arg0: string): Promise<Array<MediaUsage>> {
+        const result = await this.actor.get_club_media_usage(arg0);
+        return from_candid_vec_n7(result);
+    }
     async get_content_hash(arg0: string): Promise<string | null> {
         const result = await this.actor.get_content_hash(arg0);
-        return from_candid_opt_n7(result);
+        return from_candid_opt_n11(result);
     }
     async get_usage(): Promise<Usage> {
         const result = await this.actor.get_usage();
@@ -155,9 +181,29 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.http_request(arg0);
         return result;
     }
+    async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.merge_principal(arg0, arg1, arg2);
+        return from_candid_variant_n12(result);
+    }
     async put_chunk(arg0: string, arg1: number, arg2: Uint8Array): Promise<Result> {
         const result = await this.actor.put_chunk(arg0, arg1, arg2);
         return from_candid_Result_n1(result);
+    }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n12(result);
     }
     async set_capacity_limit(arg0: bigint): Promise<Result> {
         const result = await this.actor.set_capacity_limit(arg0);
@@ -168,6 +214,9 @@ export class Media_blob_store implements media_blob_storeInterface {
         return from_candid_Result_n1(result);
     }
 }
+function from_candid_MediaUsage_n8(value: _MediaUsage): MediaUsage {
+    return from_candid_record_n9(value);
+}
 function from_candid_ResultFinalized_n5(value: _ResultFinalized): ResultFinalized {
     return from_candid_variant_n6(value);
 }
@@ -177,8 +226,51 @@ function from_candid_ResultUploadId_n3(value: _ResultUploadId): ResultUploadId {
 function from_candid_Result_n1(value: _Result): Result {
     return from_candid_variant_n2(value);
 }
-function from_candid_opt_n7(value: [] | [string]): string | null {
+function from_candid_opt_n10(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n11(value: [] | [string]): string | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n9(value: {
+    count: bigint;
+    count_limit: bigint;
+    bytes_limit: [] | [bigint];
+    category: string;
+    bytes: bigint;
+}): {
+    count: bigint;
+    count_limit: bigint;
+    bytes_limit?: bigint;
+    category: string;
+    bytes: bigint;
+} {
+    return {
+        count: value.count,
+        count_limit: value.count_limit,
+        bytes_limit: record_opt_to_undefined(from_candid_opt_n10(value.bytes_limit)),
+        category: value.category,
+        bytes: value.bytes
+    };
+}
+function from_candid_variant_n12(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
 }
 function from_candid_variant_n2(value: {
     Ok: null;
@@ -236,6 +328,9 @@ function from_candid_variant_n6(value: {
         __kind__: "Err",
         Err: value.Err
     } : value;
+}
+function from_candid_vec_n7(value: Array<_MediaUsage>): Array<MediaUsage> {
+    return value.map((x)=>from_candid_MediaUsage_n8(x));
 }
 export interface CreateActorOptions {
     agent?: Agent;

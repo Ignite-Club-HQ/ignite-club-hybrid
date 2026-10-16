@@ -14,6 +14,7 @@ type result_snapshot = variant { Ok : snapshot; Err : text };
 type result_reconciliation = variant { Ok : reconciliation; Err : text };
 service : () -> {
   cycles_balance : () -> (nat) query;
+   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
   arm : (nat64) -> (result_state);
   claim : (nat64, nat16) -> (result_jobs);
   claim_with_lease : (nat64, nat16, nat64) -> (result_jobs);

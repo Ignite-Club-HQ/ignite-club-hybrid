@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin, SystemBars, SystemBarsStyle, SystemBarType } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
 
 /**
@@ -20,6 +20,12 @@ let lastAppliedTheme: 'light' | 'dark' | 'viewer' | null = null;
 const LIGHT_BG = '#f5f7f6';
 const DARK_BG = '#0f1512';
 const VIEWER_BG = '#000000';
+
+// Android 15/16 system bars are transparent: colour the native window behind
+// them, not only the deprecated statusBarColor. Keep inset handling unchanged.
+const StatusBarBackdrop = registerPlugin<{
+  setBackgroundColor(options: { color: string }): Promise<void>;
+}>('StatusBarBackdrop');
 
 const getThemeSync = (): 'light' | 'dark' => {
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -88,6 +94,9 @@ async function applyInternal(theme: 'light' | 'dark', force: boolean) {
     await StatusBar.show().catch(() => {});
 
     if (platform === 'android') {
+      await StatusBarBackdrop.setBackgroundColor({
+        color: theme === 'dark' ? DARK_BG : LIGHT_BG,
+      });
       // Disable overlay FIRST. Some Android WebView/OEM builds (notably
       // Samsung One UI) silently no-op the overlay toggle if it lands in
       // the same frame as a fresh viewer that set overlay=true — leaving
@@ -108,6 +117,15 @@ async function applyInternal(theme: 'light' | 'dark', force: boolean) {
       // Second overlay-off pass — wins the race when the first was a no-op
       // (e.g. fired the same frame as a fullscreen viewer's overlay=true).
       await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+      await SystemBars.setStyle({
+        bar: SystemBarType.StatusBar,
+        style: theme === 'dark' ? SystemBarsStyle.Dark : SystemBarsStyle.Light,
+      });
+      // SystemBars resets decorView to the static light Android theme.
+      // Repaint last so both the app theme and viewer backdrop survive.
+      await StatusBarBackdrop.setBackgroundColor({
+        color: theme === 'dark' ? DARK_BG : LIGHT_BG,
+      });
     }
 
     lastAppliedTheme = theme;
@@ -128,6 +146,7 @@ async function applyViewerInternal() {
     await StatusBar.show().catch(() => {});
 
     if (platform === 'android') {
+      await StatusBarBackdrop.setBackgroundColor({ color: VIEWER_BG });
       // Overlay TRUE so the viewer paints under the bar (true fullscreen feel).
       await StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
       await StatusBar.setBackgroundColor({ color: VIEWER_BG }).catch(() => {});
@@ -135,6 +154,10 @@ async function applyViewerInternal() {
 
     // White icons on the black viewer chrome.
     await StatusBar.setStyle({ style: Style.Dark });
+    if (platform === 'android') {
+      await SystemBars.setStyle({ bar: SystemBarType.StatusBar, style: SystemBarsStyle.Dark });
+      await StatusBarBackdrop.setBackgroundColor({ color: VIEWER_BG });
+    }
 
     // Mark the cache as 'viewer' so the next theme-apply always re-runs.
     lastAppliedTheme = 'viewer';

@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Int "mo:core/Int";
@@ -9,10 +10,19 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
+import RewardRoleMirror "rewardRoleMirror";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
 
   var governor : Principal;
 
@@ -28,6 +38,7 @@ persistent actor class Main(governorInit : Principal) {
   var cooldowns : [Types.PointsCooldown];
   var bulkAccessPrincipals : [Principal];
   var clubPointsSettings : [Types.ClubPointsSettings];
+  var clubDomainCanister : ?Principal;
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -49,6 +60,35 @@ persistent actor class Main(governorInit : Principal) {
   };
   func hasRole(caller : Principal, role : Text, club : Text) : Bool {
     roles.any(func(grant) { grant.user.equal(caller) and grant.role == role and grant.club_id == club })
+  };
+  // Only the governor chooses the trusted membership source. Never accept
+  // roles from the browser; refresh this caller's mirror from club_domain.
+  public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister");
+    clubDomainCanister := ?id;
+    #Ok
+  };
+
+  func syncClubRoles(caller : Principal, club_id : Text) : async { #Ok; #Err : Text } {
+    if (isGovernor(caller)) return #Ok;
+    switch (clubDomainCanister) {
+      case null #Err("Club membership service is not configured");
+      case (?cid) {
+        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
+        try {
+          let fresh = await cd.list_user_club_roles(caller, club_id);
+          roles := RewardRoleMirror.replace(roles, caller, club_id, fresh);
+          #Ok
+        } catch (_) { #Err("Could not verify club membership. Please try again.") };
+      };
+    }
+  };
+
+  public shared ({ caller }) func refresh_club_roles(club_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id)) return #Err("Invalid club");
+    await syncClubRoles(caller, club_id)
   };
   // Club/team admins and coaches may award points and administer rewards —
   // mirrors the Supabase RLS "club admin/coach" write policies on
@@ -254,13 +294,21 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(clubPointsSettings.find(func(item) = item.club_id == club_id))
   };
 
-  public shared ({ caller }) func save_club_points_settings(club_id : Text, display_name : ?Text, disabled : Bool) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
+  public shared ({ caller }) func save_club_points_settings(
+    club_id : Text,
+    display_name : ?Text,
+    disabled : Bool,
+    points_icon_url : ?Text,
+    disable_team_pom_rewards : Bool,
+  ) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
+    switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
     switch (display_name) { case (?n) { if (not valid(n)) return #Err("Invalid display name") }; case null {} };
+    switch (points_icon_url) { case (?u) { if (not valid(u)) return #Err("Invalid points icon") }; case null {} };
     if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
     let ts = nowMs();
-    let row : Types.ClubPointsSettings = { club_id; display_name; disabled; updated_at_ms = ts };
+    let row : Types.ClubPointsSettings = { club_id; display_name; disabled; updated_at_ms = ts; points_icon_url; disable_team_pom_rewards };
     clubPointsSettings := clubPointsSettings.filter(func(item) = item.club_id != club_id).concat([row]);
     #Ok(row)
   };
@@ -389,6 +437,7 @@ persistent actor class Main(governorInit : Principal) {
   ) : async { #Ok : Types.ClubReward; #Err : Text } {
     auth(caller);
     if (not valid(club_id) or not valid(name) or not valid(reward_type)) return #Err("Invalid reward");
+    switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
     if (not (isGovernor(caller) or hasRole(caller, "club_admin", club_id))) return #Err("Club admin required");
     let ts = nowMs();
     let reward : Types.ClubReward = {
@@ -410,6 +459,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubRewards.find(func(item) = item.id == id)) {
       case null #Err("Reward not found");
       case (?current) {
+        switch (await syncClubRoles(caller, current.club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
         if (not (isGovernor(caller) or hasRole(caller, "club_admin", current.club_id))) return #Err("Club admin required");
         if (not valid(name) or not valid(reward_type)) return #Err("Invalid reward update");
         let updated : Types.ClubReward = { current with name; description; points_required; is_default; is_active; reward_type; logo_url; qr_code_url; show_qr_code; sponsor_id; team_id; updated_at_ms = nowMs() };
@@ -424,6 +474,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubRewards.find(func(item) = item.id == id)) {
       case null #Err("Reward not found");
       case (?current) {
+        switch (await syncClubRoles(caller, current.club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
         if (not (isGovernor(caller) or hasRole(caller, "club_admin", current.club_id))) return #Err("Club admin required");
         clubRewards := clubRewards.filter(func(item) = item.id != id);
         #Ok
@@ -615,4 +666,95 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
     #Ok({ schema = 1; governor; roles; pointsHistory; userClubPoints; childClubPoints; clubRewards; redemptions; cooldowns })
   };
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("Old and new principal must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+    func textMatchesOld(t : Text) : Bool { t == oldText or t == ("principal:" # oldText) };
+    func rekeyText(t : Text) : Text {
+      if (t == oldText) newText
+      else if (t == ("principal:" # oldText)) "principal:" # newText
+      else t
+    };
+
+    // Conflict guard: count NON-EPHEMERAL records already referencing `new`.
+    var conflicts = 0;
+    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
+    conflicts += pointsHistory.filter(func(p) = p.user_id == ?newText or p.created_by == ?new).size();
+    conflicts += userClubPoints.filter(func(u) = u.user_id == newText).size();
+    conflicts += redemptions.filter(func(r) = r.user_id == ?newText or r.verified_by == ?new).size();
+    conflicts += cooldowns.filter(func(c) = c.user_id == newText).size();
+    conflicts += bulkAccessPrincipals.filter(func(p) = p.equal(new)).size();
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in club_points_domain");
+
+    var changed = 0;
+
+    // roles
+    let newRoles = roles.map(func(r : Types.RoleGrant) : Types.RoleGrant {
+      if (r.user.equal(old)) { changed += 1; { r with user = new } } else r
+    });
+
+    // pointsHistory (user_id text, created_by principal)
+    let newPointsHistory = pointsHistory.map(func(p : Types.PointsHistoryEntry) : Types.PointsHistoryEntry {
+      var row = p;
+      if (textMatchesOld(switch (row.user_id) { case (?u) u; case null "" }) and row.user_id != null) {
+        changed += 1; row := { row with user_id = ?rekeyText(switch (row.user_id) { case (?u) u; case null "" }) };
+      };
+      switch (row.created_by) {
+        case (?cb) { if (cb.equal(old)) { changed += 1; row := { row with created_by = ?new } } };
+        case null {};
+      };
+      row
+    });
+
+    // userClubPoints (keyed by user_id text) — move entry; if new already exists (shouldn't due to guard)
+    let newUserClubPoints = userClubPoints.map(func(u : Types.UserClubPoints) : Types.UserClubPoints {
+      if (u.user_id == oldText) { changed += 1; { u with user_id = newText } } else u
+    });
+
+    // redemptions (user_id text, verified_by principal)
+    let newRedemptions = redemptions.map(func(r : Types.RewardRedemption) : Types.RewardRedemption {
+      var row = r;
+      if (row.user_id == ?oldText) { changed += 1; row := { row with user_id = ?newText } };
+      switch (row.verified_by) {
+        case (?vb) { if (vb.equal(old)) { changed += 1; row := { row with verified_by = ?new } } };
+        case null {};
+      };
+      row
+    });
+
+    // cooldowns (user_id text, keyed with other fields but not a unique key by itself)
+    let newCooldowns = cooldowns.map(func(c : Types.PointsCooldown) : Types.PointsCooldown {
+      if (c.user_id == oldText) { changed += 1; { c with user_id = newText } } else c
+    });
+
+    // bulkAccessPrincipals (array of principals) — replace, dedupe if new already present
+    var newBulkAccess = bulkAccessPrincipals;
+    if (bulkAccessPrincipals.any(func(p) = p.equal(old))) {
+      changed += 1;
+      if (bulkAccessPrincipals.any(func(p) = p.equal(new))) {
+        newBulkAccess := bulkAccessPrincipals.filter(func(p) = not p.equal(old));
+      } else {
+        newBulkAccess := bulkAccessPrincipals.map(func(p) = if (p.equal(old)) new else p);
+      };
+    };
+
+    if (not dry_run) {
+      roles := newRoles;
+      pointsHistory := newPointsHistory;
+      userClubPoints := newUserClubPoints;
+      redemptions := newRedemptions;
+      cooldowns := newCooldowns;
+      bulkAccessPrincipals := newBulkAccess;
+    };
+
+    #ok(changed)
+  };
+
 };

@@ -136,6 +136,11 @@ export interface Main {
     { 'Ok' : Array<AdEventSummary> } |
       { 'Err' : string }
   >,
+  'add_memory_report' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'append_audit_log' : ActorMethod<
     [string, string, [] | [string], [] | [string], string],
     { 'Ok' : null } |
@@ -206,6 +211,11 @@ export interface Main {
    */
   'cycles_balance' : ActorMethod<[], bigint>,
   'delete_ad' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'delete_feedback' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'get_ad_setting' : ActorMethod<[string], [] | [AppAdSetting]>,
   'get_benchmarks' : ActorMethod<
     [Array<string>],
@@ -220,6 +230,11 @@ export interface Main {
   'get_sponsor_performance' : ActorMethod<
     [string, string],
     { 'Ok' : SponsorPerformance } |
+      { 'Err' : string }
+  >,
+  'grant_app_admin' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -240,6 +255,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_ads' : ActorMethod<[], { 'Ok' : Array<AppAd> } | { 'Err' : string }>,
+  'list_app_admins' : ActorMethod<
+    [],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
   'list_audit_logs' : ActorMethod<
     [[] | [Principal], [] | [string], [] | [string], number, number],
     { 'Ok' : { 'total' : number, 'items' : Array<AuditLog> } } |
@@ -250,10 +270,25 @@ export interface Main {
     { 'Ok' : { 'total' : number, 'items' : Array<Feedback> } } |
       { 'Err' : string }
   >,
+  'list_memory_reports' : ActorMethod<
+    [bigint],
+    Array<
+      {
+        'at' : bigint,
+        'analysis_json' : string,
+        'source' : string,
+        'readings_json' : string,
+      }
+    >
+  >,
   'list_user_activity' : ActorMethod<
     [[] | [string], bigint, bigint],
     { 'Ok' : Array<UserActivityEntry> } |
       { 'Err' : string }
+  >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
   >,
   'my_feedback' : ActorMethod<[], Array<Feedback>>,
   'perf_aggregate' : ActorMethod<
@@ -336,9 +371,19 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'resolve_admin_alert' : ActorMethod<
     [string],
     { 'Ok' : AdminAlert } |
+      { 'Err' : string }
+  >,
+  'revoke_app_admin' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_ad_active' : ActorMethod<

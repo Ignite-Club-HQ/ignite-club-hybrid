@@ -210,6 +210,28 @@ function SupabasePushAnalyticsPage() {
   const { data: health, isLoading: healthLoading, refetch: refetchHealth } = useQuery({
     queryKey: ["push-notification-health"],
     queryFn: async () => {
+      const icpHealth = await withFeatureBackend("notifications", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const { getLivePushDeliveryHealth } = await import("@/live/features/notifications");
+          const h = await getLivePushDeliveryHealth(ctx, Date.now());
+          return {
+            window_hours: h.windowHours,
+            generated_at: new Date(h.generatedAtMs).toISOString(),
+            total_24h: h.total24h,
+            sent_real: h.delivered24h,
+            failed_24h: h.failed24h,
+            expired_24h: 0,
+            skipped_24h: 0,
+            stuck_placeholders: h.processing24h,
+            pending_inflight: h.pending24h,
+            legacy_retry_placeholders: 0,
+            notifications_with_retries: 0,
+            missed_notifications: 0,
+          };
+        },
+      });
+      if (icpHealth) return icpHealth;
       const { data, error } = await supabase.rpc("get_push_notification_health");
       if (error) throw error;
       return data as {
@@ -309,9 +331,19 @@ function SupabasePushAnalyticsPage() {
   const handleCleanup = async () => {
     setIsCleaningUp(true);
     try {
-      const { data, error } = await supabase.functions.invoke('cleanup-push-subscriptions');
-      
-      if (error) throw error;
+      const data = await withFeatureBackend<{ subscriptions_removed: number }>("notifications", {
+        supabase: async () => {
+          const { data, error } = await supabase.functions.invoke('cleanup-push-subscriptions');
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const { cleanupLiveStaleDeviceTokens } = await import("@/live/features/notifications");
+          // Device tokens not refreshed in 60 days are treated as stale.
+          const removed = await cleanupLiveStaleDeviceTokens(ctx, Date.now(), 60 * 24 * 60 * 60 * 1000);
+          return { subscriptions_removed: removed };
+        },
+      });
       
       toast({
         title: "Cleanup Complete",

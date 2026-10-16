@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { defaultClubHomeCountry } from "@/lib/clubHomeCountry";
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Loader2, Info } from "lucide-react";
@@ -11,7 +12,7 @@ import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveClub } from "@/live/features/club";
+import { createLiveClub, setLiveClubKind } from "@/live/features/club";
 import { slugifyClubName } from "@/lib/eoiUtils";
 
 export default function CreateAssociationPage() {
@@ -34,11 +35,6 @@ export default function CreateAssociationPage() {
     try {
       const clubId = await withFeatureBackend("membership", {
         icp: async (ctx) => {
-          // NEEDS-CANISTER: club_domain's ClubProfile has no `kind` field, so
-          // an association is persisted as a regular club record; create_club
-          // auto-grants the caller "club_admin" (not a distinct
-          // "association_admin" role — that scoped role has no canister
-          // counterpart yet).
           const profile = await createLiveClub(
             ctx,
             crypto.randomUUID(),
@@ -46,6 +42,9 @@ export default function CreateAssociationPage() {
             slugifyClubName(name.trim()) || `association-${Date.now()}`,
             description.trim() || "",
           );
+
+          await setLiveClubKind(ctx, profile.id, "association");
+
           try {
             const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
             await ensureLiveDefaultClubChats(ctx, profile.id, { force: true });
@@ -57,7 +56,7 @@ export default function CreateAssociationPage() {
         supabase: async () => {
           const { data: club, error } = await supabase
             .from("clubs")
-            .insert({ name: name.trim(), description: description.trim() || null, kind: "association" })
+            .insert({ name: name.trim(), description: description.trim() || null, kind: "association", home_country: defaultClubHomeCountry() } as any)
             .select("id")
             .single();
           if (error || !club) {

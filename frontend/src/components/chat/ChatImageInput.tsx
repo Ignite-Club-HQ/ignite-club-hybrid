@@ -11,9 +11,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
+import { registerPendingChatUpload } from "@/lib/pendingChatUploads";
 import { compressImage as compressImageFile } from "@/lib/imageCompression";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { getReadableUploadError, isCancelledSelectionError } from "@/lib/uploadErrorUtils";
@@ -94,11 +95,8 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   const shouldStabilizeIOSLayout = isIOSEnvironment();
   const { user } = useAuth();
   const navigate = useNavigate();
-  // NEEDS-CANISTER: no canister concept of teams.club_id lookup, club
-  // sport, active live-board games, or vault_files metadata yet (storage
-  // upload itself is the allowed media-bytes exception and stays
-  // Supabase-only). Cleanly disable these metadata queries for Internet
-  // Identity accounts instead of surfacing an error.
+  // Legacy Supabase-only discovery queries stay disabled for II accounts.
+  // Document uploads use encrypted ICP storage and vault metadata below.
   const isIcp = resolveAuthBackend() === "icp";
   const queryClient = useQueryClient();
   const { hasAccess: hasProAccess } = useScheduleProAccess({ team_id: teamId ?? null, club_id: clubId ?? null } as any);
@@ -302,8 +300,8 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
     // member is signed in with Internet Identity, bytes go on-chain. With no
     // blob store configured there is no II-safe fallback — a raw Supabase
     // Storage upload would have no auth — so fail loudly rather than
-    // silently diverting bytes to Supabase.
-    // NEEDS-CANISTER: remove the isIcp throw once the blob store is deployed.
+    // silently diverting bytes to Supabase. The blob-store path above already
+    // works end-to-end once a canister id is configured in Placement Settings.
     const blobUpload = await tryUploadMediaToBlobStore({
       storagePath: icpPath,
       file: fileToUpload,
@@ -364,19 +362,13 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (isIcp) {
-      // NEEDS-CANISTER: no vault_files canister counterpart — silently
-      // no-op instead of uploading an attachment no one can reference.
-      if (docInputRef.current) docInputRef.current.value = "";
-      return;
-    }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       toast.error("File must be less than 10MB");
       if (docInputRef.current) docInputRef.current.value = "";
       return;
     }
     // Free-tier chat-file cap check (skipped automatically for Pro clubs).
-    if (clubId) {
+    if (clubId && !isIcp) {
       try {
         const { data: usageRow } = await supabase.rpc("get_club_free_usage", { _club_id: clubId });
         const usage: any = Array.isArray(usageRow) ? usageRow[0] : usageRow;
@@ -400,6 +392,15 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
     }
     setUploading(true);
     try {
+      if (!clubId || !onAppendToken) throw new Error("Cannot attach file in this chat");
+      if (isIcp) {
+        const { uploadIcpChatDocument } = await import("./chatDocumentUpload");
+        const token = await uploadIcpChatDocument(file, clubId, teamId);
+        onAppendToken(token);
+        void queryClient.invalidateQueries({ queryKey: ["vault-files"] });
+        toast.success("File attached");
+        return;
+      }
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) throw new Error("Not authenticated");
 
@@ -537,21 +538,27 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       requestAnimationFrame(restoreNativeLayout);
 
       const skipCompression = !IOS_SAFE_COMPRESSION_MIME_TYPES.has(mimeType);
-      let storageUrl: string;
-
-      try {
-        storageUrl = await uploadBlob(blob, { skipCompression });
-      } catch (primaryUploadError) {
-        if (!skipCompression) {
-          console.warn("[ChatImageInput] Retrying native upload without compression:", primaryUploadError);
-          storageUrl = await uploadBlob(blob, { skipCompression: true });
-        } else {
+      // Instant send: hand the local preview to the composer now and let the
+      // upload finish in the background (send path awaits it via
+      // lib/pendingChatUploads).
+      const job = (async () => {
+        try {
+          return await uploadBlob(blob, { skipCompression });
+        } catch (primaryUploadError) {
+          if (!skipCompression) {
+            console.warn("[ChatImageInput] Retrying native upload without compression:", primaryUploadError);
+            return await uploadBlob(blob, { skipCompression: true });
+          }
           throw primaryUploadError;
         }
-      }
-      console.log("[ChatImageInput] upload complete:", storageUrl.substring(0, 80));
-      // Keep localPreview (data URL) visible — remote private URL may not load.
-      onImageUploaded(storageUrl);
+      })();
+      registerPendingChatUpload(stablePreviewUrl, job);
+      onImageUploaded(stablePreviewUrl);
+      job.catch((error) => {
+        const errMsg = getReadableUploadError(error);
+        console.error("[ChatImageInput] Background native upload failed:", errMsg, error);
+        toast.error(errMsg || "Failed to upload image");
+      });
     } catch (error: unknown) {
       if (isCancelledSelectionError(error)) {
         console.log("[ChatImageInput] user cancelled photo selection");
@@ -605,6 +612,39 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       });
     }
 
+    // Images on the web: show instantly from a local object URL and let the
+    // member send right away — the upload runs in the background and the send
+    // path swaps in the stored URL (see lib/pendingChatUploads).
+    if (!isVideo) {
+      // Native WebViews render data URLs more reliably than blob: URLs.
+      let instantUrl: string;
+      if (Capacitor.isNativePlatform()) {
+        try {
+          instantUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error || new Error("Preview read failed"));
+            reader.readAsDataURL(file);
+          });
+        } catch {
+          instantUrl = URL.createObjectURL(file);
+        }
+      } else {
+        instantUrl = URL.createObjectURL(file);
+      }
+      setLocalPreview(instantUrl);
+      const job = uploadBlob(file, { isVideo: false });
+      registerPendingChatUpload(instantUrl, job);
+      onImageUploaded(instantUrl);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      job.catch((error) => {
+        const errMsg = getReadableUploadError(error);
+        console.error("[ChatImageInput] Background image upload failed:", errMsg, error);
+        toast.error(errMsg || "Failed to upload image");
+      });
+      return;
+    }
+
     // Prefer a data URL for the preview — blob: URLs are unreliable in iOS
     // WKWebView and Android WebView. Fall back to blob: for videos / read
     // failures.
@@ -622,6 +662,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
     }
     setLocalPreview(localUrl);
     setUploading(true);
+
 
     try {
       const storageUrl = await uploadBlob(file, { isVideo });
@@ -686,7 +727,9 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   const prevImageUrlRef = useRef(imageUrl);
   useEffect(() => {
     if (prevImageUrlRef.current && !imageUrl && localPreview) {
-      if (localPreview.startsWith("blob:")) URL.revokeObjectURL(localPreview);
+      // Never revoke here: after a send, the "Sending…" bubble in the thread
+      // still renders this same local URL until the upload finishes.
+      // Revoke only when the user removes the photo (handleRemoveImage).
       setLocalPreview(null);
     }
     prevImageUrlRef.current = imageUrl;
@@ -789,6 +832,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
 
   return (
     <div className="flex shrink-0 items-center gap-0">
+      {uploading && <span role="status" className="text-xs text-muted-foreground">Uploading…</span>}
       <input
         ref={fileInputRef}
         type="file"
@@ -992,7 +1036,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
                 locked?: boolean;
               };
               const actions: Action[] = [];
-              if (!isIcpMediaUploadUnavailable()) actions.push({
+              actions.push({
                 key: "photo",
                 label: "Photo / Video",
                 hint: "Camera roll",
@@ -1005,7 +1049,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
                 },
               });
 
-              if (showVaultPicker && clubId && !isIcpMediaUploadUnavailable()) {
+              if (showVaultPicker && clubId) {
                 actions.push({
                   key: "file",
                   label: "File or Folder",

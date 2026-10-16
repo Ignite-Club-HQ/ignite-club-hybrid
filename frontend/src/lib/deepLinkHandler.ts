@@ -63,6 +63,8 @@ export function withSignupIntent(path: string, destination: string): string {
 }
 
 async function handleDeepLinkUrl(rawUrl: string) {
+  // Internet Identity sign-in replies are consumed by the native II client.
+  if (rawUrl.startsWith('com.igniteclubhq.app://ii-callback')) return;
   const now = Date.now();
   if (
     lastHandled &&

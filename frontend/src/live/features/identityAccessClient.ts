@@ -22,7 +22,7 @@ export async function accountIdForPrincipal(principalText: string): Promise<stri
   try {
     const { Principal } = await import("@icp-sdk/core/principal");
     const bytes = Principal.fromText(principalText).toUint8Array();
-    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)));
     const hex = Array.from(digest.slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   } catch {
@@ -68,6 +68,21 @@ export async function listLiveProfilesByIds(
         out.push({ ...profile, account_id: requested });
       }
     }
+    // Linked/moved accounts may retain a UUID derived from an older principal.
+    // The caller's own profile resolves that account through the canister's
+    // identity mapping rather than assuming its UUID can still be derived.
+    const caller = ctx.identity.getPrincipal().toText();
+    const ownIds = [...new Set(ids)].filter((id) =>
+      (id === caller || id === `principal:${caller}`) && !seen.has(id),
+    );
+    if (ownIds.length) {
+      try {
+        const ownProfile = await client.getProfile();
+        for (const id of ownIds) out.push({ ...ownProfile, account_id: id });
+      } catch {
+        // A new account may not have completed its profile yet.
+      }
+    }
     return out;
   } finally {
     client.dispose();
@@ -107,7 +122,7 @@ export async function searchLiveProfilesWithPrincipals(
   ctx: FeatureBackendContext,
   query: string,
   limit: number,
-): Promise<Array<{ accountId: string; principal: Principal; displayName: string | null }>> {
+): Promise<Array<{ accountId: string; principal: Principal; displayName: string | null; avatarUrl: string | null }>> {
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
     const rows = await client.searchProfiles(query, limit);
@@ -115,6 +130,7 @@ export async function searchLiveProfilesWithPrincipals(
       accountId: row.account_id,
       principal: row.principal,
       displayName: row.display_name,
+      avatarUrl: row.avatar_ref?.[0] || null,
     }));
   } finally {
     client.dispose();

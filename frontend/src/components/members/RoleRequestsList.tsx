@@ -7,12 +7,15 @@ import { roleLabels, type AppRole } from "@/features/membership/rolePresentation
 export interface RoleRequestRow {
   id: string;
   role: string;
+  created_at?: string;
   requester: { avatar_url: string | null; display_name: string | null } | null;
 }
 
 interface RoleRequestsListProps<TRequest extends RoleRequestRow> {
   requests: TRequest[] | undefined;
   isProcessing: boolean;
+  isLoading?: boolean;
+  error?: Error | null;
   onApprove: (request: TRequest) => void;
   onDeny: (request: TRequest) => void;
 }
@@ -27,9 +30,13 @@ interface RoleRequestsListProps<TRequest extends RoleRequestRow> {
 export function RoleRequestsList<TRequest extends RoleRequestRow>({
   requests,
   isProcessing,
+  isLoading,
+  error,
   onApprove,
   onDeny,
 }: RoleRequestsListProps<TRequest>) {
+  if (error) return <p role="alert" className="text-destructive">Unable to load requests. Please try again.</p>;
+  if (isLoading) return <p role="status" className="text-muted-foreground">Loading requests…</p>;
   if (requests?.length === 0) {
     return (
       <Card className="border-dashed">
@@ -53,11 +60,16 @@ export function RoleRequestsList<TRequest extends RoleRequestRow>({
                   {request.requester?.display_name?.charAt(0) || "?"}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1">
-                <p className="font-medium">{request.requester?.display_name}</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium break-words">{request.requester?.display_name?.trim() || "Name unavailable"}</p>
                 <p className="text-sm text-muted-foreground">
                   Wants to be: {roleLabels[request.role as AppRole]}
                 </p>
+                {request.created_at && Number.isFinite(Date.parse(request.created_at)) && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Requested {new Date(request.created_at).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-2">

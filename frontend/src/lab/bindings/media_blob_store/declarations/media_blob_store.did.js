@@ -20,6 +20,13 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : FinalizedBlob,
     'Err' : IDL.Text,
   });
+  const MediaUsage = IDL.Record({
+    'count' : IDL.Nat,
+    'count_limit' : IDL.Nat,
+    'bytes_limit' : IDL.Opt(IDL.Nat64),
+    'category' : IDL.Text,
+    'bytes' : IDL.Nat64,
+  });
   const Usage = IDL.Record({
     'accepting_uploads' : IDL.Bool,
     'total_bytes' : IDL.Nat64,
@@ -53,13 +60,28 @@ export const idlFactory = ({ IDL }) => {
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_blob' : IDL.Func([IDL.Text], [Result], []),
     'finalize_upload' : IDL.Func([IDL.Text], [ResultFinalized], []),
+    'get_club_media_usage' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(MediaUsage)],
+        ['query'],
+      ),
     'get_content_hash' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'get_usage' : IDL.Func([], [Usage], ['query']),
     'health' : IDL.Func([], [Health], ['query']),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
+    'merge_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'put_chunk' : IDL.Func(
         [IDL.Text, IDL.Nat32, IDL.Vec(IDL.Nat8)],
         [Result],
+        [],
+      ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
     'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),

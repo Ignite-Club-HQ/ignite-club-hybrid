@@ -130,8 +130,8 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Fetch event groups
   const { data: groups, isLoading, refetch: refetchGroups } = useQuery({
     queryKey: ["event-groups", eventId],
-    // NEEDS-CANISTER: event_groups/event_group_players (mini-league match
-    // groups) have no events_domain/mini_league_domain equivalent.
+    // events_domain has event_groups/event_group_players (mini-league match
+    // groups) via create_event_group/list_event_groups/list_group_players.
     enabled: !!eventId,
     queryFn: () => withFeatureBackend("events", {
       supabase: async () => {
@@ -1273,7 +1273,6 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
                 onPlayerTap={handlePlayerTap}
                 onTeamTap={handleTeamTap}
                 onQuickAssignDuty={(dutyId, selectedGroup) => {
-                  if (resolveAuthBackend() === "icp") return;
                   setQuickAssignDutyId(dutyId);
                   setActiveDutiesGroup(selectedGroup);
                 }}

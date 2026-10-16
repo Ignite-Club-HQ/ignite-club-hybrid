@@ -16,17 +16,19 @@ import {
   liveAssetSource,
   removeLiveReaction,
 } from "@/live/features/media";
-import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
+import { readCachedIcpBlobObjectUrl, resolveIcpBlobObjectUrl, storedIcpPrincipal } from "@/live/mediaDecrypt";
 import { listLiveTeams } from "@/live/features/club";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { listLiveCompetitions } from "@/live/features/competitions";
-import { listLiveMembershipClubs } from "@/live/features/membership";
+import { getLiveMyRoleGrants, listLiveMembershipClubs } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ClubTeamFilter } from "@/components/ClubTeamFilter";
+import { useClubTheme } from "@/hooks/useClubTheme";
+import { useAuth } from "@/hooks/useAuth";
 import { AlbumCarousel } from "@/components/AlbumCarousel";
 import { EmojiReactions } from "@/components/EmojiReactions";
 import { MediaCommentSheet } from "@/components/MediaCommentSheet";
@@ -34,9 +36,10 @@ import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { CreateActionButton } from "@/components/CreateActionButton";
 import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
 import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
-import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
+import { IcpUploadPhotoSheet, type IcpPendingUploadPreview } from "@/components/media/IcpUploadPhotoSheet";
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
+import { mediaProfileDirectory } from "./mediaProfileDirectory";
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -45,6 +48,9 @@ import { formatTimeShort } from "@/lib/formatTimeShort";
 interface LiveAssetView {
   id: string;
   url: string;
+  /** True while the encrypted blob is still being fetched/decrypted — the UI
+   * shows a pulsing skeleton instead of a flat grey image. */
+  loading: boolean;
   isVideo: boolean;
   /** Encrypted photo-store address; unlocked in the background. */
   sourceUrl?: string | null;
@@ -72,6 +78,7 @@ interface LiveMediaPost {
   representativeAssetId: string;
   ownerId: string;
   ownerName: string;
+  ownerAvatarUrl: string | null;
   clubId: string;
   clubName: string;
   teamId: string | null;
@@ -116,49 +123,105 @@ const LOADING_PHOTO_URL =
   encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">' +
       '<rect width="600" height="600" fill="#f3f4f6"/>' +
-      '<text x="300" y="300" font-family="sans-serif" font-size="28" fill="#9ca3af" text-anchor="middle">Loading photo…</text>' +
       "</svg>",
   );
 
-/** Unlocks photos a few at a time (newest first) and reports each as it lands. */
+/** Decrypted photo URLs kept for the whole app session (keyed by source URL),
+ * so revisiting the Media page shows photos immediately. */
+const sessionPhotoUrls = new Map<string, string>();
+
+/** Unlocks photos: on-device cache hits all at once first, then the rest a
+ * few at a time (newest first), reporting each as it lands. */
 function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
-  const [urls, setUrls] = useState<Record<string, string>>({});
+  const initial = () => {
+    const out: Record<string, string> = {};
+    for (const a of posts?.flatMap((p) => p.assets) ?? []) {
+      const hit = a.sourceUrl ? sessionPhotoUrls.get(a.sourceUrl) : undefined;
+      if (hit) out[a.id] = a.isVideo ? `${hit}#.mp4` : hit;
+    }
+    return out;
+  };
+  const [urls, setUrls] = useState<Record<string, string>>(initial);
   const doneRef = useRef(new Set<string>());
   useEffect(() => {
     if (!posts) return;
     let cancelled = false;
-    const queue = posts
+    const pending = posts
       .flatMap((p) => p.assets)
       .filter((a) => a.sourceUrl && !doneRef.current.has(a.id));
-    const worker = async () => {
-      while (!cancelled && queue.length) {
-        const asset = queue.shift()!;
-        doneRef.current.add(asset.id);
-        let url = UNAVAILABLE_PHOTO_URL;
-        const local = asset.sourceUrl ? localUploadPreviews.get(asset.sourceUrl) : undefined;
-        if (local) {
-          setUrls((prev) => ({ ...prev, [asset.id]: asset.isVideo ? `${local}#.mp4` : local }));
-          continue;
-        }
-        try {
-          const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl!);
-          if (resolved) url = asset.isVideo ? `${resolved}#.mp4` : resolved;
-        } catch (err) {
-          console.warn("[icp-media-feed] could not load asset", asset.id, err);
-        }
-        setUrls((prev) => ({ ...prev, [asset.id]: url }));
-      }
+    pending.forEach((a) => doneRef.current.add(a.id));
+    const show = (asset: LiveAssetView, raw: string, remember: boolean) => {
+      if (remember && asset.sourceUrl) sessionPhotoUrls.set(asset.sourceUrl, raw);
+      const url = asset.isVideo && raw !== UNAVAILABLE_PHOTO_URL ? `${raw}#.mp4` : raw;
+      setUrls((prev) => (prev[asset.id] === url ? prev : { ...prev, [asset.id]: url }));
     };
-    void Promise.all(Array.from({ length: 6 }, worker));
+    void (async () => {
+      const misses: LiveAssetView[] = [];
+      await Promise.all(
+        pending.map(async (asset) => {
+          const src = asset.sourceUrl!;
+          const known = sessionPhotoUrls.get(src) ?? localUploadPreviews.get(src);
+          if (known) return show(asset, known, false);
+          const cached = await readCachedIcpBlobObjectUrl(src).catch(() => null);
+          if (cancelled) return;
+          if (cached) show(asset, cached, true);
+          else misses.push(asset);
+        }),
+      );
+      const order = new Map(pending.map((a, i) => [a.id, i]));
+      misses.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+      const worker = async () => {
+        while (!cancelled && misses.length) {
+          const asset = misses.shift()!;
+          try {
+            const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl!);
+            if (!cancelled) show(asset, resolved ?? UNAVAILABLE_PHOTO_URL, !!resolved);
+          } catch (err) {
+            console.warn("[icp-media-feed] could not load asset", asset.id, err);
+            if (!cancelled) show(asset, UNAVAILABLE_PHOTO_URL, false);
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: 8 }, worker));
+    })();
     return () => {
       cancelled = true;
+      // Unfinished assets must be retried on the next run.
+      pending.forEach((a) => {
+        if (!a.sourceUrl || !sessionPhotoUrls.has(a.sourceUrl)) doneRef.current.delete(a.id);
+      });
     };
   }, [posts]);
   return urls;
 }
 
+const FEED_SNAPSHOT_PREFIX = "ignite_icp_media_feed_v1:";
+
+function readFeedSnapshot(principal: string | undefined): LiveMediaFeed | undefined {
+  if (!principal) return undefined;
+  try {
+    const raw = localStorage.getItem(FEED_SNAPSHOT_PREFIX + principal);
+    return raw ? (JSON.parse(raw) as LiveMediaFeed) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeFeedSnapshot(principal: string, feed: LiveMediaFeed) {
+  try {
+    const trimmed = { ...feed, posts: feed.posts.slice(0, 60) };
+    localStorage.setItem(FEED_SNAPSHOT_PREFIX + principal, JSON.stringify(trimmed));
+  } catch {
+    /* storage full — snapshot is only a speed-up */
+  }
+}
 
 async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaFeed> {
+  // list_clubs returns every club on the canister, so scope it to the
+  // caller's own role grants — same membership the Clubs page uses.
+  const grants = await getLiveMyRoleGrants(ctx);
+  const grantClubIds = new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c));
+  const grantTeamIds = new Set(grants.map((g) => g.team[0]).filter((t): t is string => !!t));
   const clubsRaw = (await listLiveMembershipClubs(ctx)) as unknown as {
     id: string;
     name: string;
@@ -188,6 +251,12 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       // Soft-deleted clubs keep their canister records (and assets) — never
       // surface them in the feed, the filter drawer, or the upload sheet.
       if (club.deleted_at_ms.length > 0) return;
+      const directMember = grantClubIds.has(club.id);
+      if (!directMember && grantTeamIds.size === 0) return;
+      if (!directMember) {
+        const clubTeams = (await listLiveTeams(ctx, club.id).catch(() => [])) as unknown as { id: string }[];
+        if (!clubTeams.some((t) => grantTeamIds.has(t.id))) return;
+      }
       options.clubs.push({ id: club.id, name: club.name, sport: club.sport[0] ?? null });
       const [assets, teams, miniLeagues, competitions] = await Promise.all([
         listLiveAssets(ctx, club.id).catch(() => []),
@@ -234,6 +303,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     assetViews.set(asset.id, {
       id: asset.id,
       url: sourceUrl ? LOADING_PHOTO_URL : UNAVAILABLE_PHOTO_URL,
+      loading: !!sourceUrl,
       isVideo,
       sourceUrl,
     });
@@ -295,6 +365,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
         representativeAssetId: first.id,
         ownerId,
         ownerName: "Member",
+        ownerAvatarUrl: null,
         clubId: first.club_id,
         clubName: clubNameById.get(first.club_id) ?? "Club",
         teamId,
@@ -311,7 +382,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     }),
   );
 
-  // Display names for uploaders, reactors and commenters, looked up in one
+  // Profiles for uploaders, reactors and commenters, looked up in one
   // batch once every id is known.
   const nameIds = new Set<string>();
   for (const post of posts) {
@@ -319,20 +390,22 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     post.reactions.forEach((r) => nameIds.add(r.user_id));
     post.comments.forEach((c) => nameIds.add(c.user_id));
   }
-  const profileNameById = new Map<string, string>();
+  let profileById = mediaProfileDirectory([]);
   try {
     const profiles = (await listLiveProfilesByIds(ctx, [...nameIds])) as unknown as {
       account_id: string;
       display_name: string;
+      avatar_ref: [] | [string];
     }[];
-    for (const p of profiles) if (p.display_name) profileNameById.set(p.account_id, p.display_name);
+    profileById = mediaProfileDirectory(profiles);
   } catch {
     // Names fall back to "Member".
   }
   for (const post of posts) {
-    post.ownerName = profileNameById.get(post.ownerId) ?? "Member";
-    for (const r of post.reactions) r.profiles.display_name = profileNameById.get(r.user_id) ?? null;
-    for (const c of post.comments) c.profiles.display_name = profileNameById.get(c.user_id) ?? null;
+    post.ownerName = profileById.get(post.ownerId)?.display_name ?? "Member";
+    post.ownerAvatarUrl = profileById.get(post.ownerId)?.avatar_url ?? null;
+    for (const r of post.reactions) r.profiles = profileById.get(r.user_id) ?? { display_name: null, avatar_url: null };
+    for (const c of post.comments) c.profiles = profileById.get(c.user_id) ?? { display_name: null, avatar_url: null };
   }
 
   posts.sort((a, b) => b.createdAtMs - a.createdAtMs);
@@ -350,9 +423,12 @@ export function PhotoSkeleton() {
 }
 
 export function IcpMediaFeedPage() {
+  const { user, profile } = useAuth();
   const principalQuery = useQuery({
     queryKey: ["icp-principal"],
     staleTime: Infinity,
+    // Stored session principal paints the cached feed before sign-in restores.
+    placeholderData: () => storedIcpPrincipal(),
     queryFn: async () =>
       (await getCurrentInternetIdentity())?.getPrincipal().toText() ?? null,
   });
@@ -361,6 +437,7 @@ export function IcpMediaFeedPage() {
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [pendingPreviews, setPendingPreviews] = useState<IcpPendingUploadPreview[]>([]);
   // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
   const [searchParams, setSearchParams] = useSearchParams();
   const competitionId = searchParams.get("competition");
@@ -373,6 +450,13 @@ export function IcpMediaFeedPage() {
   }, [searchParams, setSearchParams]);
   const [selectedClubId, setSelectedClubId] = useState("all");
   const [selectedTeamId, setSelectedTeamId] = useState("all");
+  // Follow the top-left club switcher: when the app is filtered to one club,
+  // the feed must not show other clubs' media.
+  const { activeClubFilter } = useClubTheme();
+  useEffect(() => {
+    setSelectedClubId(activeClubFilter ?? "all");
+    setSelectedTeamId("all");
+  }, [activeClubFilter]);
   const [commentPost, setCommentPost] = useState<LiveMediaPost | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [pendingComments, setPendingComments] = useState<Record<string, LiveCommentView[]>>({});
@@ -383,13 +467,19 @@ export function IcpMediaFeedPage() {
   const feedQuery = useQuery({
     queryKey: ["icp-media-feed", principal],
     enabled: !!principal,
-    queryFn: () =>
-      withFeatureBackend("media", {
+    // Last visit's feed shows instantly; the fresh one replaces it when ready.
+    initialData: () => readFeedSnapshot(principal),
+    initialDataUpdatedAt: 0,
+    queryFn: async () => {
+      const feed = await withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
         icp: (ctx) => loadLiveMediaFeed(ctx),
-      }),
+      });
+      if (principal) writeFeedSnapshot(principal, feed);
+      return feed;
+    },
   });
 
   const invalidate = () =>
@@ -504,11 +594,14 @@ export function IcpMediaFeedPage() {
       })
       .map((post) => ({
         ...post,
+        ownerAvatarUrl: (post.ownerId === user?.id || post.ownerId === principal)
+          ? profile?.avatar_url ?? post.ownerAvatarUrl
+          : post.ownerAvatarUrl,
         assets: post.assets.map((a) =>
-          resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id] } : a,
+          resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id], loading: false } : a,
         ),
       }));
-  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, competitionId, resolvedUrls]);
+  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url]);
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
@@ -518,8 +611,15 @@ export function IcpMediaFeedPage() {
     const pending = (pendingComments[commentPost.id] ?? []).filter(
       (pc) => !live.comments.some((c) => c.text === pc.text),
     );
-    return [...live.comments, ...pending];
-  }, [commentPost, feedQuery.data?.posts, pendingComments]);
+    // Your own comments always show your name, even if the batch profile
+    // lookup missed it (e.g. linked accounts keyed by an older id).
+    const ownName = profile?.display_name || null;
+    return [...live.comments, ...pending].map((c) =>
+      ownName && principal && c.user_id === principal && (!c.profiles?.display_name || c.profiles.display_name === "You")
+        ? { ...c, profiles: { ...c.profiles, display_name: ownName, avatar_url: c.profiles?.avatar_url ?? profile?.avatar_url ?? null } }
+        : c,
+    );
+  }, [commentPost, feedQuery.data?.posts, pendingComments, principal, profile?.display_name, profile?.avatar_url]);
 
   const options = feedQuery.data?.options;
   const hasFilters = (options?.clubs.length ?? 0) > 1 || (options?.teams.length ?? 0) > 0;
@@ -565,33 +665,36 @@ export function IcpMediaFeedPage() {
     if (flat >= 0) setLightboxIndex(flat);
   };
 
+  // Match SupabaseMediaPage: render as page content inside the shared app
+  // shell (AppHeader/BottomNav own the chrome) — no min-h-screen, no sticky
+  // page header, title row sits inline like every other page.
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-2 px-4 py-3">
-          <h1 className="text-2xl font-bold">Media</h1>
-          <div className="flex items-center gap-2">
-            {hasFilters && (
-              <Button
-                variant={hasActiveFilters ? "default" : "outline"}
-                size="icon"
-                aria-label="Filter"
-                onClick={() => setFilterOpen(true)}
-                className="relative"
-              >
-                <Filter className="h-4 w-4" />
-                {hasActiveFilters && (
-                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary" />
-                )}
-              </Button>
-            )}
-            <CreateActionButton ariaLabel="Add photos" onClick={() => setUploadOpen(true)} />
-          </div>
+    <div className="py-6 pb-32 space-y-6 soft-reveal">
+      <div className="flex items-center justify-between gap-2 min-h-10">
+        <h1 className="text-2xl font-bold">Media</h1>
+        <div className="flex items-center gap-2">
+          {hasFilters && (
+            <Button
+              variant={hasActiveFilters ? "default" : "outline"}
+              size="icon"
+              aria-label="Filter"
+              onClick={() => setFilterOpen(true)}
+              className="relative"
+            >
+              <Filter className="h-4 w-4" />
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary" />
+              )}
+            </Button>
+          )}
+          <CreateActionButton ariaLabel="Add photos" onClick={() => setUploadOpen(true)} />
         </div>
+      </div>
+      <div className="max-w-lg mx-auto">
         <MediaHeaderSponsorStrip clubId={selectedClubId !== "all" ? selectedClubId : undefined} />
-      </header>
+      </div>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-4">
+      <main className="mx-auto w-full max-w-lg flex-1">
         {feedQuery.isLoading && (
           <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -610,7 +713,7 @@ export function IcpMediaFeedPage() {
           </div>
         )}
 
-        {feedQuery.isSuccess && posts.length === 0 && (
+        {feedQuery.isSuccess && posts.length === 0 && pendingPreviews.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-16 text-center">
             <Images className="h-10 w-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">No media yet</p>
@@ -619,15 +722,39 @@ export function IcpMediaFeedPage() {
         )}
 
         <div className="space-y-6">
+          {pendingPreviews.map((pending) => (
+            <div key={pending.src} className="relative overflow-hidden rounded-xl border bg-card">
+              <div className="flex items-center gap-3 px-3 py-2.5">
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.display_name || "You"} className="object-cover" />
+                  <AvatarFallback>
+                    {(profile?.display_name || "You").slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{profile?.display_name || "You"}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {pending.scopeName ? `${pending.clubName} · ${pending.scopeName}` : pending.clubName}
+                  </p>
+                </div>
+              </div>
+              <img src={pending.src} alt="" className="aspect-square w-full object-cover" />
+              <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-background/85 px-2.5 py-1">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                <p className="text-xs font-medium text-foreground">Uploading…</p>
+              </div>
+            </div>
+          ))}
           {posts.map((post, index) => (
             <div key={post.id}>
               <article className="overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex items-center gap-3 px-3 py-2.5">
                   <Avatar className="h-9 w-9">
-                    <AvatarFallback>{post.ownerName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    <AvatarImage src={post.ownerAvatarUrl || undefined} alt={post.ownerName} className="object-cover" />
+                    <AvatarFallback>{((post.ownerId === user?.id || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName).slice(0, 2).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{post.ownerName}</p>
+                    <p className="truncate text-sm font-medium">{(post.ownerId === user?.id || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName}</p>
                     <p className="truncate text-xs text-muted-foreground">{subtitleFor(post)}</p>
                   </div>
                   <span className="shrink-0 text-xs text-muted-foreground">
@@ -642,7 +769,13 @@ export function IcpMediaFeedPage() {
                   onTouchCancel={cancelLongPress}
                 >
                   <AlbumCarousel
-                    photos={post.assets.map((asset) => ({ id: asset.id, file_url: asset.url }))}
+                    photos={post.assets.map((asset) => ({
+                      id: asset.id,
+                      // Still-unlocked photos pass no URL so the carousel's
+                      // LazyImage renders its pulsing skeleton until the
+                      // decrypted bytes arrive.
+                      file_url: asset.loading ? null : asset.url,
+                    }))}
                     onTap={(i) => openPostLightbox(post, i)}
                     priority={index < 2}
                   />
@@ -714,7 +847,8 @@ export function IcpMediaFeedPage() {
         <IcpUploadPhotoSheet
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          onUploaded={invalidate}
+          onUploaded={() => queryClient.refetchQueries({ queryKey: ["icp-media-feed"] })}
+          onPendingChange={setPendingPreviews}
           clubs={options.clubs}
           teams={options.teams}
           miniLeagues={options.miniLeagues}
@@ -730,8 +864,19 @@ export function IcpMediaFeedPage() {
           if (!open) setCommentPost(null);
         }}
         photoUrl={commentPost?.assets[0]?.url ?? ""}
-        uploaderName={commentPost?.ownerName ?? null}
+        uploaderName={
+          commentPost
+            ? (commentPost.ownerId === principal || commentPost.ownerId === user?.id) && profile?.display_name
+              ? profile.display_name
+              : commentPost.ownerName
+            : null
+        }
         teamName={commentPost ? subtitleFor(commentPost) : null}
+        uploaderAvatar={commentPost
+          ? (commentPost.ownerId === principal || commentPost.ownerId === user?.id)
+            ? profile?.avatar_url ?? commentPost.ownerAvatarUrl
+            : commentPost.ownerAvatarUrl
+          : null}
         teamId={commentPost?.teamId}
         clubId={commentPost?.clubId}
         miniLeagueId={commentPost?.miniLeagueId}

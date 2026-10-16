@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubStoragePurchasedGb } from "@/live/features/promoCodes";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -131,10 +133,14 @@ export async function fetchVaultStorageSubscription(
   // Defense-in-depth: VaultPage only calls this repository from Supabase-only
   // query paths today, but guard here too so an II principal can never fire
   // this Supabase read if a future caller forgets to route around it.
-  // NEEDS-CANISTER: no club storage-purchase equivalent exists on any
-  // canister yet, so ICP callers get the "no purchased storage" default.
+  // ICP: storage add-ons granted by on-chain storage promo redemptions
+  // (club_domain). Paid storage downgrades don't exist on-chain.
   if (resolveAuthBackend() === "icp") {
-    return { storage_purchased_gb: 0, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
+    const gb = await withFeatureBackend("membership", {
+      supabase: async () => 0,
+      icp: (ctx) => getLiveClubStoragePurchasedGb(ctx, clubId),
+    }).catch(() => 0);
+    return { storage_purchased_gb: gb, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
   }
   const { data } = await client
     .from("club_subscriptions")
@@ -152,13 +158,36 @@ export async function fetchVaultStorageBreakdown(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultStorageBreakdown> {
-  // Defense-in-depth: VaultPage only calls this repository from Supabase-only
-  // query paths today, but guard here too so an II principal can never fire
-  // these Supabase reads if a future caller forgets to route around it.
-  // NEEDS-CANISTER: no club storage-usage breakdown equivalent exists on any
-  // canister yet, so ICP callers get an empty breakdown.
+  // Secure sign-in: total the vault files stored on the vault canister (no
+  // Supabase reads). Gallery photos are not counted there yet.
   if (resolveAuthBackend() === "icp") {
-    return emptyVaultStorageBreakdown();
+    const { withFeatureBackend } = await import("@/live/featureRouter");
+    return withFeatureBackend("vault", {
+      supabase: async () => emptyVaultStorageBreakdown(),
+      icp: async (ctx) => {
+        const [{ listLiveVaultClubFiles }, { listLiveTeams }] = await Promise.all([
+          import("@/live/features/vault"),
+          import("@/live/features/club"),
+        ]);
+        const [files, teams] = await Promise.all([
+          listLiveVaultClubFiles(ctx, clubId, null, null),
+          listLiveTeams(ctx, clubId).catch(() => [] as any[]),
+        ]);
+        return calculateVaultStorageBreakdown({
+          photos: [],
+          files: (files as any[])
+            .filter((file) => !file.is_external_link)
+            .map((file) => ({
+              file_size: Number(file.size ?? 0),
+              team_id: file.team?.[0] ?? null,
+              mini_league_id: file.mini_league_id?.[0] ?? null,
+              name: file.name ?? null,
+            })),
+          teams: (teams as any[]).map((team) => ({ id: team.id, name: team.name })),
+          miniLeagues: [],
+        });
+      },
+    });
   }
   const { data: photos } = await client
     .from("photos")

@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Int "mo:core/Int";
@@ -5,11 +6,13 @@ import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat16 "mo:core/Nat16";
 import Nat64 "mo:core/Nat64";
+import Int64 "mo:core/Int64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Text "mo:core/Text";
 import Blob "mo:core/Blob";
+import Char "mo:core/Char";
 import Error "mo:core/Error";
 import Timer "mo:core/Timer";
 import Call "mo:ic/Call";
@@ -19,6 +22,20 @@ import Types "types";
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
+
+  /// Public: aggregate record counts (shown in admin settings). Counts only —
+  /// no record contents, so no PII is exposed.
+  public query func usage_stats() : async { events : Nat; rsvps : Nat; children : Nat } {
+    { events = events.size(); rsvps = rsvps.size(); children = children.size() };
+  };
 
   var governor : Principal;
 
@@ -32,6 +49,7 @@ persistent actor class Main(governorInit : Principal) {
   var lineups : [Types.LineupEntry];
   var lineupSnapshots : [Types.LineupSnapshot];
   var duties : [Types.Duty];
+  var eventSponsors : [(Text, [Text])];
   var roster : [Types.RosterEntry];
   var recurrences : [Types.Recurrence];
   var series : [Types.EventSeries];
@@ -58,6 +76,8 @@ persistent actor class Main(governorInit : Principal) {
   var gameResults : [Types.GameResult];
   var activeGames : [Types.ActiveGame];
   var playHQConfig : ?Types.PlayHQConfig;
+  var playhqTeamSyncs : [Types.PlayHQTeamSync];
+  var playhqEventLinks : [Types.PlayHQEventLink];
   // Governor-set notification_queue canister id for the event-reminder
   // fan-out hook. Fail-closed while unset, mirrors messaging_domain/club_domain.
   var notificationQueueCanister : ?Principal;
@@ -73,10 +93,45 @@ persistent actor class Main(governorInit : Principal) {
   var individualDutyReminderSent : [Text];
   var competitionDomainCanister : ?Principal;
   var competitionEventOperations : [Types.CompetitionEventOperation];
+  // Per-caller favourite event titles / saved locations / training defaults /
+  // RSVP created_at preservation (events UX extras, migration 20261015_000000).
+  var favouriteEventTitles : [Types.FavouriteEventTitle];
+  var savedLocations : [Types.SavedLocation];
+  var trainingDefaults : [Types.TrainingDefault];
+  var rsvpCreatedAt : [Types.RsvpCreatedAt];
+  // Per-match captain/vice-captain + goalkeeper assignments (events_domain
+  // extras, migration 20261015_000000).
+  var matchCaptainAssignments : [Types.MatchCaptainAssignment];
+  var matchGoalkeeperAssignments : [Types.MatchGoalkeeperAssignment];
+  // Live match timer, one row per event (events_domain extras, migration
+  // 20261016_000000). See Types.EventTimer.
+  var eventTimers : [Types.EventTimer];
+  // Game event ids that already received the post-game photo prompt
+  // (migration 20261020_000000); swept by _reminderTimer.
+  var photoPromptsSent : [Text];
+  // Per-event sponsor links (event_id -> sponsor ids), set via
+  // set_event_sponsors/get_event_sponsors (migration 20261023_000000).
+  // (declared earlier alongside the other list vars; kept here as the single
+  // source of truth for its migration note.)
+  // Append-only recent-write log backing the admin "sync storm" rate view
+  // (AdminActiveGamesPage): one entry per sync_active_game call, trimmed to
+  // the last writeLogWindowMs() on every append so it stays bounded instead
+  // of growing with total lifetime writes (migration 20261023_000000).
+  var activeGameWriteLog : [(Text, Nat64)];
 
+  // Bounded window for activeGameWriteLog (10 minutes) — trimmed on every
+  // sync_active_game write so the log never grows with lifetime write count.
+  func writeLogWindowMs() : Nat64 { 600_000 };
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
+  // Records the first-RSVP timestamp for (event_id, account_id) if absent;
+  // no-op on later status changes so created_at_ms survives updates.
+  func recordRsvpCreatedAt(event_id : Text, account_id : Text) {
+    if (not rsvpCreatedAt.any(func(item) = item.event_id == event_id and item.account_id == account_id)) {
+      rsvpCreatedAt := rsvpCreatedAt.concat([{ event_id; account_id; created_at_ms = nowMs() }]);
+    };
+  };
   // Mirrors the Supabase event_type enum so canister events round-trip with
   // the app's existing type handling.
   func validEventType(value : Text) : Bool {
@@ -114,8 +169,41 @@ persistent actor class Main(governorInit : Principal) {
     else if (frequency == "fortnightly") 1_209_600_000
     else 2_592_000_000
   };
+  // Mirrors frontend/src/lib/serverTimer.ts `TimerEvent`.
+  func validTimerAction(value : Text) : Bool {
+    value == "start_half" or value == "pause" or value == "resume" or value == "end_half" or
+    value == "start_half_2" or value == "end_game" or value == "adjust" or value == "set_minutes" or
+    value == "reset"
+  };
+  func defaultEventTimer(event_id : Text, minutes_per_half : Nat16, caller : Principal) : Types.EventTimer {
+    {
+      event_id; schema_version = 2; current_half = 1; minutes_per_half;
+      half_started_at_ms = null; half_paused_at_ms = null; accumulated_pause_ms = 0;
+      is_running = false; is_game_finished = false; half_ended_at_ms = null;
+      last_event_at_ms = nowMs(); updated_by = caller;
+    }
+  };
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
+  };
+
+  // Typed view of the club_domain app_admin query. Fail-closed while
+  // clubDomainCanister is unset (set_club_domain_canister, governor-only).
+  type ClubDomainRef = actor { is_app_admin : shared query (Principal) -> async Bool };
+  func clubDomainRef() : ?ClubDomainRef {
+    switch (clubDomainCanister) {
+      case null { null };
+      case (?cd) { ?(actor (Principal.toText(cd)) : ClubDomainRef) };
+    };
+  };
+  // Platform-only (governor or club_domain's app_admin grant) — used to gate
+  // the admin active-games monitor (AdminActiveGamesPage), never a club role.
+  func requireAppAdmin(caller : Principal) : async Bool {
+    if (isGovernor(caller)) return true;
+    switch (clubDomainRef()) {
+      case null { false };
+      case (?cd) { try { await cd.is_app_admin(caller) } catch (_) { false } };
+    };
   };
   func hasBulkAccess(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and bulkAccessPrincipals.any(func(p) = p.equal(caller))
@@ -552,8 +640,24 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     if (not valid(account_id) or not valid(state) or notes.size() > 2000) return #Err("Invalid RSVP");
+    recordRsvpCreatedAt(event_id, account_id);
     let value : Types.Rsvp = { event_id; account_id; child_id = null; state; notes; has_paid = null; source = "member"; updated_at_ms = nowMs() };
     rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); rsvps := rsvps.concat([value]); #Ok(value)
+  };
+
+  // Parent RSVPs their own child (Supabase childRsvpMutation parity) — same
+  // gate as set_rsvp, but keyed by (event, account, child) so a child's
+  // answer never overwrites the parent's own RSVP.
+  public shared ({ caller }) func set_child_rsvp(event_id : Text, account_id : Text, child_id : Text, state : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(_)) {};
+    };
+    if (not valid(account_id) or not valid(child_id) or not valid(state) or notes.size() > 2000) return #Err("Invalid RSVP");
+    recordRsvpCreatedAt(event_id, account_id);
+    let value : Types.Rsvp = { event_id; account_id; child_id = ?child_id; state; notes; has_paid = null; source = "member"; updated_at_ms = nowMs() };
+    rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id and item.child_id == ?child_id)); rsvps := rsvps.concat([value]); #Ok(value)
   };
 
   // Note-only update on an existing RSVP (self-service), mirroring the
@@ -643,6 +747,18 @@ persistent actor class Main(governorInit : Principal) {
       };
     }
   };
+  // Event sponsor links (event_sponsors parity): which club sponsors are
+  // attached to a specific event. Manager-gated like set_duty.
+  public shared ({ caller }) func set_event_sponsors(event_id : Text, sponsor_ids : [Text]) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    eventSponsors := eventSponsors.filter(func((id, _)) = id != event_id).concat([(event_id, sponsor_ids)]);
+    #Ok
+  };
+  public query ({ caller }) func get_event_sponsors(event_id : Text) : async { #Ok : [Text]; #Err : Text } {
+    auth(caller);
+    switch (eventSponsors.find(func((id, _)) = id == event_id)) { case (?(_, ids)) #Ok(ids); case null #Ok([]) };
+  };
   public shared ({ caller }) func complete_duty(event_id : Text, account_id : Text) : async { #Ok : Types.Duty; #Err : Text } {
     auth(caller);
     setDutyCompleted(event_id, account_id, true)
@@ -663,6 +779,81 @@ persistent actor class Main(governorInit : Principal) {
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     let value : Types.RosterEntry = { event_id; account_id; child_id }; roster := roster.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); roster := roster.concat([value]); #Ok(value)
   };
+  // Live match timer, server-anchored on this canister. Write access mirrors
+  // every other events_domain mutation keyed by event_id (set_duty,
+  // set_roster, save_lineup_snapshot, ...): the caller must manage the event
+  // (club/team admin, coach, creator, or governor) via requireManage.
+  // `minutes_per_half` is required for "start_half"/"set_minutes" and
+  // optional otherwise (kept as-is when omitted); `adjust_ms` is required
+  // for "adjust" and ignored otherwise. Reads are open to anyone who can
+  // view the event (canView), same visibility as get_lineup_snapshot.
+  public shared ({ caller }) func set_event_timer(event_id : Text, action : Text, minutes_per_half : ?Nat16, adjust_ms : ?Int64) : async { #Ok : Types.EventTimer; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not validTimerAction(action)) return #Err("Invalid timer action");
+    let resolvedMinutes = switch (minutes_per_half) { case (?m) m; case null (45 : Nat16) };
+    if (resolvedMinutes == 0 or resolvedMinutes > 200) return #Err("Invalid minutes per half");
+    let current = switch (eventTimers.find(func(item) = item.event_id == event_id)) {
+      case (?existing) existing;
+      case null defaultEventTimer(event_id, resolvedMinutes, caller);
+    };
+    let now = nowMs();
+    let updated : Types.EventTimer = switch (action) {
+      case "start_half" {
+        { current with current_half = 1; minutes_per_half = resolvedMinutes; half_started_at_ms = ?now; half_paused_at_ms = null; accumulated_pause_ms = 0; is_running = true; is_game_finished = false; half_ended_at_ms = null; last_event_at_ms = now; updated_by = caller }
+      };
+      case "pause" {
+        if (not current.is_running) return #Err("Timer is not running");
+        { current with half_paused_at_ms = ?now; is_running = false; last_event_at_ms = now; updated_by = caller }
+      };
+      case "resume" {
+        if (current.is_running) return #Err("Timer is already running");
+        let extraPause = switch (current.half_paused_at_ms) { case (?pausedAt) if (now > pausedAt) now - pausedAt else (0 : Nat64); case null (0 : Nat64) };
+        { current with half_paused_at_ms = null; accumulated_pause_ms = current.accumulated_pause_ms + extraPause; is_running = true; last_event_at_ms = now; updated_by = caller }
+      };
+      case "end_half" {
+        { current with is_running = false; half_paused_at_ms = null; half_ended_at_ms = ?now; last_event_at_ms = now; updated_by = caller }
+      };
+      case "start_half_2" {
+        { current with current_half = 2; half_started_at_ms = ?now; half_paused_at_ms = null; accumulated_pause_ms = 0; is_running = true; is_game_finished = false; half_ended_at_ms = null; last_event_at_ms = now; updated_by = caller }
+      };
+      case "end_game" {
+        { current with is_running = false; is_game_finished = true; half_paused_at_ms = null; half_ended_at_ms = ?now; last_event_at_ms = now; updated_by = caller }
+      };
+      case "adjust" {
+        switch (adjust_ms) {
+          case null return #Err("adjust_ms required for adjust");
+          case (?delta) {
+            let nextPause : Int64 = Int64.fromNat64(current.accumulated_pause_ms) - delta;
+            let clamped : Nat64 = if (nextPause < 0) 0 else Int64.toNat64(nextPause);
+            { current with accumulated_pause_ms = clamped; last_event_at_ms = now; updated_by = caller }
+          };
+        };
+      };
+      case "set_minutes" {
+        { current with minutes_per_half = resolvedMinutes; last_event_at_ms = now; updated_by = caller }
+      };
+      case "reset" {
+        { defaultEventTimer(event_id, resolvedMinutes, caller) with last_event_at_ms = now };
+      };
+      case (_) { current };
+    };
+    eventTimers := eventTimers.filter(func(item) = item.event_id != event_id);
+    eventTimers := eventTimers.concat([updated]);
+    #Ok(updated)
+  };
+
+  public query ({ caller }) func get_event_timer(event_id : Text) : async { #Ok : ?Types.EventTimer; #Err : Text } {
+    auth(caller);
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        #Ok(eventTimers.find(func(item) = item.event_id == event_id))
+      };
+    };
+  };
+
   public shared ({ caller }) func set_recurrence(event_id : Text, frequency : Text, until_ms : Nat64) : async { #Ok : Types.Recurrence; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
@@ -922,6 +1113,7 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     if (not valid(account_id) or not validRsvpStatus(status) or notes.size() > 2000) return #Err("Invalid RSVP");
+    recordRsvpCreatedAt(event_id, account_id);
     let value : Types.Rsvp = { event_id; account_id; child_id; state = status; notes; has_paid = null; source = "admin"; updated_at_ms = nowMs() };
     rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id and item.child_id == child_id));
     rsvps := rsvps.concat([value]);
@@ -943,6 +1135,92 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  };
+
+  // ---- RSVP created_at (preserved across status changes) ----
+  public query ({ caller }) func get_rsvp_created_at(event_id : Text, account_id : Text) : async ?Nat64 {
+    auth(caller);
+    switch (rsvpCreatedAt.find(func(item) = item.event_id == event_id and item.account_id == account_id)) {
+      case null null;
+      case (?item) ?item.created_at_ms;
+    };
+  };
+
+  // ---- Favourite event titles (per-caller shortlist for CreateEventPage) ----
+  func callerAccountId(caller : Principal) : Text { Principal.toText(caller) };
+
+  public query ({ caller }) func list_favourite_event_titles() : async [Text] {
+    auth(caller);
+    let me = callerAccountId(caller);
+    favouriteEventTitles.filter(func(item) = item.account_id == me).map(func(item) = item.title);
+  };
+
+  public shared ({ caller }) func add_favourite_event_title(title : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(title)) return #Err("Invalid title");
+    let me = callerAccountId(caller);
+    if (not favouriteEventTitles.any(func(item) = item.account_id == me and item.title == title)) {
+      favouriteEventTitles := favouriteEventTitles.concat([{ account_id = me; title }]);
+    };
+    #Ok;
+  };
+
+  public shared ({ caller }) func remove_favourite_event_title(title : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    let me = callerAccountId(caller);
+    favouriteEventTitles := favouriteEventTitles.filter(func(item) = not (item.account_id == me and item.title == title));
+    #Ok;
+  };
+
+  // ---- Saved locations (per-caller addresses for AddressAutocomplete) ----
+  public query ({ caller }) func list_saved_locations() : async [Types.SavedLocation] {
+    auth(caller);
+    let me = callerAccountId(caller);
+    savedLocations.filter(func(item) = item.account_id == me);
+  };
+
+  public shared ({ caller }) func save_location(location_label : Text, address : Text, lat : Float, lng : Float) : async { #Ok : Types.SavedLocation; #Err : Text } {
+    auth(caller);
+    if (not valid(location_label) or address == "" or address.size() > 256) return #Err("Invalid location");
+    let me = callerAccountId(caller);
+    let value : Types.SavedLocation = {
+      id = "loc-" # me # "-" # Nat.toText(savedLocations.size());
+      account_id = me; location_label; address; lat; lng; created_at_ms = nowMs();
+    };
+    savedLocations := savedLocations.concat([value]);
+    #Ok(value);
+  };
+
+  public shared ({ caller }) func delete_saved_location(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    let me = callerAccountId(caller);
+    switch (savedLocations.find(func(item) = item.id == id and item.account_id == me)) {
+      case null { #Err("Saved location not found") };
+      case (?_) { savedLocations := savedLocations.filter(func(item) = item.id != id); #Ok };
+    };
+  };
+
+  // ---- Training default RSVP (per caller + club + team + optional child) ----
+  // Applied by the UI when listing/creating new training events; child_id =
+  // null is the caller's own default (not RSVPing on behalf of a child).
+  public query ({ caller }) func get_training_default(club_id : Text, team_id : Text, child_id : ?Text) : async { #Ok : ?Text; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id)) return #Err("Invalid training default lookup");
+    let me = callerAccountId(caller);
+    switch (trainingDefaults.find(func(item) = item.account_id == me and item.club_id == club_id and item.team_id == team_id and item.child_id == child_id)) {
+      case null { #Ok(null) };
+      case (?item) { #Ok(?item.default_rsvp) };
+    };
+  };
+
+  public shared ({ caller }) func set_training_default(club_id : Text, team_id : Text, child_id : ?Text, default_rsvp : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id) or not validRsvpStatus(default_rsvp)) return #Err("Invalid training default");
+    let me = callerAccountId(caller);
+    let value : Types.TrainingDefault = { account_id = me; club_id; team_id; child_id; default_rsvp; updated_at_ms = nowMs() };
+    trainingDefaults := trainingDefaults.filter(func(item) = not (item.account_id == me and item.club_id == club_id and item.team_id == team_id and item.child_id == child_id));
+    trainingDefaults := trainingDefaults.concat([value]);
+    #Ok;
   };
 
   // ---- (1) Soft delete: event + series (cascades occurrences) ----
@@ -1607,6 +1885,125 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
   };
 
+  // ---- Match captains / goalkeepers / player stats report ----
+  func validRefKind(value : Text) : Bool { value == "account" or value == "child" };
+
+  public shared ({ caller }) func set_match_captain(event_id : Text, ref_kind : Text, ref_id : Text, role : Text) : async { #Ok : Types.MatchCaptainAssignment; #Err : Text } {
+    auth(caller);
+    if (not valid(event_id) or not validRefKind(ref_kind) or not valid(ref_id) or (role != "captain" and role != "vice")) return #Err("Invalid captain assignment");
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        let value : Types.MatchCaptainAssignment = { event_id; ref_kind; ref_id; role; assigned_by = caller; updated_at_ms = nowMs() };
+        matchCaptainAssignments := matchCaptainAssignments.filter(func(item) = not (item.event_id == event_id and item.ref_kind == ref_kind and item.ref_id == ref_id and item.role == role)).concat([value]);
+        #Ok(value)
+      };
+    };
+  };
+
+  public shared ({ caller }) func remove_match_captain(event_id : Text, ref_kind : Text, ref_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        matchCaptainAssignments := matchCaptainAssignments.filter(func(item) = not (item.event_id == event_id and item.ref_kind == ref_kind and item.ref_id == ref_id and item.role == role));
+        #Ok;
+      };
+    };
+  };
+
+  public query ({ caller }) func list_match_captains(event_id : Text) : async { #Ok : [Types.MatchCaptainAssignment]; #Err : Text } {
+    auth(caller);
+    #Ok(matchCaptainAssignments.filter(func(item) = item.event_id == event_id))
+  };
+
+  public shared ({ caller }) func set_match_goalkeeper(event_id : Text, ref_kind : Text, ref_id : Text, period : Text) : async { #Ok : Types.MatchGoalkeeperAssignment; #Err : Text } {
+    auth(caller);
+    if (not valid(event_id) or not validRefKind(ref_kind) or not valid(ref_id) or not valid(period)) return #Err("Invalid goalkeeper assignment");
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        let value : Types.MatchGoalkeeperAssignment = { event_id; ref_kind; ref_id; period; assigned_by = caller; updated_at_ms = nowMs() };
+        matchGoalkeeperAssignments := matchGoalkeeperAssignments.filter(func(item) = not (item.event_id == event_id and item.period == period)).concat([value]);
+        #Ok(value)
+      };
+    };
+  };
+
+  public shared ({ caller }) func remove_match_goalkeeper(event_id : Text, period : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        matchGoalkeeperAssignments := matchGoalkeeperAssignments.filter(func(item) = not (item.event_id == event_id and item.period == period));
+        #Ok;
+      };
+    };
+  };
+
+  public query ({ caller }) func list_match_goalkeepers(event_id : Text) : async { #Ok : [Types.MatchGoalkeeperAssignment]; #Err : Text } {
+    auth(caller);
+    #Ok(matchGoalkeeperAssignments.filter(func(item) = item.event_id == event_id))
+  };
+
+  // Folds one stat bump into rows, inserting a fresh row keyed by
+  // (ref_kind, ref_id) on first sight.
+  func bumpPlayerStat(rows : [Types.PlayerStatRow], ref_kind : Text, ref_id : Text, mvp : Nat32, captain : Nat32, vice : Nat32, gk : Nat32) : [Types.PlayerStatRow] {
+    switch (rows.find(func(r) = r.ref_kind == ref_kind and r.ref_id == ref_id)) {
+      case (?existing) {
+        rows.filter(func(r) = not (r.ref_kind == ref_kind and r.ref_id == ref_id)).concat([{
+          existing with
+          mvp_count = existing.mvp_count + mvp;
+          captain_count = existing.captain_count + captain;
+          vice_count = existing.vice_count + vice;
+          goalkeeper_count = existing.goalkeeper_count + gk;
+        }]);
+      };
+      case null { rows.concat([{ ref_kind; ref_id; mvp_count = mvp; captain_count = captain; vice_count = vice; goalkeeper_count = gk }]) };
+    };
+  };
+
+  // Aggregates MVP counts (from existing GameResult rows), captain/vice
+  // counts (MatchCaptainAssignment) and goalkeeper counts
+  // (MatchGoalkeeperAssignment) per player over every non-deleted event for
+  // club_id (optionally narrowed to team_id) whose starts_at_ms falls in
+  // [from_ms, to_ms]. Team-staff authorization reuses managesTeam (club_admin
+  // / team_admin / coach), same as create_team_training_pause.
+  public query ({ caller }) func get_player_stats_report(club_id : Text, team_id : ?Text, from_ms : Nat64, to_ms : Nat64) : async { #Ok : [Types.PlayerStatRow]; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id)) return #Err("Invalid club");
+    let teamAllowed = switch (team_id) { case (?t) managesTeam(caller, club_id, t); case null false };
+    if (not isGovernor(caller) and not hasRole(caller, "club_admin", club_id, null) and not teamAllowed) return #Err("Team staff required");
+    let matchingEvents = events.filter(func(e) = e.club_id == club_id and not e.deleted and e.starts_at_ms >= from_ms and e.starts_at_ms <= to_ms and (switch (team_id) { case (?t) e.team_id == ?t; case null true }));
+    let eventIds = matchingEvents.map(func(e) = e.id);
+    var rows : [Types.PlayerStatRow] = [];
+    for (cap in matchCaptainAssignments.values()) {
+      if (eventIds.any(func(id) = id == cap.event_id)) {
+        if (cap.role == "captain") { rows := bumpPlayerStat(rows, cap.ref_kind, cap.ref_id, 0, 1, 0, 0) }
+        else { rows := bumpPlayerStat(rows, cap.ref_kind, cap.ref_id, 0, 0, 1, 0) };
+      };
+    };
+    for (gk in matchGoalkeeperAssignments.values()) {
+      if (eventIds.any(func(id) = id == gk.event_id)) {
+        rows := bumpPlayerStat(rows, gk.ref_kind, gk.ref_id, 0, 0, 0, 1);
+      };
+    };
+    for (gr in gameResults.values()) {
+      switch (gr.event_id) {
+        case (?eid) {
+          if (eventIds.any(func(id) = id == eid)) {
+            switch (gr.mvp_player_id) {
+              case (?pid) { rows := bumpPlayerStat(rows, "account", pid, 1, 0, 0, 0) };
+              case null {};
+            };
+          };
+        };
+        case null {};
+      };
+    };
+    #Ok(rows)
+  };
+
   // ---- Workstream D: active game mirror (server-side push notification driver) ----
   // Shared-session model (mirrors Supabase active_games): one active row per
   // team; a null team scopes the row to the caller alone.
@@ -1626,7 +2023,38 @@ persistent actor class Main(governorInit : Principal) {
       user_id = caller; team_id; timer_state_json; pitch_state_json; board_session_id; is_active = true; updated_at_ms = nowMs();
     };
     activeGames := activeGames.filter(func(item) = not matches(item)).concat([value]);
+    let logTeam = switch (team_id) { case (?t) t; case null "" };
+    let cutoff : Nat64 = if (value.updated_at_ms > writeLogWindowMs()) value.updated_at_ms - writeLogWindowMs() else 0;
+    activeGameWriteLog := activeGameWriteLog.filter(func((_, ts)) = ts >= cutoff).concat([(logTeam, value.updated_at_ms)]);
     #Ok(value)
+  };
+
+  // Admin monitor (AdminActiveGamesPage): every active or recently-ended
+  // game updated at/after since_ms, regardless of caller. Gated so only the
+  // governor or a club_domain app_admin can see every club's live boards.
+  public shared ({ caller }) func list_active_games(since_ms : Nat64) : async { #Ok : [Types.ActiveGame]; #Err : Text } {
+    auth(caller);
+    if (not (await requireAppAdmin(caller))) return #Err("App admin required");
+    #Ok(activeGames.filter(func(item) = item.updated_at_ms >= since_ms));
+  };
+
+  // Admin monitor: per-team sync_active_game call counts since since_ms
+  // (from the bounded recent-write log), used to flag "sync storm" teams.
+  // Same app-admin gate as list_active_games; a null/empty team_id groups
+  // under "" (per-caller sessions with no team).
+  public shared ({ caller }) func list_active_game_write_rates(since_ms : Nat64) : async { #Ok : [(Text, Nat32)]; #Err : Text } {
+    auth(caller);
+    if (not (await requireAppAdmin(caller))) return #Err("App admin required");
+    var counts : [(Text, Nat32)] = [];
+    for ((team, ts) in activeGameWriteLog.values()) {
+      if (ts >= since_ms) {
+        counts := switch (counts.find(func((t, _)) = t == team)) {
+          case (?(_, n)) counts.map(func((t, n2)) = if (t == team) (t, n2 + (1 : Nat32)) else (t, n2));
+          case null counts.concat([(team, (1 : Nat32))]);
+        };
+      };
+    };
+    #Ok(counts);
   };
 
   public shared ({ caller }) func deactivate_active_game(team_id : ?Text) : async { #Ok; #Err : Text } {
@@ -1919,6 +2347,293 @@ persistent actor class Main(governorInit : Principal) {
       };
     }
   };
+
+  // ---- PlayHQ team fixture import (on-chain playhq-materialise-team-events) ----
+  // Reads the competition fixture via HTTPS outcall and mirrors the linked
+  // team's games as "game" events: new games are created, changed games are
+  // updated, and future games that vanished from (or were cancelled in) the
+  // feed are cancelled. Teams with auto-sync on are re-imported every 6 h.
+
+  public query ({ caller }) func get_playhq_config_status() : async { #Ok : { configured : Bool; base_url : ?Text; updated_at_ms : ?Nat64 }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor only");
+    switch (playHQConfig) {
+      case null #Ok({ configured = false; base_url = null; updated_at_ms = null });
+      case (?c) #Ok({ configured = true; base_url = ?c.base_url; updated_at_ms = ?c.updated_at_ms });
+    }
+  };
+
+  func digitsToInt(cs : [Char], from : Nat, len : Nat) : ?Int {
+    if (from + len > cs.size()) return null;
+    var v : Int = 0;
+    var i = from;
+    while (i < from + len) {
+      let c = cs[i];
+      if (c < '0' or c > '9') return null;
+      v := v * 10 + (Nat32.toNat(Char.toNat32(c)) - 48);
+      i += 1;
+    };
+    ?v
+  };
+
+  // Howard Hinnant's days_from_civil (proleptic Gregorian, UTC).
+  func daysFromCivil(y0 : Int, m : Int, d : Int) : Int {
+    let y = if (m <= 2) y0 - 1 else y0;
+    let era = (if (y >= 0) y else y - 399) / 400;
+    let yoe = y - era * 400;
+    let mp = if (m > 2) m - 3 else m + 9;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+  };
+
+  func firstSunday(y : Int, m : Int) : Int {
+    let wd = (daysFromCivil(y, m, 1) + 4) % 7; // 0 = Sunday
+    1 + (7 - wd) % 7
+  };
+
+  // Offset (minutes east of UTC) for a local wall-clock date in an
+  // Australian/NZ zone. DST approximated as first Sunday Oct → first Sunday Apr.
+  func zoneOffsetMin(tz : Text, y : Int, m : Int, d : Int) : Int {
+    let lower = Text.toLower(tz);
+    let dst = if (m >= 11 or m <= 3) true else if (m == 10) d >= firstSunday(y, 10) else if (m == 4) d < firstSunday(y, 4) else false;
+    if (Text.contains(lower, #text "perth")) 480
+    else if (Text.contains(lower, #text "darwin")) 570
+    else if (Text.contains(lower, #text "adelaide") or Text.contains(lower, #text "broken_hill")) (if dst 630 else 570)
+    else if (Text.contains(lower, #text "brisbane") or Text.contains(lower, #text "lindeman")) 600
+    else if (Text.contains(lower, #text "auckland")) (if dst 780 else 720)
+    else (if dst 660 else 600)
+  };
+
+  // "YYYY-MM-DD" + optional "THH:MM[:SS][.fff][Z|±HH:MM]". Without an offset
+  // the wall clock is interpreted in `tz`.
+  func parsePlayhqTime(text : Text, tz : Text) : ?Nat64 {
+    let cs = Text.toArray(text);
+    let y = switch (digitsToInt(cs, 0, 4)) { case (?v) v; case null return null };
+    let mo = switch (digitsToInt(cs, 5, 2)) { case (?v) v; case null return null };
+    let d = switch (digitsToInt(cs, 8, 2)) { case (?v) v; case null return null };
+    var h : Int = 0; var mi : Int = 0; var sec : Int = 0;
+    var i = 10;
+    if (cs.size() > 11 and (cs[10] == 'T' or cs[10] == ' ')) {
+      h := switch (digitsToInt(cs, 11, 2)) { case (?v) v; case null 0 };
+      mi := switch (digitsToInt(cs, 14, 2)) { case (?v) v; case null 0 };
+      i := 16;
+      if (cs.size() > 18 and cs[16] == ':') { sec := switch (digitsToInt(cs, 17, 2)) { case (?v) v; case null 0 }; i := 19 };
+      while (i < cs.size() and (cs[i] == '.' or (cs[i] >= '0' and cs[i] <= '9'))) { i += 1 };
+    };
+    if (mo < 1 or mo > 12 or d < 1 or d > 31 or h > 23 or mi > 59) return null;
+    var offsetMin : Int = zoneOffsetMin(tz, y, mo, d);
+    if (i < cs.size()) {
+      if (cs[i] == 'Z') { offsetMin := 0 }
+      else if (cs[i] == '+' or cs[i] == '-') {
+        let oh = switch (digitsToInt(cs, i + 1, 2)) { case (?v) v; case null 0 };
+        let om = if (i + 4 < cs.size() and cs[i + 3] == ':') (switch (digitsToInt(cs, i + 4, 2)) { case (?v) v; case null 0 }) else (switch (digitsToInt(cs, i + 3, 2)) { case (?v) v; case null 0 });
+        offsetMin := (if (cs[i] == '-') -1 else 1) * (oh * 60 + om);
+      };
+    };
+    let ms = ((daysFromCivil(y, mo, d) * 86400 + h * 3600 + mi * 60 + sec) - offsetMin * 60) * 1000;
+    if (ms <= 0) null else ?Nat64.fromNat(Int.abs(ms))
+  };
+
+  type PlayhqGame = { game_id : Text; starts_ms : Nat64; venue : ?Text; opponent : Text; is_home : Bool; cancelled : Bool };
+
+  func firstStr(obj : Text, keys : [Text]) : ?Text {
+    for (k in keys.values()) {
+      switch (findJsonStringValue(obj, k)) { case (?v) { if (v != "") return ?v }; case null {} };
+    };
+    null
+  };
+
+  func parsePlayhqGames(body : Text, playhq_team_id : Text) : [PlayhqGame] {
+    var arr = extractJsonArray(body, "matches");
+    if (arr == "") arr := extractJsonArray(body, "games");
+    if (arr == "") arr := extractJsonArray(body, "data");
+    let objs = splitJsonObjects(if (arr == "") body else arr);
+    var out : [PlayhqGame] = [];
+    for (obj in objs.values()) {
+      var homeId : ?Text = null; var awayId : ?Text = null;
+      var homeName = ""; var awayName = "";
+      let homeObj = extractJsonObject(obj, "homeTeam");
+      let awayObj = extractJsonObject(obj, "awayTeam");
+      if (homeObj != "" or awayObj != "") {
+        homeId := findJsonStringValue(homeObj, "id");
+        awayId := findJsonStringValue(awayObj, "id");
+        homeName := switch (findJsonStringValue(homeObj, "name")) { case (?v) v; case null "" };
+        awayName := switch (findJsonStringValue(awayObj, "name")) { case (?v) v; case null "" };
+      } else {
+        let teamObjs = splitJsonObjects(extractJsonArray(obj, "teams"));
+        for (t in teamObjs.values()) {
+          let tid = findJsonStringValue(t, "id");
+          let tname = switch (findJsonStringValue(t, "name")) { case (?v) v; case null "" };
+          if (Text.contains(t, #text "\"isHomeTeam\":true") and homeId == null) { homeId := tid; homeName := tname }
+          else if (awayId == null) { awayId := tid; awayName := tname }
+          else { homeId := tid; homeName := tname };
+        };
+      };
+      let isHome = homeId == ?playhq_team_id;
+      let isAway = awayId == ?playhq_team_id;
+      let gameId = switch (findJsonStringValue(obj, "id")) { case (?v) v; case null "" };
+      if ((isHome or isAway) and gameId != "") {
+        let opponent = if (isHome) awayName else homeName;
+        let schedule = extractJsonObject(obj, "schedule");
+        let tz = switch (firstStr(if (schedule == "") obj else schedule, ["timezone", "timeZone"])) { case (?v) v; case null "Australia/Sydney" };
+        let iso : ?Text = switch (firstStr(obj, ["startTime", "startDateTime", "dateTime", "scheduledStartTime", "startsAt"])) {
+          case (?v) ?v;
+          case null {
+            let src = if (schedule == "") obj else schedule;
+            switch (findJsonStringValue(src, "date")) {
+              case (?date) ?(date # "T" # (switch (findJsonStringValue(src, "time")) { case (?t) t; case null "00:00:00" }));
+              case null null;
+            }
+          };
+        };
+        let startsOpt = switch (iso) { case (?t) parsePlayhqTime(t, tz); case null null };
+        let status = Text.toUpper(switch (findJsonStringValue(obj, "status")) { case (?v) v; case null "" });
+        let cancelled = Text.contains(status, #text "CANCEL") or Text.contains(status, #text "POSTPON") or Text.contains(status, #text "ABANDON");
+        let venueObj = extractJsonObject(obj, "venue");
+        let venue = if (venueObj == "") null else findJsonStringValue(venueObj, "name");
+        switch (startsOpt) {
+          case (?starts) { if (opponent != "") out := out.concat([{ game_id = gameId; starts_ms = starts; venue; opponent; is_home = isHome; cancelled }]) };
+          case null {};
+        };
+      };
+    };
+    out
+  };
+
+  func clip(t : Text, max : Nat) : Text {
+    if (t.size() <= max) t else Text.fromArray(Array.tabulate<Char>(max, func(i) = Text.toArray(t)[i]))
+  };
+
+  func importPlayhqTeam(club_id : Text, team_id : Text, competition_id : Text, playhq_team_id : Text, actor_ : Principal) : async* { #Ok : Types.PlayHQImportResult; #Err : Text } {
+    let body = switch (await* playhqHttpGet("/v1/competitions/" # competition_id # "/fixture")) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(b)) b;
+    };
+    let games = parsePlayhqGames(body, playhq_team_id);
+    if (games.size() == 0) return #Err("No fixtures found for this team in PlayHQ yet");
+    let now = nowMs();
+    let duration : Nat64 = 90 * 60_000;
+    var created : Nat32 = 0; var updated : Nat32 = 0; var cancelledN : Nat32 = 0;
+    for (g in games.values()) {
+      let title = clip((if (g.is_home) "vs " else "@ ") # g.opponent, 120);
+      let location = switch (g.venue) { case (?v) ?clip(v, 120); case null null };
+      let opponent = ?clip(g.opponent, 120);
+      switch (playhqEventLinks.find(func(l) = l.team_id == team_id and l.playhq_game_id == g.game_id)) {
+        case (?link) {
+          switch (events.find(func(e) = e.id == link.event_id)) {
+            case (?e) {
+              if (not e.deleted and (e.starts_at_ms != g.starts_ms or e.location != location or e.opponent != opponent or e.cancelled != g.cancelled or e.title != title)) {
+                if (g.cancelled and not e.cancelled) cancelledN += 1 else updated += 1;
+                events := events.map<Types.Event, Types.Event>(func(x) = if (x.id == e.id) { { x with title; starts_at_ms = g.starts_ms; ends_at_ms = g.starts_ms + duration; location; opponent; cancelled = g.cancelled; revision = x.revision + 1; updated_at_ms = now } } else x);
+              };
+            };
+            case null {};
+          };
+        };
+        case null {
+          if (not g.cancelled) {
+            let ev : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id = ?team_id; title; description = "PlayHQ fixture"; event_type = "game"; location; cancelled = false; creator = actor_; starts_at_ms = g.starts_ms; ends_at_ms = g.starts_ms + duration; series_id = null; revision = 1; deleted = false; opponent; address = null; mini_league_id = null; updated_at_ms = now; rsvp_audience = null; adults_only = false; restricted_to_roles = null; target_team_ids = null };
+            events := events.concat([ev]);
+            playhqEventLinks := playhqEventLinks.concat([{ event_id = ev.id; team_id; playhq_game_id = g.game_id }]);
+            created += 1;
+          };
+        };
+      };
+    };
+    // Future linked games that no longer appear in the feed are cancelled.
+    for (link in playhqEventLinks.values()) {
+      if (link.team_id == team_id and not games.any(func(g) = g.game_id == link.playhq_game_id)) {
+        switch (events.find(func(e) = e.id == link.event_id)) {
+          case (?e) {
+            if (not e.cancelled and not e.deleted and e.starts_at_ms > now) {
+              events := events.map<Types.Event, Types.Event>(func(x) = if (x.id == e.id) { { x with cancelled = true; revision = x.revision + 1; updated_at_ms = now } } else x);
+              cancelledN += 1;
+            };
+          };
+          case null {};
+        };
+      };
+    };
+    #Ok({ created; updated; cancelled = cancelledN })
+  };
+
+  func canManageTeamFixtures(caller : Principal, club_id : Text, team_id : Text) : Bool {
+    isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or hasRole(caller, "team_admin", club_id, ?team_id) or hasRole(caller, "coach", club_id, ?team_id)
+  };
+
+  /// Imports the linked team's PlayHQ fixtures as game events now.
+  public shared ({ caller }) func import_playhq_team_fixtures(club_id : Text, team_id : Text, competition_id : Text, playhq_team_id : Text) : async { #Ok : Types.PlayHQImportResult; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id) or not valid(competition_id) or not valid(playhq_team_id)) return #Err("Invalid PlayHQ link");
+    await syncRolesFromClubDomain(caller, club_id);
+    if (not canManageTeamFixtures(caller, club_id, team_id)) return #Err("Club or team admin required");
+    let r = await* importPlayhqTeam(club_id, team_id, competition_id, playhq_team_id, caller);
+    let (ok, err) = switch (r) { case (#Ok(_)) (true, null); case (#Err(e)) (false, ?e) };
+    playhqTeamSyncs := playhqTeamSyncs.map<Types.PlayHQTeamSync, Types.PlayHQTeamSync>(func(s) = if (s.team_id == team_id) { { s with last_synced_at_ms = if ok ?nowMs() else s.last_synced_at_ms; last_error = err } } else s);
+    r
+  };
+
+  /// Records (or clears, when either id is null) the team's PlayHQ link and
+  /// auto-sync flag so the 6-hourly sweep can keep its fixtures current.
+  public shared ({ caller }) func set_playhq_team_sync(club_id : Text, team_id : Text, competition_id : ?Text, playhq_team_id : ?Text, auto : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id) or not validOptId(competition_id) or not validOptId(playhq_team_id)) return #Err("Invalid PlayHQ link");
+    await syncRolesFromClubDomain(caller, club_id);
+    if (not canManageTeamFixtures(caller, club_id, team_id)) return #Err("Club or team admin required");
+    let rest = playhqTeamSyncs.filter(func(s) = s.team_id != team_id);
+    switch (competition_id, playhq_team_id) {
+      case (?c, ?p) {
+        if (rest.size() >= 5000) return #Err("Too many PlayHQ links");
+        let prev = playhqTeamSyncs.find(func(s) = s.team_id == team_id);
+        playhqTeamSyncs := rest.concat([{
+          club_id; team_id; competition_id = c; playhq_team_id = p; auto; updated_by = caller;
+          last_synced_at_ms = switch (prev) { case (?s) s.last_synced_at_ms; case null null };
+          last_error = null;
+        }]);
+      };
+      case _ { playhqTeamSyncs := rest };
+    };
+    #Ok
+  };
+
+  public query ({ caller }) func get_playhq_team_sync(team_id : Text) : async { #Ok : ?Types.PlayHQTeamSync; #Err : Text } {
+    auth(caller);
+    #Ok(playhqTeamSyncs.find(func(s) = s.team_id == team_id))
+  };
+
+  transient var playhqSweepCursor : Nat = 0;
+  func sweepPlayhqAutoSync() : async () {
+    if (playHQConfig == null) return;
+    // Cost control: only refresh teams with a game in the last 2 days or the
+    // next 14 days (or no games yet, so the first import still happens).
+    let now = nowMs();
+    let dayMs : Nat64 = 86_400_000;
+    let windowStart : Nat64 = if (now > 2 * dayMs) now - 2 * dayMs else 0;
+    let windowEnd : Nat64 = now + 14 * dayMs;
+    let autos = playhqTeamSyncs.filter(func(s) {
+      if (not s.auto) return false;
+      var hasAny = false;
+      for (e in events.values()) {
+        if (not e.deleted and e.team_id == ?s.team_id) {
+          hasAny := true;
+          if (e.starts_at_ms >= windowStart and e.starts_at_ms <= windowEnd) return true;
+        };
+      };
+      not hasAny
+    });
+    if (autos.size() == 0) return;
+    let batch = 20;
+    var i = 0;
+    while (i < batch and i < autos.size()) {
+      let s = autos[(playhqSweepCursor + i) % autos.size()];
+      let r = await* importPlayhqTeam(s.club_id, s.team_id, s.competition_id, s.playhq_team_id, s.updated_by);
+      let (ok, err) = switch (r) { case (#Ok(_)) (true, null); case (#Err(e)) (false, ?e) };
+      playhqTeamSyncs := playhqTeamSyncs.map<Types.PlayHQTeamSync, Types.PlayHQTeamSync>(func(x) = if (x.team_id == s.team_id) { { x with last_synced_at_ms = if ok ?nowMs() else x.last_synced_at_ms; last_error = err } } else x);
+      i += 1;
+    };
+    playhqSweepCursor := (playhqSweepCursor + batch) % autos.size();
+  };
+  transient let _playhqTimer = Timer.recurringTimer<system>(#seconds(21_600), sweepPlayhqAutoSync);
 
   // ---- Event reminder fan-out (non-RSVP member-list notify) ----
   // Verifies the caller manages the event, computes recipients as the event
@@ -2307,10 +3022,179 @@ persistent actor class Main(governorInit : Principal) {
     autoReminders := autoReminders.map(func(r) { if (r.event_id == event_id) { { r with sent = true } } else r });
   };
 
-  transient let _reminderTimer = Timer.recurringTimer<system>(#seconds(900), func() : async () { await sweepAutoReminders() });
+  // ---- Post-game photo prompts ----
+  // Games that ended 2–6 h ago get one "add your photos" alert to
+  // members who RSVP'd going (or the whole team if nobody RSVP'd). The 6 h
+  // window stops a first deploy from back-filling old games.
+  func sweepPhotoPrompts() : async () {
+    let nq = switch (notificationQueueCanister) { case null return; case (?id) id };
+    let now = nowMs();
+    let minAge : Nat64 = 2 * 3_600_000;
+    let maxAge : Nat64 = 6 * 3_600_000;
+    var sentThisRun = 0;
+    for (event in events.values()) {
+      if (sentThisRun < 20 and event.event_type == "game" and not event.deleted and not event.cancelled and event.team_id != null and event.ends_at_ms + minAge <= now and event.ends_at_ms + maxAge > now and photoPromptsSent.find(func(id) = id == event.id) == null) {
+        photoPromptsSent := photoPromptsSent.concat([event.id]);
+        sentThisRun += 1;
+        var recipients : [Text] = [];
+        for (r in rsvps.values()) {
+          if (r.event_id == event.id and r.state == "going" and recipients.size() < 500 and recipients.find(func(x) = x == r.account_id) == null) recipients := recipients.concat([r.account_id]);
+        };
+        if (recipients.size() == 0) {
+          for (grant in roles.values()) {
+            if (grant.club_id == event.club_id and grant.team_id == event.team_id and recipients.size() < 500) {
+              let a = grant.user.toText();
+              if (recipients.find(func(x) = x == a) == null) recipients := recipients.concat([a]);
+            };
+          };
+        };
+        if (recipients.size() > 0) {
+          let queue : actor {
+            fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
+          } = actor (Principal.toText(nq));
+          try {
+            ignore await queue.fan_out(recipients, event.club_id, "photo_prompt_reminder", "Got photos from \"" # event.title # "\"? Add them to the team gallery.", "photo-prompt-" # event.id, ?event.id);
+          } catch (_) {};
+        };
+      };
+    };
+    if (photoPromptsSent.size() > 5000) photoPromptsSent := photoPromptsSent.sliceToArray(photoPromptsSent.size() - 5000, photoPromptsSent.size());
+  };
+
+  /// App admins: run the photo-prompt sweep now (also runs every 15 min).
+  public shared ({ caller }) func run_photo_prompts() : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    let before = photoPromptsSent.size();
+    await sweepPhotoPrompts();
+    #Ok(if (photoPromptsSent.size() >= before) photoPromptsSent.size() - before else 0)
+  };
+
+  transient let _reminderTimer = Timer.recurringTimer<system>(#seconds(3_600), func() : async () { await sweepAutoReminders(); await sweepPhotoPrompts() });
 
   public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp]; childTeamAssignments : [Types.ChildTeamAssignment]; eventDutyTeams : [Types.EventDutyTeam]; dutyTeamReminderSent : [Text]; pointsReminderSent : [Text]; individualDutyReminderSent : [Text]; competitionEventOperations : [Types.CompetitionEventOperation] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
     #Ok({ schema = 8; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps; childTeamAssignments; eventDutyTeams; dutyTeamReminderSent; pointsReminderSent; individualDutyReminderSent; competitionEventOperations })
   };
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new_principal, dry_run, false)
+  };
+
+  // Same as rekey_principal, but allowed when the new_principal sign-in ID already has data:
+  // both IDs' records end up under the new_principal one (keyed duplicates keep the new_principal row).
+  public shared ({ caller }) func merge_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new_principal, dry_run, true)
+  };
+
+  func rekeyImpl(caller : Principal, old : Principal, new_principal : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new_principal.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new_principal)) return #err("old and new_principal must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new_principal);
+
+    // Conflict guard: count NON-EPHEMERAL records that already reference `new_principal`.
+    // Ephemeral/excluded: eventViews (telemetry), pushReachability (push reachability ping).
+    var conflicts = 0;
+    conflicts += roles.filter(func(r) = r.user.equal(new_principal)).size();
+    conflicts += events.filter(func(e) = e.creator.equal(new_principal)).size();
+    conflicts += associationEvents.filter(func(a) = a.created_by.equal(new_principal)).size();
+    conflicts += lineupSnapshots.filter(func(s) = s.updated_by.equal(new_principal)).size();
+    conflicts += series.filter(func(s) = s.creator.equal(new_principal)).size();
+    conflicts += eventAttendance.filter(func(a) = a.marked_by.equal(new_principal)).size();
+    conflicts += eventGuests.filter(func(g) = g.added_by.equal(new_principal)).size();
+    conflicts += coachNotes.filter(func(c) = c.updated_by.equal(new_principal)).size();
+    conflicts += teamTrainingPauses.filter(func(t) = t.created_by.equal(new_principal)).size();
+    conflicts += gameResults.filter(func(g) = g.saved_by.equal(new_principal)).size();
+    conflicts += activeGames.filter(func(g) = g.user_id.equal(new_principal)).size();
+    conflicts += (if (bulkAccessPrincipals.any(func(p) = p.equal(new_principal))) 1 else 0);
+    conflicts += rsvps.filter(func(r) = r.account_id == newText).size();
+    conflicts += attendance.filter(func(a) = a.account_id == newText).size();
+    conflicts += duties.filter(func(d) = d.account_id == newText).size();
+    conflicts += roster.filter(func(r) = r.account_id == newText).size();
+    conflicts += childGuardians.filter(func(c) = c.guardian_id == newText).size();
+    if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in events_domain");
+
+    var changed = 0;
+
+    let rolesOld = roles.filter(func(r) = r.user.equal(old)).size();
+    changed += rolesOld;
+    let eventsOld = events.filter(func(e) = e.creator.equal(old)).size();
+    changed += eventsOld;
+    let assocOld = associationEvents.filter(func(a) = a.created_by.equal(old)).size();
+    changed += assocOld;
+    let lineupSnapOld = lineupSnapshots.filter(func(s) = s.updated_by.equal(old)).size();
+    changed += lineupSnapOld;
+    let seriesOld = series.filter(func(s) = s.creator.equal(old)).size();
+    changed += seriesOld;
+    let eventAttOld = eventAttendance.filter(func(a) = a.marked_by.equal(old)).size();
+    changed += eventAttOld;
+    let eventGuestOld = eventGuests.filter(func(g) = g.added_by.equal(old)).size();
+    changed += eventGuestOld;
+    let coachNoteOld = coachNotes.filter(func(c) = c.updated_by.equal(old)).size();
+    changed += coachNoteOld;
+    let trainingPauseOld = teamTrainingPauses.filter(func(t) = t.created_by.equal(old)).size();
+    changed += trainingPauseOld;
+    let gameResultOld = gameResults.filter(func(g) = g.saved_by.equal(old)).size();
+    changed += gameResultOld;
+    let activeGameOld = activeGames.filter(func(g) = g.user_id.equal(old)).size();
+    changed += activeGameOld;
+    let bulkOld = bulkAccessPrincipals.any(func(p) = p.equal(old));
+    if (bulkOld) changed += 1;
+    let rsvpOld = rsvps.filter(func(r) = r.account_id == oldText).size();
+    changed += rsvpOld;
+    let attendanceOld = attendance.filter(func(a) = a.account_id == oldText).size();
+    changed += attendanceOld;
+    let dutyOld = duties.filter(func(d) = d.account_id == oldText).size();
+    changed += dutyOld;
+    let rosterOld = roster.filter(func(r) = r.account_id == oldText).size();
+    changed += rosterOld;
+    let guardianOld = childGuardians.filter(func(c) = c.guardian_id == oldText).size();
+    changed += guardianOld;
+
+    // Ephemeral: push reachability — keep NEW row on conflict, drop OLD.
+    let pushReachOldHas = pushReachability.any(func(p) = p.user.equal(old));
+    if (pushReachOldHas) changed += 1;
+    // Ephemeral: event views — keep NEW (event_id, viewer) row on conflict, drop OLD.
+    let eventViewOldCount = eventViews.filter(func(v) = v.viewer.equal(old)).size();
+    if (eventViewOldCount > 0) changed += eventViewOldCount;
+
+    if (not dry_run) {
+      if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new_principal }) else r);
+      if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new_principal }) else e);
+      if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new_principal }) else a);
+      if (lineupSnapOld > 0) lineupSnapshots := lineupSnapshots.map(func(s) = if (s.updated_by.equal(old)) ({ s with updated_by = new_principal }) else s);
+      if (seriesOld > 0) series := series.map(func(s) = if (s.creator.equal(old)) ({ s with creator = new_principal }) else s);
+      if (eventAttOld > 0) eventAttendance := eventAttendance.map(func(a) = if (a.marked_by.equal(old)) ({ a with marked_by = new_principal }) else a);
+      if (eventGuestOld > 0) eventGuests := eventGuests.map(func(g) = if (g.added_by.equal(old)) ({ g with added_by = new_principal }) else g);
+      if (coachNoteOld > 0) coachNotes := coachNotes.map(func(c) = if (c.updated_by.equal(old)) ({ c with updated_by = new_principal }) else c);
+      if (trainingPauseOld > 0) teamTrainingPauses := teamTrainingPauses.map(func(t) = if (t.created_by.equal(old)) ({ t with created_by = new_principal }) else t);
+      if (gameResultOld > 0) gameResults := gameResults.map(func(g) = if (g.saved_by.equal(old)) ({ g with saved_by = new_principal }) else g);
+      if (activeGameOld > 0) activeGames := activeGames.map(func(g) = if (g.user_id.equal(old)) ({ g with user_id = new_principal }) else g);
+      if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new_principal]);
+      if (rsvpOld > 0) rsvps := rsvps.map(func(r) = if (r.account_id == oldText) ({ r with account_id = newText }) else r);
+      if (attendanceOld > 0) attendance := attendance.map(func(a) = if (a.account_id == oldText) ({ a with account_id = newText }) else a);
+      if (dutyOld > 0) duties := duties.map(func(d) = if (d.account_id == oldText) ({ d with account_id = newText }) else d);
+      if (rosterOld > 0) roster := roster.map(func(r) = if (r.account_id == oldText) ({ r with account_id = newText }) else r);
+      if (guardianOld > 0) childGuardians := childGuardians.map(func(c) = if (c.guardian_id == oldText) ({ c with guardian_id = newText }) else c);
+
+      if (pushReachOldHas) {
+        let newHas = pushReachability.any(func(p) = p.user.equal(new_principal));
+        if (newHas) {
+          pushReachability := pushReachability.filter(func(p) = not p.user.equal(old));
+        } else {
+          pushReachability := pushReachability.map(func(p) = if (p.user.equal(old)) ({ p with user = new_principal }) else p);
+        };
+      };
+      if (eventViewOldCount > 0) {
+        eventViews := eventViews.filter(func(v) = not (v.viewer.equal(old) and eventViews.any(func(w) = w.event_id == v.event_id and w.viewer.equal(new_principal))))
+          .map(func(v) = if (v.viewer.equal(old)) ({ v with viewer = new_principal }) else v);
+      };
+    };
+
+    #ok(changed)
+  };
+
 };

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   get_group_metadata: vi.fn(),
   my_unread_counts: vi.fn(),
   send_message: vi.fn(),
+  submit_content_report: vi.fn(),
 }));
 
 vi.mock("../domains", () => ({
@@ -16,6 +17,7 @@ vi.mock("../domains", () => ({
       get_group_metadata: mocks.get_group_metadata,
       my_unread_counts: mocks.my_unread_counts,
       send_message: mocks.send_message,
+      submit_content_report: mocks.submit_content_report,
     },
   })),
 }));
@@ -26,6 +28,7 @@ import {
   getLiveGroupMetadata,
   myLiveUnreadCounts,
   sendLiveMessage,
+  submitLiveContentReport,
 } from "./messaging";
 
 const ctx = { target: {}, identity: {} } as never;
@@ -138,6 +141,53 @@ describe("sendLiveMessage image attachment", () => {
         url: ["https://blob.example/photo.jpg"],
       }],
       [],
+    );
+  });
+});
+
+describe("submitLiveContentReport", () => {
+  it("submits a report and maps the response", async () => {
+    const reportDate = 1700000000000n;
+    mocks.submit_content_report.mockResolvedValueOnce({
+      Ok: {
+        id: "report-1",
+        reporter: other,
+        subject_kind: "message",
+        subject_id: "msg-123",
+        conversation_id: ["conv-456"],
+        reason: "Spam",
+        details: ["extra info"],
+        created_at_ms: reportDate,
+        status: "pending",
+      },
+    });
+
+    const result = await submitLiveContentReport(
+      ctx,
+      "message",
+      "msg-123",
+      "conv-456",
+      "Spam",
+      "extra info"
+    );
+
+    expect(result).toEqual({
+      id: "report-1",
+      reporter: "aaaaa-aa",
+      subject_kind: "message",
+      subject_id: "msg-123",
+      conversation_id: "conv-456",
+      reason: "Spam",
+      details: "extra info",
+      created_at_ms: Number(reportDate),
+      status: "pending",
+    });
+    expect(mocks.submit_content_report).toHaveBeenCalledWith(
+      "message",
+      "msg-123",
+      ["conv-456"],
+      "Spam",
+      ["extra info"]
     );
   });
 });

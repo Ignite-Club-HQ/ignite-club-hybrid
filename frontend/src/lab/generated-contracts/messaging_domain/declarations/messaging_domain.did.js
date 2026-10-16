@@ -62,6 +62,17 @@ export const idlFactory = ({ IDL }) => {
     'sequence' : IDL.Nat64,
     'idempotency_key' : IDL.Text,
   });
+  const ContentReport = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'conversation_id' : IDL.Opt(IDL.Text),
+    'subject_kind' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'subject_id' : IDL.Text,
+    'details' : IDL.Opt(IDL.Text),
+    'reporter' : IDL.Principal,
+    'reason' : IDL.Text,
+  });
   const ForwardRecord = IDL.Record({
     'to_conversation_id' : IDL.Text,
     'original_sender' : IDL.Principal,
@@ -173,6 +184,7 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
   });
   const State = IDL.Record({
+    'contentReports' : IDL.Vec(ContentReport),
     'forwardRecords' : IDL.Vec(ForwardRecord),
     'joinRequests' : IDL.Vec(JoinRequest),
     'scheduledMessages' : IDL.Vec(ScheduledMessage),
@@ -256,6 +268,15 @@ export const idlFactory = ({ IDL }) => {
     'conversation_id' : IDL.Text,
     'kind' : IDL.Text,
     'last_message_at_ms' : IDL.Opt(IDL.Nat64),
+  });
+  const ChatPhotoReminderRunResult = IDL.Record({
+    'skipped' : IDL.Nat32,
+    'scanned' : IDL.Nat32,
+    'posted' : IDL.Nat32,
+  });
+  const ChatPhotoReminderResult = IDL.Variant({
+    'Ok' : ChatPhotoReminderRunResult,
+    'Err' : IDL.Text,
   });
   const RecapConfig = IDL.Record({
     'model' : IDL.Text,
@@ -393,6 +414,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
+    'deliver_scheduled_message' : IDL.Func(
+        [
+          IDL.Principal,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(Attachment),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
     'dm_attachments_disabled' : IDL.Func(
         [IDL.Principal],
         [IDL.Bool],
@@ -439,7 +472,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'generate_chat_recap' : IDL.Func(
-        [IDL.Text, IDL.Nat64],
+        [IDL.Text, IDL.Opt(IDL.Nat64)],
         [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
         [],
       ),
@@ -548,6 +581,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Record({ 'id' : IDL.Text, 'member' : IDL.Principal }))],
         [],
       ),
+    'list_content_reports' : IDL.Func(
+        [IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ContentReport), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_deleted_groups' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
@@ -635,6 +673,22 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
+    'merge_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'messages_since' : IDL.Func(
         [IDL.Text, IDL.Nat64],
         [
@@ -649,6 +703,20 @@ export const idlFactory = ({ IDL }) => {
     'online_count' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'open_conversation' : IDL.Func(
+        [IDL.Text, IDL.Nat16],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'page' : MessagePage,
+              'pins' : IDL.Opt(IDL.Vec(PinnedMessage)),
+              'reactions' : IDL.Vec(Reaction),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'pin_message' : IDL.Func(
@@ -703,6 +771,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'removeBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -723,10 +796,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'resolve_content_report' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ContentReport, 'Err' : IDL.Text })],
+        [],
+      ),
     'restore_group' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
+      ),
+    'run_chat_photo_gallery_reminders' : IDL.Func(
+        [IDL.Nat64, IDL.Nat32, IDL.Nat32, IDL.Nat32],
+        [ChatPhotoReminderResult],
+        [],
+      ),
+    'search_messages' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Message), 'Err' : IDL.Text })],
+        ['query'],
       ),
     'send_message' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(Attachment), IDL.Opt(IDL.Text)],
@@ -818,6 +906,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'submit_content_report' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : ContentReport, 'Err' : IDL.Text })],
+        [],
+      ),
+    'summarize_transcript' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
     'toggle_reaction' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -880,6 +978,17 @@ export const idlFactory = ({ IDL }) => {
         ],
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
         [],
+      ),
+    'usage_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'messages' : IDL.Nat,
+            'scheduled_messages' : IDL.Nat,
+            'conversations' : IDL.Nat,
+          }),
+        ],
+        ['query'],
       ),
     'vote_poll' : IDL.Func(
         [IDL.Text, IDL.Nat32],

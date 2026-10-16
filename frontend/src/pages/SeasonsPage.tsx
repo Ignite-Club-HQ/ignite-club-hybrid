@@ -7,6 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile } from "@/live/features/club";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useClubSeasons, type Season, type SeasonStatus } from "@/hooks/useClubSeasons";
 import { resolveAuthBackend } from "@/live/authBackendMode";
@@ -31,9 +34,6 @@ function SupabaseSeasonsPage() {
   const { clubId } = useParams<{ clubId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  // NEEDS-CANISTER: seasons archive/publish has no canister yet — an II
-  // principal has no Supabase session, so every query below is skipped and
-  // the page renders its empty state instead of erroring.
   const isIcp = resolveAuthBackend() === "icp";
   const [wizardOpen, setWizardOpen] = useState(false);
   const [templateSource, setTemplateSource] = useState<Season | null>(null);
@@ -41,29 +41,46 @@ function SupabaseSeasonsPage() {
   const { data: club, isLoading: clubLoading } = useQuery({
     queryKey: ["club-basic", clubId],
     queryFn: async () => {
-      if (!clubId || isIcp) return null;
-      const { data, error } = await supabase
-        .from("clubs")
-        .select("id, name, current_season_id")
-        .eq("id", clubId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (!clubId) return null;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("clubs")
+            .select("id, name, current_season_id")
+            .eq("id", clubId)
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const rows = await getLiveClubProfile(ctx, clubId);
+          return rows.length ? { id: rows[0].id, name: rows[0].name, current_season_id: null } : null;
+        },
+      });
     },
-    enabled: !!clubId && !isIcp,
+    enabled: !!clubId,
   });
 
   const { data: isClubAdmin, isLoading: adminLoading } = useQuery({
     queryKey: ["is-club-admin-for-seasons", clubId, user?.id],
     queryFn: async () => {
-      if (!user?.id || !clubId || isIcp) return false;
-      const [appAdmin, clubAdmin] = await Promise.all([
-        supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "app_admin").maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", user.id).eq("club_id", clubId).eq("role", "club_admin").maybeSingle(),
-      ]);
-      return !!appAdmin.data || !!clubAdmin.data;
+      if (!user?.id || !clubId) return false;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const [appAdmin, clubAdmin] = await Promise.all([
+            supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "app_admin").maybeSingle(),
+            supabase.from("user_roles").select("role").eq("user_id", user.id).eq("club_id", clubId).eq("role", "club_admin").maybeSingle(),
+          ]);
+          return !!appAdmin.data || !!clubAdmin.data;
+        },
+        icp: async (ctx) => {
+          const grants = await listLiveRoleGrants(ctx, clubId);
+          const me = ctx.identity.getPrincipal().toText();
+          return grants.some((g: { account_id: string; role: string }) => g.account_id === me && (g.role === "club_admin" || g.role === "app_admin"));
+        },
+      });
     },
-    enabled: !!user?.id && !!clubId && !isIcp,
+    enabled: !!user?.id && !!clubId,
   });
 
   const { hasPro, isLoading: proLoading } = useClubProAccess(clubId);
@@ -75,19 +92,33 @@ function SupabaseSeasonsPage() {
   const { data: teamCounts = {} } = useQuery({
     queryKey: ["season-team-counts", clubId, seasonIds.join(",")],
     queryFn: async (): Promise<Record<string, number>> => {
-      if (seasonIds.length === 0 || isIcp) return {};
-      const { data, error } = await supabase
-        .from("teams")
-        .select("season_id")
-        .in("season_id", seasonIds);
-      if (error) throw error;
-      const counts: Record<string, number> = {};
-      (data ?? []).forEach((row: any) => {
-        if (row.season_id) counts[row.season_id] = (counts[row.season_id] ?? 0) + 1;
+      if (seasonIds.length === 0) return {};
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("season_id")
+            .in("season_id", seasonIds);
+          if (error) throw error;
+          const counts: Record<string, number> = {};
+          (data ?? []).forEach((row: any) => {
+            if (row.season_id) counts[row.season_id] = (counts[row.season_id] ?? 0) + 1;
+          });
+          return counts;
+        },
+        icp: async (ctx) => {
+          if (!clubId) return {};
+          const { listLiveTeams } = await import("@/live/features/club");
+          const teams = await listLiveTeams(ctx, clubId);
+          const counts: Record<string, number> = {};
+          teams.forEach((t: any) => {
+            if (t.season_id && seasonIds.includes(t.season_id)) counts[t.season_id] = (counts[t.season_id] ?? 0) + 1;
+          });
+          return counts;
+        },
       });
-      return counts;
     },
-    enabled: seasonIds.length > 0 && !isIcp,
+    enabled: seasonIds.length > 0,
   });
 
   const grouped = useMemo(() => {
@@ -103,19 +134,6 @@ function SupabaseSeasonsPage() {
   }, [seasons]);
 
   if (clubLoading || adminLoading || seasonsLoading || proLoading) return <PageLoading />;
-
-  if (isIcp) {
-    return (
-      <div className="py-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-2xl font-bold">Seasons</h1>
-        </div>
-      </div>
-    );
-  }
 
   if (!isClubAdmin) {
     return (

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- untyped Candid/Supabase payloads at this boundary */
 import type { ClubLink, ClubLinkDraft, ClubLinksService } from "@/lab/ClubLinksService";
 import { withFeatureBackend } from "../featureRouter";
 import { supabase } from "@/integrations/supabase/client";

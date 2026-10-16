@@ -19,9 +19,34 @@ export default function AccountPage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [exportingData, setExportingData] = useState(false);
 
+  const handleDeleteAccountIcp = async () => {
+    if (deletingAccount) return;
+    setDeletingAccount(true);
+    try {
+      const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+      const { eraseMyIcpAccount } = await import("@/live/accountData");
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) {
+        toast({ title: "Session expired", description: SESSION_EXPIRED_MESSAGE, variant: "destructive" });
+        return;
+      }
+      const { note } = await eraseMyIcpAccount(identity);
+      toast({ title: "Account erased", description: note });
+      await signOut();
+    } catch (err) {
+      toast({
+        title: "Failed to erase account",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (useIcpLab) {
-      toast({ title: "Account deletion is disabled in ICP lab mode" });
+      await handleDeleteAccountIcp();
       return;
     }
     if (deletingAccount) return;
@@ -89,9 +114,43 @@ export default function AccountPage() {
     }
   };
 
+  const handleExportDataIcp = async () => {
+    if (exportingData) return;
+    setExportingData(true);
+    let objectUrl: string | null = null;
+    try {
+      const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+      const { exportMyIcpAccountData } = await import("@/live/accountData");
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) {
+        toast({ title: "Session expired", description: SESSION_EXPIRED_MESSAGE, variant: "destructive" });
+        return;
+      }
+      const payload = await exportMyIcpAccountData(identity);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `ignite-data-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "Data exported", description: "Your identity_access data has been downloaded as JSON." });
+    } catch (err) {
+      toast({
+        title: "Export failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setExportingData(false);
+    }
+  };
+
   const handleExportData = async () => {
     if (useIcpLab) {
-      toast({ title: "Data export is disabled in ICP lab mode" });
+      await handleExportDataIcp();
       return;
     }
     if (exportingData) return;
@@ -225,8 +284,7 @@ export default function AccountPage() {
         </CardContent>
       </Card>
 
-      {/* Export Data Card — Supabase-only (export edge function); hidden for Internet Identity members */}
-      {!useIcpLab && (
+      {/* Export Data Card — Supabase edge function for email users, identity_access export for Internet Identity */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -260,10 +318,8 @@ export default function AccountPage() {
           </Button>
         </CardContent>
       </Card>
-      )}
 
-      {/* Delete Account Card — Supabase-only (delete-account edge function); hidden for Internet Identity members */}
-      {!useIcpLab && (
+      {/* Delete Account Card — Supabase edge function for email users, identity_access erase_account for Internet Identity */}
       <Card className="border-destructive/50">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-destructive">
@@ -277,12 +333,20 @@ export default function AccountPage() {
         <CardContent className="space-y-4">
           <div className="text-sm space-y-2">
             <p>When you delete your account:</p>
-            <ul className="list-disc list-inside text-muted-foreground space-y-1">
-              <li>Your account will be scheduled for deletion in 30 days</li>
-              <li>You can recover your account by logging back in within 30 days</li>
-              <li>After 30 days, all your data will be permanently deleted</li>
-              <li>This includes profile, roles, RSVPs, photos, and messages</li>
-            </ul>
+            {useIcpLab ? (
+              <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                <li>Erasure is immediate and cannot be undone — there is no 30-day recovery window</li>
+                <li>Your identity_access profile, role grants, terms acceptance, and entitlements are deleted</li>
+                <li>Club, vault, events, and messaging records are not automatically purged yet</li>
+              </ul>
+            ) : (
+              <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                <li>Your account will be scheduled for deletion in 30 days</li>
+                <li>You can recover your account by logging back in within 30 days</li>
+                <li>After 30 days, all your data will be permanently deleted</li>
+                <li>This includes profile, roles, RSVPs, photos, and messages</li>
+              </ul>
+            )}
           </div>
           
           <AlertDialog>
@@ -305,7 +369,9 @@ export default function AccountPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Your account will be scheduled for permanent deletion. You have 30 days to recover it by logging back in.
+                  {useIcpLab
+                    ? "Your Internet Identity account data will be erased immediately and cannot be recovered."
+                    : "Your account will be scheduled for permanent deletion. You have 30 days to recover it by logging back in."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -318,7 +384,6 @@ export default function AccountPage() {
           </AlertDialog>
         </CardContent>
       </Card>
-      )}
     </div>
   );
 }

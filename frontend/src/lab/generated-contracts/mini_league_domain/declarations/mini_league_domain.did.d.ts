@@ -212,6 +212,7 @@ export interface Main {
     { 'Ok' : Array<MiniLeaguePlayer> } |
       { 'Err' : string }
   >,
+  'list_public_mini_leagues' : ActorMethod<[], Array<PublicMiniLeagueSummary>>,
   'list_session_availability' : ActorMethod<
     [string],
     { 'Ok' : Array<MiniLeagueSessionAvailability> } |
@@ -222,8 +223,17 @@ export interface Main {
     { 'Ok' : Array<MiniLeagueSession> } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'my_availability' : ActorMethod<[], Array<MiniLeagueSessionAvailability>>,
   'my_leagues' : ActorMethod<[], Array<MiniLeague>>,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'remove_admin' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |
@@ -428,6 +438,11 @@ export interface PlayerGuardianStatus {
   'pending' : boolean,
   'parent_linked' : boolean,
   'guardian_count' : bigint,
+}
+export interface PublicMiniLeagueSummary {
+  'id' : string,
+  'name' : string,
+  'club_id' : string,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

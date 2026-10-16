@@ -58,6 +58,13 @@ export interface CanisterWsOpenArguments {
 }
 export type CanisterWsOpenResult = { 'Ok' : null } |
   { 'Err' : string };
+export type ChatPhotoReminderResult = { 'Ok' : ChatPhotoReminderRunResult } |
+  { 'Err' : string };
+export interface ChatPhotoReminderRunResult {
+  'skipped' : number,
+  'scanned' : number,
+  'posted' : number,
+}
 export interface ClientKey {
   'client_principal' : ClientPrincipal,
   'client_nonce' : bigint,
@@ -76,6 +83,17 @@ export interface ClubUnreadSummary { 'count' : bigint, 'club_id' : string }
 export interface CompetitionAdmin {
   'conversation_id' : string,
   'user' : Principal,
+}
+export interface ContentReport {
+  'id' : string,
+  'status' : string,
+  'conversation_id' : [] | [string],
+  'subject_kind' : string,
+  'created_at_ms' : bigint,
+  'subject_id' : string,
+  'details' : [] | [string],
+  'reporter' : Principal,
+  'reason' : string,
 }
 export interface Conversation {
   'id' : string,
@@ -205,6 +223,11 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'deliver_scheduled_message' : ActorMethod<
+    [Principal, string, string, string, [] | [Attachment], [] | [string]],
+    { 'Ok' : Message } |
+      { 'Err' : string }
+  >,
   'dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
   'enable_ai_catch_up_for_all_members' : ActorMethod<
     [string],
@@ -243,7 +266,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'generate_chat_recap' : ActorMethod<
-    [string, bigint],
+    [string, [] | [bigint]],
     { 'Ok' : string } |
       { 'Err' : string }
   >,
@@ -330,6 +353,11 @@ export interface Main {
     [string],
     Array<{ 'id' : string, 'member' : Principal }>
   >,
+  'list_content_reports' : ActorMethod<
+    [[] | [string]],
+    { 'Ok' : Array<ContentReport> } |
+      { 'Err' : string }
+  >,
   'list_deleted_groups' : ActorMethod<
     [],
     { 'Ok' : Array<GroupMetadata> } |
@@ -410,6 +438,15 @@ export interface Main {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'messages_since' : ActorMethod<
     [string, bigint],
     { 'Ok' : Array<MessageWithReactions> } |
@@ -419,6 +456,17 @@ export interface Main {
   'online_count' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'open_conversation' : ActorMethod<
+    [string, number],
+    {
+        'Ok' : {
+          'page' : MessagePage,
+          'pins' : [] | [Array<PinnedMessage>],
+          'reactions' : Array<Reaction>,
+        }
+      } |
       { 'Err' : string }
   >,
   'pin_message' : ActorMethod<
@@ -456,6 +504,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -476,7 +529,21 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'resolve_content_report' : ActorMethod<
+    [string, string],
+    { 'Ok' : ContentReport } |
+      { 'Err' : string }
+  >,
   'restore_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'run_chat_photo_gallery_reminders' : ActorMethod<
+    [bigint, number, number, number],
+    ChatPhotoReminderResult
+  >,
+  'search_messages' : ActorMethod<
+    [string, string, number],
+    { 'Ok' : Array<Message> } |
+      { 'Err' : string }
+  >,
   'send_message' : ActorMethod<
     [string, string, string, [] | [Attachment], [] | [string]],
     { 'Ok' : Message } |
@@ -567,6 +634,16 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'submit_content_report' : ActorMethod<
+    [string, string, [] | [string], string, [] | [string]],
+    { 'Ok' : ContentReport } |
+      { 'Err' : string }
+  >,
+  'summarize_transcript' : ActorMethod<
+    [string, string],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
   'toggle_reaction' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -616,6 +693,18 @@ export interface Main {
     [string, string, string, [] | [string], [] | [string], Array<Principal>],
     { 'Ok' : GroupMetadata } |
       { 'Err' : string }
+  >,
+  /**
+   * / Public: aggregate record counts (shown in admin settings). Counts only —
+   * / no record contents, so no PII is exposed.
+   */
+  'usage_stats' : ActorMethod<
+    [],
+    {
+      'messages' : bigint,
+      'scheduled_messages' : bigint,
+      'conversations' : bigint,
+    }
   >,
   'vote_poll' : ActorMethod<
     [string, number],
@@ -730,6 +819,7 @@ export interface ScheduledMessage {
   'replayed_at_ms' : [] | [bigint],
 }
 export interface State {
+  'contentReports' : Array<ContentReport>,
   'forwardRecords' : Array<ForwardRecord>,
   'joinRequests' : Array<JoinRequest>,
   'scheduledMessages' : Array<ScheduledMessage>,

@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
+import { ProfilePolicyLinks } from "@/components/ProfilePolicyLinks";
 import { fetchWelcomeDmMessage } from "@/lib/welcomeMessage";
 import { subscribeToPushNotifications } from "@/lib/pushNotifications";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
@@ -166,7 +167,7 @@ function IcpLabCompleteProfilePage({ userId, onDone }: { userId: string; onDone:
 }
 
 function SupabaseCompleteProfilePage() {
-  const { user, profile, loading: authLoading, profileLoading, profileError, refreshProfile } = useAuth();
+  const { user, profile, loading: authLoading, profileLoading, profileError, refreshProfile, signOut } = useAuth();
    const queryClient = useQueryClient();
   // Secure sign-in (Internet Identity) already uses passkeys for device
   // unlock, so the biometric toggle's Supabase passkey registration is
@@ -1291,6 +1292,32 @@ function SupabaseCompleteProfilePage() {
           </p>
         </div>
 
+        {isIcpAccount && user?.id && (
+          <details className="text-xs text-muted-foreground text-center">
+            <summary className="cursor-pointer select-none hover:text-foreground">
+              Already have an Ignite account?
+            </summary>
+            <div className="mt-2 rounded-lg border border-border/50 bg-muted/40 p-3 space-y-2 text-left">
+              <p>
+                You may have chosen a different passkey or account when signing in. Sign out and pick the one you
+                normally use.
+              </p>
+              <p>
+                Sign-in ID: <span className="font-mono text-foreground break-all">{user.id}</span>
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => { void signOut(); }}
+              >
+                Sign in a different way
+              </Button>
+            </div>
+          </details>
+        )}
+
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader>
             <CardTitle>Profile Setup</CardTitle>
@@ -1454,22 +1481,7 @@ function SupabaseCompleteProfilePage() {
                 className="mt-0.5"
               />
               <Label htmlFor="policies" className="text-sm text-muted-foreground leading-relaxed cursor-pointer">
-                I have read and agree to the{" "}
-                <button 
-                  type="button"
-                  className="text-primary hover:underline inline"
-                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeOpenUrl("https://reference.invalid"); }}
-                >
-                  Terms of Service
-                </button>
-                {" "}and{" "}
-                <button 
-                  type="button"
-                  className="text-primary hover:underline inline"
-                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeOpenUrl("https://reference.invalid"); }}
-                >
-                  Privacy Policy
-                </button>
+                <ProfilePolicyLinks />
               </Label>
             </div>
 

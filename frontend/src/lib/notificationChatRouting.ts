@@ -50,6 +50,39 @@ export const chatTargetPath = (kind: ChatJumpKind, targetId: string | null, mess
   }
 };
 
+/**
+ * II path: the "messageId" here is actually the messaging_domain
+ * conversation id (see `resolveChatTargetResult` above). `get_group_metadata`
+ * covers team/club/group/competition conversations; DM and broadcast
+ * conversations have no metadata row and fall through to `not_found` so the
+ * caller uses the safe fallback route rather than guessing.
+ */
+async function resolveIcpChatTargetResult(conversationId: string): Promise<ChatTargetResolution> {
+  try {
+    const [{ icpCtx }, messaging] = await Promise.all([
+      import("@/lib/icpClubTeamLookup"),
+      import("@/live/features/messaging"),
+    ]);
+    const ctx = await icpCtx();
+    const meta = await messaging.getLiveGroupMetadata(ctx, conversationId);
+    const kind: ChatJumpKind =
+      meta.kind === "team" ? "team" : meta.kind === "club" ? "club" : "group";
+    const targetId =
+      kind === "team" ? meta.teamId ?? conversationId :
+      kind === "club" ? meta.clubId ?? conversationId :
+      conversationId;
+    return {
+      status: "found",
+      target: { kind, targetId, messageId: conversationId, path: chatTargetPath(kind, targetId, conversationId) },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not found/i.test(message)) return { status: "not_found", target: null };
+    console.warn("[NotificationRouting] ICP chat target resolve failed", err);
+    return { status: "unreachable", target: null };
+  }
+}
+
 // "No rows" / RLS-hidden results arrive as `data: null` with no error via
 // maybeSingle(). Anything else means the probe did NOT prove absence.
 function isLookupFailure(table: string, error: unknown): boolean {
@@ -69,13 +102,12 @@ function isLookupFailure(table: string, error: unknown): boolean {
 export async function resolveChatTargetResult(messageId: string): Promise<ChatTargetResolution> {
   if (!messageId) return { status: "not_found", target: null };
 
-  // NEEDS-CANISTER: these probes read Supabase message tables by row id,
-  // which don't exist for II users (messaging_domain canister conversation
-  // ids are carried directly in push/notification payloads). Never fire
-  // Supabase for an II principal — treat as unresolved so the caller falls
-  // back to the safe default route.
+  // messaging_domain has no per-message-id lookup, and push/notification
+  // payloads for II users carry the conversation id directly in `related_id`
+  // (not a message row id) — resolve the conversation's kind/owner via the
+  // messaging canister instead of probing Supabase message tables.
   if (resolveAuthBackend() === "icp") {
-    return { status: "not_found", target: null };
+    return resolveIcpChatTargetResult(messageId);
   }
 
   const found = (kind: ChatJumpKind, targetId: string | null): ChatTargetResolution => ({

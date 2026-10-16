@@ -1,0 +1,47 @@
+# Ignite Club HQ — backfill the home country on existing ICP clubs.
+#
+# Run from the GitHub Actions tab: "Backfill ICP club home countries" →
+# Run workflow on main. Uses the same DEPLOYER_PEM governor key as the deploy
+# workflow — no new secrets needed. Safe to re-run: clubs that already have a
+# country are left untouched. Requires the club_domain redeploy that adds
+# set_club_home_country (migration 20261012_000000).
+
+name: Backfill ICP club home countries
+
+on:
+  workflow_dispatch:
+    inputs:
+      country_code:
+        description: "2-letter country code to stamp on clubs that have none"
+        required: true
+        default: "AU"
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+
+      - name: Install ICP SDK
+        run: mkdir -p /tmp/icp-run && cd /tmp/icp-run && npm init -y >/dev/null && npm install @icp-sdk/core@^5.4.0 --no-fund --no-audit
+
+      - name: Backfill club home countries
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          COUNTRY_CODE: ${{ inputs.country_code }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then
+            echo "::error::The DEPLOYER_PEM repository secret is not set."
+            exit 1
+          fi
+          cp scripts/backfill-club-home-countries.mjs /tmp/icp-run/
+          node /tmp/icp-run/backfill-club-home-countries.mjs

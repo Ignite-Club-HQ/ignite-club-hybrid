@@ -133,6 +133,11 @@ export const idlFactory = ({ IDL }) => {
     'parent_linked' : IDL.Bool,
     'guardian_count' : IDL.Nat,
   });
+  const PublicMiniLeagueSummary = IDL.Record({
+    'id' : IDL.Text,
+    'name' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
   const Main = IDL.Service({
     'add_admin' : IDL.Func(
         [IDL.Text, IDL.Principal],
@@ -361,6 +366,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeaguePlayer), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_public_mini_leagues' : IDL.Func(
+        [],
+        [IDL.Vec(PublicMiniLeagueSummary)],
+        ['query'],
+      ),
     'list_session_availability' : IDL.Func(
         [IDL.Text],
         [
@@ -376,12 +386,28 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeagueSession), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'my_availability' : IDL.Func(
         [],
         [IDL.Vec(MiniLeagueSessionAvailability)],
         ['query'],
       ),
     'my_leagues' : IDL.Func([], [IDL.Vec(MiniLeague)], ['query']),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'remove_admin' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

@@ -39,6 +39,19 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { useResolvedIcpBlobSrc } from "@/hooks/useResolvedIcpBlobSrc";
+
+/** Reward/QR images may live on the ICP blob store (ciphertext URLs), so they
+ * need the decrypting resolver; Supabase URLs pass through untouched. */
+function RewardImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const resolved = useResolvedIcpBlobSrc(src);
+  if (resolved.pending) {
+    return <div className={`${className ?? ""} bg-muted animate-pulse`} aria-label={alt} />;
+  }
+  if (!resolved.src) return null;
+  return <img src={resolved.src} alt={alt} className={className} />;
+}
 import { compressImage } from "@/lib/imageCompression";
 import { PointsIconGallery } from "@/components/PointsIconGallery";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -90,6 +103,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingReward, setEditingReward] = useState<ClubReward | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [pointsRequired, setPointsRequired] = useState(20);
@@ -123,10 +137,11 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           };
         },
         icp: async (ctx) => {
-          // NEEDS-CANISTER: points_icon_url lives on the Supabase clubs row
-          // only — the ICP branch has no custom icon yet.
           const settings = await getLiveClubPointsSettings(ctx, clubId);
-          return { name: settings?.display_name[0] || "Reward Points", iconUrl: null };
+          return {
+            name: settings?.display_name[0] || "Reward Points",
+            iconUrl: settings?.points_icon_url[0] || null,
+          };
         },
       });
       setCustomPointsName(name);
@@ -150,12 +165,9 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           return data;
         },
         icp: async (ctx) => {
-          // disable_team_pom_rewards has no canister equivalent yet (the
-          // POM toggle below is hidden for II members); map the points
-          // kill switch onto the club_points_domain settings row.
           const settings = await getLiveClubPointsSettings(ctx, clubId);
           return {
-            disable_team_pom_rewards: null,
+            disable_team_pom_rewards: settings?.disable_team_pom_rewards ?? false,
             disable_points_system: settings?.disabled ?? false,
           } as { disable_team_pom_rewards: boolean | null; disable_points_system: boolean | null };
         },
@@ -165,11 +177,29 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   // Toggle team POM rewards setting
   const toggleTeamPomRewardsMutation = useMutation({
     mutationFn: async (disabled: boolean) => {
-      const { error } = await supabase
-        .from("club_subscriptions")
-        .update({ disable_team_pom_rewards: disabled })
-        .eq("club_id", clubId);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_subscriptions")
+            .update({ disable_team_pom_rewards: disabled })
+            .eq("club_id", clubId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Fetch-modify-save: the canister stores every points setting on
+          // one row, so preserve the current name/icon/kill switch while
+          // toggling the team POM override lock.
+          const current = await getLiveClubPointsSettings(ctx, clubId);
+          await saveLiveClubPointsSettings(
+            ctx,
+            clubId,
+            current?.display_name[0] ?? null,
+            current?.disabled ?? false,
+            current?.points_icon_url[0] ?? null,
+            disabled,
+          );
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-subscription-rewards", clubId] });
@@ -194,10 +224,18 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           if (error) throw error;
         },
         icp: async (ctx) => {
-          // Fetch-modify-save: the canister stores name + kill switch as one
-          // row, so preserve the current display name while toggling.
+          // Fetch-modify-save: the canister stores every points setting as
+          // one row, so preserve the current display name/icon/team override
+          // while toggling the kill switch.
           const current = await getLiveClubPointsSettings(ctx, clubId);
-          await saveLiveClubPointsSettings(ctx, clubId, current?.display_name[0] ?? null, disabled);
+          await saveLiveClubPointsSettings(
+            ctx,
+            clubId,
+            current?.display_name[0] ?? null,
+            disabled,
+            current?.points_icon_url[0] ?? null,
+            current?.disable_team_pom_rewards ?? false,
+          );
         },
       });
     },
@@ -344,8 +382,10 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       setDialogOpen(false);
       toast({ title: "Reward added" });
     },
-    onError: () => {
-      toast({ title: "Failed to add reward", variant: "destructive" });
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      setSaveError(message);
+      toast({ title: "Failed to add reward", description: message, variant: "destructive" });
     },
   });
 
@@ -394,8 +434,10 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       setDialogOpen(false);
       toast({ title: "Reward updated" });
     },
-    onError: () => {
-      toast({ title: "Failed to update reward", variant: "destructive" });
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      setSaveError(message);
+      toast({ title: "Failed to update reward", description: message, variant: "destructive" });
     },
   });
 
@@ -535,10 +577,22 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // NEEDS-CANISTER: reward-image blob storage has no canister/blob-store
-    // equivalent; raw Supabase Storage uploads cannot work for an II session.
     if (resolveAuthBackend() === "icp") {
-      toast({ title: "Image uploads aren't available for Internet Identity accounts yet", variant: "destructive" });
+      setUploading(true);
+      try {
+        const result = await compressImage(file);
+        const uploaded = await tryUploadMediaToBlobStore({
+          storagePath: `clubs/${clubId}/rewards/${Date.now()}-${file.name}`,
+          file: result.file,
+          mime: result.file.type || file.type || "image/jpeg",
+        });
+        if (!uploaded) throw new Error("Photo storage is not configured");
+        setLogoUrl(uploaded.url);
+      } catch (error) {
+        toast({ title: "Failed to upload logo", variant: "destructive" });
+      } finally {
+        setUploading(false);
+      }
       return;
     }
     setUploading(true);
@@ -567,10 +621,22 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // NEEDS-CANISTER: reward-image blob storage has no canister/blob-store
-    // equivalent; raw Supabase Storage uploads cannot work for an II session.
     if (resolveAuthBackend() === "icp") {
-      toast({ title: "Image uploads aren't available for Internet Identity accounts yet", variant: "destructive" });
+      setUploadingQr(true);
+      try {
+        const result = await compressImage(file);
+        const uploaded = await tryUploadMediaToBlobStore({
+          storagePath: `clubs/${clubId}/qr-codes/${Date.now()}-${file.name}`,
+          file: result.file,
+          mime: result.file.type || file.type || "image/jpeg",
+        });
+        if (!uploaded) throw new Error("Photo storage is not configured");
+        setQrCodeUrl(uploaded.url);
+      } catch (error) {
+        toast({ title: "Failed to upload QR code", variant: "destructive" });
+      } finally {
+        setUploadingQr(false);
+      }
       return;
     }
     setUploadingQr(true);
@@ -596,6 +662,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   };
 
   const handleOpenDialog = (reward?: ClubReward) => {
+    setSaveError(null);
     if (reward) {
       setEditingReward(reward);
       setName(reward.name);
@@ -613,6 +680,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   };
 
   const handleSubmit = () => {
+    setSaveError(null);
     if (!name.trim()) {
       toast({ title: "Please enter a reward name", variant: "destructive" });
       return;
@@ -679,10 +747,8 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         </div>
       </div>
 
-      {/* Team Override Settings — NEEDS-CANISTER: disable_team_pom_rewards
-          has no canister equivalent, so the lock is hidden for II members
-          rather than failing closed on tap. */}
-      {resolveAuthBackend() !== "icp" && (
+      {/* Team Override Settings — wired to club_points_domain's
+          disable_team_pom_rewards flag for Internet Identity clubs. */}
       <Card className="p-4">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
@@ -701,7 +767,6 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           />
         </div>
       </Card>
-      )}
 
       {/* Points System Toggle */}
       <Card className="p-4 space-y-4">
@@ -757,13 +822,17 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                     .eq("id", clubId);
                   return error;
                 },
-                // ICP: icon upload is already hidden for II members, so this
-                // only ever saves the display name (the canister stores name
-                // + kill switch; preserve the current disabled state).
                 icp: async (ctx) => {
+                  // Fetch-modify-save: preserve the kill switch + team
+                  // override lock while updating the name/icon.
                   const current = await getLiveClubPointsSettings(ctx, clubId);
                   await saveLiveClubPointsSettings(
-                    ctx, clubId, customPointsName || 'Reward Points', current?.disabled ?? false,
+                    ctx,
+                    clubId,
+                    customPointsName || 'Reward Points',
+                    current?.disabled ?? false,
+                    url,
+                    current?.disable_team_pom_rewards ?? false,
                   );
                   return null;
                 },
@@ -855,10 +924,10 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                   {/* Reward Icon/Logo */}
                   <div className="shrink-0">
                     {reward.logo_url ? (
-                      <img 
-                        src={reward.logo_url} 
-                        alt={reward.name || "Reward logo"} 
-                        className="h-12 w-12 rounded-xl object-cover border" 
+                      <RewardImage
+                        src={reward.logo_url}
+                        alt={reward.name || "Reward logo"}
+                        className="h-12 w-12 rounded-xl object-cover border"
                       />
                     ) : (
                       <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${
@@ -1027,7 +1096,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
               <div className="flex items-center gap-3">
                 {logoUrl ? (
                   <div className="relative">
-                    <img src={logoUrl} alt="Reward logo" className="h-16 w-16 rounded-xl object-cover border" />
+                    <RewardImage src={logoUrl} alt="Reward logo" className="h-16 w-16 rounded-xl object-cover border" />
                     <button
                       type="button"
                       onClick={() => setLogoUrl(null)}
@@ -1177,7 +1246,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                   <div className="flex items-center gap-3">
                     {qrCodeUrl ? (
                       <div className="relative">
-                        <img src={qrCodeUrl} alt="QR Code" className="h-24 w-24 rounded-xl object-contain border bg-background p-1" />
+                        <RewardImage src={qrCodeUrl} alt="QR Code" className="h-24 w-24 rounded-xl object-contain border bg-background p-1" />
                         <button
                           type="button"
                           onClick={() => setQrCodeUrl(null)}
@@ -1229,6 +1298,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                 ) : editingReward ? "Update Reward" : "Add Reward"}
               </Button>
             </ResponsiveDialogFooter>
+            {saveError && <p role="alert" className="text-sm text-destructive pb-4">{saveError}</p>}
           </div>
         </ResponsiveDialogContent>
       </ResponsiveDialog>

@@ -1,0 +1,382 @@
+# Codemagic CI for Ignite Club HQ native apps.
+#
+# Workflows:
+#   android-debug   — unsigned debug APK, no secrets needed. Use this first to
+#                     prove the pipeline end to end.
+#   android-release — signed AAB for Google Play. Requires the environment
+#                     variables listed below to be configured in the Codemagic
+#                     UI (Application -> Environment variables, group
+#                     "android_release"):
+#   Signing key — EITHER generate one in the Codemagic UI (app -> Code
+#                       signing -> Android -> Generate keystore; no Java needed,
+#                       its variables are injected automatically), OR set:
+#                       CM_KEYSTORE            base64 of the upload keystore (.jks)
+#                       CM_KEYSTORE_PASSWORD   keystore store password
+#                       CM_KEY_ALIAS           key alias inside the keystore
+#                       CM_KEY_PASSWORD        key password
+#                       GOOGLE_SERVICES_JSON   base64 of google-services.json
+#                                              (Firebase project used for push)
+#   ios-debug       — unsigned simulator build, no Apple account needed. Use this
+#                     to prove the iOS pipeline before touching any Apple secrets.
+#   ios-release     — signed App Store IPA. Requires an Apple Developer Program
+#                     membership and an "app_store_connect" integration in the
+#                     Codemagic team settings (Issuer ID + Key ID + the .p8 key
+#                     downloaded from App Store Connect -> Users and Access ->
+#                     Integrations -> App Store Connect API, App Manager access).
+#                     Optional group "ios_release":
+#                       GOOGLE_SERVICE_INFO_PLIST  base64 of GoogleService-Info.plist
+#                                                  (Firebase, for push on iOS)
+#
+# All workflows build the live web app (frontend/scripts/build-live.mjs ->
+# frontend/dist-live), scaffold the Capacitor native project in CI (android/ and
+# ios/ are intentionally NOT committed), sync, then build natively.
+#
+# NOTE on the install step: scripts/ensure-frontend-deps.mjs lives at the repo
+# root, not inside frontend/. It resolves frontend/ itself, so it must be run
+# from the repo root — running it with working_directory: frontend fails with
+# "Cannot find module".
+
+workflows:
+  android-debug:
+    name: Android debug APK
+    max_build_duration: 45
+    instance_type: linux_x2
+    environment:
+      node: 22
+      java: 21
+    scripts:
+      - name: Install frontend dependencies
+        script: node scripts/ensure-frontend-deps.mjs
+      - name: Build live web app
+        working_directory: frontend
+        script: |
+          # The live build bakes the backend addresses into the bundle; the guard
+          # (frontend/scripts/check-live-config.mjs) exits before vite runs when
+          # they are missing. Same public defaults as
+          # .github/workflows/deploy-frontend-canister.yml; both can be overridden
+          # by setting the variable in a Codemagic environment group.
+          export IGNITE_LIVE_SUPABASE_URL="${IGNITE_LIVE_SUPABASE_URL:-https://cdrxmelhysdqrccttsjg.supabase.co}"
+          export IGNITE_LIVE_SUPABASE_ANON_KEY="${IGNITE_LIVE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw}"
+          # Blockchain canister IDs come from the committed ID table (same source
+          # the site build uses), so the native bundle targets the real canisters.
+          if [ -f ../deploy/mainnet/.icp/data/mappings/ic.ids.json ]; then
+            export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          fi
+          npm run build:live
+      - name: Scaffold and sync Capacitor Android
+        working_directory: frontend
+        script: |
+          set -euo pipefail
+          # Fail loudly here (not later in Gradle) if the web build is missing.
+          # The live build emits live-index.html; Capacitor needs index.html.
+          [ -f dist-live/index.html ] || cp dist-live/live-index.html dist-live/index.html 2>/dev/null || true
+          test -f dist-live/index.html || { echo "dist-live/index.html missing - web build failed"; exit 1; }
+          rm -rf android
+          npx cap add android
+          # Capacitor writes capacitor.settings.gradle during update; regenerate if absent.
+          [ -f android/capacitor.settings.gradle ] || npx cap update android
+          npx cap sync android
+          test -f android/capacitor.settings.gradle || { echo "capacitor.settings.gradle was not generated"; exit 1; }
+          # Optional: notifications in the test build when the Firebase file is set.
+          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" | sed 's/^[[:space:]]*//' | head -c1 | grep -q '{' && printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json || printf '%s' "$GOOGLE_SERVICES_JSON" | tr -d ' \r\n' | base64 --decode > android/app/google-services.json
+          fi
+          # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
+          python3 - <<'PY'
+          p = "android/app/src/main/AndroidManifest.xml"
+          s = open(p).read()
+          f = ('<intent-filter><action android:name="android.intent.action.VIEW" />'
+               '<category android:name="android.intent.category.DEFAULT" />'
+               '<category android:name="android.intent.category.BROWSABLE" />'
+               '<data android:scheme="com.igniteclubhq.app" android:host="ii-callback" /></intent-filter>')
+          if "ii-callback" not in s:
+              s = s.replace("</activity>", f + "</activity>", 1)
+          open(p, "w").write(s)
+          PY
+          python3 ../scripts/configure-android-status-bar.py
+      - name: Build debug APK
+        working_directory: frontend/android
+        script: ./gradlew assembleDebug
+    artifacts:
+      - frontend/android/app/build/outputs/apk/debug/*.apk
+
+  android-release:
+    name: Android release AAB
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      node: 22
+      java: 21
+      # ignite_upload is the only upload key Codemagic holds. Play Console must
+      # have it registered (App integrity -> Request upload key reset) — the
+      # build log prints its certificate for that request.
+      android_signing:
+        - ignite_upload
+      groups:
+        - android_release
+    scripts:
+      - name: Install frontend dependencies
+        script: node scripts/ensure-frontend-deps.mjs
+      - name: Build live web app
+        working_directory: frontend
+        script: |
+          # The live build bakes the backend addresses into the bundle; the guard
+          # (frontend/scripts/check-live-config.mjs) exits before vite runs when
+          # they are missing. Same public defaults as
+          # .github/workflows/deploy-frontend-canister.yml; both can be overridden
+          # by setting the variable in a Codemagic environment group.
+          export IGNITE_LIVE_SUPABASE_URL="${IGNITE_LIVE_SUPABASE_URL:-https://cdrxmelhysdqrccttsjg.supabase.co}"
+          export IGNITE_LIVE_SUPABASE_ANON_KEY="${IGNITE_LIVE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw}"
+          # Blockchain canister IDs come from the committed ID table (same source
+          # the site build uses), so the native bundle targets the real canisters.
+          if [ -f ../deploy/mainnet/.icp/data/mappings/ic.ids.json ]; then
+            export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          fi
+          npm run build:live
+      - name: Scaffold and sync Capacitor Android
+        working_directory: frontend
+        script: |
+          set -euo pipefail
+          # Fail loudly here (not later in Gradle) if the web build is missing.
+          # The live build emits live-index.html; Capacitor needs index.html.
+          [ -f dist-live/index.html ] || cp dist-live/live-index.html dist-live/index.html 2>/dev/null || true
+          test -f dist-live/index.html || { echo "dist-live/index.html missing - web build failed"; exit 1; }
+          rm -rf android
+          npx cap add android
+          # Capacitor writes capacitor.settings.gradle during update; regenerate if absent.
+          [ -f android/capacitor.settings.gradle ] || npx cap update android
+          npx cap sync android
+          test -f android/capacitor.settings.gradle || { echo "capacitor.settings.gradle was not generated"; exit 1; }
+          # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
+          python3 - <<'PY'
+          p = "android/app/src/main/AndroidManifest.xml"
+          s = open(p).read()
+          f = ('<intent-filter><action android:name="android.intent.action.VIEW" />'
+               '<category android:name="android.intent.category.DEFAULT" />'
+               '<category android:name="android.intent.category.BROWSABLE" />'
+               '<data android:scheme="com.igniteclubhq.app" android:host="ii-callback" /></intent-filter>')
+          if "ii-callback" not in s:
+              s = s.replace("</activity>", f + "</activity>", 1)
+          open(p, "w").write(s)
+          PY
+          python3 ../scripts/configure-android-status-bar.py
+      - name: Decode signing and Firebase files
+        working_directory: frontend/android
+        script: |
+          # Signing key: Codemagic-managed (android_signing) or manual CM_KEYSTORE.
+          if [ -n "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
+            cp "$CM_KEYSTORE_PATH" app/upload-keystore.jks
+          elif [ -n "$CM_KEYSTORE" ]; then
+            printf '%s' "$CM_KEYSTORE" | tr -d ' \r\n' | base64 --decode > app/upload-keystore.jks
+          else
+            echo "No signing key found. Add the ignite_upload key under Code signing -> Android."
+            exit 1
+          fi
+          # Report (never fail on) the key fingerprint, and print the PUBLIC
+          # certificate so it can be attached to a Play upload key reset.
+          EXPECTED_SHA1_PREFIX="33:46:AD:FC"
+          SHA1=$(keytool -list -v -keystore app/upload-keystore.jks -storepass "$CM_KEYSTORE_PASSWORD" -alias "$CM_KEY_ALIAS" 2>/dev/null | sed -n 's/.*SHA1: *//p' | head -n1)
+          echo "Upload key SHA1: ${SHA1:-unreadable}"
+          case "$SHA1" in
+            "$EXPECTED_SHA1_PREFIX"*) echo "Upload key matches Play Console." ;;
+            *) echo "WARNING: Play Console expects a key starting $EXPECTED_SHA1_PREFIX. Request an upload key reset with the certificate below, then upload this build."
+               keytool -exportcert -rfc -keystore app/upload-keystore.jks -storepass "$CM_KEYSTORE_PASSWORD" -alias "$CM_KEY_ALIAS" -file upload_certificate.pem 2>/dev/null && cat upload_certificate.pem ;;
+          esac
+          printf '%s' "$GOOGLE_SERVICES_JSON" | sed 's/^[[:space:]]*//' | head -c1 | grep -q '{' && printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json || printf '%s' "$GOOGLE_SERVICES_JSON" | tr -d ' \r\n' | base64 --decode > app/google-services.json
+      - name: Configure signing
+        working_directory: frontend/android
+        script: |
+          set -euo pipefail
+          # Google Play requires every upload to have a higher versionCode than
+          # any previous one. Use minutes since 1970: always increasing, never
+          # reused, independent of Codemagic's per-workflow build counter, and
+          # far below Play's 2,100,000,000 limit. Written straight into the
+          # generated defaultConfig (replacing Capacitor's "versionCode 1") so
+          # no second Gradle block can be ignored or overridden.
+          VC=$(( $(date +%s) / 60 ))
+          sed -i -E "s/versionCode[[:space:]]+[0-9]+/versionCode $VC/; s/versionName[[:space:]]+\"[^\"]*\"/versionName \"1.0.$VC\"/" app/build.gradle
+          grep -q "versionCode $VC" app/build.gradle || { echo "Could not set versionCode in app/build.gradle"; grep -n "version" app/build.gradle; exit 1; }
+          echo "Android versionCode set to $VC"
+          cat >> app/build.gradle <<'EOF'
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file('upload-keystore.jks')
+                      storePassword System.getenv('CM_KEYSTORE_PASSWORD')
+                      keyAlias System.getenv('CM_KEY_ALIAS')
+                      keyPassword (System.getenv('CM_KEY_PASSWORD') ?: System.getenv('CM_KEYSTORE_PASSWORD'))
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                      // Play Console flags un-obfuscated DEX code; R8 shrinks
+                      // and obfuscates while the keep rules below protect
+                      // everything the web layer reaches by reflection.
+                      minifyEnabled true
+                      shrinkResources true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+          }
+          EOF
+          cat >> app/proguard-rules.pro <<'EOF'
+
+          # Capacitor bridge + plugins are discovered by reflection/annotations.
+          -keep class com.getcapacitor.** { *; }
+          -keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+          -keep class * extends com.getcapacitor.Plugin { *; }
+          -keepclassmembers class * { @com.getcapacitor.PluginMethod public *; @android.webkit.JavascriptInterface <methods>; }
+          -keep class com.capacitorjs.** { *; }
+          -keep class io.ionic.** { *; }
+          -keep class ee.forgr.** { *; }
+          -keep class com.google.firebase.** { *; }
+          -keep class com.android.billingclient.** { *; }
+          -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
+          -dontwarn **
+          EOF
+      - name: Build release AAB
+        working_directory: frontend/android
+        script: ./gradlew bundleRelease
+    artifacts:
+      - frontend/android/app/build/outputs/bundle/release/*.aab
+      - frontend/android/upload_certificate.pem
+
+  # Proves the iOS toolchain without needing an Apple Developer account: builds
+  # the app for the simulator with code signing switched off. The .app cannot be
+  # installed on a real phone — it is a pipeline check only.
+  ios-debug:
+    name: iOS debug build (simulator, unsigned)
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install frontend dependencies
+        script: node scripts/ensure-frontend-deps.mjs
+      - name: Build live web app
+        working_directory: frontend
+        script: |
+          # The live build bakes the backend addresses into the bundle; the guard
+          # (frontend/scripts/check-live-config.mjs) exits before vite runs when
+          # they are missing. Same public defaults as
+          # .github/workflows/deploy-frontend-canister.yml; both can be overridden
+          # by setting the variable in a Codemagic environment group.
+          export IGNITE_LIVE_SUPABASE_URL="${IGNITE_LIVE_SUPABASE_URL:-https://cdrxmelhysdqrccttsjg.supabase.co}"
+          export IGNITE_LIVE_SUPABASE_ANON_KEY="${IGNITE_LIVE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw}"
+          # Blockchain canister IDs come from the committed ID table (same source
+          # the site build uses), so the native bundle targets the real canisters.
+          if [ -f ../deploy/mainnet/.icp/data/mappings/ic.ids.json ]; then
+            export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          fi
+          npm run build:live
+      - name: Scaffold and sync Capacitor iOS
+        working_directory: frontend
+        script: |
+          [ -f dist-live/index.html ] || cp dist-live/live-index.html dist-live/index.html
+          npx cap add ios
+          npx cap sync ios
+          # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
+          PL=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PL" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string com.igniteclubhq.app" "$PL"
+      - name: Build for simulator (no signing)
+        working_directory: frontend/ios/App
+        script: |
+          xcodebuild build \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+    artifacts:
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug-iphonesimulator/**/*.app
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-release:
+    name: iOS release IPA (App Store)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      # Must match the name of the App Store Connect integration created in
+      # Codemagic team settings.
+      app_store_connect: ignite
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.igniteclubhq.app
+      groups:
+        - ios_release
+      vars:
+        XCODE_WORKSPACE: App.xcworkspace
+        XCODE_SCHEME: App
+        # App Store Connect -> App -> General -> App Information -> the numeric
+        # Apple ID. Fill this in once the app record exists.
+        APP_STORE_APP_ID: 0000000000
+    scripts:
+      - name: Install frontend dependencies
+        script: node scripts/ensure-frontend-deps.mjs
+      - name: Build live web app
+        working_directory: frontend
+        script: |
+          # The live build bakes the backend addresses into the bundle; the guard
+          # (frontend/scripts/check-live-config.mjs) exits before vite runs when
+          # they are missing. Same public defaults as
+          # .github/workflows/deploy-frontend-canister.yml; both can be overridden
+          # by setting the variable in a Codemagic environment group.
+          export IGNITE_LIVE_SUPABASE_URL="${IGNITE_LIVE_SUPABASE_URL:-https://cdrxmelhysdqrccttsjg.supabase.co}"
+          export IGNITE_LIVE_SUPABASE_ANON_KEY="${IGNITE_LIVE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw}"
+          # Blockchain canister IDs come from the committed ID table (same source
+          # the site build uses), so the native bundle targets the real canisters.
+          if [ -f ../deploy/mainnet/.icp/data/mappings/ic.ids.json ]; then
+            export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          fi
+          npm run build:live
+      - name: Scaffold and sync Capacitor iOS
+        working_directory: frontend
+        script: |
+          [ -f dist-live/index.html ] || cp dist-live/live-index.html dist-live/index.html
+          npx cap add ios
+          npx cap sync ios
+          # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
+          PL=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PL" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string com.igniteclubhq.app" "$PL"
+      - name: Install CocoaPods dependencies
+        working_directory: frontend/ios/App
+        script: pod install
+      - name: Wire Firebase push (iOS)
+        working_directory: frontend
+        script: bash ../scripts/native-push-ios.sh
+      - name: Increment build number
+        working_directory: frontend/ios/App
+        script: |
+          agvtool new-version -all $((${CM_BUILD_NUMBER:-1}))
+          agvtool new-marketing-version 1.0.${CM_BUILD_NUMBER:-1}
+      - name: Set up code signing
+        working_directory: frontend/ios/App
+        script: xcode-project use-profiles
+      - name: Build App Store IPA
+        working_directory: frontend/ios/App
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - frontend/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
@@ -9,6 +10,11 @@ import Runtime "mo:core/Runtime";
 import Nat8 "mo:core/Nat8";
 import Sha256 "mo:sha2/Sha256";
 import Text "mo:core/Text";
+import Time "mo:core/Time";
+import Int "mo:core/Int";
+import Iter "mo:core/Iter";
+import Map "mo:core/Map";
+import Timer "mo:core/Timer";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -33,6 +39,14 @@ import Text "mo:core/Text";
 persistent actor MediaBlobStore {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
 
 
   // ==================== Types (mirror media_blob_store.did) ====================
@@ -93,6 +107,107 @@ persistent actor MediaBlobStore {
   // Sharding (migration 20261012): running byte total and capacity limit.
   var total_bytes : Nat64;
   var capacity_limit_bytes : Nat64;
+  // Free-plan media caps (migration 20261014): per club, per 30-day cycle,
+  // per category upload counters. Pro clubs (club_domain subscription) skip.
+  var free_media_usage : [FreeUsageRow];
+  // Retention (migration 20261015): upload time per blob path. Blobs without
+  // a stamp are stamped on the next retention sweep (clock starts then).
+  var blob_uploaded_at : [(Text, Int)];
+
+  type FreeUsageRow = { club_id : Text; cycle : Nat; category : Text; count : Nat; bytes : Nat64 };
+  type MediaUsage = { category : Text; count : Nat; bytes : Nat64; count_limit : Nat; bytes_limit : ?Nat64 };
+
+  // ==================== Free-plan caps ====================
+  // Mirrors the Supabase free tier (useClubFreeUsage constants).
+  transient let CYCLE_NS : Nat = 30 * 86_400 * 1_000_000_000;
+  transient let FREE_FILE_BYTES : Nat64 = 26_214_400; // 25 MB
+
+  func currentCycle() : Nat { Int.abs(Time.now()) / CYCLE_NS };
+
+  func pathSegments(path : Text) : [Text] { Iter.toArray(Text.split(path, #char '/')) };
+
+  /// null = not capped (non-club path or exempt branding asset).
+  func categoryForPath(path : Text) : ?Text {
+    let segs = pathSegments(path);
+    if (segs.size() < 3 or segs[0] != "clubs") return null;
+    let exempt = ["logos", "sponsors", "rewards", "qr-codes", "points-icon"];
+    for (seg in segs.values()) {
+      if (exempt.any(func(e) { e == seg })) return null;
+    };
+    if (segs[2] == "vault") return ?"vault";
+    var inChat = false;
+    var prev = "";
+    for (seg in segs.values()) {
+      if (prev == "chat" and seg == "files") return ?"chat_file";
+      if (seg == "chat" or seg == "scheduled") inChat := true;
+      prev := seg;
+    };
+    if (inChat) ?"chat_photo" else ?"gallery_photo"
+  };
+
+  // Per-file cap for gallery/chat photos (all clubs) and free-club files.
+  transient let MAX_FILE_BYTES : Nat64 = 10_485_760; // 10 MB
+  // Free clubs keep uploaded media for 6 months; Pro/trial keep forever.
+  transient let RETENTION_NS : Int = 180 * 86_400 * 1_000_000_000;
+
+  func limitsFor(category : Text) : (Nat, ?Nat64) {
+    if (category == "vault" or category == "chat_file") (10, ?FREE_FILE_BYTES) else (10, null)
+  };
+
+  func usageFor(clubId : Text, cycle : Nat, category : Text) : (Nat, Nat64) {
+    switch (Array.find<FreeUsageRow>(free_media_usage, func(r) { r.club_id == clubId and r.cycle == cycle and r.category == category })) {
+      case (?r) { (r.count, r.bytes) };
+      case null { (0, 0) };
+    }
+  };
+
+  func recordUsage(clubId : Text, category : Text, size : Nat64) {
+    let cycle = currentCycle();
+    let (count, bytes) = usageFor(clubId, cycle, category);
+    let kept = free_media_usage.filter(func(r) {
+      r.cycle == cycle and not (r.club_id == clubId and r.category == category)
+    });
+    free_media_usage := kept.concat([{ club_id = clubId; cycle; category; count = count + 1; bytes = bytes + size }]);
+  };
+
+  func clubIsPro(clubId : Text) : async Bool {
+    let ?cid = club_domain_canister else return false;
+    let clubDomain : actor {
+      get_club_subscription : shared query Text -> async { #Ok : ?{ is_pro : Bool; admin_pro_override : Bool; is_pro_football : Bool; admin_pro_football_override : Bool; is_trial : Bool }; #Err : Text };
+    } = actor (Principal.toText(cid));
+    try {
+      switch (await clubDomain.get_club_subscription(clubId)) {
+        case (#Ok(?sub)) { sub.is_pro or sub.admin_pro_override or sub.is_pro_football or sub.admin_pro_football_override or sub.is_trial };
+        case _ { false };
+      }
+    } catch (_) { false }
+  };
+
+  /// Returns an error message when a free club is over its cap.
+  func checkFreeCap(path : Text, size : Nat64) : async ?Text {
+    let ?category = categoryForPath(path) else return null;
+    let ?clubId = clubIdFromPath(path) else return null;
+    let (countLimit, bytesLimit) = limitsFor(category);
+    if (size > MAX_FILE_BYTES) {
+      if (category == "gallery_photo" or category == "chat_photo") return ?"FileTooLarge";
+      if (not (await clubIsPro(clubId))) return ?"FileTooLarge";
+    };
+    let (count, bytes) = usageFor(clubId, currentCycle(), category);
+    let overCount = count + 1 > countLimit;
+    let overBytes = switch (bytesLimit) { case (?l) { bytes + size > l }; case null { false } };
+    if (not overCount and not overBytes) return null;
+    if (await clubIsPro(clubId)) return null;
+    ?("FreeLimitReached:" # category)
+  };
+
+  public query func get_club_media_usage(club_id : Text) : async [MediaUsage] {
+    let cycle = currentCycle();
+    ["gallery_photo", "chat_photo", "chat_file", "vault"].map(func(category) {
+      let (count, bytes) = usageFor(club_id, cycle, category);
+      let (count_limit, bytes_limit) = limitsFor(category);
+      { category; count; bytes; count_limit; bytes_limit }
+    })
+  };
 
   // ==================== Helpers ====================
 
@@ -152,6 +267,12 @@ persistent actor MediaBlobStore {
     // Sharding: refuse new bytes past the threshold so the app moves on to
     // the next photo store. Existing blobs stay readable forever.
     if (total_bytes + total_size > acceptThreshold()) return #Err("StoreFull");
+    if (not isGovernor<system>(caller)) {
+      switch (await checkFreeCap(path, total_size)) {
+        case (?msg) { return #Err(msg) };
+        case null {};
+      };
+    };
     switch (findBlob(path)) {
       case (?existing) {
         if (not existing.owner.equal(caller) and not isGovernor<system>(caller)) {
@@ -229,6 +350,11 @@ persistent actor MediaBlobStore {
         };
         blobs := blobs.filter(func(item) { item.path != upload.path }).concat([record]);
         total_bytes += Nat.toNat64(assembled.size());
+        blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { p != upload.path }).concat([(upload.path, Time.now())]);
+        switch (categoryForPath(upload.path), clubIdFromPath(upload.path)) {
+          case (?category, ?clubId) { recordUsage(clubId, category, upload.total_size) };
+          case _ {};
+        };
         pending_uploads := pending_uploads.filter(func(item) { item.id != upload_id });
         #Ok({
           path = upload.path;
@@ -310,6 +436,7 @@ persistent actor MediaBlobStore {
         };
         blobs := blobs.filter(func(item) { item.path != path });
         total_bytes := subBytes(total_bytes, record.bytes.size());
+        blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { p != path });
         #Ok
       };
     }
@@ -374,4 +501,109 @@ persistent actor MediaBlobStore {
       total_bytes;
     }
   };
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  // Covers: BlobRecord.owner, PendingUpload.owner. club_domain_canister is canister wiring and is
+  // never rewritten.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl<system>(caller, old, new, dry_run, false)
+  };
+
+  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
+  // both IDs' records end up under the new one (keyed duplicates keep the new row).
+  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl<system>(caller, old, new, dry_run, true)
+  };
+
+  func rekeyImpl<system>(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
+    auth(caller);
+    if (not isGovernor<system>(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new principal must differ");
+    if (isGovernor<system>(old)) return #err("Cannot rekey the governor");
+
+    var conflicts = 0;
+    conflicts += blobs.filter(func(b : BlobRecord) : Bool = b.owner.equal(new)).size();
+    conflicts += pending_uploads.filter(func(u : PendingUpload) : Bool = u.owner.equal(new)).size();
+    if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in media_blob_store");
+
+    var changed = 0;
+
+    let newBlobs = blobs.map(func(b : BlobRecord) : BlobRecord {
+      if (b.owner.equal(old)) { changed += 1; { b with owner = new } } else b
+    });
+
+    let newPendingUploads = pending_uploads.map(func(u : PendingUpload) : PendingUpload {
+      if (u.owner.equal(old)) { changed += 1; { u with owner = new } } else u
+    });
+
+    if (not dry_run) {
+      blobs := newBlobs;
+      pending_uploads := newPendingUploads;
+    };
+
+    #ok(changed)
+  };
+
+
+
+  // ==================== Retention (free clubs: 6 months) ====================
+
+  /// ?true pro, ?false free, null = unknown (skip — never delete on doubt).
+  func clubProStatus(clubId : Text) : async ?Bool {
+    let ?cid = club_domain_canister else return null;
+    let clubDomain : actor {
+      get_club_subscription : shared query Text -> async { #Ok : ?{ is_pro : Bool; admin_pro_override : Bool; is_pro_football : Bool; admin_pro_football_override : Bool; is_trial : Bool }; #Err : Text };
+    } = actor (Principal.toText(cid));
+    try {
+      switch (await clubDomain.get_club_subscription(clubId)) {
+        case (#Ok(?sub)) { ?(sub.is_pro or sub.admin_pro_override or sub.is_pro_football or sub.admin_pro_football_override or sub.is_trial) };
+        case (#Ok(null)) { ?false };
+        case (#Err(_)) { null };
+      }
+    } catch (_) { null }
+  };
+
+  func sweepRetention() : async () {
+    let now = Time.now();
+    let stamps = Map.empty<Text, Int>();
+    for ((p, t) in blob_uploaded_at.values()) { Map.add(stamps, Text.compare, p, t) };
+    let expiredByClub = Map.empty<Text, [Text]>();
+    var fresh : [(Text, Int)] = [];
+    for (b in blobs.values()) {
+      switch (Map.get(stamps, Text.compare, b.path)) {
+        case null { fresh := fresh.concat([(b.path, now)]) };
+        case (?t) {
+          if (now - t > RETENTION_NS) {
+            switch (categoryForPath(b.path), clubIdFromPath(b.path)) {
+              case (?_, ?clubId) {
+                let prev = switch (Map.get(expiredByClub, Text.compare, clubId)) { case (?xs) xs; case null [] };
+                Map.add(expiredByClub, Text.compare, clubId, prev.concat([b.path]));
+              };
+              case _ {};
+            };
+          };
+        };
+      };
+    };
+    if (fresh.size() > 0) { blob_uploaded_at := blob_uploaded_at.concat(fresh) };
+    // Cap club lookups per sweep; the rest are handled on following days.
+    var checked = 0;
+    for ((clubId, paths) in Map.entries(expiredByClub)) {
+      if (checked < 50) {
+        checked += 1;
+        if ((await clubProStatus(clubId)) == ?false) {
+          let doomed = Map.empty<Text, ()>();
+          for (p in paths.values()) { Map.add(doomed, Text.compare, p, ()) };
+          var freed : Nat = 0;
+          for (b in blobs.values()) { if (Map.containsKey(doomed, Text.compare, b.path)) freed += b.bytes.size() };
+          blobs := blobs.filter(func(b) { not Map.containsKey(doomed, Text.compare, b.path) });
+          blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { not Map.containsKey(doomed, Text.compare, p) });
+          total_bytes := subBytes(total_bytes, freed);
+        };
+      };
+    };
+  };
+  transient let _retentionTimer = Timer.recurringTimer<system>(#seconds(86_400), sweepRetention);
+
 };

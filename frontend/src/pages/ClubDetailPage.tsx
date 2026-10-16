@@ -107,7 +107,7 @@ import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
+import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, getLiveClubSettings, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
 import { markTeamDeleted, unmarkTeamDeleted } from "@/lib/deletedTeamTombstones";
 import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";
 import {
@@ -167,10 +167,6 @@ export default function ClubDetailPage() {
   const handleBroadcastTeamSchedule = async (e: React.MouseEvent, teamId: string, teamName: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (useIcpLab) {
-      toast({ title: "Schedule broadcasts are unavailable in ICP lab mode", variant: "destructive" });
-      return;
-    }
     if (!id || broadcastingTeamId) return;
     setBroadcastingTeamId(teamId);
     const res: { ok: true } | { ok: false; error: string } = await sendScheduleBroadcast(id, teamId);
@@ -220,6 +216,11 @@ export default function ClubDetailPage() {
               await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
             }
             if (!p) return null;
+            // Header/logo toggles live in ClubSettings on the canister —
+            // without them the theme editor starts "show logo in header" off
+            // and a theme save would write that off value back.
+            const settingsOpt = await getLiveClubSettings(ctx, id).catch(() => [] as Awaited<ReturnType<typeof getLiveClubSettings>>);
+            const st = settingsOpt[0];
             // Map the canister profile onto the Supabase clubs row shape this
             // page renders; the canister has no theme-HSL/sponsor columns.
             return {
@@ -235,9 +236,16 @@ export default function ClubDetailPage() {
               deleted_at: p.deleted_at_ms.length ? new Date(Number(p.deleted_at_ms[0])).toISOString() : null,
               // Supabase-only columns with no canister equivalent — render
               // with inert defaults.
-              class_mode_enabled: false,
+              class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, p.id))?.classModeEnabled ?? false,
               primary_sponsor_id: null,
-              show_logo_in_header: false,
+              show_logo_in_header: st?.header_logo_enabled ?? false,
+              show_name_in_header: st?.header_club_name_enabled ?? true,
+              logo_only_mode: st?.logo_only_mode ?? false,
+              theme_enabled: st?.theme_enabled ?? true,
+              media_sponsors_enabled: st?.media_sponsors_enabled ?? false,
+              media_header_sponsors_enabled: st?.media_header_sponsors_enabled ?? false,
+              chat_thread_ads_enabled: st?.chat_thread_ads_enabled ?? false,
+              events_sponsor_strip_enabled: st?.events_sponsor_strip_enabled ?? false,
               theme_primary_h: null,
               theme_primary_s: null,
               theme_primary_l: null,
@@ -1928,10 +1936,6 @@ export default function ClubDetailPage() {
                     <Megaphone className="h-4 w-4 mr-2 text-primary" />
                     Broadcast message
                   </DropdownMenuItem>
-                  {/* NEEDS-CANISTER: no club-wide player/guardian roster read exists
-                      on club_domain yet, so the export is hidden for Internet
-                      Identity accounts rather than firing Supabase. */}
-                  {!isIcpAccount && (
                   <DropdownMenuItem
                     disabled={isExportingRoster}
                     onSelect={async (e) => {
@@ -1965,7 +1969,6 @@ export default function ClubDetailPage() {
                     )}
                     Export player list
                   </DropdownMenuItem>
-                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -2143,7 +2146,7 @@ export default function ClubDetailPage() {
       {isAdmin && !club?.class_mode_enabled && (() => {
         const hasProAccess = !!(isAppAdmin || clubSubscription?.is_pro || clubSubscription?.is_pro_football || clubSubscription?.admin_pro_override || clubSubscription?.admin_pro_football_override);
         const sponsorToggleInvalidateKeys: Record<ClubSponsorToggleField, readonly unknown[]> = {
-          media_sponsors_enabled: ["riverside-media-sponsors-enabled"],
+          media_sponsors_enabled: ["club-media-sponsors-enabled", id],
           media_header_sponsors_enabled: ["media-header-sponsors-enabled", id],
           chat_thread_ads_enabled: ["club-chat-thread-ads-enabled", id],
           events_sponsor_strip_enabled: ["events-sponsor-strip-allowed", id],
@@ -2155,6 +2158,9 @@ export default function ClubDetailPage() {
           events_sponsor_strip_enabled: { enabled: "Events sponsor strip enabled", disabled: "Events sponsor strip disabled" },
         };
         const handleSponsorToggle = async (field: ClubSponsorToggleField, checked: boolean) => {
+          // Flip the switch immediately; roll back if the save fails.
+          const previousClub = queryClient.getQueryData(["club", id]);
+          queryClient.setQueryData(["club", id], (old: any) => (old ? { ...old, [field]: checked } : old));
           const error = await withFeatureBackend("membership", {
             supabase: async () => {
               const { error } = await supabase
@@ -2167,8 +2173,17 @@ export default function ClubDetailPage() {
               try {
                 const { getLiveClubSettings, saveLiveClubSettings } = await import("@/live/features/club");
                 const settingsOpt = await getLiveClubSettings(ctx, id!);
-                const settings = settingsOpt[0];
-                if (!settings) throw new Error("Club settings not found");
+                // A club that never saved settings has no row yet — start from defaults.
+                const settings = settingsOpt[0] ?? {
+                  club_id: id!, contact_email: [], membership_open: true, announcement: [],
+                  public_directory: false, media_sponsors_enabled: false,
+                  media_header_sponsors_enabled: false, events_sponsor_strip_enabled: false,
+                  chat_thread_ads_enabled: false, theme_primary_color: [], theme_secondary_color: [],
+                  theme_accent_color: [], header_logo_enabled: false, header_club_name_enabled: true,
+                  invite_email_style: [], club_switcher_hint: [], theme_enabled: true,
+                  logo_only_mode: false, theme_dark_primary_color: [], theme_dark_secondary_color: [],
+                  theme_dark_accent_color: [],
+                };
                 await saveLiveClubSettings(ctx, { ...settings, [field]: checked });
                 return null;
               } catch (e) {
@@ -2177,10 +2192,11 @@ export default function ClubDetailPage() {
             },
           });
           if (error) {
+            queryClient.setQueryData(["club", id], previousClub);
             toast({ title: "Error", description: "Failed to update setting.", variant: "destructive" });
             return;
           }
-          await queryClient.invalidateQueries({ queryKey: ["club", id] });
+          void queryClient.invalidateQueries({ queryKey: ["club", id] });
           await queryClient.invalidateQueries({ queryKey: sponsorToggleInvalidateKeys[field] as unknown[] });
           const { enabled, disabled } = sponsorToggleTitles[field];
           toast({ title: checked ? enabled : disabled });
@@ -2355,9 +2371,11 @@ export default function ClubDetailPage() {
             initialShowNameInHeader={(club as any).show_name_in_header ?? true}
             initialLogoOnlyMode={(club as any).logo_only_mode ?? false}
             initialThemeEnabled={(club as any).theme_enabled ?? true}
-            onSaved={() => {
-              queryClient.invalidateQueries({ queryKey: ["club", id] });
-              queryClient.invalidateQueries({ queryKey: ["club-themes"] });
+            onSaved={async () => {
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ["club", id] }),
+                queryClient.invalidateQueries({ queryKey: ["club-themes"] }),
+              ]);
             }}
           />
         );

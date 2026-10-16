@@ -12,6 +12,20 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { channel, removeChannel, from, auth: { getUser } },
 }));
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
+
+const { getLivePinnedVault, setLivePinnedVault, clearLivePinnedVault, routeViaIcp } = vi.hoisted(() => ({
+  getLivePinnedVault: vi.fn(),
+  setLivePinnedVault: vi.fn(),
+  clearLivePinnedVault: vi.fn(),
+  routeViaIcp: { value: false },
+}));
+vi.mock("@/live/features/vault", () => ({
+  getLivePinnedVault, setLivePinnedVault, clearLivePinnedVault,
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: any) =>
+    routeViaIcp.value ? providers.icp({ identity: {}, target: {} }) : providers.supabase(),
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries }),
   useQuery: (options: any) => {
@@ -63,6 +77,7 @@ describe("useChatPinnedVault", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     channels.clear();
+    routeViaIcp.value = false;
     channel.mockImplementation(makeChannel);
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
   });
@@ -150,14 +165,30 @@ describe("useChatPinnedVault", () => {
     expect(toastSuccess).not.toHaveBeenCalledWith("Pinned vault removed");
   });
 
-  it.runIf(mode === "icp")("does not query or subscribe to Supabase and rejects unsupported pin mutations", async () => {
-    const { result } = renderHook(() => useChatPinnedVault("team", "team-1"));
-    expect(queryOptions.current.enabled).toBe(false);
-    expect(channel).not.toHaveBeenCalled();
-    expect(from).not.toHaveBeenCalled();
+  it.runIf(mode === "icp")("saves through the vault canister in ICP mode instead of Supabase", async () => {
+    routeViaIcp.value = true;
+    setLivePinnedVault.mockResolvedValue({});
+    const { result } = renderHook(() =>
+      useChatPinnedVault("group", "group-1", { clubId: "club-9" }),
+    );
+    await act(async () => result.current.save({ vault_folder_id: "folder-1", enabled: true }));
 
-    await act(async () => result.current.save({ enabled: true }));
-    expect(toastError).toHaveBeenCalledWith("Couldn't pin vault", { description: "Pinning a vault is not yet available for Internet Identity accounts." });
     expect(from).not.toHaveBeenCalled();
+    expect(setLivePinnedVault).toHaveBeenCalledWith(
+      expect.anything(), "group", "group-1",
+      { clubId: "club-9", vaultFileId: null, vaultFolderId: "folder-1", rootScope: null, rootId: null, enabled: true },
+    );
+    expect(toastSuccess).toHaveBeenCalledWith("Pinned vault updated");
+  });
+
+  it.runIf(mode === "icp")("removes through the vault canister in ICP mode", async () => {
+    routeViaIcp.value = true;
+    clearLivePinnedVault.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useChatPinnedVault("club", "club-1"));
+    await act(async () => result.current.remove());
+
+    expect(from).not.toHaveBeenCalled();
+    expect(clearLivePinnedVault).toHaveBeenCalledWith(expect.anything(), "club", "club-1");
+    expect(toastSuccess).toHaveBeenCalledWith("Pinned vault removed");
   });
 });

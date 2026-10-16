@@ -1,13 +1,10 @@
 import {
   getBackendRoutingConfig,
-  readCachedClubBackendHint,
   resolveBackendForCountry,
-  resolveClubBackendOverride,
   type BackendProvider,
 } from "./backendRouting";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
-import { getUserClubIds } from "./userClubs";
 
 /**
  * Decides which sign-in screen `/auth` shows — Supabase (email/password +
@@ -33,20 +30,6 @@ export function isIcpAuthAvailable(): boolean {
   }
 }
 
-/**
- * Pre-auth fallback when no club hint is cached (fresh browser, cleared
- * storage, new device): if every club pin in the routing config names the
- * same backend, that backend is the best guess for an unknown visitor —
- * otherwise a fresh device would always land on the country default even
- * though every pinned club uses ICP. Mixed or no pins → null (country rules).
- * App admins keep the "sign in with email instead" link on the ICP screen.
- */
-function unanimousClubPin(config: ReturnType<typeof getBackendRoutingConfig>): BackendProvider | null {
-  const pins = new Set(Object.values(config.clubBackendOverrides ?? {}));
-  if (pins.size !== 1) return null;
-  const [only] = [...pins];
-  return only === "icp" || only === "supabase" ? only : null;
-}
 
 /**
  * The backend the current visitor should authenticate against, combining the
@@ -54,19 +37,133 @@ function unanimousClubPin(config: ReturnType<typeof getBackendRoutingConfig>): B
  * unknown), and canister availability. Inherits the safety net from
  * `resolveBackendForCountry`: ICP is never returned before canisters exist.
  */
+const AUTH_CHOICE_KEY = "ignite.authChoice";
+
+/**
+ * The `?auth=` testing override is only honoured on the blockchain copy's own
+ * addresses (the ICP frontend canister) and on localhost for development.
+ * Everywhere else — the main site and any custom domain — the country routing
+ * rules decide the sign-in screen with no way around them.
+ */
+export function isAuthChoiceOverrideOrigin(hostname?: string): boolean {
+  const host = (hostname ?? window.location.hostname).toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  return (
+    host.endsWith(".icp0.io") ||
+    host.endsWith(".icp.net") ||
+    host.endsWith(".ic0.app") ||
+    host.endsWith(".raw.icp0.io") ||
+    host.endsWith(".raw.icp.net")
+  );
+}
+
+/**
+ * Device-level sign-in choice from `?auth=email` / `?auth=icp` (persisted so
+ * the whole app — not just /auth — stays on that system after the redirect).
+ * Lets the on-chain copy run in Supabase mode even when routing would pick ICP,
+ * and vice versa. `?auth=auto` clears the choice and follows routing again.
+ * Ignored entirely on origins where the override is not allowed.
+ */
+const AUTH_CHOICE_EVENT = "ignite:auth-choice-changed";
+
+/**
+ * Notifies listeners (App's provider picker) that the device sign-in choice
+ * changed. Without this, tapping "Sign in with Internet Identity instead"
+ * re-renders /auth (inside the router) but not App (outside it), leaving the
+ * old provider mounted behind the new screen — the passkey button then runs
+ * the wrong sign-in system.
+ */
+function notifyAuthChoiceChanged(): void {
+  try {
+    window.dispatchEvent(new Event(AUTH_CHOICE_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Subscribe to device sign-in choice changes; returns an unsubscribe. */
+export function subscribeAuthChoice(cb: () => void): () => void {
+  try {
+    window.addEventListener(AUTH_CHOICE_EVENT, cb);
+    return () => window.removeEventListener(AUTH_CHOICE_EVENT, cb);
+  } catch {
+    return () => undefined;
+  }
+}
+
+export function readAuthChoice(): BackendProvider | null {
+  try {
+    if (!isAuthChoiceOverrideOrigin()) return null;
+    const param = new URLSearchParams(window.location.search).get("auth");
+    const before = localStorage.getItem(AUTH_CHOICE_KEY);
+    if (param === "email" || param === "supabase") localStorage.setItem(AUTH_CHOICE_KEY, "supabase");
+    else if (param === "icp") localStorage.setItem(AUTH_CHOICE_KEY, "icp");
+    // `?auth=auto` forgets the device choice so the club pin / default decides
+    // again — the only other wipe is the club-backend enforcement switch.
+    else if (param === "auto" || param === "default") localStorage.removeItem(AUTH_CHOICE_KEY);
+    const v = localStorage.getItem(AUTH_CHOICE_KEY);
+    if (v !== before) notifyAuthChoiceChanged();
+    return v === "supabase" || v === "icp" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasSupabaseSessionStored(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("sb-") && k.endsWith("-auth-token") && localStorage.getItem(k)) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
+export function hasInternetIdentitySessionStored(): boolean {
+  try {
+    const raw = localStorage.getItem("ignite_icp_internet_identity_session");
+    const parsed = raw ? (JSON.parse(raw) as { principal?: unknown }) : null;
+    return typeof parsed?.principal === "string" && parsed.principal.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when the person is currently signed in with email (Supabase): a
+ * Supabase session is stored and either this device chose email
+ * (?auth=email) or there is no Internet Identity session. The actual
+ * signed-in system always decides where their data is read from — a club
+ * pin to ICP can't serve someone without an Internet Identity.
+ */
+let mountedAuthProvider: BackendProvider | null = null;
+
+/**
+ * Called by the mounted auth provider (Supabase AuthProvider or
+ * IcpAuthProvider). The mounted provider is the truth about how the person
+ * signed in — a leftover Internet Identity record on the device from an
+ * earlier sign-in must not pull an email user's pages onto the canisters.
+ */
+export function markMountedAuthProvider(provider: BackendProvider): void {
+  mountedAuthProvider = provider;
+}
+
+export function isSignedInWithEmail(): boolean {
+  if (mountedAuthProvider === "icp") return false;
+  if (!hasSupabaseSessionStored()) return false;
+  if (mountedAuthProvider === "supabase") return true;
+  if (readAuthChoice() === "supabase") return true;
+  return !hasInternetIdentitySessionStored();
+}
+
 export function resolveAuthBackend(): BackendProvider {
+  if (isSignedInWithEmail()) return "supabase";
+  const choice = readAuthChoice();
+  if (choice === "supabase") return "supabase";
+  if (choice === "icp" && isIcpAuthAvailable()) return "icp";
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
-  // A per-club backend pin (whole app per club member) wins over the country
-  // rules. Post-auth the pin comes from live membership ids; pre-auth — which
-  // is when this function decides the /auth screen — it comes from the hint
-  // cached by the last post-auth check.
-  const clubIds = getUserClubIds();
-  const pin = clubIds.length > 0
-    ? resolveClubBackendOverride(config, clubIds)
-    : readCachedClubBackendHint() ?? unanimousClubPin(config);
-  if (pin === "supabase") return "supabase";
-  if (pin === "icp") return isIcpAuthAvailable() ? "icp" : "supabase";
+  // The sign-in screen follows the visitor's country only (club pins retired).
   return resolveBackendForCountry(config, country, isIcpAuthAvailable());
 }
 

@@ -82,6 +82,22 @@ export async function listLiveMessagesPage(
  * null means nothing older remains. This is what a chat screen wants on open;
  * `listLiveMessagesPage` pages forward from the OLDEST message instead.
  */
+// open_conversation returns the newest page plus its reactions and the
+// conversation's pins in one call. The chat page still asks for reactions and
+// pins separately, so those calls take the bundled copy once (if fresh)
+// instead of making their own round trips. null = unknown, false = canister
+// predates open_conversation (fall back to separate calls).
+let openConversationSupported: boolean | null = null;
+const OPEN_BUNDLE_TTL_MS = 10_000;
+const openBundleCache = new Map<string, { at: number; reactions: LiveReaction[] | null; pins: any[] | null }>();
+function takeBundled<K extends "reactions" | "pins">(conversationId: string, key: K) {
+  const entry = openBundleCache.get(conversationId);
+  if (!entry || Date.now() - entry.at > OPEN_BUNDLE_TTL_MS) return null;
+  const value = entry[key];
+  entry[key] = null as any;
+  return value;
+}
+
 export async function listLiveLatestMessagesPage(
   ctx: FeatureBackendContext,
   conversationId: string,
@@ -89,6 +105,29 @@ export async function listLiveLatestMessagesPage(
   limit: number,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  if (before === null && openConversationSupported !== false) {
+    try {
+      const bundle = await unwrapCandid(
+        (actor as any).open_conversation(conversationId, limit),
+        "Open conversation",
+      ) as any;
+      openConversationSupported = true;
+      const pins = Array.isArray(bundle.pins) && bundle.pins.length > 0 ? bundle.pins[0] : null;
+      openBundleCache.set(conversationId, {
+        at: Date.now(),
+        reactions: bundle.reactions as LiveReaction[],
+        pins: pins as any[] | null,
+      });
+      return bundle.page;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/has no (?:query |update |)method|IC0536|IC0504|is not a function/i.test(message)) {
+        openConversationSupported = false;
+      } else {
+        throw err;
+      }
+    }
+  }
   try {
     return await unwrapCandid(
       actor.list_latest_messages_page(
@@ -147,7 +186,7 @@ export async function sendLiveMessage(
   // (the full address still travels in `url`, which allows 2048 chars).
   const safeBody = body.trim() === "" && attachment ? " " : body;
   const refId = attachment ? await shortCanisterRefId(attachment.refId) : "";
-  return unwrapCandid(
+  const sent = await unwrapCandid(
     actor.send_message(
       conversationId,
       safeBody,
@@ -161,6 +200,28 @@ export async function sendLiveMessage(
     ),
     "Send message",
   );
+  kickIcpPush();
+  return sent;
+}
+
+/**
+ * Fire-and-forget: asks the Supabase push sender (verify-iap-receipt-icp
+ * ?job=push-kick) to deliver queued notifications now instead of waiting for
+ * the 5-minute backstop worker. Never blocks or fails the send.
+ */
+// icp-guard: allow push delivery — this edge function only drains the
+// notification_queue canister for Internet Identity users, so it is the ICP
+// path itself, not a Supabase write that needs routing to a canister.
+function kickIcpPush() {
+  try {
+    void import("@/integrations/supabase/client")
+      .then(({ supabase }) =>
+        supabase.functions.invoke("verify-iap-receipt-icp?job=push-kick", { body: {} }),
+      )
+      .catch(() => undefined);
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function updateLiveMessage(
@@ -519,19 +580,19 @@ export async function updateLiveGroup(
 }
 
 /**
- * AI catch-up recap for a conversation — the canister makes an HTTPS
- * outcall to the configured LLM endpoint (see set_recap_config). Caller
+ * AI catch-up recap for a conversation — messaging_domain asks DFINITY's
+ * free on-chain LLM canister (no HTTPS outcall, no API key). Caller
  * needs message-read access and ai_catchup_enabled in their messaging
  * settings (governor/app_admin bypass).
  */
 export async function generateLiveChatRecap(
   ctx: FeatureBackendContext,
   conversationId: string,
-  sinceMs: bigint,
+  sinceMs: bigint | null,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.generate_chat_recap(conversationId, sinceMs),
+    actor.generate_chat_recap(conversationId, sinceMs === null ? [] : [sinceMs]),
     "Generate chat recap",
   );
 }
@@ -621,6 +682,22 @@ export async function fetchLiveLinkPreview(
 ): Promise<{ title: [] | [string]; description: [] | [string]; image: [] | [string]; site_name: [] | [string] }> {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(Promise.resolve(actor.fetch_link_preview(url)), "Fetch link preview");
+}
+
+/**
+ * Link preview for email-account (Supabase) users: same messaging_domain
+ * outcall, called anonymously (the canister caches per URL and caps anonymous
+ * outcalls per hour). Returns null when the messaging canister isn't set.
+ */
+export async function fetchAnonymousLinkPreview(url: string) {
+  const [{ AnonymousIdentity }, { getActiveIcpTarget }, { isDomainConfigured }] = await Promise.all([
+    import("@icp-sdk/core/agent"),
+    import("../targetRegistry"),
+    import("../domains"),
+  ]);
+  const target = getActiveIcpTarget();
+  if (!isDomainConfigured(target, "messaging_domain")) return null;
+  return fetchLiveLinkPreview({ target, identity: new AnonymousIdentity() } as unknown as FeatureBackendContext, url);
 }
 
 /**
@@ -828,6 +905,8 @@ export async function listLiveReactions(
   ctx: FeatureBackendContext,
   conversationId: string,
 ): Promise<LiveReaction[]> {
+  const bundled = takeBundled(conversationId, "reactions");
+  if (bundled) return bundled as LiveReaction[];
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_reactions(conversationId), "List reactions");
 }
@@ -1051,6 +1130,8 @@ export async function listLivePinnedMessages(
   ctx: FeatureBackendContext,
   conversationId: string,
 ): Promise<LivePinnedMessage[]> {
+  const bundledPins = takeBundled(conversationId, "pins");
+  if (bundledPins) return bundledPins.map(toLivePinnedMessage);
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   const raw = await unwrapCandid(
     actor.list_pinned_messages(conversationId),
@@ -1247,4 +1328,162 @@ export async function listLiveOpenGroups(ctx: FeatureBackendContext, clubId: str
 export async function joinLiveOpenGroup(ctx: FeatureBackendContext, conversationId: string) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.join_open_group(conversationId), "Join group");
+}
+
+export interface LiveSearchedMessage {
+  id: string;
+  text: string;
+  author_id: string;
+  created_at: string;
+  reply_to_id: string | null;
+  profiles: null;
+  reactions: [];
+}
+
+/**
+ * Case-insensitive substring search over a conversation's canister-stored
+ * messages, mapped to the same shape `searchChatHistory` returns for the
+ * Supabase-backed chat pages (see chatHistorySearchFetcher.ts).
+ */
+export async function searchLiveMessages(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  query: string,
+  limit: number,
+): Promise<LiveSearchedMessage[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const matches = await unwrapCandid(
+    actor.search_messages(conversationId, query, limit as never),
+    "Search messages",
+  );
+  return matches.map((m) => ({
+    id: m.id,
+    text: m.body,
+    author_id: m.sender.toText(),
+    created_at: new Date(Number(m.created_at_ms)).toISOString(),
+    reply_to_id: m.reply_to_id[0] ?? null,
+    profiles: null,
+    reactions: [],
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Content reports (moderation) — backs components/reporting/ReportContentDialog.
+// ---------------------------------------------------------------------------
+
+export interface LiveContentReport {
+  id: string;
+  reporter: string;
+  subject_kind: string;
+  subject_id: string;
+  conversation_id: string | null;
+  reason: string;
+  details: string | null;
+  created_at_ms: number;
+  status: string;
+}
+
+function mapLiveContentReport(r: {
+  id: string;
+  reporter: Principal;
+  subject_kind: string;
+  subject_id: string;
+  conversation_id: [] | [string];
+  reason: string;
+  details: [] | [string];
+  created_at_ms: bigint;
+  status: string;
+}): LiveContentReport {
+  return {
+    id: r.id,
+    reporter: r.reporter.toText(),
+    subject_kind: r.subject_kind,
+    subject_id: r.subject_id,
+    conversation_id: r.conversation_id[0] ?? null,
+    reason: r.reason,
+    details: r.details[0] ?? null,
+    created_at_ms: Number(r.created_at_ms),
+    status: r.status,
+  };
+}
+
+/** Submit a moderation report (chat message/user/club/photo/...). */
+export async function submitLiveContentReport(
+  ctx: FeatureBackendContext,
+  subjectKind: string,
+  subjectId: string,
+  conversationId: string | null,
+  reason: string,
+  details?: string | null,
+): Promise<LiveContentReport> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const report = await unwrapCandid(
+    actor.submit_content_report(
+      subjectKind,
+      subjectId,
+      candidOpt(conversationId),
+      reason,
+      candidOpt(details),
+    ),
+    "Submit content report",
+  );
+  return mapLiveContentReport(report);
+}
+
+/** Admin/governor-only: list moderation reports, optionally filtered by status. */
+export async function listLiveContentReports(
+  ctx: FeatureBackendContext,
+  status?: string | null,
+): Promise<LiveContentReport[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const reports = await unwrapCandid(
+    actor.list_content_reports(candidOpt(status)),
+    "List content reports",
+  );
+  return reports.map(mapLiveContentReport);
+}
+
+/** Admin/governor-only: move a report to "open" | "reviewed" | "dismissed". */
+export async function resolveLiveContentReport(
+  ctx: FeatureBackendContext,
+  id: string,
+  status: string,
+): Promise<LiveContentReport> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const report = await unwrapCandid(actor.resolve_content_report(id, status), "Resolve content report");
+  return mapLiveContentReport(report);
+}
+
+// ---------------------------------------------------------------------------
+// Admin: chat photo gallery reminder sweep ("run now" + future timer).
+// ---------------------------------------------------------------------------
+
+export interface LiveChatPhotoReminderRunResult {
+  scanned: number;
+  posted: number;
+  skipped: number;
+}
+
+export async function runLiveChatPhotoGalleryReminders(
+  ctx: FeatureBackendContext,
+  nowMs: number,
+  windowStartHours: number,
+  windowEndHours: number,
+  cooldownDays: number,
+): Promise<LiveChatPhotoReminderRunResult> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const row = await unwrapCandid(
+    actor.run_chat_photo_gallery_reminders(
+      BigInt(Math.trunc(nowMs)),
+      windowStartHours,
+      windowEndHours,
+      cooldownDays,
+    ),
+    "Run chat photo gallery reminders",
+  );
+  return {
+    scanned: Number(row.scanned),
+    posted: Number(row.posted),
+    skipped: Number(row.skipped),
+  };
 }

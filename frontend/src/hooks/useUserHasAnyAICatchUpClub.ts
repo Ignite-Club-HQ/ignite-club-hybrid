@@ -3,6 +3,56 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isAICatchUpAllowlisted } from "@/lib/aiCatchUpAllowlist";
 import { useChatRecapGloballyEnabled } from "@/hooks/useChatRecapGloballyEnabled";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+/**
+ * ICP branch: resolve the caller's clubs from on-chain role grants, then check
+ * each club's Pro status and AI catch-up flag on-chain. Dynamic imports keep
+ * the ICP SDK out of the boot chunk (entry-chunk rule).
+ */
+async function hasAnyLiveAICatchUpClub(scopedClubId?: string | null): Promise<boolean> {
+  const { withFeatureBackend } = await import("@/live/featureRouter");
+  return withFeatureBackend("messaging", {
+    supabase: async () => false,
+    icp: async (ctx) => {
+      const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+      const { getLiveTeam, isLiveClubPro } = await import("@/live/features/club");
+      const { getLiveClubDmSettings } = await import("@/live/features/messaging");
+
+      const grants = await getLiveMyRoleGrants(ctx);
+      const clubIds = new Set<string>();
+      const teamIds: string[] = [];
+      for (const g of grants) {
+        const clubId = g.club?.[0];
+        if (clubId) clubIds.add(clubId);
+        const teamId = g.team?.[0];
+        if (teamId) teamIds.push(teamId);
+      }
+      for (const teamId of teamIds) {
+        try {
+          const team = await getLiveTeam(ctx, teamId);
+          const clubId = (team as any)?.club_id;
+          if (clubId) clubIds.add(clubId);
+        } catch {
+          // Skip teams that fail to resolve; other clubs still count.
+        }
+      }
+
+      let ids = Array.from(clubIds);
+      if (scopedClubId) ids = [scopedClubId];
+      for (const clubId of ids) {
+        try {
+          if (!(await isLiveClubPro(ctx, clubId))) continue;
+          const settings = await getLiveClubDmSettings(ctx, clubId);
+          if (settings.ai_catch_up_enabled === true) return true;
+        } catch {
+          // Skip clubs that fail to load; don't fail the whole check.
+        }
+      }
+      return false;
+    },
+  });
+}
 
 /**
  * Returns whether the current user belongs to at least one Pro (or Pro Football)
@@ -23,6 +73,9 @@ export function useUserHasAnyAICatchUpClub(scopedClubId?: string | null) {
     placeholderData: (prev) => prev,
     queryFn: async () => {
       if (!isAICatchUpAllowlisted(user?.id)) return false;
+      if (resolveAuthBackend() === "icp") {
+        return hasAnyLiveAICatchUpClub(scopedClubId);
+      }
 
       const { data: roles } = await supabase
         .from("user_roles")
@@ -77,6 +130,17 @@ export function useUserHasAnyAICatchUpClub(scopedClubId?: string | null) {
     staleTime: 60_000,
     placeholderData: (prev) => prev,
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        return withFeatureBackend("messaging", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            const { getLiveUserMessagingSettings } = await import("@/live/features/messaging");
+            const settings = await getLiveUserMessagingSettings(ctx);
+            return settings.ai_catchup_enabled === false;
+          },
+        });
+      }
       const { data } = await supabase
         .from("profiles")
         .select("ai_catch_up_enabled")

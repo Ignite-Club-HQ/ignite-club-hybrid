@@ -5,6 +5,10 @@ import { Sparkles, ArrowRight, X, CheckCircle2, Circle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { useClubProAccess } from "@/hooks/useClubProAccess";
+import { hasSavedClubBranding } from "@/lib/clubSetupBranding";
 
 interface ClubSetupProgressCardProps {
   clubId: string;
@@ -26,14 +30,47 @@ export function ClubSetupProgressCard({
   const navigate = useNavigate();
   const dismissKey = `ignite_club_setup_dismissed_${clubId}`;
   const [dismissed, setDismissed] = useState(false);
+  const useIcp = isFeatureRoutedToIcp("membership");
+  const { hasPro } = useClubProAccess(clubId);
 
   useEffect(() => {
     setDismissed(localStorage.getItem(dismissKey) === "1");
   }, [dismissKey]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["club-setup-progress", clubId, isShellClub],
+    queryKey: ["club-setup-progress", clubId, isShellClub, useIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      if (useIcp) {
+        const [clubApi, membershipApi, messagingApi] = await Promise.all([
+          import("@/live/features/club"),
+          import("@/live/features/membership"),
+          import("@/live/features/messaging"),
+        ]);
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Club setup backend changed; retry"); },
+          icp: async (ctx) => {
+            const [teams, profile, settings, roles, invites, groups, sponsors] = await Promise.all([
+              clubApi.listLiveTeams(ctx, clubId),
+              clubApi.getLiveClubProfile(ctx, clubId),
+              clubApi.getLiveClubSettings(ctx, clubId),
+              membershipApi.listLiveRoleGrants(ctx, clubId),
+              clubApi.listLivePendingInvitesByClub(ctx, clubId),
+              messagingApi.listLiveGroupsByClub(ctx, clubId),
+              clubApi.listLiveSponsors(ctx, clubId),
+            ]);
+            const pending = invites.filter((invite) => invite.status === "pending");
+            return {
+              teamsCount: teams.length,
+              hasLogo: hasSavedClubBranding({ ...settings[0], logo_url: profile[0]?.logo_url[0] }),
+              committeeCount: roles.filter((role) => role.role === "committee_member").length +
+                pending.filter((invite) => invite.role[0] === "committee_member").length,
+              teamMemberCount: pending.length + roles.filter((role) => role.team.length > 0).length,
+              groupsCount: groups.filter((group) => ["subcommittee", "Operations"].includes(group.kind)).length,
+              sponsorsCount: sponsors.length,
+            };
+          },
+        });
+      }
       const [
         teamsRes,
         clubRes,
@@ -50,7 +87,7 @@ export function ClubSetupProgressCard({
           .eq("club_id", clubId),
         supabase
           .from("clubs")
-          .select("logo_url, theme_dark_primary_h, theme_dark_secondary_h, theme_dark_accent_h")
+          .select("logo_url, theme_primary_h, theme_secondary_h, theme_accent_h, theme_dark_primary_h, theme_dark_secondary_h, theme_dark_accent_h")
           .eq("id", clubId)
           .maybeSingle(),
         supabase
@@ -86,11 +123,7 @@ export function ClubSetupProgressCard({
           .eq("club_id", clubId),
       ]);
       const clubRow = clubRes.data as any;
-      const hasBranding =
-        !!clubRow?.logo_url ||
-        clubRow?.theme_dark_primary_h != null ||
-        clubRow?.theme_dark_secondary_h != null ||
-        clubRow?.theme_dark_accent_h != null;
+      const hasBranding = hasSavedClubBranding(clubRow);
       return {
         teamsCount: teamsRes.count ?? 0,
         hasLogo: hasBranding,
@@ -108,7 +141,7 @@ export function ClubSetupProgressCard({
 
   if (isLoading || !data || dismissed) return null;
 
-  const steps: { label: string; done: boolean; pro?: boolean; optional?: boolean }[] = isShellClub
+  const steps: { label: string; done: boolean; pro?: boolean; optional?: boolean; savedDetail?: string }[] = isShellClub
     ? [
         { label: "Create teams", done: data.teamsCount > 0 },
         { label: "Invite members", done: data.teamMemberCount > 0 },
@@ -118,8 +151,8 @@ export function ClubSetupProgressCard({
         { label: "Invite members", done: data.teamMemberCount > 0 },
         { label: "Invite committee members", done: data.committeeCount > 0, pro: true, optional: true },
         { label: "Create Subcommittees", done: data.groupsCount > 0, pro: true, optional: true },
-        { label: "Add club branding", done: data.hasLogo, pro: true, optional: true },
-        { label: "Add sponsors", done: data.sponsorsCount > 0, pro: true, optional: true },
+        { label: "Add club branding", done: data.hasLogo, pro: true, optional: true, savedDetail: "Branding saved" },
+        { label: "Add sponsors", done: data.sponsorsCount > 0, pro: true, optional: true, savedDetail: `${data.sponsorsCount} sponsor${data.sponsorsCount === 1 ? "" : "s"} saved` },
       ];
 
   // Only the two core steps determine "complete" — optional/Pro items don't
@@ -188,18 +221,21 @@ export function ClubSetupProgressCard({
               className="flex items-center gap-2 text-sm"
             >
               {s.done ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                 <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
               ) : (
                 <Circle className="h-4 w-4 text-muted-foreground shrink-0" />
               )}
               <span
                 className={
                   s.done
-                    ? "text-muted-foreground line-through flex-1"
-                    : "text-foreground flex-1"
+                    ? "text-muted-foreground flex-1 min-w-0"
+                    : "text-foreground flex-1 min-w-0"
                 }
               >
-                {s.label}
+                {s.done && s.savedDetail ? s.savedDetail : s.label}
+                {s.done && s.savedDetail && !hasPro && (
+                  <span className="block text-xs text-muted-foreground">Upgrade to Pro to activate</span>
+                )}
               </span>
               {s.pro && !s.done && (
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 uppercase tracking-wide shrink-0">

@@ -63,6 +63,7 @@ echo "==> Wiring: pii_access_control -> club_domain"
 icp canister call pii_access_control set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
 icp canister call pii_access_control set_competition_domain_canister "(principal \"$COMPETITION_DOMAIN\")" -e "$ICP_ENV"
 icp canister call vault_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
+icp canister call club_points_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
 
 echo "==> Wiring: messaging_domain <-> notification_queue"
 icp canister call messaging_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e "$ICP_ENV"
@@ -71,6 +72,9 @@ icp canister call notification_queue set_messaging_domain_canister "(principal \
 echo "==> Wiring: club_domain + events_domain -> notification_queue"
 icp canister call club_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e "$ICP_ENV"
 icp canister call events_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e "$ICP_ENV"
+
+echo "==> Wiring: notification_queue -> club_domain (app-admin gated push health/cleanup)"
+icp canister call notification_queue set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
 
 # Push delivery worker grant — principal derived from ICP_PUSH_WORKER_SEED
 # (64 hex chars). Skip silently when the secret is not configured; the

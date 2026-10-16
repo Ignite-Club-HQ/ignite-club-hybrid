@@ -32,6 +32,13 @@ export interface HttpResponse {
   'headers' : Array<HeaderField>,
   'status_code' : number,
 }
+export interface MediaUsage {
+  'count' : bigint,
+  'count_limit' : bigint,
+  'bytes_limit' : [] | [bigint],
+  'category' : string,
+  'bytes' : bigint,
+}
 export type Result = { 'Ok' : null } |
   { 'Err' : string };
 export type ResultFinalized = { 'Ok' : FinalizedBlob } |
@@ -55,11 +62,22 @@ export interface _SERVICE {
   'cycles_balance' : ActorMethod<[], bigint>,
   'delete_blob' : ActorMethod<[string], Result>,
   'finalize_upload' : ActorMethod<[string], ResultFinalized>,
+  'get_club_media_usage' : ActorMethod<[string], Array<MediaUsage>>,
   'get_content_hash' : ActorMethod<[string], [] | [string]>,
   'get_usage' : ActorMethod<[], Usage>,
   'health' : ActorMethod<[], Health>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'put_chunk' : ActorMethod<[string, number, Uint8Array], Result>,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'set_capacity_limit' : ActorMethod<[bigint], Result>,
   'set_club_domain_canister' : ActorMethod<[Principal], Result>,
 }

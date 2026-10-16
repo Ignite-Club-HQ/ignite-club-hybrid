@@ -19,7 +19,7 @@ import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { acceptLiveMembershipPendingInvite } from "@/live/features/membership";
-import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveClubProfile, getLivePendingInvite } from "@/live/features/club";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -47,6 +47,29 @@ export default function JoinClubPage() {
   const isIcp = resolveAuthBackend() === "icp";
   const [joined, setJoined] = useState(false);
   const autoJoinAttempted = useRef(false);
+
+  // ICP: the invite token is the club_domain PendingInvite id (anonymous
+  // query; the id is the secret) — resolve its club for the pre-accept card.
+  const [icpInviteClub, setIcpInviteClub] = useState<{ name: string; logoUrl: string | null } | null>(null);
+  useEffect(() => {
+    if (!isIcp || !token || !user) return;
+    let cancelled = false;
+    void withFeatureBackend("membership", {
+      supabase: async () => undefined,
+      icp: async (ctx) => {
+        const invite = await getLivePendingInvite(ctx, token);
+        if (!invite?.club_id || cancelled) return;
+        const profile = await getLiveClubProfile(ctx, invite.club_id);
+        const name = profile[0]?.name;
+        if (name && !cancelled) setIcpInviteClub({ name, logoUrl: profile[0]?.logo_url?.[0] ?? null });
+      },
+    }).catch(() => {
+      // Preview is best-effort; accepting still works without it.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isIcp, token, user]);
   
   // Check if we should auto-join (returning from auth after install flow)
   const shouldAutoJoin = sessionStorage.getItem("autoJoinAfterAuth") === "true";
@@ -158,16 +181,19 @@ export default function JoinClubPage() {
             const accepted = await acceptLiveMembershipPendingInvite(ctx, token);
             const roleToAdd = (accepted.role?.[0] ?? "basic_user") as AppRole;
             let clubName: string | undefined;
+            let clubLogoUrl: string | undefined;
             try {
               const profile = await getLiveClubProfile(ctx, accepted.club_id);
               clubName = profile[0]?.name;
+              clubLogoUrl = profile[0]?.logo_url?.[0] ?? undefined;
+              if (clubName) setIcpInviteClub({ name: clubName, logoUrl: clubLogoUrl ?? null });
             } catch {
               // Club profile lookup is best-effort for the success toast only.
             }
             setInviteFlowContext({
               active: true,
               clubName,
-              clubLogoUrl: undefined,
+              clubLogoUrl,
               teamName: undefined,
               role: roleToAdd,
               inviteToken: token,
@@ -333,8 +359,18 @@ export default function JoinClubPage() {
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
           <Card className="w-full max-w-md">
             <CardContent className="p-6 text-center">
+              {icpInviteClub?.logoUrl && (
+                <Avatar className="h-14 w-14 mx-auto mb-3">
+                  <AvatarImage src={icpInviteClub.logoUrl} alt={icpInviteClub.name} />
+                  <AvatarFallback>{icpInviteClub.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
+              )}
               <h2 className="text-xl font-semibold mb-2">You've joined!</h2>
-              <p className="text-muted-foreground mb-4">Your invite has been accepted.</p>
+              <p className="text-muted-foreground mb-4">
+                {icpInviteClub?.name
+                  ? `Your invite to ${icpInviteClub.name} has been accepted.`
+                  : "Your invite has been accepted."}
+              </p>
               <Button onClick={() => navigate("/")}>Go to Home</Button>
             </CardContent>
           </Card>
@@ -345,7 +381,15 @@ export default function JoinClubPage() {
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardContent className="p-6 text-center">
-            <h2 className="text-xl font-semibold mb-2">Club Invite</h2>
+            {icpInviteClub?.logoUrl && (
+              <Avatar className="h-14 w-14 mx-auto mb-3">
+                <AvatarImage src={icpInviteClub.logoUrl} alt={icpInviteClub.name} />
+                <AvatarFallback>{icpInviteClub.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+            )}
+            <h2 className="text-xl font-semibold mb-2">
+              {icpInviteClub?.name ? `Join ${icpInviteClub.name}` : "Club Invite"}
+            </h2>
             <p className="text-muted-foreground mb-4">
               {user ? "Accept this invite to join the club." : "Sign in to accept this invite."}
             </p>

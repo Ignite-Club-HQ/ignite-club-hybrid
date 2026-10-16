@@ -164,6 +164,20 @@ export interface EventSeries {
   'location' : [] | [string],
   'event_type' : string,
 }
+export interface EventTimer {
+  'updated_by' : Principal,
+  'half_paused_at_ms' : [] | [bigint],
+  'last_event_at_ms' : bigint,
+  'accumulated_pause_ms' : bigint,
+  'is_game_finished' : boolean,
+  'schema_version' : number,
+  'half_ended_at_ms' : [] | [bigint],
+  'current_half' : number,
+  'minutes_per_half' : number,
+  'event_id' : string,
+  'is_running' : boolean,
+  'half_started_at_ms' : [] | [bigint],
+}
 export interface EventView {
   'viewed_at_ms' : bigint,
   'event_id' : string,
@@ -275,6 +289,11 @@ export interface Main {
   'add_event_guest' : ActorMethod<
     [string, string],
     { 'Ok' : EventGuest } |
+      { 'Err' : string }
+  >,
+  'add_favourite_event_title' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'add_group_player' : ActorMethod<
@@ -459,6 +478,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'delete_saved_location' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_series' : ActorMethod<
     [string, bigint],
     { 'Ok' : number } |
@@ -563,6 +587,16 @@ export interface Main {
     { 'Ok' : Array<RosterEntry> } |
       { 'Err' : string }
   >,
+  'get_event_sponsors' : ActorMethod<
+    [string],
+    { 'Ok' : Array<string> } |
+      { 'Err' : string }
+  >,
+  'get_event_timer' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [EventTimer] } |
+      { 'Err' : string }
+  >,
   'get_event_view_count' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -588,6 +622,27 @@ export interface Main {
     { 'Ok' : [] | [PitchBoardSettings] } |
       { 'Err' : string }
   >,
+  'get_player_stats_report' : ActorMethod<
+    [string, [] | [string], bigint, bigint],
+    { 'Ok' : Array<PlayerStatRow> } |
+      { 'Err' : string }
+  >,
+  'get_playhq_config_status' : ActorMethod<
+    [],
+    {
+        'Ok' : {
+          'base_url' : [] | [string],
+          'updated_at_ms' : [] | [bigint],
+          'configured' : boolean,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'get_playhq_team_sync' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [PlayHQTeamSync] } |
+      { 'Err' : string }
+  >,
   'get_push_reachable' : ActorMethod<
     [Principal],
     { 'Ok' : [] | [boolean] } |
@@ -598,9 +653,23 @@ export interface Main {
     { 'Ok' : { 'sent_at_ms' : [] | [bigint], 'recipients_count' : number } } |
       { 'Err' : string }
   >,
+  'get_rsvp_created_at' : ActorMethod<[string, string], [] | [bigint]>,
+  'get_training_default' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Imports the linked team's PlayHQ fixtures as game events now.
+   */
+  'import_playhq_team_fixtures' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : PlayHQImportResult } |
       { 'Err' : string }
   >,
   'is_guardian_of' : ActorMethod<[Principal, string], boolean>,
@@ -618,6 +687,16 @@ export interface Main {
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'list_active_game_write_rates' : ActorMethod<
+    [bigint],
+    { 'Ok' : Array<[string, number]> } |
+      { 'Err' : string }
+  >,
+  'list_active_games' : ActorMethod<
+    [bigint],
+    { 'Ok' : Array<ActiveGame> } |
       { 'Err' : string }
   >,
   'list_association_events' : ActorMethod<
@@ -666,6 +745,7 @@ export interface Main {
     { 'Ok' : Array<Event> } |
       { 'Err' : string }
   >,
+  'list_favourite_event_titles' : ActorMethod<[], Array<string>>,
   'list_game_player_stats' : ActorMethod<
     [string],
     { 'Ok' : Array<GamePlayerStat> } |
@@ -679,6 +759,16 @@ export interface Main {
   'list_group_players' : ActorMethod<
     [string],
     { 'Ok' : Array<EventGroupPlayer> } |
+      { 'Err' : string }
+  >,
+  'list_match_captains' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MatchCaptainAssignment> } |
+      { 'Err' : string }
+  >,
+  'list_match_goalkeepers' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MatchGoalkeeperAssignment> } |
       { 'Err' : string }
   >,
   'list_mini_league_rsvps' : ActorMethod<
@@ -711,6 +801,7 @@ export interface Main {
     { 'Ok' : Array<ReminderLog> } |
       { 'Err' : string }
   >,
+  'list_saved_locations' : ActorMethod<[], Array<SavedLocation>>,
   'list_series' : ActorMethod<
     [[] | [string], [] | [string]],
     Array<EventSeries>
@@ -738,6 +829,15 @@ export interface Main {
     [string, Array<AttendanceInput>],
     { 'Ok' : Array<EventAttendance> } |
       { 'Err' : string }
+  >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
   >,
   'move_group_player' : ActorMethod<
     [string, string, string, [] | [string]],
@@ -770,6 +870,11 @@ export interface Main {
     { 'Ok' : ReminderLog } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -790,12 +895,27 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'remove_favourite_event_title' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'remove_group_duty' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'remove_group_player' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_match_captain' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_match_goalkeeper' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -810,6 +930,10 @@ export interface Main {
     { 'Ok' : Array<string> } |
       { 'Err' : string }
   >,
+  /**
+   * / App admins: run the photo-prompt sweep now (also runs every 15 min).
+   */
+  'run_photo_prompts' : ActorMethod<[], { 'Ok' : bigint } | { 'Err' : string }>,
   'save_game_player_stats' : ActorMethod<
     [string, string, Array<GamePlayerStatInput>],
     { 'Ok' : Array<GamePlayerStat> } |
@@ -850,6 +974,11 @@ export interface Main {
     { 'Ok' : LineupSnapshot } |
       { 'Err' : string }
   >,
+  'save_location' : ActorMethod<
+    [string, string, number, number],
+    { 'Ok' : SavedLocation } |
+      { 'Err' : string }
+  >,
   'save_pitch_board_settings' : ActorMethod<
     [
       string,
@@ -875,6 +1004,11 @@ export interface Main {
   'set_attendance' : ActorMethod<
     [string, string, boolean, string],
     { 'Ok' : Attendance } |
+      { 'Err' : string }
+  >,
+  'set_child_rsvp' : ActorMethod<
+    [string, string, string, string, string],
+    { 'Ok' : Rsvp } |
       { 'Err' : string }
   >,
   'set_club_domain_canister' : ActorMethod<
@@ -924,9 +1058,29 @@ export interface Main {
     { 'Ok' : EventGroup } |
       { 'Err' : string }
   >,
+  'set_event_sponsors' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_event_timer' : ActorMethod<
+    [string, string, [] | [number], [] | [bigint]],
+    { 'Ok' : EventTimer } |
+      { 'Err' : string }
+  >,
   'set_group_duty' : ActorMethod<
     [string, string, [] | [string]],
     { 'Ok' : EventGroupDuty } |
+      { 'Err' : string }
+  >,
+  'set_match_captain' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : MatchCaptainAssignment } |
+      { 'Err' : string }
+  >,
+  'set_match_goalkeeper' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : MatchGoalkeeperAssignment } |
       { 'Err' : string }
   >,
   'set_mini_league_rsvp' : ActorMethod<
@@ -941,6 +1095,15 @@ export interface Main {
   >,
   'set_playhq_config' : ActorMethod<
     [[] | [PlayHQConfig]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Records (or clears, when either id is null) the team's PlayHQ link and
+   * / auto-sync flag so the 6-hourly sweep can keep its fixtures current.
+   */
+  'set_playhq_team_sync' : ActorMethod<
+    [string, string, [] | [string], [] | [string], boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -972,6 +1135,11 @@ export interface Main {
   'set_series_cancelled' : ActorMethod<
     [string, boolean, bigint],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'set_training_default' : ActorMethod<
+    [string, string, [] | [string], string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'soft_delete_series' : ActorMethod<
@@ -1040,6 +1208,30 @@ export interface Main {
     { 'Ok' : EventSeries } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: aggregate record counts (shown in admin settings). Counts only —
+   * / no record contents, so no PII is exposed.
+   */
+  'usage_stats' : ActorMethod<
+    [],
+    { 'children' : bigint, 'events' : bigint, 'rsvps' : bigint }
+  >,
+}
+export interface MatchCaptainAssignment {
+  'role' : string,
+  'updated_at_ms' : bigint,
+  'assigned_by' : Principal,
+  'ref_kind' : string,
+  'event_id' : string,
+  'ref_id' : string,
+}
+export interface MatchGoalkeeperAssignment {
+  'period' : string,
+  'updated_at_ms' : bigint,
+  'assigned_by' : Principal,
+  'ref_kind' : string,
+  'event_id' : string,
+  'ref_id' : string,
 }
 export interface MiniLeagueRsvp {
   'subject' : RsvpSubject,
@@ -1078,11 +1270,34 @@ export interface PlayHQConfig {
   'api_key' : string,
   'updated_at_ms' : bigint,
 }
+export interface PlayHQImportResult {
+  'created' : number,
+  'cancelled' : number,
+  'updated' : number,
+}
 export interface PlayHQMatch {
   'external_away_team_id' : [] | [string],
   'external_home_team_id' : [] | [string],
   'away_team_name' : [] | [string],
   'home_team_name' : [] | [string],
+}
+export interface PlayHQTeamSync {
+  'last_error' : [] | [string],
+  'updated_by' : Principal,
+  'playhq_team_id' : string,
+  'auto' : boolean,
+  'last_synced_at_ms' : [] | [bigint],
+  'team_id' : string,
+  'competition_id' : string,
+  'club_id' : string,
+}
+export interface PlayerStatRow {
+  'ref_kind' : string,
+  'mvp_count' : number,
+  'goalkeeper_count' : number,
+  'captain_count' : number,
+  'vice_count' : number,
+  'ref_id' : string,
 }
 export interface PushReachability {
   'user' : Principal,
@@ -1125,6 +1340,15 @@ export interface Rsvp {
 export type RsvpSubject = { 'account' : string } |
   { 'mini_league_player' : string };
 export interface RsvpWithChild { 'child' : [] | [Child], 'rsvp' : Rsvp }
+export interface SavedLocation {
+  'id' : string,
+  'lat' : number,
+  'lng' : number,
+  'account_id' : string,
+  'location_label' : string,
+  'created_at_ms' : bigint,
+  'address' : string,
+}
 export interface TeamTrainingPause {
   'id' : string,
   'team_id' : string,

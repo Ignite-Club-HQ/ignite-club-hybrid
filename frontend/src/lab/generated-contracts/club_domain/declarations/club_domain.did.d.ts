@@ -51,10 +51,27 @@ export interface Child {
   'club_id' : [] | [string],
   'parent' : [] | [Principal],
 }
+export interface ClassEnrolment {
+  'id' : string,
+  'status' : string,
+  'term_id' : string,
+  'updated_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'member_id' : string,
+  'club_id' : string,
+  'class_id' : string,
+}
 export interface ClubBranding {
   'name' : string,
   'contact_email' : [] | [string],
   'logo_url' : [] | [string],
+}
+export interface ClubGeneralSettings {
+  'class_mode_enabled' : boolean,
+  'allow_guests_default' : boolean,
+  'events_sponsor_strip_enabled' : boolean,
+  'max_guests_per_member_default' : bigint,
+  'club_id' : string,
 }
 export interface ClubJoinRequest {
   'id' : string,
@@ -182,6 +199,12 @@ export interface Draft {
 export interface Exclusion { 'club' : string, 'user' : Principal }
 export interface Family { 'account_id' : string, 'child_id' : string }
 export interface Guardian { 'child' : string, 'user' : Principal }
+export interface GuardianMeta {
+  'user' : Principal,
+  'is_primary' : boolean,
+  'relationship_type' : string,
+  'child_id' : string,
+}
 export interface HttpRequest {
   'url' : string,
   'method' : string,
@@ -239,6 +262,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'add_season_team_assignment' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : SeasonTeamAssignment } |
+      { 'Err' : string }
+  >,
   'add_team_captain' : ActorMethod<
     [string, string, Principal],
     { 'Ok' : null } |
@@ -264,6 +292,11 @@ export interface Main {
     { 'Ok' : TeamCreationRequest } |
       { 'Err' : string }
   >,
+  'archive_season' : ActorMethod<
+    [string],
+    { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
   'archive_team' : ActorMethod<
     [string],
     { 'Ok' : ClubTeam } |
@@ -279,6 +312,12 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles of any canister this canister controls
+   * / (the frontend asset canister adds club_domain as a controller at deploy
+   * / time so admin settings can show its balance too).
+   */
+  'canister_cycles' : ActorMethod<[Principal], bigint>,
   'check_team_name_unique' : ActorMethod<
     [string, string],
     { 'Ok' : boolean } |
@@ -309,6 +348,11 @@ export interface Main {
     { 'Ok' : ClubProfile } |
       { 'Err' : string }
   >,
+  'create_invite_short_code' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
   'create_news_post' : ActorMethod<
     [
       string,
@@ -335,6 +379,11 @@ export interface Main {
   'create_pending_invite' : ActorMethod<
     [string, string, [] | [string], [] | [string], string, [] | [string]],
     { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
+      { 'Err' : string }
+  >,
+  'create_promo_code' : ActorMethod<
+    [string, string, string, [] | [string], [] | [number], [] | [bigint]],
+    { 'Ok' : PromoCode } |
       { 'Err' : string }
   >,
   'create_shell_team_invite' : ActorMethod<
@@ -376,6 +425,16 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'delete_pitch_formation' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_promo_code' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_sponsor' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -389,6 +448,11 @@ export interface Main {
   'delete_team_permanent' : ActorMethod<
     [string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'enrol_in_class' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : ClassEnrolment } |
       { 'Err' : string }
   >,
   'ensure_club_conversations' : ActorMethod<
@@ -408,6 +472,23 @@ export interface Main {
       { 'Err' : string }
   >,
   'export_links' : ActorMethod<[], { 'Ok' : Snapshot } | { 'Err' : string }>,
+  'find_pending_invite_by_email_hash' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [PendingInviteEmailHash] } |
+      { 'Err' : string }
+  >,
+  'free_usage_counters' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'teams' : bigint,
+          'members' : bigint,
+          'pending_invites' : bigint,
+          'news_posts' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'freeze_club' : ActorMethod<
     [string, bigint],
     { 'Ok' : bigint } |
@@ -419,9 +500,24 @@ export interface Main {
     { 'Ok' : ClubBranding } |
       { 'Err' : string }
   >,
+  'get_club_general_settings' : ActorMethod<
+    [string],
+    { 'Ok' : ClubGeneralSettings } |
+      { 'Err' : string }
+  >,
+  'get_club_home_countries' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<[string, string]> } |
+      { 'Err' : string }
+  >,
   'get_club_invite_message_default' : ActorMethod<
     [string],
     { 'Ok' : [] | [InviteMessageDefault] } |
+      { 'Err' : string }
+  >,
+  'get_club_kind' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
   'get_club_link' : ActorMethod<
@@ -439,9 +535,19 @@ export interface Main {
     { 'Ok' : Array<ClubProfile> } |
       { 'Err' : string }
   >,
+  'get_club_roster' : ActorMethod<
+    [string],
+    { 'Ok' : { 'children' : Array<Child>, 'roles' : Array<RoleGrant> } } |
+      { 'Err' : string }
+  >,
   'get_club_settings' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubSettings] } |
+      { 'Err' : string }
+  >,
+  'get_club_storage_purchased' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
       { 'Err' : string }
   >,
   'get_club_subscription' : ActorMethod<
@@ -454,12 +560,23 @@ export interface Main {
     { 'Ok' : Array<ClubSubscription> } |
       { 'Err' : string }
   >,
+  'get_club_theme_json' : ActorMethod<[string], [] | [string]>,
   'get_current_season' : ActorMethod<
     [string],
     { 'Ok' : [] | [Season] } |
       { 'Err' : string }
   >,
+  'get_guardian_relationships' : ActorMethod<
+    [string],
+    { 'Ok' : Array<GuardianMeta> } |
+      { 'Err' : string }
+  >,
   'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
+  'get_my_accessibility_prefs' : ActorMethod<
+    [],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'get_my_theme_preference' : ActorMethod<
     [],
     { 'Ok' : [] | [string] } |
@@ -473,6 +590,28 @@ export interface Main {
   'get_pending_invite' : ActorMethod<
     [string],
     { 'Ok' : PendingInvite } |
+      { 'Err' : string }
+  >,
+  'get_pending_invite_label' : ActorMethod<[string], [] | [string]>,
+  'get_public_eoi_config' : ActorMethod<
+    [string, string],
+    {
+        'Ok' : [] | [
+          {
+            'club_logo_url' : [] | [string],
+            'season_id' : string,
+            'season_name' : string,
+            'config_json' : [] | [string],
+            'club_name' : string,
+            'club_id' : string,
+          }
+        ]
+      } |
+      { 'Err' : string }
+  >,
+  'get_season_eoi_config' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
   'get_shell_team_by_token' : ActorMethod<
@@ -500,9 +639,19 @@ export interface Main {
     { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
+  'get_team_pitch_notify' : ActorMethod<
+    [string],
+    { 'Ok' : PitchNotifyFlags } |
+      { 'Err' : string }
+  >,
   'get_team_player_positions' : ActorMethod<
     [string],
     { 'Ok' : Array<TeamPlayerPosition> } |
+      { 'Err' : string }
+  >,
+  'get_team_player_positions_v2' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamPlayerPositionAssignment> } |
       { 'Err' : string }
   >,
   'get_team_subscription' : ActorMethod<
@@ -566,6 +715,11 @@ export interface Main {
     { 'Ok' : Array<ClubSponsor> } |
       { 'Err' : string }
   >,
+  'list_association_clubs' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
   'list_child_guardians' : ActorMethod<
     [string],
     { 'Ok' : Array<Principal> } |
@@ -574,6 +728,11 @@ export interface Main {
   'list_children' : ActorMethod<
     [],
     { 'Ok' : Array<Child> } |
+      { 'Err' : string }
+  >,
+  'list_class_enrolments' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<ClassEnrolment> } |
       { 'Err' : string }
   >,
   'list_club_admins' : ActorMethod<[string], Array<Principal>>,
@@ -603,6 +762,16 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_my_children' : ActorMethod<[], Array<Child>>,
+  'list_my_personal_teams' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
+  'list_my_removed_clubs' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
   'list_news' : ActorMethod<
     [string],
     { 'Ok' : Array<NewsPost> } |
@@ -618,9 +787,29 @@ export interface Main {
     { 'Ok' : Array<NewsPost> } |
       { 'Err' : string }
   >,
+  'list_news_targets' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<[string, string, string]> } |
+      { 'Err' : string }
+  >,
+  'list_online_presence' : ActorMethod<
+    [bigint],
+    { 'Ok' : Array<[string, bigint]> } |
+      { 'Err' : string }
+  >,
   'list_pending_invites_by_club' : ActorMethod<
     [string],
     { 'Ok' : Array<PendingInvite> } |
+      { 'Err' : string }
+  >,
+  'list_pitch_formations' : ActorMethod<
+    [string],
+    { 'Ok' : Array<PitchFormation> } |
+      { 'Err' : string }
+  >,
+  'list_promo_codes' : ActorMethod<
+    [],
+    { 'Ok' : Array<PromoCode> } |
       { 'Err' : string }
   >,
   'list_removed_members' : ActorMethod<
@@ -641,6 +830,11 @@ export interface Main {
   'list_season_player_stats' : ActorMethod<
     [string, string],
     { 'Ok' : Array<SeasonPlayerStat> } |
+      { 'Err' : string }
+  >,
+  'list_season_team_assignment' : ActorMethod<
+    [string],
+    { 'Ok' : Array<SeasonTeamAssignment> } |
       { 'Err' : string }
   >,
   'list_season_team_summary' : ActorMethod<
@@ -708,6 +902,11 @@ export interface Main {
     { 'Ok' : Array<ClubTeam> } |
       { 'Err' : string }
   >,
+  'list_unaffiliated_clubs' : ActorMethod<
+    [string, number],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
   'list_user_club_roles' : ActorMethod<
     [Principal, string],
     Array<[string, [] | [string]]>
@@ -716,6 +915,15 @@ export interface Main {
     [string, string, [] | [string], string, string, number, [] | [string]],
     { 'Ok' : MemberPayment } |
       { 'Err' : string }
+  >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
   >,
   'move_child_to_team' : ActorMethod<
     [string, [] | [string], string],
@@ -727,15 +935,52 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'move_pending_invite_team' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : PendingInvite } |
+      { 'Err' : string }
+  >,
+  'move_season_team_assignment' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : SeasonTeamAssignment } |
+      { 'Err' : string }
+  >,
   'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
   'my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
   'profile_team_history' : ActorMethod<
     [string],
     Array<ProfileTeamHistoryEntry>
   >,
+  'publish_season' : ActorMethod<
+    [string],
+    { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
   'purge_expired_deletions' : ActorMethod<
     [],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'record_presence_heartbeat' : ActorMethod<
+    [],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Redeems a storage promo code for a club. Returns the new add-on total (GB).
+   */
+  'redeem_club_storage_promo_code' : ActorMethod<
+    [string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Redeems a team promo code for `tier` ("pro" | "pro_football").
+   * / Returns the grant's expiry (code expiry if set, else 1 month / 1 year).
+   */
+  'redeem_team_promo_code' : ActorMethod<
+    [string, string, string, boolean],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'reject_club_join_request' : ActorMethod<
@@ -753,6 +998,15 @@ export interface Main {
     { 'Ok' : TeamCreationRequest } |
       { 'Err' : string }
   >,
+  /**
+   * / Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+   * / Any NEW stored principal / principal-text field added to this canister must be added here.
+   */
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'remove_member' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |
@@ -760,6 +1014,11 @@ export interface Main {
   >,
   'remove_role_grant' : ActorMethod<
     [Principal, string, string, [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_season_team_assignment' : ActorMethod<
+    [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -791,6 +1050,11 @@ export interface Main {
   'resend_pending_invite' : ActorMethod<
     [string],
     { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
+      { 'Err' : string }
+  >,
+  'resolve_invite_short_code' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
       { 'Err' : string }
   >,
   'restore_club' : ActorMethod<
@@ -828,6 +1092,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'rollover_season' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
   'rotate_team_invite_link' : ActorMethod<
     [string],
     { 'Ok' : TeamInviteLink } |
@@ -851,6 +1120,11 @@ export interface Main {
   'save_club_term' : ActorMethod<
     [ClubTerm],
     { 'Ok' : ClubTerm } |
+      { 'Err' : string }
+  >,
+  'save_pitch_formation' : ActorMethod<
+    [string, string, number, string, [] | [string]],
+    { 'Ok' : PitchFormation } |
       { 'Err' : string }
   >,
   'save_season' : ActorMethod<[Season], { 'Ok' : Season } | { 'Err' : string }>,
@@ -907,14 +1181,29 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'set_accessibility_prefs' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_app_config' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_club_general_settings' : ActorMethod<
+    [string, boolean, boolean, bigint, boolean],
+    { 'Ok' : ClubGeneralSettings } |
+      { 'Err' : string }
+  >,
   'set_club_header_toggles' : ActorMethod<
     [string, boolean, boolean],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_home_country' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_invite_email_style' : ActorMethod<
@@ -927,9 +1216,19 @@ export interface Main {
     { 'Ok' : InviteMessageDefault } |
       { 'Err' : string }
   >,
+  'set_club_kind' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_club_logo_only_mode' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_parent_org' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_switcher_hint' : ActorMethod<
@@ -945,6 +1244,11 @@ export interface Main {
   'set_club_theme_enabled' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_theme_json' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_theme_palette' : ActorMethod<
@@ -970,6 +1274,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_guardian_relationship' : ActorMethod<
+    [string, Principal, string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_messaging_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -977,6 +1286,11 @@ export interface Main {
   >,
   'set_mini_league_domain_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_news_post_target' : ActorMethod<
+    [string, string, [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -995,8 +1309,33 @@ export interface Main {
     { 'Ok' : Child } |
       { 'Err' : string }
   >,
+  'set_pending_invite_email_hash' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_pending_invite_label' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_pii_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_promo_code_active' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_season_eoi_config' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_season_public_eoi_config' : ActorMethod<
+    [string, [] | [string], string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -1005,8 +1344,18 @@ export interface Main {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'set_team_pitch_notify' : ActorMethod<
+    [string, boolean, boolean, boolean],
+    { 'Ok' : PitchNotifyFlags } |
+      { 'Err' : string }
+  >,
   'set_team_player_position' : ActorMethod<
     [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_team_player_positions_v2' : ActorMethod<
+    [string, string, Array<string>, [] | [number]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -1078,7 +1427,30 @@ export interface Main {
     { 'Ok' : NewsPost } |
       { 'Err' : string }
   >,
+  'update_pending_invite_role' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : PendingInvite } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Public: aggregate record counts (shown in admin settings). Counts only —
+   * / no record contents, so no PII is exposed.
+   */
+  'usage_stats' : ActorMethod<
+    [],
+    {
+      'teams' : bigint,
+      'clubs' : bigint,
+      'accounts' : bigint,
+      'news_posts' : bigint,
+    }
+  >,
   'whoami' : ActorMethod<[], { 'Ok' : Account } | { 'Err' : string }>,
+  'withdraw_from_class' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
 }
 export interface MemberPayment {
   'id' : string,
@@ -1149,6 +1521,28 @@ export interface PendingInvite {
   'invited_by' : Principal,
   'club_id' : string,
 }
+export interface PendingInviteEmailHash {
+  'hash' : string,
+  'invite_id' : string,
+  'club_id' : string,
+}
+export interface PitchFormation {
+  'id' : string,
+  'name' : string,
+  'team_id' : string,
+  'created_by' : Principal,
+  'drawing_json' : [] | [string],
+  'created_at_ms' : bigint,
+  'team_size' : number,
+  'formation_json' : string,
+  'club_id' : string,
+}
+export interface PitchNotifyFlags {
+  'subs_manager' : boolean,
+  'coach' : boolean,
+  'team_id' : string,
+  'team_admin' : boolean,
+}
 export interface ProfileTeamHistoryEntry {
   'season_start_date' : string,
   'season_id' : string,
@@ -1162,6 +1556,19 @@ export interface ProfileTeamHistoryEntry {
   'club_name' : string,
   'club_id' : string,
   'season_status' : string,
+}
+export interface PromoCode {
+  'id' : string,
+  'access_level' : string,
+  'uses_count' : number,
+  'code' : string,
+  'scope_type' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'storage_gb' : [] | [number],
+  'is_active' : boolean,
+  'club_id' : [] | [string],
+  'expires_at_ms' : [] | [bigint],
 }
 export interface RemovedMember {
   'club' : string,
@@ -1214,6 +1621,12 @@ export interface SeasonPlayerStat {
   'events_attended' : number,
   'games_played' : number,
   'club_id' : string,
+}
+export interface SeasonTeamAssignment {
+  'season_id' : string,
+  'added_at_ms' : bigint,
+  'team_id' : string,
+  'member_id' : string,
 }
 export interface SeasonTeamSummary {
   'season_id' : string,
@@ -1290,6 +1703,12 @@ export interface TeamPlayerPosition {
   'team_id' : string,
   'member_id' : string,
   'position' : string,
+}
+export interface TeamPlayerPositionAssignment {
+  'team_id' : string,
+  'member_id' : string,
+  'positions' : Array<string>,
+  'jersey_number' : [] | [number],
 }
 export interface TeamSponsorAllocation {
   'team_id' : string,

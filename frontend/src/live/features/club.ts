@@ -303,6 +303,20 @@ export async function listLiveSponsors(ctx: FeatureBackendContext, clubId: strin
   );
 }
 
+/**
+ * Club-level Pro check for sponsor display: the club's own subscription row
+ * (paid / promo / admin override) or, as a fallback, the viewer's personal
+ * entitlement. Sponsors belong to the club, so a free member of a Pro club
+ * must still see them.
+ */
+export async function isLiveClubPro(ctx: FeatureBackendContext, clubId: string): Promise<boolean> {
+  const sub = await getLiveClubSubscription(ctx, clubId).catch(() => null);
+  if (sub?.is_pro || sub?.admin_pro_override || sub?.is_pro_football || sub?.admin_pro_football_override) return true;
+  const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
+  const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target).catch(() => null);
+  return !!summary?.isPro;
+}
+
 export async function saveLiveSponsor(ctx: FeatureBackendContext, sponsor: LiveClubSponsor) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.save_sponsor(sponsor), "Save sponsor");
@@ -503,6 +517,11 @@ export async function restoreLiveClub(
   return unwrapCandid(actor.restore_club(clubId, cascadeTeams), "Restore club");
 }
 
+export async function listLiveMyRemovedClubs(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_my_removed_clubs(), "List removed clubs");
+}
+
 export async function deleteLiveClubPermanent(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.delete_club_permanent(clubId), "Permanently delete club");
@@ -622,7 +641,7 @@ export async function createLivePendingInvite(
   },
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const result = unwrapCandid(
+  const result = await unwrapCandid(
     actor.create_pending_invite(
       input.kind,
       input.clubId,
@@ -637,8 +656,18 @@ export async function createLivePendingInvite(
   // field_id = "email", owner = the inviting caller). Best effort — the
   // invite itself already exists and must not fail on a PII write.
   const inviteId = (result as { invite?: { id?: string } } | undefined)?.invite?.id;
-  if (inviteId) {
+  if (inviteId && input.email) {
     await registerLivePiiText(ctx, inviteId, "email", input.email);
+    // Also index the invite by a hash of its email + club id so a later
+    // create_pending_invite call can dedupe without ever reading a plaintext
+    // email back off the canister (see lib/inviteEmailDedupe.ts).
+    try {
+      const { hashInviteEmail } = await import("@/lib/inviteEmailDedupe");
+      const hash = await hashInviteEmail(input.email, input.clubId);
+      await setLivePendingInviteEmailHash(ctx, inviteId, input.clubId, hash);
+    } catch (err) {
+      console.warn("[createLivePendingInvite] email hash registration failed:", err);
+    }
   }
   return result;
 }
@@ -656,6 +685,49 @@ export async function resendLivePendingInvite(ctx: FeatureBackendContext, invite
 export async function revokeLivePendingInvite(ctx: FeatureBackendContext, inviteId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.revoke_pending_invite(inviteId), "Revoke pending invite");
+}
+
+/** Creates (or returns the existing) short code for an invite, for short-link sharing. */
+export async function createLiveInviteShortCode(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_invite_short_code(inviteId), "Create invite short code");
+}
+
+/**
+ * Email-hash index for pending invites — club_domain never sees a plaintext
+ * invitee email on this path (SHA-256 of the lowercased email + club id, see
+ * lib/inviteEmailDedupe.ts), only the hash, so an ICP-routed club can still
+ * dedupe a second invite to the same address without an email-indexed table.
+ */
+export async function setLivePendingInviteEmailHash(
+  ctx: FeatureBackendContext,
+  inviteId: string,
+  clubId: string,
+  hash: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_pending_invite_email_hash(inviteId, clubId, hash),
+    "Set pending invite email hash",
+  );
+}
+
+export async function findLivePendingInviteByEmailHash(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  hash: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.find_pending_invite_by_email_hash(clubId, hash),
+    "Find pending invite by email hash",
+  );
+}
+
+/** Resolves a short code back to its invite id, for the /i/:code redirect route. */
+export async function resolveLiveInviteShortCode(ctx: FeatureBackendContext, code: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.resolve_invite_short_code(code), "Resolve invite short code");
 }
 
 /**
@@ -678,6 +750,30 @@ export async function unlinkLiveGuardian(
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.unlink_guardian(childId, guardian), "Unlink guardian");
+}
+
+/**
+ * Guardian relationship metadata (relationship_type + is_primary) layered on
+ * top of the plain guardian link above — the canister counterpart of the
+ * Supabase `child_guardians.relationship_type`/`is_primary` columns.
+ */
+export async function getLiveGuardianRelationships(ctx: FeatureBackendContext, childId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_guardian_relationships(childId), "Get guardian relationships");
+}
+
+export async function setLiveGuardianRelationship(
+  ctx: FeatureBackendContext,
+  childId: string,
+  user: Parameters<ClubDomainActor["set_guardian_relationship"]>[1],
+  relationshipType: string,
+  isPrimary: boolean,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_guardian_relationship(childId, user, relationshipType, isPrimary),
+    "Set guardian relationship",
+  );
 }
 
 export async function adminLinkLiveChildToParent(
@@ -770,6 +866,21 @@ export type LiveTeamCreationRequest = Extract<
   { Ok: unknown[] }
 >["Ok"][number];
 
+/** Non-admin self-service team creation request (approved/rejected by a club admin). */
+export async function requestLiveTeamCreation(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  name: string,
+  division?: string | null,
+  ageGroup?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.request_team_creation(clubId, name, candidOpt(division), candidOpt(ageGroup)),
+    "Request team creation",
+  );
+}
+
 export async function listLiveTeamCreationRequests(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_team_creation_requests(clubId), "List team creation requests");
@@ -812,6 +923,32 @@ export async function setLiveTeamPlayerPosition(
   return unwrapCandid(
     actor.set_team_player_position(teamId, memberId, position),
     "Set team player position",
+  );
+}
+
+/**
+ * v2 player-position records: multiple preferred positions plus a jersey
+ * number per player/team, replacing the single-position v1 rows above.
+ */
+export async function getLiveTeamPlayerPositionsV2(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_team_player_positions_v2(teamId),
+    "Get team player positions v2",
+  );
+}
+
+export async function setLiveTeamPlayerPositionsV2(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  memberId: string,
+  positions: string[],
+  jerseyNumber: number | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_team_player_positions_v2(teamId, memberId, positions, candidOpt(jerseyNumber)),
+    "Set team player positions v2",
   );
 }
 
@@ -859,14 +996,37 @@ export async function createLiveClub(
   slug: string,
   description: string,
   sport?: string | null,
+  homeCountry?: string | null,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   const created = await unwrapCandid(
     actor.create_club(id, name, slug, candidOpt(description || null), candidOpt(sport || null)),
     "Create club",
   );
+  // Record the club's home country (jurisdiction routing metadata, mirroring
+  // Supabase clubs.home_country). Set-once for admins; the club already
+  // exists if this fails, so log rather than fail the creation.
+  const country = homeCountry?.trim().toUpperCase();
+  if (country && /^[A-Z]{2}$/.test(country)) {
+    try {
+      await unwrapCandid(actor.set_club_home_country(id, country), "Set club home country");
+    } catch (err) {
+      console.warn("[createLiveClub] home country not recorded", err);
+    }
+  }
   syncAvatarClubGrantsBestEffort(ctx);
   return created;
+}
+
+/** Batched read of club home countries (jurisdiction routing metadata). */
+export async function getLiveClubHomeCountries(
+  ctx: FeatureBackendContext,
+  clubIds: string[],
+): Promise<Record<string, string>> {
+  if (clubIds.length === 0) return {};
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const rows = (await unwrapCandid(actor.get_club_home_countries(clubIds), "Get club home countries")) as Array<[string, string]>;
+  return Object.fromEntries(rows);
 }
 
 export async function listLiveClubJoinRequests(ctx: FeatureBackendContext, clubId: string) {
@@ -1315,4 +1475,424 @@ export async function listLiveChildGuardians(ctx: FeatureBackendContext, childId
 export async function setMyLiveChildGuardian(ctx: FeatureBackendContext, childId: string, user: Principal, linked: boolean) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.set_own_child_guardian(childId, user, linked), "Update guardian");
+}
+
+/** Competition / mini-league audience for a news post (null clears it). */
+export async function setLiveNewsPostTarget(
+  ctx: FeatureBackendContext,
+  postId: string,
+  kind: "competition" | "mini_league",
+  targetId: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_news_post_target(postId, kind, candidOpt(targetId)), "Set news audience");
+}
+
+export interface LiveClubRosterChild {
+  id: string;
+  teams: string[];
+  club_id?: string;
+  parent?: Principal;
+}
+
+export interface LiveClubRoster {
+  children: LiveClubRosterChild[];
+  roles: Array<{ club?: string; role: string; team?: string; user: Principal }>;
+}
+
+/**
+ * Club-wide roster for the player-list export and schedule broadcasts:
+ * children on the club's teams plus club-scoped role grants. Staff-gated
+ * canister-side (club_domain get_club_roster).
+ */
+export async function getLiveClubRoster(
+  ctx: FeatureBackendContext,
+  clubId: string,
+): Promise<LiveClubRoster> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.get_club_roster(clubId), "Load club roster");
+  const one = <T,>(v: unknown): T | undefined =>
+    (Array.isArray(v) ? (v[0] as T | undefined) : ((v ?? undefined) as T | undefined));
+  return {
+    children: raw.children.map((c) => ({
+      id: c.id,
+      teams: [...c.teams],
+      club_id: one<string>(c.club_id),
+      parent: one<Principal>(c.parent),
+    })),
+    roles: raw.roles.map((r) => ({
+      club: one<string>(r.club),
+      role: r.role,
+      team: one<string>(r.team),
+      user: r.user,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Pending invite label/role/team edits — canister counterparts of the
+// Supabase `pending_invites` update (label/role) and move-team RPCs.
+// ---------------------------------------------------------------------------
+
+export async function getLivePendingInviteLabel(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.get_pending_invite_label(inviteId);
+}
+
+export async function setLivePendingInviteLabel(
+  ctx: FeatureBackendContext,
+  inviteId: string,
+  label: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_pending_invite_label(inviteId, label), "Set pending invite label");
+}
+
+export async function updateLivePendingInviteRole(
+  ctx: FeatureBackendContext,
+  inviteId: string,
+  role: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_pending_invite_role(inviteId, candidOpt(role)),
+    "Update pending invite role",
+  );
+}
+
+export async function moveLivePendingInviteTeam(
+  ctx: FeatureBackendContext,
+  inviteId: string,
+  teamId: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.move_pending_invite_team(inviteId, candidOpt(teamId)),
+    "Move pending invite team",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Season lifecycle (publish/archive/rollover) and EOI config — canister
+// counterparts of the Supabase season status transitions and
+// season_eoi_config JSON column.
+// ---------------------------------------------------------------------------
+
+export async function publishLiveSeason(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.publish_season(seasonId), "Publish season");
+}
+
+export async function archiveLiveSeason(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.archive_season(seasonId), "Archive season");
+}
+
+export async function rolloverLiveSeason(
+  ctx: FeatureBackendContext,
+  fromSeasonId: string,
+  newName: string,
+  startDate: string,
+  endDate: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.rollover_season(fromSeasonId, newName, startDate, endDate),
+    "Rollover season",
+  );
+}
+
+export async function getLiveSeasonEoiConfig(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_season_eoi_config(seasonId), "Get season EOI config");
+}
+
+export async function setLiveSeasonEoiConfig(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  configJson: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_season_eoi_config(seasonId, configJson),
+    "Set season EOI config",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Season team assignments — which team a member is assigned to for a given
+// season. Canister counterpart of the Supabase season_team_assignments table.
+// ---------------------------------------------------------------------------
+
+export async function listLiveSeasonTeamAssignment(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_season_team_assignment(seasonId), "List season team assignments");
+}
+
+export async function addLiveSeasonTeamAssignment(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  teamId: string,
+  memberId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.add_season_team_assignment(seasonId, teamId, memberId),
+    "Add season team assignment",
+  );
+}
+
+export async function moveLiveSeasonTeamAssignment(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  memberId: string,
+  newTeamId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.move_season_team_assignment(seasonId, memberId, newTeamId),
+    "Move season team assignment",
+  );
+}
+
+export async function removeLiveSeasonTeamAssignment(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  memberId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_season_team_assignment(seasonId, memberId),
+    "Remove season team assignment",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Club kind (full / shell / association) — canister counterpart of the
+// Supabase `clubs.kind` column.
+// ---------------------------------------------------------------------------
+
+export async function getLiveClubKind(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_club_kind(clubId), "Get club kind");
+}
+
+export async function setLiveClubKind(ctx: FeatureBackendContext, clubId: string, kind: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_club_kind(clubId, kind), "Set club kind");
+}
+
+/** Link (associationId) or unlink (null) a club to/from an association. */
+export async function setLiveClubParentOrg(ctx: FeatureBackendContext, clubId: string, associationId: string | null) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_parent_org(clubId, associationId ? [associationId] : []),
+    "Set club association",
+  );
+}
+
+export async function listLiveAssociationClubs(ctx: FeatureBackendContext, associationId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_association_clubs(associationId), "List association clubs");
+}
+
+export async function listLiveUnaffiliatedClubs(ctx: FeatureBackendContext, search: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_unaffiliated_clubs(search, 50), "List unaffiliated clubs");
+}
+
+// ---------------------------------------------------------------------------
+// Class enrolment (club terms + classes) — canister counterpart of the
+// Supabase `class_enrolments` table.
+// ---------------------------------------------------------------------------
+
+export async function enrolLiveInClass(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  termId: string,
+  classId: string,
+  memberId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.enrol_in_class(clubId, termId, classId, memberId),
+    "Enrol in class",
+  );
+}
+
+export async function withdrawLiveFromClass(ctx: FeatureBackendContext, enrolmentId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.withdraw_from_class(enrolmentId), "Withdraw from class");
+}
+
+export async function listLiveClassEnrolments(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  termId?: string | null,
+  classId?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_class_enrolments(clubId, candidOpt(termId), candidOpt(classId)),
+    "List class enrolments",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Club theme (raw JSON blob) — canister counterpart of the Supabase per-field
+// HSL theme columns, stored as a single opaque JSON string canister-side.
+// ---------------------------------------------------------------------------
+
+export async function getLiveClubThemeJson(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.get_club_theme_json(clubId);
+}
+
+export async function setLiveClubThemeJson(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  themeJson: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_club_theme_json(clubId, themeJson), "Set club theme JSON");
+}
+
+// ---------------------------------------------------------------------------
+// Free-tier usage counters — canister counterpart of the Supabase
+// `get_club_free_usage` RPC. The canister only tracks structural counts
+// (teams/members/pending invites/news posts); it has no upload/poll cycle
+// counters, so callers treat those as unavailable under the ICP backend.
+// ---------------------------------------------------------------------------
+
+export async function getLiveFreeUsageCounters(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.free_usage_counters(clubId), "Get free usage counters");
+}
+
+export interface LiveClubGeneralSettings {
+  classModeEnabled: boolean;
+  allowGuestsDefault: boolean;
+  maxGuestsPerMemberDefault: number;
+  eventsSponsorStripEnabled: boolean;
+}
+
+/** Club-wide general settings (class mode, guest defaults, sponsor strip). */
+export async function getLiveClubGeneralSettings(
+  ctx: FeatureBackendContext,
+  clubId: string,
+): Promise<LiveClubGeneralSettings | null> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  try {
+    const s = await unwrapCandid(actor.get_club_general_settings(clubId), "Get club settings");
+    return {
+      classModeEnabled: s.class_mode_enabled,
+      allowGuestsDefault: s.allow_guests_default,
+      maxGuestsPerMemberDefault: Number(s.max_guests_per_member_default),
+      eventsSponsorStripEnabled: s.events_sponsor_strip_enabled,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function setLiveClubGeneralSettings(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  s: LiveClubGeneralSettings,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_general_settings(
+      clubId,
+      s.classModeEnabled,
+      s.allowGuestsDefault,
+      BigInt(Math.max(0, Math.floor(s.maxGuestsPerMemberDefault))),
+      s.eventsSponsorStripEnabled,
+    ),
+    "Save club settings",
+  );
+}
+
+/** Best-effort liveness ping for the online-users roster; club_domain tracks last-seen per caller. */
+export async function recordLiveClubPresenceHeartbeat(ctx: FeatureBackendContext): Promise<void> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  await unwrapCandid(actor.record_presence_heartbeat(), "Record presence heartbeat");
+}
+
+export interface LiveOnlinePresenceRow {
+  accountId: string;
+  lastSeenMs: bigint;
+}
+
+/** Accounts (principal text / account id) with a heartbeat within the last `windowSeconds`. App-admin/governor only canister-side. */
+export async function listLiveOnlinePresence(
+  ctx: FeatureBackendContext,
+  windowSeconds: number,
+): Promise<LiveOnlinePresenceRow[]> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const rows = await unwrapCandid(
+    actor.list_online_presence(BigInt(Math.trunc(windowSeconds))),
+    "List online presence",
+  );
+  return rows.map(([accountId, lastSeenMs]) => ({ accountId, lastSeenMs }));
+}
+
+export async function getLiveAccessibilityPrefs(ctx: FeatureBackendContext): Promise<string | null> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const result = await unwrapCandid(actor.get_my_accessibility_prefs(), "Get accessibility prefs");
+  return result.length ? result[0] : null;
+}
+
+export async function saveLiveAccessibilityPrefs(ctx: FeatureBackendContext, prefsJson: string): Promise<void> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  await unwrapCandid(actor.set_accessibility_prefs(prefsJson), "Save accessibility prefs");
+}
+
+/**
+ * Personal (clubless) teams — caller is the implicit owner (save_team with
+ * club_id ""), counterpart of the Supabase "shell club" personal-team flow.
+ * Listing is caller-scoped on the canister (no club_id to filter by).
+ */
+export async function listLivePersonalTeams(ctx: FeatureBackendContext): Promise<LiveClubTeam[]> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_my_personal_teams(), "List my personal teams");
+}
+
+// ---- Pitch board: named formations + alert role switches (club_domain) ----
+export async function listLivePitchFormations(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_pitch_formations(teamId), "List formations");
+}
+export async function saveLivePitchFormation(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  name: string,
+  teamSize: number,
+  formationJson: string,
+  drawingJson: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.save_pitch_formation(teamId, name, teamSize, formationJson, drawingJson === null ? [] : [drawingJson]),
+    "Save formation",
+  );
+}
+export async function deleteLivePitchFormation(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_pitch_formation(id), "Delete formation");
+}
+export async function getLiveTeamPitchNotify(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_team_pitch_notify(teamId), "Get pitch alerts");
+}
+export async function setLiveTeamPitchNotify(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  flags: { coach: boolean; team_admin: boolean; subs_manager: boolean },
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_team_pitch_notify(teamId, flags.coach, flags.team_admin, flags.subs_manager),
+    "Save pitch alerts",
+  );
 }

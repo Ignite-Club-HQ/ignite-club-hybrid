@@ -19,17 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { FixturesCSVImport } from "@/components/FixturesCSVImport";
 import { ClubAdminConfirmBanner } from "@/components/ClubAdminConfirmBanner";
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-
 export default function ImportFixturesPage() {
-  if (isFeatureRoutedToIcp("events")) {
-    return <IcpUnavailablePage title="Fixture import is unavailable in ICP lab mode" description="External calendar and document-provider imports remain disabled until an approved worker boundary is implemented." />;
-  }
-  return <SupabaseImportFixturesPage />;
-}
-
-function SupabaseImportFixturesPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { activeClubFilter } = useClubTheme();

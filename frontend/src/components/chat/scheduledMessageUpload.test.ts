@@ -9,8 +9,10 @@ const mockSupabase = await vi.hoisted(async () => {
   const { createMockSupabaseClient: createClient } = await import("@/test/mockSupabaseClient");
   return createClient();
 });
+const mocks = vi.hoisted(() => ({ isIcp: false, blobUpload: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: mockSupabase }));
-vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => icpMode }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => mocks.isIcp }));
+vi.mock("@/live/mediaUpload", () => ({ tryUploadMediaToBlobStore: mocks.blobUpload }));
 vi.mock("@/lib/imageCompression", () => ({ compressImage }));
 vi.mock("@/lib/binaryUtils", () => ({ mimeToExtension: (mime: string) => mime === "image/png" ? "png" : "jpg" }));
 vi.mock("@/lib/chatImageAspectCache", () => ({ measureImageDimensions, appendDimensionsToUrl, setCachedImageAspectRatio }));
@@ -24,6 +26,8 @@ function imageFile(name = "photo.jpg", type = "image/jpeg", bytes = 5) {
 describe("uploadScheduledImage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isIcp = icpMode;
+    mocks.blobUpload.mockResolvedValue({ url: "https://files.icp0.io/scheduled.jpg", blobRef: { canister: "blob-store", path: "p", content_hash: "h" } });
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
     upload.mockResolvedValue({ error: null });
     getPublicUrl.mockReturnValue({ data: { publicUrl: "https://example.invalid/upload.jpg" } });
@@ -43,6 +47,7 @@ describe("uploadScheduledImage", () => {
     const exact = imageFile("exact.jpg", "image/jpeg", 10 * 1024 * 1024);
     await expect(uploadScheduledImage(exact)).resolves.toBe("https://example.invalid/upload.jpg");
     vi.clearAllMocks();
+    mocks.isIcp = false;
     const over = imageFile("over.jpg", "image/jpeg", 10 * 1024 * 1024 + 1);
     await expect(uploadScheduledImage(over)).rejects.toThrow("Image must be less than 10MB");
     expect(mockSupabase.auth.getUser).not.toHaveBeenCalled();
@@ -51,7 +56,7 @@ describe("uploadScheduledImage", () => {
   it.runIf(!icpMode)("rejects unauthenticated uploads before compression or storage", async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: null } });
     await expect(uploadScheduledImage(imageFile())).rejects.toThrow("Not authenticated");
-    expect(compressImage).not.toHaveBeenCalled(); expect(upload).not.toHaveBeenCalled();
+    expect(compressImage).toHaveBeenCalled(); expect(upload).not.toHaveBeenCalled();
   });
 
   it.runIf(!icpMode).each([
@@ -87,12 +92,37 @@ describe("uploadScheduledImage", () => {
     expect(setCachedImageAspectRatio).toHaveBeenCalledWith([result], 1600 / 900);
   });
 
-  it.runIf(icpMode)("fails closed before auth or storage for ICP attachments", async () => {
-    await expect(uploadScheduledImage(imageFile(), { teamId: "team-1" })).rejects.toThrow(
-      /aren't available yet on the Internet Identity messaging backend/,
-    );
-    expect(mockSupabase.auth.getUser).not.toHaveBeenCalled();
-    expect(compressImage).not.toHaveBeenCalled();
-    expect(mockSupabase.storage.from).not.toHaveBeenCalled();
+  describe.runIf(icpMode)("Internet Identity / ICP messaging routing", () => {
+    it("uploads encrypted bytes to the blob store instead of Supabase Storage", async () => {
+      const result = await uploadScheduledImage(imageFile(), { clubId: "club-1", teamId: "team-1" });
+      expect(result).toBe("https://files.icp0.io/scheduled.jpg");
+      expect(mockSupabase.storage.from).not.toHaveBeenCalled();
+      expect(mockSupabase.auth.getUser).not.toHaveBeenCalled();
+      const [args] = mocks.blobUpload.mock.calls[0];
+      expect(args.storagePath).toMatch(/^clubs\/club-1\/teams\/team-1\/scheduled\/\d+-[a-z0-9]+\.jpg$/);
+      expect(args.mime).toBe("image/jpeg");
+    });
+
+    it("scopes the blob-store path to club-only and clubless targets", async () => {
+      await uploadScheduledImage(imageFile(), { clubId: "club-1" });
+      expect(mocks.blobUpload.mock.calls[0][0].storagePath).toMatch(/^clubs\/club-1\/scheduled\/\d+-[a-z0-9]+\.jpg$/);
+      mocks.blobUpload.mockClear();
+      await uploadScheduledImage(imageFile());
+      expect(mocks.blobUpload.mock.calls[0][0].storagePath).toMatch(/^general\/scheduled\/\d+-[a-z0-9]+\.jpg$/);
+    });
+
+    it("throws instead of silently falling back to Supabase when the blob store is unavailable", async () => {
+      mocks.blobUpload.mockResolvedValue(null);
+      await expect(uploadScheduledImage(imageFile())).rejects.toThrow(
+        "Media uploads are not available yet for Internet Identity accounts",
+      );
+      expect(mockSupabase.storage.from).not.toHaveBeenCalled();
+    });
+
+    it("still measures and encodes dimensions for ICP uploads", async () => {
+      measureImageDimensions.mockResolvedValue({ width: 800, height: 400 });
+      const result = await uploadScheduledImage(imageFile());
+      expect(result).toBe("https://files.icp0.io/scheduled.jpg?w=800&h=400");
+    });
   });
 });

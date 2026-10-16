@@ -291,6 +291,19 @@ export async function setLiveEventRsvp(
   return unwrapCandid(actor.set_rsvp(eventId, accountId, state, notes), "Set RSVP");
 }
 
+/** Parent RSVPs their own child — counterpart of the Supabase childRsvpMutation write. */
+export async function setLiveChildRsvp(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+  childId: string,
+  state: string,
+  notes = "",
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_child_rsvp(eventId, accountId, childId, state, notes), "Set child RSVP");
+}
+
 export async function setLiveEventAttendance(
   ctx: FeatureBackendContext,
   eventId: string,
@@ -302,6 +315,48 @@ export async function setLiveEventAttendance(
   return unwrapCandid(
     actor.set_attendance(eventId, accountId, present, note),
     "Set attendance",
+  );
+}
+
+/**
+ * Server-anchored live match timer, one per event (events_domain
+ * set_event_timer/get_event_timer). Counterpart of the Supabase
+ * pitch-timer-event/pitch-timer-read edge functions for ICP-mode callers —
+ * see frontend/src/lib/serverTimer.ts for the shared `ServerTimer` shape the
+ * ICP branch converts to/from.
+ */
+/** Event sponsor links (event_sponsors parity): sponsor ids attached to one event. */
+export async function getLiveEventSponsorIds(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_event_sponsors(eventId), "Get event sponsors");
+}
+
+export async function saveLiveEventSponsors(ctx: FeatureBackendContext, eventId: string, sponsorIds: string[]) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_event_sponsors(eventId, sponsorIds), "Save event sponsors");
+}
+
+export async function getLiveEventTimer(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_event_timer(eventId), "Get event timer");
+}
+
+export async function setLiveEventTimer(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  action: string,
+  minutesPerHalf?: number | null,
+  adjustMs?: number | bigint | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_event_timer(
+      eventId,
+      action,
+      candidOpt(minutesPerHalf ?? null),
+      candidOpt(adjustMs === null || adjustMs === undefined ? null : BigInt(adjustMs)),
+    ),
+    "Set event timer",
   );
 }
 
@@ -1126,6 +1181,97 @@ export async function listLiveGroupDuties(ctx: FeatureBackendContext, groupId: s
   return unwrapCandid(actor.list_group_duties(groupId), "List group duties");
 }
 
+/**
+ * Per-match captain/vice-captain assignment and per-match goalkeeper
+ * assignment (period/quarter-scoped) — counterparts of the Supabase
+ * `match_captains` / `match_goalkeepers` tables with no canister equivalent
+ * until this feature. `ref_kind` distinguishes an account id from a child id
+ * the same way EventGroupPlayer/Rsvp refs do elsewhere in this module.
+ */
+export async function setLiveMatchCaptain(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  refKind: string,
+  refId: string,
+  role: "captain" | "vice",
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_match_captain(eventId, refKind, refId, role),
+    "Set match captain",
+  );
+}
+
+export async function removeLiveMatchCaptain(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  refKind: string,
+  refId: string,
+  role: "captain" | "vice",
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_match_captain(eventId, refKind, refId, role),
+    "Remove match captain",
+  );
+}
+
+export async function listLiveMatchCaptains(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_match_captains(eventId), "List match captains");
+}
+
+export async function setLiveMatchGoalkeeper(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  refKind: string,
+  refId: string,
+  period: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_match_goalkeeper(eventId, refKind, refId, period),
+    "Set match goalkeeper",
+  );
+}
+
+export async function removeLiveMatchGoalkeeper(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  period: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_match_goalkeeper(eventId, period),
+    "Remove match goalkeeper",
+  );
+}
+
+export async function listLiveMatchGoalkeepers(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_match_goalkeepers(eventId), "List match goalkeepers");
+}
+
+/**
+ * Player stats report: aggregates MVP/captain/vice/goalkeeper counts per
+ * player across every non-deleted event for a club (optionally scoped to one
+ * team) between from_ms/to_ms. Counterpart of the Supabase player-stats
+ * report query joined from `game_results`/`match_captains`/`match_goalkeepers`.
+ */
+export async function getLivePlayerStatsReport(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string | null | undefined,
+  fromMs: number | Date,
+  toMs: number | Date,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_player_stats_report(clubId, candidOpt(teamId), toNat64(fromMs), toNat64(toMs)),
+    "Get player stats report",
+  );
+}
+
 export async function setLiveRsvpNote(
   ctx: FeatureBackendContext,
   eventId: string,
@@ -1857,6 +2003,32 @@ export async function getLiveActiveGame(ctx: FeatureBackendContext, teamId?: str
   return [{ ...row, pitch_state_json: JSON.stringify(resolved) }];
 }
 
+/**
+ * Admin monitor (AdminActiveGamesPage): every active or recently-ended game
+ * updated at/after `sinceMs`, across all teams/callers. Canister-side gated
+ * to the governor or a club_domain app_admin (events_domain
+ * `list_active_games`).
+ */
+export async function listLiveActiveGames(ctx: FeatureBackendContext, sinceMs: number) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_active_games(toNat64(sinceMs)), "List active games");
+}
+
+/**
+ * Admin monitor: per-team `sync_active_game` call counts since `sinceMs`
+ * (from the bounded recent-write log), used to flag "sync storm" teams.
+ * Same app-admin gate as listLiveActiveGames; a null/empty team_id groups
+ * under "".
+ */
+export async function listLiveActiveGameWriteRates(ctx: FeatureBackendContext, sinceMs: number) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const rows = await unwrapCandid(
+    actor.list_active_game_write_rates(toNat64(sinceMs)),
+    "List active game write rates",
+  ) as Array<[string, number]>;
+  return new Map(rows.map(([team, count]) => [team, Number(count)]));
+}
+
 /** Admin per-viewer event-view list (event_views rows for one event). */
 export async function listLiveEventViews(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
@@ -1996,4 +2168,126 @@ export async function setLiveEventDutyTeam(
     actor.set_event_duty_team(eventId, candidOpt(teamId)),
     "Set event duty team",
   );
+}
+
+/** Caller's favourite event titles (events_domain `list_favourite_event_titles`). */
+export async function listLiveFavouriteEventTitles(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.list_favourite_event_titles();
+}
+
+export async function addLiveFavouriteEventTitle(ctx: FeatureBackendContext, title: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.add_favourite_event_title(title), "Save favourite title");
+}
+
+export async function removeLiveFavouriteEventTitle(ctx: FeatureBackendContext, title: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_favourite_event_title(title), "Remove favourite title");
+}
+
+/** Caller's saved addresses (events_domain `list_saved_locations`). */
+export async function listLiveSavedLocations(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.list_saved_locations();
+}
+
+export async function saveLiveLocation(
+  ctx: FeatureBackendContext,
+  locationLabel: string,
+  address: string,
+  lat: number,
+  lng: number,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.save_location(locationLabel, address, lat, lng), "Save location");
+}
+
+export async function deleteLiveSavedLocation(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_saved_location(id), "Delete saved location");
+}
+
+/**
+ * Per-(club, team, child|self) default training RSVP ("going"/"not_going").
+ * `childId` null means the default is for the caller's own account.
+ */
+export async function getLiveTrainingDefault(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+  childId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_training_default(clubId, teamId, candidOpt(childId)),
+    "Get training default",
+  );
+}
+
+export async function setLiveTrainingDefault(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+  childId: string | null | undefined,
+  defaultRsvp: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_training_default(clubId, teamId, candidOpt(childId), defaultRsvp),
+    "Set training default",
+  );
+}
+
+/** When the caller's RSVP row for an event was created (ms epoch), or null if none. */
+export async function getLiveRsvpCreatedAt(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return await actor.get_rsvp_created_at(eventId, accountId);
+}
+
+/** App admins: run the on-chain post-game photo prompt sweep now (it also runs every 15 minutes). */
+export async function runLivePhotoPrompts(ctx: FeatureBackendContext): Promise<number> {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const sent = await unwrapCandid(actor.run_photo_prompts(), "Run photo prompts");
+  return Number(sent);
+}
+
+/** Imports a linked team's PlayHQ fixtures as on-chain game events. */
+export async function importLivePlayHQTeamFixtures(
+  ctx: FeatureBackendContext,
+  input: { clubId: string; teamId: string; competitionId: string; playhqTeamId: string },
+): Promise<{ created: number; updated: number; cancelled: number }> {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const r = await unwrapCandid(
+    actor.import_playhq_team_fixtures(input.clubId, input.teamId, input.competitionId, input.playhqTeamId),
+    "Import PlayHQ fixtures",
+  );
+  return { created: Number(r.created), updated: Number(r.updated), cancelled: Number(r.cancelled) };
+}
+
+/** Records (or clears) a team's PlayHQ link + auto-sync flag on-chain. */
+export async function setLivePlayHQTeamSync(
+  ctx: FeatureBackendContext,
+  input: { clubId: string; teamId: string; competitionId: string | null; playhqTeamId: string | null; auto: boolean },
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_playhq_team_sync(input.clubId, input.teamId, candidOpt(input.competitionId), candidOpt(input.playhqTeamId), input.auto),
+    "Save PlayHQ sync",
+  );
+}
+
+/** Governor-only: whether a PlayHQ key is stored (never returns the key). */
+export async function getLivePlayHQConfigStatus(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const r = await unwrapCandid(actor.get_playhq_config_status(), "Load PlayHQ settings");
+  return {
+    configured: r.configured,
+    baseUrl: r.base_url[0] ?? null,
+    updatedAt: r.updated_at_ms.length ? new Date(Number(r.updated_at_ms[0])).toISOString() : null,
+  };
 }

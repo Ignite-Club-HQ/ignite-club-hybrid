@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -102,33 +103,96 @@ export default function ManageUsersPage() {
   return <SupabaseManageUsersPage />;
 }
 
-/** Read-only identity_access directory; account status and role mutations remain unavailable pending parity. */
+const ASSIGNABLE_ROLES = ["app_admin", "club_admin", "team_member", "guardian"];
+
 function IcpLabManageUsersPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const persona = user?.id?.startsWith("icp-") ? user.id.slice(4) : "member";
   const [fallbackUsers] = useState(() => getLocalLabUserDirectory());
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, "Active" | "Suspended">>({});
+  const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
+  const [roleToAssign, setRoleToAssign] = useState<Record<string, string>>({});
+  const directoryQueryKey = ["icp-user-directory", persona];
   const { data: directory, error, isLoading } = useQuery({
-    queryKey: ["icp-user-directory", persona],
+    queryKey: directoryQueryKey,
     queryFn: async () => {
       try {
         const connection = await connectLocalIdentityAccessClient(persona);
         const state = await connection.client.exportState();
+        const rolesByAccount = new Map<string, typeof state.roles>();
+        state.roles.forEach((grant) => {
+          const existing = rolesByAccount.get(grant.account_id) ?? [];
+          existing.push(grant);
+          rolesByAccount.set(grant.account_id, existing);
+        });
         return {
           source: "icp" as const,
           users: state.accounts.map((account) => ({
             id: account.id,
             display_name: account.id,
             email: account.principals[0]?.toText() ?? "synthetic-principal",
+            roles: rolesByAccount.get(account.id) ?? [],
           })),
         };
       } catch (error) {
         if (!(error instanceof Error) || !/not configured/i.test(error.message)) throw error;
-        return { source: "fixture" as const, users: fallbackUsers };
+        return { source: "fixture" as const, users: fallbackUsers.map((u) => ({ ...u, roles: [] as any[] })) };
       }
     },
   });
-  const users = directory?.users ?? fallbackUsers;
+  const users = directory?.users ?? fallbackUsers.map((u) => ({ ...u, roles: [] as any[] }));
+  const isLive = directory?.source === "icp";
+
+  const refreshDirectory = () => queryClient.invalidateQueries({ queryKey: directoryQueryKey });
+
+  const handleToggleStatus = async (accountId: string, currentStatus: "Active" | "Suspended") => {
+    const nextStatus = currentStatus === "Active" ? "Suspended" : "Active";
+    setPendingAccountId(accountId);
+    try {
+      const { setLiveAccountStatus } = await import("@/live/features/identityAccessAdmin");
+      await setLiveAccountStatus(accountId, nextStatus);
+      setStatusOverrides((prev) => ({ ...prev, [accountId]: nextStatus }));
+      toast.success(nextStatus === "Suspended" ? "Account suspended" : "Account reactivated");
+      refreshDirectory();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update account status");
+    } finally {
+      setPendingAccountId(null);
+    }
+  };
+
+  const handleGrantRole = async (accountId: string) => {
+    const role = roleToAssign[accountId];
+    if (!role) return;
+    setPendingAccountId(accountId);
+    try {
+      const { grantLiveRole } = await import("@/live/features/identityAccessAdmin");
+      await grantLiveRole(accountId, role);
+      toast.success(`Granted ${role}`);
+      setRoleToAssign((prev) => ({ ...prev, [accountId]: "" }));
+      refreshDirectory();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to grant role");
+    } finally {
+      setPendingAccountId(null);
+    }
+  };
+
+  const handleRevokeRole = async (accountId: string, role: string, club?: string, team?: string, siteId?: string) => {
+    setPendingAccountId(accountId);
+    try {
+      const { revokeLiveRole } = await import("@/live/features/identityAccessAdmin");
+      await revokeLiveRole(accountId, role, club, team, siteId);
+      toast.success(`Revoked ${role}`);
+      refreshDirectory();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to revoke role");
+    } finally {
+      setPendingAccountId(null);
+    }
+  };
 
   return (
     <div className="container max-w-3xl mx-auto px-4 py-6 space-y-4">
@@ -138,27 +202,85 @@ function IcpLabManageUsersPage() {
         </Button>
         <h1 className="text-lg font-bold">Users</h1>
       </div>
-      <p className="text-sm text-muted-foreground">
-        {resolveAuthBackend() === "icp" ? "Loaded from the Internet Identity canisters. Account status changes, bans, and role edits are disabled." : directory?.source === "icp"
-          ? "Loaded from the local identity_access canister. Account status changes, bans, and role edits are disabled."
-          : "The local identity_access canister is not configured. Showing a synthetic read-only preview; no Supabase request was made."}
-      </p>
       {isLoading && <Skeleton className="h-10 w-full" />}
       {error && <p className="text-sm text-destructive">{error instanceof Error ? error.message : "Unable to load users."}</p>}
       <div className="space-y-2">
-        {users.map((profile) => (
-          <Card key={profile.id}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <Avatar>
-                <AvatarFallback>{(profile.display_name ?? "?").slice(0, 1)}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{profile.display_name}</p>
-                <p className="text-xs text-muted-foreground">{profile.email}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {users.map((profile) => {
+          const status = statusOverrides[profile.id] ?? "Active";
+          const isPending = pendingAccountId === profile.id;
+          return (
+            <Card key={profile.id}>
+              <CardContent className="flex flex-col gap-3 p-4">
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarFallback>{(profile.display_name ?? "?").slice(0, 1)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{profile.display_name}</p>
+                      <Badge variant={status === "Active" ? "secondary" : "destructive"}>{status}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{profile.email}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={status === "Active" ? "destructive" : "outline"}
+                    disabled={!isLive || isPending}
+                    onClick={() => handleToggleStatus(profile.id, status)}
+                  >
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "Active" ? "Suspend" : "Reactivate"}
+                  </Button>
+                </div>
+
+                {profile.roles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {profile.roles.map((grant: any, idx: number) => (
+                      <Badge key={idx} variant="outline" className="flex items-center gap-1">
+                        {grant.role}
+                        {grant.club?.[0] ? `:${grant.club[0]}` : ""}
+                        {grant.team?.[0] ? `/${grant.team[0]}` : ""}
+                        <button
+                          type="button"
+                          aria-label={`Revoke ${grant.role}`}
+                          disabled={!isLive || isPending}
+                          onClick={() => handleRevokeRole(profile.id, grant.role, grant.club?.[0], grant.team?.[0], grant.site_id?.[0])}
+                          className="ml-1 disabled:opacity-50"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={roleToAssign[profile.id] ?? ""}
+                    onValueChange={(value) => setRoleToAssign((prev) => ({ ...prev, [profile.id]: value }))}
+                    disabled={!isLive || isPending}
+                  >
+                    <SelectTrigger className="h-8 w-[180px]">
+                      <SelectValue placeholder="Assign role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ASSIGNABLE_ROLES.map((role) => (
+                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!isLive || isPending || !roleToAssign[profile.id]}
+                    onClick={() => handleGrantRole(profile.id)}
+                  >
+                    Grant
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
@@ -356,12 +478,30 @@ function SupabaseManageUsersPage() {
   const { data: appAdmins, isLoading: loadingAdmins } = useQuery({
     queryKey: ["app-admins"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("id, user_id, created_at, profiles (id, display_name, avatar_url)")
-        .eq("role", "app_admin");
-      if (error) throw error;
-      return data;
+      type AdminRow = { id: string; user_id: string; created_at: string | null; profiles: { id: string; display_name: string | null; avatar_url: string | null } | null };
+      return withFeatureBackend<AdminRow[]>("admin", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("user_roles")
+            .select("id, user_id, created_at, profiles (id, display_name, avatar_url)")
+            .eq("role", "app_admin");
+          if (error) throw error;
+          return (data ?? []) as unknown as AdminRow[];
+        },
+        icp: async (ctx) => {
+          const [{ listLiveAppAdmins }, { listLiveProfilesByIds }] = await Promise.all([
+            import("@/live/features/insights"),
+            import("@/live/features/identityAccessClient"),
+          ]);
+          const principals = (await listLiveAppAdmins(ctx)).map((p) => p.toText());
+          const profiles = await listLiveProfilesByIds(ctx, principals).catch(() => []);
+          const byId = new Map(profiles.map((p: { account_id: string; display_name?: string | null; avatar_url?: string | null }) => [p.account_id, p]));
+          return principals.map((id) => {
+            const p = byId.get(id);
+            return { id, user_id: id, created_at: null, profiles: { id, display_name: p?.display_name ?? null, avatar_url: p?.avatar_url ?? null } };
+          });
+        },
+      });
     },
     enabled: isAppAdmin === true,
   });
@@ -417,16 +557,26 @@ function SupabaseManageUsersPage() {
     queryFn: async () => {
       if (!adminSearchQuery.trim() || adminSearchQuery.length < 2) return [];
       
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url")
-        .ilike("display_name", `%${adminSearchQuery}%`)
-        .limit(10);
-      if (error) throw error;
-      
+      const data = await withFeatureBackend<Array<{ id: string; display_name: string | null; avatar_url: string | null }>>("admin", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url")
+            .ilike("display_name", `%${adminSearchQuery}%`)
+            .limit(10);
+          if (error) throw error;
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const { searchLiveProfilesWithPrincipals } = await import("@/live/features/identityAccessClient");
+          const rows = await searchLiveProfilesWithPrincipals(ctx, adminSearchQuery.trim(), 10);
+          return rows.map((r) => ({ id: r.principal.toText(), display_name: r.displayName, avatar_url: r.avatarUrl }));
+        },
+      });
+
       // Filter out users who are already app admins
       const adminIds = appAdmins?.map(a => a.user_id) || [];
-      return data?.filter(p => !adminIds.includes(p.id)) || [];
+      return data.filter(p => !adminIds.includes(p.id));
     },
     enabled: adminSearchQuery.length >= 2 && isAddDialogOpen,
   });
@@ -457,8 +607,25 @@ function SupabaseManageUsersPage() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: async ({ userId, immediate, gdprRequest = false }: { userId: string; immediate: boolean; gdprRequest?: boolean }) => {
-      // NEEDS-CANISTER: admin-delete-account not yet available on canister
-      if (resolveAuthBackend() === "icp") throw new Error("Account deletion is not yet available for Internet Identity accounts.");
+      if (resolveAuthBackend() === "icp") {
+        // identity_access.erase_account is app_admin-gated and immediate —
+        // there is no canister-side "scheduled" deletion, so any delete type
+        // selected here erases the account straight away.
+        const [{ getCurrentInternetIdentity }, { connectLiveIdentityAccessClientWithIdentity }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/identityAccess"),
+        ]);
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) throw new Error("You need to sign in again.");
+        const { client } = await connectLiveIdentityAccessClientWithIdentity(getActiveIcpTarget(), identity);
+        try {
+          await client.eraseAccount(userId);
+        } finally {
+          client.dispose();
+        }
+        return { success: true };
+      }
       const { data, error } = await supabase.functions.invoke('admin-delete-account', {
         body: { userId, immediate, gdprRequest }
       });
@@ -515,11 +682,23 @@ function SupabaseManageUsersPage() {
 
   const addAdminMutation = useMutation({
     mutationFn: async ({ userId, displayName }: { userId: string; displayName: string }) => {
-      const { error } = await supabase.from("user_roles").insert({
-        user_id: userId,
-        role: "app_admin",
+      await withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("user_roles").insert({
+            user_id: userId,
+            role: "app_admin",
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // In ICP mode the id is the person's principal text.
+          const [{ grantLiveAppAdmin }, { Principal }] = await Promise.all([
+            import("@/live/features/insights"),
+            import("@icp-sdk/core/principal"),
+          ]);
+          await grantLiveAppAdmin(ctx, Principal.fromText(userId));
+        },
       });
-      if (error) throw error;
 
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
       if (resolveAuthBackend() === "icp") {
@@ -570,8 +749,19 @@ function SupabaseManageUsersPage() {
 
   const removeAdminMutation = useMutation({
     mutationFn: async ({ roleId, userId }: { roleId: string; userId: string }) => {
-      const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
-      if (error) throw error;
+      await withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const [{ revokeLiveAppAdmin }, { Principal }] = await Promise.all([
+            import("@/live/features/insights"),
+            import("@icp-sdk/core/principal"),
+          ]);
+          await revokeLiveAppAdmin(ctx, Principal.fromText(userId));
+        },
+      });
 
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
       if (resolveAuthBackend() === "icp") {

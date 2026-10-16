@@ -9,6 +9,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   completeLiveEventDuty,
   createLiveOpenDuty,
+  claimLiveOpenDuty,
   removeLiveEventDuty,
   setLiveEventDuty,
   uncompleteLiveEventDuty,
@@ -151,6 +152,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
           const duty = duties?.find((candidate) => candidate.id === dutyId);
           if (!duty?.name) throw new Error("Duty not found");
           await setLiveEventDuty(ctx, id, user.id, duty.name);
+          if (String(duty.id).startsWith("open:")) await claimLiveOpenDuty(ctx, String(duty.id).slice(5), user.id).catch(() => undefined);
           return true;
         },
       });
@@ -267,6 +269,25 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
     });
   };
 
+  // Instant on-screen status flip (ICP saves take ~1.3s); caller rolls back
+  // from the returned snapshot on failure.
+  const optimisticDutyStatus = async (dutyId: string, status: "open" | "completed") => {
+    if (useIcpLab || !id) return undefined;
+    const key = eventKeys.duties(id);
+    await queryClient.cancelQueries({ queryKey: key });
+    const snapshot = queryClient.getQueryData(key);
+    queryClient.setQueryData(key, (current: unknown) =>
+      Array.isArray(current)
+        ? current.map((d: any) =>
+            d.id === dutyId
+              ? { ...d, status, completed_at: status === "completed" ? new Date().toISOString() : null }
+              : d,
+          )
+        : current,
+    );
+    return { snapshot };
+  };
+
   // Complete duty mutation
   const completeDutyMutation = useMutation({
     mutationFn: async (dutyId: string) => {
@@ -324,6 +345,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       await notifyDutyCompleted(duty);
       return { outcome: "completed" as const };
     },
+    onMutate: (dutyId: string) => optimisticDutyStatus(dutyId, "completed"),
     onSuccess: (result) => {
       if (useIcpLab) {
         toast({ title: "Duty completed locally" });
@@ -336,7 +358,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       }
     },
 
-    onError: (error) => {
+    onError: (error, _dutyId, ctx: any) => {
       if (error instanceof DutyNotificationPartialError) {
         // The duty IS completed — never roll back or reopen it, and never
         // report a total failure.
@@ -348,6 +370,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         });
         return;
       }
+      if (ctx && "snapshot" in ctx) queryClient.setQueryData(eventKeys.duties(id), ctx.snapshot);
       toast({ 
         title: "Failed to complete duty", 
         description: error.message,
@@ -386,6 +409,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         .eq("id", dutyId);
       if (error) throw error;
     },
+    onMutate: (dutyId: string) => optimisticDutyStatus(dutyId, "open"),
     onSuccess: () => {
       if (useIcpLab) {
         toast({ title: "Duty reopened locally" });
@@ -395,7 +419,8 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       queryClient.invalidateQueries({ queryKey: eventKeys.duties(id) });
       toast({ title: "Marked as not complete" });
     },
-    onError: (error) => {
+    onError: (error, _dutyId, ctx: any) => {
+      if (ctx && "snapshot" in ctx) queryClient.setQueryData(eventKeys.duties(id), ctx.snapshot);
       toast({
         title: "Failed to undo",
         description: error.message,
@@ -464,6 +489,19 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       // set-duty write as claiming (provisional — verify against the live
       // canister post-deploy). Unassigning (userId === null) has no canister
       // shape, so it always stays on Supabase.
+      if (!userId && isFeatureRoutedToIcp("events")) {
+        // Unassign on-chain: remove the current assignee's duty row.
+        const duty = duties?.find((candidate) => candidate.id === selectedDutyId);
+        const prev = duty?.assigned_to ? String(duty.assigned_to) : null;
+        if (!id) throw new Error("Missing event ID");
+        if (prev) {
+          await withFeatureBackend("events", {
+            supabase: async () => undefined,
+            icp: async (ctx) => { await removeLiveEventDuty(ctx, id, prev); },
+          });
+        }
+        return;
+      }
       const assignedOnIcp = userId
         ? await withFeatureBackend("events", {
             supabase: () => false,
@@ -472,6 +510,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
               const duty = duties?.find((candidate) => candidate.id === selectedDutyId);
               if (!duty?.name) throw new Error("Duty not found");
               await setLiveEventDuty(ctx, id, userId, duty.name);
+              if (String(duty.id).startsWith("open:")) await claimLiveOpenDuty(ctx, String(duty.id).slice(5), userId).catch(() => undefined);
               return true;
             },
           })

@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { savePitchState } from "../pitchStateUtils";
 import type {
   Goal,
@@ -61,15 +61,23 @@ export function usePitchBoardUnlinkEvent({
       goals,
     });
 
-    // NEEDS-CANISTER: active_games has no events_domain equivalent; II
-    // sessions have no Supabase session, so skip this deactivation write.
-    if (userId && !teamId.startsWith("event-group-") && resolveAuthBackend() !== "icp") {
-      await supabase
-        .from("active_games")
-        .update({ is_active: false })
-        .eq("team_id", teamId)
-        .eq("user_id", userId)
-        .eq("is_active", true);
+    if (userId && !teamId.startsWith("event-group-")) {
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          await supabase
+            .from("active_games")
+            .update({ is_active: false })
+            .eq("team_id", teamId)
+            .eq("user_id", userId)
+            .eq("is_active", true);
+        },
+        // Wired: events_domain.deactivate_active_game is the canister
+        // counterpart of the active_games.is_active flip.
+        icp: async (ctx) => {
+          const { deactivateLiveActiveGame } = await import("@/live/features/events");
+          await deactivateLiveActiveGame(ctx, teamId);
+        },
+      });
     }
 
     invalidateTeamActiveGame();

@@ -1,3 +1,4 @@
+import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveIcpBlobObjectUrl, parseIcpBlobUrl } from "@/live/mediaDecrypt";
@@ -159,6 +160,8 @@ async function createSignedUrlViaFunction(url: string): Promise<string | null> {
 
 
 export async function resolveSignedUrl(url: string): Promise<string> {
+  const localPreview = localUploadPreviews.get(url);
+  if (localPreview) return localPreview;
   // ICP blob-store URLs serve IBE ciphertext: fetch + decrypt in-browser
   // (never fall back to the raw URL). Returns null for non-blob URLs.
   const icpObjectUrl = await resolveIcpBlobObjectUrl(url);
@@ -184,6 +187,8 @@ export async function resolveSignedUrl(url: string): Promise<string> {
 
 function readCachedSignedUrl(url: string | null | undefined): string | null {
   if (!url) return null;
+  const localPreview = localUploadPreviews.get(url);
+  if (localPreview) return localPreview;
   const cached = urlCache.get(url);
   if (cached && cached.expiresAt > Date.now()) return cached.url;
   // ICP blob-store URLs serve IBE ciphertext — they are never directly

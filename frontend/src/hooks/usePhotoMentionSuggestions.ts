@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { myLiveRoleGrants } from "@/live/features/club";
+import { listLiveTeamRoleGrants } from "@/live/features/membership";
+import { listLiveAdmins, listLivePlayers } from "@/live/features/miniLeagues";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 
 export interface MentionScope {
   teamId?: string | null;
@@ -42,19 +45,33 @@ export function usePhotoMentionSuggestions(
     queryFn: async (): Promise<MentionUser[]> => {
       let userIds: string[] = [];
 
-      if (isFeatureRoutedToIcp("membership") && (scope.teamId || scope.clubId)) {
-        // Internet Identity users: resolve the mention audience from the
-        // canister's caller-scoped role grants rather than Supabase
-        // `user_roles` (there is no cross-caller role lookup on the
-        // canister, so this only covers the signed-in caller's own scope).
+      const icp = isFeatureRoutedToIcp("membership");
+      if (icp && scope.miniLeagueId) {
+        // Internet Identity: league admins + parents of league players, on-chain.
+        const mlId = scope.miniLeagueId;
+        const ids = await withFeatureBackend("mini_leagues", {
+          supabase: async () => [] as string[],
+          icp: async (ctx) => {
+            const [admins, players] = await Promise.all([
+              listLiveAdmins(ctx, mlId),
+              listLivePlayers(ctx, mlId),
+            ]);
+            const out = new Set<string>();
+            admins.forEach((a: { user_id: { toText(): string } }) => out.add(a.user_id.toText()));
+            players.forEach((p) => p.parent_user_id[0] && out.add(p.parent_user_id[0]));
+            return [...out];
+          },
+        });
+        userIds = ids;
+      } else if (icp && (scope.teamId || scope.clubId)) {
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
-          icp: (ctx) => myLiveRoleGrants(ctx),
+          icp: (ctx) => (scope.teamId ? listLiveTeamRoleGrants(ctx, scope.teamId) : myLiveRoleGrants(ctx)),
         });
         userIds = [
           ...new Set(
             grants
-              .filter((g) => (scope.teamId ? g.team === scope.teamId : g.club === scope.clubId))
+              .filter((g) => (scope.teamId ? g.team[0] === scope.teamId : g.club[0] === scope.clubId))
               .map((g) => g.user.toText()),
           ),
         ];
@@ -100,6 +117,21 @@ export function usePhotoMentionSuggestions(
       }
 
       if (userIds.length === 0) return [];
+
+      if (icp) {
+        const needle = search.toLowerCase();
+        const rows = await withFeatureBackend("membership", {
+          supabase: async () => [] as MentionUser[],
+          icp: async (ctx) =>
+            (await listLiveProfilesByIds(ctx, userIds)).map((r) => {
+              const row = r as unknown as { account_id: string; display_name?: string | null; avatar_ref?: [] | [string] };
+              return { id: row.account_id, display_name: row.display_name ?? null, avatar_url: row.avatar_ref?.[0] ?? null };
+            }),
+        });
+        return rows
+          .filter((r) => r.display_name && (!needle || r.display_name.toLowerCase().includes(needle)))
+          .slice(0, 6);
+      }
 
       const safe = search.replace(/[\\%_]/g, (m) => `\\${m}`);
       let q = supabase

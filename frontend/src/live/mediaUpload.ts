@@ -43,6 +43,7 @@ export function isIcpMediaUploadUnavailable(): boolean {
   return !isBlobStoreConfigured(getActiveIcpTarget());
 }
 
+
 export interface BlobMediaUpload {
   /** On-chain URL to persist in place of a Supabase storage URL. */
   url: string;

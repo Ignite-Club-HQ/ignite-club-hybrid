@@ -16,11 +16,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveTeams } from "@/live/features/club";
+import { listLiveEvents } from "@/live/features/events";
+import { resolveLiveProFootballAccess } from "@/live/features/proAccess";
 
-// NEEDS-CANISTER: player-stats reporting has no canister shape yet — in ICP
-// mode every query on this page is disabled so no II principal reaches Supabase.
-const isIcpPageMode = () => resolveAuthBackend() === "icp";
+// Player-stats reporting is backed canister-side by events_domain's
+// get_player_stats_report; team/game listing and the Pro Football gate
+// below dispatch through withFeatureBackend instead of disabling ICP
+// sessions outright.
 import PlayerStatsReportView from "@/components/reports/PlayerStatsReportView";
 
 interface Team {
@@ -72,7 +76,29 @@ function SupabasePlayerStatsReportPage() {
   // Fetch teams the user can report on, strictly scoped to the active club filter.
   const { data: teams, isLoading: teamsLoading } = useQuery({
     queryKey: ["admin-coach-teams", user?.id, activeClubFilter],
-    queryFn: async () => {
+    queryFn: () => withFeatureBackend("events", {
+      icp: async (ctx) => {
+        // ICP club membership is pinned to a single active club; canister
+        // role-gating happens server-side on the report query itself, so
+        // every team in the active club is listed here.
+        if (!activeClubFilter) return [] as Team[];
+        const rows = await listLiveTeams(ctx, activeClubFilter);
+        const allTeams: Team[] = (rows ?? []).map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          logo_url: t.logo_url ?? null,
+          club_id: t.club_id,
+          clubs: null,
+        }));
+        allTeams.sort((a, b) => a.name.localeCompare(b.name));
+        return lockedTeamId ? allTeams.filter((t) => t.id === lockedTeamId) : allTeams;
+      },
+      supabase: () => fetchSupabaseTeams(),
+    }),
+    enabled: !!user,
+  });
+
+  async function fetchSupabaseTeams(): Promise<Team[]> {
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("team_id, club_id, role")
@@ -134,9 +160,7 @@ function SupabasePlayerStatsReportPage() {
         return allTeams.filter((t) => t.id === lockedTeamId);
       }
       return allTeams;
-    },
-    enabled: !!user && !isIcpPageMode(),
-  });
+  }
 
   // If the active club changes, drop a selection that no longer belongs to it.
   useEffect(() => {
@@ -151,92 +175,123 @@ function SupabasePlayerStatsReportPage() {
   // Fetch game events for selected team that have stats
   const { data: gameEvents, isLoading: eventsLoading } = useQuery({
     queryKey: ["team-game-events", selectedTeamId],
-    queryFn: async () => {
-      // Events that have any saved stats for this team. Historically only
-      // `game_summaries.team_id` was consulted, so games whose summary was
-      // saved without a team id (or that only produced player-stat rows)
-      // vanished from the report. Union every signal instead.
-      const [summariesRes, statsRes, teamEventsRes] = await Promise.all([
-        supabase.from("game_summaries").select("event_id").eq("team_id", selectedTeamId),
-        supabase.from("game_player_stats").select("event_id").eq("team_id", selectedTeamId),
-        supabase.from("events").select("id").eq("team_id", selectedTeamId).eq("type", "game"),
-      ]);
-
-      const eventIdSet = new Set<string>();
-      for (const row of summariesRes.data || []) if (row.event_id) eventIdSet.add(row.event_id);
-      for (const row of statsRes.data || []) if (row.event_id) eventIdSet.add(row.event_id);
-
-      // Recover rows saved without a team id by checking this team's own events.
-      const teamEventIds = (teamEventsRes.data || []).map((e: any) => e.id).filter(Boolean);
-      if (teamEventIds.length > 0) {
-        const [orphanStats, orphanSummaries] = await Promise.all([
-          supabase.from("game_player_stats").select("event_id").in("event_id", teamEventIds),
-          supabase.from("game_summaries").select("event_id").in("event_id", teamEventIds),
-        ]);
-        for (const row of orphanStats.data || []) if (row.event_id) eventIdSet.add(row.event_id);
-        for (const row of orphanSummaries.data || []) if (row.event_id) eventIdSet.add(row.event_id);
-      }
-
-      const eventIds = Array.from(eventIdSet);
-      if (eventIds.length === 0) return [];
-
-      const { data: events } = await supabase
-        .from("events")
-        .select("id, title, event_date, opponent")
-        .in("id", eventIds)
-        .eq("type", "game")
-        .order("event_date", { ascending: false });
-
-      return (events as GameEvent[]) || [];
-    },
-    enabled: !!selectedTeamId && !isIcpPageMode(),
+    queryFn: () => withFeatureBackend("events", {
+      icp: async (ctx) => {
+        // The canister has no per-event "has stats" index — get_player_stats_report
+        // aggregates across a date range instead — so every game-type event for the
+        // team is listed here; selecting one scopes PlayerStatsReportView's query.
+        const rows = await listLiveEvents(ctx, null, selectedTeamId);
+        const games = (rows ?? [])
+          .filter((e: any) => e.event_type === "game")
+          .map((e: any) => ({
+            id: e.id,
+            title: e.title,
+            event_date: new Date(Number(e.starts_at_ms)).toISOString(),
+            opponent: e.opponent?.[0] ?? null,
+          }))
+          .sort((a, b) => (a.event_date < b.event_date ? 1 : -1));
+        return games as GameEvent[];
+      },
+      supabase: () => fetchSupabaseGameEvents(),
+    }),
+    enabled: !!selectedTeamId,
   });
+
+  async function fetchSupabaseGameEvents(): Promise<GameEvent[]> {
+    // Events that have any saved stats for this team. Historically only
+    // `game_summaries.team_id` was consulted, so games whose summary was
+    // saved without a team id (or that only produced player-stat rows)
+    // vanished from the report. Union every signal instead.
+    const [summariesRes, statsRes, teamEventsRes] = await Promise.all([
+      supabase.from("game_summaries").select("event_id").eq("team_id", selectedTeamId),
+      supabase.from("game_player_stats").select("event_id").eq("team_id", selectedTeamId),
+      supabase.from("events").select("id").eq("team_id", selectedTeamId).eq("type", "game"),
+    ]);
+
+    const eventIdSet = new Set<string>();
+    for (const row of summariesRes.data || []) if (row.event_id) eventIdSet.add(row.event_id);
+    for (const row of statsRes.data || []) if (row.event_id) eventIdSet.add(row.event_id);
+
+    // Recover rows saved without a team id by checking this team's own events.
+    const teamEventIds = (teamEventsRes.data || []).map((e: any) => e.id).filter(Boolean);
+    if (teamEventIds.length > 0) {
+      const [orphanStats, orphanSummaries] = await Promise.all([
+        supabase.from("game_player_stats").select("event_id").in("event_id", teamEventIds),
+        supabase.from("game_summaries").select("event_id").in("event_id", teamEventIds),
+      ]);
+      for (const row of orphanStats.data || []) if (row.event_id) eventIdSet.add(row.event_id);
+      for (const row of orphanSummaries.data || []) if (row.event_id) eventIdSet.add(row.event_id);
+    }
+
+    const eventIds = Array.from(eventIdSet);
+    if (eventIds.length === 0) return [];
+
+    const { data: events } = await supabase
+      .from("events")
+      .select("id, title, event_date, opponent")
+      .in("id", eventIds)
+      .eq("type", "game")
+      .order("event_date", { ascending: false });
+
+    return (events as GameEvent[]) || [];
+  }
 
   // Check if user has Pro Football access via team or club subscription
   const { data: hasProFootball, isLoading: proFootballLoading } = useQuery({
-    queryKey: ["pro-football-access", user?.id],
-    queryFn: async () => {
-      // Check team subscriptions
-      // Get user's team and club memberships first
-      const { data: userTeamRoles } = await supabase
-        .from("user_roles")
-        .select("team_id")
-        .eq("user_id", user!.id)
-        .not("team_id", "is", null);
-
-      const { data: userClubRoles } = await supabase
-        .from("user_roles")
-        .select("club_id")
-        .eq("user_id", user!.id)
-        .not("club_id", "is", null);
-
-      const userTeamIds = userTeamRoles?.map((r) => r.team_id) || [];
-      const userClubIds = userClubRoles?.map((r) => r.club_id) || [];
-
-      // Check team subscriptions
-      if (userTeamIds.length > 0) {
-        const { data: teamSubs } = await supabase
-          .from("team_subscriptions")
-          .select("team_id, is_pro_football, admin_pro_football_override")
-          .in("team_id", userTeamIds);
-
-        if (teamSubs?.some((s) => s.is_pro_football || s.admin_pro_football_override)) return true;
-      }
-
-      // Check club subscriptions
-      if (userClubIds.length > 0) {
-        const { data: clubSubs } = await supabase
-          .from("club_subscriptions")
-          .select("club_id, is_pro_football, admin_pro_football_override")
-          .in("club_id", userClubIds);
-
-        if (clubSubs?.some((s) => s.is_pro_football || s.admin_pro_football_override)) return true;
-      }
-
-      return false;
-    },
-    enabled: !!user && !isIcpPageMode(),
+    queryKey: ["pro-football-access", user?.id, activeClubFilter, teams?.map((t) => t.id).join(",")],
+    queryFn: () => withFeatureBackend("events", {
+      icp: async (ctx) => {
+        if (activeClubFilter && (await resolveLiveProFootballAccess(ctx, { clubId: activeClubFilter }))) return true;
+        for (const team of teams ?? []) {
+          if (await resolveLiveProFootballAccess(ctx, { teamId: team.id })) return true;
+        }
+        return false;
+      },
+      supabase: () => fetchSupabaseProFootballAccess(),
+    }),
+    enabled: !!user && !!teams,
   });
+
+  async function fetchSupabaseProFootballAccess(): Promise<boolean> {
+    // Check team subscriptions
+    // Get user's team and club memberships first
+    const { data: userTeamRoles } = await supabase
+      .from("user_roles")
+      .select("team_id")
+      .eq("user_id", user!.id)
+      .not("team_id", "is", null);
+
+    const { data: userClubRoles } = await supabase
+      .from("user_roles")
+      .select("club_id")
+      .eq("user_id", user!.id)
+      .not("club_id", "is", null);
+
+    const userTeamIds = userTeamRoles?.map((r) => r.team_id) || [];
+    const userClubIds = userClubRoles?.map((r) => r.club_id) || [];
+
+    // Check team subscriptions
+    if (userTeamIds.length > 0) {
+      const { data: teamSubs } = await supabase
+        .from("team_subscriptions")
+        .select("team_id, is_pro_football, admin_pro_football_override")
+        .in("team_id", userTeamIds);
+
+      if (teamSubs?.some((s) => s.is_pro_football || s.admin_pro_football_override)) return true;
+    }
+
+    // Check club subscriptions
+    if (userClubIds.length > 0) {
+      const { data: clubSubs } = await supabase
+        .from("club_subscriptions")
+        .select("club_id, is_pro_football, admin_pro_football_override")
+        .in("club_id", userClubIds);
+
+      if (clubSubs?.some((s) => s.is_pro_football || s.admin_pro_football_override)) return true;
+    }
+
+    return false;
+  }
 
   // Select first team by default, or preselect the team passed via URL query param
   if (teams && teams.length > 0 && (!selectedTeamId || !teams.some((t) => t.id === selectedTeamId))) {

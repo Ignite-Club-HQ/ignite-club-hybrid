@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { resendLivePendingInvite } from "@/live/features/club";
+import { resendLivePendingInvite, getLiveClubBranding, getLiveTeam } from "@/live/features/club";
 import PendingInviteCard from "./PendingInviteCard";
 import ReconcilePendingInvitesButton from "./ReconcilePendingInvitesButton";
 
@@ -65,26 +65,97 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
     if (invitesWithEmail.length === 0) return;
 
     if (isFeatureRoutedToIcp("membership")) {
-      // ICP path: club_domain only exposes resend_pending_invite per-invite
-      // (it reissues the invite payload; there is no "send email" side
-      // effect on canister side — email delivery stays Supabase-only).
-      // NEEDS-CANISTER: actual email dispatch for resend_pending_invite's payload.
       setIsResendingAll(true);
       let sentCount = 0;
       let failCount = 0;
-      for (const invite of invitesWithEmail) {
-        try {
-          await withFeatureBackend("membership", {
-            supabase: async () => {
-              throw new Error("unreachable: already routed to icp");
-            },
-            icp: (ctx) => resendLivePendingInvite(ctx, invite.id),
+
+      try {
+        // Fetch branding info once for the club
+        const effectiveClubId = clubId || (invites[0] as any).club_id;
+        if (!effectiveClubId) throw new Error("Missing club ID for branding lookup");
+
+        const branding = await withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: (ctx) => getLiveClubBranding(ctx, effectiveClubId),
+        });
+
+        const clubName = branding?.name || "The Club";
+        const clubLogoUrl = branding?.logo_url[0];
+        const clubContactEmail = branding?.contact_email[0];
+
+        // Fetch team name if teamId is provided
+        let teamName = "";
+        if (teamId) {
+          const team = await withFeatureBackend("membership", {
+            supabase: async () => null,
+            icp: (ctx) => getLiveTeam(ctx, teamId),
           });
-          sentCount++;
-        } catch {
-          failCount++;
+          teamName = team && team.length ? team[0].name : "";
         }
+
+        for (const invite of invitesWithEmail) {
+          try {
+            const res = await withFeatureBackend("membership", {
+              supabase: async () => {
+                throw new Error("unreachable: already routed to icp");
+              },
+              icp: (ctx) => resendLivePendingInvite(ctx, invite.id),
+            });
+
+            // Resending on canister returns the invite record (or similar payload).
+            // We use the same invite ID as the token for ICP pending invites.
+            const inviteToken = invite.id;
+            const inviteLinkForEmail = `${window.location.origin}/join/p/${inviteToken}`;
+            const recipientName = invite.invited_label || invite.profiles?.display_name || "Member";
+            
+            // ICP invite metadata is often a JSON string or already parsed
+            const meta = (typeof (res as any).invite?.metadata === 'string' ? JSON.parse((res as any).invite.metadata) : (res as any).invite?.metadata) as { children?: { name: string }[]; customMessage?: string } | null;
+            const childrenNames = invite.role === "parent" && meta?.children
+              ? meta.children.map(c => c.name)
+              : undefined;
+
+            const { data: emailResult, error: funcError } = await supabase.functions.invoke("send-email", {
+              body: {
+                to: invite.invited_email,
+                subject: childrenNames && childrenNames.length === 1
+                  ? `Reminder: ${clubName} — see which team ${childrenNames[0]} is in ⚽`
+                  : childrenNames && childrenNames.length > 1
+                    ? `Reminder: ${clubName} — see which team your kids are in ⚽`
+                    : `Reminder: ${clubName} — you've been added to the team ⚽`,
+                template: "team-invite",
+                senderName: clubName !== "The Club" ? clubName : undefined,
+                replyTo: clubContactEmail,
+                templateData: {
+                  recipientName,
+                  invitedEmail: invite.invited_email,
+                  teamName: teamName || clubName,
+                  clubName,
+                  roleName: roleLabels[invite.role] || invite.role.replace("_", " "),
+                  inviteLink: inviteLinkForEmail,
+                  clubLogoUrl,
+                  childrenNames,
+                  customMessage: meta?.customMessage,
+                },
+              },
+            });
+
+            if (funcError) throw funcError;
+
+            if (emailResult?.verified && emailResult?.success) {
+              sentCount++;
+            } else {
+              throw new Error(emailResult?.error || "Email not verified");
+            }
+          } catch (e) {
+            console.error("Failed to resend invite", invite.id, e);
+            failCount++;
+          }
+        }
+      } catch (err) {
+        console.error("Error in resend all (ICP path)", err);
+        failCount = invitesWithEmail.length;
       }
+
       queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
       setIsResendingAll(false);
       setShowResendAllDialog(false);

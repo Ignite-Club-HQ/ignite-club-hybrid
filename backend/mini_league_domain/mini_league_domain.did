@@ -1,3 +1,9 @@
+type PublicMiniLeagueSummary = 
+ record {
+   club_id: text;
+   id: text;
+   name: text;
+ };
 type PlayerGuardianStatus = 
  record {
    guardian_count: nat;
@@ -211,6 +217,7 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
+   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_mini_league: (mini_league_id: text) -> (variant {
                                                     Err: text;
                                                     Ok;
@@ -305,6 +312,7 @@ type Main =
        Err: text;
        Ok: vec MiniLeaguePlayer;
      }) query;
+   list_public_mini_leagues: () -> (vec PublicMiniLeagueSummary) query;
    list_session_availability: (session_id: text) ->
     (variant {
        Err: text;
@@ -317,6 +325,11 @@ type Main =
      }) query;
    my_availability: () -> (vec MiniLeagueSessionAvailability) query;
    my_leagues: () -> (vec MiniLeague) query;
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    remove_admin: (mini_league_id: text, user_id: principal) ->
     (variant {
        Err: text;

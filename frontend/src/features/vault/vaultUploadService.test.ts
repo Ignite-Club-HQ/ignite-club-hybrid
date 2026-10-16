@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import {
   buildVaultUploadPath,
-  createVaultExternalLink,
   getVaultUploadScope,
   uploadVaultItem,
   type VaultUploadDependencies,

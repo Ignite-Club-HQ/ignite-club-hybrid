@@ -168,6 +168,29 @@ module {
   // and pitch-board settings. Pro flags are platform-written only (a team
   // cannot grant itself Pro); pitch fields are team-admin writable through
   // save_team_pitch_settings, which never touches the Pro flags.
+  // promo_codes parity. Platform-admin managed; redeemed by a team/club
+  // admin through redeem_team_promo_code, which writes the Pro flags the
+  // admin could not set directly.
+  public type PromoCode = {
+    id : Text;
+    code : Text;
+    access_level : Text; // "pro" | "pro_football" | "storage"
+    scope_type : Text; // "team" | "club"
+    club_id : ?Text;
+    storage_gb : ?Nat32;
+    expires_at_ms : ?Nat64;
+    is_active : Bool;
+    uses_count : Nat32;
+    created_by : Principal;
+    created_at_ms : Nat64;
+  };
+  public type PromoRedemption = {
+    promo_id : Text;
+    target_id : Text; // team id
+    redeemed_by : Principal;
+    redeemed_at_ms : Nat64;
+    expires_at_ms : Nat64;
+  };
   public type TeamSubscription = {
     team_id : Text;
     is_pro : Bool;
@@ -495,5 +518,51 @@ module {
     attendance_pct : Float;
     games_played : Nat32;
     updated_at_ms : Nat64;
+  };
+
+  // Season team assignment — a draft membership of a club member on a team
+  // scoped to a season, distinct from AccountRole (permanent club/team role
+  // grants). Lets draft planning and season rollover move members between
+  // teams for an upcoming season without touching live ACL roles.
+  public type SeasonTeamAssignment = { season_id : Text; team_id : Text; member_id : Text; added_at_ms : Nat64 };
+
+  // Class/term enrolment record — a member's enrolment status in a class
+  // within a ClubTerm. class_id is a free-form identifier (the Supabase
+  // classes.id text), distinct from team_id.
+  public type ClassEnrolment = {
+    id : Text;
+    club_id : Text;
+    term_id : Text;
+    class_id : Text;
+    member_id : Text;
+    status : Text; // "enrolled" | "withdrawn"
+    created_at_ms : Nat64;
+    updated_at_ms : Nat64;
+  };
+
+
+  // Multi-position + jersey number per player — superset of
+  // TeamPlayerPosition (which stays for legacy single-position readers).
+  public type TeamPlayerPositionAssignment = { team_id : Text; member_id : Text; positions : [Text]; jersey_number : ?Nat16 };
+
+  // Guardian relationship metadata (relationship_type/is_primary) keyed on
+  // top of the core acl.guardians link (child, user) pair.
+  public type GuardianMeta = { child_id : Text; user : Principal; relationship_type : Text; is_primary : Bool };
+
+  // Salted-hash dedupe index for pending invite emails: the frontend hashes
+  // the email (salt + lowercase email, SHA-256) before it ever reaches the
+  // canister, so no plaintext email is required to detect a duplicate invite.
+  public type PendingInviteEmailHash = { invite_id : Text; club_id : Text; hash : Text };
+
+  // Per-club general settings — class/term mode toggle, default guest
+  // policy for event RSVPs, and whether the events sponsor strip renders.
+  // Separate from ClubSettings (theme/branding) so this migration-added
+  // record stays independent of that earlier, already-stable type.
+  public type ClubGeneralSettings = {
+    club_id : Text;
+    class_mode_enabled : Bool;
+    allow_guests_default : Bool;
+    max_guests_per_member_default : Nat;
+    events_sponsor_strip_enabled : Bool;
   };
 }

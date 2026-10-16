@@ -5,15 +5,18 @@ const mocks = vi.hoisted(() => ({
   getCurrentInternetIdentity: vi.fn(),
   getActiveIcpTarget: vi.fn(() => ({ alias: "test-target" })),
   tryGetActiveIcpTarget: vi.fn<() => unknown>(() => null),
+  isSignedInWithEmail: vi.fn(() => false),
 }));
 
 vi.mock("./loadBackendRouting", () => ({
   getEffectiveBackendForFeature: mocks.getEffectiveBackendForFeature,
   tryGetActiveIcpTarget: mocks.tryGetActiveIcpTarget,
+  isSignedInWithEmail: mocks.isSignedInWithEmail,
 }));
 
 vi.mock("./internetIdentityAuth", () => ({
   getCurrentInternetIdentity: mocks.getCurrentInternetIdentity,
+  getCurrentInternetIdentityConfirmed: mocks.getCurrentInternetIdentity,
 }));
 
 vi.mock("./targetRegistry", () => ({
@@ -27,6 +30,16 @@ describe("withFeatureBackend", () => {
     mocks.getEffectiveBackendForFeature.mockReset();
     mocks.getCurrentInternetIdentity.mockReset();
     mocks.tryGetActiveIcpTarget.mockReturnValue(null);
+    mocks.isSignedInWithEmail.mockReturnValue(false);
+  });
+
+  it("reads Supabase for an email sign-in even when a club pin routes the feature to ICP", async () => {
+    mocks.isSignedInWithEmail.mockReturnValue(true);
+    mocks.getEffectiveBackendForFeature.mockReturnValue("icp");
+    const supabaseFn = vi.fn(async () => "supabase-result");
+    const icpFn = vi.fn(async () => "icp-result");
+    expect(await withFeatureBackend("messaging", { supabase: supabaseFn, icp: icpFn })).toBe("supabase-result");
+    expect(icpFn).not.toHaveBeenCalled();
   });
 
   it("keeps an Internet Identity user on the canister when routing momentarily says Supabase", async () => {

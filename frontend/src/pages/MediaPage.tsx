@@ -3,6 +3,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { usePersistedFilter } from "@/lib/persistedFilter";
 import { cn } from "@/lib/utils";
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, onlineManager } from "@tanstack/react-query";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { Image, Lock, Crown, Plus, MessageCircle, Trash2, Loader2, Filter, Flag, ShieldAlert, Eye, WifiOff } from "lucide-react";
 import {
   Sheet,
@@ -39,7 +40,6 @@ import {
 import { fetchMediaComments, fetchMediaReactions } from "@/features/media/mediaReadRepository";
 import { createMediaComment, removeMediaReaction, replaceMediaReaction } from "@/features/media/mediaEngagementRepository";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { ensureFreshSession, isAuthLikeError } from "@/lib/ensureFreshSession";
 import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
@@ -49,6 +49,8 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { toast } from "sonner";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
+import { useIcpEntitlements } from "@/hooks/useIcpProAccess";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { Link } from "react-router-dom";
@@ -67,7 +69,7 @@ import { useClubFreeUsage, readClubFreeUsageSnapshot, FREE_PHOTO_UPLOADS_PER_CYC
 import { UsageMeter } from "@/components/subscription/UsageMeter";
 import { FREE_UPGRADE_MESSAGES } from "@/lib/freeUpgradeMessages";
 import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
-import { cachePhotos, removePhotoFromCache, getFeedPhotosFromCache, backgroundRefreshPhotos, CachedPhoto } from "@/lib/mediaCache";
+import { cachePhotos, getCachedPhotos, removePhotoFromCache, getFeedPhotosFromCache, backgroundRefreshPhotos, CachedPhoto } from "@/lib/mediaCache";
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePhotoViewCounts, useRecordPhotoView, usePhotoViewRealtime } from "@/hooks/usePhotoViews";
 import { IcpMediaFeedPage, PhotoSkeleton } from "@/components/media/IcpMediaFeedPage";
@@ -89,6 +91,8 @@ import {
 // date don't show a view count since scroll views weren't recorded yet.
 const PHOTO_VIEWS_FEATURE_LAUNCH = new Date("2026-04-18T00:00:00Z");
 
+const EMPTY_ROLES: Array<{ role: string; club_id: string | null; team_id: string | null }> = [];
+
 export default function MediaPage() {
   if (isFeatureRoutedToIcp("media")) {
     return <IcpMediaFeedPage />;
@@ -108,16 +112,15 @@ function SupabaseMediaPage() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
   // Auto-open the upload sheet when ?upload=1 is in the URL (e.g. tapped from
-  // a post-game gallery prompt card in team chat). Skipped for Internet
-  // Identity members until the media_blob_store canister is configured —
-  // uploads are hidden for them (fail-closed guard inside the sheet too).
+  // a post-game gallery prompt card in team chat).
   useEffect(() => {
-    if (searchParams.get("upload") === "1" && !isIcpMediaUploadUnavailable()) {
+    if (searchParams.get("upload") === "1") {
       setUploadDialogOpen(true);
     }
   }, [searchParams]);
 
   const [uploadingCount, setUploadingCount] = useState(0);
+  const [uploadingPreviews, setUploadingPreviews] = useState<string[]>([]);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [replyingTo, setReplyingTo] = useState<Record<string, { id: string; name: string } | undefined>>({});
@@ -182,6 +185,10 @@ function SupabaseMediaPage() {
   const [cachedPhotosData, setCachedPhotosData] = useState<CachedPhoto[] | null>(null);
   const [isCacheStale, setIsCacheStale] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  // Secure-sign-in (ICP) feeds are always club-scoped; cache per club so the
+  // last-seen photos paint instantly while the canister read refreshes.
+  const isIcpMode = resolveAuthBackend() === "icp";
+  const feedCacheClubRef = useRef<string | null>(null);
   const PHOTOS_PER_PAGE = 9; // Smaller initial load for faster first paint
 
   // Load cached photos immediately on mount for instant display, AND re-hydrate
@@ -191,7 +198,10 @@ function SupabaseMediaPage() {
   // original mount-time hydrate had already run with no cache present.
   useEffect(() => {
     const hydrate = () => {
-      const { photos: cached, isStale } = getFeedPhotosFromCache();
+      const club = feedCacheClubRef.current;
+      const { photos: cached, isStale } = club
+        ? getCachedPhotos(null, club, null, { allowStale: true })
+        : getFeedPhotosFromCache();
       if (cached && cached.length > 0) {
         setCachedPhotosData(cached);
         setIsCacheStale(isStale);
@@ -311,7 +321,7 @@ function SupabaseMediaPage() {
     console.warn(`[MediaDiag] ${step}`, { t: new Date().toISOString(), userId: user?.id, ...extra });
   };
 
-  const { data: userRoles, isLoading: loadingRoles } = useQuery({
+  const { data: supabaseUserRoles, isLoading: loadingRolesSb } = useQuery({
     queryKey: ["user-roles-media", user?.id],
     queryFn: async () => {
       const start = performance.now();
@@ -325,11 +335,14 @@ function SupabaseMediaPage() {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user,
+    // ICP accounts have no Supabase roles — skip the round trip entirely.
+    enabled: !!user && !isIcpMode,
     staleTime: 300000,
     placeholderData: (prev) => prev,
   });
 
+  const userRoles = isIcpMode ? EMPTY_ROLES : supabaseUserRoles;
+  const loadingRoles = isIcpMode ? false : loadingRolesSb;
   const isAppAdmin = useMemo(() => 
     userRoles?.some(r => r.role === "app_admin") ?? false, 
     [userRoles]
@@ -347,14 +360,28 @@ function SupabaseMediaPage() {
 
   // Quick Pro check - check if user has any Pro club/team membership
   // Logic: Club Pro → all teams inherit Pro; Free club → check team subscription
-// NOTE(ICP pro-access): fail-closed by design — ICP/Internet Identity users
-// have no Supabase session, so this query never runs/returns no rows and the
-// caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
-// via what canister) is a pending product decision; this is intentionally
-// left as-is (no behavior change) until that's decided.
-  const { data: hasProClub, isLoading: loadingProAccess, error: proAccessError } = useQuery({
+// NOTE(ICP pro-access): ICP/Internet Identity users resolve Pro from the
+// chain via isLiveClubPro (club subscription, then personal entitlement);
+// the Supabase query below only runs for email accounts.
+  const { data: hasProClubSb, isLoading: loadingProAccessSb, error: proAccessError } = useQuery({
     queryKey: ["has-pro-access", user?.id, roleClubIds.join(","), roleTeamIds.join(",")],
     queryFn: async () => {
+      // ICP mode: read each candidate club's Pro status from the chain
+      // (isLiveClubPro also falls back to the viewer's personal entitlement).
+      const icpResult = await withFeatureBackend<boolean | null>("membership", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const { isLiveClubPro } = await import("@/live/features/club");
+          const candidates = activeClubFilter
+            ? [...new Set([...roleClubIds, activeClubFilter])]
+            : roleClubIds;
+          for (const clubId of candidates) {
+            if (await isLiveClubPro(ctx, clubId)) return true;
+          }
+          return false;
+        },
+      });
+      if (icpResult !== null) return icpResult;
       try { await ensureFreshSession(); } catch { /* offline / signed out — let queries surface real errors */ }
       const overall = performance.now();
       diagLog("hasProClub:start", { roleClubIds: roleClubIds.length, roleTeamIds: roleTeamIds.length, activeClubFilter });
@@ -443,13 +470,18 @@ function SupabaseMediaPage() {
 
       return false;
     },
-    enabled: !!user,
+    enabled: !!user && !isIcpMode,
     staleTime: 300000,
     gcTime: 300000,
     retry: (failureCount, error) => failureCount < 2 && (isAuthLikeError(error) || onlineManager.isOnline()),
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
     placeholderData: (prev) => prev,
   });
+  // ICP: Pro comes from the identity canister's entitlements (cached on
+  // device, so this resolves instantly on repeat visits).
+  const icpEntitlements = useIcpEntitlements({ enabled: isIcpMode });
+  const hasProClub = isIcpMode ? (icpEntitlements.isLoading ? undefined : icpEntitlements.isPro) : hasProClubSb;
+  const loadingProAccess = isIcpMode ? icpEntitlements.isLoading : loadingProAccessSb;
 
   const { data: userProfile } = useQuery({
     queryKey: ["user-profile-media", user?.id],
@@ -533,6 +565,14 @@ function SupabaseMediaPage() {
   });
 
   const selectedClubFilter = selectedClubId !== "all" ? selectedClubId : null;
+  // ICP: show this club's cached photos immediately (also on filter change).
+  useEffect(() => {
+    if (!isIcpMode || !selectedClubFilter) return;
+    feedCacheClubRef.current = selectedClubFilter;
+    const { photos: cached, isStale } = getCachedPhotos(null, selectedClubFilter, null, { allowStale: true });
+    setCachedPhotosData(cached && cached.length > 0 ? cached : null);
+    setIsCacheStale(isStale);
+  }, [isIcpMode, selectedClubFilter]);
   const selectedTeamFilter = selectedTeamId !== "all" ? selectedTeamId : null;
   const dateFromKey = dateRange.from ? startOfDay(dateRange.from).toISOString() : null;
   const dateToKey = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
@@ -597,8 +637,9 @@ function SupabaseMediaPage() {
       if (error) throw error;
 
       // Cache first page results for offline access
-      if (pageParam === 0 && data && !selectedClubFilter && !selectedTeamFilter && !urlEventId && !urlCompetitionId && !dateFromKey && !dateToKey && !cardId) {
-        cachePhotos(null, null, null, data.map(p => ({
+      const icpClubFeed = isIcpMode && !!selectedClubFilter;
+  if (pageParam === 0 && data && (icpClubFeed || !selectedClubFilter) && !selectedTeamFilter && !urlEventId && !urlCompetitionId && !dateFromKey && !dateToKey && !cardId) {
+        cachePhotos(null, icpClubFeed ? selectedClubFilter : null, null, data.map(p => ({
           id: p.id,
           file_url: p.file_url || p.image_url,
           title: p.title,
@@ -888,14 +929,14 @@ function SupabaseMediaPage() {
       console.warn("[MediaDiag] pro-gate-watchdog", { t: new Date().toISOString(), abortedInFlight: aborted });
       setProGateTimedOut(true);
       queryClient.refetchQueries({ queryKey: ["has-pro-access"] });
-    }, 6000);
+    }, isIcpMode ? 2500 : 6000);
     return () => clearInterval(timer);
-  }, [proGateStuck, queryClient]);
+  }, [proGateStuck, queryClient, isIcpMode]);
 
   // Only show loading state on initial resolution — never on refetch/resume.
   // Offline, the pro check can never resolve, so it must not gate rendering:
   // cached photos are shown instead of an indefinite skeleton/blank area.
-  const isCheckingProAccess = isOnline && !proAccessEverResolved.current && !proGateTimedOut && (!user || loadingProAccess || activeClubProLoading || loadingRoles || waitingOnRolesWithoutFallback || proQueryNotYetResolved);
+  const isCheckingProAccess = isOnline && !(isIcpMode && (allPhotos?.length ?? 0) > 0) && !proAccessEverResolved.current && !proGateTimedOut && (!user || loadingProAccess || activeClubProLoading || loadingRoles || waitingOnRolesWithoutFallback || proQueryNotYetResolved);
 
   // Get ALL loaded photo IDs (not filtered) for fetching reactions/comments
   const allPhotoIds = useMemo(() => allPhotos?.map(p => p.id) || [], [allPhotos]);
@@ -1236,7 +1277,7 @@ function SupabaseMediaPage() {
   // pro check can never hold the whole page on skeletons.
   // Offline never shows skeletons — we render cached photos or a friendly
   // offline empty state instead of an indefinite shimmer.
-  const showSkeletons = isOnline && (loadingPhotos || (loadingProAccess && !proGateTimedOut)) && allPhotos.length === 0;
+  const showSkeletons = isOnline && (loadingPhotos || (!isIcpMode && loadingProAccess && !proGateTimedOut)) && allPhotos.length === 0;
 
   // Diagnostic: log what's blocking the skeleton from clearing.
   useEffect(() => {
@@ -1332,17 +1373,16 @@ function SupabaseMediaPage() {
             </Button>
           )}
 
-          {!isIcpMediaUploadUnavailable() && (
-            <CreateActionButton
-              ariaLabel="Add photo"
-              onClick={() => setUploadDialogOpen(true)}
-            />
-          )}
+          <CreateActionButton
+            ariaLabel="Add photo"
+            onClick={() => setUploadDialogOpen(true)}
+          />
           <Suspense fallback={null}>
           <UploadPhotoSheet
             open={uploadDialogOpen}
             onOpenChange={setUploadDialogOpen}
             onUploadingCountChange={setUploadingCount}
+            onUploadingPreviewsChange={setUploadingPreviews}
             defaultTeamId={searchParams.get("team")}
             defaultEventId={searchParams.get("event")}
             defaultCompetitionId={urlCompetitionId}
@@ -1476,12 +1516,10 @@ function SupabaseMediaPage() {
             <p className="text-sm text-muted-foreground mt-1">
               No photos from this event yet — share what you captured today.
             </p>
-            {!isIcpMediaUploadUnavailable() && (
-              <Button onClick={() => setUploadDialogOpen(true)} className="mt-4 gap-2" size="sm">
-                <Plus className="h-4 w-4" />
-                Add photos
-              </Button>
-            )}
+            <Button onClick={() => setUploadDialogOpen(true)} className="mt-4 gap-2" size="sm">
+              <Plus className="h-4 w-4" />
+              Add photos
+            </Button>
           </CardContent>
         </Card>
       ) : photos.length === 0 && hasActiveFilters ? (
@@ -1508,9 +1546,12 @@ function SupabaseMediaPage() {
                   </div>
                 </div>
                 <div className="relative aspect-square bg-muted">
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground font-medium">Uploading photo...</p>
+                  {uploadingPreviews[i] && (
+                    <img src={uploadingPreviews[i]} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  )}
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-background/85 px-2.5 py-1">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    <p className="text-xs text-foreground font-medium">Uploading…</p>
                   </div>
                 </div>
                 <CardContent className="p-3 space-y-3">

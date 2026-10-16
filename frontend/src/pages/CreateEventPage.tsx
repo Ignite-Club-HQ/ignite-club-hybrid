@@ -58,6 +58,14 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, listLiveTeams } from "@/live/features/club";
+import {
+  addLiveFavouriteEventTitle,
+  deleteLiveSavedLocation,
+  listLiveFavouriteEventTitles,
+  listLiveSavedLocations,
+  removeLiveFavouriteEventTitle,
+  saveLiveLocation,
+} from "@/live/features/events";
 import { resolveLiveProFootballAccess } from "@/live/features/proAccess";
 import { DEFAULT_MATCH_ARRIVAL_MINUTES } from "@/lib/matchArrivalTime";
 import { validateEventTeamClubScope } from "@/lib/eventScopeValidation";
@@ -777,8 +785,19 @@ function SupabaseCreateEventPage() {
 
           return uniqueLocations;
         },
-        // Location history lives in Supabase events only — nothing to offer in ICP mode.
-        icp: async () => [] as SavedLocation[],
+        // ICP: the caller's own saved addresses (events_domain
+        // list_saved_locations), not club event history like the Supabase
+        // branch — closest canister-backed equivalent available today.
+        icp: async (ctx) =>
+          (await listLiveSavedLocations(ctx)).map((loc) => ({
+            id: loc.id,
+            address: loc.address,
+            suburb: null,
+            state: null,
+            postcode: null,
+            name: loc.location_label,
+            isFavorite: true,
+          })) as SavedLocation[],
       }),
     enabled: !!clubId,
   });
@@ -797,9 +816,18 @@ function SupabaseCreateEventPage() {
             .order("created_at", { ascending: false });
           return data || [];
         },
-        // Favourite titles are a Supabase table keyed by UUID — not available
-        // for II principals.
-        icp: async () => [] as any[],
+        // ICP: events_domain list_favourite_event_titles returns bare
+        // strings (no id/event_type/created_at), so shape them to match the
+        // Supabase row the UI below expects. Selecting a favourite keeps the
+        // currently chosen event type unchanged instead of overriding it.
+        icp: async (ctx) =>
+          (await listLiveFavouriteEventTitles(ctx)).map((t) => ({
+            id: t,
+            title: t,
+            event_type: "",
+            created_at: "",
+            user_id: "",
+          })),
       }),
     enabled: !!user,
   });
@@ -807,7 +835,7 @@ function SupabaseCreateEventPage() {
   const saveFavoriteTitle = async () => {
     if (!user || !title.trim()) return;
 
-    const error = await withFeatureBackend("membership", {
+    const error = await withFeatureBackend("events", {
       supabase: async () => {
         const { error } = await supabase
           .from("favorite_event_titles")
@@ -818,14 +846,19 @@ function SupabaseCreateEventPage() {
           });
         return error;
       },
-      icp: async () => ({ code: "icp_skip" } as any),
+      // ICP: add_favourite_event_title dedups server-side (Err on repeat),
+      // surfaced the same way as the Supabase 23505 unique-violation below.
+      icp: async (ctx) => {
+        try {
+          await addLiveFavouriteEventTitle(ctx, title.trim());
+          return null;
+        } catch {
+          return { code: "23505" } as any;
+        }
+      },
     });
 
     if (error) {
-      if (error.code === "icp_skip") {
-        toast({ title: "Not available", description: "Favourite titles aren't available in ICP mode yet." });
-        return;
-      }
       if (error.code === "23505") {
         toast({ title: "Already saved", description: "This title is already in your favorites" });
       } else {
@@ -838,7 +871,8 @@ function SupabaseCreateEventPage() {
   };
 
   const deleteFavoriteTitle = async (id: string) => {
-    const error = await withFeatureBackend("membership", {
+    // ICP rows are keyed by title (id === title, see query mapping above).
+    const error = await withFeatureBackend("events", {
       supabase: async () => {
         const { error } = await supabase
           .from("favorite_event_titles")
@@ -846,7 +880,10 @@ function SupabaseCreateEventPage() {
           .eq("id", id);
         return error;
       },
-      icp: async () => null,
+      icp: async (ctx) => {
+        await removeLiveFavouriteEventTitle(ctx, id);
+        return null;
+      },
     });
 
     if (!error) {

@@ -38,6 +38,7 @@ import {
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveTeam, listLiveClubs, listLiveTeams } from "@/live/features/club";
+import { requestLiveRole } from "@/live/features/membership";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { isLiveAppAdmin } from "@/live/features/insights";
 import {
@@ -50,7 +51,7 @@ import {
 } from "@/live/features/proAccess";
 import { getLiveClubPointsSettings } from "@/live/features/points";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
+import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, listLivePublicMiniLeagues } from "@/live/features/miniLeagues";
 import {
   fetchLiveHomeChildren,
   fetchLiveHomeFeed,
@@ -86,6 +87,7 @@ import {
   getLocalDateKey,
   isStillUpcomingForNextUp,
   selectVisibleHomeEvents,
+  isHomeEventForMember,
 } from "@/components/home/homeEventSelection";
 import { HomeDashboardSections } from "@/components/home/HomeDashboardSections";
 
@@ -567,13 +569,11 @@ export default function HomePage() {
         // can keep yesterday's data alive into the next day. Re-filter on
         // render so stale past events never leak into Next Up.
         if (!isStillUpcomingForNextUp(event, nowMs)) return false;
-        if (event.mini_league_id) {
-          return miniLeagueIds.includes(event.mini_league_id);
-        } else if (event.team_id) {
-          return teamIds.includes(event.team_id);
-        } else {
-          return clubIdsArr.includes(event.club_id);
-        }
+        return isHomeEventForMember(event as any, {
+          teamIds,
+          clubIds: clubIdsArr,
+          miniLeagueIds,
+        });
       });
 
       // Limit recurring series to next 3 upcoming occurrences
@@ -590,7 +590,13 @@ export default function HomePage() {
         return fixtureData.getLocalLabHomeSnapshot(user.id);
       }
       return withFeatureBackend("home", {
-        // NEEDS-CANISTER: presence, rewards, subscriptions, pitch-boards have no canister shape yet
+        // Memberships + Next Up events only — see fetchLiveHomeFeed. Team
+        // subscriptions (Pro Football) and the recently-used pitch-board list
+        // below have their own per-query ICP/Supabase branches; rewards route
+        // through the "points" feature's existing canister wrapper
+        // (fetchAvailableHomeRewardsForBackend -> listLiveClubRewards), and
+        // chat presence already has a canister wrapper (livePresenceHeartbeat)
+        // used elsewhere — neither is part of this consolidated query.
         supabase: fetchHomeFromSupabase,
         icp: (ctx) => fetchLiveHomeFeed(ctx),
       });
@@ -1283,8 +1289,31 @@ export default function HomePage() {
 
   // Only fetch all clubs/teams/leagues when join dialogs are open (lazy loading)
   const { data: clubs, error: clubsError, isLoading: clubsLoading } = useQuery({
-    queryKey: ["all-clubs"],
+    queryKey: ["all-clubs", resolveAuthBackend()],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const rows = await listLiveClubs(ctx);
+            const filterOut = /test|demo|sample/i;
+            const filtered = rows.filter((c) => !filterOut.test(c.name));
+            const classModeFlags = await Promise.all(
+              filtered.map(async (c) => {
+                try {
+                  const settings: any = await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, c.id);
+                  return Boolean(settings?.class_mode_enabled);
+                } catch {
+                  return false;
+                }
+              }),
+            );
+            return filtered
+              .map((c, i) => ({ id: c.id, name: c.name, sport: c.sport[0] ?? null, class_mode_enabled: classModeFlags[i] }))
+              .sort((a, b) => a.name.localeCompare(b.name)) as Club[];
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name, sport, class_mode_enabled")
@@ -1297,14 +1326,37 @@ export default function HomePage() {
       if (error) throw error;
       return data as Club[];
     },
-    enabled: !!user && (teamDialogOpen || !!activeClubFilter) && resolveAuthBackend() !== "icp",
+    enabled: !!user && (teamDialogOpen || !!activeClubFilter),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
 
   const { data: teams, error: teamsError, isLoading: teamsLoading } = useQuery({
-    queryKey: ["all-teams"],
+    queryKey: ["all-teams", resolveAuthBackend()],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const filterOut = /test|demo|sample/i;
+            const liveClubs = (await listLiveClubs(ctx)).filter((c) => !filterOut.test(c.name));
+            const teamsByClub = await Promise.all(
+              liveClubs.map(async (c) => {
+                const rows = await listLiveTeams(ctx, c.id);
+                return rows
+                  .filter((t) => t.deleted_at_ms.length === 0 && !filterOut.test(t.name))
+                  .map((t) => ({
+                    id: t.id,
+                    name: t.name,
+                    club_id: t.club_id,
+                    clubs: { name: c.name, sport: c.sport[0] ?? null, deleted_at: null, purged_at: null },
+                  }));
+              }),
+            );
+            return (teamsByClub.flat() as unknown as Team[]).sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("id, name, club_id, clubs!club_id!inner (name, sport, deleted_at, purged_at)")
@@ -1321,7 +1373,7 @@ export default function HomePage() {
       if (error) throw error;
       return data as Team[];
     },
-    enabled: !!user && teamDialogOpen && resolveAuthBackend() !== "icp",
+    enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1349,9 +1401,17 @@ export default function HomePage() {
         // (list_mini_leagues_by_club) and per-caller (my_leagues) listings,
         // not a global cross-club directory with joined club metadata. Leave
         // empty under ICP until a club directory canister can supply this.
-        icp: async () => [] as MiniLeague[],
+        icp: async (ctx) => {
+          const rows = await listLivePublicMiniLeagues(ctx);
+          return rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            club_id: r.club_id,
+            clubs: { name: "Loading...", sport: null },
+          })) as MiniLeague[];
+        },
       }),
-    enabled: !!user && teamDialogOpen && resolveAuthBackend() !== "icp",
+    enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1647,8 +1707,27 @@ export default function HomePage() {
     placeholderData: (prev) => prev,
   });
   const { data: recentlyUsedGames } = useQuery({
-    queryKey: ["recently-used-pitch-boards", user?.id],
+    queryKey: ["recently-used-pitch-boards", user?.id, resolveAuthBackend() === "icp" ? allEvents : null],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        // No pitch-board state canister exists yet (active_games is
+        // Supabase-only), so there is no real "last opened" timestamp to
+        // read. Reuse the home feed's own events_domain data (already fetched
+        // via fetchLiveHomeFeed/listLiveEvents) as a stand-in signal: the
+        // most recently scheduled games' teams sort to the top, same as the
+        // Supabase branch's intent of surfacing teams the user is actively
+        // using.
+        const games = (allEvents || []).filter((e) => e.type === "game" && e.team_id);
+        const seen = new Set<string>();
+        const result: { team_id: string; updated_at: string }[] = [];
+        for (const game of games) {
+          if (!game.team_id || seen.has(game.team_id)) continue;
+          seen.add(game.team_id);
+          result.push({ team_id: game.team_id, updated_at: game.event_date });
+          if (result.length >= 10) break;
+        }
+        return result;
+      }
       const { data, error } = await supabase
         .from("active_games")
         .select("team_id, updated_at")
@@ -1656,11 +1735,11 @@ export default function HomePage() {
         .not("team_id", "is", null)
         .order("updated_at", { ascending: false })
         .limit(10);
-      
+
       if (error) throw error;
       return data;
     },
-    enabled: !!user && resolveAuthBackend() !== "icp",
+    enabled: !!user,
     staleTime: 2 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -1859,7 +1938,7 @@ export default function HomePage() {
       if (error) throw error;
       return (data || []).map(r => r.role as TeamRole);
     },
-    enabled: !!user?.id && !!selectedTeam && isAlreadyTeamMember && resolveAuthBackend() !== "icp",
+    enabled: !!user?.id && !!selectedTeam && isAlreadyTeamMember,
     staleTime: 30_000,
   });
 
@@ -1868,8 +1947,31 @@ export default function HomePage() {
 
   const teamRequestMutation = useMutation({
     mutationFn: async () => {
-      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) throw new Error("Team and league access requests are unavailable in ICP lab mode.");
+      if (resolveAuthBackend() === "icp") {
+        if (isLeagueSelected && actualLeagueId) {
+          const league = miniLeagues?.find((l) => l.id === actualLeagueId);
+          if (!league) throw new Error("League not found");
+          if (userRoles?.some(r => r.club_id === league.club_id && r.role === selectedLeagueRole)) {
+            throw new Error("You already have this role in this league");
+          }
+          await withFeatureBackend("membership", {
+            supabase: async () => { throw new Error("unreachable"); },
+            icp: (ctx) => requestLiveRole(ctx, league.club_id, selectedLeagueRole!),
+          });
+          return;
+        }
+        if (userRoles?.some(r => r.team_id === selectedTeam && r.role === selectedTeamRole)) {
+          throw new Error("You already have this role in this team");
+        }
+        const team = teams?.find((t) => t.id === selectedTeam);
+        if (!team) throw new Error("Team not found");
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: (ctx) => requestLiveRole(ctx, team.club_id, selectedTeamRole!, selectedTeam),
+        });
+        return;
+      }
       if (isLeagueSelected && actualLeagueId) {
         // Handle league join request
         const league = miniLeagues?.find((l) => l.id === actualLeagueId);
@@ -1949,13 +2051,20 @@ export default function HomePage() {
   // user is already part of. Reuses the same role_requests workflow.
   const requestAdditionalAccessMutation = useMutation({
     mutationFn: async (role: TeamRole) => {
-      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) throw new Error("Additional team access requests are unavailable in ICP lab mode.");
       if (!user || !selectedTeam) throw new Error("Missing data");
       if (userRoles?.some(r => r.team_id === selectedTeam && r.role === role)) {
         throw new Error(`You already have the ${teamRoleLabel(role)} role on this team`);
       }
       const team = teams?.find((t) => t.id === selectedTeam);
+      if (resolveAuthBackend() === "icp") {
+        if (!team) throw new Error("Team not found");
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: (ctx) => requestLiveRole(ctx, team.club_id, role, selectedTeam),
+        });
+        return;
+      }
       const { error } = await supabase.from("role_requests").insert({
         user_id: user.id,
         team_id: selectedTeam,
@@ -2041,11 +2150,14 @@ export default function HomePage() {
   useEffect(() => {
     setRevealTimedOut(false);
     if (!initialized || computedShowContent || hasRevealed) return;
-    const timer = setTimeout(() => setRevealTimedOut(true), 10000);
+    const timer = setTimeout(() => setRevealTimedOut(true), resolveAuthBackend() === "icp" ? 2500 : 10000);
     return () => clearTimeout(timer);
   }, [initialized, computedShowContent, hasRevealed, user?.id, activeClubFilter]);
 
-  const showContent = computedShowContent || hasRevealed || revealTimedOut;
+  // ICP reads are slow on cold start; when we already have a last-seen
+  // snapshot, show it immediately instead of waiting for every section.
+  const icpCachedReveal = resolveAuthBackend() === "icp" && initialized && (!!nextUpCachedSnapshot || events.length > 0);
+  const showContent = computedShowContent || hasRevealed || revealTimedOut || icpCachedReveal;
 
   // Empty-state gate: only show the "Find or Join a Club" welcome once we
   // authoritatively know the user has zero clubs AND zero teams. The

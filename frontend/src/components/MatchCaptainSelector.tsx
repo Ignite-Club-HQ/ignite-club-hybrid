@@ -27,6 +27,11 @@ import { selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveMatchCaptains,
+  setLiveMatchCaptain,
+  removeLiveMatchCaptain,
+} from "@/live/features/events";
 
 interface MatchCaptainSelectorProps {
   eventId: string;
@@ -44,35 +49,58 @@ export default function MatchCaptainSelector({
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  // NEEDS-CANISTER: events_domain has no per-match captain-assignment store
-  // (Supabase `match_captains` has no canister counterpart) — silently
-  // disable admin assignment controls for Internet Identity accounts
-  // instead of throwing or showing an "unavailable" state.
+  // events_domain has a per-match captain-assignment store
+  // (set_match_captain/list_match_captains/remove_match_captain); ICP
+  // sessions resolve the captain the same way Supabase ones do.
   const isIcp = resolveAuthBackend() === "icp";
-  const effectiveIsAdmin = isAdmin && !isIcp;
+  const effectiveIsAdmin = isAdmin;
   const [selectDialogOpen, setSelectDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data: captain, isLoading } = useQuery({
     queryKey: ["match-captain", eventId],
-    enabled: !isIcp,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("match_captains")
-        .select(`*, children:child_id (id, name)`)
-        .eq("event_id", eventId)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) return null;
+    queryFn: () => withFeatureBackend("events", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("match_captains")
+          .select(`*, children:child_id (id, name)`)
+          .eq("event_id", eventId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return null;
 
-      let profile = null;
-      if (data.user_id) {
-        const { data: profileData } = await selectCachedProfileById(data.user_id);
-        profile = profileData;
-      }
-      return { ...data, profiles: profile };
-    },
+        let profile = null;
+        if (data.user_id) {
+          const { data: profileData } = await selectCachedProfileById(data.user_id);
+          profile = profileData;
+        }
+        return { ...data, profiles: profile };
+      },
+      icp: async (ctx) => {
+        const rows = await listLiveMatchCaptains(ctx, eventId);
+        const row = rows.find((r) => r.role === "captain") ?? rows[0];
+        if (!row) return null;
+        const isChild = row.ref_kind === "child";
+        let profile = null;
+        let children = null;
+        if (isChild) {
+          const { data: kid } = await supabase.from("children").select("id, name").eq("id", row.ref_id).maybeSingle();
+          children = kid;
+        } else {
+          const { data: profileData } = await selectCachedProfileById(row.ref_id);
+          profile = profileData;
+        }
+        return {
+          id: `${row.event_id}:${row.ref_kind}:${row.ref_id}:${row.role}`,
+          event_id: row.event_id,
+          user_id: isChild ? null : row.ref_id,
+          child_id: isChild ? row.ref_id : null,
+          profiles: profile,
+          children,
+        };
+      },
+    }),
   });
 
   const { data: playerUserIds = [] } = useQuery({
@@ -127,15 +155,30 @@ export default function MatchCaptainSelector({
 
   const assignMutation = useMutation({
     mutationFn: async ({ userId, childId }: { userId?: string; childId?: string }) => {
-      // Replace any existing captain for this event
-      await supabase.from("match_captains").delete().eq("event_id", eventId);
-      const { error } = await supabase.from("match_captains").insert({
-        event_id: eventId,
-        user_id: userId || null,
-        child_id: childId || null,
-        assigned_by: user!.id,
-      } as any);
-      if (error) throw error;
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          // Replace any existing captain for this event
+          await supabase.from("match_captains").delete().eq("event_id", eventId);
+          const { error } = await supabase.from("match_captains").insert({
+            event_id: eventId,
+            user_id: userId || null,
+            child_id: childId || null,
+            assigned_by: user!.id,
+          } as any);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const existing = await listLiveMatchCaptains(ctx, eventId);
+          await Promise.all(
+            existing
+              .filter((r) => r.role === "captain")
+              .map((r) => removeLiveMatchCaptain(ctx, eventId, r.ref_kind, r.ref_id, "captain" as const)),
+          );
+          const refKind = userId ? "account" : "child";
+          const refId = (userId || childId)!;
+          await setLiveMatchCaptain(ctx, eventId, refKind, refId, "captain");
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["match-captain", eventId] });
@@ -152,11 +195,20 @@ export default function MatchCaptainSelector({
   const removeMutation = useMutation({
     mutationFn: async () => {
       if (!captain) return;
-      const { error } = await supabase
-        .from("match_captains")
-        .delete()
-        .eq("id", captain.id);
-      if (error) throw error;
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("match_captains")
+            .delete()
+            .eq("id", captain.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const refKind = captain.child_id ? "child" : "account";
+          const refId = captain.child_id || captain.user_id;
+          await removeLiveMatchCaptain(ctx, eventId, refKind, refId, "captain");
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["match-captain", eventId] });

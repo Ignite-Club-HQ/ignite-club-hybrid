@@ -34,6 +34,9 @@ export function useTeamChatAdminStatus({
     queryKey: ["team-chat-admin", teamId, userId, clubId],
     queryFn: async () => {
       if (!userId || !teamId) return false;
+      const { resolveIcpChatAdmin } = await import("@/lib/icpChatAdmin");
+      const icp = await resolveIcpChatAdmin({ clubId, teamId });
+      if (icp !== null) return icp;
       const [teamRoleResult, clubRoleResult, appAdminResult] = await Promise.all([
         supabaseClient
           .from("user_roles")

@@ -756,3 +756,54 @@ export async function unregisterLiveDeviceToken(ctx: FeatureBackendContext, toke
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandid(actor.unregister_device_token(token), "Unregister device token");
 }
+
+// ---------------------------------------------------------------------------
+// Admin: 24h push delivery health + stale device-token cleanup.
+// App-admin gated canister-side (governor or club_domain app_admin); needs
+// notification_queue.set_club_domain_canister wired (see backend/AGENTS.md).
+// ---------------------------------------------------------------------------
+
+export interface LivePushDeliveryHealth {
+  windowHours: number;
+  generatedAtMs: number;
+  total24h: number;
+  pending24h: number;
+  processing24h: number;
+  delivered24h: number;
+  failed24h: number;
+  deviceTokenCount: number;
+}
+
+export async function getLivePushDeliveryHealth(
+  ctx: FeatureBackendContext,
+  nowMs: number,
+): Promise<LivePushDeliveryHealth> {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  const row = await unwrapCandid(
+    actor.get_push_delivery_health(BigInt(Math.trunc(nowMs))),
+    "Get push delivery health",
+  );
+  return {
+    windowHours: Number(row.window_hours),
+    generatedAtMs: Number(row.generated_at_ms),
+    total24h: Number(row.total_24h),
+    pending24h: Number(row.pending_24h),
+    processing24h: Number(row.processing_24h),
+    delivered24h: Number(row.delivered_24h),
+    failed24h: Number(row.failed_24h),
+    deviceTokenCount: Number(row.device_token_count),
+  };
+}
+
+export async function cleanupLiveStaleDeviceTokens(
+  ctx: FeatureBackendContext,
+  nowMs: number,
+  maxAgeMs: number,
+): Promise<number> {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  const removed = await unwrapCandid(
+    actor.cleanup_stale_device_tokens(BigInt(Math.trunc(nowMs)), BigInt(Math.trunc(maxAgeMs))),
+    "Cleanup stale device tokens",
+  );
+  return Number(removed);
+}

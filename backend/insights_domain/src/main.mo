@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Float "mo:core/Float";
@@ -14,6 +15,14 @@ import Types "types";
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
 
   var governor : Principal;
 
@@ -73,6 +82,54 @@ persistent actor class Main(governorInit : Principal) {
     if (not roles.any(func(item) = item.user.equal(principal) and item.role == role and item.club_id == club_id and item.team_id == team_id)) {
       roles := roles.concat([{ user = principal; role; club_id; team_id }]);
     };
+    #Ok
+  };
+
+  // App-wide app_admin grants (club/team scoped grants use grant_role above,
+  // governor-only). App admins themselves are managed by any existing
+  // app_admin (not just the governor) via the functions below, which back
+  // ManageUsersPage's "App Admins" tab in ICP mode. The sentinel club_id
+  // "global" has no scoping meaning — isAppAdmin's hasRole lookup passes
+  // club = null, matching any club_id — it only satisfies grant_role's
+  // non-empty-club_id-shaped storage convention for this role grant.
+  transient let APP_ADMIN_CLUB_SENTINEL = "global";
+
+  // Mirrors ManageUsersPage's "Fetch all app admins" query. App-admin gated
+  // (not governor-only) so any current app admin can audit the roster.
+  public query ({ caller }) func list_app_admins() : async { #Ok : [Principal]; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let admins = roles.filter(func(item) = item.role == "app_admin");
+    var out : [Principal] = [];
+    for (item in admins.values()) {
+      if (not out.any(func(p) = p.equal(item.user))) { out := out.concat([item.user]) };
+    };
+    #Ok(out)
+  };
+
+  // Mirrors ManageUsersPage's "Add Admin" action. App-admin gated: any
+  // existing app admin may promote another principal (not governor-only —
+  // Internet Identity app admins have no Supabase-style single owner).
+  public shared ({ caller }) func grant_app_admin(principal : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");
+    if (not roles.any(func(item) = item.user.equal(principal) and item.role == "app_admin")) {
+      roles := roles.concat([{ user = principal; role = "app_admin"; club_id = APP_ADMIN_CLUB_SENTINEL; team_id = null }]);
+    };
+    #Ok
+  };
+
+  // Mirrors ManageUsersPage's "Remove Admin" action. App-admin gated, but
+  // refuses revoking the caller's own grant (UI-level self-removal footgun)
+  // and refuses revoking the governor (who is always an implicit app admin
+  // via isGovernor — removing a role grant from them would be a no-op that
+  // misleads the admin UI into thinking they lost access).
+  public shared ({ caller }) func revoke_app_admin(principal : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (principal.equal(caller)) return #Err("Cannot revoke your own app admin access");
+    if (isGovernor(principal)) return #Err("Cannot revoke the governor's app admin access");
+    roles := roles.filter(func(item) = not (item.user.equal(principal) and item.role == "app_admin"));
     #Ok
   };
 
@@ -347,6 +404,14 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // Mirrors ManageFeedbackPage's delete action (Supabase `feedback.delete`).
+  public shared ({ caller }) func delete_feedback(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not feedback.any(func(item) = item.id == id)) return #Err("Feedback not found");
+    feedback := feedback.filter(func(item) = item.id != id);
+    #Ok
+  };
+
   // ================= Client perf log =================
   // clientPerfLog equivalent: accepts a batch of per-page/per-metric timing
   // samples from a client flush (mirrors record_perf_samples_batch above but
@@ -488,6 +553,27 @@ persistent actor class Main(governorInit : Principal) {
       let ctr = if (impressions == 0) 0.0 else Int.toFloat(Nat32.toNat(clicks)) / Int.toFloat(Nat32.toNat(impressions));
       { sponsor_id; impressions; clicks; unique_reach; ctr }
     }))
+  };
+
+  // ================= Canister memory reports (app-admin only) =================
+  // Readings + AI analysis written by the Canister health workflow (governor)
+  // or added by hand by app admins. JSON kept as Text; capped at 200 entries.
+  var memoryReports : [{ at : Int; source : Text; readings_json : Text; analysis_json : Text; author : Principal }] = [];
+
+  public shared ({ caller }) func add_memory_report(source : Text, readings_json : Text, analysis_json : Text) : async { #Ok; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admins only");
+    if (readings_json.size() > 20_000 or analysis_json.size() > 20_000) return #Err("Report too large");
+    let entry = { at = Time.now(); source; readings_json; analysis_json; author = caller };
+    let all = memoryReports.concat([entry]);
+    memoryReports := if (all.size() > 200) all.sliceToArray(all.size() - 200, all.size()) else all;
+    #Ok
+  };
+
+  public query ({ caller }) func list_memory_reports(limit : Nat) : async [{ at : Int; source : Text; readings_json : Text; analysis_json : Text }] {
+    if (not isAppAdmin(caller)) return [];
+    let n = memoryReports.size();
+    let start = if (n > limit) n - limit : Nat else 0;
+    memoryReports.sliceToArray(start, n).map(func(r) = { at = r.at; source = r.source; readings_json = r.readings_json; analysis_json = r.analysis_json })
   };
 
   public query ({ caller }) func is_app_admin() : async Bool {
@@ -687,4 +773,103 @@ persistent actor class Main(governorInit : Principal) {
     let end = Nat.min(MAX_ACTIVITY_LIST, sorted.size());
     #Ok(sorted.sliceToArray(0, end))
   };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("Old and new principal must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+
+    // Conflict guard: count NON-EPHEMERAL records already referencing `new`.
+    // Ephemeral/excluded from the guard (rewritten but not counted): webVitals.user,
+    // perfSamples.user, clientPerfSamples.user, adEvents.user (telemetry), and
+    // userActivity.user_id / engagementCounters.activeUsers / sponsorReach.accountIds
+    // (account-id text buckets, not principal-keyed records).
+    var conflicts = 0;
+    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
+    conflicts += adminAlerts.filter(func(a) = a.resolved_by == ?new).size();
+    conflicts += auditLogs.filter(func(a) = a.actor_id.equal(new) or a.target_user_id == ?newText).size();
+    conflicts += feedback.filter(func(f) = f.user.equal(new)).size();
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in insights_domain");
+
+    var changed = 0;
+
+    // roles
+    let newRoles = roles.map(func(r : Types.RoleGrant) : Types.RoleGrant {
+      if (r.user.equal(old)) { changed += 1; { r with user = new } } else r
+    });
+
+    // adminAlerts.resolved_by
+    let newAdminAlerts = adminAlerts.map(func(a : Types.AdminAlert) : Types.AdminAlert {
+      if (a.resolved_by == ?old) { changed += 1; { a with resolved_by = ?new } } else a
+    });
+
+    // auditLogs.actor_id / target_user_id
+    let newAuditLogs = auditLogs.map(func(a : Types.AuditLog) : Types.AuditLog {
+      var row = a;
+      if (row.actor_id.equal(old)) { changed += 1; row := { row with actor_id = new } };
+      if (row.target_user_id == ?oldText) { changed += 1; row := { row with target_user_id = ?newText } };
+      row
+    });
+
+    // feedback.user
+    let newFeedback = feedback.map(func(f : Types.Feedback) : Types.Feedback {
+      if (f.user.equal(old)) { changed += 1; { f with user = new } } else f
+    });
+
+    // ---- Ephemeral: rewritten, not counted in conflict guard ----
+    // webVitals.user — on key clash (both old and new rows for same metric/time),
+    // keep both since these are append-only telemetry rows, not keyed records.
+    let newWebVitals = webVitals.map(func(w : Types.WebVital) : Types.WebVital {
+      if (w.user.equal(old)) { { w with user = new } } else w
+    });
+    let newPerfSamples = perfSamples.map(func(p : Types.PerfSample) : Types.PerfSample {
+      if (p.user.equal(old)) { { p with user = new } } else p
+    });
+    let newClientPerfSamples = clientPerfSamples.map(func(c : Types.ClientPerfSample) : Types.ClientPerfSample {
+      if (c.user.equal(old)) { { c with user = new } } else c
+    });
+    let newAdEvents = adEvents.map(func(e : Types.AdEvent) : Types.AdEvent {
+      if (e.user.equal(old)) { { e with user = new } } else e
+    });
+    let newUserActivity = userActivity.map(func(u : Types.UserActivityEntry) : Types.UserActivityEntry {
+      if (u.user_id == oldText) { { u with user_id = newText } } else u
+    });
+    let newEngagementCounters = engagementCounters.map(func(c : Types.EngagementCounter) : Types.EngagementCounter {
+      if (c.activeUsers.any(func(u) = u == oldText)) {
+        let withoutOld = c.activeUsers.filter(func(u) = u != oldText);
+        let activeUsers = if (withoutOld.any(func(u) = u == newText)) withoutOld else withoutOld.concat([newText]);
+        { c with activeUsers }
+      } else c
+    });
+    let newSponsorReach = sponsorReach.map(func(s : Types.SponsorReachCounter) : Types.SponsorReachCounter {
+      if (s.accountIds.any(func(a) = a == oldText)) {
+        let withoutOld = s.accountIds.filter(func(a) = a != oldText);
+        let accountIds = if (withoutOld.any(func(a) = a == newText)) withoutOld else withoutOld.concat([newText]);
+        { s with accountIds }
+      } else s
+    });
+
+    if (not dry_run) {
+      roles := newRoles;
+      adminAlerts := newAdminAlerts;
+      auditLogs := newAuditLogs;
+      feedback := newFeedback;
+      webVitals := newWebVitals;
+      perfSamples := newPerfSamples;
+      clientPerfSamples := newClientPerfSamples;
+      adEvents := newAdEvents;
+      userActivity := newUserActivity;
+      engagementCounters := newEngagementCounters;
+      sponsorReach := newSponsorReach;
+    };
+
+    #ok(changed)
+  };
+
 }

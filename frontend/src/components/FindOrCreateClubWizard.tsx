@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { defaultClubHomeCountry } from "@/lib/clubHomeCountry";
 import { useState, useEffect } from "react";
 import { Search, Building2, Plus, MapPin, Loader2, Check, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -136,7 +137,26 @@ export default function FindOrCreateClubWizard({
             clubName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `club-${Date.now()}`,
             clubDescription.trim() || "",
           );
-          // NEEDS-CANISTER: logo upload has no club_domain counterpart; skipped on this path.
+          // Logo upload mirrors MonogramLogoGenerator's ICP save path: blob
+          // store upload, then write the resulting URL onto the club profile.
+          if (clubLogoFile) {
+            try {
+              const { tryUploadMediaToBlobStore } = await import("@/live/mediaUpload");
+              const uploaded = await tryUploadMediaToBlobStore({
+                storagePath: `clubs/${profile.id}/logos/${crypto.randomUUID()}.png`,
+                file: clubLogoFile,
+                mime: clubLogoFile.type,
+              });
+              if (uploaded) {
+                const { getLiveClubProfile, saveLiveClubProfile } = await import("@/live/features/club");
+                const existing = await getLiveClubProfile(ctx, profile.id);
+                const current = existing.length ? existing[0] : profile;
+                await saveLiveClubProfile(ctx, { ...current, id: profile.id, logo_url: uploaded.url } as any);
+              }
+            } catch (error) {
+              console.error("[CreateClub] ICP logo upload failed", error);
+            }
+          }
           await addLiveRoleGrant(ctx, Principal.fromText(user.id), profile.id, "club_admin");
           try {
             const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
@@ -166,7 +186,8 @@ export default function FindOrCreateClubWizard({
               logo_url: null,
               sport: clubSport || null,
               created_by: user.id,
-            })
+              home_country: defaultClubHomeCountry(),
+            } as any)
             .select()
             .single();
 

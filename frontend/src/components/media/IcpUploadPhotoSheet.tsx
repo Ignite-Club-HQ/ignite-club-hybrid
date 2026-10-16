@@ -28,16 +28,38 @@ export interface IcpUploadNamedOption {
   club_id: string;
 }
 
+/** A photo shown in the feed while its upload finishes in the background. */
+export interface IcpPendingUploadPreview {
+  src: string;
+  clubName: string;
+  /** Team, mini-league or competition name the photo is scoped to, if any. */
+  scopeName: string | null;
+}
+
 interface IcpUploadPhotoSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUploaded: () => void;
+  onUploaded: () => unknown;
+  /** Local copies of the photos being shared, shown in the feed right away. */
+  onPendingChange?: (previews: IcpPendingUploadPreview[]) => void;
   clubs: IcpUploadClubOption[];
   teams: IcpUploadTeamOption[];
   miniLeagues: IcpUploadNamedOption[];
   competitions: IcpUploadNamedOption[];
   defaultClubId?: string;
   defaultCompetitionId?: string;
+}
+
+const preparedFiles = new WeakMap<File, Promise<{ file: File | Blob }>>();
+function prepareFile(raw: File): Promise<{ file: File | Blob }> {
+  let job = preparedFiles.get(raw);
+  if (!job) {
+    job = raw.type.startsWith("video/")
+      ? Promise.resolve({ file: raw })
+      : compressImage(raw).catch(() => ({ file: raw }));
+    preparedFiles.set(raw, job);
+  }
+  return job;
 }
 
 const SCOPE_UNSUPPORTED = /set_asset_scope|has no update method|not found/i;
@@ -52,6 +74,7 @@ export function IcpUploadPhotoSheet({
   competitions,
   defaultClubId,
   defaultCompetitionId,
+  onPendingChange,
 }: IcpUploadPhotoSheetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -81,6 +104,27 @@ export function IcpUploadPhotoSheet({
     }
   }, [open]);
 
+  // Warm the slow one-off steps (sign-in lookup, lock check, encryption key)
+  // while the member is still choosing photos, so pressing Share only pays
+  // for the upload itself.
+  useEffect(() => {
+    if (!open || !clubId) return;
+    void (async () => {
+      try {
+        const [{ getActiveIcpTarget }, { getCurrentInternetIdentity }, { encryptClubMedia }] = await Promise.all([
+          import("@/live/targetRegistry"),
+          import("@/live/internetIdentityAuth"),
+          import("@/live/piiVetKeys"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return;
+        await encryptClubMedia({ target: getActiveIcpTarget(), identity } as never, clubId, new Uint8Array(1));
+      } catch {
+        // Best-effort warm-up only.
+      }
+    })();
+  }, [open, clubId]);
+
   const clubTeams = teams.filter((t) => t.club_id === clubId);
   const clubMiniLeagues = miniLeagues.filter((m) => m.club_id === clubId);
   const clubCompetitions = competitions.filter((c) => c.club_id === clubId);
@@ -94,6 +138,8 @@ export function IcpUploadPhotoSheet({
       toast.error("Pick photos or videos");
       return;
     }
+    // Start shrinking photos now, not when Share is pressed.
+    for (const f of next) prepareFile(f);
     setFiles((prev) => [...prev, ...next].slice(0, 10));
   };
 
@@ -112,7 +158,21 @@ export function IcpUploadPhotoSheet({
     }
     setUploading(true);
     setProgress({ done: 0, total: files.length });
-    const toastId = toast.loading(files.length > 1 ? `Sharing ${files.length} photos…` : "Sharing photo…");
+    // Show the photos in the feed instantly (like chat); no "shared" toast.
+    // Carry the club/team names so the placeholder card looks like a real
+    // post (uploader + club/team) instead of a bare image.
+    const clubName = clubs.find((c) => c.id === clubId)?.name ?? "";
+    const scopeName = teamId
+      ? teams.find((t) => t.id === teamId)?.name ?? null
+      : miniLeagueId
+        ? miniLeagues.find((m) => m.id === miniLeagueId)?.name ?? null
+        : competitionId
+          ? competitions.find((c) => c.id === competitionId)?.name ?? null
+          : null;
+    const previews = files
+      .filter((f) => f.type.startsWith("image/"))
+      .map((f) => ({ src: URL.createObjectURL(f), clubName, scopeName }));
+    onPendingChange?.(previews);
     onOpenChange(false);
     // Multi-photo uploads form one album post, like the Supabase gallery.
     const albumId = files.length > 1 ? crypto.randomUUID() : null;
@@ -124,10 +184,12 @@ export function IcpUploadPhotoSheet({
           throw new Error("unreachable");
         },
         icp: async (ctx) => {
-          for (let i = 0; i < files.length; i++) {
+          let done = 0;
+          let nextIndex = 0;
+          const uploadOne = async (i: number) => {
             const raw = files[i];
             const isVideo = raw.type.startsWith("video/");
-            const prepared = isVideo ? { file: raw } : await compressImage(raw);
+            const prepared = await prepareFile(raw);
             const mime = prepared.file.type || raw.type || "application/octet-stream";
             // The clubs/<clubId>/ prefix is what grantLiveClubPiiRead matches
             // to give club members decrypt access. Keep the path short: the
@@ -177,23 +239,27 @@ export function IcpUploadPhotoSheet({
                 throw err;
               }
             }
-            setProgress({ done: i + 1, total: files.length });
-          }
+            done += 1;
+            setProgress({ done, total: files.length });
+          };
+          // Several photos upload side by side instead of one after another.
+          const worker = async () => {
+            while (nextIndex < files.length) await uploadOne(nextIndex++);
+          };
+          await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
         },
       });
-      toast.success(
-        files.length > 1 ? `${files.length} photos shared` : "Photo shared",
-        { id: toastId },
-      );
       if (scopePending) {
         toast.info(
           "Tags and captions will appear after the media backend update is deployed.",
         );
       }
-      onUploaded();
+      // Keep the local copies on screen until the refreshed feed has them.
+      await Promise.resolve(onUploaded()).catch(() => undefined);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed", { id: toastId });
+      toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
+      onPendingChange?.([]);
       setUploading(false);
     }
   };

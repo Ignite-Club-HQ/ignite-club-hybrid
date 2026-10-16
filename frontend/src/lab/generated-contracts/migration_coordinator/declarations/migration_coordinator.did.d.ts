@@ -23,6 +23,10 @@ export interface Main {
   'cycles_balance' : ActorMethod<[], bigint>,
   'markExported' : ActorMethod<[bigint, bigint, string], Migration>,
   'markImported' : ActorMethod<[bigint, bigint, string], Migration>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'orchestrateExport' : ActorMethod<[bigint], Migration>,
   'orchestrateVerify' : ActorMethod<[bigint], Migration>,
   'status' : ActorMethod<[], [[] | [Migration], Array<Migration>]>,

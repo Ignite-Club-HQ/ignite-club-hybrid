@@ -46,12 +46,46 @@ for (const filePath of filesUnder(srcRoot)) {
   failed = true;
 }
 
+// Vault is a fully dual-backend (Supabase / ICP canister) feature: any direct
+// supabase.from(/supabase.rpc( read or write in vault code must also be
+// guarded (or explicitly allowlisted), the same as edge-function/storage calls.
+const vaultCallPatterns = [
+  /\bsupabase\s*\.\s*from\s*\(/,
+  /\bsupabase\s*\.\s*rpc\s*\(/,
+  /\bclient\s*\.\s*from\s*\(/,
+  /\bclient\s*\.\s*rpc\s*\(/,
+];
+
+const vaultPathPatterns = [
+  new RegExp(`^features${path.sep}vault${path.sep}`),
+  /^lib[/\\]vault.*\.ts$/,
+  new RegExp(`^components.*${path.sep}Vault[^${path.sep}]*\.tsx$`),
+];
+
+function isVaultFile(relativePath) {
+  return vaultPathPatterns.some((pattern) => pattern.test(relativePath));
+}
+
+for (const filePath of filesUnder(srcRoot)) {
+  if (!/\.(?:ts|tsx)$/.test(filePath)) continue;
+  if (/\.test\.tsx?$/.test(filePath)) continue;
+  if (filePath.includes(`${path.sep}lab${path.sep}`)) continue;
+  const relativePath = path.relative(srcRoot, filePath);
+  if (!isVaultFile(relativePath)) continue;
+  const text = fs.readFileSync(filePath, "utf8");
+  if (!vaultCallPatterns.some((pattern) => pattern.test(text))) continue;
+  if (guardPatterns.some((pattern) => pattern.test(text))) continue;
+  if (allowPattern.test(text)) continue;
+  console.error(`${relativePath}: Supabase from()/rpc() call in Vault code without an ICP-mode guard`);
+  failed = true;
+}
+
 if (failed) {
   throw new Error(
-    "Unguarded Supabase edge-function/storage call sites found. Add a guard " +
+    "Unguarded Supabase call sites found. Add a guard " +
       "(withFeatureBackend / assertSupabaseWritePath / isFeatureRoutedToIcp / resolveAuthBackend / isIcpMediaUploadUnavailable) " +
       "or an explicit '// icp-guard: allow <reason>' comment for a by-design exception.",
   );
 }
 
-console.log("ICP-mode guard check passed: all Supabase edge-function/storage call sites are guarded or explicitly allowed.");
+console.log("ICP-mode guard check passed: all Supabase edge-function/storage/Vault call sites are guarded or explicitly allowed.");

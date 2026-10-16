@@ -1,4 +1,6 @@
 import { useState, useEffect, Suspense } from "react";
+import { defaultClubHomeCountry } from "@/lib/clubHomeCountry";
+import { GOOGLE_SIGN_IN_ENABLED } from "@/lib/authProviderFlags";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Flame,
@@ -279,7 +281,8 @@ function SupabaseSignupProPage() {
         logo_url: null, // Will be updated after upload
         sport: clubSport || null,
         created_by: user!.id,
-      })
+        home_country: defaultClubHomeCountry(),
+      } as any)
       .select()
       .single();
 
@@ -677,6 +680,8 @@ function SupabaseSignupProPage() {
               {authLoading2 ? <Loader2 className="h-4 w-4 animate-spin" /> : authMode === "signup" ? "Create Account" : "Sign In"}
             </Button>
             
+            {GOOGLE_SIGN_IN_ENABLED && (
+              <>
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />
@@ -706,6 +711,8 @@ function SupabaseSignupProPage() {
                 </>
               )}
             </Button>
+              </>
+            )}
           </CardContent>
         </Tabs>
       </Card>

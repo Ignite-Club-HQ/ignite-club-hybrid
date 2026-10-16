@@ -5,11 +5,31 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { fetchLiveHomeChildren } from "@/live/features/homeFeed";
+import { getLiveMyRoleGrants, listLiveChildren } from "@/live/features/membership";
+import { getLiveClubProfile, listLiveTeams, listLiveClassEnrolments } from "@/live/features/club";
 
 const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const TODAY_INDEX = new Date().getDay(); // 0=Sun
 const JS_TO_DAY_NAME = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const todayName = JS_TO_DAY_NAME[TODAY_INDEX];
+
+interface WidgetClass {
+  id: string;
+  name: string;
+  class_day: string | null;
+  class_time: string | null;
+  class_duration_minutes: number | null;
+  level_age: string | null;
+  club_id: string;
+  clubs: { name: string } | null;
+}
+
+interface WidgetData {
+  classes: WidgetClass[];
+  childNamesByTeam: Record<string, string[]>;
+}
 
 /**
  * Shows upcoming enrolled classes for the logged-in parent's children.
@@ -18,77 +38,130 @@ const todayName = JS_TO_DAY_NAME[TODAY_INDEX];
 export function UpcomingClassesWidget() {
   const { user } = useAuth();
 
-  // 1. Get parent's children
-  const { data: children = [] } = useQuery({
-    queryKey: ["widget-children", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("children")
-        .select("id, name")
-        .eq("parent_id", user!.id);
-      return data || [];
+  const { data } = useQuery<WidgetData>({
+    queryKey: ["widget-upcoming-classes", user?.id],
+    queryFn: async (): Promise<WidgetData> => {
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          // 1. Get parent's children
+          const { data: children } = await supabase
+            .from("children")
+            .select("id, name")
+            .eq("parent_id", user!.id);
+          const childRows = children || [];
+          const childIds = childRows.map((c) => c.id);
+          if (childIds.length === 0) return { classes: [], childNamesByTeam: {} };
+
+          // 2. Get active enrolments for these children
+          const { data: enrolments } = await supabase
+            .from("class_enrolments")
+            .select("team_id, child_id")
+            .in("child_id", childIds)
+            .eq("status", "enrolled");
+          const enrolmentRows = enrolments || [];
+          const enrolledTeamIds = [...new Set(enrolmentRows.map((e) => e.team_id))];
+          if (enrolledTeamIds.length === 0) return { classes: [], childNamesByTeam: {} };
+
+          // 3. Get class details for enrolled teams
+          const { data: teams } = await supabase
+            .from("teams")
+            .select("id, name, class_day, class_time, class_duration_minutes, level_age, club_id, clubs!club_id(name)")
+            .in("id", enrolledTeamIds)
+            .eq("is_archived", false)
+            .not("class_day", "is", null);
+          const classes = (teams || []) as WidgetClass[];
+
+          const childNamesByTeam: Record<string, string[]> = {};
+          enrolmentRows.forEach((e) => {
+            const child = childRows.find((c) => c.id === e.child_id);
+            if (child) {
+              if (!childNamesByTeam[e.team_id]) childNamesByTeam[e.team_id] = [];
+              if (!childNamesByTeam[e.team_id].includes(child.name)) {
+                childNamesByTeam[e.team_id].push(child.name);
+              }
+            }
+          });
+          return { classes, childNamesByTeam };
+        },
+        icp: async (ctx) => {
+          // 1. Children linked to this account (names decrypted best-effort)
+          const [childrenWithNames, rawChildren, grants] = await Promise.all([
+            fetchLiveHomeChildren(ctx).catch(() => []),
+            listLiveChildren(ctx).catch(() => []),
+            getLiveMyRoleGrants(ctx).catch(() => []),
+          ]);
+          const childIds = rawChildren.map((c) => c.id);
+          if (childIds.length === 0) return { classes: [], childNamesByTeam: {} };
+          const nameByChildId = new Map(childrenWithNames.map((c) => [c.id, c.name]));
+
+          // 2. Clubs to scan: the children's own clubs plus every club the
+          // caller has a role in (covers children whose club link is unset).
+          const clubIds = new Set<string>();
+          rawChildren.forEach((c) => {
+            const cid = c.club_id?.[0];
+            if (cid) clubIds.add(cid);
+          });
+          grants.forEach((g) => {
+            const cid = g.club?.[0];
+            if (cid) clubIds.add(cid);
+          });
+          if (clubIds.size === 0) return { classes: [], childNamesByTeam: {} };
+
+          // 3. Per club: enrolments for these children + class details.
+          const classes: WidgetClass[] = [];
+          const childNamesByTeam: Record<string, string[]> = {};
+          await Promise.all(
+            [...clubIds].map(async (clubId) => {
+              const [enrolments, teams, profile] = await Promise.all([
+                listLiveClassEnrolments(ctx, clubId).catch(() => []),
+                listLiveTeams(ctx, clubId).catch(() => []),
+                getLiveClubProfile(ctx, clubId).catch(() => [] as [] | [{ name: string }]),
+              ]);
+              const clubName = profile[0]?.name ?? null;
+              const mine = enrolments.filter(
+                (e) => e.status === "enrolled" && childIds.includes(e.member_id),
+              );
+              if (mine.length === 0) return;
+              const teamById = new Map(teams.map((t) => [t.id, t]));
+              mine.forEach((e) => {
+                const t = teamById.get(e.class_id);
+                if (!t || t.archived || !t.class_day?.[0]) return;
+                if (!classes.some((c) => c.id === t.id)) {
+                  classes.push({
+                    id: t.id,
+                    name: t.name,
+                    class_day: t.class_day[0] || null,
+                    class_time: t.class_time?.[0] || null,
+                    class_duration_minutes: t.class_duration_minutes?.[0]
+                      ? Number(t.class_duration_minutes[0])
+                      : null,
+                    level_age: t.level_age?.[0] || null,
+                    club_id: clubId,
+                    clubs: clubName ? { name: clubName } : null,
+                  });
+                }
+                const childName = nameByChildId.get(e.member_id);
+                if (childName) {
+                  if (!childNamesByTeam[t.id]) childNamesByTeam[t.id] = [];
+                  if (!childNamesByTeam[t.id].includes(childName)) {
+                    childNamesByTeam[t.id].push(childName);
+                  }
+                }
+              });
+            }),
+          );
+          return { classes, childNamesByTeam };
+        },
+      });
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
 
-  const childIds = children.map(c => c.id);
-
-  // 2. Get active enrolments for these children
-  const { data: enrolments = [] } = useQuery({
-    queryKey: ["widget-child-enrolments", childIds],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("class_enrolments")
-        .select("team_id, child_id")
-        .in("child_id", childIds)
-        .eq("status", "enrolled");
-      return data || [];
-    },
-    enabled: childIds.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const enrolledTeamIds = [...new Set(enrolments.map(e => e.team_id))];
-
-  // 3. Get class details for enrolled teams
-  const { data: classes = [] } = useQuery({
-    queryKey: ["widget-class-details", enrolledTeamIds],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("teams")
-        .select("id, name, class_day, class_time, class_duration_minutes, level_age, club_id, clubs!club_id(name)")
-        .in("id", enrolledTeamIds)
-        .eq("is_archived", false)
-        .not("class_day", "is", null);
-      return (data || []) as Array<{
-        id: string;
-        name: string;
-        class_day: string | null;
-        class_time: string | null;
-        class_duration_minutes: number | null;
-        level_age: string | null;
-        club_id: string;
-        clubs: { name: string } | null;
-      }>;
-    },
-    enabled: enrolledTeamIds.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
+  const classes = data?.classes ?? [];
+  const childNamesByTeam = data?.childNamesByTeam ?? {};
 
   if (classes.length === 0) return null;
-
-  // Build child name map per class
-  const childNamesByTeam: Record<string, string[]> = {};
-  enrolments.forEach(e => {
-    const child = children.find(c => c.id === e.child_id);
-    if (child) {
-      if (!childNamesByTeam[e.team_id]) childNamesByTeam[e.team_id] = [];
-      if (!childNamesByTeam[e.team_id].includes(child.name)) {
-        childNamesByTeam[e.team_id].push(child.name);
-      }
-    }
-  });
 
   // Sort classes: today first, then upcoming days in order
   const todayIdx = DAY_ORDER.indexOf(todayName);

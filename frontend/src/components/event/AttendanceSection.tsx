@@ -93,6 +93,7 @@ export function AttendanceSection({
   const [sendingForUser, setSendingForUser] = useState<string | null>(null);
   const [viewsDialogOpen, setViewsDialogOpen] = useState(false);
 
+  // The event-view hook routes both Supabase and events_domain reads.
   const { data: eventViews = [] } = useEventViewsAdmin(eventId, isAdmin);
 
   const addressableMemberIds = useMemo(

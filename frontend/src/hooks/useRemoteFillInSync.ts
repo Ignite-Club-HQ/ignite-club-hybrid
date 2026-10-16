@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Player } from "@/components/pitch/types";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveActiveGame } from "@/live/features/events";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const ICP_POLL_INTERVAL_MS = 5_000;

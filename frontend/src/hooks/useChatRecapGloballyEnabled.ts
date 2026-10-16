@@ -21,6 +21,11 @@ export function useChatRecapGloballyEnabled(): boolean {
   const { data } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const { readLiveAppConfig } = await import("@/live/appConfig");
+        const { decodeAppSettingBool } = await import("@/live/features/appSettings");
+        return decodeAppSettingBool(await readLiveAppConfig("chat_recap_enabled"), true);
+      }
       const { data: row } = await supabase
         .from("app_settings")
         .select("value")

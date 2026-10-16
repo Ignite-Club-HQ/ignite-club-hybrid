@@ -16,6 +16,11 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  rolloverLiveSeason,
+  listLiveSeasonTeamAssignment,
+  addLiveSeasonTeamAssignment,
+} from "@/live/features/club";
 
 interface Props {
   open: boolean;
@@ -52,11 +57,28 @@ export function SeasonTemplateDialog({
           if (error) throw error;
           return data as string;
         },
-        // NEEDS-CANISTER: create_season_from_template copies team structure
-        // (teams, rosters) which has no canister equivalent — competition_domain
-        // seasons have no team-template duplication shape.
-        icp: async () => {
-          throw new Error("Creating a season from a template isn't available on this backend yet.");
+        // Mapped onto rollover_season (creates the new season) followed by
+        // copying each season_team_assignment across — the closest canister
+        // equivalent to "create season from template + copy rosters".
+        icp: async (ctx) => {
+          const result = (await rolloverLiveSeason(
+            ctx,
+            sourceSeasonId,
+            name.trim(),
+            startDate || "",
+            endDate || "",
+          )) as { season?: { id?: string } } | string;
+          const newSeasonId =
+            typeof result === "string" ? result : result?.season?.id;
+          if (!newSeasonId) throw new Error("Rollover did not return a new season id");
+          const assignments = (await listLiveSeasonTeamAssignment(ctx, sourceSeasonId)) as Array<{
+            member_id: string;
+            team_id: string;
+          }>;
+          for (const a of assignments) {
+            await addLiveSeasonTeamAssignment(ctx, newSeasonId, a.team_id, a.member_id);
+          }
+          return newSeasonId;
         },
       });
     },

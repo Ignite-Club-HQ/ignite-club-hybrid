@@ -115,26 +115,42 @@ function LogoClubThemeDropdown() {
             // Lazy-imported: the header mounts on every page, so the ICP SDK
             // must stay out of the entry chunk (same rule as miniLeagues).
             const { getLiveMyRoleGrants } = await import("@/live/features/membership");
-            const { getLiveClubProfile, getLiveClubSubscription } = await import("@/live/features/club");
+            const { getLiveClubProfile, getLiveClubSubscription, getLiveClubSettings } = await import("@/live/features/club");
             const grants = await getLiveMyRoleGrants(ctx);
             const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
             if (!clubIds.length) return guardClubListResult(`all-user-clubs:${user.id}`, []);
             const clubs = await Promise.all(clubIds.map(async (clubId) => {
-              const row = await getLiveClubProfile(ctx, clubId);
-              const p = row.length ? row[0] : null;
-              if (!p || p.deleted_at_ms.length) return null;
-              const sub = await getLiveClubSubscription(ctx, clubId).catch(() => null);
-              const hasPro = sub !== null &&
-                (sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override);
-              return {
-                clubId: p.id,
-                clubName: p.name.trim(),
-                logoUrl: p.logo_url[0] ?? null,
-                hasPro,
-                hasTheme: false,
-                themeEnabled: false,
-                isSelectable: false,
-              };
+              // Per-club isolation: one club whose profile read fails (e.g. a
+              // half-migrated club) must not reject the whole Promise.all and
+              // hide every OTHER club from the picker — keepPreviousData would
+              // then keep showing the stale list indefinitely.
+              try {
+                const row = await getLiveClubProfile(ctx, clubId);
+                const p = row.length ? row[0] : null;
+                if (!p || p.deleted_at_ms.length) return null;
+                const [sub, settingsRow] = await Promise.all([
+                  getLiveClubSubscription(ctx, clubId).catch(() => null),
+                  getLiveClubSettings(ctx, clubId).catch(() => null),
+                ]);
+                // get_club_settings returns a candid opt ([] | [Settings]) —
+                // unwrap before reading fields (same as useClubTheme does).
+                const settings = settingsRow?.[0] ?? null;
+                const hasPro = sub !== null &&
+                  (sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override);
+                const hasTheme = /^#?[0-9a-f]{6}$/i.test(settings?.theme_primary_color[0] ?? "");
+                const themeEnabled = settings?.theme_enabled ?? false;
+                return {
+                  clubId: p.id,
+                  clubName: p.name.trim(),
+                  logoUrl: p.logo_url[0] ?? null,
+                  hasPro,
+                  hasTheme,
+                  themeEnabled,
+                  isSelectable: hasPro && hasTheme && themeEnabled,
+                };
+              } catch {
+                return null;
+              }
             }));
             const result = clubs.filter((c): c is NonNullable<typeof c> => c !== null);
             const dedupedClubs = new Map<string, (typeof result)[number]>();
@@ -624,7 +640,17 @@ export function AppHeader() {
   const markAllAsRead = useMutation({
     mutationFn: async () => {
       if (!user?.id) return;
-      if (resolveAuthBackend() === "icp") return;
+      if (resolveAuthBackend() === "icp") {
+        const { markAllLiveNotificationsRead } = await import("@/live/features/notifications");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        await withFeatureBackend("notifications", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            await markAllLiveNotificationsRead(ctx, user.id, activeClubFilter ?? null);
+          },
+        });
+        return;
+      }
 
       // Only ever flips is_read — notifications are never deleted here so the
       // user keeps their full history and can still open them later.
@@ -683,7 +709,28 @@ export function AppHeader() {
     queryKey: notificationKeys.recentFor(user?.id, activeClubFilter),
     queryFn: async () => {
       if (!user?.id) return [];
-      if (resolveAuthBackend() === "icp") return [];
+      if (resolveAuthBackend() === "icp") {
+        const { listLiveInbox } = await import("@/live/features/notifications");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const inbox = await withFeatureBackend("notifications", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => listLiveInbox(ctx, user.id, activeClubFilter ?? null, 40),
+        });
+        return (inbox as any[])
+          .map((n) => ({
+            id: n.id,
+            message: n.body,
+            type: n.kind,
+            created_at: new Date(Number(n.created_at_ms)).toISOString(),
+            is_read: n.read,
+            related_id: Array.isArray(n.related_id) ? (n.related_id[0] ?? null) : null,
+            club_id: Array.isArray(n.club_id) ? (n.club_id[0] ?? null) : (n.club_id ?? null),
+            club: Array.isArray(n.club) ? (n.club[0] ?? null) : (n.club ?? null),
+            idempotency_key: n.idempotency_key ?? null,
+          }))
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 40);
+      }
       let q = supabase
         .from("notifications")
         .select("id, message, type, created_at, is_read, related_id, club_id")
@@ -714,6 +761,9 @@ export function AppHeader() {
     // notifications, so a small staleTime is safe and prevents duplicate
     // fetches during rapid remounts (nav, resume, sheet toggles).
     staleTime: 30_000,
+    // ICP notification_queue has no realtime channel (useAuth.tsx) — poll
+    // the canister inbox directly so the dropdown stays fresh.
+    refetchInterval: resolveAuthBackend() === "icp" ? 30_000 : false,
   });
 
   /**
@@ -732,7 +782,15 @@ export function AppHeader() {
     queryKey: notificationKeys.clubUnreadFor(user?.id, activeClubFilter),
     queryFn: async () => {
       if (!user?.id || !activeClubFilter) return 0;
-      if (resolveAuthBackend() === "icp") return 0;
+      if (resolveAuthBackend() === "icp") {
+        const { listLiveInbox } = await import("@/live/features/notifications");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const inbox = await withFeatureBackend("notifications", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => listLiveInbox(ctx, user.id, activeClubFilter, 500),
+        });
+        return (inbox as any[]).filter((n) => !n.read).length;
+      }
       // Pull unread rows (capped) so we can drop DMs from senders who don't
       // share the active club — matches the popover's filtering logic.
       const { data } = await supabase
@@ -746,8 +804,9 @@ export function AppHeader() {
       return filtered.length;
     },
     enabled: !!user?.id && !!activeClubFilter,
-    // Realtime already invalidates this key when notifications change; polling
-    // is only a safety net for missed events, so 60s is plenty.
+    // Realtime already invalidates this key when notifications change (Supabase);
+    // on ICP there is no realtime channel so polling is the only signal —
+    // either way 60s is plenty.
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -758,7 +817,15 @@ export function AppHeader() {
 
   const markAsRead = useMutation({
     mutationFn: async (id: string) => {
-      if (resolveAuthBackend() === "icp") return id;
+      if (resolveAuthBackend() === "icp") {
+        const { markLiveNotificationRead } = await import("@/live/features/notifications");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        await withFeatureBackend("notifications", {
+          supabase: async () => {},
+          icp: async (ctx) => { await markLiveNotificationRead(ctx, id); },
+        });
+        return id;
+      }
       const { error } = await supabase
         .from("notifications")
         .update({ is_read: true })
@@ -824,7 +891,32 @@ export function AppHeader() {
 
   const handleNotificationClick = async (notification: typeof recentNotifications[0]) => {
     if (resolveAuthBackend() === "icp") {
-      navigate("/notifications");
+      // The canister has no per-type route metadata (chat/event containers
+      // live in Supabase-shaped tables that don't exist on-chain), so the
+      // dropdown always lands on the full inbox — but the tap still marks
+      // the item read on-chain instead of silently doing nothing.
+      if (!notification.is_read) {
+        void markAsRead.mutateAsync(notification.id).catch(() => {
+          // Silent — the read state will reconcile on next inbox refetch.
+        });
+      }
+      try {
+        const { getIcpNotificationRoute } = await import("@/lib/icpNotificationRoute");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const to = await withFeatureBackend("notifications", {
+          supabase: async () => "/notifications",
+          icp: (ctx) =>
+            getIcpNotificationRoute(ctx, {
+              kind: notification.type,
+              relatedId: notification.related_id ?? null,
+              club: (notification as any).club ?? null,
+              messageId: (notification as any).idempotency_key ?? null,
+            }),
+        });
+        navigateWithFreshJump(to);
+      } catch {
+        navigate("/notifications");
+      }
       return;
     }
     try {

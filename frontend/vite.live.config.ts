@@ -2,7 +2,6 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import { visualizer } from "rollup-plugin-visualizer";
 // @ts-expect-error plain-JS Netlify function handlers have no type declarations
-import giphySearchHandler from "./netlify/functions/giphy-search.mjs";
 // @ts-expect-error plain-JS Netlify function handlers have no type declarations
 import fetchLinkPreviewHandler from "./netlify/functions/fetch-link-preview.mjs";
 // @ts-expect-error plain-JS Netlify function handlers have no type declarations
@@ -70,7 +69,6 @@ export default defineConfig({
       name: "ignite-live-api",
       configureServer(server) {
         const routes: Record<string, (req: Request) => Promise<Response>> = {
-          "/api/giphy-search": giphySearchHandler,
           "/api/fetch-link-preview": fetchLinkPreviewHandler,
           "/api/register-club-backend": registerClubBackendHandler,
         };

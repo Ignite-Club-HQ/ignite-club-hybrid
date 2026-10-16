@@ -1,4 +1,5 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
+import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import React, { Suspense, useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
@@ -32,6 +33,7 @@ import { ChatSearchBar, ChatSearchLoadingState } from "@/components/chat/ChatSea
 import { useChatHistorySearch } from "@/hooks/useChatHistorySearch";
 import { createChatHistorySearchFetcher } from "@/features/messaging/thread/chatHistorySearchFetcher";
 import { CLUB_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdapters";
+import { getCachedClub } from "@/lib/clubTeamCache";
 import { fetchMessagesAround } from "@/lib/fetchMessagesAround";
 
 import { PageLoading } from "@/components/ui/page-loading";
@@ -335,6 +337,10 @@ export default function ClubChatPage() {
     setSearchQuery("");
     setSearchOpen(false);
     if (target?.created_at && clubId) {
+      if (useIcpLab || resolveAuthBackend() === "icp") {
+        requestAnimationFrame(() => handleJumpToMessage(mid));
+        return;
+      }
       try {
         const ctx = await fetchMessagesAround({
           table: "club_messages",
@@ -392,6 +398,18 @@ export default function ClubChatPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Instant header name: while the club row is still in flight, fall back to the
+  // shared club/team metadata cache so the skeleton and header paint the real
+  // chat name instead of a generic "Club chat" label.
+  const cachedClubMeta = useMemo(
+    () => (clubId ? getCachedClub(clubId) : null),
+    // Recompute once the live club arrives so the header upgrades to fresh data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [clubId, club],
+  );
+  const clubDisplayName = club?.name || cachedClubMeta?.name || "";
+  const clubAvatarUrl = club?.logo_url || cachedClubMeta?.logo_url || undefined;
+
   // Sync active club to this chat's club so push-launched threads
   // don't leave the user inside the wrong club context.
   useSyncActiveClubToChat(clubId);
@@ -407,6 +425,9 @@ export default function ClubChatPage() {
       const uid = user?.id;
       const cid = clubId;
       if (!uid || !cid) return false;
+      const { resolveIcpChatAdmin } = await import("@/lib/icpChatAdmin");
+      const icp = await resolveIcpChatAdmin({ clubId: cid });
+      if (icp !== null) return icp;
       const { data } = await supabase
         .from("user_roles")
         .select("id")
@@ -841,7 +862,7 @@ export default function ClubChatPage() {
       const realByAuthorText = new Set(
         messages
           .filter((m: any) => !m.id.startsWith("temp-") && !m.id.startsWith("queued-"))
-          .map((m: any) => `${m.author_id}::${m.text ?? ""}::${m.image_url ?? ""}`),
+          .map((m: any) => `${m.author_id}::${(m.text ?? "").trim()}::${m.image_url ? "img" : ""}`),
       );
       const previousOnly = (prev || []).filter((message: any) => {
         if (incomingIds.has(message.id)) return false;
@@ -849,7 +870,7 @@ export default function ClubChatPage() {
         // fail-open branch below would re-add it on every sync.
         if (isTombstoned(reconcileScope, message.id)) return false;
         if (message.id.startsWith("temp-") || message.id.startsWith("queued-")) {
-          const key = `${message.author_id}::${message.text ?? ""}::${message.image_url ?? ""}`;
+          const key = `${message.author_id}::${(message.text ?? "").trim()}::${message.image_url ? "img" : ""}`;
           if (realByAuthorText.has(key)) return false;
         }
         return true;
@@ -1453,6 +1474,7 @@ export default function ClubChatPage() {
 
   const sendMutation = useMutation({
     mutationFn: async ({ text, image_url, reply_to_id }: { text: string; image_url: string | null; reply_to_id: string | null }) => {
+      image_url = (await resolveChatUploadUrl(image_url)) as typeof image_url;
       if (useIcpLab) {
         throw new Error("Club messaging is not available in the local ICP contract.");
       }
@@ -1780,7 +1802,7 @@ export default function ClubChatPage() {
     : "Club chat";
 
   if (isLoadingClubSubscription && !club) {
-    return <ChatPageSkeleton title="Club chat" />;
+    return <ChatPageSkeleton title={clubDisplayName || undefined} />;
   }
 
   // Block access for non-Pro users - show full page blocker
@@ -1792,13 +1814,13 @@ export default function ClubChatPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <Avatar className="h-10 w-10">
-            <AvatarImage src={club?.logo_url || undefined} />
+            <AvatarImage src={clubAvatarUrl} />
             <AvatarFallback className="bg-secondary text-secondary-foreground">
-              {club?.name?.charAt(0)?.toUpperCase() || "C"}
+              {(clubDisplayName || "C").charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
         <div className="flex-1">
-            <h1 className="font-semibold">{club?.name || "Club"}</h1>
+            <h1 className="font-semibold">{clubDisplayName || "Club"}</h1>
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center">
@@ -1827,9 +1849,9 @@ export default function ClubChatPage() {
       {/* Header */}
       <ChatHeaderShell
         type="club"
-        name={club?.name || "Club"}
+        name={clubDisplayName || "Club"}
         sublabel={clubHeaderSublabel}
-        avatarUrl={club?.logo_url}
+        avatarUrl={clubAvatarUrl}
         onOpenDetails={() => setMembersOpen(true)}
         leftSlot={
           <ChatSearchBar onSearch={setSearchQuery} isOpen={searchOpen} onOpenChange={setSearchOpen} isSearching={isSearchFetching} />
@@ -1873,9 +1895,9 @@ export default function ClubChatPage() {
         onOpenChange={setMembersOpen}
         chatType="club"
         chatId={clubId!}
-        name={club?.name || "Club"}
+        name={clubDisplayName || "Club"}
         sublabel="Club chat"
-        avatarUrl={club?.logo_url}
+        avatarUrl={clubAvatarUrl}
       />
 
 

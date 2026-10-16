@@ -88,6 +88,19 @@ export function blobAssetUrl(canisterId: string, path: string): string {
   return `https://${canisterId}.raw.icp0.io${cleanPath}`;
 }
 
+/**
+ * Reverses `blobAssetUrl`: given a URL already pointing at an ICP blob-store
+ * canister, recover the canister id + path so a caller can reuse the
+ * already-uploaded bytes (e.g. registering a chat photo as a gallery asset)
+ * without re-downloading/re-uploading them. Returns null for anything else
+ * (e.g. a Supabase storage URL).
+ */
+export function parseIcpBlobUrl(url: string): { canisterId: string; path: string } | null {
+  const match = /^https:\/\/([a-z0-9-]+)\.raw\.icp0\.io(\/.*)$/i.exec(url);
+  if (!match) return null;
+  return { canisterId: match[1], path: match[2] };
+}
+
 export function resolveMediaSource(asset: LiveAssetLocation): LiveMediaSource {
   const ref = asset.blob_ref?.[0];
   if (ref) {

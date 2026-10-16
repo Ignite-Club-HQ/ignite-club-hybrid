@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Users, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveSeasonTeamAssignment, addLiveSeasonTeamAssignment } from "@/live/features/club";
 
 interface Props {
   open: boolean;
@@ -99,10 +100,24 @@ export function BulkRolloverDialog({
           if (error) throw error;
           return data ?? 0;
         },
-        // NEEDS-CANISTER: competition_domain has no roster/team-membership
-        // carry-over concept — team_memberships has no canister equivalent.
-        icp: async () => {
-          throw new Error("Rolling over players isn't available on this backend yet.");
+        // Mapped onto season_team_assignment: carry each selected player's
+        // current team assignment on the source season over to the same
+        // team id on the target season (teams are club-wide, not re-created
+        // per season, so the team id stays valid).
+        icp: async (ctx) => {
+          const assignments = (await listLiveSeasonTeamAssignment(ctx, sourceSeasonId)) as Array<{
+            member_id: string;
+            team_id: string;
+          }>;
+          const teamIdByMember = new Map(assignments.map((a) => [a.member_id, a.team_id]));
+          let count = 0;
+          for (const playerId of selectedPlayerIds) {
+            const teamId = teamIdByMember.get(playerId);
+            if (!teamId) continue;
+            await addLiveSeasonTeamAssignment(ctx, targetSeasonId, teamId, playerId);
+            count += 1;
+          }
+          return count;
         },
       });
     },

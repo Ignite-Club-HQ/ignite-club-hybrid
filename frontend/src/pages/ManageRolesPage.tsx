@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { listSupabaseRoleRequests } from "@/features/membership/roleRequestRepository";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import AddClubRoleToMemberDialog from "@/components/AddClubRoleToMemberDialog";
@@ -182,27 +182,13 @@ function SupabaseManageRolesPage() {
     refetchOnMount: true,
   });
 
-  const { data: requests } = useQuery({
+  const { data: requests, isPending: loadingRequests, error: requestError } = useQuery({
     queryKey: ["club-role-requests", clubId],
     queryFn: () =>
       withFeatureBackend("membership", {
         supabase: async () => {
-          const { data, error } = await supabase
-            .from("role_requests")
-            .select("*")
-            .eq("club_id", clubId!)
-            .eq("status", "pending");
-          if (error) throw error;
-
-          // Fetch profiles separately
-          if (!data || data.length === 0) return [];
-          const userIds = data.map(r => r.user_id);
-          const { data: profiles } = await selectCachedProfilesByIds(userIds);
-
-          return data.map(req => ({
-            ...req,
-            requester: profiles?.find(p => p.id === req.user_id) || null
-          }));
+          if (!clubId) return [];
+          return listSupabaseRoleRequests({ clubId });
         },
         // Provisional: account_id is the canister principal text, not a
         // Supabase profile id — no display name/avatar join on the canister.
@@ -221,6 +207,9 @@ function SupabaseManageRolesPage() {
         },
       }),
     enabled: !!clubId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const deleteRoleMutation = useMutation({
@@ -392,6 +381,8 @@ function SupabaseManageRolesPage() {
         requests={
           <RoleRequestsList
             requests={requests}
+            isLoading={loadingRequests}
+            error={requestError}
             isProcessing={handleRequestMutation.isPending}
             onApprove={(request) => handleRequestMutation.mutate({ requestId: request.id, approved: true, request })}
             onDeny={(request) => handleRequestMutation.mutate({ requestId: request.id, approved: false, request })}

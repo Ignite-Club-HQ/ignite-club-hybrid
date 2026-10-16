@@ -44,6 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logScheduleOpenLatency, resetScheduleOpenLog } from "@/lib/scheduleOpenLatency";
 import { format, parseISO, startOfDay, isSameDay, subHours } from "date-fns";
+import { hasValidScheduleDate, scheduleTimestampDate } from "@/lib/scheduleDates";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { EventsHeaderSponsorStrip } from "@/components/events/EventsHeaderSponsorStrip";
@@ -193,7 +194,7 @@ export default function EventsPage() {
   usePageTitle("Schedule");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { activeClubFilter } = useClubTheme();
+  const { activeClubFilter, setActiveClubTheme } = useClubTheme();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Production ICP-mode gate — no canister equivalent for these
   // child_guardians/children parent-filter lookups yet.
@@ -581,6 +582,18 @@ export default function EventsPage() {
         isAppAdmin,
       };
     },
+    // Last-known memberships let the schedule query start immediately; the
+    // fresh copy replaces them in the background.
+    initialData: () => {
+      if (useIcpLab || !user?.id) return undefined;
+      try {
+        const raw = localStorage.getItem(`ignite_schedule_memberships_v1:${user.id}`);
+        return raw ? JSON.parse(raw) : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    initialDataUpdatedAt: 0,
     enabled: !!user || useIcpLab,
     // Roles + memberships change rarely; 30min stale eliminates the repeat
     // waterfall on tab focus / navigation returns.
@@ -593,6 +606,15 @@ export default function EventsPage() {
   // Teams the user can filter the schedule by — names for memberships.teamIds,
   // optionally narrowed to the current club filter. Reuses membership team IDs
   // so we don't re-run the roles + children waterfall.
+  useEffect(() => {
+    if (useIcpLab || !user?.id || !userMemberships) return;
+    try {
+      localStorage.setItem(`ignite_schedule_memberships_v1:${user.id}`, JSON.stringify(userMemberships));
+    } catch {
+      /* snapshot is only a speed-up */
+    }
+  }, [useIcpLab, user?.id, userMemberships]);
+
   const { data: userTeams } = useQuery({
     queryKey: ["user-teams-for-filter", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, clubFilter, userMemberships?.teamIds],
     queryFn: async () => {
@@ -778,14 +800,17 @@ export default function EventsPage() {
               const rows = rowsByClub[clubIndex];
               for (const ev of rows as any[]) {
                 if (ev.deleted) continue;
-                const start = new Date(Number(ev.starts_at_ms));
+                // Skip rows with missing/invalid timestamps — formatting an
+                // Invalid Date throws RangeError and blanks the whole page.
+                const start = scheduleTimestampDate(ev.starts_at_ms);
+                if (!start) continue;
                 if (start < thirtyDaysAgo || start > upperBound) continue;
                 if (filter !== "all" && ev.event_type !== filter) continue;
                 const teamId = (ev.team_id?.[0] ?? null) as string | null;
                 // Club-wide events (no team) show to every club member; team
                 // events show to that team's members and club admins.
                 if (teamId && !teamIds.includes(teamId) && !(userMemberships?.clubAdminClubIds ?? []).includes(clubId)) continue;
-                const end = new Date(Number(ev.ends_at_ms));
+                const end = scheduleTimestampDate(ev.ends_at_ms) ?? start;
                 all.push({
                   id: ev.id,
                   title: ev.title,
@@ -810,7 +835,7 @@ export default function EventsPage() {
                   start_time: format(start, "HH:mm"),
                   end_time: format(end, "HH:mm"),
                   description: ev.description ?? "",
-                  updated_at: new Date(Number(ev.updated_at_ms ?? ev.starts_at_ms)).toISOString(),
+                  updated_at: (scheduleTimestampDate(ev.updated_at_ms) ?? start).toISOString(),
                 } as Event);
               }
             }
@@ -1055,18 +1080,22 @@ export default function EventsPage() {
   // gates the events query) may never resolve. Rather than sit on a spinner
   // forever, read the user-scoped schedule cache directly and render it.
   const { isOnline } = useOnlineStatus();
+  // Also used online: last visit's schedule paints instantly while the
+  // fresh one loads in the background (replaced as soon as it arrives).
   const offlineCachedEvents = useMemo(() => {
-    if (isOnline) return null;
     try {
       return (getCachedEventsList(eventsScopeKey, user?.id) as Event[] | null) ?? null;
     } catch {
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline, eventsScopeKey, user?.id]);
+  }, [eventsScopeKey, user?.id]);
 
   // Never let a failed/never-resolving network query blank out cached data.
-  const events: Event[] | undefined = eventsData ?? offlineCachedEvents ?? undefined;
+  const events = useMemo(
+    () => (eventsData ?? offlineCachedEvents)?.filter(hasValidScheduleDate),
+    [eventsData, offlineCachedEvents],
+  );
   const showingOfflineCache = !isOnline && !eventsData && !!offlineCachedEvents;
   const offlineNoCache = !isOnline && !events;
 
@@ -1092,6 +1121,10 @@ export default function EventsPage() {
       params.delete("team"); // Clear team when club changes
     }
     setSearchParams(params);
+    // The page dropdown must win over the global club theme filter —
+    // otherwise activeClubFilter (preferred in clubFilter above) keeps the
+    // calendar showing the previously selected club's events.
+    setActiveClubTheme(value === "all" ? null : value);
   };
 
   const handleTeamChange = (value: string) => {
@@ -1386,35 +1419,11 @@ export default function EventsPage() {
                   ["club_admin", "team_admin", "coach", "committee_member"].includes(r.role),
                 );
               if (!canCreate) {
-                const evts = upcomingEvents || [];
-                if (!evts.length) {
-                  toast({ title: "No upcoming events to export" });
-                  return;
-                }
-                exportEventsIcs(
-                  evts.map((e: any) => ({
-                    id: e.id,
-                    title: e.title,
-                    type: e.type,
-                    event_date: e.event_date,
-                    start_time: e.start_time,
-                    end_time: e.end_time,
-                    description: e.description,
-                    location_name: e.location_name,
-                    address: e.address,
-                    suburb: e.suburb,
-                    state: e.state,
-                    postcode: e.postcode,
-                    is_cancelled: e.is_cancelled,
-                    updated_at: e.updated_at,
-                    url: `${window.location.origin}/events/${e.id}`,
-                  })),
-                  "Ignite Schedule",
-                  "ignite-schedule",
-                ).then(() => {
-                  toast({ title: "Schedule exported" });
-                }).catch((err) => {
-                  toast({ title: "Couldn't export", description: (err as Error).message, variant: "destructive" });
+                // Calendar export has its own button next to List/Calendar —
+                // the + is for creating, so explain why it's unavailable.
+                toast({
+                  title: "Only coaches and club or team admins can add events",
+                  description: "Ask your club admin for a coach or admin role, or create your own club from the Clubs page.",
                 });
                 return;
               }

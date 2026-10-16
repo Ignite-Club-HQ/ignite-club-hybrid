@@ -44,6 +44,8 @@ import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import type { FeatureBackendContext } from "@/live/featureRouter";
 
 interface ThreadInfo {
   label: string;
@@ -126,6 +128,24 @@ function useThreadLabels(rows: ScheduledMessageRow[]) {
   return useQuery({
     queryKey: ["scheduled-message-thread-labels", key],
     queryFn: async () => {
+      return withFeatureBackend("messaging", {
+        supabase: () => fetchSupabaseThreadLabels(rows, teamIds, clubIds, groupIds, dmConvIds, adminConvIds),
+        icp: (ctx) => fetchIcpThreadLabels(ctx, rows, teamIds, clubIds, groupIds, dmConvIds, adminConvIds),
+      });
+    },
+    enabled: rows.length > 0,
+    staleTime: 60 * 1000,
+  });
+}
+
+async function fetchSupabaseThreadLabels(
+  rows: ScheduledMessageRow[],
+  teamIds: string[],
+  clubIds: string[],
+  groupIds: string[],
+  dmConvIds: string[],
+  adminConvIds: string[],
+): Promise<Record<string, ThreadInfo>> {
       const labels: Record<string, ThreadInfo> = {};
       const tasks: Promise<void>[] = [];
 
@@ -220,10 +240,73 @@ function useThreadLabels(rows: ScheduledMessageRow[]) {
 
       await Promise.all(tasks);
       return labels;
-    },
-    enabled: rows.length > 0,
-    staleTime: 60 * 1000,
+}
+
+export async function fetchIcpThreadLabels(
+  ctx: FeatureBackendContext,
+  rows: ScheduledMessageRow[],
+  teamIds: string[],
+  clubIds: string[],
+  groupIds: string[],
+  dmConvIds: string[],
+  adminConvIds: string[],
+): Promise<Record<string, ThreadInfo>> {
+  const labels: Record<string, ThreadInfo> = {};
+  const { getLiveTeam, getLiveClubProfile } = await import("@/live/features/club");
+  const { getLiveGroupMetadata } = await import("@/live/features/messaging");
+  const { getCachedIcpIdentityProfile } = await import("@/live/identityProfileCache");
+
+  const tasks: Promise<void>[] = [];
+
+  teamIds.forEach((teamId) => {
+    tasks.push((async () => {
+      const [team] = await getLiveTeam(ctx, teamId);
+      if (!team) return;
+      labels[`team:${teamId}`] = {
+        label: `${team.name} chat`,
+        href: `/teams/${teamId}/chat`,
+      };
+    })());
   });
+
+  clubIds.forEach((clubId) => {
+    tasks.push((async () => {
+      const [profile] = await getLiveClubProfile(ctx, clubId);
+      labels[`club:${clubId}`] = {
+        label: `${profile?.name || "Club"} club chat`,
+        href: `/clubs/${clubId}/chat`,
+      };
+    })());
+  });
+
+  groupIds.forEach((groupId) => {
+    tasks.push((async () => {
+      const meta = await getLiveGroupMetadata(ctx, groupId).catch(() => null);
+      labels[`group:${groupId}`] = {
+        label: meta?.name || "Group chat",
+        sublabel: "Group chat",
+        href: `/groups/${groupId}/chat`,
+      };
+    })());
+  });
+
+  dmConvIds.forEach((convId) => {
+    tasks.push((async () => {
+      const profile = getCachedIcpIdentityProfile(convId);
+      labels[`direct:${convId}`] = {
+        label: profile?.displayName || "Direct message",
+        sublabel: "Direct message",
+        href: `/messages/dm/${convId}`,
+      };
+    })());
+  });
+
+  adminConvIds.forEach((convId) => {
+    labels[`club_admin:${convId}`] = { label: "Club admin chat", sublabel: "Club admin chat" };
+  });
+
+  await Promise.all(tasks);
+  return labels;
 }
 
 function lookupLabel(
@@ -246,17 +329,7 @@ function lookupLabel(
   }
 }
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-
 export default function ScheduledMessagesPage() {
-  if (isFeatureRoutedToIcp("messaging")) {
-    return <IcpUnavailablePage title="Scheduled messages are unavailable in ICP lab mode" description="Message scheduling and external delivery workers are not connected to the ICP messaging service yet." />;
-  }
-  return <SupabaseScheduledMessagesPage />;
-}
-
-function SupabaseScheduledMessagesPage() {
   const navigate = useNavigate();
   const { hasAnyClubPro, isLoading: proLoading } = useUserHasAnyClubPro();
   const { activeClubFilter } = useClubTheme();

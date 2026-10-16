@@ -59,6 +59,10 @@ export interface Main {
   'acknowledge' : ActorMethod<[string, string], Result>,
   'cancel_scheduled' : ActorMethod<[string, string], ScheduledResult>,
   'claim' : ActorMethod<[bigint, number], Results>,
+  'cleanup_stale_device_tokens' : ActorMethod<
+    [bigint, bigint],
+    DeviceTokenCountResult
+  >,
   'clear_inbox' : ActorMethod<[string, [] | [string]], ResultNat16>,
   /**
    * / Public: remaining cycles (shown in admin settings).
@@ -86,6 +90,7 @@ export interface Main {
   'get_notification' : ActorMethod<[string], [] | [Notification]>,
   'get_preferences' : ActorMethod<[string], Preferences>,
   'get_push_alert_settings' : ActorMethod<[], PushAlertSettings>,
+  'get_push_delivery_health' : ActorMethod<[bigint], PushDeliveryHealthResult>,
   'grant_worker' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -102,6 +107,15 @@ export interface Main {
   'mark_failed' : ActorMethod<[string, string], ScheduledResult>,
   'mark_read' : ActorMethod<[string], Result>,
   'mark_sent' : ActorMethod<[string, string], ScheduledResult>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'record_chat_notify_batch' : ActorMethod<
     [string, string, string, string, Array<string>, Array<string>],
     ChatNotifyBatchResult
@@ -127,6 +141,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'remove_device_tokens' : ActorMethod<
     [string, Array<string>],
     DeviceTokenCountResult
@@ -148,6 +167,11 @@ export interface Main {
       [] | [bigint],
     ],
     ScheduledResult
+  >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
   >,
   'set_messaging_domain_canister' : ActorMethod<
     [Principal],
@@ -260,6 +284,18 @@ export interface PushAlertSettingsInput {
   'min_notifications' : number,
   'failure_threshold_percent' : number,
 }
+export interface PushDeliveryHealth {
+  'generated_at_ms' : bigint,
+  'total_24h' : number,
+  'processing_24h' : number,
+  'device_token_count' : number,
+  'window_hours' : number,
+  'failed_24h' : number,
+  'pending_24h' : number,
+  'delivered_24h' : number,
+}
+export type PushDeliveryHealthResult = { 'Ok' : PushDeliveryHealth } |
+  { 'Err' : string };
 export type Recurrence = { 'Weekly' : null } |
   { 'None' : null } |
   { 'Daily' : null } |

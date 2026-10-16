@@ -1,4 +1,5 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
+import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import React, { Suspense, useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
 import { resolveChatJumpTarget } from "@/lib/resolveChatJumpTarget";
@@ -511,7 +512,7 @@ export default function BroadcastChatPage() {
       const realByAuthorText = new Set(
         messages
           .filter((m: any) => !m.id.startsWith("temp-") && !m.id.startsWith("queued-"))
-          .map((m: any) => `${m.author_id}::${m.text ?? ""}::${m.image_url ?? ""}`),
+          .map((m: any) => `${m.author_id}::${(m.text ?? "").trim()}::${m.image_url ? "img" : ""}`),
       );
       const previousOnly = (prev || []).filter((message: any) => {
         if (incomingIds.has(message.id)) return false;
@@ -519,7 +520,7 @@ export default function BroadcastChatPage() {
         // fail-open branch below would re-add it on every sync.
         if (isTombstoned(reconcileScope, message.id)) return false;
         if (message.id.startsWith("temp-") || message.id.startsWith("queued-")) {
-          const key = `${message.author_id}::${message.text ?? ""}::${message.image_url ?? ""}`;
+          const key = `${message.author_id}::${(message.text ?? "").trim()}::${message.image_url ? "img" : ""}`;
           if (realByAuthorText.has(key)) return false;
         }
         return true;
@@ -952,6 +953,7 @@ export default function BroadcastChatPage() {
 
   const sendMutation = useMutation({
     mutationFn: async ({ text, image_url, reply_to_id }: { text: string; image_url: string | null; reply_to_id: string | null }) => {
+      image_url = (await resolveChatUploadUrl(image_url)) as typeof image_url;
       // If offline, queue the message
       if (!navigator.onLine) {
         queueMessage({
@@ -990,7 +992,10 @@ export default function BroadcastChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, "broadcast", text, `broadcast:${user!.id}:${Date.now()}`, attachment, reply_to_id);
+          // Idempotent: makes sure the shared feed exists before posting
+          // (send_message answers "Conversation not found" otherwise).
+          await ensureLiveBroadcastConversation(ctx);
+          await sendLiveMessage(ctx, "broadcast", text, `bc:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, "broadcast", user!.id).catch(() => { /* best-effort engagement counter */ });
         },
       });
@@ -1081,6 +1086,7 @@ export default function BroadcastChatPage() {
       console.error("Failed to send broadcast message", err);
       toast({
         title: "Failed to send message",
+        description: err instanceof Error ? err.message.slice(0, 200) : undefined,
         variant: "destructive",
       });
     },

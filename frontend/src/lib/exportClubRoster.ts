@@ -23,13 +23,86 @@ export interface ClubRosterRow {
  * plus adult players (profiles holding the `player` role on a team).
  * Archived/deleted teams are excluded.
  */
+const opt = <T,>(v: [] | [T]): T | null => (Array.isArray(v) ? v[0] ?? null : (v as unknown as T | null));
+
+/**
+ * Internet Identity branch: builds the roster from club_domain role grants
+ * plus club_domain children (via getLiveClubRoster), resolving names through
+ * the vault (children) and the identity profile cache (adults holding the
+ * `player` role). All ICP modules are loaded lazily so the agent/candid SDK
+ * never lands in a Supabase account's entry chunk.
+ */
+async function fetchClubRosterRowsIcp(clubId: string): Promise<ClubRosterRow[]> {
+  const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, clubFeature, vault, identityProfile] =
+    await Promise.all([
+      import("@/live/internetIdentityAuth"),
+      import("@/live/targetRegistry"),
+      import("@/live/features/club"),
+      import("@/live/features/vault"),
+      import("@/live/identityProfileCache"),
+    ]);
+  const identity = await getCurrentInternetIdentity();
+  if (!identity) throw new Error("Internet Identity session required");
+  const ctx = { identity, target: getActiveIcpTarget() };
+
+  const { children, roles } = await clubFeature.getLiveClubRoster(ctx, clubId);
+  const teams = await clubFeature.listLiveTeams(ctx, clubId);
+  const teamById = new Map(teams.map((t) => [t.id, t]));
+
+  const childIds = [...new Set(children.map((c) => c.id))];
+  const childNames = await vault.resolveLivePiiTextBatch(
+    ctx,
+    childIds,
+    "name",
+    "read_pii",
+    "Club player list export",
+  );
+
+  const rows: ClubRosterRow[] = [];
+  for (const child of children) {
+    for (const teamId of child.teams) {
+      const team = teamById.get(teamId);
+      if (!team) continue;
+      rows.push({
+        playerName: childNames.get(child.id) ?? "Unnamed player",
+        playerType: "Junior",
+        yearOfBirth: "",
+        teamName: team.name ?? "",
+        ageGroup: (Array.isArray(team.division) ? team.division[0] : team.division) ?? "",
+        parents: "",
+      });
+    }
+  }
+
+  const playerGrants = roles.filter((r) => r.role === "player" && r.team);
+  for (const grant of playerGrants) {
+    const teamId = grant.team ?? null;
+    const team = teamId ? teamById.get(teamId) : null;
+    if (!team) continue;
+    const principalText = grant.user.toText();
+    const profile = identityProfile.getCachedIcpIdentityProfile(principalText);
+    rows.push({
+      playerName: profile?.displayName ?? "Unnamed member",
+      playerType: "Adult",
+      yearOfBirth: "",
+      teamName: team.name ?? "",
+      ageGroup: (Array.isArray(team.division) ? team.division[0] : team.division) ?? "",
+      parents: "",
+    });
+  }
+
+  return rows.sort(
+    (a, b) =>
+      a.teamName.localeCompare(b.teamName) || a.playerName.localeCompare(b.playerName),
+  );
+}
+
 export async function fetchClubRosterRows(clubId: string): Promise<ClubRosterRow[]> {
-  // NEEDS-CANISTER: no club-wide player/guardian roster read exists on
-  // club_domain yet. Callers hide this for Internet Identity accounts;
-  // fail closed here too so a future caller can never fire Supabase
-  // roster queries for an II user.
+  // Internet Identity accounts build the roster from club_domain's
+  // get_club_roster (see fetchClubRosterRowsIcp above) instead of the
+  // Supabase queries below.
   if (resolveAuthBackend() === "icp") {
-    throw new Error("Player list export is not available for Internet Identity accounts.");
+    return fetchClubRosterRowsIcp(clubId);
   }
   const { data: teams, error: teamsError } = await supabase
     .from("teams")

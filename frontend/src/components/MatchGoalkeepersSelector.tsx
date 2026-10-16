@@ -13,9 +13,15 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { selectCachedProfilesByIds, selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveMatchGoalkeepers,
+  setLiveMatchGoalkeeper,
+  removeLiveMatchGoalkeeper,
+} from "@/live/features/events";
 
 interface Props {
   eventId: string;
@@ -28,52 +34,80 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  // NEEDS-CANISTER: events_domain has no per-match goalkeeper-assignment
-  // store (Supabase `match_goalkeepers` has no canister counterpart) —
-  // silently disable admin assignment controls for Internet Identity
-  // accounts instead of throwing or showing an "unavailable" state.
+  // events_domain has a per-match goalkeeper-assignment store
+  // (set_match_goalkeeper/list_match_goalkeepers/remove_match_goalkeeper,
+  // one row per "period" slot); ICP sessions assign a free period slot per
+  // keeper the same way Supabase's unordered `match_goalkeepers` rows allow
+  // more than one goalkeeper per match.
   const isIcp = resolveAuthBackend() === "icp";
-  const effectiveIsAdmin = isAdmin && !isIcp;
+  const effectiveIsAdmin = isAdmin;
   const [open, setOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data: keepers = [], isLoading } = useQuery({
     queryKey: ["match-goalkeepers", eventId, (rsvps || []).length],
-    enabled: !isIcp,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("match_goalkeepers" as any)
-        .select(`*`)
-        .eq("event_id", eventId);
-      if (error) throw error;
-      const rows: any[] = data || [];
-      const userIds = rows.map((r) => r.user_id).filter(Boolean);
-      const childIds = rows.map((r) => r.child_id).filter(Boolean);
-      const profileMap = new Map<string, any>();
-      const childMap = new Map<string, any>();
-      if (userIds.length) {
-        const { data: profs } = await selectCachedProfilesByIds(userIds);
-        (profs || []).forEach((p: any) => profileMap.set(p.id, p));
-      }
-      if (childIds.length) {
-        const { data: kids } = await supabase
-          .from("children")
-          .select("id, name")
-          .in("id", childIds);
-        (kids || []).forEach((c: any) => childMap.set(c.id, c));
-      }
-      // Fallback to rsvp-embedded child names if RLS blocks direct children read
-      (rsvps || []).forEach((r: any) => {
-        if (r.child_id && r.children && !childMap.has(r.child_id)) {
-          childMap.set(r.child_id, r.children);
+    queryFn: () => withFeatureBackend("events", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("match_goalkeepers" as any)
+          .select(`*`)
+          .eq("event_id", eventId);
+        if (error) throw error;
+        const rows: any[] = data || [];
+        const userIds = rows.map((r) => r.user_id).filter(Boolean);
+        const childIds = rows.map((r) => r.child_id).filter(Boolean);
+        const profileMap = new Map<string, any>();
+        const childMap = new Map<string, any>();
+        if (userIds.length) {
+          const { data: profs } = await selectCachedProfilesByIds(userIds);
+          (profs || []).forEach((p: any) => profileMap.set(p.id, p));
         }
-      });
-      return rows.map((r) => ({
-        ...r,
-        profiles: r.user_id ? profileMap.get(r.user_id) : null,
-        children: r.child_id ? childMap.get(r.child_id) : null,
-      }));
-    },
+        if (childIds.length) {
+          const { data: kids } = await supabase
+            .from("children")
+            .select("id, name")
+            .in("id", childIds);
+          (kids || []).forEach((c: any) => childMap.set(c.id, c));
+        }
+        // Fallback to rsvp-embedded child names if RLS blocks direct children read
+        (rsvps || []).forEach((r: any) => {
+          if (r.child_id && r.children && !childMap.has(r.child_id)) {
+            childMap.set(r.child_id, r.children);
+          }
+        });
+        return rows.map((r) => ({
+          ...r,
+          profiles: r.user_id ? profileMap.get(r.user_id) : null,
+          children: r.child_id ? childMap.get(r.child_id) : null,
+        }));
+      },
+      icp: async (ctx) => {
+        const rows = await listLiveMatchGoalkeepers(ctx, eventId);
+        const result = [];
+        for (const row of rows) {
+          const isChild = row.ref_kind === "child";
+          let profile = null;
+          let children = null;
+          if (isChild) {
+            const { data: kid } = await supabase.from("children").select("id, name").eq("id", row.ref_id).maybeSingle();
+            children = kid;
+          } else {
+            const { data: profileData } = await selectCachedProfileById(row.ref_id);
+            profile = profileData;
+          }
+          result.push({
+            id: `${row.event_id}:${row.period}`,
+            event_id: row.event_id,
+            period: row.period,
+            user_id: isChild ? null : row.ref_id,
+            child_id: isChild ? row.ref_id : null,
+            profiles: profile,
+            children,
+          });
+        }
+        return result;
+      },
+    }),
   });
 
   const { data: playerUserIds = [] } = useQuery({
@@ -91,15 +125,31 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
     enabled: !!teamId && !isIcp,
   });
 
+  const nextFreePeriod = () => {
+    const used = new Set(keepers.map((k: any) => k.period).filter(Boolean));
+    let n = 1;
+    while (used.has(String(n))) n += 1;
+    return String(n);
+  };
+
   const addMutation = useMutation({
     mutationFn: async ({ userId, childId }: { userId?: string; childId?: string }) => {
-      const { error } = await supabase.from("match_goalkeepers" as any).insert({
-        event_id: eventId,
-        user_id: userId || null,
-        child_id: childId || null,
-        assigned_by: user!.id,
-      } as any);
-      if (error) throw error;
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error } = await supabase.from("match_goalkeepers" as any).insert({
+            event_id: eventId,
+            user_id: userId || null,
+            child_id: childId || null,
+            assigned_by: user!.id,
+          } as any);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const refKind = userId ? "account" : "child";
+          const refId = (userId || childId)!;
+          await setLiveMatchGoalkeeper(ctx, eventId, refKind, refId, nextFreePeriod());
+        },
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["match-goalkeepers", eventId] });
@@ -113,9 +163,16 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
   });
 
   const removeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("match_goalkeepers" as any).delete().eq("id", id);
-      if (error) throw error;
+    mutationFn: async (row: any) => {
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error } = await supabase.from("match_goalkeepers" as any).delete().eq("id", row.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await removeLiveMatchGoalkeeper(ctx, eventId, row.period);
+        },
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["match-goalkeepers", eventId] });
@@ -126,7 +183,7 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
   const goingPlayers = (rsvps || []).filter((r) => r.status === "going");
   const goingChildren = goingPlayers.filter((r) => r.child_id);
   const goingMembers = goingPlayers.filter(
-    (r) => !r.child_id && r.user_id && playerUserIds.includes(r.user_id)
+    (r) => !r.child_id && r.user_id && (isIcp || playerUserIds.includes(r.user_id))
   );
 
   const assignedUserIds = new Set(keepers.filter((k: any) => k.user_id).map((k: any) => k.user_id));
@@ -174,7 +231,7 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
                       variant="ghost"
                       size="icon"
                       className="text-destructive h-8 w-8"
-                      onClick={() => removeMutation.mutate(k.id)}
+                      onClick={() => removeMutation.mutate(k)}
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -187,6 +244,7 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
               <p className="text-sm text-muted-foreground">No goalkeeper recorded</p>
             )
           )}
+
           {effectiveIsAdmin && (
             <Button
               variant="outline"

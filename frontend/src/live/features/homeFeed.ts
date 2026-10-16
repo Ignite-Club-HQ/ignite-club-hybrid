@@ -1,5 +1,5 @@
 import type { FeatureBackendContext } from "../featureRouter";
-import { getLiveClubProfile, getLiveTeam } from "./club";
+import { getLiveClubProfile, getLiveTeam, listLivePersonalTeams } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
 import { getLiveMyRoleGrants, listLiveChildren } from "./membership";
 import { resolveLivePiiTextBatch } from "./vault";
@@ -111,10 +111,22 @@ export interface LiveHomeEvent {
 export function mapLiveHomeEvent(
   event: LiveEvent,
   clubNameById: ReadonlyMap<string, string>,
+  teamNameById?: ReadonlyMap<string, string>,
 ): LiveHomeEvent {
+  const teamId = event.team_id[0] ?? null;
+  const teamName = teamId ? teamNameById?.get(teamId) ?? null : null;
+  const opponent = event.opponent[0] ?? null;
+  // Canister games often store an empty title (the Supabase branch auto-titles
+  // "Team vs Opponent" at creation). Derive the same display title so the
+  // Next Up card never renders a nameless game.
+  const title =
+    event.title.trim() ||
+    (teamName && opponent
+      ? `${teamName} vs ${opponent}`
+      : (teamName ?? opponent ?? ""));
   return {
     id: event.id,
-    title: event.title,
+    title,
     type: event.event_type === "game" || event.event_type === "social" ? event.event_type : "training",
     event_date: new Date(Number(event.starts_at_ms)).toISOString(),
     start_time: null,
@@ -122,16 +134,16 @@ export function mapLiveHomeEvent(
     location_name: event.location[0] ?? null,
     suburb: null,
     club_id: event.club_id,
-    team_id: event.team_id[0] ?? null,
+    team_id: teamId,
     mini_league_id: event.mini_league_id[0] ?? null,
     is_cancelled: event.cancelled,
     is_bye: false,
     is_recurring: false,
     parent_event_id: null,
     amount: null,
-    opponent: event.opponent[0] ?? null,
+    opponent,
     arrival_minutes_before: null,
-    teams: null,
+    teams: teamName ? { name: teamName, default_match_arrival_minutes: null } : null,
     clubs: { name: clubNameById.get(event.club_id) ?? "", sport: null },
   };
 }
@@ -150,7 +162,21 @@ const MERGED_EVENTS_CAP = 100;
 export async function fetchLiveHomeFeed(
   ctx: FeatureBackendContext,
 ): Promise<{ memberships: LiveHomeMemberships; events: LiveHomeEvent[] }> {
+  // Personal teams don't depend on grants — start them in parallel.
+  const personalTeamsPromise = listLivePersonalTeams(ctx).catch(() => []);
   const raw = deriveLiveMemberships(await getLiveMyRoleGrants(ctx));
+  // Memoise per-open lookups so tombstone checks and card-name lookups share
+  // one canister call per club/team instead of repeating them.
+  const clubCache = new Map<string, ReturnType<typeof getLiveClubProfile>>();
+  const teamCache = new Map<string, ReturnType<typeof getLiveTeam>>();
+  const clubProfile = (id: string) => {
+    if (!clubCache.has(id)) clubCache.set(id, getLiveClubProfile(ctx, id));
+    return clubCache.get(id)!;
+  };
+  const teamRecord = (id: string) => {
+    if (!teamCache.has(id)) teamCache.set(id, getLiveTeam(ctx, id));
+    return teamCache.get(id)!;
+  };
 
   // Drop soft-deleted clubs/teams. Grants survive the tombstone (mirroring
   // Supabase's orphan user_roles rows), so cross-check every club/team
@@ -163,10 +189,16 @@ export async function fetchLiveHomeFeed(
     ...raw.leagueAdminClubIds,
     ...raw.roles.map((r) => r.club_id).filter((id): id is string => !!id),
   ])];
+  // Start event reads for every candidate scope now, in parallel with the
+  // tombstone checks; results for inactive scopes are simply discarded.
+  const eventPromises = new Map<string, Promise<LiveEvent[]>>();
+  for (const clubId of raw.clubIds) eventPromises.set(`c:${clubId}`, listLiveEvents(ctx, clubId, null));
+  for (const teamId of raw.teamIds) eventPromises.set(`t:${teamId}`, listLiveEvents(ctx, null, teamId));
+  for (const p of eventPromises.values()) p.catch(() => {});
   const activeClubIds = new Set<string>();
   await Promise.all(
     candidateClubIds.map(async (clubId) => {
-      const profile = await getLiveClubProfile(ctx, clubId);
+      const profile = await clubProfile(clubId);
       const club = profile[0];
       if (club && club.deleted_at_ms.length === 0) activeClubIds.add(clubId);
     }),
@@ -174,7 +206,7 @@ export async function fetchLiveHomeFeed(
   const activeTeamIds = new Set<string>();
   await Promise.all(
     raw.teamIds.map(async (teamId) => {
-      const teamOpt = (await getLiveTeam(ctx, teamId)) as unknown as Array<{
+      const teamOpt = (await teamRecord(teamId)) as unknown as Array<{
         club_id: string;
         deleted_at_ms: [] | [bigint];
       }>;
@@ -184,8 +216,17 @@ export async function fetchLiveHomeFeed(
       }
     }),
   );
+  // Personal (club-less) ICP teams have no club_domain role grant to surface
+  // them, so they are fetched separately and merged in directly (no club
+  // tombstone check applies — they have no club).
+  const personalTeams = await personalTeamsPromise;
+  for (const team of personalTeams) {
+    if (!team.deleted_at_ms?.length) activeTeamIds.add(team.id);
+  }
+  const mergedTeamIds = [...new Set([...raw.teamIds, ...personalTeams.map((t) => t.id)])];
+
   const memberships: LiveHomeMemberships = {
-    teamIds: raw.teamIds.filter((id) => activeTeamIds.has(id)),
+    teamIds: mergedTeamIds.filter((id) => activeTeamIds.has(id)),
     clubIds: raw.clubIds.filter((id) => activeClubIds.has(id)),
     clubAdminClubIds: raw.clubAdminClubIds.filter((id) => activeClubIds.has(id)),
     leagueAdminClubIds: raw.leagueAdminClubIds.filter((id) => activeClubIds.has(id)),
@@ -198,8 +239,8 @@ export async function fetchLiveHomeFeed(
   };
 
   const eventResults = await Promise.all([
-    ...memberships.clubIds.map((clubId) => listLiveEvents(ctx, clubId, null)),
-    ...memberships.teamIds.map((teamId) => listLiveEvents(ctx, null, teamId)),
+    ...memberships.clubIds.map((clubId) => eventPromises.get(`c:${clubId}`) ?? listLiveEvents(ctx, clubId, null)),
+    ...memberships.teamIds.map((teamId) => eventPromises.get(`t:${teamId}`) ?? listLiveEvents(ctx, null, teamId)),
   ]);
 
   const mergedById = new Map<string, LiveEvent>();
@@ -213,10 +254,11 @@ export async function fetchLiveHomeFeed(
   // Club names for the carousel cards. Best effort per club: a missing
   // profile falls back to an empty name rather than failing the whole feed.
   const clubNameById = new Map<string, string>();
-  await Promise.all(
+  const teamNameById = new Map<string, string>();
+  const clubNamesDone = Promise.all(
     [...new Set(merged.map((event) => event.club_id))].map(async (clubId) => {
       try {
-        const profile = await getLiveClubProfile(ctx, clubId);
+        const profile = await clubProfile(clubId);
         const name = profile[0]?.name;
         if (name) clubNameById.set(clubId, name);
       } catch {
@@ -225,7 +267,38 @@ export async function fetchLiveHomeFeed(
     }),
   );
 
-  let events = merged.map((event) => mapLiveHomeEvent(event, clubNameById));
+  // Team names for the carousel cards — the Next Up card uses the team name
+  // as its primary title, so without this every ICP game renders nameless.
+  // Best effort per team, same contract as the club-name lookup above.
+  await Promise.all([clubNamesDone, Promise.all(
+    [...new Set(merged.map((event) => event.team_id[0]).filter((id): id is string => !!id))].map(
+      async (teamId) => {
+        try {
+          const teamOpt = (await teamRecord(teamId)) as unknown as Array<{
+            name: string;
+          }>;
+          const name = teamOpt[0]?.name;
+          if (name) teamNameById.set(teamId, name);
+        } catch {
+          // Best effort — see club-name comment above.
+        }
+      },
+    ),
+  )]);
+
+  // Only events this user is actually part of: club-level roles (club admin,
+  // competition admin) must not surface other teams' games. listLiveEvents by
+  // club returns every team's events, so filter like the Supabase branch.
+  const { isHomeEventForMember } = await import("@/components/home/homeEventSelection");
+  let events = merged
+    .map((event) => mapLiveHomeEvent(event, clubNameById, teamNameById))
+    .filter((event) =>
+      isHomeEventForMember(event, {
+        teamIds: memberships.teamIds,
+        clubIds: memberships.clubIds,
+        miniLeagueIds: null,
+      }),
+    );
 
   // Same client-side freshness/recurring handling as the Supabase branch.
   // Imported lazily so the live layer keeps no static dependency on the

@@ -80,6 +80,10 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : IDL.Vec(Notification),
     'Err' : IDL.Text,
   });
+  const DeviceTokenCountResult = IDL.Variant({
+    'Ok' : IDL.Nat16,
+    'Err' : IDL.Text,
+  });
   const ResultNat16 = IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text });
   const ScheduledResults = IDL.Variant({
     'Ok' : IDL.Vec(ScheduledMessage),
@@ -145,6 +149,20 @@ export const idlFactory = ({ IDL }) => {
     'min_notifications' : IDL.Nat32,
     'failure_threshold_percent' : IDL.Nat32,
   });
+  const PushDeliveryHealth = IDL.Record({
+    'generated_at_ms' : IDL.Nat64,
+    'total_24h' : IDL.Nat32,
+    'processing_24h' : IDL.Nat32,
+    'device_token_count' : IDL.Nat32,
+    'window_hours' : IDL.Nat32,
+    'failed_24h' : IDL.Nat32,
+    'pending_24h' : IDL.Nat32,
+    'delivered_24h' : IDL.Nat32,
+  });
+  const PushDeliveryHealthResult = IDL.Variant({
+    'Ok' : PushDeliveryHealth,
+    'Err' : IDL.Text,
+  });
   const DeviceToken = IDL.Record({
     'token' : IDL.Text,
     'auth' : IDL.Opt(IDL.Text),
@@ -170,10 +188,6 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const DigestResult = IDL.Variant({ 'Ok' : DigestItem, 'Err' : IDL.Text });
-  const DeviceTokenCountResult = IDL.Variant({
-    'Ok' : IDL.Nat16,
-    'Err' : IDL.Text,
-  });
   const PreferencesInput = IDL.Record({
     'email_pitch_board_enabled' : IDL.Bool,
     'admin_enabled' : IDL.Bool,
@@ -208,6 +222,11 @@ export const idlFactory = ({ IDL }) => {
     'acknowledge' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
     'cancel_scheduled' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'claim' : IDL.Func([IDL.Nat64, IDL.Nat16], [Results], []),
+    'cleanup_stale_device_tokens' : IDL.Func(
+        [IDL.Nat64, IDL.Nat64],
+        [DeviceTokenCountResult],
+        [],
+      ),
     'clear_inbox' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [ResultNat16], []),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_notification' : IDL.Func(
@@ -250,6 +269,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_preferences' : IDL.Func([IDL.Text], [Preferences], ['query']),
     'get_push_alert_settings' : IDL.Func([], [PushAlertSettings], ['query']),
+    'get_push_delivery_health' : IDL.Func(
+        [IDL.Nat64],
+        [PushDeliveryHealthResult],
+        [],
+      ),
     'grant_worker' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -283,6 +307,22 @@ export const idlFactory = ({ IDL }) => {
     'mark_failed' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'mark_read' : IDL.Func([IDL.Text], [Result], []),
     'mark_sent' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
+    'merge_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'record_chat_notify_batch' : IDL.Func(
         [
           IDL.Text,
@@ -317,6 +357,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'remove_device_tokens' : IDL.Func(
         [IDL.Text, IDL.Vec(IDL.Text)],
         [DeviceTokenCountResult],
@@ -339,6 +384,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Nat64),
         ],
         [ScheduledResult],
+        [],
+      ),
+    'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_messaging_domain_canister' : IDL.Func(

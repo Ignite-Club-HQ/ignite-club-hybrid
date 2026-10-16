@@ -52,7 +52,8 @@ async function fetchClubNames(clubIds: string[]): Promise<Record<string, string>
               const profile = profileOpt[0];
               if (profile?.name) map[id] = String(profile.name).trim();
             } catch {
-              // NEEDS-CANISTER: no-op — best-effort club name lookup only.
+              // Best-effort club name lookup only: a failed read just omits
+              // that club from the toast copy, it never blocks the switch.
             }
           }),
         );

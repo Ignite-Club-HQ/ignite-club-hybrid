@@ -4,7 +4,7 @@ import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
 import { icpCallerHasProEntitlement } from "@/lib/icpPointsPro";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { awardLivePoints, subjectForUser } from "@/live/features/points";
+import { awardLivePoints, getLiveClubPointsSettings, subjectForUser } from "@/live/features/points";
 import {
   checkLeaderboardPosition,
   checkEngagementStreak,
@@ -76,9 +76,14 @@ export async function awardEngagementPoints({
       // as useClubProAccess), and the canister enforces the daily cooldown
       // atomically inside award_points, so neither Supabase pre-check may
       // run here (an II principal has no Supabase session).
-      // NEEDS-CANISTER: the club-level disable_points_system kill switch has
-      // no club_domain settings field yet.
       if (!(await icpCallerHasProEntitlement())) return false;
+      // club_points_domain's own kill switch (ClubPointsSettings.disabled) —
+      // the ICP counterpart of the Supabase club_subscriptions.disable_points_system flag.
+      const disabled = await withFeatureBackend("points", {
+        supabase: async () => false,
+        icp: (ctx) => getLiveClubPointsSettings(ctx, clubId).then((row) => row?.disabled ?? false),
+      });
+      if (disabled) return false;
     } else {
       // Check if club has Pro subscription and points system enabled
       const { data: clubSub } = await supabase

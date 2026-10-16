@@ -8,7 +8,8 @@ if (!fs.existsSync(bundleRoot)) {
 
 const forbiddenPatterns = [
   /sb_secret_[A-Za-z0-9_-]+/,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  // Header followed by key material — libraries that parse PEMs ship the bare header string.
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----\s*[A-Za-z0-9+/=]{40,}/,
   /STRIPE_(SECRET|WEBHOOK_SECRET|API_KEY)/i,
   /RESEND_API_KEY/i,
   /VAPID_PRIVATE_KEY/i,

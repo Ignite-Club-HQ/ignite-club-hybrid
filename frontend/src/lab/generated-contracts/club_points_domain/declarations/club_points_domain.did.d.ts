@@ -17,10 +17,12 @@ export interface ChildClubPoints {
   'points' : number,
 }
 export interface ClubPointsSettings {
+  'points_icon_url' : [] | [string],
   'updated_at_ms' : bigint,
   'display_name' : [] | [string],
   'disabled' : boolean,
   'club_id' : string,
+  'disable_team_pom_rewards' : boolean,
 }
 export interface ClubReward {
   'id' : string,
@@ -197,10 +199,24 @@ export interface Main {
     { 'Ok' : Array<ClubReward> } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'redeem_reward' : ActorMethod<
     [string, Subject, string, [] | [string]],
     { 'Ok' : RewardRedemption } |
       { 'Err' : string }
+  >,
+  'refresh_club_roles' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
   >,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
@@ -208,8 +224,13 @@ export interface Main {
       { 'Err' : string }
   >,
   'save_club_points_settings' : ActorMethod<
-    [string, [] | [string], boolean],
+    [string, [] | [string], boolean, [] | [string], boolean],
     { 'Ok' : ClubPointsSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<

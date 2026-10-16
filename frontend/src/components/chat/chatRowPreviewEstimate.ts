@@ -1,3 +1,4 @@
+import { EVENT_URL_PATTERN } from "@/lib/chatEventToken";
 function looksLikeYoutubeUrl(text: string) {
   return /(?:youtube\.com\/(?:watch\?|shorts\/|embed\/)|youtu\.be\/)/i.test(text);
 }
@@ -31,7 +32,7 @@ export function estimateVisibleChatText(rawText: string) {
   return rawText
     .replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")
-    .replace(/(?:https?:\/\/[^\s]*)?\/events\/[0-9a-f-]{36}(?:\S*)?/gi, "")
+    .replace(new RegExp(EVENT_URL_PATTERN, "gi"), "")
     .replace(/\[(event|poll|board|vault|vaultfolder|vaultroot|gallery|galleryprompt):[^\]]+\]/gi, "")
     .replace(PLAIN_URL_REGEX, (url) => looksLikeYoutubeUrl(url) ? "" : "x".repeat(Math.min(50, url.length)))
     .trim();

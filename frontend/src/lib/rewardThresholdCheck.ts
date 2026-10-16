@@ -1,8 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sendGamificationNotification } from "@/lib/gamificationNotify";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listLiveClubRewards } from "@/live/features/points";
+import { listLiveChildGuardians } from "@/live/features/club";
 
 /**
  * Checks if a user/child has crossed a reward threshold after receiving points.
@@ -75,16 +75,22 @@ export async function checkRewardThreshold({
 }
 
 async function getParentId(childId: string): Promise<string | null> {
-  // Supabase-only: the club_domain Child record links to the parent's
-  // principal, not their app account id, so a child→parent account lookup
-  // has no canister equivalent. ICP callers always pass userId directly, so
-  // this is unreachable for II sessions — the guard is belt-and-braces.
-  // NEEDS-CANISTER: child→parent account id resolution.
-  if (isFeatureRoutedToIcp("points")) return null;
-  const { data } = await supabase
-    .from("children")
-    .select("parent_id")
-    .eq("id", childId)
-    .single();
-  return data?.parent_id || null;
+  return withFeatureBackend("points", {
+    supabase: async () => {
+      const { data } = await supabase
+        .from("children")
+        .select("parent_id")
+        .eq("id", childId)
+        .single();
+      return data?.parent_id || null;
+    },
+    // club_domain's Child record carries no direct parent id, but
+    // list_child_guardians(child_id) returns every linked guardian
+    // principal (the parent is always granted first) — the ICP
+    // counterpart of the Supabase children.parent_id column.
+    icp: async (ctx) => {
+      const guardians = await listLiveChildGuardians(ctx, childId);
+      return guardians.length ? guardians[0].toText() : null;
+    },
+  });
 }

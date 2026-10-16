@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- untyped Candid/Supabase payloads at this boundary */
 import { connectLiveCompetitionDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
@@ -795,4 +796,136 @@ export async function sendLiveCompetitionBroadcast(ctx: FeatureBackendContext, c
 export async function listLiveCompetitionBroadcasts(ctx: FeatureBackendContext, competitionId: string) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_competition_broadcasts(competitionId), "List broadcasts");
+}
+
+/**
+ * Personal (clubless) competitions — counterpart of create_personal_competition
+ * on Supabase (organizerClubId === PERSONAL_ORGANISER). Caller becomes the
+ * implicit organiser; listing is caller-scoped on the canister.
+ */
+export async function createLivePersonalCompetition(
+  ctx: FeatureBackendContext,
+  name: string,
+  season: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_personal_competition(name, season),
+    "Create personal competition",
+  );
+}
+
+export async function listLivePersonalCompetitions(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_my_personal_competitions(), "List my personal competitions");
+}
+
+/**
+ * Referee / committee officials (competition_domain role links + the
+ * competition-chat-scope -> messaging_domain conversation mapping).
+ */
+export type OfficialRole = "referee" | "committee";
+export const OFFICIAL_CHAT_SCOPE: Record<OfficialRole, "referees" | "committee"> = {
+  referee: "referees",
+  committee: "committee",
+};
+
+export async function getLiveRoleLink(ctx: FeatureBackendContext, competitionId: string, role: OfficialRole) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  const opt = await unwrapCandid(actor.get_role_link(competitionId, role), "Get role link");
+  return opt[0] ?? null;
+}
+
+export async function createLiveRoleLink(ctx: FeatureBackendContext, competitionId: string, role: OfficialRole) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_role_link(competitionId, role), "Create role link");
+}
+
+export async function revokeLiveRoleLink(ctx: FeatureBackendContext, competitionId: string, role: OfficialRole) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.revoke_role_link(competitionId, role), "Turn off role link");
+}
+
+/** Anonymous-safe: pass an AnonymousIdentity ctx before sign-in. Null when the link is unknown/off. */
+export async function getLiveRoleLinkPreview(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  const result = await actor.get_role_link_preview(token);
+  return "Ok" in result ? result.Ok : null;
+}
+
+export async function acceptLiveRoleLink(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.accept_role_link(token), "Join as official");
+}
+
+export async function listLiveOfficialChats(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_official_chats(competitionId), "List competition chats");
+}
+
+/**
+ * Brings the referees/committee group chats in line with the current role
+ * holders: creates the chat (in the organiser club) once someone holds the
+ * role, records it on competition_domain, and adds any missing holders.
+ * Runs as a competition manager (the caller becomes the chat owner), so
+ * people who joined via a link are added the next time a manager opens
+ * settings. Clubless (personal) competitions have no club to host chats.
+ */
+export async function syncLiveOfficialChats(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  clubId: string | null,
+  competitionName: string,
+) {
+  if (!clubId) return;
+  const [{ Principal }, messaging] = await Promise.all([
+    import("@icp-sdk/core/principal"),
+    import("./messaging"),
+  ]);
+  const me = ctx.identity.getPrincipal();
+  const [grants, chats] = await Promise.all([
+    listLiveCompetitionRoles(ctx, competitionId),
+    listLiveOfficialChats(ctx, competitionId),
+  ]);
+  for (const role of ["referee", "committee"] as OfficialRole[]) {
+    const scope = OFFICIAL_CHAT_SCOPE[role];
+    const holders = grants.filter((g) => g.role === role).map((g) => g.user.toText());
+    if (holders.length === 0) continue;
+    const existing = chats.find((c) => c.scope === scope);
+    const label = role === "referee" ? "Referees" : "Committee";
+    if (!existing) {
+      const entries: Array<[InstanceType<typeof Principal>, string]> = [[me, "owner"]];
+      for (const h of holders) if (h !== me.toText()) entries.push([Principal.fromText(h), "member"]);
+      const meta = await messaging.createLiveGroupWithRoles(ctx, clubId, null, `${competitionName} – ${label}`, "competition", entries);
+      const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+      await unwrapCandid(actor.set_official_chat(competitionId, scope, meta.conversation_id), "Save competition chat");
+    } else {
+      try {
+        await messaging.addLiveGroupMembers(ctx, existing.conversation_id, holders.map((h) => Principal.fromText(h)));
+      } catch {
+        // Already members, or the chat was deleted — nothing to add.
+      }
+    }
+  }
+}
+
+/** Removes a former official from the matching chat (best-effort). */
+export async function removeFromLiveOfficialChat(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  role: OfficialRole,
+  principalText: string,
+) {
+  const chats = await listLiveOfficialChats(ctx, competitionId);
+  const chat = chats.find((c) => c.scope === OFFICIAL_CHAT_SCOPE[role]);
+  if (!chat) return;
+  const [{ Principal }, { removeLiveGroupMember }] = await Promise.all([
+    import("@icp-sdk/core/principal"),
+    import("./messaging"),
+  ]);
+  try {
+    await removeLiveGroupMember(ctx, chat.conversation_id, Principal.fromText(principalText));
+  } catch {
+    // Not a member — nothing to remove.
+  }
 }

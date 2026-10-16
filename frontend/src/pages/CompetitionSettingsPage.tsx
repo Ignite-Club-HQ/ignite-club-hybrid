@@ -21,6 +21,9 @@ import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { CompetitionAdminsCard } from "@/components/competitions/CompetitionAdminsCard";
 import { CompetitionOfficialsCard } from "@/components/competitions/CompetitionOfficialsCard";
+import { CompetitionChatsCard } from "@/components/competitions/CompetitionChatsCard";
+import { InviteMessageDefaultCard } from "@/components/invite/InviteMessageDefaultCard";
+import { CompetitionWelcomeEmailCard } from "@/components/competitions/CompetitionWelcomeEmailCard";
 import { CompetitionMemberChatCard } from "@/components/competitions/CompetitionMemberChatCard";
 import { WelcomeEmailSettingsCard } from "@/components/WelcomeEmailSettingsCard";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
@@ -296,6 +299,14 @@ function LiveIcpCompetitionSettingsPage() {
 
       <CompetitionMemberChatCard competitionId={id!} />
 
+      <CompetitionChatsCard competitionId={id!} />
+
+      <CompetitionOfficialsCard
+        competitionId={id!}
+        competitionName={competition.name}
+        organizerClubId={competition.club_id || null}
+      />
+
       <div
         className={cn(
           "fixed inset-x-0 z-[45] border-t bg-background shadow-lg transition-transform",
@@ -390,7 +401,7 @@ function SupabaseCompetitionSettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("competitions")
-        .select("*, clubs:club_id(kind)")
+        .select("*, clubs:organizer_club_id(kind)")
         .eq("id", id!)
         .maybeSingle();
       if (error) throw error;
@@ -657,6 +668,18 @@ function SupabaseCompetitionSettingsPage() {
       <WelcomeEmailSettingsCard scopeKind="competition" scopeId={id!} />
 
       {/* 6. Competition-wide chat — opt-in thread for all members of entered teams */}
+      <CompetitionChatsCard competitionId={id!} />
+
+      <CompetitionOfficialsCard
+        competitionId={id!}
+        competitionName={competition.name}
+        organizerClubId={(competition as any).organizer_club_id ?? null}
+      />
+
+      <InviteMessageDefaultCard scope="competition" scopeId={id!} />
+
+      <CompetitionWelcomeEmailCard competitionId={id!} />
+
       <CompetitionMemberChatCard competitionId={id!} />
 
 

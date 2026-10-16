@@ -240,8 +240,8 @@ export function useChatCatchUp({
       };
 
       const fetchTier = async (hours: number, force: boolean): Promise<{ result: ChatSummaryResult | null; error: string | null }> => {
-        // Internet Identity users: generate_chat_recap runs canister-side (the
-        // canister makes the LLM HTTPS outcall itself) — no Supabase call fires.
+        // Internet Identity users: generate_chat_recap runs canister-side via
+        // DFINITY's free on-chain LLM canister — no Supabase call fires.
         if (isFeatureRoutedToIcp("messaging")) {
           try {
             const sinceMs = BigInt(Date.now() - hours * 60 * 60 * 1000);
@@ -251,7 +251,21 @@ export function useChatCatchUp({
               },
               icp: (ctx) => generateLiveChatRecap(ctx, scope_id, sinceMs),
             });
-            const parsed = JSON.parse(text) as ChatSummaryResult;
+            // The on-chain LLM returns a plain-text/markdown recap.
+            const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            const bullets: string[] = [];
+            let headline = "";
+            for (const line of lines) {
+              const m = line.match(/^(?:[-*•]|\d+\.)\s+(.*)$/);
+              if (m) bullets.push(m[1]);
+              else if (!headline) headline = line.replace(/^#+\s*/, "");
+            }
+            const parsed = {
+              summary: { headline, since_last_visit: { today: bullets, yesterday: [], earlier: [] } },
+              message_count: bullets.length,
+              last_message_id: null,
+              cached: false,
+            } as unknown as ChatSummaryResult;
             return { result: { ...parsed, lookback_hours: hours }, error: null };
           } catch (e: any) {
             return { result: null, error: e?.message ?? "unknown" };

@@ -69,7 +69,10 @@ export async function icpListClubs(): Promise<Array<{ id: string; name: string }
   for (let i = 0; i < 20; i++) {
     const page: any = await club.listLiveClubs(ctx, cursor, 100);
     const items: any[] = page?.items ?? page?.clubs ?? (Array.isArray(page) ? page : []);
-    for (const c of items) if (!opt(c.deleted_at)) out.push({ id: c.id, name: c.name });
+    for (const c of items) {
+      const deleted = opt(c.deleted_at_ms) ?? opt(c.deleted_at);
+      if (deleted == null && c.is_active !== false) out.push({ id: c.id, name: c.name });
+    }
     cursor = opt(page?.next_cursor);
     if (!cursor || items.length === 0) break;
   }

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveSeasonEoiConfig, setLiveSeasonEoiConfig } from "@/live/features/club";
 
 interface EoiEmbedCardProps {
   clubId: string;
@@ -41,9 +42,25 @@ export function EoiEmbedCard({ clubId, seasonId, seasonSlug, clubSlug }: EoiEmbe
             .eq("id", seasonId);
           return newToken;
         },
-        // NEEDS-CANISTER: EOI webhook tokens on `seasons` have no canister
-        // equivalent — competition_domain has no EOI concept.
-        icp: async () => null as string | null,
+        // Stored inside the same opaque EOI config JSON blob used by
+        // SeasonEoiConfigCard (set_season_eoi_config), under a
+        // `webhookToken` key rather than a dedicated column.
+        icp: async (ctx) => {
+          const rawOpt = (await getLiveSeasonEoiConfig(ctx, seasonId)) as unknown; const raw = (Array.isArray(rawOpt) ? (rawOpt[0] ?? null) : rawOpt) as string | null;
+          let config: Record<string, unknown> = {};
+          if (raw) {
+            try {
+              config = JSON.parse(raw);
+            } catch {
+              config = {};
+            }
+          }
+          if (typeof config.webhookToken === "string") return config.webhookToken;
+          const newToken = crypto.randomUUID();
+          config.webhookToken = newToken;
+          await setLiveSeasonEoiConfig(ctx, seasonId, JSON.stringify(config));
+          return newToken;
+        },
       });
       setWebhookToken(token);
     })();

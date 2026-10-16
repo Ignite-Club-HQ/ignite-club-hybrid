@@ -29,7 +29,6 @@ import { listLiveEvents } from "@/live/features/events";
  * ICP-mode items loader for the carousel: role grants + teams/clubs from the
  * club canister, mini-leagues from the mini-league canister. PlayHQ managed-
  * competition cards stay Supabase-only (approved exception).
- * NEEDS-CANISTER: team/club sport and trial (is_pro/pro_expires_at) fields.
  */
 async function fetchIcpCarouselItems(
   ctx: FeatureBackendContext,
@@ -45,16 +44,16 @@ async function fetchIcpCarouselItems(
     grants.filter((g) => g.club[0] && g.role === "league_admin").map((g) => g.club[0]!),
   )];
 
-  const clubMeta = new Map<string, { name: string; logo_url: string | null }>();
+  const clubMeta = new Map<string, { name: string; logo_url: string | null; sport: string | null }>();
   const getClubMeta = async (clubId: string) => {
     let meta = clubMeta.get(clubId);
     if (!meta) {
       try {
         const opt = (await getLiveClubProfile(ctx, clubId)) as any;
         const p = Array.isArray(opt) ? opt[0] : opt;
-        meta = { name: p?.name ?? "", logo_url: p?.logo_url?.[0] ?? null };
+        meta = { name: p?.name ?? "", logo_url: p?.logo_url?.[0] ?? null, sport: p?.sport ?? null };
       } catch {
-        meta = { name: "", logo_url: null };
+        meta = { name: "", logo_url: null, sport: null };
       }
       clubMeta.set(clubId, meta);
     }
@@ -76,6 +75,12 @@ async function fetchIcpCarouselItems(
           teamRoles.some((g) => ["coach", "team_admin"].includes(g.role)) ||
           clubRoles.some((g) => ["club_admin", "app_admin"].includes(g.role));
         const meta = await getClubMeta(team.club_id);
+        let isOnTrial = false;
+        try {
+          const { getLiveTeamSubscription } = await import("@/live/features/club");
+          const sub = await getLiveTeamSubscription(ctx, team.id);
+          isOnTrial = !!(sub?.is_pro && sub?.trial_ends_at_ms);
+        } catch { /* subscription row absent — not on trial */ }
         result.push({
           id: team.id,
           name: team.name,
@@ -83,9 +88,10 @@ async function fetchIcpCarouselItems(
           club_logo_url: meta.logo_url,
           type: "team",
           club_name: meta.name,
-          sport: null,
+          sport: meta.sport,
           club_id: team.club_id,
           canManage,
+          isOnTrial,
         });
       } catch { /* team not visible to caller */ }
     }),
@@ -119,7 +125,7 @@ async function fetchIcpCarouselItems(
           club_logo_url: meta.logo_url,
           type: "league",
           club_name: meta.name,
-          sport: null,
+          sport: meta.sport,
           club_id: league.club_id,
           canManage: leagueAdminClubIds.includes(league.club_id),
         });
@@ -793,9 +799,8 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
         return title;
       };
 
-      // ICP mode: next event per team from the events canister.
-      // NEEDS-CANISTER: per-mini-league next event (canister events carry no
-      // mini_league_id link) and the is_bye flag.
+      // ICP mode: next event per team from the events canister, plus next
+      // upcoming session per mini-league from the mini-league canister.
       if (isIcp) {
         return withFeatureBackend("events", {
           // Unreachable: this branch only runs when ICP mode is active.
@@ -819,6 +824,27 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
                     };
                   }
                 } catch { /* team vanished */ }
+              }),
+            );
+            await Promise.all(
+              leagueItemIds.map(async (leagueId) => {
+                try {
+                  const { listLiveSessions } = await import("@/live/features/miniLeagues");
+                  const sessions = (await listLiveSessions(ctx, leagueId)) as any[];
+                  const next = sessions
+                    .filter((s) => s.status !== "cancelled" && s.status !== "deleted")
+                    .map((s) => ({ s, when: new Date(`${s.session_date}T${s.start_time}`) }))
+                    .filter((e) => !Number.isNaN(e.when.getTime()) && e.when.getTime() >= nowMs)
+                    .sort((a, b) => a.when.getTime() - b.when.getTime())[0];
+                  if (next) {
+                    map[leagueId] = {
+                      title: "Match",
+                      dateLabel: formatShortDate(next.when.toISOString()),
+                      type: "mini_league",
+                      eventDate: next.when.toISOString(),
+                    };
+                  }
+                } catch { /* league not visible */ }
               }),
             );
             return map;
@@ -983,18 +1009,58 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     competition_sport: string | null;
   };
   const { data: competitionRows = [] as CompetitionRow[] } = useQuery({
-    queryKey: ["team-competitions-premium-v3", teamIds],
+    queryKey: ["team-competitions-premium-v3", teamIds, isIcp],
     queryFn: async () => {
       if (teamIds.length === 0) return [] as CompetitionRow[];
+
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          // Unreachable: this branch only runs when ICP mode is active.
+          supabase: async () => [] as CompetitionRow[],
+          icp: async (ctx) => {
+            const { listLiveEntriesByTeam, listLiveCompetitions } = await import("@/live/features/competitions");
+            const rows: CompetitionRow[] = [];
+            const compsByClub = new Map<string, any[]>();
+            await Promise.all(
+              teamIds.map(async (teamId) => {
+                try {
+                  const entries = (await listLiveEntriesByTeam(ctx, teamId)) as any[];
+                  for (const entry of entries || []) {
+                    if (!entry?.competition_id || entry.status !== "active") continue;
+                    let comps = compsByClub.get(entry.club_id);
+                    if (!comps) {
+                      try {
+                        comps = (await listLiveCompetitions(ctx, entry.club_id)) as any[];
+                      } catch {
+                        comps = [];
+                      }
+                      compsByClub.set(entry.club_id, comps);
+                    }
+                    const comp = comps.find((c) => c.id === entry.competition_id);
+                    if (!comp) continue;
+                    rows.push({
+                      team_id: teamId,
+                      competition_id: comp.id,
+                      competition_name: comp.name,
+                      competition_logo_url: null,
+                      competition_sport: null,
+                    });
+                  }
+                } catch { /* team not visible */ }
+              }),
+            );
+            return rows;
+          },
+        });
+      }
+
       const { data, error } = await supabase.rpc("get_team_competition_names", {
         _team_ids: teamIds,
       });
       if (error) return [] as CompetitionRow[];
       return (data || []) as CompetitionRow[];
     },
-    // NEEDS-CANISTER: per-team active competition names — the competition
-    // canister has no team->competitions lookup shape yet.
-    enabled: teamIds.length > 0 && !isIcp,
+    enabled: teamIds.length > 0,
     staleTime: 10 * 60 * 1000,
     placeholderData: (prev) => prev,
   });

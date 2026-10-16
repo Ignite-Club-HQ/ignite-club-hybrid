@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
@@ -7,11 +8,23 @@ import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
+import Random "mo:core/Random";
+import Text "mo:core/Text";
+import Nat8 "mo:core/Nat8";
+import Iter "mo:core/Iter";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
 
   var governor : Principal;
 
@@ -30,6 +43,60 @@ persistent actor class Main(governorInit : Principal) {
   var competitionJoinLinks : [Types.CompetitionJoinLink];
   var competitionOfficialEmailInvites : [Types.CompetitionOfficialEmailInvite];
   var eoiSubmissions : [Types.EoiSubmission];
+
+  func eoiHex(b : Blob) : Text {
+    let digits = "0123456789abcdef".chars().toArray();
+    var out = "";
+    for (byte in b.vals()) {
+      let n = byte.toNat();
+      out #= Text.fromChar(digits[n / 16]) # Text.fromChar(digits[n % 16]);
+    };
+    out
+  };
+
+  func eoiClip(t : Text, max : Nat) : Text { if (t.size() > max) "" else t };
+
+  // Public (anonymous allowed) expression-of-interest submission — parity
+  // with the Supabase anon insert on eoi_submissions. Size-capped and
+  // capped per season to bound spam; club/season existence is checked by
+  // the frontend against club_domain's public EOI config before submit.
+  public shared func submit_public_eoi(
+    club_id : Text, season_id : Text, parent_name : Text, parent_email : Text,
+    parent_mobile : ?Text, player_name : Text, player_dob : ?Text, player_gender : ?Text,
+    preferred_teammates : ?Text, preferred_position : ?Text, skill_level : ?Nat16,
+    training_days : [Text], game_days : [Text], notes : ?Text, source : Text,
+  ) : async { #Ok : Text; #Err : Text } {
+    let pn = eoiClip(parent_name.trim(#char ' '), 120);
+    let pe = eoiClip(parent_email.trim(#char ' ').toLower(), 200);
+    let pl = eoiClip(player_name.trim(#char ' '), 120);
+    if (club_id == "" or season_id == "" or pn == "" or pl == "" or not pe.contains(#char '@')) return #Err("Missing required fields");
+    if (training_days.size() > 7 or game_days.size() > 7) return #Err("Invalid days");
+    let small = func(o : ?Text) : ?Text = switch (o) { case (?t) { let c = eoiClip(t, 1000); if (c == "") null else ?c }; case null null };
+    if (eoiSubmissions.filter(func(e) = e.season_id == season_id).size() >= 5000) return #Err("This form is full");
+    let dup = eoiSubmissions.find(func(e) = e.season_id == season_id and e.parent_email == pe and e.player_name.toLower() == pl.toLower());
+    if (dup != null) return #Err("An expression of interest for this player was already submitted");
+    let rnd = await Random.blob();
+    let hex = eoiHex(rnd);
+    let now = nowMs();
+    let id = "eoi-" # Text.fromIter(hex.chars().take(16));
+    let entry : Types.EoiSubmission = {
+      id; club_id; season_id;
+      claim_token = hex;
+      status = "submitted";
+      source = if (source == "embed") "website" else if (source == "app") "app" else "website";
+      parent_name = pn; parent_email = pe; parent_mobile = small(parent_mobile); parent_user_id = null;
+      player_name = pl; player_dob = small(player_dob); player_gender = small(player_gender);
+      age_group = null; preferred_position = small(preferred_position); preferred_teammates = small(preferred_teammates);
+      skill_level; returning_player = false; game_days; training_days;
+      extra_notes = null; notes = small(notes); child_id = null; assigned_team_id = null;
+      invite_sent_count = 0; invite_sent_at_ms = null;
+      submitted_at_ms = now; created_at_ms = now; updated_at_ms = now;
+      allocated_at_ms = null; confirmed_at_ms = null; registered_at_ms = null; withdrawn_at_ms = null;
+      claimed_at_ms = null; parent_confirmed_at_ms = null; revision = 0;
+    };
+    eoiSubmissions := eoiSubmissions.concat([entry]);
+    #Ok(id)
+  };
   var divisionSettings : [Types.DivisionSetting];
   var competitionLadderSettings : [Types.CompetitionLadderSetting];
   var broadcasts : [Types.Broadcast];
@@ -37,6 +104,85 @@ persistent actor class Main(governorInit : Principal) {
   var eventsDomainCanister : ?Principal;
   var vaultDomainCanister : ?Principal;
   var piiAccessControlCanister : ?Principal;
+  var personalCompetitionOwners : [(Text, Principal)];
+  var roleLinks : [Types.RoleLink];
+  var officialChats : [Types.OfficialChat];
+
+  // ---------------- Referee / committee officials ----------------
+
+  func isOfficialRole(role : Text) : Bool { role == "referee" or role == "committee" };
+  func isChatScope(scope : Text) : Bool { scope == "referees" or scope == "committee" or scope == "coordinators" or scope == "all_members" };
+
+  func competitionName(competition_id : Text) : ?Text {
+    switch (competitions.find(func(c) = c.id == competition_id)) { case (?c) ?c.name; case null null }
+  };
+
+  // Replaces any active link for (competition, role) with a fresh
+  // unguessable token; the old link stops working immediately.
+  public shared ({ caller }) func create_role_link(competition_id : Text, role : Text) : async { #Ok : Types.RoleLink; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not isOfficialRole(role)) return #Err("Invalid role");
+    if (competitionName(competition_id) == null) return #Err("Competition not found");
+    let hex = eoiHex(await Random.blob());
+    let link : Types.RoleLink = { competition_id; role; token = "crl-" # hex; revoked = false; created_by = caller; created_at_ms = nowMs() };
+    roleLinks := roleLinks.filter(func(l) = not (l.competition_id == competition_id and l.role == role)).concat([link]);
+    #Ok(link)
+  };
+
+  public shared ({ caller }) func revoke_role_link(competition_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    roleLinks := roleLinks.filter(func(l) = not (l.competition_id == competition_id and l.role == role));
+    #Ok
+  };
+
+  public query ({ caller }) func get_role_link(competition_id : Text, role : Text) : async { #Ok : ?Types.RoleLink; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    #Ok(roleLinks.find(func(l) = l.competition_id == competition_id and l.role == role and not l.revoked))
+  };
+
+  // Public: what the join page shows before sign-in.
+  public query func get_role_link_preview(token : Text) : async { #Ok : Types.RoleLinkPreview; #Err : Text } {
+    switch (roleLinks.find(func(l) = l.token == token and not l.revoked)) {
+      case null #Err("Link not found");
+      case (?l) switch (competitionName(l.competition_id)) {
+        case null #Err("Competition not found");
+        case (?name) #Ok({ competition_id = l.competition_id; name; role = l.role });
+      };
+    }
+  };
+
+  public shared ({ caller }) func accept_role_link(token : Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
+    auth(caller);
+    switch (roleLinks.find(func(l) = l.token == token and not l.revoked)) {
+      case null #Err("Link not found or turned off");
+      case (?l) {
+        let grant : Types.RoleGrant = { user = caller; role = l.role; competition_id = l.competition_id; team_id = null };
+        if (not roles.any(func(r) = r.user.equal(caller) and r.role == l.role and r.competition_id == l.competition_id and r.team_id == null)) {
+          roles := roles.concat([grant]);
+        };
+        #Ok(grant)
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_official_chat(competition_id : Text, scope : Text, conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not isChatScope(scope) or not valid(conversation_id)) return #Err("Invalid chat");
+    officialChats := officialChats.filter(func(c) = not (c.competition_id == competition_id and c.scope == scope)).concat([{ competition_id; scope; conversation_id }]);
+    #Ok
+  };
+
+  // Readable by competition managers and anyone holding a role in it.
+  public query ({ caller }) func list_official_chats(competition_id : Text) : async { #Ok : [Types.OfficialChat]; #Err : Text } {
+    auth(caller);
+    let hasRole = roles.any(func(r) = r.user.equal(caller) and r.competition_id == competition_id);
+    if (not canManageCompetition(caller, competition_id) and not hasRole) return #Err("Forbidden");
+    #Ok(officialChats.filter(func(c) = c.competition_id == competition_id))
+  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
@@ -72,7 +218,10 @@ persistent actor class Main(governorInit : Principal) {
     let club_admin = competition_club != "" and roles.any(func(role) {
       role.user.equal(caller) and role.role == "club_admin" and role.competition_id == competition_club
     });
-    competition_admin or club_admin
+    // Caller-owned clubless ("personal") competitions: the creator gets the
+    // same admin rights a club_admin would have, with no club involved.
+    let personal_owner = personalCompetitionOwners.any(func(pair) = pair.0 == competition_id and pair.1.equal(caller));
+    competition_admin or club_admin or personal_owner
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, competition_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
@@ -134,6 +283,28 @@ persistent actor class Main(governorInit : Principal) {
     } catch (_) {
       #Err("Competition event fan-out failed; retry with the same operation id")
     }
+  };
+
+  // Clubless ("personal") competition — no club_domain club involved. The
+  // caller is recorded as owner and gets admin rights via
+  // canManageCompetition; club_id is "" to mark it personal everywhere a
+  // Competition is read.
+  public shared ({ caller }) func create_personal_competition(name : Text, season : Text) : async { #Ok : Types.Competition; #Err : Text } {
+    auth(caller);
+    if (not valid(name) or not valid(season)) return #Err("Invalid competition");
+    let id = "cmp-personal-" # Principal.toText(caller) # "-" # Nat.toText(competitions.size() + 1);
+    let competition : Types.Competition = { id; club_id = ""; name; season; status = "open"; description = null; visibility = "private"; points_win = 3; points_draw = 1; points_loss = 0; revision = 1 };
+    competitions := competitions.concat([competition]);
+    personalCompetitionOwners := personalCompetitionOwners.concat([(id, caller)]);
+    #Ok(competition)
+  };
+
+  // Lists the caller's own clubless competitions (owner-only; not visible
+  // via list_competitions/list_competitions_multi since those are club-scoped).
+  public query ({ caller }) func list_my_personal_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
+    auth(caller);
+    let mine = personalCompetitionOwners.filter(func(pair) = pair.1.equal(caller)).map(func(pair) = pair.0);
+    #Ok(competitions.filter(func(item) = mine.any(func(id) = id == item.id)))
   };
 
   // Competition settings (name, description, status, visibility, ladder
@@ -1332,5 +1503,71 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_competition_broadcasts(competition_id : Text) : async { #Ok : [Types.Broadcast]; #Err : Text } {
     auth(caller);
     #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
+  };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    var conflicts = 0;
+    conflicts += roles.filter(func(item) = item.user.equal(new)).size();
+    conflicts += tokens.filter(func(item) = item.issued_by.equal(new)).size();
+    conflicts += competitionInvites.filter(func(item) = item.invitee.equal(new) or item.created_by.equal(new)).size();
+    conflicts += competitionJoinLinks.filter(func(item) = item.created_by.equal(new)).size();
+    conflicts += eoiSubmissions.filter(func(item) = item.parent_user_id == ?new).size();
+    conflicts += broadcasts.filter(func(item) = item.sender.equal(new)).size();
+    if (bulkAccessPrincipals.any(func(p) = p.equal(new))) { conflicts += 1 };
+
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in competition_domain");
+
+    var changed = 0;
+
+    let newRoles = roles.map(func(item : Types.RoleGrant) : Types.RoleGrant {
+      if (item.user.equal(old)) { changed += 1; { item with user = new } } else item
+    });
+    let newTokens = tokens.map(func(item : Types.JoinToken) : Types.JoinToken {
+      if (item.issued_by.equal(old)) { changed += 1; { item with issued_by = new } } else item
+    });
+    let newCompetitionInvites = competitionInvites.map(func(item : Types.CompetitionInvite) : Types.CompetitionInvite {
+      var touched = false;
+      var invitee = item.invitee;
+      var created_by = item.created_by;
+      if (invitee.equal(old)) { invitee := new; touched := true };
+      if (created_by.equal(old)) { created_by := new; touched := true };
+      if (touched) { changed += 1; { item with invitee; created_by } } else item
+    });
+    let newCompetitionJoinLinks = competitionJoinLinks.map(func(item : Types.CompetitionJoinLink) : Types.CompetitionJoinLink {
+      if (item.created_by.equal(old)) { changed += 1; { item with created_by = new } } else item
+    });
+    let newEoiSubmissions = eoiSubmissions.map(func(item : Types.EoiSubmission) : Types.EoiSubmission {
+      if (item.parent_user_id == ?old) { changed += 1; { item with parent_user_id = ?new } } else item
+    });
+    let newBroadcasts = broadcasts.map(func(item : Types.Broadcast) : Types.Broadcast {
+      if (item.sender.equal(old)) { changed += 1; { item with sender = new } } else item
+    });
+    var newBulkAccessPrincipals = bulkAccessPrincipals;
+    if (bulkAccessPrincipals.any(func(p) = p.equal(old))) {
+      let hasNew = bulkAccessPrincipals.any(func(p) = p.equal(new));
+      newBulkAccessPrincipals := bulkAccessPrincipals.filterMap(func(p) : ?Principal {
+        if (p.equal(old)) { if (hasNew) null else ?new } else ?p
+      });
+      changed += 1;
+    };
+
+    if (not dry_run) {
+      roles := newRoles;
+      tokens := newTokens;
+      competitionInvites := newCompetitionInvites;
+      competitionJoinLinks := newCompetitionJoinLinks;
+      eoiSubmissions := newEoiSubmissions;
+      broadcasts := newBroadcasts;
+      bulkAccessPrincipals := newBulkAccessPrincipals;
+    };
+
+    #ok(changed)
   };
 };

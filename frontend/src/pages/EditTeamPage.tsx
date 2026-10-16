@@ -124,7 +124,7 @@ export default function EditTeamPage() {
               id: club.id,
               name: club.name,
               sport: null,
-              class_mode_enabled: false
+              class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, club.id))?.classModeEnabled ?? false
             } : null
           } as any;
         }
@@ -138,14 +138,24 @@ export default function EditTeamPage() {
     queryKey: ["team-folders", team?.club_id, providerKey],
     queryFn: async () => {
       if (useIcpLab) return [];
-      if (isFeatureRoutedToIcp("membership")) return []; // NEEDS-CANISTER: team folders not yet on canister
-      const { data, error } = await supabase
-        .from("team_folders")
-        .select("*")
-        .eq("club_id", team!.club_id)
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("team_folders")
+            .select("*")
+            .eq("club_id", team!.club_id)
+            .order("sort_order", { ascending: true });
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const { listLiveTeamFolders } = await import("@/live/features/club");
+          const list = await listLiveTeamFolders(ctx, team!.club_id);
+          return list
+            .map((f) => ({ id: f.id, name: f.name, sort_order: f.sort_order }))
+            .sort((a, b) => a.sort_order - b.sort_order);
+        },
+      });
     },
     enabled: !!team?.club_id,
   });

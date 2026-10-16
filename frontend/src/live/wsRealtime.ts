@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- untyped Candid/Supabase payloads at this boundary */
 import { Actor, HttpAgent, SignIdentity } from "@dfinity/agent";
 import type { Identity as DfinityIdentity, PublicKey, Signature } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";

@@ -528,6 +528,41 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Sign-in ID — Internet Identity gives a different ID per web address /
+          identity, so showing it lets members tell which account they're on. */}
+      {isIcpAccount && user?.id && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Fingerprint className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="font-medium">Your sign-in ID</span>
+                <p className="text-xs text-muted-foreground">
+                  Signed in at {typeof window !== "undefined" ? window.location.host : ""}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(user.id);
+                    toast({ title: "Sign-in ID copied" });
+                  } catch {
+                    toast({ title: "Couldn't copy", description: user.id });
+                  }
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+            <p className="text-xs font-mono break-all text-muted-foreground">{user.id}</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Change Password — Internet Identity has no password to change */}
       {!isIcpAccount && (
       <Card

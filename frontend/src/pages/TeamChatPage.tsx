@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, Suspense } from "react";
+import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { isSameDay } from "date-fns";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import { resolveChatMetadataState } from "@/lib/chatMetadataGate";
@@ -16,6 +17,7 @@ import { useChatPageReady } from "@/hooks/useChatPageReady";
 import { useSyncActiveClubToChat } from "@/hooks/useSyncActiveClubToChat";
 import { useTeamChatAdminStatus } from "@/features/messaging/thread/useTeamChatAdminStatus";
 import { useTeamChatTeamData } from "@/features/messaging/thread/useTeamChatTeamData";
+import { getCachedTeam } from "@/lib/clubTeamCache";
 import { useChatViewportHeight } from "@/hooks/useChatViewportHeight";
 import { useMeasuredElementHeight } from "@/hooks/useMeasuredElementHeight";
 import { keepComposerFocusedThroughSend } from "@/lib/chatComposerFocus";
@@ -323,7 +325,7 @@ export default function TeamChatPage() {
     setSearchQuery("");
     setSearchOpen(false);
     if (target?.created_at && teamId) {
-      if (useIcpLab) {
+      if (useIcpLab || resolveAuthBackend() === "icp") {
         requestAnimationFrame(() => handleJumpToMessage(mid));
         return;
       }
@@ -375,7 +377,8 @@ export default function TeamChatPage() {
     teamId,
     userId: user?.id,
     clubId: team?.club_id,
-    enabled: authReady && !!user?.id && !useIcpLab,
+    // ICP accounts resolve admin status from club_domain grants inside the hook.
+    enabled: authReady && !!user?.id,
   });
 
   const [pinVaultSheetOpen, setPinVaultSheetOpen] = useState(false);
@@ -386,11 +389,22 @@ export default function TeamChatPage() {
   const handleMemberProfileTap = useCallback(async (memberUserId: string, displayName: string, avatarUrl?: string | null) => {
     if (!teamId || !isAdmin || memberUserId === user?.id) return;
 
-    const { data: roles, error } = await supabase
-      .from("user_roles")
-      .select("id, role")
-      .eq("user_id", memberUserId)
-      .eq("team_id", teamId);
+    let roles: { id: string; role: string }[] | null = null;
+    let error: unknown = null;
+    if (resolveAuthBackend() === "icp") {
+      try {
+        const { listIcpTeamMemberRoles } = await import("@/lib/icpTeamMemberRoles");
+        roles = await listIcpTeamMemberRoles(teamId, memberUserId);
+      } catch (e) {
+        error = e;
+      }
+    } else {
+      ({ data: roles, error } = await supabase
+        .from("user_roles")
+        .select("id, role")
+        .eq("user_id", memberUserId)
+        .eq("team_id", teamId));
+    }
 
     if (error) {
       toast.error("Failed to load member roles");
@@ -408,11 +422,18 @@ export default function TeamChatPage() {
   const handleRemoveRoleFromSelectedMember = useCallback(async (roleItem: { id: string; role: string }) => {
     if (!teamId) return;
 
-    // Provisional: user_roles is a Supabase-only table with no membership.ts
-    // canister equivalent for role removal yet — block the action for
-    // Internet Identity accounts instead of firing a failing uuid query.
     if (resolveAuthBackend() === "icp") {
-      toast.error("Member management isn't available for Internet Identity accounts yet");
+      if (!selectedMember || !team?.club_id) return;
+      try {
+        const { removeIcpTeamRoles } = await import("@/lib/icpTeamMemberRoles");
+        await removeIcpTeamRoles(team.club_id, teamId, selectedMember.userId, [roleItem.role]);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to remove role");
+        return;
+      }
+      toast.success("Role removed");
+      refreshChatManagedTeamMembership(queryClient, teamId, "team", teamId);
+      setSelectedMember(null);
       return;
     }
 
@@ -430,16 +451,23 @@ export default function TeamChatPage() {
     queryClient.invalidateQueries({ queryKey: ["team-messages", teamId] });
     refreshChatManagedTeamMembership(queryClient, teamId, "team", teamId);
     setSelectedMember(null);
-  }, [teamId, queryClient]);
+  }, [teamId, queryClient, selectedMember, team?.club_id]);
 
   const handleRemoveSelectedMemberFromTeam = useCallback(async () => {
     if (!teamId || !selectedMember) return;
 
-    // Provisional: no canister shape for member removal (remove_team_member
-    // is a Supabase-only rpc) — block the action for Internet Identity
-    // accounts instead of firing a failing uuid-keyed rpc.
     if (resolveAuthBackend() === "icp") {
-      toast.error("Member management isn't available for Internet Identity accounts yet");
+      if (!team?.club_id) return;
+      try {
+        const { removeIcpTeamRoles } = await import("@/lib/icpTeamMemberRoles");
+        await removeIcpTeamRoles(team.club_id, teamId, selectedMember.userId, selectedMember.roles.map((r) => r.role));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to remove member");
+        return;
+      }
+      toast.success("Member removed from team");
+      refreshChatManagedTeamMembership(queryClient, teamId, "team", teamId);
+      setSelectedMember(null);
       return;
     }
 
@@ -459,7 +487,7 @@ export default function TeamChatPage() {
     queryClient.invalidateQueries({ queryKey: ["team-messages", teamId] });
     refreshChatRemovedTeamMember(queryClient, teamId, "team", teamId);
     setSelectedMember(null);
-  }, [teamId, selectedMember, queryClient]);
+  }, [teamId, selectedMember, queryClient, team?.club_id]);
 
   // Force a fresh fetch whenever we land on this team chat. Push notifications
   // and inbox taps can land here while react-query still has stale data —
@@ -972,7 +1000,7 @@ export default function TeamChatPage() {
       const realByAuthorText = new Set(
         messages
           .filter((m) => !m.id.startsWith("temp-") && !m.id.startsWith("queued-"))
-          .map((m) => `${m.author_id}::${m.text ?? ""}::${m.image_url ?? ""}`),
+          .map((m) => `${m.author_id}::${(m.text ?? "").trim()}::${m.image_url ? "img" : ""}`),
       );
       const previousOnly = (prev || []).filter((message) => {
         // SECURITY (cross-team bleed): this merge is deliberately fail-open — it
@@ -986,7 +1014,7 @@ export default function TeamChatPage() {
         // cache snapshot — never carry it over from the previous render state.
         if (isTombstoned(reconcileScope, message.id)) return false;
         if (message.id.startsWith("temp-") || message.id.startsWith("queued-")) {
-          const key = `${message.author_id}::${message.text ?? ""}::${message.image_url ?? ""}`;
+          const key = `${message.author_id}::${(message.text ?? "").trim()}::${message.image_url ? "img" : ""}`;
           if (realByAuthorText.has(key)) return false;
         }
         return true;
@@ -1629,6 +1657,7 @@ export default function TeamChatPage() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async ({ text, image_url, reply_to_id }: { text: string; image_url: string | null; reply_to_id: string | null }) => {
+      image_url = (await resolveChatUploadUrl(image_url)) as typeof image_url;
       // Lab mode: optimistic cache-only delivery, no backend write and no persistence.
       if (useIcpLab) {
         const localMessage = await sendLocalTeamMessage(
@@ -2004,7 +2033,9 @@ export default function TeamChatPage() {
   });
 
   if (teamMetadataState === "loading") {
-    return <ChatPageSkeleton title="Team chat" />;
+    // Show the saved team name while the live metadata fetch resolves; if even the
+    // device cache is cold, render a neutral skeleton block instead of a generic label.
+    return <ChatPageSkeleton title={teamId ? getCachedTeam(teamId)?.name || undefined : undefined} />;
   }
 
   if (teamMetadataState === "unreachable") {

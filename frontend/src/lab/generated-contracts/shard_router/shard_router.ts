@@ -189,6 +189,11 @@ export interface shard_routerInterface {
     get_migration(arg0: string): Promise<result_opt_migration>;
     get_route(arg0: string): Promise<result_opt_route>;
     list_routes(arg0: string | null, arg1: number): Promise<result_page>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     version(): Promise<bigint>;
 }
 import type { assign_domain_result as _assign_domain_result, assign_result as _assign_result, domain_migration as _domain_migration, domain_route as _domain_route, migration as _migration, page as _page, result_assign as _result_assign, result_assign_domain as _result_assign_domain, result_domain_migration as _result_domain_migration, result_migration as _result_migration, result_nat64 as _result_nat64, result_opt_domain_migration as _result_opt_domain_migration, result_opt_domain_route as _result_opt_domain_route, result_opt_migration as _result_opt_migration, result_opt_route as _result_opt_route, result_page as _result_page, route as _route } from "./declarations/shard_router.did";
@@ -249,6 +254,14 @@ export class Shard_router implements shard_routerInterface {
     async list_routes(arg0: string | null, arg1: number): Promise<result_page> {
         const result = await this.actor.list_routes(to_candid_opt_n23(arg0), arg1);
         return from_candid_result_page_n24(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async version(): Promise<bigint> {
         const result = await this.actor.version();

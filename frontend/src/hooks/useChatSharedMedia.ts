@@ -1,3 +1,4 @@
+import { EVENT_TOKEN_PATTERN } from "@/lib/chatEventToken";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -56,7 +57,7 @@ const VAULT_FILE_RE = /\[vault:([0-9a-f-]{36})\]/gi;
 const VAULT_FOLDER_RE = /\[vaultfolder:([0-9a-f-]{36})\]/gi;
 const VAULT_ROOT_RE = /\[vaultroot:(team|club):([0-9a-f-]{36})\]/gi;
 const URL_RE = /https?:\/\/[^\s)]+/gi;
-const ALL_TOKEN_RE = /\[(?:event|vault|vaultfolder|vaultroot:(?:team|club)):[0-9a-f-]{36}\]/gi;
+const ALL_TOKEN_RE = new RegExp(String.raw`${EVENT_TOKEN_PATTERN}|\[(?:vault|vaultfolder|vaultroot:(?:team|club)):[0-9a-f-]{36}\]`, "gi");
 
 function hostnameOf(url: string): string {
   try {

@@ -175,6 +175,11 @@ export interface Main {
     { 'Ok' : RoleGrant } |
       { 'Err' : string }
   >,
+  'accept_role_link' : ActorMethod<
+    [string],
+    { 'Ok' : RoleGrant } |
+      { 'Err' : string }
+  >,
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -256,6 +261,16 @@ export interface Main {
     { 'Ok' : CompetitionJoinLink } |
       { 'Err' : string }
   >,
+  'create_personal_competition' : ActorMethod<
+    [string, string],
+    { 'Ok' : Competition } |
+      { 'Err' : string }
+  >,
+  'create_role_link' : ActorMethod<
+    [string, string],
+    { 'Ok' : RoleLink } |
+      { 'Err' : string }
+  >,
   'create_season' : ActorMethod<
     [string, string],
     { 'Ok' : Season } |
@@ -318,6 +333,16 @@ export interface Main {
   'get_news_audience' : ActorMethod<
     [string, Principal],
     { 'Ok' : CompetitionNewsAudience } |
+      { 'Err' : string }
+  >,
+  'get_role_link' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [RoleLink] } |
+      { 'Err' : string }
+  >,
+  'get_role_link_preview' : ActorMethod<
+    [string],
+    { 'Ok' : RoleLinkPreview } |
       { 'Err' : string }
   >,
   'get_vault_access' : ActorMethod<
@@ -432,6 +457,16 @@ export interface Main {
     { 'Ok' : Array<Competition> } |
       { 'Err' : string }
   >,
+  'list_my_personal_competitions' : ActorMethod<
+    [],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'list_official_chats' : ActorMethod<
+    [string],
+    { 'Ok' : Array<OfficialChat> } |
+      { 'Err' : string }
+  >,
   'list_public_competitions' : ActorMethod<
     [],
     { 'Ok' : Array<Competition> } |
@@ -442,6 +477,10 @@ export interface Main {
     { 'Ok' : Array<Season> } |
       { 'Err' : string }
   >,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'record_match' : ActorMethod<
     [string, string, string],
     { 'Ok' : Match } |
@@ -451,6 +490,11 @@ export interface Main {
     [string, string, string],
     { 'Ok' : TeamEntry } |
       { 'Err' : string }
+  >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
   >,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
@@ -483,6 +527,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'revoke_competition_official_link' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'revoke_role_link' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -527,6 +576,11 @@ export interface Main {
     { 'Ok' : Match } |
       { 'Err' : string }
   >,
+  'set_official_chat' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_pii_access_control_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -545,6 +599,27 @@ export interface Main {
   'set_vault_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'submit_public_eoi' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      string,
+      [] | [string],
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [number],
+      Array<string>,
+      Array<string>,
+      [] | [string],
+      string,
+    ],
+    { 'Ok' : string } |
       { 'Err' : string }
   >,
   'suggest_eoi_teams' : ActorMethod<
@@ -623,10 +698,28 @@ export interface Match {
   'arrival_minutes_before' : [] | [number],
   'competition_id' : string,
 }
+export interface OfficialChat {
+  'conversation_id' : string,
+  'scope' : string,
+  'competition_id' : string,
+}
 export interface RoleGrant {
   'role' : string,
   'user' : Principal,
   'team_id' : [] | [string],
+  'competition_id' : string,
+}
+export interface RoleLink {
+  'token' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'competition_id' : string,
+}
+export interface RoleLinkPreview {
+  'name' : string,
+  'role' : string,
   'competition_id' : string,
 }
 export interface Season {

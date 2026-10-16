@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Camera, Loader2, UserPlus } from "lucide-react";
@@ -30,6 +30,8 @@ import { getLocalLabClubDetail } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
   getLiveClubProfile,
+  getLiveClubGeneralSettings,
+  setLiveClubGeneralSettings,
   saveLiveClubProfile,
   getLiveClubSettings,
   saveLiveClubSettings,
@@ -78,16 +80,43 @@ export default function EditClubPage() {
           club_subscriptions: null,
         } : null;
       }
-      const { data, error } = await supabase
-        .from("clubs")
-        .select(`
-          *,
-          club_subscriptions(is_pro, is_pro_football, expires_at)
-        `)
-        .eq("id", id!)
-        .single();
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("clubs")
+            .select(`
+              *,
+              club_subscriptions(is_pro, is_pro_football, expires_at)
+            `)
+            .eq("id", id!)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const [profileOpt, settingsOpt, general] = await Promise.all([
+            getLiveClubProfile(ctx, id!),
+            getLiveClubSettings(ctx, id!),
+            getLiveClubGeneralSettings(ctx, id!),
+          ]);
+          const profile = profileOpt[0];
+          if (!profile) return null;
+          const settings = settingsOpt[0];
+          return {
+            id: profile.id,
+            name: profile.name,
+            description: profile.description[0] ?? null,
+            logo_url: profile.logo_url[0] ?? null,
+            sport: (profile as any).sport?.[0] ?? null,
+            contact_email: settings?.contact_email?.[0] ?? null,
+            class_mode_enabled: general?.classModeEnabled ?? false,
+            allow_guests_default: general?.allowGuestsDefault ?? false,
+            max_guests_per_member_default: general?.maxGuestsPerMemberDefault ?? 2,
+            events_sponsor_strip_enabled: general?.eventsSponsorStripEnabled ?? settings?.events_sponsor_strip_enabled ?? false,
+            club_subscriptions: null,
+          };
+        },
+      });
     },
     enabled: !!id,
   });
@@ -108,6 +137,12 @@ export default function EditClubPage() {
 
   const [uploading, setUploading] = useState(false);
   const isNative = shouldUseNativePicker();
+  // The avatar shows an instant local preview (blob: URL) while the real
+  // upload finishes; the real uploaded URL is kept here so a save never
+  // writes a blob: URL to the backend.
+  const uploadedLogoUrlRef = useRef<string | null>(null);
+  const logoUrlForSave = () =>
+    uploadedLogoUrlRef.current ?? (logoUrl.startsWith("blob:") ? club?.logo_url ?? "" : logoUrl);
 
   const handleNativeLogoPick = async () => {
     if (!id) return;
@@ -122,18 +157,29 @@ export default function EditClubPage() {
       const result = await pickNativePhoto({ quality: 80 });
       setUploading(true);
 
+      // Show the chosen logo straight away while the real upload finishes.
+      const localPreview = URL.createObjectURL(result.blob);
+      setLogoUrl(localPreview);
+
       const ext = mimeToExtension(result.mimeType);
       const fileName = `${id}/${Date.now()}.${ext}`;
       const storagePath = `club-logos/${fileName}`;
 
+      // On-chain bytes cost upload time; shrink the logo first.
+      const { compressImage } = await import("@/lib/imageCompression");
+      const compressed = await compressImage(
+        new File([result.blob], `logo.${ext}`, { type: result.mimeType }),
+      );
+
       const blobUpload = await tryUploadMediaToBlobStore({
         storagePath,
-        file: result.blob,
-        mime: result.mimeType,
+        file: compressed.file,
+        mime: compressed.file.type || result.mimeType,
       });
 
       if (blobUpload) {
-        setLogoUrl(blobUpload.url);
+        // Blob-store URLs serve ciphertext — keep the local preview on screen.
+        uploadedLogoUrlRef.current = blobUpload.url;
       } else {
         // Fail closed for ICP users: if they are routed to ICP but the blob store
         // isn't ready, they cannot upload to Supabase.
@@ -146,6 +192,7 @@ export default function EditClubPage() {
         if (uploadError) throw uploadError;
 
         const { data: urlData } = supabase.storage.from('club-logos').getPublicUrl(fileName);
+        uploadedLogoUrlRef.current = urlData.publicUrl;
         setLogoUrl(urlData.publicUrl);
       }
       toast({ title: "Logo uploaded", description: "Your club logo has been uploaded successfully." });
@@ -173,18 +220,27 @@ export default function EditClubPage() {
 
     setUploading(true);
     try {
+      // Show the chosen logo straight away while the real upload finishes.
+      const localPreview = URL.createObjectURL(file);
+      setLogoUrl(localPreview);
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${id}/${Date.now()}.${fileExt}`;
       const storagePath = `club-logos/${fileName}`;
 
+      // On-chain bytes cost upload time; shrink the logo first.
+      const { compressImage } = await import("@/lib/imageCompression");
+      const compressed = await compressImage(file);
+
       const blobUpload = await tryUploadMediaToBlobStore({
         storagePath,
-        file,
-        mime: file.type,
+        file: compressed.file,
+        mime: compressed.file.type || file.type,
       });
 
       if (blobUpload) {
-        setLogoUrl(blobUpload.url);
+        // Blob-store URLs serve ciphertext — keep the local preview on screen.
+        uploadedLogoUrlRef.current = blobUpload.url;
       } else {
         // Fail closed for ICP users
         if (isFeatureRoutedToIcp("membership")) {
@@ -200,6 +256,7 @@ export default function EditClubPage() {
           .from('club-logos')
           .getPublicUrl(fileName);
 
+        uploadedLogoUrlRef.current = urlData.publicUrl;
         setLogoUrl(urlData.publicUrl);
       }
       toast({
@@ -239,9 +296,8 @@ export default function EditClubPage() {
     setSaving(true);
 
     // Routes to club_domain's club profile/settings when placement settings
-    // resolve ICP for membership. sport, class_mode_enabled,
-    // allow_guests_default, max_guests_per_member_default and
-    // events_sponsor_strip_enabled stay Supabase: no canister shape.
+    // resolve ICP for membership. Class mode, guest defaults and the events
+    // sponsor strip live in club_domain's general settings.
     try {
       await withFeatureBackend("membership", {
         supabase: async () => {
@@ -250,7 +306,7 @@ export default function EditClubPage() {
             .update({
               name: name.trim(),
               description: description.trim() || null,
-              logo_url: logoUrl || null,
+              logo_url: logoUrlForSave() || null,
               sport: sport || null,
               contact_email: contactEmail.trim() || null,
               class_mode_enabled: classModeEnabled,
@@ -269,7 +325,8 @@ export default function EditClubPage() {
                 ...existingProfile,
                 name: name.trim(),
                 description: candidOpt(description.trim() || undefined),
-                logo_url: candidOpt(logoUrl || undefined),
+                logo_url: candidOpt(logoUrlForSave() || undefined),
+                sport: candidOpt(sport || undefined),
               }
             : {
                 // provisional mapping — verify against deployed canister
@@ -277,7 +334,7 @@ export default function EditClubPage() {
                 name: name.trim(),
                 slug: id!,
                 description: candidOpt(description.trim() || undefined),
-                logo_url: candidOpt(logoUrl || undefined),
+                logo_url: candidOpt(logoUrlForSave() || undefined),
                 primary_color: [],
                 secondary_color: [],
                 is_active: true,
@@ -326,6 +383,15 @@ export default function EditClubPage() {
                 header_club_name_enabled: false,
               };
           await saveLiveClubSettings(ctx, settings);
+          const prevGeneral = await getLiveClubGeneralSettings(ctx, id!);
+          await setLiveClubGeneralSettings(ctx, id!, {
+            classModeEnabled,
+            allowGuestsDefault,
+            maxGuestsPerMemberDefault: maxGuestsDefault,
+            eventsSponsorStripEnabled: showEventsStripToggle
+              ? eventsSponsorStripEnabled
+              : prevGeneral?.eventsSponsorStripEnabled ?? false,
+          });
         },
       });
     } catch (error: any) {
@@ -339,6 +405,13 @@ export default function EditClubPage() {
     }
 
     setSaving(false);
+
+    // Refresh everywhere the club name/logo shows: the header theme query,
+    // club lists, and this club's own profile reads.
+    queryClient.invalidateQueries({ queryKey: ["all-user-clubs-for-theme-v2"] });
+    queryClient.invalidateQueries({ queryKey: ["clubs"] });
+    queryClient.invalidateQueries({ queryKey: ["club", id] });
+    queryClient.invalidateQueries({ queryKey: ["club-profile", id] });
 
     toast({
       title: "Club updated!",

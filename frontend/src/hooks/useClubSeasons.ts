@@ -17,7 +17,7 @@ export interface Season {
   updated_at: string;
 }
 
-function mapLiveSeason(season: LiveSeason & { created_at_ms: bigint; updated_at_ms: bigint }): Season {
+export function mapLiveSeason(season: LiveSeason & { created_at_ms: bigint; updated_at_ms: bigint }): Season {
   return {
     id: season.id,
     club_id: season.club_id,

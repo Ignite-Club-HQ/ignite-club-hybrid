@@ -8,9 +8,7 @@ import {
   getBuildTimeBackendRoutingConfig,
   readCachedBackendRoutingConfig,
   parseBackendRoutingConfig,
-  readCachedClubBackendHint,
   resolveBackendForCountry,
-  resolveClubBackendOverride,
   resolveTargetForCountry,
   resolveIcpEngineForCountry,
   isCloudEngineUsable,
@@ -21,7 +19,9 @@ import {
 import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } from "./featureBackend";
 import { getActiveIcpTarget, registerIcpEngineResolver, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
-import { getUserClubIds } from "./userClubs";
+import { isSignedInWithEmail } from "./authBackendMode";
+
+export { isSignedInWithEmail };
 
 /**
  * Loads the app-admin backend routing configuration from
@@ -147,30 +147,30 @@ function isIcpAvailable(): boolean {
   }
 }
 
+
 /**
- * Which backend should serve the current user right now, combining the saved
- * routing config, the user's country (profile override, else IP), and whether
- * any ICP canisters are actually configured. Feature routing only — this
- * never blocks access.
+ * The active ICP target, or null when none is configured. Never throws, so
+ * routing checks can call it freely.
  */
-/**
- * The per-club backend pin for the current user, or null. Post-auth this
- * uses the live membership ids loaded by ClubBackendEnforcement; pre-auth
- * (the /auth screen decision) it falls back to the hint cached by the last
- * post-auth check.
- */
-function currentClubBackendOverride(config: BackendRoutingConfig): BackendProvider | null {
-  const clubIds = getUserClubIds();
-  if (clubIds.length > 0) return resolveClubBackendOverride(config, clubIds);
-  return readCachedClubBackendHint();
+export function tryGetActiveIcpTarget(): IcpTargetConfig | null {
+  try {
+    return getActiveIcpTarget();
+  } catch {
+    return null;
+  }
 }
 
+/**
+ * Which backend should serve the current user right now. One rule, no
+ * per-club pin: email sign-in reads Supabase, secure sign-in reads the
+ * canisters (when any are configured), and a signed-out visitor follows the
+ * routing config for their country.
+ */
 export function getEffectiveBackend(): BackendProvider {
+  if (isSignedInWithEmail()) return "supabase";
+  if (hasStoredInternetIdentitySession()) return isIcpAvailable() ? "icp" : "supabase";
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
-  const pin = currentClubBackendOverride(config);
-  if (pin === "supabase") return "supabase";
-  if (pin === "icp") return isIcpAvailable() ? "icp" : "supabase";
   return resolveBackendForCountry(config, country, isIcpAvailable());
 }
 
@@ -182,44 +182,27 @@ export function getEffectiveBackend(): BackendProvider {
 export function getEffectiveTarget(): ApprovedBackendTarget | undefined {
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
-  const pin = currentClubBackendOverride(config);
-  if (!pin) return resolveTargetForCountry(config, country, isIcpAvailable());
-  // A club pin flips the backend; pick an approved target for that backend.
-  const backend: BackendProvider = pin === "icp" && !isIcpAvailable() ? "supabase" : pin;
-  const enabledForBackend = config.targets.filter(t => t.enabled && t.backend === backend);
-  const code = country?.trim().toUpperCase();
-  const pinnedId = code ? config.countryTargets[code] : undefined;
-  if (pinnedId) {
-    const pinned = enabledForBackend.find(t => t.id === pinnedId);
-    if (pinned) return pinned;
-  }
-  return enabledForBackend[0];
-}
-
-export function tryGetActiveIcpTarget(): IcpTargetConfig | null {
-  try {
-    return getActiveIcpTarget();
-  } catch {
-    return null;
-  }
+  return resolveTargetForCountry(config, country, isIcpAvailable());
 }
 
 /**
- * Which backend should serve one feature area right now. Per-feature variant
- * of getEffectiveBackend(): ICP is only returned when the routing config
- * resolves ICP for the user's country AND that feature's canister ID is
- * configured on the active ICP target — so a feature whose canister is not
- * deployed yet transparently keeps using Supabase.
+ * Which backend should serve one feature area right now: the same rule as
+ * getEffectiveBackend(), narrowed per feature — a secure sign-in session only
+ * gets "icp" when that feature's canister is actually configured, so a
+ * feature whose canister is not deployed yet keeps using Supabase instead of
+ * failing every request.
  */
 export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProvider {
-  const config = getBackendRoutingConfig();
-  const { country } = getCurrentCountry();
-  const pin = currentClubBackendOverride(config);
-  if (pin === "supabase") return "supabase";
-  if (pin === "icp") {
+  // Signed in with email: every feature reads Supabase. Without this,
+  // isFeatureRoutedToIcp() returned true for email users and Messages/Media
+  // went to the canisters (blank).
+  if (isSignedInWithEmail()) return "supabase";
+  if (hasStoredInternetIdentitySession()) {
     const target = tryGetActiveIcpTarget();
     return target && isFeatureCanisterConfigured(target, feature) ? "icp" : "supabase";
   }
+  const config = getBackendRoutingConfig();
+  const { country } = getCurrentCountry();
   return resolveFeatureBackend(config, country, tryGetActiveIcpTarget(), feature);
 }
 
@@ -231,6 +214,7 @@ export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProv
  */
 export function isFeatureRoutedToIcp(feature: FeatureArea): boolean {
   if (getEffectiveBackendForFeature(feature) === "icp") return true;
+  if (isSignedInWithEmail()) return false;
   // Mirror withFeatureBackend's fallback: an Internet Identity user has no
   // Supabase data, so when routing momentarily resolves to Supabase (e.g. a
   // just-created, unpinned club tips the club-pin check) keep pages on the
@@ -249,3 +233,4 @@ function hasStoredInternetIdentitySession(): boolean {
     return false;
   }
 }
+

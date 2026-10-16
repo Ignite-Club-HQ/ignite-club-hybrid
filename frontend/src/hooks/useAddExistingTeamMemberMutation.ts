@@ -241,9 +241,32 @@ export function useAddExistingTeamMemberMutation({
           }
 
           const { resolveAuthBackend } = await import("@/live/authBackendMode");
-          let notificationError = null;
+          let notificationError: { message: string } | null = null;
           if (resolveAuthBackend() === "icp") {
-            // NEEDS-CANISTER: Membership notifications stay Supabase-only
+            // The membership feature itself is still Supabase-routed here,
+            // but the signed-in account is an Internet Identity principal
+            // (global auth backend is "icp"). Best-effort fan-out the
+            // notification through the notification_queue canister instead
+            // of writing to the Supabase `notifications` table, which this
+            // account can never read.
+            try {
+              const [{ icpCtx }, { fanOutLiveNotifications }] = await Promise.all([
+                import("@/lib/icpClubTeamLookup"),
+                import("@/live/features/notifications"),
+              ]);
+              const liveCtx = await icpCtx();
+              await fanOutLiveNotifications(liveCtx, {
+                userIds: [selectedUser.id],
+                clubId,
+                kind: "membership",
+                body: `You have been added to ${teamName} as ${selectedRoleLabel}`,
+                idempotencyKeyPrefix: `membership-add-${teamId}-${selectedUser.id}`,
+                relatedId: teamId,
+              });
+            } catch (error) {
+              console.error("[AddTeamMember] notification fan-out failed:", error);
+              notificationError = { message: (error as Error)?.message ?? "Notification failed" };
+            }
           } else {
             const result = await supabase.from("notifications").insert({
               user_id: selectedUser.id,
@@ -273,14 +296,15 @@ export function useAddExistingTeamMemberMutation({
         // message so the coach knows exactly what to retry. No rollback.
         icp: async (ctx) => {
           const { Principal } = await import("@icp-sdk/core/principal");
-          // NEEDS-CANISTER / gap: selectedUser.id here is whatever the member
-          // picker (useAddTeamMemberSearch) resolved, but that hook queries
-          // Supabase `search_invitable_profiles` ungated — under ICP it will
-          // surface Supabase profile UUIDs, not Internet Identity principals.
-          // Principal.fromText will throw for a UUID; the picker needs its
-          // own canister-backed member search before this flow is reachable
-          // end-to-end for ICP users.
-          const userPrincipal = Principal.fromText(selectedUser.id);
+          // selectedUser.id is sourced from useAddTeamMemberSearch, which
+          // calls searchLiveInvitableProfiles under ICP routing — that
+          // returns bare principal text (`r.principal.toText()`), not a
+          // Supabase profile UUID or a "principal:<text>" club_domain
+          // account id. normalizeAccountId is still run defensively in case
+          // a "principal:" prefixed id ever reaches this path (e.g. a future
+          // caller reusing a club_domain account_id directly).
+          const { normalizeAccountId } = await import("@/live/messagingCandidates");
+          const userPrincipal = Principal.fromText(normalizeAccountId(selectedUser.id));
 
           const succeeded: string[] = [];
           const failed: string[] = [];
@@ -329,10 +353,13 @@ export function useAddExistingTeamMemberMutation({
                 }
                 if (!childId) throw new Error("No child id returned from canister");
 
-                // NEEDS-CANISTER: club_domain's team-player-position record
-                // only stores a single `position` string, no jersey_number
-                // field — jersey numbers can't be persisted under ICP yet, so
-                // we skip that sub-step silently rather than fail the child.
+                if (child.jerseyNumber) {
+                  const jerseyNumber = parseInt(child.jerseyNumber);
+                  if (!Number.isNaN(jerseyNumber)) {
+                    const { setLiveTeamPlayerPositionsV2 } = await import("@/live/features/club");
+                    await setLiveTeamPlayerPositionsV2(ctx, teamId, childId, ["MID"], jerseyNumber);
+                  }
+                }
               } catch (error) {
                 console.error("[AddTeamMember][ICP] child failed:", child.name, error);
                 childFailures += 1;
@@ -361,22 +388,25 @@ export function useAddExistingTeamMemberMutation({
 
           if (wantsSecondParentInvite) {
             try {
-              // NEEDS-CANISTER: create_pending_invite does not return (or
-              // store) a token the way Supabase's pending_invites does, and
-              // there is no club_domain-aware accept route in the frontend
-              // yet — the id-based link below is best-effort/non-functional
-              // until that route exists. Surfaced per the locked decision so
-              // the coach at least has a reference to share/retry with.
-              const { invite } = await createLivePendingInvite(ctx, {
+              // create_pending_invite does not return (or store) a token the
+              // way Supabase's pending_invites does, and there is no
+              // club_domain-aware accept route in the frontend yet — the
+              // id-based link below (resolved from the created invite's own
+              // id, per createLivePendingInvite's return shape) is
+              // best-effort/non-functional until that route exists. Surfaced
+              // per the locked decision so the coach at least has a
+              // reference to share/retry with.
+              const created = (await createLivePendingInvite(ctx, {
                 kind: "team",
                 clubId,
                 email: trimmedSecondParentEmail,
                 teamId,
                 role: "parent",
-              });
+              })) as { invite?: { id?: string } } | undefined;
+              const inviteId = created?.invite?.id;
               secondParentInviteEmail = trimmedSecondParentEmail;
-              secondParentInviteLink = invite?.id
-                ? `${window.location.origin}/join/p/${invite.id}`
+              secondParentInviteLink = inviteId
+                ? `${window.location.origin}/join/p/${inviteId}`
                 : null;
               secondParentStatus = "invited";
               succeeded.push("second parent invited");

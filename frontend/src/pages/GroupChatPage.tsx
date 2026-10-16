@@ -1,4 +1,6 @@
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
+import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
 import { resolveChatJumpTarget } from "@/lib/resolveChatJumpTarget";
@@ -177,9 +179,6 @@ export default function GroupChatPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [miniLeagueInviteOpen, setMiniLeagueInviteOpen] = useState(false);
-  const scheduleTarget: ScheduleTarget | null = groupId
-    ? { chat_type: "group", group_id: groupId }
-    : null;
   const [replyTo, setReplyTo] = useChatDraftReply<GroupMessage>(groupId);
   const [editingMessage, setEditingMessage] = useState<GroupMessage | null>(null);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
@@ -337,7 +336,7 @@ export default function GroupChatPage() {
     setSearchQuery("");
     setSearchOpen(false);
     if (target?.created_at && groupId) {
-      if (useIcpLab) {
+      if (useIcpLab || resolveAuthBackend() === "icp") {
         requestAnimationFrame(() => handleJumpToMessage(mid));
         return;
       }
@@ -450,6 +449,9 @@ export default function GroupChatPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const scheduleTarget: ScheduleTarget | null = groupId
+    ? { chat_type: "group", group_id: groupId, pro_club_id: group?.club_id ?? null }
+    : null;
   const { hasPro: clubPro, isLoading: clubProLoading } = useClubProAccess(group?.club_id ?? null, { enabled: chatReady });
   // Personal groups have no club_id, so the club lookup never resolves and the
   // menu would show Pro locks to genuine Pro users. Fall back to the user's
@@ -470,6 +472,9 @@ export default function GroupChatPage() {
     queryKey: ["group-chat-admin", groupId, user?.id, group?.team_id, group?.club_id],
     queryFn: async () => {
       if (!group) return false;
+      const { resolveIcpChatAdmin } = await import("@/lib/icpChatAdmin");
+      const icp = await resolveIcpChatAdmin({ clubId: group.club_id, teamId: group.team_id, teamRoles: ["team_admin"] });
+      if (icp !== null) return icp;
       
       // Run all role checks in parallel
       const [teamRoleResult, clubRoleResult, appAdminResult] = await Promise.all([
@@ -1047,6 +1052,7 @@ export default function GroupChatPage() {
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({ text, image_url, reply_to_id }: { text: string; image_url: string | null; reply_to_id: string | null }) => {
+      image_url = (await resolveChatUploadUrl(image_url)) as typeof image_url;
       if (!user || !groupId) return;
 
       if (useIcpLab) {

@@ -51,6 +51,7 @@ import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveClubSubscription, listLiveTeams } from "@/live/features/club";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
+import { useInAppPurchase } from "@/hooks/useInAppPurchase";
 
 
 const PRO_FEATURES = [
@@ -130,6 +131,7 @@ export default function ClubUpgradePage() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [teamSelectOpen, setTeamSelectOpen] = useState(false);
   const { showIfDesktop, dialog: desktopUpgradeDialog } = useDesktopUpgradeGate();
+  const { purchaseProduct } = useInAppPurchase();
 
 
   useEffect(() => {
@@ -213,7 +215,7 @@ export default function ClubUpgradePage() {
               id: p.id,
               name: p.name,
               sport: p.sport[0] ?? null,
-              class_mode_enabled: false,
+              class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, p.id))?.classModeEnabled ?? false,
             };
           },
         });
@@ -411,7 +413,7 @@ export default function ClubUpgradePage() {
       isAnnual: boolean;
     }) => {
       // NEEDS-CANISTER: promo codes not yet on canister
-      if (isFeatureRoutedToIcp("membership")) throw new Error("Promo codes are not yet available for Internet Identity accounts.");
+      if (useIcpLab || isFeatureRoutedToIcp("membership")) throw new Error("Promo codes are not yet available for Internet Identity accounts.");
       // Validate promo code
       const { data: promoData, error: promoError } = await supabase
         .from("promo_codes")
@@ -514,7 +516,7 @@ export default function ClubUpgradePage() {
   const cancelTrialMutation = useMutation({
     mutationFn: async () => {
       // NEEDS-CANISTER: cancel-subscription not yet available on canister
-      if (isFeatureRoutedToIcp("membership")) throw new Error("Subscription management is not yet available for Internet Identity accounts.");
+      if (useIcpLab || isFeatureRoutedToIcp("membership")) throw new Error("Subscription management is not yet available for Internet Identity accounts.");
       const { data, error } = await supabase.functions.invoke('cancel-subscription', {
         body: { subscription_type: 'club', entity_id: clubId },
       });
@@ -632,7 +634,7 @@ export default function ClubUpgradePage() {
     // NEEDS-CANISTER: card checkout runs through Supabase functions/Stripe,
     // which Internet Identity sessions cannot call; only native IAP is
     // supported for ICP-routed clubs.
-    if (isIcpRouted) {
+    if (useIcpLab || isIcpRouted) {
       toast({
         title: "Checkout unavailable",
         description: "Card checkout is not yet available for Internet Identity clubs. Please subscribe from the mobile app instead.",
@@ -688,6 +690,18 @@ export default function ClubUpgradePage() {
 
     setIsCheckingOut(true);
     try {
+      if (useIcpLab || isIcpRouted) {
+        // Session-free path: verify-iap-receipt-icp mints an attestation and
+        // the entitlement is redeemed on the identity_access canister.
+        const ok = await purchaseProduct(productId, clubId!, "club");
+        if (ok) {
+          queryClient.invalidateQueries({ queryKey: ["club-subscription", clubId] });
+          invalidateProAccessQueries(queryClient);
+          queryClient.invalidateQueries({ queryKey: ["club", clubId] });
+          toast({ title: "Upgrade Successful!", description: "Your club subscription is now active." });
+        }
+        return;
+      }
       const { NativePurchases, PURCHASE_TYPE } = await import("@capgo/native-purchases");
       const purchaseResult = await NativePurchases.purchaseProduct({
         productIdentifier: productId,
@@ -730,7 +744,7 @@ export default function ClubUpgradePage() {
   const { data: hasStripeConfig } = useQuery({
     queryKey: ["stripe-config-check", clubId, providerKey],
     queryFn: async () => {
-      if (useIcpLab) return false;
+      if (useIcpLab || isIcpRouted) return false;
       // Check club config
       const { data: clubConfig } = await supabase
         .from("club_stripe_configs")
@@ -752,33 +766,6 @@ export default function ClubUpgradePage() {
     },
     enabled: !!clubId,
   });
-
-  if (useIcpLab) {
-    return (
-      <div className="py-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Club Pro Plans</h1>
-            <p className="text-sm text-muted-foreground">{club?.name ?? "Synthetic club"}</p>
-          </div>
-        </div>
-        <Card className="border-primary/20 bg-primary/5 max-w-lg">
-          <CardContent className="space-y-2 p-6">
-            <h2 className="font-semibold">Subscriptions are not enabled in ICP lab mode</h2>
-            <p className="text-sm text-muted-foreground">
-              Billing, promo codes, trials, in-app purchases, and subscription changes remain unavailable. No payment or club data has been changed.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Synthetic fixture: {teamCount} {teamCount === 1 ? "team" : "teams"}; no active subscription.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   if (clubLoading || loadingAdminCheck) {
     return <UpgradeLoadingState />;

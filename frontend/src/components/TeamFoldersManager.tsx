@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { CreateTeamFolderDialog } from "@/components/CreateTeamFolderDialog";
@@ -71,33 +72,69 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
   const [folderDescription, setFolderDescription] = useState("");
   const [folderColor, setFolderColor] = useState("default");
 
+  const isIcp = resolveAuthBackend() === "icp";
+
   const { data: folders = [], isLoading } = useQuery({
-    queryKey: ["team-folders", clubId],
+    queryKey: ["team-folders", clubId, isIcp],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("team_folders")
-        .select("*")
-        .eq("club_id", clubId)
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      return data as TeamFolder[];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("team_folders")
+            .select("*")
+            .eq("club_id", clubId)
+            .order("sort_order", { ascending: true });
+          if (error) throw error;
+          return data as TeamFolder[];
+        },
+        icp: async (ctx) => {
+          const { listLiveTeamFolders } = await import("@/live/features/club");
+          const list = await listLiveTeamFolders(ctx, clubId);
+          return list
+            .map((f) => ({
+              id: f.id,
+              club_id: f.club_id,
+              name: f.name,
+              description: f.description?.[0] ?? null,
+              sort_order: f.sort_order,
+              color: f.color,
+              created_at: new Date(Number(f.created_at_ms)).toISOString(),
+            }))
+            .sort((a, b) => a.sort_order - b.sort_order) as TeamFolder[];
+        },
+      });
     },
     enabled: !!clubId,
   });
 
-  const isIcp = resolveAuthBackend() === "icp";
-
   const createFolderMutation = useMutation({
     mutationFn: async (params: { name: string; description: string; color: string }) => {
-      const { error } = await supabase.from("team_folders").insert({
-        club_id: clubId,
-        name: params.name,
-        description: params.description || null,
-        color: params.color,
-        sort_order: folders.length,
-        created_by: user?.id,
-      } as any);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("team_folders").insert({
+            club_id: clubId,
+            name: params.name,
+            description: params.description || null,
+            color: params.color,
+            sort_order: folders.length,
+            created_by: user?.id,
+          } as any);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { saveLiveTeamFolder } = await import("@/live/features/club");
+          await saveLiveTeamFolder(ctx, {
+            id: crypto.randomUUID(),
+            club_id: clubId,
+            name: params.name,
+            description: params.description ? [params.description] : [],
+            color: params.color,
+            sort_order: folders.length,
+            created_by: ctx.identity.getPrincipal(),
+            created_at_ms: BigInt(Date.now()),
+          });
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });
@@ -112,15 +149,32 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
   const updateFolderMutation = useMutation({
     mutationFn: async () => {
       if (!editingFolder) return;
-      const { error } = await supabase
-        .from("team_folders")
-        .update({
-          name: folderName.trim(),
-          description: folderDescription.trim() || null,
-          color: folderColor,
-        })
-        .eq("id", editingFolder.id);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("team_folders")
+            .update({
+              name: folderName.trim(),
+              description: folderDescription.trim() || null,
+              color: folderColor,
+            })
+            .eq("id", editingFolder.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { saveLiveTeamFolder } = await import("@/live/features/club");
+          await saveLiveTeamFolder(ctx, {
+            id: editingFolder.id,
+            club_id: clubId,
+            name: folderName.trim(),
+            description: folderDescription.trim() ? [folderDescription.trim()] : [],
+            color: folderColor,
+            sort_order: editingFolder.sort_order,
+            created_by: ctx.identity.getPrincipal(),
+            created_at_ms: BigInt(new Date(editingFolder.created_at).getTime()),
+          });
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });
@@ -137,11 +191,19 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
-      const { error } = await supabase
-        .from("team_folders")
-        .delete()
-        .eq("id", folderId);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("team_folders")
+            .delete()
+            .eq("id", folderId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { deleteLiveTeamFolder } = await import("@/live/features/club");
+          await deleteLiveTeamFolder(ctx, folderId);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });
@@ -155,12 +217,33 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
 
   const reorderFoldersMutation = useMutation({
     mutationFn: async (reorderedFolders: { id: string; sort_order: number }[]) => {
-      const updates = reorderedFolders.map(({ id, sort_order }) =>
-        supabase.from("team_folders").update({ sort_order }).eq("id", id)
-      );
-      const results = await Promise.all(updates);
-      const error = results.find((r) => r.error)?.error;
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const updates = reorderedFolders.map(({ id, sort_order }) =>
+            supabase.from("team_folders").update({ sort_order }).eq("id", id)
+          );
+          const results = await Promise.all(updates);
+          const error = results.find((r) => r.error)?.error;
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { saveLiveTeamFolder } = await import("@/live/features/club");
+          for (const { id, sort_order } of reorderedFolders) {
+            const existing = folders.find((f) => f.id === id);
+            if (!existing) continue;
+            await saveLiveTeamFolder(ctx, {
+              id,
+              club_id: clubId,
+              name: existing.name,
+              description: existing.description ? [existing.description] : [],
+              color: existing.color,
+              sort_order,
+              created_by: ctx.identity.getPrincipal(),
+              created_at_ms: BigInt(new Date(existing.created_at).getTime()),
+            });
+          }
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });
@@ -230,12 +313,6 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
   };
 
   if (!isAdmin) return null;
-  // NEEDS-CANISTER: team_folders (organising teams into club-admin-defined
-  // folders) has no club_domain equivalent yet — vault_domain's folder CRUD
-  // is a separate feature (media/vault files), not this team-grouping
-  // concept. Hide the manage UI for Internet Identity accounts rather than
-  // firing failing uuid-keyed Supabase writes. See roadmap.md.
-  if (isIcp) return null;
 
   return (
     <div className="space-y-3">

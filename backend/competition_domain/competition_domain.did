@@ -30,12 +30,33 @@ type Season =
    revision: nat64;
    status: text;
  };
+type RoleLinkPreview = 
+ record {
+   competition_id: text;
+   name: text;
+   role: text;
+ };
+type RoleLink = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   revoked: bool;
+   role: text;
+   token: text;
+ };
 type RoleGrant = 
  record {
    competition_id: text;
    role: text;
    team_id: opt text;
    user: principal;
+ };
+type OfficialChat = 
+ record {
+   competition_id: text;
+   conversation_id: text;
+   scope: text;
  };
 type Match = 
  record {
@@ -69,6 +90,10 @@ type Main =
        Err: text;
        Ok: RoleGrant;
      });
+   accept_role_link: (token: text) -> (variant {
+                                         Err: text;
+                                         Ok: RoleGrant;
+                                       });
    addBulkAccessPrincipal: ("principal": principal) ->
     (variant {
        Err: text;
@@ -157,6 +182,16 @@ type Main =
                        Err: text;
                        Ok: CompetitionJoinLink;
                      });
+   create_personal_competition: (name: text, season: text) ->
+    (variant {
+       Err: text;
+       Ok: Competition;
+     });
+   create_role_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleLink;
+     });
    create_season: (competition_id: text, name: text) ->
     (variant {
        Err: text;
@@ -227,6 +262,16 @@ type Main =
        Err: text;
        Ok: CompetitionNewsAudience;
      });
+   get_role_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: opt RoleLink;
+     }) query;
+   get_role_link_preview: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleLinkPreview;
+     }) query;
    get_vault_access: (competition_id: text, requester: principal) ->
     (variant {
        Err: text;
@@ -338,6 +383,16 @@ type Main =
        Err: text;
        Ok: vec Competition;
      }) query;
+   list_my_personal_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
+   list_official_chats: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec OfficialChat;
+     }) query;
    list_public_competitions: () ->
     (variant {
        Err: text;
@@ -348,6 +403,12 @@ type Main =
        Err: text;
        Ok: vec Season;
      }) query;
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
    record_match: (competition_id: text, home_team: text, away_team: text) ->
     (variant {
        Err: text;
@@ -357,6 +418,11 @@ type Main =
     (variant {
        Err: text;
        Ok: TeamEntry;
+     });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
      });
    removeBulkAccessPrincipal: ("principal": principal) ->
     (variant {
@@ -388,6 +454,11 @@ type Main =
        Ok;
      });
    revoke_competition_official_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_role_link: (competition_id: text, role: text) ->
     (variant {
        Err: text;
        Ok;
@@ -431,6 +502,11 @@ type Main =
                                            Err: text;
                                            Ok: Match;
                                          });
+   set_official_chat: (competition_id: text, scope: text, conversation_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    set_pii_access_control_canister: (id: principal) ->
     (variant {
        Err: text;
@@ -450,6 +526,15 @@ type Main =
                                                     Err: text;
                                                     Ok;
                                                   });
+   submit_public_eoi: (club_id: text, season_id: text, parent_name: text,
+    parent_email: text, parent_mobile: opt text, player_name: text,
+    player_dob: opt text, player_gender: opt text, preferred_teammates:
+    opt text, preferred_position: opt text, skill_level: opt nat16,
+    training_days: vec text, game_days: vec text, notes: opt text, source:
+    text) -> (variant {
+                Err: text;
+                Ok: text;
+              });
    suggest_eoi_teams: (season_id: text) ->
     (variant {
        Err: text;

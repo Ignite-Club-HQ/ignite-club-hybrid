@@ -1,3 +1,4 @@
+import { EVENT_TOKEN_PATTERN } from "@/lib/chatEventToken";
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -51,7 +52,7 @@ interface SuggestedUser {
 
 // Mention format: @[DisplayName](userId)
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
-const EVENT_TOKEN_RE = /\[event:([0-9a-f-]{36})\]/gi;
+const EVENT_TOKEN_RE = new RegExp(EVENT_TOKEN_PATTERN, "gi");
 
 // URL detection regex
 const URL_REGEX = /https?:\/\/[^\s]+/g;
@@ -76,7 +77,7 @@ interface RawSegment {
 function parseRawValue(raw: string): RawSegment[] {
   const segments: RawSegment[] = [];
   // Order: mention, event, vaultroot, vaultfolder, vault file
-  const regex = /(@\[([^\]]+)\]\(([^)]+)\))|(\[event:([0-9a-f-]{36})\])|(\[vaultroot:(team|club):([0-9a-f-]{36})\])|(\[vaultfolder:([0-9a-f-]{36})\])|(\[vault:([0-9a-f-]{36})\])/gi;
+  const regex = new RegExp(String.raw`(@\[([^\]]+)\]\(([^)]+)\))|(${EVENT_TOKEN_PATTERN})|(\[vaultroot:(team|club):([0-9a-f-]{36})\])|(\[vaultfolder:([0-9a-f-]{36})\])|(\[vault:([0-9a-f-]{36})\])`, "gi");
   let lastEnd = 0;
   let match;
 
@@ -432,7 +433,7 @@ export function MentionInput({
     return [...new Set(matches)].slice(0, 3);
   }, [value]);
 
-  const hasEventToken = useMemo(() => /\[event:[0-9a-f-]{36}\]/i.test(value), [value]);
+  const hasEventToken = useMemo(() => new RegExp(EVENT_TOKEN_PATTERN, "i").test(value), [value]);
   const hasVaultToken = useMemo(
     () => /\[(?:vault|vaultfolder|vaultroot:(?:team|club)):[0-9a-f-]{36}\]/i.test(value),
     [value],
@@ -440,7 +441,7 @@ export function MentionInput({
   const hideTextareaPlaceholder = hasEventToken || hasVaultToken;
 
   const eventIds = useMemo(
-    () => [...new Set(Array.from(value.matchAll(/\[event:([0-9a-f-]{36})\]/gi), (match) => match[1]).filter(Boolean))].slice(0, 3),
+    () => [...new Set(Array.from(value.matchAll(new RegExp(EVENT_TOKEN_PATTERN, "gi")), (match) => match[1]).filter(Boolean))].slice(0, 3),
     [value]
   );
 

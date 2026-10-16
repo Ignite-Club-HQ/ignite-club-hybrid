@@ -31,6 +31,10 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_workloads' : ActorMethod<[], Array<WorkloadIdentity>>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'register_workload' : ActorMethod<
     [Principal, string, Array<string>],
     { 'Ok' : WorkloadIdentity } |

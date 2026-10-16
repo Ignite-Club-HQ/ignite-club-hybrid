@@ -97,6 +97,13 @@ module {
     display_name : ?Text;
     disabled : Bool;
     updated_at_ms : Nat64;
+    // Blob-store ref (storage path, resolved client-side via mediaStorage.ts)
+    // for a custom points icon — mirrors clubs.points_icon_url.
+    points_icon_url : ?Text;
+    // Per-club lock on team-level overrides — mirrors
+    // club_subscriptions.disable_team_pom_rewards (prevents team
+    // admins/coaches from creating their own Player of Match rewards).
+    disable_team_pom_rewards : Bool;
   };
 
   public type State = {

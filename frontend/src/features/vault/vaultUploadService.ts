@@ -58,29 +58,6 @@ export function buildVaultUploadPath(options: {
   return `unassigned/${leaf}`;
 }
 
-export async function createVaultExternalLink(
-  options: {
-    url: string;
-    name: string;
-    userId: string;
-    folderId: string | null;
-    view: VaultFolderView;
-  },
-  client: IgniteSupabaseClient = supabase,
-): Promise<void> {
-  const insert: VaultFileInsert = {
-    file_url: options.url,
-    uploaded_by: options.userId,
-    name: options.name,
-    folder_id: options.folderId,
-    is_external_link: true,
-    file_size: 0,
-    ...getVaultUploadScope(options.view),
-  };
-  const { error } = await client.from("vault_files").insert(insert);
-  if (error) throw error;
-}
-
 export interface VaultUploadDependencies {
   reserveStorage: typeof reserveVaultStorage;
   settleStorage: typeof settleVaultStorage;
@@ -137,7 +114,8 @@ export async function uploadVaultItem(
     }
     const blobUpload = dependencies.tryBlobUpload
       ? await dependencies.tryBlobUpload({
-          storagePath,
+          // "vault/" segment lets the canister apply the vault free-plan cap.
+          storagePath: storagePath.replace(/^(clubs\/[^/]+\/)/, "$1vault/"),
           file: options.file,
           mime: options.file.type || "application/octet-stream",
           lock: "own",

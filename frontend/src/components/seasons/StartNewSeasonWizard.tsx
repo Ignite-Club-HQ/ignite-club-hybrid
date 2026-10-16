@@ -21,6 +21,7 @@ import type { Season } from "@/hooks/useClubSeasons";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { saveLiveSeason, type LiveSeason } from "@/live/features/club";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { ReturningMembersStep } from "./ReturningMembersStep";
 import { SeasonInviteStep } from "./SeasonInviteStep";
 
@@ -176,6 +177,20 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
         .map((id) => ({ club_player_id: id, team_id: assignments[id] ?? null }))
         .filter((a) => !!a.team_id);
       if (placed.length === 0) return 0;
+      if (isFeatureRoutedToIcp("competitions") || isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => 0,
+          icp: async (ctx) => {
+            const { addLiveSeasonTeamAssignment } = await import("@/live/features/club");
+            let n = 0;
+            for (const a of placed) {
+              await addLiveSeasonTeamAssignment(ctx, targetId, a.team_id as string, a.club_player_id);
+              n += 1;
+            }
+            return n;
+          },
+        });
+      }
       const { data, error } = await supabase.rpc("carry_over_players_to_teams", {
         _target_season_id: targetId,
         _assignments: placed,
@@ -332,6 +347,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
               <ReturningMembersStep
                 sourceSeasonId={currentSeason.id}
                 targetSeasonId={createdSeasonId}
+                clubId={clubId}
                 selectedIds={selectedPlayerIds}
                 onChange={setSelectedPlayerIds}
                 assignments={assignments}
@@ -413,4 +429,21 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Club seasons live on club_domain (same store the ICP Seasons pages read). */
+async function createClubSeasonOnChain(ctx: FeatureBackendContext, clubId: string, name: string): Promise<string> {
+  const { saveLiveSeason } = await import("@/live/features/club");
+  const now = BigInt(Date.now());
+  const saved = (await saveLiveSeason(ctx, {
+    id: crypto.randomUUID(),
+    club_id: clubId,
+    name,
+    start_date: "",
+    end_date: "",
+    status: "draft",
+    created_at_ms: now,
+    updated_at_ms: now,
+  } as any)) as any;
+  return (saved?.id as string) ?? "";
 }

@@ -6,7 +6,9 @@ import { filterVisibleVaultFolders, getVaultScope } from "./vaultScope";
 import { isVaultImageItem } from "./vaultItemClassification";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
+  listLiveVaultClubFiles,
   listLiveVaultClubFilesWithFolder,
+  listLiveVaultFiles,
   listLiveVaultFilesWithFolder,
   listLiveVaultFolders,
   listLiveVaultTrashWithFolder,
@@ -18,7 +20,7 @@ import {
  * uploader is an ICP principal (rendered as its text form) rather than a
  * Supabase user id — verify against the deployed canister.
  */
-function mapLiveVaultFolder(folder: any): VaultFolderRow {
+export function mapLiveVaultFolder(folder: any): VaultFolderRow {
   return {
     id: folder.id,
     name: folder.name,
@@ -52,7 +54,7 @@ function unwrapLiveVaultFileWithFolder(entry: any): any {
   return entry;
 }
 
-function mapLiveVaultFile(file: any): VaultFileRow {
+export function mapLiveVaultFile(file: any): VaultFileRow {
   return {
     id: file.id,
     folder_id: Array.isArray(file.folder_id) ? file.folder_id[0] ?? null : file.folder_id ?? null,
@@ -430,6 +432,167 @@ export async function searchVaultContents(
     }));
 
   return { folders, files };
+}
+
+/**
+ * Folder/file lookups for the chat vault picker (VaultPickerSheet): a
+ * simpler surface than fetchVaultSubfolders/fetchVaultItems — no role-based
+ * folder restriction, just "this club/team, this parent" — mirrored against
+ * the canister the same way as the rest of this module.
+ */
+export type VaultPickerFolder = Pick<
+  VaultFolderRow,
+  "id" | "name" | "parent_id" | "team_id" | "club_id"
+>;
+export type VaultPickerFile = Pick<
+  VaultFileRow,
+  "id" | "name" | "file_type" | "file_size" | "folder_id" | "team_id" | "club_id" | "is_external_link"
+>;
+
+export async function listVaultPickerFolders(
+  options: { clubId: string; teamId: string | null; parentId: string | null },
+  client: IgniteSupabaseClient = supabase,
+): Promise<VaultPickerFolder[]> {
+  const { clubId, teamId, parentId } = options;
+
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      let query = client
+        .from("vault_folders")
+        .select("id, name, parent_id, team_id, club_id")
+        .eq("club_id", clubId)
+        .order("name");
+
+      if (parentId) {
+        query = query.eq("parent_id", parentId);
+      } else {
+        query = query.is("parent_id", null);
+        query = teamId ? query.or(`team_id.is.null,team_id.eq.${teamId}`) : query.is("team_id", null);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []) as VaultPickerFolder[];
+    },
+    // Provisional: the canister has no mini-league scope for the picker's
+    // purposes; verify against the deployed canister.
+    icp: async (ctx) => {
+      const folders = (await listLiveVaultFolders(ctx, clubId, null)) as any[];
+      const mapped = folders.map(mapLiveVaultFolder) as VaultPickerFolder[];
+      return mapped.filter((folder) => {
+        if (parentId) return folder.parent_id === parentId;
+        if (folder.parent_id !== null) return false;
+        return teamId ? folder.team_id === null || folder.team_id === teamId : folder.team_id === null;
+      });
+    },
+  });
+}
+
+export async function listVaultPickerFiles(
+  options: { clubId: string; teamId: string | null; folderId: string | null },
+  client: IgniteSupabaseClient = supabase,
+): Promise<VaultPickerFile[]> {
+  const { clubId, teamId, folderId } = options;
+
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      let query = client
+        .from("vault_files")
+        .select("id, name, file_type, file_size, folder_id, team_id, club_id, is_external_link")
+        .eq("club_id", clubId)
+        .is("deleted_at", null)
+        .order("name");
+
+      if (folderId) {
+        query = query.eq("folder_id", folderId);
+      } else {
+        query = query.is("folder_id", null);
+        query = teamId ? query.or(`team_id.is.null,team_id.eq.${teamId}`) : query.is("team_id", null);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []) as VaultPickerFile[];
+    },
+    icp: async (ctx) => {
+      const rawFiles = folderId
+        ? await listLiveVaultFiles(ctx, folderId)
+        : await listLiveVaultClubFiles(ctx, clubId, null);
+      const mapped = (rawFiles as any[])
+        .map(mapLiveVaultFile)
+        .filter((file) => !file.deleted_at) as VaultPickerFile[];
+
+      if (folderId) return mapped;
+      return mapped.filter((file) => {
+        if (file.folder_id) return false;
+        return teamId ? file.team_id === null || file.team_id === teamId : file.team_id === null;
+      });
+    },
+  });
+}
+
+/**
+ * Child folder/file counts for a batch of folders, used by the vault picker
+ * to show "X folders · Y files" next to each row without a per-folder query.
+ */
+export async function listVaultPickerFolderChildCounts(
+  options: { clubId: string; teamId: string | null; folderIds: string[] },
+  client: IgniteSupabaseClient = supabase,
+): Promise<Map<string, { folders: number; files: number }>> {
+  const { clubId, folderIds } = options;
+  const counts = new Map<string, { folders: number; files: number }>();
+  if (folderIds.length === 0) return counts;
+  for (const id of folderIds) counts.set(id, { folders: 0, files: 0 });
+
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const [{ data: subfolders, error: subErr }, { data: subfiles, error: fileErr }] = await Promise.all([
+        client.from("vault_folders").select("parent_id").eq("club_id", clubId).in("parent_id", folderIds),
+        client
+          .from("vault_files")
+          .select("folder_id")
+          .eq("club_id", clubId)
+          .is("deleted_at", null)
+          .in("folder_id", folderIds),
+      ]);
+      if (subErr) throw subErr;
+      if (fileErr) throw fileErr;
+
+      for (const row of subfolders || []) {
+        const pid = (row as { parent_id: string | null }).parent_id;
+        const c = pid ? counts.get(pid) : undefined;
+        if (c) c.folders += 1;
+      }
+      for (const row of subfiles || []) {
+        const fid = (row as { folder_id: string | null }).folder_id;
+        const c = fid ? counts.get(fid) : undefined;
+        if (c) c.files += 1;
+      }
+      return counts;
+    },
+    // Provisional: the canister has no bulk "children of these folders"
+    // query, so we pull the full club folder/file lists and tally client
+    // side — verify this stays cheap once real clubs have deep vault trees.
+    icp: async (ctx) => {
+      const [folders, files] = await Promise.all([
+        listLiveVaultFolders(ctx, clubId, null) as Promise<any[]>,
+        listLiveVaultClubFiles(ctx, clubId, null) as Promise<any[]>,
+      ]);
+      const folderIdSet = new Set(folderIds);
+      for (const raw of folders) {
+        const folder = mapLiveVaultFolder(raw);
+        const pid = folder.parent_id;
+        if (pid && folderIdSet.has(pid)) counts.get(pid)!.folders += 1;
+      }
+      for (const raw of files) {
+        const file = mapLiveVaultFile(raw);
+        if (file.deleted_at) continue;
+        const fid = file.folder_id;
+        if (fid && folderIdSet.has(fid)) counts.get(fid)!.files += 1;
+      }
+      return counts;
+    },
+  });
 }
 
 export async function fetchVaultTrash(

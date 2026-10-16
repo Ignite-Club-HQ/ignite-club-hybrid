@@ -10,7 +10,7 @@ import {
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
-import { createLivePendingInvite, bulkAddLiveTeamMembers, listLivePendingInvitesByClub } from "@/live/features/club";
+import { createLivePendingInvite, bulkAddLiveTeamMembers, createLiveInviteShortCode, findLivePendingInviteByEmailHash } from "@/live/features/club";
 
 type Args = {
   supabase: any;
@@ -76,11 +76,10 @@ export function useAddPendingTeamMemberMutation({
    * `bulk_add_team_members` (role grant) for an existing-user match, or
    * `create_pending_invite` for a fresh invite. Invite email delivery works
    * here too (the send-email edge function is anon-key callable). Second-
-   * parent linking has no club_domain counterpart and in-app notifications
-   * stay Supabase-only (push/notifications table), so those stay
-   * skipped/omitted on this path.
-   * NEEDS-CANISTER: second-parent invite composition + in-app notification
-   * write for pending/bulk team-member adds.
+   * parent linking uses `create_pending_invite` with kind "guardian" against
+   * the first existing child id, so the invite itself always lands on the
+   * canister. In-app notifications stay Supabase-only (push/notifications
+   * table), so those stay skipped/omitted on this path.
    */
   const mutationIcp = async (ctx: FeatureBackendContext) => {
     if (!nameInput.trim()) throw new Error("Please enter a name");
@@ -107,7 +106,7 @@ export function useAddPendingTeamMemberMutation({
           email: "",
           childrenCount: 0,
           childrenNames: [] as string[],
-          secondParentLink: null,
+          secondParentLink: null as string | null,
           secondParentEmail: "",
           secondParentName: "",
           secondParentAddedDirectly: false,
@@ -123,21 +122,19 @@ export function useAddPendingTeamMemberMutation({
       }
     }
 
-    // Dedupe against existing pending invites for the same email+team — the
+    // Dedupe against existing pending invites for the same email+club — the
     // ICP equivalent of the Supabase email dedupe. Account matching has no
     // ICP equivalent by design: Internet Identity accounts have no email on
-    // file, so only the pending-invite ledger can be checked.
+    // file, so only the pending-invite email-hash index can be checked
+    // (set_pending_invite_email_hash/find_pending_invite_by_email_hash —
+    // club_domain never sees the plaintext email on this index).
     const inviteEmail = customEmail.trim().toLowerCase();
     if (inviteEmail) {
-      const existing = await listLivePendingInvitesByClub(ctx, clubId);
-      const duplicate = existing.find(
-        (i) =>
-          i.status === "pending" &&
-          i.email.trim().toLowerCase() === inviteEmail &&
-          (i.team_id.length ? i.team_id[0] : null) === (teamId ?? null),
-      );
+      const { hashInviteEmail } = await import("@/lib/inviteEmailDedupe");
+      const hash = await hashInviteEmail(inviteEmail, clubId);
+      const duplicate = await findLivePendingInviteByEmailHash(ctx, clubId, hash);
       if (duplicate) {
-        throw new Error(`An invite for ${inviteEmail} is already pending for this team.`);
+        throw new Error(`An invite for ${inviteEmail} is already pending for this club.`);
       }
     }
 
@@ -150,6 +147,17 @@ export function useAddPendingTeamMemberMutation({
     });
     const link = `${window.location.origin}/join/p/${invite.id}`;
 
+    // Short invite link, same as the Supabase path's short_code: shorter,
+    // friendlier URL for sharing (email/internal still use the full link).
+    let shareLink = link;
+    try {
+      const shortCode = await createLiveInviteShortCode(ctx, invite.id);
+      shareLink = `${window.location.origin}/i/${shortCode}`;
+    } catch (err) {
+      console.warn("[ICP invite] short code creation failed:", err);
+    }
+
+    // icp-guard: allow email delivery stays off-chain by design (send-email)
     // Email delivery routes through the send-email edge function, which is
     // anon-key callable so Internet Identity sessions can send too. Failure
     // degrades to manual link sharing — the link is returned either way.
@@ -183,24 +191,51 @@ export function useAddPendingTeamMemberMutation({
         console.warn("[ICP invite] email send threw:", err);
       }
     }
+    // Second-parent invite: club_domain has no dedicated "second parent" op,
+    // but a "guardian" kind pending invite against the (first) child id is
+    // the closest real equivalent — it lands a real, acceptable invite on
+    // the canister instead of silently dropping the second parent.
+    let secondParentLink: string | null = null;
+    let secondParentStatus: "skipped" | "invited" | "failed" = "skipped";
+    let secondParentFailure: string | null = null;
+    const secondParentEmailTrimmed = secondParentEmail.trim().toLowerCase();
+    if (secondParentEmailTrimmed) {
+      try {
+        const { createLivePendingInvite: createLiveGuardianInvite } = await import("@/live/features/club");
+        const childId = singleChildren.find((c) => c.existingChildId)?.existingChildId || null;
+        const { invite: guardianInvite } = await createLiveGuardianInvite(ctx, {
+          kind: "guardian",
+          clubId,
+          email: secondParentEmailTrimmed,
+          childId,
+        });
+        secondParentLink = `${window.location.origin}/join/p/${guardianInvite.id}`;
+        secondParentStatus = "invited";
+      } catch (err) {
+        console.warn("[ICP invite] second parent guardian invite failed:", err);
+        secondParentFailure = secondParentName.trim() || secondParentEmailTrimmed;
+        secondParentStatus = "failed";
+      }
+    }
+
     return {
       link,
-      shareLink: link,
+      shareLink,
       email: customEmail.trim(),
       childrenCount: 0,
       childrenNames: [] as string[],
-      secondParentLink: null,
-      secondParentEmail: "",
-      secondParentName: "",
+      secondParentLink,
+      secondParentEmail: secondParentStatus === "invited" ? secondParentEmailTrimmed : "",
+      secondParentName: secondParentStatus === "invited" ? secondParentName.trim() : "",
       secondParentAddedDirectly: false,
-      secondParentStatus: "skipped" as const,
+      secondParentStatus,
       secondParentLabel: null as string | null,
-      secondParentFailure: null as string | null,
+      secondParentFailure,
     };
   };
 
   return useMutation({
-    mutationFn: async () => withFeatureBackend("membership", {
+    mutationFn: async () => withFeatureBackend<any>("membership", {
       icp: mutationIcp,
       supabase: async () => {
       if (!nameInput.trim()) throw new Error("Please enter a name");

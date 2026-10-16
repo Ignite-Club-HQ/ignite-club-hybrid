@@ -147,11 +147,17 @@ export function MessagesInboxSections({
           { id: "all", label: "All", visible: true, unread: totalUnread },
           { id: "teams", label: "Teams", visible: counts.teams > 0, type: "team", unread: unread.teams },
           { id: "groups", label: "Groups", visible: counts.groupish > 0, type: "group", unread: unread.groupish },
-          { id: "dms", label: "DMs", visible: counts.dms > 0, type: "dm", unread: unread.dms },
+          // DMs remain reachable even before the first conversation exists
+          // or while the direct-message query is still resolving.
+          { id: "dms", label: "DMs", visible: true, type: "dm", unread: unread.dms },
         ];
-        const shown = chips.filter((chip) => chip.visible);
-        if (totalUnread === 0 && allItems.length <= 6) return null;
-        if (shown.length <= 2) return null;
+        // Never hide the chips while a non-"all" filter is active: the user
+        // would have no way to switch back (the filter is persisted). The
+        // counts above are computed from the already-filtered list, so a
+        // non-active category would read 0 and its chip would vanish —
+        // force every chip visible while a filter is active.
+        const filterActive = typeFilter !== "all";
+        const shown = chips.filter((chip) => chip.visible || filterActive);
 
         const currentUnread = chips.find((chip) => chip.id === typeFilter)?.unread ?? 0;
         const elsewhere = chips
@@ -171,9 +177,10 @@ export function MessagesInboxSections({
                   const hasActiveAccent = activeStyle !== undefined;
                   const showCount = chip.unread > 0;
                   return (
-                    <button
+                    <Button
                       key={chip.id}
                       type="button"
+                      variant="outline"
                       onClick={() => setTypeFilter(chip.id)}
                       style={activeStyle}
                       aria-pressed={active}
@@ -194,7 +201,7 @@ export function MessagesInboxSections({
                           </span>
                         )
                       )}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>

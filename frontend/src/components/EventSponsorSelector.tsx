@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,15 +31,26 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
   const { data: sponsors, isLoading: sponsorsLoading } = useQuery({
     queryKey: ["sponsors", clubId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, is_active")
-        .eq("club_id", clubId)
-        .eq("is_active", true)
-        .order("display_order", { ascending: true });
-      
-      if (error) throw error;
-      return data as Sponsor[];
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, is_active")
+            .eq("club_id", clubId)
+            .eq("is_active", true)
+            .order("display_order", { ascending: true });
+
+          if (error) throw error;
+          return data as Sponsor[];
+        },
+        icp: async (ctx) => {
+          const { listLiveSponsors } = await import("@/live/features/club");
+          const all = await listLiveSponsors(ctx, clubId);
+          return (all || [])
+            .filter((s: any) => s.is_active)
+            .map((s: any) => ({ id: s.id, name: s.name, logo_url: s.logo_url ?? null, is_active: s.is_active })) as Sponsor[];
+        },
+      });
     },
   });
 
@@ -46,13 +58,21 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
   const { data: eventSponsorIds, isLoading: eventSponsorsLoading } = useQuery({
     queryKey: ["event-sponsor-ids", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_sponsors")
-        .select("sponsor_id")
-        .eq("event_id", eventId);
-      
-      if (error) throw error;
-      return data?.map(es => es.sponsor_id) || [];
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("event_sponsors")
+            .select("sponsor_id")
+            .eq("event_id", eventId);
+
+          if (error) throw error;
+          return data?.map(es => es.sponsor_id) || [];
+        },
+        icp: async (ctx) => {
+          const { getLiveEventSponsorIds } = await import("@/live/features/events");
+          return (await getLiveEventSponsorIds(ctx, eventId)) || [];
+        },
+      });
     },
   });
 
@@ -69,28 +89,36 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
 
   const saveMutation = useMutation({
     mutationFn: async (sponsorIds: string[]) => {
-      // Delete existing
-      const { error: deleteError } = await supabase
-        .from("event_sponsors")
-        .delete()
-        .eq("event_id", eventId);
-      
-      if (deleteError) throw deleteError;
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          // Delete existing
+          const { error: deleteError } = await supabase
+            .from("event_sponsors")
+            .delete()
+            .eq("event_id", eventId);
 
-      // Insert new
-      if (sponsorIds.length > 0) {
-        const inserts = sponsorIds.map((sponsorId, index) => ({
-          event_id: eventId,
-          sponsor_id: sponsorId,
-          display_order: index,
-        }));
+          if (deleteError) throw deleteError;
 
-        const { error: insertError } = await supabase
-          .from("event_sponsors")
-          .insert(inserts);
-        
-        if (insertError) throw insertError;
-      }
+          // Insert new
+          if (sponsorIds.length > 0) {
+            const inserts = sponsorIds.map((sponsorId, index) => ({
+              event_id: eventId,
+              sponsor_id: sponsorId,
+              display_order: index,
+            }));
+
+            const { error: insertError } = await supabase
+              .from("event_sponsors")
+              .insert(inserts);
+
+            if (insertError) throw insertError;
+          }
+        },
+        icp: async (ctx) => {
+          const { saveLiveEventSponsors } = await import("@/live/features/events");
+          await saveLiveEventSponsors(ctx, eventId, sponsorIds);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-sponsors", eventId] });

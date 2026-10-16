@@ -23,7 +23,10 @@ export function createIdentityAccessClient(actor: _SERVICE) {
     myTermsAcceptance: () => call(() => actor.my_terms_acceptance()),
     getTermsAcceptance: (accountId: string) => call(() => actor.get_terms_acceptance(accountId)),
     setTermsAcceptance: (termsVersion: number) => call(() => actor.set_terms_acceptance(termsVersion)),
+    setThemePreference: (theme: string | null) => call(() => actor.set_theme_preference(theme ? [theme] : [])),
+    setClubSwitcherHintSeen: () => call(() => actor.set_club_switcher_hint_seen()),
     exportState: () => call<State>(() => actor.export_state()),
+    eraseAccount: (accountId: string) => call(() => actor.erase_account(accountId)),
     registerAccount: () => call(() => actor.register_account()),
     access: (club?: string, team?: string, child?: string) => call(() => actor.access(club ? [club] : [], team ? [team] : [], child ? [child] : [])),
     accessScoped: (siteId?: string, club?: string, team?: string, child?: string) => call(() => actor.access_scoped(siteId ? [siteId] : [], club ? [club] : [], team ? [team] : [], child ? [child] : [])),
@@ -33,6 +36,10 @@ export function createIdentityAccessClient(actor: _SERVICE) {
     revoke: (principal: Parameters<_SERVICE['revoke']>[0], expectedVersion: bigint) => call(() => actor.revoke(principal, expectedVersion)),
     grantRole: (accountId: string, role: string, club?: string, team?: string, siteId?: string) =>
       call(() => actor.grant_role_scoped(accountId, role, siteId ? [siteId] : [], club ? [club] : [], team ? [team] : [])),
+    revokeRole: (accountId: string, role: string, club?: string, team?: string, siteId?: string) =>
+      call(() => actor.revoke_role_scoped(accountId, role, siteId ? [siteId] : [], club ? [club] : [], team ? [team] : [])),
+    setAccountStatus: (accountId: string, status: "Active" | "Suspended") =>
+      call(() => actor.set_account_status(accountId, status === "Active" ? { Active: null } : { Suspended: null })),
     setFamily: (accountId: string, childId: string) => call(() => actor.set_family(accountId, childId)),
     setExclusion: (accountId: string, club: string, team?: string, siteId?: string) =>
       call(() => actor.set_exclusion_scoped(accountId, siteId ? [siteId] : [], club, team ? [team] : [])),

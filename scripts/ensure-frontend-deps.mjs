@@ -90,12 +90,20 @@ export function ensureFrontendDeps() {
       }
     }
     console.log("installing frontend dependencies (npm ci)...");
-    const install = spawnSync(
-      process.platform === "win32" ? "npm.cmd" : "npm",
-      ["ci", "--no-fund", "--no-audit"],
-      { cwd: frontendDir, stdio: "inherit" },
-    );
-    if (install.status !== 0) throw new Error(`npm ci failed with status ${install.status}`);
+    // Retry: publish builds occasionally hit transient registry/network errors.
+    let status = 1;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const install = spawnSync(
+        process.platform === "win32" ? "npm.cmd" : "npm",
+        ["ci", "--no-fund", "--no-audit", "--fetch-retries=5", "--fetch-retry-mintimeout=5000"],
+        { cwd: frontendDir, stdio: "inherit" },
+      );
+      status = install.status ?? 1;
+      if (status === 0) break;
+      console.log(`npm ci attempt ${attempt} failed (status ${status})${attempt < 3 ? ", retrying..." : ""}`);
+      if (attempt < 3) sleep(5000 * attempt);
+    }
+    if (status !== 0) throw new Error(`npm ci failed with status ${status}`);
     if (!existsSync(viteBin)) throw new Error("frontend dependencies still missing after npm ci");
     writeFileSync(stampFile, lockfileHash());
     // Fresh deps invalidate Vite's pre-bundle cache.

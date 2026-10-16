@@ -14,9 +14,14 @@ import { invalidateVaultCache, vaultKeys } from "./vaultQueryKeys";
 import type { VaultFolderView } from "./types";
 import {
   fetchVaultTrashItems,
+  partitionVaultTrashItems,
+  type VaultTrashFile,
   type VaultTrashItems,
 } from "./vaultTrashRepository";
+import { mapLiveVaultFile } from "./vaultReadRepository";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveVaultTrashWithFolder } from "@/live/features/vault";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 type VaultTrashWorkflowOptions = {
@@ -45,6 +50,36 @@ export function getVaultTrashQueryScope(
   };
 }
 
+/**
+ * Maps a `VaultFileWithFolder` canister record onto the same
+ * `{ ...file, folder, team }` shape the Supabase trash query returns.
+ * Provisional: the canister has no team-name join, so `team` stays null.
+ */
+function mapIcpTrashEntry(entry: any): VaultTrashFile {
+  const file = entry?.file ?? entry;
+  const folderNameRaw = entry?.folder_name;
+  const folderName = Array.isArray(folderNameRaw) ? folderNameRaw[0] : folderNameRaw;
+  const mapped = mapLiveVaultFile(file) as VaultTrashFile;
+  return {
+    ...mapped,
+    folder: folderName ? { id: mapped.folder_id ?? "", name: folderName } : null,
+    team: null,
+  };
+}
+
+async function fetchVaultTrashForClub(clubId: string, competitionId: string | null): Promise<VaultTrashItems> {
+  return withFeatureBackend("vault", {
+    supabase: () => fetchVaultTrashItems(clubId, undefined, competitionId),
+    icp: async (ctx) => {
+      const trashed = await listLiveVaultTrashWithFolder(ctx, clubId);
+      const mapped = (trashed as any[])
+        .map(mapIcpTrashEntry)
+        .filter((file) => !competitionId || file.competition_id === competitionId);
+      return partitionVaultTrashItems(mapped);
+    },
+  });
+}
+
 export function useVaultTrashWorkflow({
   currentView,
   showTrash,
@@ -58,11 +93,8 @@ export function useVaultTrashWorkflow({
   const { clubId, competitionId, enabled } = getVaultTrashQueryScope(currentView, showTrash);
   const { data: trashItems, isLoading: isLoadingTrash } = useQuery({
     queryKey: vaultKeys.trashForClub(clubId, competitionId),
-    queryFn: () => fetchVaultTrashItems(clubId!, undefined, competitionId),
-    // Vault trash reads Supabase photos/vault_files rows directly with no
-    // canister counterpart — stay silent (empty) when the club is ICP-routed
-    // rather than querying the wrong backend.
-    enabled: enabled && !isFeatureRoutedToIcp("vault"),
+  queryFn: () => fetchVaultTrashForClub(clubId!, competitionId),
+    enabled,
   });
 
   const deletePhotoMutation = useMutation({
@@ -149,25 +181,28 @@ export function useVaultTrashWorkflow({
 
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const emptyTrash = async () => {
-    // Fail closed: permanent-delete-photos is a Supabase edge function and
-    // has no canister equivalent; never fire it for an ICP-routed club.
-    if (isFeatureRoutedToIcp("vault")) return;
     if (!trashItems || isEmptyingTrash) return;
 
     setIsEmptyingTrash(true);
     try {
       const allPhotoIds = trashItems.photos.map((photo) => photo.id);
       const allFileIds = trashItems.files.map((file) => file.id);
+
+      // The ICP vault_domain canister has no separate "photos" table — a
+      // photos-row lookup there would just hit Supabase with no match, so
+      // skip it and let permanentlyDeleteVaultItems route every id as a file.
       const photoTableIds: string[] = [];
-      for (const photo of trashItems.photos) {
-        if (!photo.file_url) continue;
-        const { data: photoRecord, error } = await supabase
-          .from("photos")
-          .select("id")
-          .eq("image_url", photo.file_url)
-          .maybeSingle();
-        if (error) throw error;
-        if (photoRecord) photoTableIds.push(photoRecord.id);
+      if (!isFeatureRoutedToIcp("vault")) {
+        for (const photo of trashItems.photos) {
+          if (!photo.file_url) continue;
+          const { data: photoRecord, error } = await supabase
+            .from("photos")
+            .select("id")
+            .eq("image_url", photo.file_url)
+            .maybeSingle();
+          if (error) throw error;
+          if (photoRecord) photoTableIds.push(photoRecord.id);
+        }
       }
 
       const result = await permanentlyDeleteVaultItems({

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useResolvedIcpBlobSrc } from "@/hooks/useResolvedIcpBlobSrc";
 
 interface LogoImageProps {
   src: string;
@@ -134,7 +135,21 @@ if (typeof window !== "undefined") {
  * `online`, and on tab/app resume, and each retry re-issues a real request via
  * a cache-busting attempt token.
  */
-export function LogoImage({ src, alt = "", className, imgClassName, fallback }: LogoImageProps) {
+export function LogoImage(props: LogoImageProps) {
+  // ICP blob-store logos are stored locked (ciphertext); unlock them first.
+  const resolved = useResolvedIcpBlobSrc(props.src);
+  if (resolved.failed) return <>{props.fallback ?? null}</>;
+  if (resolved.pending || !resolved.src) {
+    return (
+      <span className={`relative inline-block overflow-hidden ${props.className ?? ""}`}>
+        <span aria-hidden="true" className="absolute inset-0 bg-muted animate-pulse" />
+      </span>
+    );
+  }
+  return <PlainLogoImage {...props} src={resolved.src} />;
+}
+
+function PlainLogoImage({ src, alt = "", className, imgClassName, fallback }: LogoImageProps) {
   const [failed, setFailed] = useState(false);
   // Bumped on every retry so React remounts the <img> and the browser
   // re-requests the (previously failed) URL instead of reusing its error cache.

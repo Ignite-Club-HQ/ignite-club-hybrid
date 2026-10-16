@@ -428,11 +428,26 @@ export async function resolveClubIdForChatTarget(
   try {
     if (!targetId) return null;
     if (kind === "club") return targetId;
-    // NEEDS-CANISTER: team->club and group->club lookups below read Supabase
-    // tables by row id. No canister wrapper exposes this mapping yet, so for
-    // II users navigate without the extra club-filter sync rather than
-    // firing Supabase.
-    if (resolveAuthBackend() === "icp") return null;
+    if (resolveAuthBackend() === "icp") {
+      if (kind === "team") {
+        const { icpGetTeam } = await import("@/lib/icpClubTeamLookup");
+        const team = await icpGetTeam(targetId).catch(() => null);
+        return team?.club_id ?? null;
+      }
+      if (kind === "group") {
+        const [{ icpCtx }, { getLiveGroupMetadata }] = await Promise.all([
+          import("@/lib/icpClubTeamLookup"),
+          import("@/live/features/messaging"),
+        ]);
+        const ctx = await icpCtx();
+        const meta = await getLiveGroupMetadata(ctx, targetId).catch(() => null);
+        return meta?.clubId ?? null;
+      }
+      // club_admin thread ids are `club-admin-<clubUuid>-<member>`; the club id
+      // is a fixed-shape UUID, so it can be read back unambiguously.
+      const m = /^club-admin-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i.exec(targetId);
+      return m ? m[1] : null;
+    }
     if (kind === "team") {
       const { data } = await supabase.from("teams").select("club_id").eq("id", targetId).maybeSingle();
       return (data as any)?.club_id ?? null;

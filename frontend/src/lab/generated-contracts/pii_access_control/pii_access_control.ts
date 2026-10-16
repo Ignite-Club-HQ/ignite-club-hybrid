@@ -128,6 +128,18 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     my_guardian_children(): Promise<Array<string>>;
     pii_vetkey_verification_key(): Promise<Uint8Array>;
     purge_club_grants(club_id: string): Promise<{
@@ -143,6 +155,13 @@ export interface MainInterface {
     } | {
         __kind__: "Err";
         Err: string;
+    }>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
     }>;
     remove_guardian_relationship(guardian: Principal, child_id: string): Promise<{
         __kind__: "Ok";
@@ -214,35 +233,6 @@ export interface AuditFilter {
     opt_principal?: Principal;
     opt_field_id?: string;
 }
-/**
- * / PII Access Control Canister
- * / Mediates access to personally identifiable information (PII) with
- * / field-level access policies and an audit trail.
- * /
- * / Encryption construction (vetKeys / IBE):
- * / - The canister holds NO key material. Values are encrypted client-side
- * /   with identity-based encryption (IBE) under the subnet's vetKD master
- * /   key: the writer derives this canister's IBE public key offline (master
- * /   public key -> canister key -> context subkey) and encrypts to the
- * /   identity `pii_id ++ "\u{1F}" ++ field_id` — no canister call needed to
- * /   write, so first registration of a record needs no key ceremony.
- * / - Readers call `get_encrypted_pii_vetkeys_batch`, which enforces the
- * /   exact same authorization as the old decrypt path (governor, domain
- * /   owner, granted readers, verified guardians, club-scoped read grants
- * /   verified live via club_domain) and only then relays the vetKey for the
- * /   record's identity, encrypted under the caller's one-time transport key.
- * /   The subnet never sees the raw key; the canister only relays the
- * /   still-encrypted key and never sees plaintext.
- * / - The frontend (@icp-sdk/vetkeys) does all cryptography: transport keys,
- * /   decryptAndVerify, IBE encrypt/decrypt. The Motoko vetKeys library
- * /   deliberately exposes only the management-canister relay.
- * / - VETKD_KEY_NAME selects the subnet key ("test_key_1" local, "key_1"
- * /   production). It is captured at first install and immutable for the life
- * /   of the derived keys — the deploy script MUST set it before first use.
- * / - `vetkd_derive_key` costs cycles per derivation; readers cache derived
- * /   vetKeys client-side per session, so each (pii_id, field_id) costs one
- * /   derivation per reader session.
- */
 export interface pii_access_controlInterface extends MainInterface {
 }
 import type { AuditFilter as _AuditFilter, EncryptedPii as _EncryptedPii, PiiDeleteResult as _PiiDeleteResult } from "./declarations/pii_access_control.did";
@@ -350,6 +340,24 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.grant_pii_read_competition(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
+    }
+    async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.merge_principal(arg0, arg1, arg2);
+        return from_candid_variant_n10(result);
+    }
     async my_guardian_children(): Promise<Array<string>> {
         const result = await this.actor.my_guardian_children();
         return result;
@@ -366,7 +374,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_grants(arg0);
-        return from_candid_variant_n10(result);
+        return from_candid_variant_n11(result);
     }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
@@ -376,7 +384,17 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n11(result);
+        return from_candid_variant_n12(result);
+    }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n10(result);
     }
     async remove_guardian_relationship(arg0: Principal, arg1: string): Promise<{
         __kind__: "Ok";
@@ -472,6 +490,25 @@ function from_candid_variant_n1(value: {
     } : value;
 }
 function from_candid_variant_n10(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n11(value: {
     Ok: number;
 } | {
     Err: string;
@@ -490,7 +527,7 @@ function from_candid_variant_n10(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n11(value: {
+function from_candid_variant_n12(value: {
     Ok: _EncryptedPii;
 } | {
     Err: string;

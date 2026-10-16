@@ -84,3 +84,40 @@ export function selectVisibleHomeEvents<
     : freshEvents;
   return visibleEvents.slice(0, limit);
 }
+
+export interface HomeEventAudience {
+  club_id: string;
+  team_id?: string | null;
+  target_team_ids?: string[] | null;
+  mini_league_id?: string | null;
+}
+
+export interface HomeEventMemberships {
+  teamIds: readonly string[];
+  clubIds: readonly string[];
+  /** null = don't filter mini-league events (backend has no player list). */
+  miniLeagueIds: readonly string[] | null;
+}
+
+/**
+ * Whether an event belongs in the signed-in user's Next Up. Club-level roles
+ * (club admin, committee, competition/league admin) do NOT make someone part
+ * of another team's game: team events need a role on that team, and
+ * club-wide events aimed at specific teams need a role on one of them.
+ */
+export function isHomeEventForMember(
+  event: HomeEventAudience,
+  memberships: HomeEventMemberships,
+): boolean {
+  if (event.mini_league_id) {
+    return memberships.miniLeagueIds === null
+      ? true
+      : memberships.miniLeagueIds.includes(event.mini_league_id);
+  }
+  if (event.team_id) return memberships.teamIds.includes(event.team_id);
+  const targets = (event.target_team_ids ?? []).filter(Boolean);
+  if (targets.length > 0) {
+    return targets.some((teamId) => memberships.teamIds.includes(teamId));
+  }
+  return memberships.clubIds.includes(event.club_id);
+}

@@ -1,3 +1,4 @@
+import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
@@ -8,11 +9,20 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
+import Timer "mo:core/Timer";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  // Live memory reading for the admin health page (public, like cycles_balance).
+  public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
+    {
+      heap_bytes = PrimMem.rts_heap_size();
+      memory_bytes = PrimMem.rts_memory_size();
+      stable_bytes = PrimMem.nat64ToNat(PrimMem.stableMemorySize()) * 65536;
+    }
+  };
 
   var items : [Types.Notification];
   var leases : [Types.Lease];
@@ -32,6 +42,9 @@ persistent actor class Main(governorInit : Principal) {
   // mute list accepted as-is); any other caller may only fan out their own
   // messages. Fail-closed while unset. See docs/icp-chat-notify-fanout-spec.md.
   var messagingDomainCanister : ?Principal;
+  // Governor-set club_domain canister id, used to verify app_admin grants
+  // for admin-only endpoints (push health, stale token cleanup).
+  var clubDomainCanister : ?Principal;
   // Device push tokens owned by principal text (see Types.DeviceToken).
   // Caller-scoped writes; the delivery worker reads/prunes via worker-gated
   // methods below.
@@ -42,6 +55,31 @@ persistent actor class Main(governorInit : Principal) {
     if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
     messagingDomainCanister := ?id;
     #Ok
+  };
+
+  public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    governorOnly(caller);
+    if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
+    clubDomainCanister := ?id;
+    #Ok
+  };
+
+  // Governor or club_domain app_admin grant. Fail-closed while
+  // clubDomainCanister is unset (mirrors messaging_domain/events_domain).
+  func appAdminOnly(caller : Principal) : async { #Ok; #Err : Text } {
+    authenticated(caller);
+    switch (governor) {
+      case (?owner) { if (owner.equal(caller)) { return #Ok } };
+      case null {};
+    };
+    switch (clubDomainCanister) {
+      case null { #Err("club_domain canister not configured") };
+      case (?cd) {
+        let clubDomain = actor (Principal.toText(cd)) : actor { is_app_admin : shared query (Principal) -> async Bool };
+        let isAdmin = try { await clubDomain.is_app_admin(caller) } catch (_) { false };
+        if (isAdmin) { #Ok } else { #Err("App admin required") };
+      };
+    };
   };
 
   func authenticated(caller : Principal) {
@@ -660,6 +698,116 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(res)
   };
 
+
+  // ======================================================================
+  // Scheduled-message delivery. A transient 60-second timer posts every due
+  // Pending scheduled message to messaging_domain as its author (via
+  // deliver_scheduled_message, which trusts only this canister and re-runs
+  // all send checks). Recurring messages roll forward to their next slot.
+  // Idempotency key "sched:<id>:<slot>" makes a repeated tick a no-op.
+  // ======================================================================
+
+  transient var deliveringScheduled = false;
+  transient let SCHEDULED_BATCH = 20;
+
+  func scheduledConversation(item : Types.ScheduledMessage) : ?Text {
+    switch (item.chat_type) {
+      case (#Broadcast) { ?"broadcast" };
+      case (#Direct or #ClubAdmin) { item.conversation_id };
+      case _ { scheduledTarget(item) };
+    }
+  };
+
+  func looksLikePrincipal(t : Text) : Bool {
+    t.size() >= 5 and t.size() <= 63 and t.contains(#char '-')
+  };
+
+  func nextSlot(item : Types.ScheduledMessage) : ?Nat64 {
+    let day : Nat64 = 86_400_000;
+    let step : Nat64 = switch (item.recurrence) {
+      case (#None) { return null };
+      case (#Daily) { day };
+      case (#Weekly) { 7 * day };
+      case (#Monthly) { 30 * day };
+    };
+    let now = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    var next = item.scheduled_for_ms + step;
+    while (next <= now) { next += step };
+    switch (item.recurrence_until_ms) {
+      case (?until) { if (next > until) { null } else { ?next } };
+      case null { ?next };
+    }
+  };
+
+  func settleScheduled(id : Text, slot : Nat64, outcome : { #Sent : Text; #Failed : Text }) {
+    switch (findScheduledIndex(id)) {
+      case null {};
+      case (?index) {
+        let item = scheduled[index];
+        // Edited/cancelled while in flight: leave the newer state alone.
+        if (item.status != #Pending or item.scheduled_for_ms != slot) { return };
+        let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
+        let updated = switch (outcome) {
+          case (#Sent(msgId)) {
+            switch (nextSlot(item)) {
+              case (?next) { { item with scheduled_for_ms = next; sent_message_id = ?msgId; attempted_at_ms = ?stamp; updated_at_ms = stamp } };
+              case null { { item with status = #Sent; sent_message_id = ?msgId; attempted_at_ms = ?stamp; updated_at_ms = stamp } };
+            }
+          };
+          case (#Failed(err)) { { item with status = #Failed; error_message = ?err; attempted_at_ms = ?stamp; updated_at_ms = stamp } };
+        };
+        replaceScheduled(index, updated);
+      };
+    }
+  };
+
+  func deliverDueScheduled() : async () {
+    if (deliveringScheduled) { return };
+    let messaging = switch (messagingDomainCanister) { case (?m) { m }; case null { return } };
+    let now = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    var due : [Types.ScheduledMessage] = [];
+    for (item in scheduled.values()) {
+      if (due.size() < SCHEDULED_BATCH and item.status == #Pending and item.scheduled_for_ms <= now) {
+        due := due.concat([item]);
+      };
+    };
+    if (due.size() == 0) { return };
+    deliveringScheduled := true;
+    let chat : actor {
+      deliver_scheduled_message : shared (Principal, Text, Text, Text, ?{ kind : Text; ref_id : Text; url : ?Text }, ?Text) -> async { #Ok : { id : Text }; #Err : Text };
+    } = actor (Principal.toText(messaging));
+    for (item in due.values()) {
+      let slot = item.scheduled_for_ms;
+      switch (scheduledConversation(item)) {
+        case null { settleScheduled(item.id, slot, #Failed("No chat to post to")) };
+        case (?conversation) {
+          if (not looksLikePrincipal(item.author)) {
+            settleScheduled(item.id, slot, #Failed("Author is not a blockchain account"));
+          } else {
+            let attachment = switch (item.image_url) {
+              case (?url) { ?{ kind = "image"; ref_id = "sched-" # item.id; url = ?url } };
+              case null { null };
+            };
+            let body = if (item.body == "" and attachment != null) { " " } else { item.body };
+            try {
+              switch (await chat.deliver_scheduled_message(Principal.fromText(item.author), conversation, body, "sched:" # item.id # ":" # Nat64.toText(slot), attachment, item.reply_to_id)) {
+                case (#Ok(msg)) { settleScheduled(item.id, slot, #Sent(msg.id)) };
+                case (#Err(e)) { settleScheduled(item.id, slot, #Failed(e)) };
+              };
+            } catch (_) {
+              // Transient call failure: stay Pending, retried next tick.
+            };
+          };
+        };
+      };
+    };
+    deliveringScheduled := false;
+  };
+
+  transient let _scheduledTimer = Timer.recurringTimer<system>(#seconds(300), func() : async () {
+    try { await deliverDueScheduled() } catch (_) { deliveringScheduled := false };
+  });
+
   // ======================================================================
   // Message digests
   // ======================================================================
@@ -937,5 +1085,174 @@ persistent actor class Main(governorInit : Principal) {
       if (entry.user == user and tokens.any(func(token : Text) : Bool = token == entry.token)) { removed += 1; false } else { true }
     });
     #Ok(removed)
+  };
+
+  // ---- Admin: 24h push delivery health + stale device-token cleanup ----
+  // App-admin gated (governor or club_domain app_admin). Backs
+  // PushAnalyticsPage's health dashboard and "Cleanup Stale" button.
+  public shared ({ caller }) func get_push_delivery_health(now_ms : Nat64) : async Types.PushDeliveryHealthResult {
+    switch (await appAdminOnly(caller)) {
+      case (#Err(e)) { return #Err(e) };
+      case (#Ok) {};
+    };
+    let windowMs : Nat64 = 24 * 3_600_000;
+    let cutoff : Nat64 = if (now_ms > windowMs) { now_ms - windowMs } else { 0 };
+    var total : Nat32 = 0;
+    var pending : Nat32 = 0;
+    var processing : Nat32 = 0;
+    var delivered : Nat32 = 0;
+    var failed : Nat32 = 0;
+    for (item in items.values()) {
+      if (item.created_at_ms >= cutoff) {
+        total += 1;
+        switch (item.status) {
+          case (#Pending) { pending += 1 };
+          case (#Processing) { processing += 1 };
+          case (#Delivered) { delivered += 1 };
+          case (#Failed) { failed += 1 };
+        };
+      };
+    };
+    #Ok({
+      window_hours = 24;
+      generated_at_ms = now_ms;
+      total_24h = total;
+      pending_24h = pending;
+      processing_24h = processing;
+      delivered_24h = delivered;
+      failed_24h = failed;
+      device_token_count = Nat.toNat32(device_tokens.size());
+    });
+  };
+
+  // Removes device tokens untouched for more than `max_age_ms` (stale/dead
+  // registrations — same intent as the Supabase cleanup-push-subscriptions
+  // edge function). Returns the number removed.
+  public shared ({ caller }) func cleanup_stale_device_tokens(now_ms : Nat64, max_age_ms : Nat64) : async Types.DeviceTokenCountResult {
+    switch (await appAdminOnly(caller)) {
+      case (#Err(e)) { return #Err(e) };
+      case (#Ok) {};
+    };
+    let cutoff : Nat64 = if (now_ms > max_age_ms) { now_ms - max_age_ms } else { 0 };
+    let before = device_tokens.size();
+    device_tokens := device_tokens.filter(func(t : Types.DeviceToken) : Bool { t.updated_at_ms >= cutoff });
+    #Ok(Nat.toNat16(before - device_tokens.size()));
+  };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  //
+  // Covered: Notification.user, ScheduledMessage.author, DigestItem.mentions
+  // (Text elements; exact match only), Preferences.user, PushAlertSettings.updated_by,
+  // DeviceToken.user. Device tokens and preferences are the ephemeral/allowed
+  // collections called out by the spec: on collision we keep the NEW row and
+  // drop the OLD one instead of erroring or merging.
+  // Not touched: governor (governor variable itself), workers (worker wiring),
+  // Lease.owner (always a worker principal), messagingDomainCanister
+  // (canister wiring), chat_notified_messages (message ids, not identities).
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, false)
+  };
+
+  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
+  // both IDs' records end up under the new one (keyed duplicates keep the new row).
+  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, true)
+  };
+
+  func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
+    authenticated(caller);
+    let isGov = switch (governor) { case (?g) { g.equal(caller) }; case null { false } };
+    if (not isGov) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new principal must differ");
+    let governorIsOld = switch (governor) { case (?g) { g.equal(old) }; case null { false } };
+    if (governorIsOld) return #err("Cannot rekey the governor");
+
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+
+    // Conflict guard: non-ephemeral records already referencing `new`.
+    // (device_tokens and preferences are excluded — they are the
+    // ephemeral/allowed collections, handled by keep-new-drop-old below.)
+    var conflicts = 0;
+    conflicts += items.filter(func(n : Types.Notification) : Bool = n.user == newText).size();
+    conflicts += scheduled.filter(func(s : Types.ScheduledMessage) : Bool = s.author == newText).size();
+    conflicts += digests.filter(func(d : Types.DigestItem) : Bool = d.mentions.any(func(m : Text) : Bool = m == newText)).size();
+    conflicts += switch (push_settings) { case (?p) { if (p.updated_by == ?newText) { 1 } else { 0 } }; case null { 0 } };
+    if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in notification_queue");
+
+    var changed = 0;
+
+    let newItems = items.map(func(n : Types.Notification) : Types.Notification {
+      if (n.user == oldText) { changed += 1; { n with user = newText } } else { n }
+    });
+
+    let newScheduled = scheduled.map(func(s : Types.ScheduledMessage) : Types.ScheduledMessage {
+      if (s.author == oldText) { changed += 1; { s with author = newText } } else { s }
+    });
+
+    let newDigests = digests.map(func(d : Types.DigestItem) : Types.DigestItem {
+      if (d.mentions.any(func(m : Text) : Bool = m == oldText)) {
+        changed += 1;
+        var seenNew = d.mentions.any(func(m : Text) : Bool = m == newText);
+        var out : [Text] = [];
+        for (m in d.mentions.values()) {
+          if (m == oldText) {
+            if (not seenNew) { out := out.concat([newText]); seenNew := true };
+          } else {
+            out := out.concat([m]);
+          };
+        };
+        { d with mentions = out }
+      } else { d }
+    });
+
+    let newPushSettings = switch (push_settings) {
+      case (?p) { if (p.updated_by == ?oldText) { changed += 1; ?{ p with updated_by = ?newText } } else { ?p } };
+      case null { null };
+    };
+
+    // Device tokens: caller-scoped, keyed by (user, token). On collision
+    // (same token already registered under both old and new text) keep the
+    // NEW row and drop the OLD one; otherwise just rename old -> new.
+    var deviceChanged = 0;
+    var dedupedDeviceTokens : [Types.DeviceToken] = [];
+    for (t in device_tokens.values()) {
+      let renamed : Types.DeviceToken = if (t.user == oldText) { { t with user = newText } } else { t };
+      if (t.user == oldText) { deviceChanged += 1 };
+      if (not dedupedDeviceTokens.any(func(x : Types.DeviceToken) : Bool = x.user == renamed.user and x.token == renamed.token)) {
+        dedupedDeviceTokens := dedupedDeviceTokens.concat([renamed]);
+      };
+    };
+    changed += deviceChanged;
+
+    // Preferences: one row per user. On collision (both old and new already
+    // have a stored Preferences row) keep the NEW row and drop the OLD one.
+    var prefsChanged = 0;
+    let oldPrefs = findPreference(oldText);
+    let newPrefsExisting = findPreference(newText);
+    let newPreferences = switch (oldPrefs) {
+      case (?op) {
+        prefsChanged += 1;
+        switch (newPrefsExisting) {
+          case (?_) { preferences.filter(func(p : Types.Preferences) : Bool = p.user != oldText) };
+          case null { preferences.map(func(p : Types.Preferences) : Types.Preferences = if (p.user == oldText) { { op with user = newText } } else { p }) };
+        };
+      };
+      case null { preferences };
+    };
+    changed += prefsChanged;
+
+    if (not dry_run) {
+      items := newItems;
+      scheduled := newScheduled;
+      digests := newDigests;
+      push_settings := newPushSettings;
+      device_tokens := dedupedDeviceTokens;
+      preferences := newPreferences;
+    };
+
+    #ok(changed)
   };
 };

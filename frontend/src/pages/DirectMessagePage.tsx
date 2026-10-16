@@ -1,4 +1,5 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
+import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
 import { resolveChatJumpTarget } from "@/lib/resolveChatJumpTarget";
@@ -190,7 +191,7 @@ const mergeDirectMessages = (
   const realByAuthorText = new Set(
     incomingMessages
       .filter((message) => !message.id.startsWith("temp-") && !message.id.startsWith("queued-"))
-      .map((message) => `${message.author_id}::${message.text ?? ""}::${message.image_url ?? ""}`),
+      .map((message) => `${message.author_id}::${(message.text ?? "").trim()}::${message.image_url ? "img" : ""}`),
   );
   const previousOnly = previousMessages.filter((message) => {
     if (incomingIds.has(message.id)) return false;
@@ -198,7 +199,7 @@ const mergeDirectMessages = (
     // the fail-open branch below would re-add it on every sync.
     if (reconcileScope && isTombstoned(reconcileScope, message.id)) return false;
     if (message.id.startsWith("temp-") || message.id.startsWith("queued-")) {
-      const key = `${message.author_id}::${message.text ?? ""}::${message.image_url ?? ""}`;
+      const key = `${message.author_id}::${(message.text ?? "").trim()}::${message.image_url ? "img" : ""}`;
       if (realByAuthorText.has(key)) return false;
     }
     return true;
@@ -433,10 +434,25 @@ export default function DirectMessagePage() {
     queryKey: ["dm-shared-club", user?.id, otherUserId],
     queryFn: async () => {
       if (!user?.id || !otherUserId) return null;
-      // Provisional: user_roles is a Supabase-only table keyed by uuid; there
-      // is no canister equivalent, so ICP-mode users just get an empty vault
-      // / event picker here instead of a failing uuid query.
-      if (resolveAuthBackend() === "icp") return null;
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const { listLiveClubs } = await import("@/live/features/club");
+            const { listLiveRoleGrants } = await import("@/live/features/membership");
+            const { normalizeAccountId } = await import("@/live/messagingCandidates");
+            const myId = normalizeAccountId(user.id);
+            const theirId = normalizeAccountId(otherUserId);
+            const clubs = await listLiveClubs(ctx);
+            for (const club of clubs) {
+              const grants = await listLiveRoleGrants(ctx, club.id);
+              const accountIds = new Set(grants.map((g: any) => normalizeAccountId(g.account_id)));
+              if (accountIds.has(myId) && accountIds.has(theirId)) return club.id;
+            }
+            return null;
+          },
+        });
+      }
       const [mine, theirs] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
         supabase.from("user_roles").select("club_id").eq("user_id", otherUserId).not("club_id", "is", null),
@@ -1113,6 +1129,7 @@ export default function DirectMessagePage() {
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({ text, imageUrl, replyToId }: { text: string; imageUrl?: string | null; replyToId?: string | null }) => {
+      imageUrl = (await resolveChatUploadUrl(imageUrl)) as typeof imageUrl;
       // Offline path: queue the message instead of failing
       if (!navigator.onLine) {
         const queued = queueMessage({

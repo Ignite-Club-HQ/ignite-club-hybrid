@@ -131,10 +131,15 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
+   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_ad: (id: text) -> (variant {
                                Err: text;
                                Ok;
                              });
+   delete_feedback: (id: text) -> (variant {
+                                     Err: text;
+                                     Ok;
+                                   });
    get_ad_setting: (location: text) -> (opt AppAdSetting) query;
    get_benchmarks: (metric_keys: vec text) ->
     (variant {
@@ -152,11 +157,17 @@ type Main =
        Err: text;
        Ok: SponsorPerformance;
      }) query;
+   grant_app_admin: ("principal": principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
    grant_role: ("principal": principal, role: text, club_id: text, team_id:
     opt text) -> (variant {
                     Err: text;
                     Ok;
                   });
+   add_memory_report: (text, text, text) -> (variant { Ok; Err: text });
+   list_memory_reports: (nat) -> (vec record { at: int; source: text; readings_json: text; analysis_json: text }) query;
    is_app_admin: () -> (bool) query;
    list_active_ads: () -> (vec AppAd) query;
    list_ad_settings: () -> (variant {
@@ -172,6 +183,10 @@ type Main =
                       Err: text;
                       Ok: vec AppAd;
                     }) query;
+   list_app_admins: () -> (variant {
+                             Err: text;
+                             Ok: vec principal;
+                           }) query;
    list_audit_logs: (actor_filter: opt principal, action_type: opt text,
     table_name: opt text, offset: nat32, limit: nat32) ->
     (variant {
@@ -275,10 +290,19 @@ type Main =
                                  Err: text;
                                  Ok;
                                });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    resolve_admin_alert: (id: text) -> (variant {
                                          Err: text;
                                          Ok: AdminAlert;
                                        });
+   revoke_app_admin: ("principal": principal) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
    set_ad_active: (id: text, is_active: bool) -> (variant {
                                                     Err: text;
                                                     Ok;

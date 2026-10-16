@@ -281,6 +281,11 @@ export interface placement_registryInterface {
     grant_operator(arg0: Principal, arg1: Array<operator_role>): Promise<result_operator>;
     list_audit(arg0: bigint | null, arg1: number): Promise<result_audit_page>;
     list_placements(arg0: string | null, arg1: number): Promise<result_page>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     revoke_operator(arg0: Principal): Promise<result_unit>;
     set_availability(arg0: backend_kind, arg1: boolean, arg2: bigint): Promise<result_availability>;
     set_placement(arg0: string, arg1: string, arg2: backend, arg3: bigint): Promise<result_placement>;
@@ -347,6 +352,14 @@ export class Placement_registry implements placement_registryInterface {
     async list_placements(arg0: string | null, arg1: number): Promise<result_page> {
         const result = await this.actor.list_placements(to_candid_opt_n49(arg0), arg1);
         return from_candid_result_page_n50(result);
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
+        return result;
     }
     async revoke_operator(arg0: Principal): Promise<result_unit> {
         const result = await this.actor.revoke_operator(arg0);

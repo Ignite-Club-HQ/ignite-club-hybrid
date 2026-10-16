@@ -86,18 +86,13 @@ export function getQueuedRsvpsForEvent(eventId: string): QueuedRsvp[] {
 async function sendQueuedRsvp(r: QueuedRsvp): Promise<boolean> {
   try {
     if (isFeatureRoutedToIcp("events")) {
-      if (r.miniLeaguePlayerId) {
-        // NEEDS-CANISTER: mini-league-player RSVPs have no events_domain
-        // shape (set_rsvp/admin_upsert_rsvp are keyed by account/child, not
-        // mini_league_player_id). Fail the sync rather than silently
-        // writing to Supabase, where ICP users' clients never read it.
-        return false;
-      }
       return withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
-          const { setLiveEventRsvp, adminUpsertLiveRsvp } = await import("@/live/features/events");
-          if (r.childId) {
+          const { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveMiniLeagueRsvp } = await import("@/live/features/events");
+          if (r.miniLeaguePlayerId) {
+            await setLiveMiniLeagueRsvp(ctx, r.eventId, { mini_league_player: r.miniLeaguePlayerId }, r.status);
+          } else if (r.childId) {
             await adminUpsertLiveRsvp(ctx, r.eventId, r.userId, r.status, {
               childId: r.childId,
               notes: r.notes ?? null,

@@ -218,7 +218,7 @@ export default function TeamDetailPage() {
                     name: club.name,
                     is_pro: sub?.is_pro ?? false,
                     sport: club.sport[0] ?? null,
-                    class_mode_enabled: false,
+                    class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, club.id))?.classModeEnabled ?? false,
                     bot_user_id: null,
                   }
                 : null,

@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { buildPublicEoiUrl, slugifyClubName } from "@/lib/eoiUtils";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveSeasonEoiConfig } from "@/live/features/club";
 
 interface Props {
   seasonId: string;
@@ -69,6 +70,43 @@ export function SeasonEoiConfigCard({ seasonId, clubName, season }: Props) {
     setAskPos(season.eoi_ask_position);
   }, [seasonId, season]);
 
+  // ICP: older saves only wrote the private blob. Re-publish the
+  // website-safe copy once per session so the public form works without
+  // the admin having to press Save again.
+  useEffect(() => {
+    if (!season.eoi_enabled || !season.eoi_slug) return;
+    const key = `eoi-public-sync:${seasonId}`;
+    try { if (sessionStorage.getItem(key)) return; } catch { /* ignore */ }
+    void withFeatureBackend("competitions", {
+      supabase: async () => undefined,
+      icp: async (ctx) => {
+        const configJson = JSON.stringify({
+          eoi_enabled: season.eoi_enabled,
+          eoi_slug: season.eoi_slug,
+          eoi_opens_at: season.eoi_opens_at,
+          eoi_closes_at: season.eoi_closes_at,
+          eoi_welcome_message: season.eoi_welcome_message,
+          eoi_thank_you_message: season.eoi_thank_you_message,
+          eoi_thank_you_redirect_url: season.eoi_thank_you_redirect_url,
+          eoi_require_dob: season.eoi_require_dob,
+          eoi_require_gender: season.eoi_require_gender,
+          eoi_ask_preferences: season.eoi_ask_preferences,
+          eoi_ask_availability: season.eoi_ask_availability,
+          eoi_ask_skill_level: season.eoi_ask_skill_level,
+          eoi_ask_position: season.eoi_ask_position,
+        });
+        const { connectLiveClubDomain } = await import("@/live/domains");
+        const { unwrapCandid } = await import("@/live/features/candid");
+        const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+        await unwrapCandid(
+          actor.set_season_public_eoi_config(seasonId, [season.eoi_slug!], configJson),
+          "Sync public form settings",
+        );
+        try { sessionStorage.setItem(key, "1"); } catch { /* ignore */ }
+      },
+    }).catch(() => undefined);
+  }, [seasonId, season]);
+
   const saveMut = useMutation({
     mutationFn: async () =>
       withFeatureBackend("competitions", {
@@ -92,10 +130,36 @@ export function SeasonEoiConfigCard({ seasonId, clubName, season }: Props) {
           const { error } = await supabase.from("seasons").update(payload).eq("id", seasonId);
           if (error) throw error;
         },
-        // NEEDS-CANISTER: EOI configuration fields on `seasons` have no
-        // canister equivalent — competition_domain has no EOI concept.
-        icp: async () => {
-          throw new Error("EOI settings aren't available on this backend yet.");
+        // Stored as an opaque JSON blob via set_season_eoi_config — the
+        // canister has no dedicated EOI columns, so the whole config payload
+        // round-trips through this JSON string.
+        icp: async (ctx) => {
+          const finalSlug = slug.trim() || null;
+          const configJson = JSON.stringify({
+            eoi_enabled: enabled,
+            eoi_slug: finalSlug,
+            eoi_opens_at: opensAt ? new Date(opensAt).toISOString() : null,
+            eoi_closes_at: closesAt ? new Date(closesAt + "T23:59:59").toISOString() : null,
+            eoi_welcome_message: welcome.trim() || null,
+            eoi_thank_you_message: thankYou.trim() || null,
+            eoi_thank_you_redirect_url: redirectUrl.trim() || null,
+            eoi_require_dob: requireDob,
+            eoi_require_gender: requireGender,
+            eoi_ask_preferences: askPrefs,
+            eoi_ask_availability: askAvail,
+            eoi_ask_skill_level: askSkill,
+            eoi_ask_position: askPos,
+          });
+          await setLiveSeasonEoiConfig(ctx, seasonId, configJson);
+          // Website-safe copy for the public form (never includes the
+          // private blob's webhook token).
+          const { connectLiveClubDomain } = await import("@/live/domains");
+          const { unwrapCandid } = await import("@/live/features/candid");
+          const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+          await unwrapCandid(
+            actor.set_season_public_eoi_config(seasonId, finalSlug ? [finalSlug] : [], configJson),
+            "Save public form settings",
+          );
         },
       }),
     onSuccess: () => {

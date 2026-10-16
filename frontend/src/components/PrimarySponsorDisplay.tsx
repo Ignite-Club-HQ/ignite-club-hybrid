@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { SponsorTier, TIER_CONFIG } from "@/lib/sponsorTiers";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listAllLiveSponsors } from "@/live/features/club";
 
 interface Sponsor {
   id: string;
@@ -38,15 +40,33 @@ export function PrimarySponsorDisplay({ sponsorId, variant = "compact", context 
   
   const { data: sponsor, isLoading } = useQuery({
     queryKey: ["sponsor", sponsorId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, website_url, description, tier")
-        .eq("id", sponsorId!)
-        .single();
-      if (error) throw error;
-      return data as Sponsor;
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, website_url, description, tier")
+            .eq("id", sponsorId!)
+            .single();
+          if (error) throw error;
+          return data as Sponsor;
+        },
+        icp: async (ctx) => {
+          // Sponsors live on club_domain; look the id up across the caller's
+          // clubs (the display component only knows the sponsor id).
+          const all = await listAllLiveSponsors(ctx);
+          const row = all.find((s) => s.id === sponsorId);
+          if (!row) throw new Error("Sponsor not found");
+          return {
+            id: row.id,
+            name: row.name,
+            logo_url: row.logo_url[0] ?? null,
+            website_url: row.website_url[0] ?? null,
+            description: row.description[0] ?? null,
+            tier: row.tier && row.tier !== "none" ? (row.tier as SponsorTier) : null,
+          } as Sponsor;
+        },
+      }),
     enabled: !!sponsorId,
     // Sponsors change rarely — cache aggressively to eliminate the ~12k/day
     // duplicate PK lookups this component was generating across mounts.

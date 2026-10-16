@@ -49,6 +49,7 @@ type State =
    clubDmSettings: vec ClubDmSettings;
    clubMemberships: vec ClubMembership;
    competitionAdmins: vec CompetitionAdmin;
+   contentReports: vec ContentReport;
    conversations: vec Conversation;
    dmAttachmentsDisabled: vec principal;
    dmLinks: vec DmLink;
@@ -255,6 +256,12 @@ type Main =
                                            Err: text;
                                            Ok: nat32;
                                          });
+   deliver_scheduled_message: (sender: principal, conversation_id: text,
+    body: text, idempotency_key: text, attachment: opt Attachment,
+    reply_to_id: opt text) -> (variant {
+                                 Err: text;
+                                 Ok: Message;
+                               });
    dm_attachments_disabled: (user: principal) -> (bool) query;
    enable_ai_catch_up_for_all_members: (club_id: text) ->
     (variant {
@@ -294,7 +301,7 @@ type Main =
        Err: text;
        Ok: Message;
      });
-   generate_chat_recap: (conversation_id: text, since_ms: nat64) ->
+   generate_chat_recap: (scope_id: text, since_ms: opt nat64) ->
     (variant {
        Err: text;
        Ok: text;
@@ -390,6 +397,11 @@ type Main =
            id: text;
            member: principal;
          });
+   list_content_reports: (status: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec ContentReport;
+     }) query;
    list_deleted_groups: () ->
     (variant {
        Err: text;
@@ -469,6 +481,17 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    messages_since: (conversation_id: text, since_ms: nat64) ->
     (variant {
        Err: text;
@@ -479,6 +502,16 @@ type Main =
     (variant {
        Err: text;
        Ok: nat64;
+     }) query;
+   open_conversation: (conversation_id: text, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          page: MessagePage;
+          pins: opt vec PinnedMessage;
+          reactions: vec Reaction;
+        };
      }) query;
    pin_message: (conversation_id: text, message_id: text) ->
     (variant {
@@ -518,6 +551,11 @@ type Main =
        Err: text;
        Ok;
      });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    removeBulkAccessPrincipal: ("principal": principal) ->
     (variant {
        Err: text;
@@ -537,10 +575,23 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   resolve_content_report: (id: text, status: text) ->
+    (variant {
+       Err: text;
+       Ok: ContentReport;
+     });
    restore_group: (conversation_id: text) -> (variant {
                                                 Err: text;
                                                 Ok;
                                               });
+   run_chat_photo_gallery_reminders: (now_ms: nat64, window_start_hours:
+    nat32, window_end_hours: nat32, cooldown_days: nat32) ->
+    (ChatPhotoReminderResult);
+   search_messages: (conversation_id: text, needle: text, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok: vec Message;
+     }) query;
    send_message: (conversation_id: text, body: text, idempotency_key: 
     text, attachment: opt Attachment, reply_to_id: opt text) ->
     (variant {
@@ -630,6 +681,17 @@ type Main =
                                                     Err: text;
                                                     Ok;
                                                   });
+   submit_content_report: (subject_kind: text, subject_id: text,
+    conversation_id: opt text, reason: text, details: opt text) ->
+    (variant {
+       Err: text;
+       Ok: ContentReport;
+     });
+   summarize_transcript: (scope_id: text, transcript: text) ->
+    (variant {
+       Err: text;
+       Ok: text;
+     });
    toggle_reaction: (message_id: text, emoji: text) ->
     (variant {
        Err: text;
@@ -681,6 +743,14 @@ type Main =
        Err: text;
        Ok: GroupMetadata;
      });
+   /// Public: aggregate record counts (shown in admin settings). Counts only —
+   /// no record contents, so no PII is exposed.
+   usage_stats: () ->
+    (record {
+       conversations: nat;
+       messages: nat;
+       scheduled_messages: nat;
+     }) query;
    vote_poll: (poll_id: text, option_index: nat32) ->
     (variant {
        Err: text;
@@ -775,6 +845,18 @@ type Conversation =
    participants: vec principal;
    team_id: opt text;
  };
+type ContentReport = 
+ record {
+   conversation_id: opt text;
+   created_at_ms: nat64;
+   details: opt text;
+   id: text;
+   reason: text;
+   reporter: principal;
+   status: text;
+   subject_id: text;
+   subject_kind: text;
+ };
 type CompetitionAdmin = 
  record {
    conversation_id: text;
@@ -804,6 +886,17 @@ type ClientKey =
  record {
    client_nonce: nat64;
    client_principal: ClientPrincipal;
+ };
+type ChatPhotoReminderRunResult = 
+ record {
+   posted: nat32;
+   scanned: nat32;
+   skipped: nat32;
+ };
+type ChatPhotoReminderResult = 
+ variant {
+   Err: text;
+   Ok: ChatPhotoReminderRunResult;
  };
 type CanisterWsOpenResult = 
  variant {

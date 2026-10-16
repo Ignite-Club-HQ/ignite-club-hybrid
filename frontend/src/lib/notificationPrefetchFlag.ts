@@ -25,6 +25,12 @@ export function isNotificationPrefetchEnabled(): boolean {
 
 async function refresh(): Promise<void> {
   try {
+    if (resolveAuthBackend() === "icp") {
+      const { readLiveAppConfig } = await import("@/live/appConfig");
+      const raw = await readLiveAppConfig("notification_prefetch_enabled");
+      if (raw != null) cachedEnabled = raw.trim() !== "false" && raw.trim() !== '"false"';
+      return;
+    }
     const { data } = await supabase
       .from("app_settings")
       .select("value")

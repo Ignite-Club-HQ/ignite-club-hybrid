@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Cookie, X } from "lucide-react";
+import { LEGAL_URLS } from "@/lib/legalLinks";
 
 const COOKIE_CONSENT_KEY = "cookie-consent";
 
@@ -42,7 +43,7 @@ export function CookieConsentBanner() {
           <p className="text-sm text-muted-foreground">
             We use cookies to enhance your experience. By continuing to visit this site, you agree to our use of cookies.{" "}
             <a 
-              href="https://reference.invalid" 
+              href={LEGAL_URLS.privacy}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline font-medium"

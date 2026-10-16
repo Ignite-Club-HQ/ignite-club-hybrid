@@ -26,6 +26,7 @@ import {
   cacheClubBackendHint,
   getBackendRoutingConfig,
   readCachedClubBackendHint,
+  deriveClubBackendsFromHomeCountries,
   resolveBackendForUser,
   resolveClubBackendOverride,
   type BackendRoutingConfig,
@@ -162,14 +163,25 @@ describe("per-club backend overrides", () => {
     expect(resolveBackendForUser(icpConfig, "US", [], true)).toBe("icp");
   });
 
-  it("round-trips the cached club backend hint", () => {
+  it("ignores and clears a hint from the retired per-club pins", () => {
+    localStorage.setItem(CLUB_BACKEND_HINT_KEY, "icp");
     expect(readCachedClubBackendHint()).toBeNull();
+    expect(localStorage.getItem(CLUB_BACKEND_HINT_KEY)).toBeNull();
+  });
+
+  it("remembers the backend required by the user's club home countries", () => {
     cacheClubBackendHint("icp");
     expect(readCachedClubBackendHint()).toBe("icp");
-    expect(localStorage.getItem(CLUB_BACKEND_HINT_KEY)).toBe("icp");
-    cacheClubBackendHint("supabase");
-    expect(readCachedClubBackendHint()).toBe("supabase");
     cacheClubBackendHint(null);
     expect(readCachedClubBackendHint()).toBeNull();
+  });
+
+  it("routes a club by its home country: US club -> ICP, AU club -> Supabase", () => {
+    const cfg = { ...config, defaultBackend: "supabase" as const, countryRules: { US: "icp" as const, AU: "supabase" as const }, clubBackendOverrides: {} };
+    const pins = deriveClubBackendsFromHomeCountries(cfg, { us: "US", au: "AU", nz: "NZ", none: null }, true);
+    expect(pins).toEqual({ us: "icp", au: "supabase", nz: "supabase" });
+    expect(resolveBackendForUser({ ...cfg, clubBackendOverrides: pins }, "AU", ["us"], true)).toBe("icp");
+    expect(resolveBackendForUser({ ...cfg, clubBackendOverrides: pins }, "US", ["au"], true)).toBe("supabase");
+    expect(resolveBackendForUser({ ...cfg, clubBackendOverrides: pins }, "AU", ["us", "au"], true)).toBe("supabase");
   });
 });

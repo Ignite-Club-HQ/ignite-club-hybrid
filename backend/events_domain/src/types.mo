@@ -204,6 +204,59 @@ module {
   // list_child_team_assignments can authorise on club membership.
   public type ChildTeamAssignment = { child_id : Text; team_id : Text; club_id : Text };
 
+  // ---- Favourite event titles / saved locations / training defaults / RSVP created_at (events UX extras) ----
+  // Per-caller shortlist of event titles for quick reuse when creating events.
+  public type FavouriteEventTitle = { account_id : Text; title : Text };
+  // Per-caller saved addresses for the event location autocomplete.
+  public type SavedLocation = { id : Text; account_id : Text; location_label : Text; address : Text; lat : Float; lng : Float; created_at_ms : Nat64 };
+  // Per (caller, club, team, child) default RSVP applied to new training events in the UI.
+  // child_id = null means the caller's own default (not RSVPing on behalf of a child).
+  public type TrainingDefault = { account_id : Text; club_id : Text; team_id : Text; child_id : ?Text; default_rsvp : Text; updated_at_ms : Nat64 };
+  // First-RSVP timestamp per (event, account), preserved across later status
+  // changes (set_rsvp/admin_upsert_rsvp overwrite state but not this).
+  public type RsvpCreatedAt = { event_id : Text; account_id : Text; created_at_ms : Nat64 };
+
+  // ---- Match captains / goalkeepers / player stats report (events_domain extras) ----
+  // Per-match captain/vice-captain assignment. ref_kind distinguishes an
+  // account (member) ref from a child ref, same "account" | "child"
+  // convention as RsvpSubject's #account variant plus the nameless Child
+  // records above (no PII stored here, only opaque ids).
+  public type MatchCaptainRole = { #captain; #vice };
+  public type MatchCaptainAssignment = { event_id : Text; ref_kind : Text; ref_id : Text; role : Text; assigned_by : Principal; updated_at_ms : Nat64 };
+  // Per-match goalkeeper assignment, scoped to a period/quarter label (free
+  // text so it fits whichever sport's period convention the client uses,
+  // e.g. "1", "2", "Q1"). Multiple rows per event allow a GK rotation.
+  public type MatchGoalkeeperAssignment = { event_id : Text; ref_kind : Text; ref_id : Text; period : Text; assigned_by : Principal; updated_at_ms : Nat64 };
+  // One aggregated row per player (ref_kind/ref_id) returned by
+  // get_player_stats_report: MVP counts come from existing GameResult rows,
+  // captain/vice counts from MatchCaptainAssignment, goalkeeper counts from
+  // MatchGoalkeeperAssignment, all folded over events in the requested
+  // club/team + date range.
+  public type PlayerStatRow = { ref_kind : Text; ref_id : Text; mvp_count : Nat32; captain_count : Nat32; vice_count : Nat32; goalkeeper_count : Nat32 };
+
+  // ---- Live match timer (events_domain extras, migration 20261016_000000) ----
+  // Server-anchored per-event pitch timer, mirroring the shape the Supabase
+  // `pitch-timer-event`/`pitch-timer-read` edge functions maintain (see
+  // frontend/src/lib/serverTimer.ts `ServerTimer`). Keyed by event_id — one
+  // timer per event, independent of which team board is viewing it.
+  // Timestamps are canister-native Nat64 ms (unlike the Supabase ISO-string
+  // columns); the frontend ICP wrapper converts to/from ISO strings so the
+  // existing `ServerTimer` consumers are unaffected.
+  public type EventTimer = {
+    event_id : Text;
+    schema_version : Nat8;
+    current_half : Nat8;
+    minutes_per_half : Nat16;
+    half_started_at_ms : ?Nat64;
+    half_paused_at_ms : ?Nat64;
+    accumulated_pause_ms : Nat64;
+    is_running : Bool;
+    is_game_finished : Bool;
+    half_ended_at_ms : ?Nat64;
+    last_event_at_ms : Nat64;
+    updated_by : Principal;
+  };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];
@@ -242,4 +295,12 @@ module {
     home_team_name : ?Text;
     away_team_name : ?Text;
   };
+
+  // ---- PlayHQ team fixture import (playhq-materialise-team-events parity) ----
+  public type PlayHQTeamSync = {
+    club_id : Text; team_id : Text; competition_id : Text; playhq_team_id : Text;
+    auto : Bool; updated_by : Principal; last_synced_at_ms : ?Nat64; last_error : ?Text;
+  };
+  public type PlayHQEventLink = { event_id : Text; team_id : Text; playhq_game_id : Text };
+  public type PlayHQImportResult = { created : Nat32; updated : Nat32; cancelled : Nat32 };
 }

@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Ticket, CreditCard, MessageSquare, UserCog, FileArchive, BarChart3, Megaphone, Bell, Settings, FileText, Smartphone, Send, Activity, KeyRound, Sparkles, Paperclip, TrendingUp, Image as ImageIcon, Bug, RotateCcw, Globe2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,151 +12,16 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
+// One admin page for both backends: every check below routes through
+// withFeatureBackend, and payment/password tiles are hidden in ICP mode
+// (those tools stay off-chain by design).
 export default function AdminPage() {
-  if (resolveAuthBackend() === "icp") {
-    return <IcpAdminPage />;
-  }
   return <SupabaseAdminPage />;
-}
-
-// ICP-mode admin landing. Admin rights come from the canisters via
-// useIsAppAdmin (insights_domain is_app_admin), so an Internet Identity app
-// admin sees the real tooling. Only tools whose pages work against the live
-// canisters are listed — billing, AI, backups, temp-password and
-// native-storage tooling are Supabase-only (NEEDS-CANISTER), Active
-// Games has no canister holding live coaching-board state yet, and the
-// App Settings page shows only the canister-backed global settings.
-function IcpAdminPage() {
-  const navigate = useNavigate();
-  const { isAppAdmin, isLoading } = useIsAppAdmin();
-
-  if (isLoading) {
-    return <PageLoading />;
-  }
-
-  if (!isAppAdmin) {
-    return (
-      <div className="py-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-2xl font-bold">Admin</h1>
-        </div>
-        <div className="flex-1 flex items-center justify-center p-4">
-          <p className="text-muted-foreground">Access denied. Admin role required.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="py-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Admin</h1>
-          <p className="text-sm text-muted-foreground">Management tools and settings</p>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">App Administration</CardTitle>
-          <CardDescription>Global app management tools</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <AdminMenuItem
-            icon={UserCog}
-            label="User Management"
-            description="Manage user accounts and roles"
-            onClick={() => navigate("/admin/users")}
-          />
-          <AdminMenuItem
-            icon={MessageSquare}
-            label="Manage Feedback"
-            description="View and respond to user feedback"
-            onClick={() => navigate("/admin/feedback")}
-          />
-          <AdminMenuItem
-            icon={BarChart3}
-            label="Sponsor Analytics"
-            description="View sponsor performance metrics"
-            onClick={() => navigate("/admin/sponsor-analytics")}
-          />
-          <AdminMenuItem
-            icon={Bell}
-            label="Notification Preferences"
-            description="Global notification settings"
-            onClick={() => navigate("/admin/notification-preferences")}
-          />
-          <AdminMenuItem
-            icon={Bug}
-            label="Chat Virt Debug"
-            description="Capture row-height drift and scroll jolts in any chat thread"
-            onClick={() => navigate("/admin/chat-virt-debug")}
-          />
-          <AdminMenuItem
-            icon={RotateCcw}
-            label="Deleted Chats"
-            description="Restore or permanently delete archived group chats"
-            onClick={() => navigate("/admin/deleted-chats")}
-          />
-          <AdminMenuItem
-            icon={Paperclip}
-            label="DM Attachments"
-            description="Disable DM attachments by club or by user"
-            onClick={() => navigate("/admin/dm-attachments")}
-          />
-          <AdminMenuItem
-            icon={ImageIcon}
-            label="Manage Ads"
-            description="Create and manage in-app advertisements"
-            onClick={() => navigate("/admin/ads")}
-          />
-          <AdminMenuItem
-            icon={Globe2}
-            label="Infrastructure / Placement Settings"
-            description="ICP canisters, default backend, and per-country eligibility"
-            onClick={() => navigate("/admin/placement-settings")}
-          />
-          <AdminMenuItem
-            icon={Settings}
-            label="App Settings"
-            description="Club creation lock, chat performance switches, welcome message"
-            onClick={() => navigate("/admin/settings")}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Analytics</CardTitle>
-          <CardDescription>Performance and usage analytics</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <AdminMenuItem
-            icon={TrendingUp}
-            label="Engagement"
-            description="Activity trends per club"
-            onClick={() => navigate("/admin/engagement")}
-          />
-          <AdminMenuItem
-            icon={Activity}
-            label="Online Users"
-            description="See who is currently active in the app"
-            onClick={() => navigate("/admin/online-users")}
-          />
-        </CardContent>
-      </Card>
-    </div>
-  );
 }
 
 function SupabaseAdminPage() {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
 
   // Check if user is app admin
@@ -164,15 +30,24 @@ function SupabaseAdminPage() {
   // Check if user is team admin or coach (for player stats access)
   const { data: teamAdminCoachTeamIds = [] } = useQuery({
     queryKey: ["team-admin-coach-team-ids", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("team_id")
-        .eq("user_id", user!.id)
-        .in("role", ["team_admin", "coach"])
-        .not("team_id", "is", null);
-      return ((data || []).map((r: any) => r.team_id).filter(Boolean)) as string[];
-    },
+    queryFn: async () => withFeatureBackend<string[]>("membership", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("team_id")
+          .eq("user_id", user!.id)
+          .in("role", ["team_admin", "coach"])
+          .not("team_id", "is", null);
+        return ((data || []).map((r: any) => r.team_id).filter(Boolean)) as string[];
+      },
+      icp: async (ctx) => {
+        const { myLiveRoleGrants } = await import("@/live/features/club");
+        const grants = await myLiveRoleGrants(ctx);
+        return Array.from(new Set(grants
+          .filter((g) => (g.role === "team_admin" || g.role === "coach") && g.team.length > 0)
+          .map((g) => g.team[0] as string)));
+      },
+    }),
     enabled: !!user,
   });
   const isTeamAdminOrCoach = teamAdminCoachTeamIds.length > 0;
@@ -183,7 +58,21 @@ function SupabaseAdminPage() {
     queryKey: ["has-pro-football-for-team-admin-teams", user?.id, teamAdminCoachTeamIds],
     enabled: !!user && teamAdminCoachTeamIds.length > 0,
     staleTime: 60_000,
-    queryFn: async () => {
+    queryFn: async () => withFeatureBackend<boolean>("membership", {
+      icp: async (ctx) => {
+        const { getLiveTeam, getLiveClubSubscription } = await import("@/live/features/club");
+        const teams = await Promise.all(teamAdminCoachTeamIds.map((id) => getLiveTeam(ctx, id).catch(() => [] as const)));
+        const clubIds = Array.from(new Set(teams.map((t: any) => t?.[0]?.club_id).filter(Boolean))) as string[];
+        const subs = await Promise.all(clubIds.map((id) => getLiveClubSubscription(ctx, id).catch(() => null)));
+        const nowMs = Date.now();
+        return subs.some((s: any) => {
+          if (!s) return false;
+          const on = Boolean(s.is_pro_football) || Boolean(s.admin_pro_football_override?.[0] ?? s.admin_pro_football_override === true);
+          const exp = Array.isArray(s.expires_at_ms) ? s.expires_at_ms[0] : s.expires_at_ms;
+          return on && (exp == null || Number(exp) > nowMs);
+        });
+      },
+      supabase: async () => {
       const { data: teams } = await supabase
         .from("teams")
         .select("club_id")
@@ -199,21 +88,31 @@ function SupabaseAdminPage() {
           (s.is_pro_football || s.admin_pro_football_override) &&
           (!s.expires_at || new Date(s.expires_at) > new Date()),
       );
-    },
+      },
+    }),
   });
 
   // Check if user is club admin (for club-scoped tools like restoring deleted chats)
   const { data: clubAdminClubIds = [] } = useQuery({
     queryKey: ["club-admin-club-ids", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("club_id")
-        .eq("user_id", user!.id)
-        .eq("role", "club_admin")
-        .not("club_id", "is", null);
-      return (data || []).map((r: any) => r.club_id).filter(Boolean) as string[];
-    },
+    queryFn: async () => withFeatureBackend<string[]>("membership", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("club_id")
+          .eq("user_id", user!.id)
+          .eq("role", "club_admin")
+          .not("club_id", "is", null);
+        return (data || []).map((r: any) => r.club_id).filter(Boolean) as string[];
+      },
+      icp: async (ctx) => {
+        const { myLiveRoleGrants } = await import("@/live/features/club");
+        const grants = await myLiveRoleGrants(ctx);
+        return Array.from(new Set(grants
+          .filter((g) => g.role === "club_admin" && g.club.length > 0)
+          .map((g) => g.club[0] as string)));
+      },
+    }),
     enabled: !!user,
   });
   const isClubAdmin = clubAdminClubIds.length > 0;
@@ -298,6 +197,7 @@ function SupabaseAdminPage() {
             <CardDescription>Global app management tools</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+            {!isIcp && (<>
             <AdminMenuItem
               icon={Ticket}
               label="Manage Promo Codes"
@@ -310,6 +210,7 @@ function SupabaseAdminPage() {
               description="Configure payment settings"
               onClick={() => navigate("/admin/stripe")}
             />
+            </>)}
             <AdminMenuItem
               icon={MessageSquare}
               label="Manage Feedback"
@@ -322,12 +223,14 @@ function SupabaseAdminPage() {
               description="Manage user accounts and roles"
               onClick={() => navigate("/admin/users")}
             />
+            {!isIcp && (<>
             <AdminMenuItem
               icon={KeyRound}
               label="Set Temp Password"
               description="Reset password for a locked-out user"
               onClick={() => navigate("/admin/temp-password")}
             />
+            </>)}
             <AdminMenuItem
               icon={FileArchive}
               label="Club Backups"
@@ -370,12 +273,14 @@ function SupabaseAdminPage() {
               description="Enable AI Chat Recap across Pro clubs (all or selected)"
               onClick={() => navigate("/admin/ai-catch-up")}
             />
+            {!isIcp && (<>
             <AdminMenuItem
               icon={Smartphone}
               label="AdMob Settings"
               description="Configure Google AdMob for native apps"
               onClick={() => navigate("/admin/admob")}
             />
+            </>)}
             <AdminMenuItem
               icon={Send}
               label="Send Update Reminder"
@@ -411,6 +316,18 @@ function SupabaseAdminPage() {
               label="ICP LLM Test"
               description="Test LLM inference via the Internet Computer"
               onClick={() => navigate("/admin/icp-llm-test")}
+            />
+            <AdminMenuItem
+              icon={Globe2}
+              label="On-chain Data"
+              description="Browse clubs, teams, members, events, news and sponsors stored on the canisters"
+              onClick={() => navigate("/admin/icp-data")}
+            />
+            <AdminMenuItem
+              icon={Globe2}
+              label="Canister Health"
+              description="Live cycle balances, burn rate and days remaining for every canister"
+              onClick={() => navigate("/admin/icp-health")}
             />
           </CardContent>
         </Card>

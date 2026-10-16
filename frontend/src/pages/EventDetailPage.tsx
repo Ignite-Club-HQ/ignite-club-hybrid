@@ -1,3 +1,4 @@
+import type { Json } from "@/integrations/supabase/types";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDeleteEvent } from "@/hooks/useDeleteEvent";
@@ -76,15 +77,18 @@ import {
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   getLiveEventRoster,
   getLiveEventRosterDetailed,
   listLiveDuties,
+  listLiveOpenDuties,
   getLiveMyChildren,
   getLiveMyChildTeamAssignments,
   listLiveChildTeamAssignments,
   isLiveTeamMember,
   checkLiveEventMembership,
+  getLiveCoachNote,
 } from "@/live/features/events";
 import { getLiveMyRoleGrants, listLiveRoleGrants } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
@@ -171,10 +175,23 @@ export default function EventDetailPage() {
   const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
   const { data: recentReminderMap } = useQuery({
     queryKey: eventKeys.recentReminders(id),
-    enabled: !!id && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!id && !useIcpLab,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
     queryFn: async () => {
+      if (isIcpAuthBackend) {
+        const sinceMs = Date.now() - REMINDER_COOLDOWN_MS;
+        const log = await withFeatureBackend("events", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveReminders(ctx, id!) as unknown as Promise<any[]>,
+        }).catch(() => [] as any[]);
+        const map = new Map<string, string>();
+        for (const r of [...log].sort((a, b) => Number(b.sent_at_ms) - Number(a.sent_at_ms))) {
+          const t = Number(r.sent_at_ms);
+          if (t >= sinceMs && !map.has(String(r.recipient))) map.set(String(r.recipient), new Date(t).toISOString());
+        }
+        return map;
+      }
       const since = new Date(Date.now() - REMINDER_COOLDOWN_MS).toISOString();
       const { data, error } = await supabase
         .from("notifications")
@@ -233,6 +250,29 @@ export default function EventDetailPage() {
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
+  });
+
+  // ICP event mapping: coach notes live on events_domain (get_coach_note),
+  // not on the canister Event record toEventDetailShape() maps — fetch
+  // separately and fold into the Supabase-shaped fields EventNoteSection reads.
+  const isIcpEventsRouted = isFeatureRoutedToIcp("events");
+  const { data: icpCoachNoteForEvent } = useQuery({
+    queryKey: ["event-detail-coach-note", id],
+    enabled: isIcpEventsRouted && !!id,
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const result = await getLiveCoachNote(ctx, id!);
+          const raw = result && result.length ? result[0] : null;
+          if (!raw) return null;
+          return {
+            coach_note: raw.note,
+            coach_note_author: raw.updated_by.toText(),
+            coach_note_updated_at: new Date(Number(raw.updated_at_ms)).toISOString(),
+          };
+        },
+      }),
   });
 
   // Watchdog: after an Android WebView background freeze the event fetch can
@@ -540,7 +580,10 @@ export default function EventDetailPage() {
           // completed, event_id } — no `id`/`name`/`assigned_to`/`status`
           // fields. Map it into the Supabase-shaped duty row the rest of the
           // page expects rather than casting onto a mismatched shape.
-          const rows = await listLiveDuties(ctx, id!);
+          const [rows, openDuties] = await Promise.all([
+            listLiveDuties(ctx, id!),
+            listLiveOpenDuties(ctx, id!).catch(() => [] as any[]),
+          ]);
           const assigneeIds = Array.from(new Set(rows.map((d) => d.account_id).filter(Boolean)));
           const profiles = assigneeIds.length > 0 ? await listLiveProfilesByIds(ctx, assigneeIds) : [];
           const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
@@ -554,7 +597,19 @@ export default function EventDetailPage() {
               status: d.completed ? "completed" : "open",
               profiles: p ? { display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null } : null,
             };
-          });
+          }).concat(
+            // Newly added (unclaimed) duties live on the open-duty board.
+            (openDuties as any[])
+              .filter((od) => !(Array.isArray(od.claimed_by) ? od.claimed_by[0] : od.claimed_by))
+              .map((od) => ({
+                id: `open:${od.id}`,
+                event_id: od.event_id,
+                name: od.duty,
+                assigned_to: null,
+                status: "open",
+                profiles: null,
+              })),
+          );
         },
       });
     },
@@ -787,16 +842,36 @@ export default function EventDetailPage() {
   // Check if a game is currently in progress (for read-only spectator mode)
   const { data: activeGameSummary } = useQuery({
     queryKey: ["active-game-summary", id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("game_summaries")
-        .select("id, is_active, pitch_state, timer_state")
-        .eq("event_id", id!)
-        .eq("is_active", true)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && !isIcpAuthBackend && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
+    queryFn: async () => withFeatureBackend("events", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("game_summaries")
+          .select("id, is_active, pitch_state, timer_state")
+          .eq("event_id", id!)
+          .eq("is_active", true)
+          .maybeSingle();
+        return data;
+      },
+      // ICP: the on-chain match timer is the "game in progress" signal.
+      icp: async (ctx) => {
+        const { getLiveEventTimer } = await import("@/live/features/events");
+        const { icpTimerToServerTimer } = await import("@/lib/serverTimer");
+        const raw = await getLiveEventTimer(ctx, id!);
+        const timer = Array.isArray(raw) ? raw[0] : raw;
+        if (!timer) return null;
+        const state = icpTimerToServerTimer(timer as never);
+        if (!state.half_started_at || state.is_game_finished) return null;
+        // Pitch positions come from the coach's on-chain active-game sync.
+        let pitchState: Json = null;
+        try {
+          const { getLiveActiveGame } = await import("@/live/features/events");
+          const game = (await getLiveActiveGame(ctx, event!.team_id!))[0];
+          if (game?.pitch_state_json) pitchState = JSON.parse(game.pitch_state_json) as Json;
+        } catch { /* timer-only view */ }
+        return { id: id!, is_active: true, pitch_state: pitchState, timer_state: state as unknown as Json };
+      },
+    }),
+    enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
     refetchInterval: 30000, // Poll every 30s to detect game start
   });
 
@@ -1547,8 +1622,16 @@ export default function EventDetailPage() {
   const isGameEvent = event?.type === "game" && !!event?.team_id;
   const { data: matchCaptainRow } = useQuery({
     queryKey: ["match-captain", id, "marker"],
-    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!id && isGameEvent && !useIcpLab,
     queryFn: async () => {
+      if (isIcpAuthBackend) {
+        const rows = await withFeatureBackend("events", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchCaptains(ctx, id!) as Promise<any[]>,
+        }).catch(() => [] as any[]);
+        const c = rows.find((r) => r.role === "captain");
+        return c ? { user_id: c.ref_kind === "child" ? null : c.ref_id, child_id: c.ref_kind === "child" ? c.ref_id : null } : null;
+      }
       const { data, error } = await supabase
         .from("match_captains")
         .select("user_id, child_id")
@@ -1560,8 +1643,17 @@ export default function EventDetailPage() {
   });
   const { data: potmRow } = useQuery({
     queryKey: ["player-of-match", id, "marker"],
-    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!id && isGameEvent && !useIcpLab,
     queryFn: async () => {
+      if (isIcpAuthBackend) {
+        const res = await withFeatureBackend("events", {
+          supabase: async () => null as any,
+          icp: async (ctx) => (await import("@/live/features/events")).getLiveGameResult(ctx, id!) as Promise<any>,
+        }).catch(() => null);
+        const r = Array.isArray(res) ? res[0] : res;
+        const mvp = r ? (Array.isArray(r.mvp_player_id) ? r.mvp_player_id[0] : r.mvp_player_id) : null;
+        return mvp ? { user_id: mvp as string, child_id: mvp as string } : null;
+      }
       const { data, error } = await supabase
         .from("player_of_match")
         .select("user_id, child_id")
@@ -1573,8 +1665,15 @@ export default function EventDetailPage() {
   });
   const { data: goalkeeperRows = [] } = useQuery({
     queryKey: ["match-goalkeepers", id],
-    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!id && isGameEvent && !useIcpLab,
     queryFn: async () => {
+      if (isIcpAuthBackend) {
+        const rows = await withFeatureBackend("events", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchGoalkeepers(ctx, id!) as Promise<any[]>,
+        }).catch(() => [] as any[]);
+        return rows.map((g) => ({ user_id: g.ref_kind === "child" ? null : g.ref_id, child_id: g.ref_kind === "child" ? g.ref_id : null }));
+      }
       const { data, error } = await supabase
         .from("match_goalkeepers" as any)
         .select("user_id, child_id")
@@ -1873,9 +1972,9 @@ export default function EventDetailPage() {
       {/* Event Note (coach/admin pinned info, notifies attendees) */}
       <EventNoteSection
         eventId={id!}
-        note={(event as any).coach_note}
-        noteUpdatedAt={(event as any).coach_note_updated_at}
-        noteAuthor={(event as any).coach_note_author}
+        note={icpCoachNoteForEvent ? icpCoachNoteForEvent.coach_note : (event as any).coach_note}
+        noteUpdatedAt={icpCoachNoteForEvent ? icpCoachNoteForEvent.coach_note_updated_at : (event as any).coach_note_updated_at}
+        noteAuthor={icpCoachNoteForEvent ? icpCoachNoteForEvent.coach_note_author : (event as any).coach_note_author}
         canEdit={canManageEvent}
       />
 

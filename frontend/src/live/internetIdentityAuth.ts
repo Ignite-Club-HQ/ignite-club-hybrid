@@ -82,12 +82,75 @@ const II_ALTERNATIVE_ORIGINS = new Set([
   "https://project--9e0ff3f7-539e-4a59-aa6d-a6d3fe4c7c5e-dev.lovable.app",
 ]);
 
+// The ICP frontend canister keeps accounts separate from the Lovable sites
+// (user decision 2026-10-07), but ALL of the canister's own addresses
+// (<id>.icp.net, <id>.raw.icp0.io, <id>.ic0.app, ...) sign in as
+// https://<id>.icp0.io so one person gets one identity whichever address
+// they open. The canister lists them in its /.well-known/ii-alternative-origins
+// (written by scripts/prepare-canister-dist.mjs).
+const CANISTER_ALIAS_HOST = /^([a-z0-9]{5}(?:-[a-z0-9]{5}){3}-cai)\.(?:raw\.icp0\.io|icp\.net|raw\.icp\.net|ic0\.app|raw\.ic0\.app)$/;
+
+export function resolveDerivationOriginFor(origin: string): string | undefined {
+  if (II_ALTERNATIVE_ORIGINS.has(origin)) return CANONICAL_II_ORIGIN;
+  let host: string;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return undefined;
+    host = url.hostname;
+  } catch {
+    return undefined;
+  }
+  const match = CANISTER_ALIAS_HOST.exec(host);
+  return match ? `https://${match[1]}.icp0.io` : undefined;
+}
+
 function resolveDerivationOrigin(): string | undefined {
   if (typeof window === "undefined") return undefined;
-  return II_ALTERNATIVE_ORIGINS.has(window.location.origin) ? CANONICAL_II_ORIGIN : undefined;
+  return resolveDerivationOriginFor(window.location.origin);
+}
+
+/**
+ * Phones sign in by sending the whole page to Internet Identity and back
+ * (redirect), not through a second tab. Why: on Android/iOS the second tab
+ * pushes the app's tab into the background, the phone pauses it, and Internet
+ * Identity then shows "Connection closed" — on almost every sign-in on a busy
+ * phone. Only on the frontend canister's own addresses, because the return
+ * address must be listed in that site's /.well-known/ii-auth-callbacks
+ * (written by scripts/prepare-canister-dist.mjs).
+ */
+export const II_REDIRECT_CALLBACK_PATH = "/auth";
+const II_REDIRECT_PENDING_KEY = "ignite_ii_redirect_pending";
+const II_REDIRECT_MAX_AGE_MS = 10 * 60 * 1000;
+const CANISTER_HOST = /^[a-z0-9]{5}(?:-[a-z0-9]{5}){3}-cai\.(?:icp0\.io|raw\.icp0\.io|icp\.net|raw\.icp\.net|ic0\.app|raw\.ic0\.app)$/;
+
+export function shouldUseRedirectSignIn(origin: string, userAgent: string, maxTouchPoints = 0): boolean {
+  let host: string;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return false;
+    host = url.hostname;
+  } catch {
+    return false;
+  }
+  if (!CANISTER_HOST.test(host)) return false;
+  // iPadOS reports a desktop Mac user agent; touch points give it away.
+  const iPadOs = /Macintosh/.test(userAgent) && maxTouchPoints > 1;
+  return iPadOs || /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+}
+
+function prefersRedirectSignIn(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  return shouldUseRedirectSignIn(window.location.origin, navigator.userAgent, navigator.maxTouchPoints ?? 0);
 }
 
 async function createDefaultAuthClient(target: IcpTargetConfig): Promise<InternetIdentityAuthClient> {
+  // Phone app: built-in copy runs from a private origin, so sign in through
+  // the canister-hosted bridge in the system browser (same account as web).
+  const { Capacitor } = await import("@capacitor/core");
+  if (Capacitor.isNativePlatform()) {
+    const { createNativeAuthClient } = await import("./nativeInternetIdentity");
+    return createNativeAuthClient();
+  }
   const provider = resolveInternetIdentityProvider(target);
   const derivationOrigin = resolveDerivationOrigin();
   const { AuthClient } = await import("@icp-sdk/auth/client");
@@ -97,8 +160,101 @@ async function createDefaultAuthClient(target: IcpTargetConfig): Promise<Interne
     agentOptions: {
       host: target.host,
     },
-    transport: "window",
+    transport: prefersRedirectSignIn() ? "redirect" : "window",
   }) as unknown as InternetIdentityAuthClient;
+}
+
+function readRedirectPending(): boolean {
+  try {
+    const raw = sessionStorage.getItem(II_REDIRECT_PENDING_KEY);
+    if (!raw) return false;
+    return Date.now() - Number(raw) < II_REDIRECT_MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
+function clearRedirectPending(): void {
+  try { sessionStorage.removeItem(II_REDIRECT_PENDING_KEY); } catch { /* ignore */ }
+}
+
+/**
+ * True on the page load where Internet Identity has just sent the member
+ * back after a phone (redirect) sign-in.
+ */
+export function isInternetIdentityRedirectReturn(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.location.pathname !== II_REDIRECT_CALLBACK_PATH) return false;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  return params.has("message") && params.has("state") && readRedirectPending();
+}
+
+/**
+ * Finishes a phone (redirect) sign-in on the return load, before the app
+ * renders (the sign-in reply is in the address and must be read before the
+ * router touches it). On success the sign-in library stores the session and
+ * reloads the page the member started from, where the normal resume picks
+ * it up. Never starts a new sign-in.
+ */
+export async function completeInternetIdentityRedirect(): Promise<void> {
+  if (!isInternetIdentityRedirectReturn()) return;
+  // Cleared first so a failure can never loop the member back to II.
+  clearRedirectPending();
+  try {
+    const target = getActiveIcpTarget();
+    activeClient?.dispose?.();
+    activeClient = await createDefaultAuthClient(target);
+    activeTarget = target;
+    // Same call shape as the first leg, so the library replays its journal
+    // (the real return address was saved on that leg).
+    await activeClient.signIn({ returnTo: II_REDIRECT_CALLBACK_PATH });
+  } catch (error) {
+    console.warn("[InternetIdentity] Could not finish the phone sign-in:", error);
+  }
+}
+
+async function startRedirectSignIn(target: IcpTargetConfig, returnTo?: string): Promise<never> {
+  // The return address must exactly match the allow-list entry, and the
+  // library takes it from the page address when the client is built.
+  if (window.location.pathname !== II_REDIRECT_CALLBACK_PATH) {
+    window.history.replaceState(window.history.state, "", `${II_REDIRECT_CALLBACK_PATH}${window.location.search}`);
+  }
+  activeClient?.dispose?.();
+  activeClient = await createDefaultAuthClient(target);
+  activeTarget = target;
+  try { sessionStorage.setItem(II_REDIRECT_PENDING_KEY, String(Date.now())); } catch { /* ignore */ }
+  try {
+    await activeClient.signIn({ returnTo: returnTo || II_REDIRECT_CALLBACK_PATH });
+  } catch (error) {
+    clearRedirectPending();
+    throw error;
+  }
+  // signIn() navigated the page to Internet Identity; nothing more happens here.
+  return new Promise<never>(() => undefined);
+}
+
+// registerAccount is idempotent canister-side, but it is a paid update call
+// (~1–2s on the sign-in critical path). Once it has succeeded for a principal
+// on a target, skip it on later sign-ins/resumes so returning members get in
+// as fast as a Supabase session resume.
+const PROVISIONED_KEY_PREFIX = "ignite_ii_provisioned_v1:";
+
+function provisionedKey(principal: string, target: IcpTargetConfig): string {
+  return `${PROVISIONED_KEY_PREFIX}${target.alias}:${principal}`;
+}
+
+function isAccountProvisioned(principal: string, target: IcpTargetConfig): boolean {
+  try {
+    return localStorage.getItem(provisionedKey(principal, target)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markAccountProvisioned(principal: string, target: IcpTargetConfig): void {
+  try {
+    localStorage.setItem(provisionedKey(principal, target), "1");
+  } catch { /* storage full/blocked: next sign-in just re-registers */ }
 }
 
 async function provisionInternetIdentityAccount(identity: Identity, principal: string, target: IcpTargetConfig): Promise<void> {
@@ -106,6 +262,7 @@ async function provisionInternetIdentityAccount(identity: Identity, principal: s
     await accountProvisionerOverride(identity, principal, target);
     return;
   }
+  if (isAccountProvisioned(principal, target)) return;
 
   const { connectLiveIdentityAccessClientWithIdentity, isLiveIdentityAccessConfigured } = await import("./identityAccess");
   if (!isLiveIdentityAccessConfigured(target)) {
@@ -119,6 +276,7 @@ async function provisionInternetIdentityAccount(identity: Identity, principal: s
   }
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
   await client.registerAccount();
+  markAccountProvisioned(principal, target);
 }
 
 let activeClient: InternetIdentityAuthClient | undefined;
@@ -274,6 +432,9 @@ export async function signInWithInternetIdentity(returnTo?: string): Promise<Int
   // An explicit tap always re-arms the silent resume path.
   signOutRequested = false;
   const { client, target } = getWarmedAuthClient() ?? (await getAuthClient());
+  if (!client.isAuthenticated() && prefersRedirectSignIn()) {
+    await startRedirectSignIn(target, returnTo);
+  }
   const identity = client.isAuthenticated()
     ? await client.getIdentity()
     : await signInWithStoredSessionRecovery(client, returnTo);
@@ -331,6 +492,23 @@ export async function getCurrentInternetIdentity(): Promise<Identity | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Like getCurrentInternetIdentity, but only answers null after the session is
+ * still missing across several checks. The auth client briefly reports
+ * "not signed in" while it re-mints its short-lived session or re-reads
+ * storage after another tab wrote it; treating that blip as sign-out dropped
+ * active members back through sign-in.
+ */
+export async function getCurrentInternetIdentityConfirmed(attempts = 4, delayMs = 1500): Promise<Identity | null> {
+  for (let i = 0; i < attempts; i++) {
+    const identity = await getCurrentInternetIdentity();
+    if (identity) return identity;
+    if (signOutRequested) return null;
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return null;
 }
 
 export async function signOutInternetIdentity(): Promise<void> {

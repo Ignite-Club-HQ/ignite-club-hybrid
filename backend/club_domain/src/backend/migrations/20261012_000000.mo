@@ -42,6 +42,7 @@ module {
     var miniLeagueDomainCanister : ?Principal;
     var newsAudienceRecipients : [NewsAudienceRecipient];
     var competitionDomainCanister : ?Principal;
+    var clubHomeCountries : [(Text, Text)];
   };
 
   public func migration(old : OldActor) : NewActor {
@@ -53,6 +54,7 @@ module {
       var miniLeagueDomainCanister = null;
       var newsAudienceRecipients = [];
       var competitionDomainCanister = null;
+      var clubHomeCountries = [];
     }
   };
 };

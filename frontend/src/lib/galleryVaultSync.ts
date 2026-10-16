@@ -1,5 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import type { FeatureBackendContext } from "@/live/featureRouter";
+import { createLiveVaultFolder, listLiveVaultFolders, registerLiveVaultFile } from "@/live/features/vault";
 
 /**
  * One-way sync: media gallery photo upload → vault_files.
@@ -34,9 +37,10 @@ export async function syncGalleryPhotoToVault({
   teamId?: string | null;
   miniLeagueId?: string | null;
 }) {
-  // NEEDS-CANISTER: this one-way gallery->vault mirror writes vault_files
-  // directly outside the typed vault_domain wrappers. Skip under ICP.
-  if (isFeatureRoutedToIcp("vault")) return;
+  if (isFeatureRoutedToIcp("vault")) {
+    await syncGalleryPhotoToVaultIcp({ fileUrl, fileName, userId, clubId, teamId });
+    return;
+  }
   try {
     if (!clubId || !fileUrl) return;
 
@@ -129,4 +133,66 @@ async function getOrCreateGalleryFolder(
 
   folderCache.set(cacheKey, newFolder.id);
   return newFolder.id;
+}
+
+/**
+ * ICP counterpart of `syncGalleryPhotoToVault`: writes through the typed
+ * vault_domain wrappers instead of the Supabase vault_files table. The
+ * Pro-gate and dedupe checks are Supabase-only (club_subscriptions,
+ * vault_files lookup) and have no canister read yet, so this best-effort
+ * mirror always registers — a harmless provisional duplicate at worst,
+ * never a block on the gallery upload that already succeeded.
+ */
+async function syncGalleryPhotoToVaultIcp({
+  fileUrl,
+  fileName,
+  userId: _userId,
+  clubId,
+  teamId,
+}: {
+  fileUrl: string;
+  fileName: string;
+  userId: string;
+  clubId: string;
+  teamId?: string | null;
+}): Promise<void> {
+  try {
+    if (!clubId || !fileUrl) return;
+    await withFeatureBackend("vault", {
+      supabase: async () => {
+        throw new Error("unreachable: vault routing checked by the caller");
+      },
+      icp: async (ctx: FeatureBackendContext) => {
+        const folderName = "Gallery Uploads";
+        const folders = await listLiveVaultFolders(ctx, clubId, teamId || null);
+        let folder = folders.find((f) => f.name === folderName && !f.parent_id?.[0]);
+        if (!folder) {
+          folder = await createLiveVaultFolder(
+            ctx,
+            crypto.randomUUID(),
+            clubId,
+            teamId || null,
+            null,
+            folderName,
+            [],
+          );
+        }
+        await registerLiveVaultFile(
+          ctx,
+          crypto.randomUUID(),
+          folder.id,
+          clubId,
+          teamId || null,
+          fileName,
+          fileUrl,
+          0,
+          "image/jpeg",
+          false,
+          null,
+        );
+      },
+    });
+  } catch (err) {
+    console.warn("galleryVaultSync (ICP) error:", err);
+  }
 }

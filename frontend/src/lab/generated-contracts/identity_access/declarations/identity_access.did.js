@@ -10,8 +10,13 @@ import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
   const Init = IDL.Record({ 'governor' : IDL.Principal });
+  const AccountStatus = IDL.Variant({
+    'Active' : IDL.Null,
+    'Suspended' : IDL.Null,
+  });
   const Account = IDL.Record({
     'id' : IDL.Text,
+    'status' : AccountStatus,
     'version' : IDL.Nat64,
     'principals' : IDL.Vec(IDL.Principal),
   });
@@ -72,9 +77,11 @@ export const idlFactory = ({ IDL }) => {
   });
   const Profile = IDL.Record({
     'account_id' : IDL.Text,
+    'club_switcher_hint_seen_at' : IDL.Opt(IDL.Nat64),
     'avatar_ref' : IDL.Opt(IDL.Text),
     'updated_at_ns' : IDL.Nat64,
     'display_name' : IDL.Text,
+    'theme_preference' : IDL.Opt(IDL.Text),
   });
   const RoleGrant = IDL.Record({
     'account_id' : IDL.Text,
@@ -124,18 +131,19 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const Result_12 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
+  const Result_13 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
   const ProfileSearchResult = IDL.Record({
     'account_id' : IDL.Text,
     'principal' : IDL.Principal,
     'avatar_ref' : IDL.Opt(IDL.Text),
     'display_name' : IDL.Text,
   });
-  const Result_13 = IDL.Variant({
+  const Result_14 = IDL.Variant({
     'Ok' : IDL.Vec(ProfileSearchResult),
     'Err' : IDL.Text,
   });
-  const Result_14 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
-  const Result_15 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
+  const Result_15 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
+  const Result_16 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
   
   return IDL.Service({
     'accept_link' : IDL.Func([IDL.Nat64], [Result], []),
@@ -200,6 +208,17 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'is_pro' : IDL.Func([IDL.Principal], [Result_5], ['query']),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'my_roles' : IDL.Func([], [Result_11], ['query']),
     'my_terms_acceptance' : IDL.Func([], [Result_10], ['query']),
     'redeem_entitlement' : IDL.Func(
@@ -208,10 +227,33 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'register_account' : IDL.Func([], [Result], []),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [Result_13],
+        [],
+      ),
     'remove_verifier' : IDL.Func([IDL.Principal], [Result_2], []),
     'revoke' : IDL.Func([IDL.Principal, IDL.Nat64], [Result], []),
-    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_13], ['query']),
+    'revoke_role' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [Result_2],
+        [],
+      ),
+    'revoke_role_scoped' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [Result_2],
+        [],
+      ),
+    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_14], ['query']),
+    'set_account_status' : IDL.Func([IDL.Text, AccountStatus], [Result], []),
     'set_attestation_secret' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result_2], []),
+    'set_club_switcher_hint_seen' : IDL.Func([], [Result_9], []),
     'set_entitlement' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Nat64, IDL.Text],
         [Result_12],
@@ -230,11 +272,12 @@ export const idlFactory = ({ IDL }) => {
     'set_family' : IDL.Func([IDL.Text, IDL.Text], [Result_2], []),
     'set_privacy_consent' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
-        [Result_14],
+        [Result_15],
         [],
       ),
     'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_9], []),
-    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_15], []),
+    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_16], []),
+    'set_theme_preference' : IDL.Func([IDL.Opt(IDL.Text)], [Result_9], []),
     'whoami' : IDL.Func([], [Result], ['query']),
   });
 };

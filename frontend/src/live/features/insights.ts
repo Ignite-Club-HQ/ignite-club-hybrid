@@ -352,6 +352,28 @@ export async function updateLiveFeedbackStatus(
   );
 }
 
+// ---------------- App admin management ----------------
+
+export async function listLiveAppAdmins(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_app_admins(), "List app admins");
+}
+
+export async function grantLiveAppAdmin(ctx: FeatureBackendContext, principal: import("@icp-sdk/core/principal").Principal) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.grant_app_admin(principal), "Grant app admin");
+}
+
+export async function revokeLiveAppAdmin(ctx: FeatureBackendContext, principal: import("@icp-sdk/core/principal").Principal) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.revoke_app_admin(principal), "Revoke app admin");
+}
+
+export async function deleteLiveFeedback(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_feedback(id), "Delete feedback");
+}
+
 // ---------------- Client perf (client-side perf entries/aggregate) ----------------
 
 export type LiveClientPerfEntry = Parameters<InsightsDomainActor["record_client_perf"]>[0][number];

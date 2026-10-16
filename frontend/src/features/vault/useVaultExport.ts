@@ -59,6 +59,20 @@ async function createZipArchive() {
   return new JSZip();
 }
 
+/**
+ * Resolves a vault file's fetchable URL for export. ICP blob-store files are
+ * IBE-encrypted at rest — `fetch(file_url)` would only ever return
+ * ciphertext, so blob URLs must first go through the same decrypt pipeline
+ * `safeOpenUrl`/`safeOpenFile` use (live/mediaDecrypt.ts) to get a local
+ * object URL with the decrypted bytes. Non-ICP (Supabase) URLs pass through
+ * unchanged.
+ */
+async function resolveVaultExportFetchUrl(url: string): Promise<string> {
+  const { resolveIcpBlobObjectUrl } = await import("@/live/mediaDecrypt");
+  const resolved = await resolveIcpBlobObjectUrl(url);
+  return resolved ?? url;
+}
+
 const scopeForView = (currentView: FolderView) => ({
   folderId: currentView.type === "root" ? null : currentView.folderId || null,
   clubId: currentView.type === "root" ? null : currentView.clubId,
@@ -97,7 +111,7 @@ export function useVaultExport({
 
   const downloadFile = useCallback(async (url: string, filename: string) => {
     try {
-      const response = await fetch(url);
+      const response = await fetch(await resolveVaultExportFetchUrl(url));
       if (!response.ok) throw new Error(`Failed to fetch file (${response.status})`);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
@@ -261,7 +275,7 @@ export function useVaultExport({
           signal,
           isAborted: () => signal.aborted,
           fetchBlob: async (url, sig) => {
-            const response = await fetch(url, { signal: sig });
+            const response = await fetch(await resolveVaultExportFetchUrl(url), { signal: sig });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return response.blob();
           },
@@ -348,7 +362,7 @@ export function useVaultExport({
       for (const photo of photosToExport) {
         if (signal.aborted) throw new Error("Export cancelled");
         try {
-          const response = await fetch(photo.file_url, { signal });
+          const response = await fetch(await resolveVaultExportFetchUrl(photo.file_url), { signal });
           const blob = await response.blob();
           zip.file(photo.path ? `${photo.path}/${photo.title || `photo-${photo.id}.jpg`}` : photo.title || `photo-${photo.id}.jpg`, blob);
           fileCount++;
@@ -361,7 +375,7 @@ export function useVaultExport({
       for (const file of filesToExport) {
         if (signal.aborted) throw new Error("Export cancelled");
         try {
-          const response = await fetch(file.file_url, { signal });
+          const response = await fetch(await resolveVaultExportFetchUrl(file.file_url), { signal });
           const blob = await response.blob();
           zip.file(file.path ? `${file.path}/${file.name}` : file.name, blob);
           fileCount++;
@@ -417,7 +431,7 @@ export function useVaultExport({
       for (const photo of photosToExport) {
         if (signal.aborted) throw new Error("Export cancelled");
         try {
-          const response = await fetch(photo.file_url, { signal });
+          const response = await fetch(await resolveVaultExportFetchUrl(photo.file_url), { signal });
           const blob = await response.blob();
           zip.file(photo.path ? `${photo.path}/${photo.title || `photo-${photo.id}.jpg`}` : photo.title || `photo-${photo.id}.jpg`, blob);
           fileCount++;
@@ -430,7 +444,7 @@ export function useVaultExport({
       for (const file of filesToExport) {
         if (signal.aborted) throw new Error("Export cancelled");
         try {
-          const response = await fetch(file.file_url, { signal });
+          const response = await fetch(await resolveVaultExportFetchUrl(file.file_url), { signal });
           const blob = await response.blob();
           zip.file(file.path ? `${file.path}/${file.name}` : file.name, blob);
           fileCount++;
