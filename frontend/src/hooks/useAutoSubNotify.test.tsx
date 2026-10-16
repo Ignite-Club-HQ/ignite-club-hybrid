@@ -53,6 +53,11 @@ const makeChain = (table: string) => {
 
 
 const invokeSpy = vi.fn(async (_fnName?: string, _payload?: { body?: { userId?: string } }) => ({ data: null, error: null }));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+}));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -80,7 +85,7 @@ beforeEach(() => {
 });
 
 // ---- tests ------------------------------------------------------------
-describe("useAutoSubNotify — retry-safe dedup", () => {
+describe.runIf(supabaseMode)("useAutoSubNotify — retry-safe dedup", () => {
   it("dispatches to team_admin/coach when role lookup succeeds", async () => {
     tableResponses.user_roles = {
       data: [{ user_id: "u1" }, { user_id: "u2" }],
@@ -264,5 +269,18 @@ describe("useAutoSubNotify — retry-safe dedup", () => {
         await result.current(baseArgs);
       }),
     ).resolves.not.toThrow();
+  });
+});
+
+describe.runIf(!supabaseMode)("useAutoSubNotify — ICP boundary", () => {
+  it("does not query Supabase recipients or dispatch Supabase push for ICP users", async () => {
+    const { result } = renderHook(() => useAutoSubNotify("team-1", "Team"));
+
+    await act(async () => {
+      await result.current(baseArgs);
+    });
+
+    expect(tableCalls).toEqual({});
+    expect(invokeSpy).not.toHaveBeenCalled();
   });
 });

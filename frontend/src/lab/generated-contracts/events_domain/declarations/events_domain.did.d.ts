@@ -62,6 +62,15 @@ export interface CoachNote {
   'updated_at_ms' : bigint,
   'event_id' : string,
 }
+export interface CompetitionEventOperation {
+  'event_ids' : Array<string>,
+  'operation_id' : string,
+  'competition_id' : string,
+}
+export interface CompetitionEventTarget {
+  'team_id' : string,
+  'club_id' : string,
+}
 export interface Duty {
   'account_id' : string,
   'duty' : string,
@@ -75,13 +84,17 @@ export interface Event {
   'deleted' : boolean,
   'mini_league_id' : [] | [string],
   'cancelled' : boolean,
+  'target_team_ids' : [] | [Array<string>],
   'series_id' : [] | [string],
+  'adults_only' : boolean,
   'team_id' : [] | [string],
   'description' : string,
   'updated_at_ms' : bigint,
   'starts_at_ms' : bigint,
   'address' : [] | [string],
+  'restricted_to_roles' : [] | [Array<string>],
   'ends_at_ms' : bigint,
+  'rsvp_audience' : [] | [string],
   'revision' : bigint,
   'club_id' : string,
   'location' : [] | [string],
@@ -137,11 +150,15 @@ export interface EventSeries {
   'creator' : Principal,
   'deleted' : boolean,
   'until_ms' : bigint,
+  'target_team_ids' : [] | [Array<string>],
   'first_starts_at_ms' : bigint,
+  'adults_only' : boolean,
   'team_id' : [] | [string],
   'description' : string,
+  'restricted_to_roles' : [] | [Array<string>],
   'frequency' : string,
   'first_ends_at_ms' : bigint,
+  'rsvp_audience' : [] | [string],
   'revision' : bigint,
   'club_id' : string,
   'location' : [] | [string],
@@ -327,7 +344,7 @@ export interface Main {
       string,
       Principal,
       string,
-      Array<{ 'team_id' : string, 'club_id' : string }>,
+      Array<CompetitionEventTarget>,
       string,
       string,
       string,
@@ -351,6 +368,10 @@ export interface Main {
       [] | [string],
       bigint,
       bigint,
+      [] | [string],
+      boolean,
+      [] | [Array<string>],
+      [] | [Array<string>],
     ],
     { 'Ok' : Event } |
       { 'Err' : string }
@@ -385,6 +406,10 @@ export interface Main {
       bigint,
       [] | [number],
       [] | [bigint],
+      [] | [string],
+      boolean,
+      [] | [Array<string>],
+      [] | [Array<string>],
     ],
     { 'Ok' : { 'series' : EventSeries, 'events' : Array<Event> } } |
       { 'Err' : string }
@@ -401,6 +426,10 @@ export interface Main {
       bigint,
       bigint,
       bigint,
+      [] | [string],
+      boolean,
+      [] | [Array<string>],
+      [] | [Array<string>],
     ],
     { 'Ok' : { 'series' : EventSeries, 'events' : Array<Event> } } |
       { 'Err' : string }
@@ -461,6 +490,7 @@ export interface Main {
         'Ok' : {
           'lineups' : Array<LineupEntry>,
           'eventGuests' : Array<EventGuest>,
+          'competitionEventOperations' : Array<CompetitionEventOperation>,
           'miniLeagueRsvps' : Array<MiniLeagueRsvp>,
           'teamTrainingPauses' : Array<TeamTrainingPause>,
           'eventAttendance' : Array<EventAttendance>,
@@ -986,12 +1016,27 @@ export interface Main {
       [] | [string],
       bigint,
       bigint,
+      [] | [string],
+      boolean,
+      [] | [Array<string>],
+      [] | [Array<string>],
     ],
     { 'Ok' : Event } |
       { 'Err' : string }
   >,
   'update_series' : ActorMethod<
-    [string, string, string, string, [] | [string], bigint],
+    [
+      string,
+      string,
+      string,
+      string,
+      [] | [string],
+      bigint,
+      [] | [string],
+      boolean,
+      [] | [Array<string>],
+      [] | [Array<string>],
+    ],
     { 'Ok' : EventSeries } |
       { 'Err' : string }
   >,

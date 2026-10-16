@@ -13,6 +13,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
+const fixtureMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  listMatches: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
 // ---- mocks --------------------------------------------------------------
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "u1" } }) }));
@@ -63,6 +69,13 @@ vi.mock("@/integrations/supabase/client", () => ({
     auth: { getUser: vi.fn(async () => ({ data: { user: { id: "u1" } } })) },
   },
 }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    fixtureMocks.backend === "icp" ? providers.icp({ identity: {}, target: { alias: "test" } }) : providers.supabase(),
+}));
+vi.mock("@/live/features/competitions", () => ({
+  listLiveCompetitionMatches: (...args: unknown[]) => fixtureMocks.listMatches(...args),
+}));
 
 // import after mocks
 import {
@@ -82,10 +95,12 @@ const wrap = (ui: React.ReactElement) => {
 };
 
 beforeEach(() => {
+  fixtureMocks.backend = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
+  fixtureMocks.listMatches.mockReset();
   for (const k of Object.keys(responses)) delete responses[k];
 });
 
-describe("CompetitionFixturesPanel — fixture read failures", () => {
+describe.runIf(supabaseMode)("CompetitionFixturesPanel — fixture read failures — Supabase", () => {
   it("shows an error state (not 'No fixtures yet') when the fixture query fails", async () => {
     queue("competition_matches", { data: null, error: { message: "boom" } });
     wrap(
@@ -119,7 +134,7 @@ describe("CompetitionFixturesPanel — fixture read failures", () => {
   });
 });
 
-describe("CompetitionLadderPanel — dependency failures", () => {
+describe.runIf(supabaseMode)("CompetitionLadderPanel — dependency failures — Supabase", () => {
   it("errors when the accepted-entry query fails (no partial ladder)", async () => {
     queue("competition_ladder", { data: [], error: null });
     queue("competition_entries", { data: null, error: { message: "denied" } });
@@ -148,5 +163,23 @@ describe("CompetitionLadderPanel — dependency failures", () => {
     queue("competition_entries", { data: [], error: null });
     wrap(<CompetitionLadderPanel competitionId="c1" divisions={[]} />);
     await waitFor(() => expect(screen.getByText(/No ladder yet/i)).toBeTruthy());
+  });
+});
+
+describe.runIf(!supabaseMode)("CompetitionFixturesPanel — fixture read state — ICP", () => {
+  it("shows an error state when the canister fixture read fails", async () => {
+    fixtureMocks.backend = "icp";
+    fixtureMocks.listMatches.mockRejectedValue(new Error("canister unavailable"));
+    wrap(<CompetitionFixturesPanel competitionId="c1" isAdmin={false} divisions={[]} entries={[]} />);
+    await waitFor(() => expect(screen.getByText(/Couldn't load fixtures/i)).toBeTruthy());
+    expect(screen.queryByText(/No fixtures yet/i)).toBeNull();
+  });
+
+  it("shows an empty state for a successful empty canister response", async () => {
+    fixtureMocks.backend = "icp";
+    fixtureMocks.listMatches.mockResolvedValue([]);
+    wrap(<CompetitionFixturesPanel competitionId="c1" isAdmin={false} divisions={[]} entries={[]} />);
+    await waitFor(() => expect(screen.getByText(/No fixtures yet/i)).toBeTruthy());
+    expect(screen.queryByText(/Couldn't load fixtures/i)).toBeNull();
   });
 });

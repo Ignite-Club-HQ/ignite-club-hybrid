@@ -6,9 +6,13 @@ const { from, queryResult, showNotification } = vi.hoisted(() => ({
   queryResult: { data: [] as any[], error: null as any },
   showNotification: vi.fn(),
 }));
+const icpMode = vi.hoisted(() => process.env.IGNITE_TEST_BACKEND_MODE === "icp");
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from },
+}));
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => (icpMode ? "icp" : "supabase"),
 }));
 
 import { useMissedNotificationSync } from "./useMissedNotificationSync";
@@ -43,7 +47,7 @@ async function manuallySync(result: { current: { syncMissedNotifications: () => 
   });
 }
 
-describe("useMissedNotificationSync recovery and deduplication", () => {
+describe.runIf(!icpMode)("useMissedNotificationSync recovery and deduplication", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-19T12:00:00Z"));
@@ -188,5 +192,23 @@ describe("useMissedNotificationSync recovery and deduplication", () => {
     expect(JSON.parse(localStorage.getItem("notifications-last-shown")!)).toHaveProperty(
       "notification-1",
     );
+  });
+});
+
+describe.runIf(icpMode)("useMissedNotificationSync ICP boundary", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-19T12:00:00Z"));
+    localStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("does not query Supabase or replay missed push notifications", async () => {
+    const { result } = renderHook(() => useMissedNotificationSync("principal-1"));
+    await manuallySync(result);
+    expect(from).not.toHaveBeenCalled();
+    expect(showNotification).not.toHaveBeenCalled();
   });
 });

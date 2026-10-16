@@ -9,6 +9,8 @@ import {
   isVaultStorageImageFilename,
 } from "./vaultStorageRepository";
 
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type Call = { table: string; method: string; args: unknown[] };
 
@@ -110,7 +112,7 @@ describe("Vault storage accounting", () => {
     ]);
   });
 
-  it("reads purchased storage for the exact club and defaults an absent row", async () => {
+  it.runIf(supabaseMode)("reads purchased storage for the exact club and defaults an absent row", async () => {
     const present = scriptedClient({ club_subscriptions: [{ storage_purchased_gb: 5, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null }] });
     await expect(fetchVaultStorageSubscription("club-a", present.client)).resolves.toMatchObject({ storage_purchased_gb: 5 });
     expect(present.calls).toContainEqual({ table: "club_subscriptions", method: "eq", args: ["club_id", "club-a"] });
@@ -123,7 +125,7 @@ describe("Vault storage accounting", () => {
     });
   });
 
-  it("scopes every storage source to the club and excludes deleted photos, files, and teams", async () => {
+  it.runIf(supabaseMode)("scopes every storage source to the club and excludes deleted photos, files, and teams", async () => {
     const fake = scriptedClient({
       photos: [[]],
       vault_files: [[]],
@@ -138,5 +140,29 @@ describe("Vault storage accounting", () => {
       expect(fake.calls).toContainEqual({ table, method: "is", args: ["deleted_at", null] });
     }
     expect(fake.calls.some((call) => call.table === "mini_leagues" && call.method === "is")).toBe(false);
+  });
+});
+
+describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () => {
+  it("returns the no-purchased-storage default without querying Supabase", async () => {
+    const fake = scriptedClient({});
+    await expect(fetchVaultStorageSubscription("club-a", fake.client)).resolves.toEqual({
+      storage_purchased_gb: 0,
+      scheduled_storage_downgrade_gb: null,
+      storage_downgrade_at: null,
+    });
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("returns an empty storage breakdown without querying Supabase", async () => {
+    const fake = scriptedClient({});
+    await expect(fetchVaultStorageBreakdown("club-a", fake.client)).resolves.toMatchObject({
+      photos: 0,
+      documents: 0,
+      total: 0,
+      byTeam: [],
+      byMiniLeague: [],
+    });
+    expect(fake.calls).toEqual([]);
   });
 });

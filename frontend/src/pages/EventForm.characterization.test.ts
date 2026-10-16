@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createEventTransaction } from "@/features/events/createEventWorkflow";
 import { updateEventTransaction } from "@/features/events/editEventWorkflow";
 
-describe("CreateEventPage and EditEventPage mutation contracts", () => {
+const backendMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
+
+describe.runIf(backendMode === "supabase")("CreateEventPage and EditEventPage Supabase mutation contracts", () => {
   it("CreateEventPage creates one event with optional children and duties", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: "created-event", error: null });
 

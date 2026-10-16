@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   }>,
   insert: vi.fn().mockResolvedValue({ error: null }),
   removeChannel: vi.fn().mockResolvedValue(undefined),
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -38,6 +39,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/lib/nativePush", () => ({
   getPlatform: () => "web",
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
 
 import { useRealtimePerfSampler } from "./useRealtimePerfSampler";
 
@@ -50,7 +52,7 @@ describe("useRealtimePerfSampler", () => {
     mocks.removeChannel.mockClear();
   });
 
-  it("scopes notification and read-receipt subscriptions to the current user", () => {
+  it.runIf(mocks.mode === "supabase")("scopes notification and read-receipt subscriptions to the current user", () => {
     renderHook(() => useRealtimePerfSampler("user-123"));
 
     expect(mocks.channels).toHaveLength(2);
@@ -64,7 +66,7 @@ describe("useRealtimePerfSampler", () => {
     expect(mocks.channels[1].handlers[0].config).not.toHaveProperty("filter");
   });
 
-  it("batches valid latency samples and flushes them without affecting the app", async () => {
+  it.runIf(mocks.mode === "supabase")("batches valid latency samples and flushes them without affecting the app", async () => {
     const now = Date.now();
     renderHook(() => useRealtimePerfSampler("user-123"));
 
@@ -100,7 +102,7 @@ describe("useRealtimePerfSampler", () => {
     expect(mocks.channels).toHaveLength(0);
   });
 
-  it("removes both telemetry channels during cleanup", () => {
+  it.runIf(mocks.mode === "supabase")("removes both telemetry channels during cleanup", () => {
     const { unmount } = renderHook(() => useRealtimePerfSampler("user-123"));
     const created = [...mocks.channels];
 
@@ -109,5 +111,13 @@ describe("useRealtimePerfSampler", () => {
     expect(mocks.removeChannel).toHaveBeenCalledTimes(2);
     expect(mocks.removeChannel).toHaveBeenCalledWith(created[0]);
     expect(mocks.removeChannel).toHaveBeenCalledWith(created[1]);
+  });
+
+  it.runIf(mocks.mode === "icp")("does not open Supabase telemetry channels or write samples", async () => {
+    renderHook(() => useRealtimePerfSampler("principal-1"));
+    act(() => vi.advanceTimersByTime(30_000));
+    await act(async () => Promise.resolve());
+    expect(mocks.channels).toHaveLength(0);
+    expect(mocks.insert).not.toHaveBeenCalled();
   });
 });

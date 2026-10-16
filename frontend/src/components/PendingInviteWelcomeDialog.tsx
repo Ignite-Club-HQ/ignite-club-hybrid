@@ -71,7 +71,7 @@ export function PendingInviteWelcomeDialog() {
   const { data: pendingInvites = [] } = useQuery({
     queryKey: membershipKeys.pendingInvitesForUser(user?.id),
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || isFeatureRoutedToIcp("membership")) return [];
       const { data, error } = await supabase
         .from("pending_invites")
         .select(`
@@ -103,7 +103,7 @@ export function PendingInviteWelcomeDialog() {
       }
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!user && !isFeatureRoutedToIcp("membership"),
     staleTime: 30_000,
   });
 

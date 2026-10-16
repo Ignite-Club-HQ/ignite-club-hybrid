@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
   from: vi.fn(),
   toast: vi.fn(),
   guardians: [] as any[],
@@ -11,10 +13,26 @@ const mocks = vi.hoisted(() => ({
   insertError: null as any,
   deleteError: null as any,
   operations: [] as Array<{ kind: string; table: string; payload?: any; filters?: any[] }>,
+  guardiansLive: vi.fn(),
+  rolesLive: vi.fn(),
+  profilesLive: vi.fn(),
+  linkLive: vi.fn(),
+  unlinkLive: vi.fn(),
+  grantName: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from } }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.mode === "icp" ? providers.icp(mocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/club", () => ({ listLiveChildGuardians: (...args: unknown[]) => mocks.guardiansLive(...args) }));
+vi.mock("@/live/features/membership", () => ({ listLiveTeamRoleGrants: (...args: unknown[]) => mocks.rolesLive(...args) }));
+vi.mock("@/live/features/identityAccessClient", () => ({ listLiveProfilesByIds: (...args: unknown[]) => mocks.profilesLive(...args) }));
+vi.mock("@/live/features/vault", () => ({ grantLiveGuardianChildNameRead: (...args: unknown[]) => mocks.grantName(...args) }));
+vi.mock("@icp-sdk/core/principal", () => ({ Principal: { fromText: (text: string) => ({ toText: () => text, text }) } }));
 
 import ManageGuardiansDialog from "./ManageGuardiansDialog";
 
@@ -98,7 +116,7 @@ function guardianRow(name: string) {
   return within(row as HTMLElement);
 }
 
-describe("ManageGuardiansDialog characterization — relationship integrity", () => {
+describe.runIf(mocks.mode === "supabase")("ManageGuardiansDialog characterization — relationship integrity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.guardians = [primary, second];
@@ -203,5 +221,25 @@ describe("ManageGuardiansDialog characterization — relationship integrity", ()
     fireEvent.click(await screen.findByRole("button", { name: "Done" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(mocks.operations.filter(op => op.kind === "insert" || op.kind === "delete")).toEqual([]);
+  });
+});
+
+describe.runIf(mocks.mode === "icp")("ManageGuardiansDialog ICP boundary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.guardiansLive.mockResolvedValue([{ toText: () => "guardian-principal" }]);
+    mocks.rolesLive.mockResolvedValue([]);
+    mocks.profilesLive.mockResolvedValue([{ account_id: "guardian-principal", display_name: "Guardian One", avatar_ref: [] }]);
+  });
+
+  it("shows canister-linked guardians without Supabase reads or unsafe removal", async () => {
+    renderDialog();
+    expect(await screen.findByText("Guardian One")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/not available in ICP yet/i);
+    expect(guardianRow("Guardian One").queryByRole("button")).not.toBeInTheDocument();
+    expect(mocks.guardiansLive).toHaveBeenCalledWith(mocks.context, "child-1");
+    expect(mocks.profilesLive).toHaveBeenCalledWith(mocks.context, ["guardian-principal"]);
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.rolesLive).not.toHaveBeenCalled();
   });
 });

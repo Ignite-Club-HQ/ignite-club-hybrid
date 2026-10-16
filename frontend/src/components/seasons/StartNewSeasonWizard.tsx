@@ -19,7 +19,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Season } from "@/hooks/useClubSeasons";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveSeason, duplicateLiveSeason, setLiveSeasonStatus } from "@/live/features/competitions";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { saveLiveSeason, type LiveSeason } from "@/live/features/club";
 import { ReturningMembersStep } from "./ReturningMembersStep";
 import { SeasonInviteStep } from "./SeasonInviteStep";
 
@@ -33,11 +34,32 @@ interface Props {
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
+function liveSeasonRecord(
+  id: string,
+  clubId: string,
+  name: string,
+  status: LiveSeason["status"],
+  startDate = "",
+  endDate = "",
+): LiveSeason {
+  return {
+    id,
+    club_id: clubId,
+    name,
+    status,
+    start_date: startDate,
+    end_date: endDate,
+    created_at_ms: 0n,
+    updated_at_ms: 0n,
+  };
+}
+
 export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason, onComplete }: Props) {
+  const isIcp = resolveAuthBackend() === "icp";
   const [step, setStep] = useState<Step>(1);
   const [archiveCurrent, setArchiveCurrent] = useState(true);
   const [seasonName, setSeasonName] = useState("");
-  const [duplicateStructure, setDuplicateStructure] = useState(true);
+  const [duplicateStructure, setDuplicateStructure] = useState(!isIcp);
   const [copyStaff, setCopyStaff] = useState(true);
   const [createdSeasonId, setCreatedSeasonId] = useState<string | null>(null);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
@@ -49,7 +71,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
     setStep(1);
     setArchiveCurrent(true);
     setSeasonName("");
-    setDuplicateStructure(true);
+    setDuplicateStructure(!isIcp);
     setCopyStaff(true);
     setCreatedSeasonId(null);
     setSelectedPlayerIds(new Set());
@@ -65,18 +87,20 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
   const archiveMut = useMutation({
     mutationFn: async () => {
       if (!currentSeason || !archiveCurrent) return;
-      await withFeatureBackend("competitions", {
+      await withFeatureBackend("membership", {
         supabase: async () => {
           const { error } = await supabase.rpc("archive_season", { _season_id: currentSeason.id });
           if (error) throw error;
         },
         icp: async (ctx) => {
-          // Provisional mapping: the competition_domain canister models one
-          // season per competition (no separate season id) and tracks a
-          // revision counter this club-based flow has no equivalent for —
-          // using 0 here is unverified; confirm against the live schema
-          // post-deploy.
-          await setLiveSeasonStatus(ctx, currentSeason.id, "archived", 0);
+          await saveLiveSeason(ctx, liveSeasonRecord(
+            currentSeason.id,
+            currentSeason.club_id,
+            currentSeason.name,
+            "archived",
+            currentSeason.start_date ?? "",
+            currentSeason.end_date ?? "",
+          ));
         },
       });
     },
@@ -85,7 +109,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
   const createMut = useMutation({
     mutationFn: async (): Promise<string> => {
       if (duplicateStructure && currentSeason) {
-        return withFeatureBackend("competitions", {
+        return withFeatureBackend("membership", {
           supabase: async () => {
             const { data, error } = await supabase.rpc("duplicate_season_structure", {
               _source_season_id: currentSeason.id,
@@ -95,18 +119,12 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
             if (error) throw error;
             return data as string;
           },
-          icp: async (ctx) => {
-            // Provisional mapping: this club-based flow has no competition
-            // concept — using clubId as the competition identifier is
-            // unverified; confirm against the live schema post-deploy.
-            // The canister duplicates entries only; staff copying has no
-            // canister shape (copyStaff is ignored on this branch).
-            const season = await duplicateLiveSeason(ctx, clubId, currentSeason.name, seasonName.trim());
-            return season.competition_id;
+          icp: async () => {
+            throw new Error("Duplicating season teams and staff isn't available in ICP yet.");
           },
         });
       }
-      return withFeatureBackend("competitions", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("seasons")
@@ -117,12 +135,11 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
           return data.id as string;
         },
         icp: async (ctx) => {
-          // Provisional mapping: competition_domain seasons belong to a
-          // competition id, but this club-based flow has no competition
-          // concept — using clubId as the identifier is unverified; confirm
-          // against the live schema post-deploy.
-          const created = await createLiveSeason(ctx, clubId, seasonName.trim());
-          return created.competition_id;
+          const created = await saveLiveSeason(
+            ctx,
+            liveSeasonRecord("", clubId, seasonName.trim(), "draft"),
+          );
+          return created.id;
         },
       });
     },
@@ -130,7 +147,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
 
   const publishMut = useMutation({
     mutationFn: async (id: string) => {
-      await withFeatureBackend("competitions", {
+      await withFeatureBackend("membership", {
         supabase: async () => {
           const { error } = await supabase.rpc("publish_season", { _season_id: id });
           if (error) throw error;
@@ -140,9 +157,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
           await supabase.rpc("notify_season_published", { _season_id: id });
         },
         icp: async (ctx) => {
-          // Provisional mapping: see createMut/archiveMut above re: season
-          // identity and revision — unverified until deploy.
-          await setLiveSeasonStatus(ctx, id, "published", 0);
+          await saveLiveSeason(ctx, liveSeasonRecord(id, clubId, seasonName.trim(), "active"));
         },
       });
     },
@@ -154,6 +169,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
       ids,
     }: { targetId: string; ids: string[] }): Promise<number> => {
       if (!currentSeason || ids.length === 0) return 0;
+      if (isIcp) throw new Error("Carrying players into a new season isn't available in ICP yet.");
       // Explicit per-player team placement — juniors usually move up a grade,
       // so we never rely on matching the old team name.
       const placed = ids
@@ -281,12 +297,15 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
                       id="dup"
                       checked={duplicateStructure}
                       onCheckedChange={(v) => setDuplicateStructure(!!v)}
+                      disabled={isIcp}
                       className="mt-0.5"
                     />
                     <div className="flex-1">
                       <Label htmlFor="dup" className="cursor-pointer">Duplicate structure from {currentSeason.name}</Label>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Copies team names. You'll choose which players to carry over next.
+                        {isIcp
+                          ? "Team and staff cloning isn't available in ICP yet."
+                          : "Copies team names. You'll choose which players to carry over next."}
                       </p>
                     </div>
                   </div>

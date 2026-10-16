@@ -1,5 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fetchEventRsvps } from "@/features/events/eventRsvpRepository";
+
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  snapshot: vi.fn(),
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  getLiveEventsSnapshot: (...args: unknown[]) => backendMocks.snapshot(...args),
+}));
 
 function clientWith(options: {
   rsvps?: any[] | null;
@@ -34,13 +47,15 @@ function clientWith(options: {
 }
 
 describe("event RSVP repository", () => {
-  it("isolates the authoritative RSVP read to the requested event", async () => {
+  beforeEach(() => backendMocks.snapshot.mockReset());
+
+  it.runIf(backendMocks.mode === "supabase")("isolates the authoritative RSVP read to the requested event", async () => {
     const db = clientWith({ rsvps: [] });
     await expect(fetchEventRsvps(db.client, "event-1", vi.fn())).resolves.toEqual([]);
     expect(db.calls).toContainEqual({ table: "rsvps", filter: ["event_id", "event-1"] });
   });
 
-  it("enriches adult and child rows without changing RSVP ownership", async () => {
+  it.runIf(backendMocks.mode === "supabase")("enriches adult and child rows without changing RSVP ownership", async () => {
     const db = clientWith({
       rsvps: [
         { id: "r1", user_id: "adult-1", child_id: null, status: "going" },
@@ -72,7 +87,7 @@ describe("event RSVP repository", () => {
     ]);
   });
 
-  it("propagates the core RSVP read error and performs no enrichment", async () => {
+  it.runIf(backendMocks.mode === "supabase")("propagates the core RSVP read error and performs no enrichment", async () => {
     const denied = { code: "42501", message: "denied" };
     const db = clientWith({ rsvpError: denied });
     const loadProfiles = vi.fn();
@@ -81,7 +96,7 @@ describe("event RSVP repository", () => {
     expect(db.from).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps valid attendance rows when display-only enrichment is unavailable", async () => {
+  it.runIf(backendMocks.mode === "supabase")("keeps valid attendance rows when display-only enrichment is unavailable", async () => {
     const db = clientWith({
       rsvps: [{ id: "r1", user_id: "adult-1", child_id: "child-1", status: "going" }],
       childError: { status: 503 },
@@ -90,5 +105,27 @@ describe("event RSVP repository", () => {
     await expect(fetchEventRsvps(db.client, "event-1", loadProfiles)).resolves.toEqual([
       expect.objectContaining({ id: "r1", profiles: null, children: null }),
     ]);
+  });
+
+  it.runIf(backendMocks.mode === "icp")("maps caller RSVP snapshot rows and enriches profiles without Supabase reads", async () => {
+    backendMocks.snapshot.mockResolvedValue({ rsvps: [
+      { event_id: "event-icp", account_id: "principal-a", child_id: [], state: "going", updated_at_ms: 1_800_000_000_000n },
+      { event_id: "other-event", account_id: "principal-b", child_id: [], state: "maybe", updated_at_ms: 1n },
+    ] });
+    const client = { from: vi.fn() };
+    const loadProfiles = vi.fn().mockResolvedValue({ data: [{ id: "principal-a", display_name: "Adult", avatar_url: null }] });
+
+    await expect(fetchEventRsvps(client, "event-icp", loadProfiles)).resolves.toEqual([
+      expect.objectContaining({
+        event_id: "event-icp",
+        user_id: "principal-a",
+        status: "going",
+        profiles: { display_name: "Adult", avatar_url: null },
+        children: null,
+      }),
+    ]);
+    expect(backendMocks.snapshot).toHaveBeenCalledWith(backendMocks.context);
+    expect(loadProfiles).toHaveBeenCalledWith(["principal-a"]);
+    expect(client.from).not.toHaveBeenCalled();
   });
 });

@@ -11,9 +11,22 @@ const mocks = vi.hoisted(() => ({
   onComplete: vi.fn(),
   onOpenChange: vi.fn(),
 }));
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  saveLiveSeason: vi.fn(),
+  context: { identity: {}, target: {} },
+}));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc: mocks.rpc, from: mocks.from } }));
 vi.mock("sonner", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => backendMocks.mode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/club", () => ({
+  saveLiveSeason: (...args: unknown[]) => backendMocks.saveLiveSeason(...args),
+}));
 vi.mock("./ReturningMembersStep", () => ({
   ReturningMembersStep: ({ targetSeasonId, onChange, onAssignmentsChange }: any) => (
     <div>
@@ -54,7 +67,7 @@ async function advanceToReturningPlayers() {
   await screen.findByText("Returning target season-new");
 }
 
-describe("StartNewSeasonWizard orchestration", () => {
+describe.runIf(backendMocks.mode === "supabase")("StartNewSeasonWizard orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rpc.mockImplementation(async (name: string) => {
@@ -165,5 +178,46 @@ describe("StartNewSeasonWizard orchestration", () => {
     fireEvent.click(screen.getByRole("button", { name: /Publish/ }));
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("publish denied"));
     expect(mocks.onComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe.runIf(backendMocks.mode === "icp")("StartNewSeasonWizard ICP club-season path", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    backendMocks.saveLiveSeason.mockImplementation(async (_ctx: unknown, season: any) => ({
+      ...season,
+      id: season.id || "season-new",
+    }));
+  });
+
+  it("archives, creates a draft season, and publishes through club_domain only", async () => {
+    renderWizard();
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await waitFor(() => expect(backendMocks.saveLiveSeason).toHaveBeenCalledWith(
+      backendMocks.context,
+      expect.objectContaining({ id: "season-old", club_id: "club-1", status: "archived" }),
+    ));
+
+    await screen.findByLabelText("Season name");
+    fireEvent.change(screen.getByLabelText("Season name"), { target: { value: "2027 Season" } });
+    const structureToggle = screen.getByRole("checkbox", { name: /Duplicate structure/ });
+    expect(structureToggle).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await screen.findByText("Returning target season-new");
+
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await screen.findByText(/Invite into season-new/);
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await screen.findByText("Review");
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Publish/ }));
+
+    await waitFor(() => expect(backendMocks.saveLiveSeason).toHaveBeenCalledWith(
+      backendMocks.context,
+      expect.objectContaining({ id: "season-new", club_id: "club-1", name: "2027 Season", status: "active" }),
+    ));
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.onComplete).toHaveBeenCalledOnce();
   });
 });

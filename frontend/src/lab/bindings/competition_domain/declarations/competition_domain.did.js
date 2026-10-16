@@ -101,6 +101,19 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
     'competition_id' : IDL.Text,
   });
+  const CompetitionOfficialEmailInvite = IDL.Record({
+    'token' : IDL.Text,
+    'revoked' : IDL.Bool,
+    'role' : IDL.Text,
+    'verification_code_hash' : IDL.Text,
+    'accepted_by' : IDL.Opt(IDL.Principal),
+    'attempts' : IDL.Nat8,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'email_hash' : IDL.Text,
+    'competition_id' : IDL.Text,
+    'expires_at_ms' : IDL.Nat64,
+  });
   const Season = IDL.Record({
     'status' : IDL.Text,
     'name' : IDL.Text,
@@ -151,6 +164,7 @@ export const idlFactory = ({ IDL }) => {
     'competitionInvites' : IDL.Vec(CompetitionInvite),
     'governor' : IDL.Principal,
     'competitionJoinLinks' : IDL.Vec(CompetitionJoinLink),
+    'competitionOfficialEmailInvites' : IDL.Vec(CompetitionOfficialEmailInvite),
     'competitions' : IDL.Vec(Competition),
     'roles' : IDL.Vec(RoleGrant),
   });
@@ -206,6 +220,11 @@ export const idlFactory = ({ IDL }) => {
     'accept_competition_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'accept_competition_official_email_invite' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : RoleGrant, 'Err' : IDL.Text })],
         [],
       ),
     'addBulkAccessPrincipal' : IDL.Func(
@@ -298,6 +317,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
         [],
       ),
+    'create_competition_official_email_invite' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : CompetitionOfficialEmailInvite,
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'create_competition_official_link' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
@@ -342,6 +371,21 @@ export const idlFactory = ({ IDL }) => {
     'get_competition_hide_ladder' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_competition_official_email_invite_preview' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'status' : IDL.Text,
+              'competition_name' : IDL.Text,
+              'role' : IDL.Text,
+              'competition_id' : IDL.Text,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'get_eoi_stats' : IDL.Func(
@@ -488,6 +532,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_public_competitions' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_seasons' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
@@ -524,6 +573,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'revoke_competition_join_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'revoke_competition_official_email_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

@@ -7,6 +7,9 @@ import { PendingInviteWelcomeDialog } from "./PendingInviteWelcomeDialog";
 
 const rpcMock = vi.fn();
 const functionsInvokeMock = vi.fn().mockResolvedValue({ data: {}, error: null });
+const membershipIcpRouted = vi.hoisted(() => ({ value: process.env.IGNITE_TEST_BACKEND_MODE === "icp" }));
+const acceptIcpInviteAndWelcomeMock = vi.fn();
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
 // Per-table mutable state
 type UserRole = {
@@ -92,6 +95,13 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: (feature: string) => feature === "membership" && membershipIcpRouted.value,
+}));
+vi.mock("@/features/membership/acceptIcpInviteAndWelcome", () => ({
+  acceptIcpInviteAndWelcome: (...args: unknown[]) => acceptIcpInviteAndWelcomeMock(...args),
+}));
+
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     user: { id: "user-1", user_metadata: { display_name: "Test User" } },
@@ -156,7 +166,7 @@ beforeEach(() => {
 
 // --- Tests ---------------------------------------------------------------
 
-describe("PendingInviteWelcomeDialog — guardian invite transactional acceptance", () => {
+describe.runIf(supabaseMode)("PendingInviteWelcomeDialog — guardian invite transactional acceptance", () => {
   it("successful guardian RPC marks the invite accepted via the RPC (no client user_roles insert)", async () => {
     const invite = makeGuardianInvite();
     state.pending_invites = [invite];
@@ -279,5 +289,25 @@ describe("PendingInviteWelcomeDialog — guardian invite transactional acceptanc
     expect(rpcMock).not.toHaveBeenCalled();
     // Coach role should have been inserted by the standard path.
     expect(state.user_roles.some((r) => r.role === "coach" && r.team_id === "team-1")).toBe(true);
+  });
+});
+
+describe.runIf(!supabaseMode)("PendingInviteWelcomeDialog — ICP boundary", () => {
+  beforeEach(() => {
+    membershipIcpRouted.value = true;
+    fromMock.mockClear();
+    rpcMock.mockClear();
+    functionsInvokeMock.mockClear();
+    acceptIcpInviteAndWelcomeMock.mockClear();
+  });
+
+  it("does not query or mutate Supabase for background pending invites", async () => {
+    renderComponent();
+    await flush();
+
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(functionsInvokeMock).not.toHaveBeenCalled();
+    expect(acceptIcpInviteAndWelcomeMock).not.toHaveBeenCalled();
   });
 });

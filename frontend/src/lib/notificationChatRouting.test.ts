@@ -1,22 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const maybeSingleMocks: Record<string, () => Promise<{ data: unknown; error: unknown }>> = {};
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  lookups: [] as string[],
+}));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    from: (table: string) => ({
+    from: (table: string) => {
+      backendMocks.lookups.push(table);
+      return {
       select: () => ({
         eq: () => ({
           maybeSingle: () =>
             (maybeSingleMocks[table] ?? (async () => ({ data: null, error: null })))(),
         }),
       }),
-    }),
+      };
+    },
   },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => backendMocks.mode }));
 
 import {
   resolveChatTargetForMessageId,
+  resolveChatTargetResult,
   chatTargetPath,
   NOTIFICATION_FALLBACK_PATH,
 } from "./notificationChatRouting";
@@ -27,10 +36,11 @@ function setTable(table: string, data: unknown, error: unknown = null) {
 
 beforeEach(() => {
   for (const key of Object.keys(maybeSingleMocks)) delete maybeSingleMocks[key];
+  backendMocks.lookups = [];
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
-describe("resolveChatTargetForMessageId", () => {
+describe.runIf(backendMocks.mode === "supabase")("resolveChatTargetForMessageId", () => {
   it("resolves an accessible team message to the exact message", async () => {
     setTable("team_messages", { team_id: "team-1" });
     expect(await resolveChatTargetForMessageId("m1")).toEqual({
@@ -92,6 +102,14 @@ describe("resolveChatTargetForMessageId", () => {
 
   it("returns null for an empty message id", async () => {
     expect(await resolveChatTargetForMessageId("")).toBeNull();
+  });
+});
+
+describe.runIf(backendMocks.mode === "icp")("ICP chat-target resolution boundary", () => {
+  it("uses the safe fallback result without probing Supabase message tables", async () => {
+    expect(await resolveChatTargetResult("message-icp")).toEqual({ status: "not_found", target: null });
+    expect(await resolveChatTargetForMessageId("message-icp")).toBeNull();
+    expect(backendMocks.lookups).toEqual([]);
   });
 });
 

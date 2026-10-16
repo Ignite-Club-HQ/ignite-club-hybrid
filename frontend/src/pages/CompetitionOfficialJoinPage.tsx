@@ -3,16 +3,24 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Loader2, Trophy } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStorage";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getEffectiveBackendForFeature } from "@/live/loadBackendRouting";
-import { getLiveJoinLinkPreview, joinLiveCompetitionByToken } from "@/live/features/competitions";
+import {
+  acceptLiveCompetitionOfficialEmailInvite,
+  getLiveCompetitionOfficialEmailInvitePreview,
+  getLiveJoinLinkPreview,
+  joinLiveCompetitionByToken,
+} from "@/live/features/competitions";
+import { hashOfficialInviteCode, hashOfficialInviteEmail } from "@/features/competitions/officialEmailInvite";
 
 type OfficialRole = "referee" | "committee_member";
 type LinkInfo = {
-  status: "valid" | "invalid" | "archived";
+  status: "valid" | "invalid" | "archived" | "expired" | "used" | "revoked";
   competitionId: string | null;
   competitionName: string | null;
   role: OfficialRole | null;
@@ -23,6 +31,7 @@ const roleLabel = (role: OfficialRole) => role === "referee" ? "referee" : "comm
 export default function CompetitionOfficialJoinPage() {
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
+  const emailInvite = params.get("email") === "1";
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [info, setInfo] = useState<LinkInfo | null>(null);
@@ -30,6 +39,8 @@ export default function CompetitionOfficialJoinPage() {
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const nextPath = `/competitions/officials/join?token=${encodeURIComponent(token)}`;
 
   useEffect(() => {
@@ -45,6 +56,20 @@ export default function CompetitionOfficialJoinPage() {
       try {
         const result = await withFeatureBackend("competitions", {
           supabase: async () => {
+            if (emailInvite) {
+              const { data, error: rpcError } = await (supabase as any).rpc("get_competition_role_email_invite_status", { p_token: token });
+              if (rpcError) throw rpcError;
+              const row = data?.[0];
+              if (!row || !["referee", "committee_member"].includes(row.role)) {
+                return { status: "invalid", competitionId: null, competitionName: null, role: null } as LinkInfo;
+              }
+              return {
+                status: row.status as LinkInfo["status"],
+                competitionId: row.competition_id,
+                competitionName: row.competition_name,
+                role: row.role as OfficialRole,
+              } satisfies LinkInfo;
+            }
             const { data, error: rpcError } = await (supabase as any).rpc("get_competition_role_link_status", { p_token: token });
             if (rpcError) throw rpcError;
             const row = data?.[0];
@@ -59,6 +84,23 @@ export default function CompetitionOfficialJoinPage() {
             } satisfies LinkInfo;
           },
           icp: async (ctx) => {
+            if (emailInvite) {
+              const preview = await getLiveCompetitionOfficialEmailInvitePreview(ctx, token);
+              if (!["referee", "committee_member"].includes(preview.role)) {
+                return {
+                  status: preview.status as LinkInfo["status"],
+                  competitionId: preview.competition_id,
+                  competitionName: preview.competition_name,
+                  role: null,
+                } satisfies LinkInfo;
+              }
+              return {
+                status: preview.status as LinkInfo["status"],
+                competitionId: preview.competition_id,
+                competitionName: preview.competition_name,
+                role: preview.role as OfficialRole,
+              } satisfies LinkInfo;
+            }
             const result = await getLiveJoinLinkPreview(ctx, token);
             const preview = result.preview;
             if (!preview || !["referee", "committee_member"].includes(preview.role)) {
@@ -85,7 +127,7 @@ export default function CompetitionOfficialJoinPage() {
       }
     })();
     return () => { active = false; };
-  }, [token]);
+  }, [token, emailInvite]);
 
   const join = async () => {
     if (!user) {
@@ -97,6 +139,39 @@ export default function CompetitionOfficialJoinPage() {
     setJoining(true);
     setError(null);
     try {
+      if (emailInvite) {
+        const codeHash = await hashOfficialInviteCode(token, verificationCode.trim());
+        const result = await withFeatureBackend("competitions", {
+          supabase: async () => {
+            const { data, error: rpcError } = await (supabase as any).rpc("accept_competition_role_email_invite", {
+              p_token: token,
+              p_verification_code_hash: codeHash,
+            });
+            if (rpcError) throw rpcError;
+            return data?.[0] as { status: string; competition_id: string | null; role: string | null } | undefined;
+          },
+          icp: async (ctx) => {
+            const emailHash = await hashOfficialInviteEmail(token, inviteEmail.trim());
+            const grant = await acceptLiveCompetitionOfficialEmailInvite(ctx, token, emailHash, codeHash);
+            return { status: "joined", competition_id: grant.competition_id, role: grant.role };
+          },
+        });
+        if (!result || !["joined", "already"].includes(result.status)) {
+          const errors: Record<string, string> = {
+            email_unverified: "Verify your invited email address before joining.",
+            code_invalid: "The email address or verification code is incorrect.",
+            locked: "Too many incorrect codes. Ask for a new invitation.",
+            expired: "This invitation has expired.",
+            used: "This invitation has already been used.",
+            revoked: "This invitation has been revoked.",
+          };
+          throw new Error(errors[result?.status ?? ""] ?? "This official invitation is no longer valid.");
+        }
+        setJoined(true);
+        navigate(`/competitions/${info.competitionId}`, { replace: true });
+        return;
+      }
+
       await withFeatureBackend("competitions", {
         supabase: async () => {
           const { data, error: rpcError } = await (supabase as any).rpc("accept_competition_role_link", { p_token: token });
@@ -122,6 +197,9 @@ export default function CompetitionOfficialJoinPage() {
 
   const linkError = info?.status === "archived"
     ? "This competition has been archived."
+    : info?.status === "expired" ? "This invitation has expired."
+    : info?.status === "used" ? "This invitation has already been used."
+    : info?.status === "revoked" ? "This invitation has been revoked."
     : info?.status !== "valid" ? "This official join link is invalid or has been revoked." : error;
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -140,6 +218,21 @@ export default function CompetitionOfficialJoinPage() {
                 <p className="font-semibold">{info?.competitionName}</p>
                 <p className="mt-1 text-sm text-muted-foreground">Join as a {roleLabel(info!.role!)}.</p>
               </div>
+              {emailInvite && (
+                <div className="w-full space-y-2 text-left">
+                  {getEffectiveBackendForFeature("competitions") === "icp" && (
+                    <>
+                      <Label htmlFor="official-invite-email">Invited email</Label>
+                      <Input id="official-invite-email" type="email" autoComplete="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} />
+                    </>
+                  )}
+                  <Label htmlFor="official-invite-code">One-time email code</Label>
+                  <Input id="official-invite-code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 8))} />
+                  {getEffectiveBackendForFeature("competitions") !== "icp" && (
+                    <p className="text-xs text-muted-foreground">Sign in with the email address this invitation was sent to.</p>
+                  )}
+                </div>
+              )}
               <Button className="w-full" disabled={joining} onClick={() => void join()}>
                 {joining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {user ? `Join as ${roleLabel(info!.role!)}` : "Sign in to join"}

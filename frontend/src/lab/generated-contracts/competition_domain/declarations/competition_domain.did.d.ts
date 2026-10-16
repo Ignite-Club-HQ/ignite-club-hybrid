@@ -72,6 +72,19 @@ export interface CompetitionNewsAudience {
   'competition_id' : string,
   'club_id' : string,
 }
+export interface CompetitionOfficialEmailInvite {
+  'token' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'verification_code_hash' : string,
+  'accepted_by' : [] | [Principal],
+  'attempts' : number,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'email_hash' : string,
+  'competition_id' : string,
+  'expires_at_ms' : bigint,
+}
 export interface DivisionSetting {
   'division' : string,
   'competition_id' : string,
@@ -157,6 +170,11 @@ export interface Main {
     { 'Ok' : CompetitionInvite } |
       { 'Err' : string }
   >,
+  'accept_competition_official_email_invite' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : RoleGrant } |
+      { 'Err' : string }
+  >,
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -228,6 +246,11 @@ export interface Main {
     { 'Ok' : CompetitionJoinLink } |
       { 'Err' : string }
   >,
+  'create_competition_official_email_invite' : ActorMethod<
+    [string, string, string, string, string],
+    { 'Ok' : CompetitionOfficialEmailInvite } |
+      { 'Err' : string }
+  >,
   'create_competition_official_link' : ActorMethod<
     [string, string, string],
     { 'Ok' : CompetitionJoinLink } |
@@ -263,6 +286,18 @@ export interface Main {
   'get_competition_hide_ladder' : ActorMethod<
     [string],
     { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'get_competition_official_email_invite_preview' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'status' : string,
+          'competition_name' : string,
+          'role' : string,
+          'competition_id' : string,
+        }
+      } |
       { 'Err' : string }
   >,
   'get_eoi_stats' : ActorMethod<
@@ -397,6 +432,11 @@ export interface Main {
     { 'Ok' : Array<Competition> } |
       { 'Err' : string }
   >,
+  'list_public_competitions' : ActorMethod<
+    [],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
   'list_seasons' : ActorMethod<
     [string],
     { 'Ok' : Array<Season> } |
@@ -433,6 +473,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'revoke_competition_join_link' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'revoke_competition_official_email_invite' : ActorMethod<
     [string],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -602,6 +647,7 @@ export interface State {
   'competitionInvites' : Array<CompetitionInvite>,
   'governor' : Principal,
   'competitionJoinLinks' : Array<CompetitionJoinLink>,
+  'competitionOfficialEmailInvites' : Array<CompetitionOfficialEmailInvite>,
   'competitions' : Array<Competition>,
   'roles' : Array<RoleGrant>,
 }

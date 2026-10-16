@@ -11,6 +11,26 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSaveGameResult, type SaveGameResultInput } from "./useSaveGameResult";
 
+const liveMocks = vi.hoisted(() => ({
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  saveLiveGameResult: vi.fn(),
+  getUser: vi.fn(),
+  from: vi.fn(),
+  context: { identity: {}, target: {} },
+}));
+const supabaseMode = liveMocks.backend === "supabase";
+
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => liveMocks.backend,
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    liveMocks.backend === "icp" ? providers.icp(liveMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  saveLiveGameResult: (...args: unknown[]) => liveMocks.saveLiveGameResult(...args),
+}));
+
 // ---- toast mock --------------------------------------------------------
 const toastSpy = vi.fn();
 vi.mock("@/hooks/use-toast", () => ({
@@ -51,9 +71,9 @@ const makeFromBuilder = () => ({
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    from: vi.fn(() => makeFromBuilder()),
+    from: (...args: unknown[]) => liveMocks.from(...args),
     auth: {
-      getUser: vi.fn(async () => ({ data: { user: currentUser } })),
+      getUser: (...args: unknown[]) => liveMocks.getUser(...args),
     },
   },
 }));
@@ -80,6 +100,10 @@ const baseInput = (): SaveGameResultInput => ({
 });
 
 beforeEach(() => {
+  liveMocks.backend = supabaseMode ? "supabase" : "icp";
+  liveMocks.saveLiveGameResult.mockReset();
+  liveMocks.getUser.mockReset().mockImplementation(async () => ({ data: { user: currentUser } }));
+  liveMocks.from.mockReset().mockImplementation(() => makeFromBuilder());
   ops.length = 0;
   toastSpy.mockReset();
   lookupResponse = { data: null, error: null };
@@ -88,7 +112,7 @@ beforeEach(() => {
 });
 
 // ---- tests -------------------------------------------------------------
-describe("useSaveGameResult — onlyIfMissing fail-closed", () => {
+describe.runIf(supabaseMode)("useSaveGameResult — onlyIfMissing fail-closed", () => {
   it("performs the upsert when lookup succeeds with no existing row", async () => {
     const { result } = renderHook(() => useSaveGameResult(), { wrapper });
     await act(async () => {
@@ -228,5 +252,57 @@ describe("useSaveGameResult — onlyIfMissing fail-closed", () => {
     });
     expect(ops).toEqual([]);
     expect(result.current.saved).toBe(false);
+  });
+});
+
+describe.runIf(!supabaseMode)("useSaveGameResult — ICP adapter", () => {
+  beforeEach(() => {
+    liveMocks.backend = "icp";
+  });
+
+  it("saves the same result contract through events_domain without Supabase access", async () => {
+    liveMocks.saveLiveGameResult.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useSaveGameResult(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.save(baseInput(), { onlyIfMissing: true })).resolves.toBe(true);
+    });
+
+    expect(liveMocks.saveLiveGameResult).toHaveBeenCalledWith(liveMocks.context, {
+      teamId: "team-1",
+      eventId: "evt-1",
+      sport: "soccer",
+      homeLabel: "Home",
+      awayLabel: "Away",
+      homeScore: 3,
+      awayScore: 1,
+      periodScoresJson: "[]",
+      playerStatsJson: "[]",
+      mvpPlayerId: null,
+      mvpPlayerName: null,
+    });
+    expect(liveMocks.getUser).not.toHaveBeenCalled();
+    expect(liveMocks.from).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates successful ICP writes and reports canister failures", async () => {
+    liveMocks.saveLiveGameResult.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("canister denied"));
+    const { result } = renderHook(() => useSaveGameResult(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.save(baseInput())).resolves.toBe(true);
+      await expect(result.current.save(baseInput())).resolves.toBe(true);
+    });
+    expect(liveMocks.saveLiveGameResult).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await expect(result.current.save({ ...baseInput(), awayScore: 2 }, { force: true })).resolves.toBe(false);
+    });
+    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Could not save game",
+      description: "canister denied",
+      variant: "destructive",
+    }));
+    expect(liveMocks.from).not.toHaveBeenCalled();
   });
 });

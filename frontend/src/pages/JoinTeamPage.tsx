@@ -129,6 +129,7 @@ function SupabaseJoinTeamPage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
+  const isIcpAccount = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();

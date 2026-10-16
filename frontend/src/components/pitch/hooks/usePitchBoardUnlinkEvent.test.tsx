@@ -4,6 +4,7 @@ import type { Player, SubstitutionEvent } from "../types";
 import { usePitchBoardUnlinkEvent } from "./usePitchBoardUnlinkEvent";
 
 const mocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   from: vi.fn(),
   savePitchState: vi.fn(),
 }));
@@ -14,6 +15,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("../pitchStateUtils", () => ({
   savePitchState: mocks.savePitchState,
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
 
 const player = (id: string, name: string, onPitch = false): Player => ({
   id,
@@ -88,7 +90,7 @@ function setup({
 describe("usePitchBoardUnlinkEvent", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("persists the complete unlinked snapshot and deactivates only this user's active game", async () => {
+  it.runIf(mocks.mode === "supabase")("persists the complete unlinked snapshot and deactivates only this user's active game", async () => {
     const query = activeGamesUpdate();
     mocks.from.mockReturnValue(query);
     const { result, args, callbacks } = setup();
@@ -146,13 +148,24 @@ describe("usePitchBoardUnlinkEvent", () => {
     expect(callbacks.notifyUnlinked).toHaveBeenCalledOnce();
   });
 
-  it("retains the existing non-fatal resolved database-error behavior", async () => {
+  it.runIf(mocks.mode === "supabase")("retains the existing non-fatal resolved database-error behavior", async () => {
     mocks.from.mockReturnValue(activeGamesUpdate({ message: "update denied" }));
     const { result, callbacks } = setup();
 
     await expect(act(async () => result.current())).resolves.toBeUndefined();
     expect(callbacks.invalidateTeamActiveGame).toHaveBeenCalledOnce();
     expect(callbacks.notifyUnlinked).toHaveBeenCalledOnce();
+  });
+
+  it.runIf(mocks.mode === "icp")("persists locally and skips the unsupported active-game deactivation", async () => {
+    const { result, args, callbacks } = setup();
+    await act(async () => result.current());
+    expect(mocks.savePitchState).toHaveBeenCalledWith("team-1", expect.objectContaining({ linkedEventId: null }));
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(callbacks.invalidateTeamActiveGame).toHaveBeenCalledOnce();
+    expect(callbacks.notifyUnlinked).toHaveBeenCalledOnce();
+    expect(callbacks.setLinkedEventId).toHaveBeenCalledWith(null);
+    expect(args.teamId).toBe("team-1");
   });
 
   it("uses the latest board snapshot after roster changes", async () => {

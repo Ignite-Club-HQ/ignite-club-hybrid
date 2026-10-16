@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import {
   createVaultFolder,
@@ -13,6 +13,37 @@ import {
   restoreVaultItem,
   softDeleteVaultItem,
 } from "./vaultMutationRepository";
+
+const vaultMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  createFolder: vi.fn(),
+  createFile: vi.fn(),
+  deleteFolder: vi.fn(),
+  deleteFile: vi.fn(),
+  moveFile: vi.fn(),
+  renameFile: vi.fn(),
+  restoreFile: vi.fn(),
+  trashFile: vi.fn(),
+  updateFolder: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = { identity: {}, target: { alias: "test" } };
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    vaultMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/vault", () => ({
+  createLiveVaultFolder: (...args: unknown[]) => vaultMocks.createFolder(...args),
+  deleteLiveVaultFolder: (...args: unknown[]) => vaultMocks.deleteFolder(...args),
+  moveLiveVaultFile: (...args: unknown[]) => vaultMocks.moveFile(...args),
+  permanentlyDeleteLiveVaultFile: (...args: unknown[]) => vaultMocks.deleteFile(...args),
+  renameLiveVaultFile: (...args: unknown[]) => vaultMocks.renameFile(...args),
+  restoreLiveVaultFile: (...args: unknown[]) => vaultMocks.restoreFile(...args),
+  registerLiveVaultFile: (...args: unknown[]) => vaultMocks.createFile(...args),
+  trashLiveVaultFile: (...args: unknown[]) => vaultMocks.trashFile(...args),
+  updateLiveVaultFolder: (...args: unknown[]) => vaultMocks.updateFolder(...args),
+}));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type Write = { table: string; payload: unknown; filters: Array<[string, unknown]> };
@@ -38,7 +69,7 @@ function mutationClient(error: unknown = null) {
   return { client: { from } as unknown as IgniteSupabaseClient, writes };
 }
 
-describe("Vault rename and move repository", () => {
+describe.runIf(supabaseMode)("Vault rename and move repository — Supabase", () => {
   it("renames only the exact folder row", async () => {
     const fake = mutationClient();
     await renameVaultFolder("folder-a", "Policies", fake.client);
@@ -125,7 +156,7 @@ function lifecycleClient(error: unknown = null) {
   return { client: { from } as unknown as IgniteSupabaseClient, writes };
 }
 
-describe("Vault folder and trash-state mutations", () => {
+describe.runIf(supabaseMode)("Vault folder and trash-state mutations — Supabase", () => {
   it("creates a club folder with exact creator, parent, and club scope", async () => {
     const fake = lifecycleClient();
     await createVaultFolder({
@@ -374,7 +405,7 @@ function permanentDeleteClient(options: {
   return { client, reads, invoke: vi.fn(invoke) };
 }
 
-describe("Vault permanent single-item deletion", () => {
+describe.runIf(supabaseMode)("Vault permanent single-item deletion — Supabase", () => {
   it("resolves the legacy photo mirror and deletes both exact records through the server boundary", async () => {
     const fake = permanentDeleteClient();
     fake.client.functions.invoke = fake.invoke;
@@ -433,5 +464,92 @@ describe("Vault permanent single-item deletion", () => {
     fake.client.functions.invoke = fake.invoke;
 
     await expect(permanentlyDeleteVaultFile("file-a", fake.client)).rejects.toThrow("permission denied");
+  });
+});
+
+describe.runIf(!supabaseMode)("Vault mutation repository — ICP", () => {
+  beforeEach(() => {
+    vaultMocks.backend = "icp";
+    for (const mock of [
+      vaultMocks.createFolder,
+      vaultMocks.createFile,
+      vaultMocks.deleteFolder,
+      vaultMocks.deleteFile,
+      vaultMocks.moveFile,
+      vaultMocks.renameFile,
+      vaultMocks.restoreFile,
+      vaultMocks.trashFile,
+      vaultMocks.updateFolder,
+    ]) mock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("routes rename, move, trash, restore and folder deletion to vault_domain", async () => {
+    const fake = mutationClient();
+    await renameVaultFolder("folder-a", "Policies", fake.client);
+    await renameVaultItem("file-a", "Rules.pdf", fake.client);
+    await moveVaultFile({ fileId: "file-a", targetFolderId: "folder-b" }, fake.client);
+    await softDeleteVaultItem("file-a", "principal-a", new Date(), fake.client);
+    await restoreVaultItem("file-a", fake.client);
+    await deleteVaultFolder("folder-a", fake.client);
+    expect(vaultMocks.updateFolder).toHaveBeenCalledWith(icpContext, "folder-a", "Policies", []);
+    expect(vaultMocks.renameFile).toHaveBeenCalledWith(icpContext, "file-a", "Rules.pdf");
+    expect(vaultMocks.moveFile).toHaveBeenCalledWith(icpContext, "file-a", "folder-b");
+    expect(vaultMocks.trashFile).toHaveBeenCalledWith(icpContext, "file-a");
+    expect(vaultMocks.restoreFile).toHaveBeenCalledWith(icpContext, "file-a");
+    expect(vaultMocks.deleteFolder).toHaveBeenCalledWith(icpContext, "folder-a");
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("creates folder and external-link records through vault_domain", async () => {
+    const fake = lifecycleClient();
+    await createVaultFolder({
+      name: "Policies",
+      userId: "principal-a",
+      parentFolderId: "parent-a",
+      view: { type: "team", clubId: "club-a", clubName: "Club A", teamId: "team-a", teamName: "Team A" },
+    }, fake.client);
+    await createVaultLinkFile({
+      url: "https://reference.invalid/doc",
+      name: "Handbook",
+      userId: "principal-a",
+      folderId: "folder-a",
+      view: { type: "club", clubId: "club-a", clubName: "Club A" },
+    }, fake.client);
+    expect(vaultMocks.createFolder).toHaveBeenCalledWith(
+      icpContext,
+      expect.any(String),
+      "club-a",
+      "team-a",
+      "parent-a",
+      "Policies",
+      [],
+      null,
+      null,
+    );
+    expect(vaultMocks.createFile).toHaveBeenCalledWith(
+      icpContext,
+      expect.any(String),
+      "folder-a",
+      "club-a",
+      null,
+      "Handbook",
+      "https://reference.invalid/doc",
+      0,
+      "link/external",
+      true,
+      null,
+      null,
+      null,
+    );
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("hard-deletes the exact Vault metadata record through vault_domain", async () => {
+    const fake = mutationClient();
+    await expect(permanentlyDeleteVaultFile("file-a", fake.client)).resolves.toBeUndefined();
+    await expect(permanentlyDeleteVaultPhoto("photo-a", fake.client)).resolves.toBe("photo-a");
+    expect(vaultMocks.deleteFile).toHaveBeenNthCalledWith(1, icpContext, "file-a");
+    expect(vaultMocks.deleteFile).toHaveBeenNthCalledWith(2, icpContext, "photo-a");
+    expect(fake.writes).toEqual([]);
   });
 });

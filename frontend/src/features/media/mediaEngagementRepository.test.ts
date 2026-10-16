@@ -1,7 +1,33 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import { createMediaComment, removeMediaReaction, replaceMediaReaction } from "./mediaEngagementRepository";
+
+const mediaMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  addReaction: vi.fn(),
+  listReactions: vi.fn(),
+  removeReaction: vi.fn(),
+  addComment: vi.fn(),
+}));
+
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = {
+  identity: { getPrincipal: () => ({ toText: () => "principal-a" }) },
+  target: { alias: "test" },
+};
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mediaMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => false }));
+vi.mock("@/live/features/media", () => ({
+  addLiveReaction: (...args: unknown[]) => mediaMocks.addReaction(...args),
+  listLiveReactions: (...args: unknown[]) => mediaMocks.listReactions(...args),
+  removeLiveReaction: (...args: unknown[]) => mediaMocks.removeReaction(...args),
+  addLiveComment: (...args: unknown[]) => mediaMocks.addComment(...args),
+}));
 
 type Client = SupabaseClient<Database>;
 type Result = { data: any; error: any };
@@ -24,7 +50,11 @@ function scriptedClient(script: Record<string, Result[]>) {
   return { client: { from } as unknown as Client, calls };
 }
 
-describe("Media engagement repository", () => {
+describe.runIf(supabaseMode)("Media engagement repository — Supabase", () => {
+  beforeEach(() => {
+    mediaMocks.backend = "supabase";
+  });
+
   it("replaces only the current user's reaction on the selected photo", async () => {
     const { client, calls } = scriptedClient({ photo_reactions: [
       { data: null, error: null }, { data: null, error: null },
@@ -96,5 +126,41 @@ describe("Media engagement repository", () => {
     await expect(createMediaComment({
       photoId: "photo-a", userId: "user-a", text: "No access",
     }, client)).rejects.toEqual(failure);
+  });
+});
+
+describe.runIf(!supabaseMode)("Media engagement repository — ICP", () => {
+  beforeEach(() => {
+    mediaMocks.backend = "icp";
+    mediaMocks.addReaction.mockReset();
+    mediaMocks.listReactions.mockReset();
+    mediaMocks.removeReaction.mockReset();
+    mediaMocks.addComment.mockReset();
+  });
+
+  it("replaces a reaction through the ICP media adapter", async () => {
+    const { client, calls } = scriptedClient({});
+    await replaceMediaReaction({ photoId: "photo-a", userId: "principal-a", reactionType: "love" }, client);
+    expect(mediaMocks.addReaction).toHaveBeenCalledWith(icpContext, "photo-a", "love", expect.any(Number));
+    expect(calls).toEqual([]);
+  });
+
+  it("removes only the caller's ICP reaction", async () => {
+    mediaMocks.listReactions.mockResolvedValue([
+      { id: "reaction-a", user: { toText: () => "principal-a" } },
+      { id: "reaction-b", user: { toText: () => "principal-b" } },
+    ]);
+    const { client, calls } = scriptedClient({});
+    await removeMediaReaction({ photoId: "photo-a", userId: "principal-a" }, client);
+    expect(mediaMocks.listReactions).toHaveBeenCalledWith(icpContext, "photo-a");
+    expect(mediaMocks.removeReaction).toHaveBeenCalledWith(icpContext, "reaction-a");
+    expect(calls).toEqual([]);
+  });
+
+  it("creates an ICP comment without writing to Supabase", async () => {
+    const { client, calls } = scriptedClient({});
+    await createMediaComment({ photoId: "photo-a", userId: "principal-a", text: "Hello", replyToId: "comment-parent" }, client);
+    expect(mediaMocks.addComment).toHaveBeenCalledWith(icpContext, "photo-a", "Hello", expect.any(Number));
+    expect(calls).toEqual([]);
   });
 });

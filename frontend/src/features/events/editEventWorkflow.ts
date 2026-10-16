@@ -98,6 +98,10 @@ export async function updateEventTransaction(
           eventType: String(updates.type ?? current?.event_type ?? "training"),
           location: optText(updates.address ?? updates.location_name ?? current?.location?.[0]),
           fromMs: new Date(input.selectedEventDate).getTime(),
+          rsvpAudience: (updates.rsvp_audience as string | null | undefined) ?? null,
+          adultsOnly: updates.adults_only === true,
+          restrictedToRoles: (updates.restricted_to_roles as string[] | null | undefined) ?? null,
+          targetTeamIds: (updates.target_team_ids as string[] | null | undefined) ?? null,
         });
         if ("duty_team_id" in updates) {
           const fromMs = new Date(input.selectedEventDate).getTime();
@@ -141,6 +145,10 @@ export async function updateEventTransaction(
         address: optText(updates.address),
         miniLeagueId: (updates.mini_league_id as string | null | undefined) ?? null,
         startsAtMs,
+        rsvpAudience: (updates.rsvp_audience as string | null | undefined) ?? null,
+        adultsOnly: updates.adults_only === true,
+        restrictedToRoles: (updates.restricted_to_roles as string[] | null | undefined) ?? null,
+        targetTeamIds: (updates.target_team_ids as string[] | null | undefined) ?? null,
         // The canister requires end > start; no/invalid end -> one hour.
         endsAtMs: endsAtMs > startsAtMs ? endsAtMs : startsAtMs + 3_600_000,
       });
@@ -257,6 +265,10 @@ export async function convertEventToRecurringSeries(
         firstStartsAtMs,
         firstEndsAtMs: firstStartsAtMs + (durationMs && durationMs > 0 ? durationMs : 3_600_000),
         untilMs,
+        rsvpAudience: (updates.rsvp_audience as string | null | undefined) ?? null,
+        adultsOnly: updates.adults_only === true,
+        restrictedToRoles: (updates.restricted_to_roles as string[] | null | undefined) ?? null,
+        targetTeamIds: (updates.target_team_ids as string[] | null | undefined) ?? null,
       });
       return events.length;
     },

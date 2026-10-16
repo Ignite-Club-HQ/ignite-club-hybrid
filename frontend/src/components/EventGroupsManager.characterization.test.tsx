@@ -10,6 +10,7 @@ type Operation = {
 };
 
 const mocks = vi.hoisted(() => ({
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   mutations: [] as any[],
   operations: [] as Operation[],
   results: {} as Record<string, Array<{ data: any; error: any }>>,
@@ -21,7 +22,13 @@ const mocks = vi.hoisted(() => ({
   allPlayers: [] as any[],
   eventRsvps: [] as any[],
   previousEvents: [] as any[],
+  createLiveEventGroup: vi.fn(),
+  setLiveEventGroupAppearance: vi.fn(),
+  addLiveGroupPlayer: vi.fn(),
+  moveLiveGroupPlayer: vi.fn(),
+  replaceLiveEventGroups: vi.fn(),
 }));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
 const mutationNames = [
   "createGroup",
@@ -60,6 +67,30 @@ vi.mock("@tanstack/react-query", () => ({
     mocks.mutations.push(options);
     return { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false };
   },
+}));
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.backend === "icp"
+      ? providers.icp({ identity: {}, target: {} })
+      : providers.supabase(),
+}));
+
+vi.mock("@/live/features/events", () => ({
+  createLiveEventGroup: (...args: unknown[]) => mocks.createLiveEventGroup(...args),
+  renameLiveEventGroup: vi.fn().mockResolvedValue(undefined),
+  deleteLiveEventGroup: vi.fn().mockResolvedValue(undefined),
+  listLiveEventGroups: vi.fn().mockResolvedValue([]),
+  addLiveGroupPlayer: (...args: unknown[]) => mocks.addLiveGroupPlayer(...args),
+  listLiveGroupPlayers: vi.fn().mockResolvedValue([]),
+  moveLiveGroupPlayer: (...args: unknown[]) => mocks.moveLiveGroupPlayer(...args),
+  swapLiveGroupPlayers: vi.fn().mockResolvedValue(undefined),
+  setLiveGroupDuty: vi.fn().mockResolvedValue(undefined),
+  listLiveGroupDuties: vi.fn().mockResolvedValue([]),
+  setLiveEventGroupAppearance: (...args: unknown[]) => mocks.setLiveEventGroupAppearance(...args),
+  replaceLiveEventGroups: (...args: unknown[]) => mocks.replaceLiveEventGroups(...args),
+  listLiveDuties: vi.fn().mockResolvedValue([]),
+  listLiveMiniLeagueRsvps: vi.fn().mockResolvedValue([]),
 }));
 
 function takeResult(table: string, kind: string) {
@@ -131,8 +162,9 @@ function mutation(name: string) {
   return mocks.mutations.slice(-mutationNames.length)[mutationNames.indexOf(name)];
 }
 
-describe("EventGroupsManager business-operation characterization", () => {
+describe.runIf(supabaseMode)("EventGroupsManager business-operation characterization", () => {
   beforeEach(() => {
+    mocks.backend = "supabase";
     vi.clearAllMocks();
     mocks.mutations = [];
     mocks.operations = [];
@@ -452,5 +484,104 @@ describe("EventGroupsManager business-operation characterization", () => {
     expect(screen.getByText("Bailey")).toBeInTheDocument();
     expect(screen.queryByText("Regenerate All")).not.toBeInTheDocument();
     expect(screen.queryByText(/Tap a player/)).not.toBeInTheDocument();
+  });
+});
+
+describe.runIf(!supabaseMode)("EventGroupsManager ICP provider contracts", () => {
+  const context = { identity: {}, target: {} };
+
+  beforeEach(() => {
+    mocks.backend = "icp";
+    mocks.mutations = [];
+    mocks.operations = [];
+    mocks.createLiveEventGroup.mockReset().mockResolvedValue({ id: "group-icp" });
+    mocks.setLiveEventGroupAppearance.mockReset().mockResolvedValue(undefined);
+    mocks.addLiveGroupPlayer.mockReset().mockResolvedValue(undefined);
+    mocks.moveLiveGroupPlayer.mockReset().mockResolvedValue(undefined);
+    mocks.replaceLiveEventGroups.mockReset().mockResolvedValue(["generated-icp"]);
+  });
+
+  it("creates a group and assigns players through the events canister", async () => {
+    await renderManager();
+    await mutation("createGroup").mutationFn({
+      name: "Pitch One",
+      pitchName: "North",
+      teamAPlayerIds: ["player-a"],
+      teamBPlayerIds: ["player-b"],
+    });
+
+    expect(mocks.createLiveEventGroup).toHaveBeenCalledWith(
+      context,
+      "event-1",
+      "Pitch One",
+      null,
+      "#111111",
+      null,
+      "North",
+    );
+    expect(mocks.setLiveEventGroupAppearance).toHaveBeenCalledWith(
+      context,
+      "group-icp",
+      null,
+      "#111111",
+      null,
+      "North",
+      "#eeeeee",
+    );
+    expect(mocks.addLiveGroupPlayer).toHaveBeenNthCalledWith(1, context, "group-icp", "player-a", "a");
+    expect(mocks.addLiveGroupPlayer).toHaveBeenNthCalledWith(2, context, "group-icp", "player-b", "b");
+    expect(mocks.operations).toEqual([]);
+  });
+
+  it("moves a player between groups through the canister adapter", async () => {
+    await renderManager();
+    await mutation("movePlayer").mutationFn({
+      playerId: "player-a",
+      fromGroupId: "group-1",
+      toGroupId: "group-2",
+      toTeam: "b",
+    });
+
+    expect(mocks.moveLiveGroupPlayer).toHaveBeenCalledWith(
+      context,
+      "group-1",
+      "group-2",
+      "player-a",
+      "b",
+    );
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.operations).toEqual([]);
+  });
+
+  it("generates balanced groups through one canister replacement call", async () => {
+    mocks.allPlayers = ["a", "b", "c", "d"].map((id, index) => ({
+      id: `player-${id}`,
+      name: `Player ${id}`,
+      ability_rating: 4 - index,
+      parent_user_id: null,
+      child_id: null,
+    }));
+    mocks.eventRsvps = mocks.allPlayers.map((player) => ({ mini_league_player_id: player.id }));
+    await renderManager();
+
+    const result = await mutation("autoGenerate").mutationFn();
+
+    expect(mocks.replaceLiveEventGroups).toHaveBeenCalledWith(
+      context,
+      "event-1",
+      [expect.objectContaining({
+        name: "Match 1",
+        players: [
+          { accountId: "player-a", teamLetter: "a" },
+          { accountId: "player-b", teamLetter: "a" },
+          { accountId: "player-c", teamLetter: "b" },
+          { accountId: "player-d", teamLetter: "b" },
+        ],
+      })],
+      false,
+    );
+    expect(result.matchIds).toEqual(["generated-icp"]);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.operations).toEqual([]);
   });
 });

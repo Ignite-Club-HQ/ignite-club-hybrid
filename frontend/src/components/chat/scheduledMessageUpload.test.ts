@@ -4,11 +4,13 @@ const { upload, getPublicUrl, compressImage, measureImageDimensions, appendDimen
   upload: vi.fn(), getPublicUrl: vi.fn(), compressImage: vi.fn(),
   measureImageDimensions: vi.fn(), appendDimensionsToUrl: vi.fn(), setCachedImageAspectRatio: vi.fn(),
 }));
+const icpMode = vi.hoisted(() => process.env.IGNITE_TEST_BACKEND_MODE === "icp");
 const mockSupabase = await vi.hoisted(async () => {
   const { createMockSupabaseClient: createClient } = await import("@/test/mockSupabaseClient");
   return createClient();
 });
 vi.mock("@/integrations/supabase/client", () => ({ supabase: mockSupabase }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => icpMode }));
 vi.mock("@/lib/imageCompression", () => ({ compressImage }));
 vi.mock("@/lib/binaryUtils", () => ({ mimeToExtension: (mime: string) => mime === "image/png" ? "png" : "jpg" }));
 vi.mock("@/lib/chatImageAspectCache", () => ({ measureImageDimensions, appendDimensionsToUrl, setCachedImageAspectRatio }));
@@ -37,7 +39,7 @@ describe("uploadScheduledImage", () => {
     expect(mockSupabase.auth.getUser).not.toHaveBeenCalled(); expect(mockSupabase.storage.from).not.toHaveBeenCalled();
   });
 
-  it("accepts exactly 10MB but rejects one byte over the limit", async () => {
+  it.runIf(!icpMode)("accepts exactly 10MB but rejects one byte over the limit", async () => {
     const exact = imageFile("exact.jpg", "image/jpeg", 10 * 1024 * 1024);
     await expect(uploadScheduledImage(exact)).resolves.toBe("https://example.invalid/upload.jpg");
     vi.clearAllMocks();
@@ -46,13 +48,13 @@ describe("uploadScheduledImage", () => {
     expect(mockSupabase.auth.getUser).not.toHaveBeenCalled();
   });
 
-  it("rejects unauthenticated uploads before compression or storage", async () => {
+  it.runIf(!icpMode)("rejects unauthenticated uploads before compression or storage", async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: null } });
     await expect(uploadScheduledImage(imageFile())).rejects.toThrow("Not authenticated");
     expect(compressImage).not.toHaveBeenCalled(); expect(upload).not.toHaveBeenCalled();
   });
 
-  it.each([
+  it.runIf(!icpMode).each([
     [{ clubId: "club-1", teamId: "team-1" }, "clubs/club-1/teams/team-1/user-1/scheduled-1234567890.jpg"],
     [{ clubId: "club-1" }, "clubs/club-1/user-1/scheduled-1234567890.jpg"],
     [{}, "general/user-1/scheduled-1234567890.jpg"],
@@ -65,23 +67,32 @@ describe("uploadScheduledImage", () => {
     expect(getPublicUrl).toHaveBeenCalledWith(expectedPath);
   });
 
-  it("uses the original file when compression fails", async () => {
+  it.runIf(!icpMode)("uses the original file when compression fails", async () => {
     const original = imageFile();
     compressImage.mockRejectedValue(new Error("compression unavailable"));
     await uploadScheduledImage(original, { teamId: "team-1" });
     expect(upload.mock.calls[0][1]).toBe(original);
   });
 
-  it("surfaces storage errors and does not request a public URL", async () => {
+  it.runIf(!icpMode)("surfaces storage errors and does not request a public URL", async () => {
     upload.mockResolvedValue({ error: { message: "RLS denied" } });
     await expect(uploadScheduledImage(imageFile(), { clubId: "club-1" })).rejects.toThrow("RLS denied");
     expect(getPublicUrl).not.toHaveBeenCalled();
   });
 
-  it("adds measured dimensions and caches the resulting aspect ratio", async () => {
+  it.runIf(!icpMode)("adds measured dimensions and caches the resulting aspect ratio", async () => {
     measureImageDimensions.mockResolvedValue({ width: 1600, height: 900 });
     const result = await uploadScheduledImage(imageFile());
     expect(result).toBe("https://example.invalid/upload.jpg?w=1600&h=900");
     expect(setCachedImageAspectRatio).toHaveBeenCalledWith([result], 1600 / 900);
+  });
+
+  it.runIf(icpMode)("fails closed before auth or storage for ICP attachments", async () => {
+    await expect(uploadScheduledImage(imageFile(), { teamId: "team-1" })).rejects.toThrow(
+      /aren't available yet on the Internet Identity messaging backend/,
+    );
+    expect(mockSupabase.auth.getUser).not.toHaveBeenCalled();
+    expect(compressImage).not.toHaveBeenCalled();
+    expect(mockSupabase.storage.from).not.toHaveBeenCalled();
   });
 });

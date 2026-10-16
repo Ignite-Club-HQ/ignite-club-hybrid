@@ -95,6 +95,7 @@ export function getErrorMessage(error: unknown, fallback: string): string {
 
 export function PasskeyManagementDialog({ open, onOpenChange }: PasskeyManagementDialogProps) {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { registerPasskey, removeAccount, storeCredentialsForNativeBiometric, loading: registerLoading } = usePasskey();
@@ -143,7 +144,7 @@ export function PasskeyManagementDialog({ open, onOpenChange }: PasskeyManagemen
       if (error) throw error;
       return data as Passkey[];
     },
-    enabled: !!user && open,
+    enabled: !!user && open && !isIcp,
   });
 
   const handleDelete = async (passkeyId: string) => {
@@ -249,7 +250,7 @@ export function PasskeyManagementDialog({ open, onOpenChange }: PasskeyManagemen
   // Passkeys are stored against the Supabase account; Internet Identity
   // sessions have none — the settings trigger is already hidden for II
   // sessions; this is belt-and-braces.
-  if (resolveAuthBackend() === "icp") return null;
+  if (isIcp) return null;
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {

@@ -5,6 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { ReturningMembersStep, type ReturningPlayer } from "./ReturningMembersStep";
 
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  rpc: vi.fn(),
+  from: vi.fn(),
+}));
+
 // jsdom lacks ResizeObserver, which Radix ScrollArea requires.
 if (!("ResizeObserver" in globalThis)) {
   (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
@@ -54,8 +60,17 @@ let rpcPlayers = players;
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    rpc: vi.fn(async () => ({ data: rpcPlayers, error: null })),
-    from: vi.fn(() => {
+    rpc: (...args: unknown[]) => backendMocks.rpc(...args),
+    from: (...args: unknown[]) => backendMocks.from(...args),
+  },
+}));
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => backendMocks.mode,
+}));
+
+function installSupabaseFixtures() {
+  backendMocks.rpc.mockImplementation(async () => ({ data: rpcPlayers, error: null }));
+  backendMocks.from.mockImplementation(() => {
       const chain: Record<string, unknown> = {};
       const self = () => chain;
       Object.assign(chain, {
@@ -65,9 +80,8 @@ vi.mock("@/integrations/supabase/client", () => ({
         order: async () => ({ data: targetTeams, error: null }),
       });
       return chain;
-    }),
-  },
-}));
+  });
+}
 
 function Harness({ initialSelected = new Set<string>() }: { initialSelected?: Set<string> }) {
   const [selected, setSelected] = useState<Set<string>>(initialSelected);
@@ -90,11 +104,14 @@ function Harness({ initialSelected = new Set<string>() }: { initialSelected?: Se
 
 const selectedOf = () => screen.getByTestId("selected").textContent;
 
-describe("ReturningMembersStep", () => {
+describe.runIf(backendMocks.mode === "supabase")("ReturningMembersStep", () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     rpcPlayers = players;
+    backendMocks.rpc.mockReset();
+    backendMocks.from.mockReset();
+    installSupabaseFixtures();
     errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
   afterEach(() => {
@@ -200,5 +217,14 @@ describe("ReturningMembersStep", () => {
     expect(
       await screen.findByText("No players from the previous season to carry over."),
     ).toBeInTheDocument();
+  });
+});
+
+describe.runIf(backendMocks.mode === "icp")("ReturningMembersStep ICP boundary", () => {
+  it("shows the no-roster state without querying Supabase", async () => {
+    render(<Harness />);
+    expect(await screen.findByText("No players from the previous season to carry over.")).toBeInTheDocument();
+    expect(backendMocks.rpc).not.toHaveBeenCalled();
+    expect(backendMocks.from).not.toHaveBeenCalled();
   });
 });

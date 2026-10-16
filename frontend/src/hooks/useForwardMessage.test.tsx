@@ -8,6 +8,14 @@ const {
   invalidateQueries,
   selectProfile,
   queryOptions,
+  mode,
+  context,
+  roleGrants,
+  clubGroups,
+  teamGroups,
+  clubProfile,
+  forwardLiveMessage,
+  notifyLive,
 } = vi.hoisted(() => ({
   from: vi.fn(),
   toastSuccess: vi.fn(),
@@ -15,9 +23,29 @@ const {
   invalidateQueries: vi.fn(),
   selectProfile: vi.fn(),
   queryOptions: { current: null as any },
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: { getPrincipal: () => ({ toText: () => "principal-sender" }) }, target: {} },
+  roleGrants: vi.fn(),
+  clubGroups: vi.fn(),
+  teamGroups: vi.fn(),
+  clubProfile: vi.fn(),
+  forwardLiveMessage: vi.fn(),
+  notifyLive: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from } }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mode === "icp" ? providers.icp(context) : providers.supabase(),
+}));
+vi.mock("@/live/features/membership", () => ({ getLiveMyRoleGrants: (...args: unknown[]) => roleGrants(...args) }));
+vi.mock("@/live/features/messaging", () => ({
+  listLiveGroupsByClub: (...args: unknown[]) => clubGroups(...args),
+  listLiveGroupsByTeam: (...args: unknown[]) => teamGroups(...args),
+  forwardLiveMessage: (...args: unknown[]) => forwardLiveMessage(...args),
+}));
+vi.mock("@/live/features/club", () => ({ getLiveClubProfile: (...args: unknown[]) => clubProfile(...args) }));
+vi.mock("@/live/features/notifications", () => ({ recordLiveChatNotifyBatch: (...args: unknown[]) => notifyLive(...args) }));
 vi.mock("@/lib/profileCache", () => ({ selectCachedProfileById: selectProfile }));
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
 vi.mock("@tanstack/react-query", () => ({
@@ -75,7 +103,7 @@ const source = {
   sourceLabel: "Team chat",
 };
 
-describe("useForwardDestinations membership scoping", () => {
+describe.runIf(mode === "supabase")("useForwardDestinations membership scoping", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryOptions.current = null;
@@ -126,7 +154,7 @@ describe("useForwardDestinations membership scoping", () => {
   });
 });
 
-describe("useForwardMessageMutation permission and failure boundaries", () => {
+describe.runIf(mode === "supabase")("useForwardMessageMutation permission and failure boundaries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     selectProfile.mockResolvedValue({ data: { display_name: "Casey Coach" } });
@@ -222,5 +250,50 @@ describe("useForwardMessageMutation permission and failure boundaries", () => {
     ).resolves.toEqual({ forwarded: 1 });
     expect(toastSuccess).toHaveBeenCalledWith("Message forwarded");
     expect(toastError).not.toHaveBeenCalled();
+  });
+});
+
+describe.runIf(mode === "icp")("useForwardMessage ICP provider", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    roleGrants.mockResolvedValue([
+      { club: ["club-1"], team: ["team-1"] },
+    ]);
+    clubGroups.mockResolvedValue([
+      { conversationId: "club-group", name: "Club", clubId: "club-1", teamId: null, isMember: true },
+    ]);
+    teamGroups.mockResolvedValue([
+      { conversationId: "team-group", name: "Team", clubId: "club-1", teamId: "team-1", isMember: true },
+      { conversationId: "not-member", name: "Other", clubId: "club-1", teamId: "team-1", isMember: false },
+    ]);
+    clubProfile.mockResolvedValue([{ name: "Riverside" }]);
+    forwardLiveMessage.mockResolvedValue({ id: "forwarded-message" });
+    notifyLive.mockResolvedValue(undefined);
+  });
+
+  it("discovers only member groups through club/team canister queries", async () => {
+    renderHook(() => useForwardDestinations("principal-sender", true));
+    await expect(queryOptions.current.queryFn()).resolves.toEqual([
+      { id: "club-group", name: "Club", club_id: "club-1", team_id: null, club_name: "Riverside" },
+      { id: "team-group", name: "Team", club_id: "club-1", team_id: "team-1", club_name: "Riverside" },
+    ]);
+    expect(roleGrants).toHaveBeenCalledWith(context);
+    expect(clubGroups).toHaveBeenCalledWith(context, "club-1");
+    expect(teamGroups).toHaveBeenCalledWith(context, "team-1");
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("forwards the source message to selected canister conversations and notifies its author", async () => {
+    const { result } = renderHook(() => useForwardMessageMutation("principal-sender"));
+    await expect(result.current.mutateAsync({
+      source: { ...source, messageId: "source-message" },
+      destinationGroupIds: ["team-group"],
+    })).resolves.toEqual({ forwarded: 1 });
+    expect(forwardLiveMessage).toHaveBeenCalledWith(context, "source-message", "team-group");
+    expect(notifyLive).toHaveBeenCalledWith(context, expect.objectContaining({
+      conversationId: "team-group",
+      recipients: ["author-1"],
+    }));
+    expect(from).not.toHaveBeenCalled();
   });
 });

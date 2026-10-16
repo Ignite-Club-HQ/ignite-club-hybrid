@@ -1,9 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { channel, removeChannel, from, getUser, invalidateQueries, toastSuccess, toastError, channels } = vi.hoisted(() => ({
+const { channel, removeChannel, from, getUser, invalidateQueries, toastSuccess, toastError, channels, queryOptions, mode } = vi.hoisted(() => ({
   channel: vi.fn(), removeChannel: vi.fn(), from: vi.fn(), getUser: vi.fn(), invalidateQueries: vi.fn(),
   toastSuccess: vi.fn(), toastError: vi.fn(), channels: new Map<string, any>(),
+  queryOptions: { current: null as any },
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -12,7 +14,10 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries }),
-  useQuery: () => ({ data: null, isLoading: false }),
+  useQuery: (options: any) => {
+    queryOptions.current = options;
+    return { data: null, isLoading: false };
+  },
   useMutation: (options: any) => ({
     isPending: false,
     mutate: async (input: any) => {
@@ -26,6 +31,7 @@ vi.mock("@tanstack/react-query", () => ({
     },
   }),
 }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => mode === "icp" }));
 
 import { pinnedVaultKey, useChatPinnedVault } from "./useChatPinnedVault";
 
@@ -67,7 +73,7 @@ describe("useChatPinnedVault", () => {
     expect(channel).not.toHaveBeenCalled();
   });
 
-  it("subscribes to the exact chat and invalidates only its pinned-vault key", () => {
+  it.runIf(mode === "supabase")("subscribes to the exact chat and invalidates only its pinned-vault key", () => {
     renderHook(() => useChatPinnedVault("group", "group-1"));
     const record = channels.get("chat-pinned-vault-group-group-1");
 
@@ -78,7 +84,7 @@ describe("useChatPinnedVault", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: pinnedVaultKey("group", "group-1") });
   });
 
-  it("removes the old channel before subscribing to a different chat", () => {
+  it.runIf(mode === "supabase")("removes the old channel before subscribing to a different chat", () => {
     const { rerender } = renderHook(({ chatType, chatId }) => useChatPinnedVault(chatType, chatId), {
       initialProps: { chatType: "team" as const, chatId: "team-1" },
     });
@@ -89,14 +95,14 @@ describe("useChatPinnedVault", () => {
     expect(channels.has("chat-pinned-vault-team-team-2")).toBe(true);
   });
 
-  it("removes the active channel on unmount", () => {
+  it.runIf(mode === "supabase")("removes the active channel on unmount", () => {
     const { unmount } = renderHook(() => useChatPinnedVault("club", "club-1"));
     const active = channels.get("chat-pinned-vault-club-club-1");
     unmount();
     expect(removeChannel).toHaveBeenCalledWith(active);
   });
 
-  it("saves an authenticated pinned target with exact chat scope and setter identity", async () => {
+  it.runIf(mode === "supabase")("saves an authenticated pinned target with exact chat scope and setter identity", async () => {
     const query = mutationChain();
     from.mockReturnValueOnce(query);
     const { result } = renderHook(() => useChatPinnedVault("team", "team-1"));
@@ -111,7 +117,7 @@ describe("useChatPinnedVault", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Pinned vault updated");
   });
 
-  it("rejects saving when there is no authenticated user without writing", async () => {
+  it.runIf(mode === "supabase")("rejects saving when there is no authenticated user without writing", async () => {
     getUser.mockResolvedValue({ data: { user: null } });
     const { result } = renderHook(() => useChatPinnedVault("team", "team-1"));
     await act(async () => result.current.save({ enabled: true }));
@@ -120,7 +126,7 @@ describe("useChatPinnedVault", () => {
     expect(toastError).toHaveBeenCalledWith("Couldn't pin vault", { description: "Not authenticated" });
   });
 
-  it("scopes enable toggles by both chat type and chat id", async () => {
+  it.runIf(mode === "supabase")("scopes enable toggles by both chat type and chat id", async () => {
     const query = mutationChain();
     from.mockReturnValueOnce(query);
     const { result } = renderHook(() => useChatPinnedVault("group", "group-1"));
@@ -131,7 +137,7 @@ describe("useChatPinnedVault", () => {
     expect(query.eq).toHaveBeenNthCalledWith(2, "chat_id", "group-1");
   });
 
-  it("scopes removal by both chat type and chat id and reports mutation errors", async () => {
+  it.runIf(mode === "supabase")("scopes removal by both chat type and chat id and reports mutation errors", async () => {
     const query = mutationChain({ message: "denied" });
     from.mockReturnValueOnce(query);
     const { result } = renderHook(() => useChatPinnedVault("club", "club-1"));
@@ -142,5 +148,16 @@ describe("useChatPinnedVault", () => {
     expect(query.eq).toHaveBeenNthCalledWith(2, "chat_id", "club-1");
     expect(toastError).toHaveBeenCalledWith("Couldn't remove pinned vault", { description: "denied" });
     expect(toastSuccess).not.toHaveBeenCalledWith("Pinned vault removed");
+  });
+
+  it.runIf(mode === "icp")("does not query or subscribe to Supabase and rejects unsupported pin mutations", async () => {
+    const { result } = renderHook(() => useChatPinnedVault("team", "team-1"));
+    expect(queryOptions.current.enabled).toBe(false);
+    expect(channel).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+
+    await act(async () => result.current.save({ enabled: true }));
+    expect(toastError).toHaveBeenCalledWith("Couldn't pin vault", { description: "Pinning a vault is not yet available for Internet Identity accounts." });
+    expect(from).not.toHaveBeenCalled();
   });
 });

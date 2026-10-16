@@ -46,6 +46,13 @@ vi.mock("@/components/subscription/ProFeatureLock", () => ({
 
 const rpcMock = vi.fn();
 const fromInsertMock = vi.fn();
+const icpMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  roleGrants: vi.fn(),
+  clubProfile: vi.fn(),
+  createCompetition: vi.fn(),
+}));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     rpc: (...args: any[]) => rpcMock(...args),
@@ -57,15 +64,29 @@ vi.mock("@/integrations/supabase/client", () => ({
     }),
   },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMocks.mode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    icpMocks.mode === "icp" ? providers.icp(icpMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/membership", () => ({
+  getLiveMyRoleGrants: (...args: unknown[]) => icpMocks.roleGrants(...args),
+}));
+vi.mock("@/live/features/club", () => ({
+  getLiveClubProfile: (...args: unknown[]) => icpMocks.clubProfile(...args),
+}));
+vi.mock("@/live/features/competitions", () => ({
+  createLiveCompetition: (...args: unknown[]) => icpMocks.createCompetition(...args),
+}));
 
 // ---- Helpers ------------------------------------------------------------
 
-async function renderPage() {
+async function renderPage(organizer?: string) {
   const { default: Page } = await import("./CreateCompetitionPage");
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[organizer ? `/?organizer=${organizer}` : "/?backend=supabase"]}>
         <Page />
       </MemoryRouter>
     </QueryClientProvider>
@@ -85,13 +106,16 @@ beforeEach(() => {
   toastMock.mockReset();
   rpcMock.mockReset();
   fromInsertMock.mockReset();
+  icpMocks.roleGrants.mockReset();
+  icpMocks.clubProfile.mockReset();
+  icpMocks.createCompetition.mockReset();
 });
 
 afterEach(cleanup);
 
 // ---- Tests --------------------------------------------------------------
 
-describe("CreateCompetitionPage — personal organiser (atomic RPC)", () => {
+describe.runIf(icpMocks.mode === "supabase")("CreateCompetitionPage — personal organiser (atomic RPC)", () => {
   it("calls the transactional RPC once and never inserts shell/role/competition from the client", async () => {
     rpcMock.mockResolvedValueOnce({
       data: [{ competition_id: "comp-1", club_id: "club-1" }],
@@ -183,5 +207,25 @@ describe("CreateCompetitionPage — personal organiser (atomic RPC)", () => {
 
     resolveRpc({ data: [{ competition_id: "comp-1", club_id: "club-1" }], error: null });
     await waitFor(() => expect(navigateMock).toHaveBeenCalled());
+  });
+});
+
+describe.runIf(icpMocks.mode === "icp")("CreateCompetitionPage — ICP organizer club", () => {
+  it("creates under the selected existing club through competition_domain", async () => {
+    icpMocks.roleGrants.mockResolvedValue([{ role: "club_admin", club: ["club-icp"] }]);
+    icpMocks.clubProfile.mockResolvedValue([{ id: "club-icp", name: "ICP Club", kind: "full", deleted_at_ms: [] }]);
+    icpMocks.createCompetition.mockResolvedValue({ id: "competition-icp" });
+    await renderPage("club-icp");
+    await fillNameAndSubmit("Twilight Cup");
+
+    await waitFor(() => expect(icpMocks.createCompetition).toHaveBeenCalledWith(
+      icpMocks.context,
+      "club-icp",
+      "Twilight Cup",
+      "",
+    ));
+    expect(navigateMock).toHaveBeenCalledWith("/competitions/competition-icp");
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(fromInsertMock).not.toHaveBeenCalled();
   });
 });

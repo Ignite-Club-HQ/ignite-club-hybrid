@@ -8,9 +8,13 @@ const { channel, removeChannel, channels } = vi.hoisted(() => ({
   removeChannel: vi.fn(),
   channels: new Map<string, any>(),
 }));
+const realtimeMode = vi.hoisted(() => ({ icp: process.env.IGNITE_TEST_BACKEND_MODE === "icp" }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { channel, removeChannel },
+}));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: (feature: string) => feature === "media" && realtimeMode.icp,
 }));
 
 import { useMediaRealtime } from "./useMediaRealtime";
@@ -42,16 +46,17 @@ describe("useMediaRealtime", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     channels.clear();
+    realtimeMode.icp = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
     channel.mockImplementation(makeChannel);
     delete (window as any).Capacitor;
   });
 
-  it("does not subscribe without an authenticated user", () => {
+  it.runIf(process.env.IGNITE_TEST_BACKEND_MODE !== "icp")("does not subscribe without an authenticated user", () => {
     setup(undefined, ["photo-a"]);
     expect(channel).not.toHaveBeenCalled();
   });
 
-  it("subscribes before callbacks can run and invalidates the user's feed on insert", () => {
+  it.runIf(process.env.IGNITE_TEST_BACKEND_MODE !== "icp")("subscribes before callbacks can run and invalidates the user's feed on insert", () => {
     const { invalidate } = setup("user-a", ["photo-a"]);
     const feed = channels.get("media-feed-user-a");
     expect(feed.on.mock.invocationCallOrder[0]).toBeLessThan(feed.subscribe.mock.invocationCallOrder[0]);
@@ -59,7 +64,7 @@ describe("useMediaRealtime", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["photos", "user-a"] });
   });
 
-  it("invalidates engagement only for a currently loaded photo", () => {
+  it.runIf(process.env.IGNITE_TEST_BACKEND_MODE !== "icp")("invalidates engagement only for a currently loaded photo", () => {
     const { invalidate } = setup("user-a", ["photo-a"]);
     const engagement = channels.get("media-comments-user-a");
     act(() => engagement.handlers.get("photo_comments")({ new: { photo_id: "outside" } }));
@@ -68,7 +73,7 @@ describe("useMediaRealtime", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["photo-reactions", "user-a"] });
   });
 
-  it("does not churn channels when an equivalent photo-id array is recreated", () => {
+  it.runIf(process.env.IGNITE_TEST_BACKEND_MODE !== "icp")("does not churn channels when an equivalent photo-id array is recreated", () => {
     const { rerender } = setup("user-a", ["photo-a", "photo-b"]);
     const initialCalls = channel.mock.calls.length;
     rerender({ id: "user-a", ids: ["photo-a", "photo-b"] });
@@ -76,7 +81,7 @@ describe("useMediaRealtime", () => {
     expect(removeChannel).not.toHaveBeenCalled();
   });
 
-  it("replaces scoped channels and cleans everything up on unmount", () => {
+  it.runIf(process.env.IGNITE_TEST_BACKEND_MODE !== "icp")("replaces scoped channels and cleans everything up on unmount", () => {
     const { rerender, unmount } = setup("user-a", ["photo-a"]);
     const firstFeed = channels.get("media-feed-user-a");
     const firstEngagement = channels.get("media-comments-user-a");
@@ -90,7 +95,7 @@ describe("useMediaRealtime", () => {
     expect(removeChannel).toHaveBeenCalledWith(secondEngagement);
   });
 
-  it("refreshes engagement on browser visibility but leaves native resume to its adapter", () => {
+  it.runIf(process.env.IGNITE_TEST_BACKEND_MODE !== "icp")("refreshes engagement on browser visibility but leaves native resume to its adapter", () => {
     const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     const browser = setup("user-a", ["photo-a"]);
     act(() => document.dispatchEvent(new Event("visibilitychange")));
@@ -104,5 +109,11 @@ describe("useMediaRealtime", () => {
     expect(native.invalidate).not.toHaveBeenCalled();
     native.unmount();
     visibility.mockRestore();
+  });
+
+  it.runIf(process.env.IGNITE_TEST_BACKEND_MODE === "icp")("does not open Supabase channels for ICP media", () => {
+    setup("principal-a", ["photo-a"]);
+    expect(channel).not.toHaveBeenCalled();
+    expect(removeChannel).not.toHaveBeenCalled();
   });
 });

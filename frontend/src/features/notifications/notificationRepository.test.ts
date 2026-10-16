@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import {
   clearNotifications,
@@ -8,6 +8,30 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "./notificationRepository";
+
+const notificationMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  listInbox: vi.fn(),
+  markRead: vi.fn(),
+  markAllRead: vi.fn(),
+  deleteNotification: vi.fn(),
+  clearInbox: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    notificationMocks.backend === "icp"
+      ? providers.icp({ identity: {}, target: { alias: "test" } })
+      : providers.supabase(),
+}));
+vi.mock("@/live/features/notifications", () => ({
+  listLiveInbox: (...args: unknown[]) => notificationMocks.listInbox(...args),
+  markLiveNotificationRead: (...args: unknown[]) => notificationMocks.markRead(...args),
+  markAllLiveNotificationsRead: (...args: unknown[]) => notificationMocks.markAllRead(...args),
+  deleteLiveNotification: (...args: unknown[]) => notificationMocks.deleteNotification(...args),
+  clearLiveInbox: (...args: unknown[]) => notificationMocks.clearInbox(...args),
+}));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type Call = { method: string; args: unknown[] };
@@ -35,7 +59,7 @@ function fakeClient(result: { data?: unknown; error?: unknown } = {}) {
 const scope = "club-a";
 const scopeExpression = "club_id.eq.club-a,type.in.(direct_message,streak_progress,reward_unlocked)";
 
-describe("notification repository", () => {
+describe.runIf(supabaseMode)("notification repository — Supabase", () => {
   it("loads newest notifications with a bounded global query and maps is_read", async () => {
     const fake = fakeClient({ data: [{
       id: "notification-a", user_id: "user-a", type: "event", message: "Game",
@@ -109,5 +133,53 @@ describe("notification repository", () => {
   ] as const)("propagates database errors from %s", async (_name, operation) => {
     const error = { code: "42501", message: "denied" };
     await expect(operation(fakeClient({ error }).client)).rejects.toBe(error);
+  });
+});
+
+describe.runIf(!supabaseMode)("notification repository — ICP", () => {
+  beforeEach(() => {
+    notificationMocks.backend = "icp";
+    notificationMocks.listInbox.mockReset();
+    notificationMocks.markRead.mockReset();
+    notificationMocks.markAllRead.mockReset();
+    notificationMocks.deleteNotification.mockReset();
+    notificationMocks.clearInbox.mockReset();
+  });
+
+  it("maps canister inbox rows into the shared frontend notification shape", async () => {
+    notificationMocks.listInbox.mockResolvedValue([{
+      id: "notification-icp",
+      user: "principal-a",
+      kind: "event",
+      body: "Game",
+      related_id: ["event-a"],
+      created_at_ms: 1_786_032_000_000n,
+      read: false,
+    }]);
+    const fake = fakeClient();
+    await expect(listNotifications("principal-a", "club-a", fake.client)).resolves.toEqual([{
+      id: "notification-icp",
+      user_id: "principal-a",
+      type: "event",
+      message: "Game",
+      related_id: "event-a",
+      created_at: new Date(1_786_032_000_000).toISOString(),
+      read: false,
+    }]);
+    expect(notificationMocks.listInbox).toHaveBeenCalledWith(expect.anything(), "principal-a", "club-a", 500);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("routes inbox mutations through the notification canister", async () => {
+    const fake = fakeClient();
+    await markNotificationRead("notification-a", fake.client);
+    await markAllNotificationsRead("principal-a", "club-a", fake.client);
+    await deleteNotification("notification-a", fake.client);
+    await clearNotifications("principal-a", null, fake.client);
+    expect(notificationMocks.markRead).toHaveBeenCalledTimes(1);
+    expect(notificationMocks.markAllRead).toHaveBeenCalledWith(expect.anything(), "principal-a", "club-a");
+    expect(notificationMocks.deleteNotification).toHaveBeenCalledTimes(1);
+    expect(notificationMocks.clearInbox).toHaveBeenCalledWith(expect.anything(), "principal-a", null);
+    expect(fake.calls).toEqual([]);
   });
 });

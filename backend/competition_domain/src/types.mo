@@ -37,6 +37,19 @@ module {
     created_at_ms : Nat64;
     revision : Nat64;
   };
+  public type CompetitionOfficialEmailInvite = {
+    competition_id : Text;
+    token : Text;
+    role : Text;
+    email_hash : Text;
+    verification_code_hash : Text;
+    created_by : Principal;
+    created_at_ms : Nat64;
+    expires_at_ms : Nat64;
+    attempts : Nat8;
+    accepted_by : ?Principal;
+    revoked : Bool;
+  };
   // Expression-of-interest submission (parent sign-up for a season).
   // Mirrors the Supabase eoi_submissions columns the EOI hooks read/write;
   // *_at_ms timestamps replace ISO strings, Principal replaces auth.uid().
@@ -131,6 +144,7 @@ module {
     chatSettings : [ChatSettings];
     competitionInvites : [CompetitionInvite];
     competitionJoinLinks : [CompetitionJoinLink];
+    competitionOfficialEmailInvites : [CompetitionOfficialEmailInvite];
     eoiSubmissions : [EoiSubmission];
   };
   public type DivisionSetting = { competition_id : Text; division : Text; hide_ladder : Bool };

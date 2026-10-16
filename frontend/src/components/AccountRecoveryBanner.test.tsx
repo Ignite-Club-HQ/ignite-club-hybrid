@@ -53,6 +53,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 import { AccountRecoveryBanner } from "./AccountRecoveryBanner";
 
 const onRecovered = vi.fn();
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
 beforeEach(() => {
   toastFn.mockReset();
@@ -70,7 +71,7 @@ async function renderBanner() {
   await screen.findByRole("button", { name: /recover my account/i });
 }
 
-describe("AccountRecoveryBanner — session validation", () => {
+describe.runIf(supabaseMode)("AccountRecoveryBanner — session validation", () => {
   it("valid session sends the exact bearer token", async () => {
     invokeFn.mockResolvedValue({ data: { success: true }, error: null });
     await renderBanner();
@@ -178,5 +179,14 @@ describe("AccountRecoveryBanner — session validation", () => {
         screen.queryByText(/account scheduled for deletion/i)
       ).not.toBeInTheDocument()
     );
+  });
+});
+
+describe.runIf(!supabaseMode)("AccountRecoveryBanner — ICP account boundary", () => {
+  it("does not query or render Supabase account recovery for an ICP identity", async () => {
+    const { container } = render(<AccountRecoveryBanner userId="principal-1" onRecovered={onRecovered} />);
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(invokeFn).not.toHaveBeenCalled();
+    expect(onRecovered).not.toHaveBeenCalled();
   });
 });

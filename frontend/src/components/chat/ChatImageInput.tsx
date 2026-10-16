@@ -32,6 +32,7 @@ interface ChatImageInputProps {
   disabled?: boolean;
   clubId?: string;
   teamId?: string;
+  competitionId?: string;
   onEventSelect?: (eventId: string) => void;
   showEventPicker?: boolean;
   onPollCreate?: () => void;
@@ -52,7 +53,7 @@ interface ChatImageInputProps {
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 const IOS_SAFE_COMPRESSION_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
 
-export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, teamId, onEventSelect, showEventPicker = false, onPollCreate, showPollCreator = false, onBoardPick, showBoardPicker = false, onNewsSelect, showNewsPicker = false, hasText = false, onAppendToken, showVaultPicker = false }: ChatImageInputProps) {
+export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, teamId, competitionId, onEventSelect, showEventPicker = false, onPollCreate, showPollCreator = false, onBoardPick, showBoardPicker = false, onNewsSelect, showNewsPicker = false, hasText = false, onAppendToken, showVaultPicker = false }: ChatImageInputProps) {
   const [uploading, setUploading] = useState(false);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -307,6 +308,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       storagePath: icpPath,
       file: fileToUpload,
       mime: contentType,
+      competitionId,
     });
     let publicUrl: string;
     if (blobUpload) {

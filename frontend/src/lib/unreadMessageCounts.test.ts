@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { rpcResult, tableResults, queries } = vi.hoisted(() => ({
+const { rpcResult, tableResults, queries, backend, liveUnreadCounts } = vi.hoisted(() => ({
   rpcResult: { data: null as any, error: null as any, throws: null as any },
   tableResults: new Map<string, { data: any; error: any }>(),
   queries: [] as Array<{ table: string; chain: any }>,
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  liveUnreadCounts: vi.fn(),
 }));
 
 const mockSupabase = await vi.hoisted(async () => {
@@ -11,6 +13,13 @@ const mockSupabase = await vi.hoisted(async () => {
   return createMockSupabaseClient();
 });
 vi.mock("@/integrations/supabase/client", () => ({ supabase: mockSupabase }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backend === "icp" ? providers.icp({ identity: {}, target: {} }) : providers.supabase(),
+}));
+vi.mock("@/live/features/messaging", () => ({
+  myLiveUnreadCounts: (...args: unknown[]) => liveUnreadCounts(...args),
+}));
 
 import {
   createEmptyUnreadMessageCounts,
@@ -30,21 +39,7 @@ function tableQuery(table: string) {
   return chain;
 }
 
-describe("unread message count aggregation", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    tableResults.clear();
-    queries.length = 0;
-    rpcResult.data = null;
-    rpcResult.error = null;
-    rpcResult.throws = null;
-    mockSupabase.rpc.mockImplementation(() => {
-      if (rpcResult.throws) return Promise.reject(rpcResult.throws);
-      return Promise.resolve({ data: rpcResult.data, error: rpcResult.error });
-    });
-    mockSupabase.from.mockImplementation(tableQuery);
-  });
-
+describe("unread message count helpers", () => {
   it("creates independent empty count containers", () => {
     const first = createEmptyUnreadMessageCounts();
     const second = createEmptyUnreadMessageCounts();
@@ -61,6 +56,24 @@ describe("unread message count aggregation", () => {
       groups: { "group-1": 2 },
       dms: { "conversation-1": 5 },
     })).toBe(17);
+  });
+});
+
+const supabaseMode = backend === "supabase";
+
+describe.runIf(supabaseMode)("Supabase unread message count aggregation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tableResults.clear();
+    queries.length = 0;
+    rpcResult.data = null;
+    rpcResult.error = null;
+    rpcResult.throws = null;
+    mockSupabase.rpc.mockImplementation(() => {
+      if (rpcResult.throws) return Promise.reject(rpcResult.throws);
+      return Promise.resolve({ data: rpcResult.data, error: rpcResult.error });
+    });
+    mockSupabase.from.mockImplementation(tableQuery);
   });
 
   it("uses the single-RPC fast path and normalizes numeric values", async () => {
@@ -211,4 +224,34 @@ describe("unread message count aggregation", () => {
       });
     },
   );
+});
+
+describe.runIf(!supabaseMode)("ICP unread message count mapping", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    liveUnreadCounts.mockReset();
+  });
+
+  it("maps canister scopes into the shared count shape without querying Supabase", async () => {
+    const context = { identity: {}, target: {} };
+    liveUnreadCounts.mockResolvedValue([
+      { kind: "broadcast", conversationId: "broadcast", count: 2 },
+      { kind: "team", conversationId: "team-1", count: 3 },
+      { kind: "club", conversationId: "club-1", count: 1 },
+      { kind: "group", conversationId: "group-1", count: 4 },
+      { kind: "competition", conversationId: "competition-1", count: 2 },
+      { kind: "dm", conversationId: "conversation-1", count: 5 },
+    ]);
+
+    await expect(fetchUnreadMessageCounts("user-1")).resolves.toEqual({
+      broadcast: 2,
+      teams: { "team-1": 3 },
+      clubs: { "club-1": 1 },
+      groups: { "group-1": 4, "competition-1": 2 },
+      dms: { "conversation-1": 5 },
+    });
+    expect(liveUnreadCounts).toHaveBeenCalledWith(context);
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
 });

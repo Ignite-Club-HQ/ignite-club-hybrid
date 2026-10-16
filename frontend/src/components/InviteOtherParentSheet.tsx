@@ -182,11 +182,7 @@ export default function InviteOtherParentSheet({
     },
   });
 
-  /** ICP path: create the pending_invite record on club_domain. No canister
-   * accept_pending_invite method exists yet (PendingInvite has no accept
-   * flow — see club.ts), so this persists the invite for admin visibility
-   * but the recipient cannot yet self-accept via the shared link on ICP.
-   * NEEDS-CANISTER: accept_pending_invite (or equivalent) for PendingInvite. */
+  /** ICP path: create a club_domain pending invite for the recipient to accept by link. */
   const sendInviteIcp = async (
     ctx: FeatureBackendContext,
     effectiveDelivery: "email" | "share",
@@ -194,7 +190,8 @@ export default function InviteOtherParentSheet({
     let clubId: string | null = null;
     const teamId = teamIds[0] ?? null;
     if (teamId) {
-      const team = await getLiveTeam(ctx, teamId);
+      const teamResult = await getLiveTeam(ctx, teamId);
+      const team = Array.isArray(teamResult) ? teamResult[0] : teamResult;
       clubId = (team as any)?.club_id ?? null;
       if (!clubId) throw new InviteScopeResolutionError();
     }

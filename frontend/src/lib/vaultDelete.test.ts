@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: (...args: any[]) => invoke(...args) } },
 }));
@@ -11,7 +12,7 @@ beforeEach(() => invoke.mockReset());
 
 const ok = (body: any) => ({ data: body, error: null });
 
-describe("permanentlyDeleteVaultItems", () => {
+describe.runIf(supabaseMode)("permanentlyDeleteVaultItems", () => {
   it("returns explicit succeeded[] and failed[] entries", async () => {
     invoke.mockResolvedValue(
       ok({
@@ -198,5 +199,13 @@ describe("permanentlyDeleteVaultItems", () => {
     const r = await permanentlyDeleteVaultItems({ photoIds: ["p1", "p2"] });
     expect(r.succeeded).toEqual([{ id: "p1", kind: "photo" }]);
     expect(r.failed).toEqual([{ id: "p2", kind: "photo", code: "unknown_error" }]);
+  });
+});
+
+describe.runIf(!supabaseMode)("permanentlyDeleteVaultItems — ICP boundary", () => {
+  it("fails closed before invoking the Supabase deletion function", async () => {
+    await expect(permanentlyDeleteVaultItems({ photoIds: ["p1"], fileIds: ["f1"] }))
+      .rejects.toThrow(/not available yet for Internet Identity accounts/);
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

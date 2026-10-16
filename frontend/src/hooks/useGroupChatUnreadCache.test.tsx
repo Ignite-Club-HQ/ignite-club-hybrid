@@ -2,19 +2,32 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Handler = (payload: any) => void;
-const { channel, removeChannel, setQueryData, invalidateQueries, channels } = vi.hoisted(() => ({
+const { channel, removeChannel, setQueryData, invalidateQueries, channels, mode, queryOptions, liveUnreadCounts, context } = vi.hoisted(() => ({
   channel: vi.fn(),
   removeChannel: vi.fn(),
   setQueryData: vi.fn(),
   invalidateQueries: vi.fn(),
   channels: new Map<string, { name: string; on: ReturnType<typeof vi.fn>; subscribe: ReturnType<typeof vi.fn>; handler?: Handler; config?: any }>(),
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  queryOptions: { current: null as any },
+  liveUnreadCounts: vi.fn(),
+  context: { identity: {}, target: {} },
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { channel, removeChannel } }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ setQueryData, invalidateQueries }),
-  useQuery: (options: any) => ({ data: options.initialData, isLoading: false, options }),
+  useQuery: (options: any) => {
+    queryOptions.current = options;
+    return { data: options.initialData, isLoading: false, options };
+  },
 }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => mode === "icp" }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mode === "icp" ? providers.icp(context) : providers.supabase(),
+}));
+vi.mock("@/live/features/messaging", () => ({ myLiveUnreadCounts: (...args: unknown[]) => liveUnreadCounts(...args) }));
 
 import { groupChatUnreadCacheKey, useGroupChatUnreadCache } from "./useGroupChatUnreadCache";
 
@@ -35,6 +48,8 @@ describe("useGroupChatUnreadCache realtime scoping", () => {
     vi.clearAllMocks();
     channels.clear();
     channel.mockImplementation(makeChannel);
+    queryOptions.current = null;
+    liveUnreadCounts.mockReset().mockResolvedValue([]);
   });
 
   it("does not subscribe when there is no authenticated user", () => {
@@ -43,7 +58,7 @@ describe("useGroupChatUnreadCache realtime scoping", () => {
     expect(groupChatUnreadCacheKey(null)).toEqual(["chat-group-unread-cache", null]);
   });
 
-  it("creates exactly three user-scoped channels with protected cache/read filters", () => {
+  it.runIf(mode === "supabase")("creates exactly three user-scoped channels with protected cache/read filters", () => {
     renderHook(() => useGroupChatUnreadCache("user-1"));
 
     expect(channel.mock.calls.map(([name]) => name)).toEqual([
@@ -60,7 +75,7 @@ describe("useGroupChatUnreadCache realtime scoping", () => {
     expect([...channels.values()].every((entry) => entry.subscribe.mock.calls.length === 1)).toBe(true);
   });
 
-  it("patches only the payload group and removes zero or deleted counts", () => {
+  it.runIf(mode === "supabase")("patches only the payload group and removes zero or deleted counts", () => {
     renderHook(() => useGroupChatUnreadCache("user-1"));
     const handler = channels.get("chat-group-unread-user-1")!.handler!;
 
@@ -77,7 +92,7 @@ describe("useGroupChatUnreadCache realtime scoping", () => {
     expect(updater({ "group-2": 2, "group-3": 1 })).toEqual({ "group-3": 1 });
   });
 
-  it("coalesces bursts of message and read events into one cache invalidation per frame", async () => {
+  it.runIf(mode === "supabase")("coalesces bursts of message and read events into one cache invalidation per frame", async () => {
     vi.useFakeTimers();
     renderHook(() => useGroupChatUnreadCache("user-1"));
     const messageHandler = channels.get("chat-group-unread-msgs-user-1")!.handler!;
@@ -95,7 +110,7 @@ describe("useGroupChatUnreadCache realtime scoping", () => {
     vi.useRealTimers();
   });
 
-  it("removes all old-user channels before subscribing for a new user", () => {
+  it.runIf(mode === "supabase")("removes all old-user channels before subscribing for a new user", () => {
     const { rerender } = renderHook(({ userId }) => useGroupChatUnreadCache(userId), {
       initialProps: { userId: "user-1" as string | null },
     });
@@ -113,10 +128,24 @@ describe("useGroupChatUnreadCache realtime scoping", () => {
     expect(channels.has("chat-group-unread-reads-user-2")).toBe(true);
   });
 
-  it("removes every active channel on unmount", () => {
+  it.runIf(mode === "supabase")("removes every active channel on unmount", () => {
     const { unmount } = renderHook(() => useGroupChatUnreadCache("user-1"));
     const active = [...channels.values()];
     unmount();
     expect(removeChannel.mock.calls.map(([removed]) => removed)).toEqual(active);
+  });
+
+  it.runIf(mode === "icp")("polls canister unread counts and opens no Supabase realtime channels", async () => {
+    liveUnreadCounts.mockResolvedValue([
+      { conversationId: "group-1", kind: "group", count: 3 },
+      { conversationId: "group-2", kind: "group", count: 0 },
+      { conversationId: "club-1", kind: "club", count: 7 },
+    ]);
+    const { result } = renderHook(() => useGroupChatUnreadCache("principal-1"));
+    expect(typeof queryOptions.current.refetchInterval).toBe("number");
+    await expect(queryOptions.current.queryFn()).resolves.toEqual({ "group-1": 3 });
+    expect(liveUnreadCounts).toHaveBeenCalledWith(context);
+    expect(channel).not.toHaveBeenCalled();
+    expect(result.current.data).toEqual({});
   });
 });

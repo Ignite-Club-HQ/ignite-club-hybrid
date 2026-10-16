@@ -5,6 +5,11 @@ import React from "react";
 
 const mockUser: { id: string } | null = { id: "user-1" };
 let currentUser: { id: string } | null = mockUser;
+const adminMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  isLiveAppAdmin: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: currentUser }),
@@ -24,6 +29,13 @@ vi.mock("@/integrations/supabase/client", () => ({
     }),
   },
 }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    adminMocks.backend === "icp" ? providers.icp({ identity: {}, target: { alias: "test" } }) : providers.supabase(),
+}));
+vi.mock("@/live/features/insights", () => ({
+  isLiveAppAdmin: (...args: unknown[]) => adminMocks.isLiveAppAdmin(...args),
+}));
 
 import { useIsAppAdmin, isAppAdminQueryKey } from "./useIsAppAdmin";
 
@@ -37,31 +49,32 @@ const newClient = () =>
 
 describe("useIsAppAdmin", () => {
   beforeEach(() => {
+    adminMocks.backend = "supabase";
     currentUser = { id: "user-1" };
     maybeSingle.mockReset();
   });
 
-  it("resolves true for a confirmed app admin", async () => {
+  it.runIf(supabaseMode)("resolves true for a confirmed app admin", async () => {
     maybeSingle.mockResolvedValue({ data: { id: "role-1" }, error: null });
     const { result } = renderHook(() => useIsAppAdmin(), { wrapper: wrapper(newClient()) });
     await waitFor(() => expect(result.current.isAppAdmin).toBe(true));
   });
 
-  it("resolves false for an ordinary user", async () => {
+  it.runIf(supabaseMode)("resolves false for an ordinary user", async () => {
     maybeSingle.mockResolvedValue({ data: null, error: null });
     const { result } = renderHook(() => useIsAppAdmin(), { wrapper: wrapper(newClient()) });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isAppAdmin).toBe(false);
   });
 
-  it("is false while the permission query is loading", () => {
+  it.runIf(supabaseMode)("is false while the permission query is loading", () => {
     maybeSingle.mockReturnValue(new Promise(() => {}));
     const { result } = renderHook(() => useIsAppAdmin(), { wrapper: wrapper(newClient()) });
     expect(result.current.isAppAdmin).toBe(false);
     expect(result.current.isLoading).toBe(true);
   });
 
-  it("is false when the permission query errors", async () => {
+  it.runIf(supabaseMode)("is false when the permission query errors", async () => {
     maybeSingle.mockResolvedValue({ data: null, error: { message: "boom" } });
     const { result } = renderHook(() => useIsAppAdmin(), { wrapper: wrapper(newClient()) });
     await waitFor(() => expect(maybeSingle).toHaveBeenCalled());
@@ -76,7 +89,7 @@ describe("useIsAppAdmin", () => {
     expect(maybeSingle).not.toHaveBeenCalled();
   });
 
-  it("keys the cache per user so a cached false cannot leak across users", async () => {
+  it.runIf(supabaseMode)("keys the cache per user so a cached false cannot leak across users", async () => {
     const client = newClient();
     maybeSingle.mockResolvedValue({ data: null, error: null });
     const first = renderHook(() => useIsAppAdmin(), { wrapper: wrapper(client) });
@@ -91,7 +104,7 @@ describe("useIsAppAdmin", () => {
     expect(client.getQueryData(isAppAdminQueryKey("user-2"))).toBe(true);
   });
 
-  it("shares one cache entry between two consumers (AppHeader + BroadcastChatPage pattern)", async () => {
+  it.runIf(supabaseMode)("shares one cache entry between two consumers (AppHeader + BroadcastChatPage pattern)", async () => {
     const client = newClient();
     maybeSingle.mockResolvedValue({ data: { id: "role-1" }, error: null });
     const a = renderHook(() => useIsAppAdmin(), { wrapper: wrapper(client) });
@@ -99,5 +112,14 @@ describe("useIsAppAdmin", () => {
     await waitFor(() => expect(a.result.current.isAppAdmin).toBe(true));
     await waitFor(() => expect(b.result.current.isAppAdmin).toBe(true));
     expect(maybeSingle).toHaveBeenCalledTimes(1);
+  });
+
+  it.runIf(!supabaseMode)("resolves app-admin status through insights_domain", async () => {
+    adminMocks.backend = "icp";
+    adminMocks.isLiveAppAdmin.mockResolvedValue(true);
+    const { result } = renderHook(() => useIsAppAdmin(), { wrapper: wrapper(newClient()) });
+    await waitFor(() => expect(result.current.isAppAdmin).toBe(true));
+    expect(adminMocks.isLiveAppAdmin).toHaveBeenCalledWith(expect.objectContaining({ identity: expect.any(Object) }));
+    expect(maybeSingle).not.toHaveBeenCalled();
   });
 });

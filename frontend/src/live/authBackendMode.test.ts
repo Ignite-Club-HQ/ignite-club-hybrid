@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveAuthBackend, useIcpAuthScreen } from "./authBackendMode";
 import { applyBackendRoutingConfig, cacheClubBackendHint } from "./backendRouting";
 import { applyIcpAdminOverrides } from "./icpAdminOverrides";
@@ -15,7 +15,10 @@ function resetState(): void {
   cacheClubBackendHint(null);
 }
 
-afterEach(resetState);
+afterEach(() => {
+  vi.unstubAllEnvs();
+  resetState();
+});
 
 describe("resolveAuthBackend", () => {
   it("defaults to Supabase with no admin configuration", () => {
@@ -25,6 +28,7 @@ describe("resolveAuthBackend", () => {
   });
 
   it("keeps Supabase when the default backend is ICP but no canisters are configured", () => {
+    vi.stubEnv("IGNITE_LIVE_ICP_CANISTER_IDS_JSON", "{}");
     applyBackendRoutingConfig({
       defaultBackend: "icp",
       countryRules: {},
@@ -98,6 +102,7 @@ describe("resolveAuthBackend with per-club overrides", () => {
   });
 
   it("keeps Supabase auth when a member club is pinned to ICP but no canisters exist", () => {
+    vi.stubEnv("IGNITE_LIVE_ICP_CANISTER_IDS_JSON", "{}");
     applyBackendRoutingConfig(clubPinnedConfig);
     setUserClubIds(["club-icp"]);
     expect(resolveAuthBackend()).toBe("supabase");

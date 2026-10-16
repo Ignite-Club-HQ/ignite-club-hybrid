@@ -29,7 +29,10 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ setQueryData: mocks.setQueryData }),
 }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: vi.fn() } }));
-vi.mock("@/hooks/useAuth", () => ({ useAuth: () => mocks.auth }));
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => mocks.auth,
+  useOptionalAuth: () => mocks.auth,
+}));
 vi.mock("@/hooks/useNativePush", () => ({ useNativePush: mocks.useNativePush }));
 vi.mock("@/hooks/useRealtimePerfSampler", () => ({ useRealtimePerfSampler: mocks.useRealtimePerfSampler }));
 vi.mock("@/hooks/usePushSubscriptionHealth", () => ({ usePushSubscriptionHealth: mocks.usePushSubscriptionHealth }));

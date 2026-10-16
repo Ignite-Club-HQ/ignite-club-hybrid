@@ -55,6 +55,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 // ---------- imports (after mocks) --------------------------------------
 import { useNotificationNudge } from "./useNotificationNudge";
+const backendMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => backendMode }));
 
 const USER_ID = "user-nudge-test";
 const statusKey = (ctx: string) => `notification-nudge-status-${ctx}-${USER_ID}`;
@@ -73,7 +75,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("useNotificationNudge — web/PWA push_subscriptions", () => {
+describe.runIf(backendMode === "supabase")("useNotificationNudge — web/PWA push_subscriptions", () => {
   it("shows nudge when lookup succeeds and no subscription exists", async () => {
     tableResponses["push_subscriptions"] = { data: [], error: null };
 
@@ -150,7 +152,7 @@ describe("useNotificationNudge — web/PWA push_subscriptions", () => {
   });
 });
 
-describe("useNotificationNudge — native fcm_tokens fallback", () => {
+describe.runIf(backendMode === "supabase")("useNotificationNudge — native fcm_tokens fallback", () => {
   beforeEach(() => {
     isNativePlatformMock.mockReturnValue(true);
     checkPermissionsMock.mockResolvedValue({ receive: "denied" });
@@ -188,6 +190,17 @@ describe("useNotificationNudge — native fcm_tokens fallback", () => {
     expect(result.current.shouldShowNudge).toBe(false);
     expect(result.current.hasPushEnabled).not.toBe(false);
     expect(localStorage.getItem(statusKey("inbox"))).not.toBe("disabled");
+  });
+});
+
+describe.runIf(backendMode === "icp")("useNotificationNudge ICP boundary", () => {
+  it("assumes push is handled by ICP delivery and never reads Supabase subscriptions", async () => {
+    const { result } = renderHook(() => useNotificationNudge(USER_ID, "chat"));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.hasPushEnabled).toBe(true);
+    expect(result.current.shouldShowNudge).toBe(false);
+    expect(tableCalls.push_subscriptions ?? 0).toBe(0);
+    expect(tableCalls.fcm_tokens ?? 0).toBe(0);
   });
 });
 

@@ -4,7 +4,11 @@ const mockSupabase = await vi.hoisted(async () => {
   const { createMockSupabaseClient } = await import("@/test/mockSupabaseClient");
   return createMockSupabaseClient();
 });
+const mockIcpMode = vi.hoisted(() => process.env.IGNITE_TEST_BACKEND_MODE === "icp");
 vi.mock("@/integrations/supabase/client", () => ({ supabase: mockSupabase }));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => mockIcpMode,
+}));
 
 import {
   getQueueCount,
@@ -16,6 +20,8 @@ import {
   syncQueuedMessages,
   type QueuedMessageType,
 } from "./messageQueue";
+
+const supabaseIt = mockIcpMode ? it.skip : it;
 
 function insertResult(error: unknown = null) {
   return { insert: vi.fn().mockResolvedValue({ error }) };
@@ -39,7 +45,7 @@ describe("offline message queue", () => {
     vi.clearAllMocks();
   });
 
-  it.each([
+  supabaseIt.each([
     ["team", "team_messages", "team_id"],
     ["club", "club_messages", "club_id"],
     ["group", "group_messages", "group_id"],
@@ -63,7 +69,7 @@ describe("offline message queue", () => {
     expect(getQueueCount()).toBe(0);
   });
 
-  it("routes broadcasts without leaking an unrelated target identifier", async () => {
+  supabaseIt("routes broadcasts without leaking an unrelated target identifier", async () => {
     const query = insertResult();
     mockSupabase.from.mockReturnValueOnce(query);
     enqueue("broadcast", "must-not-be-written");
@@ -100,7 +106,7 @@ describe("offline message queue", () => {
     expect(hasQueuedMessages()).toBe(true);
   });
 
-  it("syncs successful messages while retaining a transient failure", async () => {
+  supabaseIt("syncs successful messages while retaining a transient failure", async () => {
     enqueue("team", "team-1");
     enqueue("club", "club-1");
     mockSupabase.from
@@ -113,7 +119,7 @@ describe("offline message queue", () => {
     ]);
   });
 
-  it("discards and reports a message only after its third failed attempt", async () => {
+  supabaseIt("discards and reports a message only after its third failed attempt", async () => {
     enqueue("group", "group-1");
     mockSupabase.from.mockImplementation(() => insertResult({ message: "denied" }));
 
@@ -130,5 +136,17 @@ describe("offline message queue", () => {
     expect(getQueuedMessages()).toEqual([]);
     expect(getQueueCount()).toBe(0);
     expect(hasQueuedMessages()).toBe(false);
+  });
+});
+
+describe.runIf(mockIcpMode)("offline message queue — ICP replay boundary", () => {
+  it("retains queued messages without attempting Supabase replay", async () => {
+    enqueue("team", "team-1");
+
+    await expect(syncQueuedMessages()).resolves.toEqual({ synced: 0, failed: 0 });
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+    expect(getQueuedMessages()).toEqual([
+      expect.objectContaining({ type: "team", targetId: "team-1", retryCount: 1 }),
+    ]);
   });
 });

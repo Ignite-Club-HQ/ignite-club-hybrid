@@ -136,7 +136,9 @@ beforeEach(() => {
   currentSearch = "";
 });
 
-describe("VerifyResetCodePage — OTP numeric enforcement", () => {
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
+describe.runIf(supabaseMode)("VerifyResetCodePage — OTP numeric enforcement", () => {
   it("calls verifyOtp for a 6-digit numeric code typed manually", async () => {
     verifyOtp.mockResolvedValue({ error: null });
     renderPage("?email=redacted@example.invalid");
@@ -200,7 +202,7 @@ describe("VerifyResetCodePage — OTP numeric enforcement", () => {
   });
 });
 
-describe("VerifyResetCodePage — URL auto-verify", () => {
+describe.runIf(supabaseMode)("VerifyResetCodePage — URL auto-verify", () => {
   it("auto-verifies when a valid 6-digit numeric code is in the URL", async () => {
     verifyOtp.mockResolvedValue({ error: null });
     renderPage("?email=redacted@example.invalid&code=987654");
@@ -241,7 +243,7 @@ describe("VerifyResetCodePage — URL auto-verify", () => {
   });
 });
 
-describe("VerifyResetCodePage — email validation & concurrency", () => {
+describe.runIf(supabaseMode)("VerifyResetCodePage — email validation & concurrency", () => {
   it("does not call verifyOtp when email is missing", async () => {
     renderPage(""); // no email at all
     typeCode("123456");
@@ -288,5 +290,14 @@ describe("VerifyResetCodePage — email validation & concurrency", () => {
     typeCode("555555");
     await waitFor(() => expect(verifyOtp).toHaveBeenCalledTimes(1));
     resolve({ error: null });
+  });
+});
+
+describe.runIf(!supabaseMode)("VerifyResetCodePage — ICP recovery boundary", () => {
+  it("shows verification as unavailable without calling Supabase auth", () => {
+    const { container } = renderPage();
+    expect(container.textContent).toMatch(/reset-code verification is unavailable in icp lab mode/i);
+    expect(verifyOtp).not.toHaveBeenCalled();
+    expect(resetPasswordForEmail).not.toHaveBeenCalled();
   });
 });

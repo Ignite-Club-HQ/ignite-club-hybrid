@@ -28,6 +28,12 @@ type CallLog = {
 
 const calls: CallLog[] = [];
 const rpcCalls: string[] = [];
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  saveSummary: vi.fn(),
+  savePlayerStats: vi.fn(),
+}));
 
 // Configurable per-test error responses
 let summaryError: { message: string } | null = null;
@@ -59,6 +65,15 @@ vi.mock("@/integrations/supabase/client", () => ({
       return { error: null };
     }),
   },
+}));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => backendMocks.mode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  saveLiveGameSummary: (...args: unknown[]) => backendMocks.saveSummary(...args),
+  saveLiveGamePlayerStats: (...args: unknown[]) => backendMocks.savePlayerStats(...args),
 }));
 
 // ---- helpers -----------------------------------------------------------
@@ -101,10 +116,12 @@ beforeEach(() => {
   summaryError = null;
   deleteError = null;
   insertError = null;
+  backendMocks.saveSummary.mockReset().mockResolvedValue(undefined);
+  backendMocks.savePlayerStats.mockReset().mockResolvedValue(undefined);
 });
 
 // ---- tests -------------------------------------------------------------
-describe("useGameStats — replace workflow error handling", () => {
+describe.runIf(backendMocks.mode === "supabase")("useGameStats — replace workflow error handling", () => {
   it("happy path: upsert summary, delete old stats, insert new stats, send email, show success toast", async () => {
     const { result } = renderHook(() => useGameStats(), { wrapper });
     await act(async () => {
@@ -219,5 +236,35 @@ describe("useGameStats — replace workflow error handling", () => {
       .filter(Boolean);
     expect(invalidatedKeys).not.toContain("game-stats");
     expect(invalidatedKeys).not.toContain("game-summary");
+  });
+});
+
+describe.runIf(backendMocks.mode === "icp")("useGameStats ICP workflow", () => {
+  it("saves the summary and player stats through events_domain without Supabase calls", async () => {
+    const { result } = renderHook(() => useGameStats(), { wrapper });
+    await act(async () => result.current.saveGameStats(baseParams()));
+
+    expect(backendMocks.saveSummary).toHaveBeenCalledWith(
+      backendMocks.context,
+      expect.objectContaining({ eventId: "evt-1", teamId: "team-1", formationUsed: "4-4-2" }),
+    );
+    expect(backendMocks.savePlayerStats).toHaveBeenCalledWith(
+      backendMocks.context,
+      "evt-1",
+      "team-1",
+      expect.arrayContaining([expect.objectContaining({ userId: "p1", minutesPlayed: 60 })]),
+    );
+    expect(calls).toEqual([]);
+    expect(rpcCalls).toEqual([]);
+    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Game stats saved" }));
+  });
+
+  it("does not write player stats when the canister summary save fails", async () => {
+    backendMocks.saveSummary.mockRejectedValueOnce(new Error("summary unavailable"));
+    const { result } = renderHook(() => useGameStats(), { wrapper });
+    await expect(act(async () => result.current.saveGameStats(baseParams()))).rejects.toThrow("summary unavailable");
+    expect(backendMocks.savePlayerStats).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(rpcCalls).toEqual([]);
   });
 });

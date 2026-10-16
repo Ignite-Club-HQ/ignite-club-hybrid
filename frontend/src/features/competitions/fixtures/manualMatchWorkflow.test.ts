@@ -4,10 +4,22 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   insert: vi.fn(),
   response: { error: null as { message: string } | null },
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  recordLiveMatch: vi.fn(),
 }));
+
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = { identity: {}, target: { alias: "test" } };
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: mocks.from },
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/competitions", () => ({
+  recordLiveMatch: (...args: unknown[]) => mocks.recordLiveMatch(...args),
 }));
 
 import { buildManualMatchRow, createManualMatch } from "./manualMatchWorkflow";
@@ -15,6 +27,7 @@ import { buildManualMatchRow, createManualMatch } from "./manualMatchWorkflow";
 describe("manual match workflow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.backend = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
     mocks.response = { error: null };
     mocks.insert.mockImplementation(() => Promise.resolve(mocks.response));
     mocks.from.mockReturnValue({ insert: mocks.insert });
@@ -76,7 +89,7 @@ describe("manual match workflow", () => {
     }));
   });
 
-  it("inserts one row into competition_matches and returns failures unchanged", async () => {
+  it.runIf(supabaseMode)("inserts one row into competition_matches and returns failures unchanged", async () => {
     const row = buildManualMatchRow({
       competitionId: "competition-1",
       homeTeamId: "home-1",
@@ -96,5 +109,26 @@ describe("manual match workflow", () => {
     expect(mocks.from).toHaveBeenCalledWith("competition_matches");
     expect(mocks.insert).toHaveBeenCalledOnce();
     expect(mocks.insert).toHaveBeenCalledWith(row);
+  });
+
+  it.runIf(!supabaseMode)("records the teams through competition_domain without a Supabase write", async () => {
+    mocks.recordLiveMatch.mockResolvedValue({ id: "match-icp" });
+    const row = buildManualMatchRow({
+      competitionId: "competition-icp",
+      homeTeamId: "home-1",
+      awayTeamId: "away-1",
+      divisionId: "",
+      scheduledAt: "2026-09-12T09:00",
+      venue: "Riverside Park",
+      pitch: "",
+      round: "",
+      duration: "",
+      arrival: "",
+      notes: "",
+    });
+
+    await expect(createManualMatch(row)).resolves.toEqual({ error: null });
+    expect(mocks.recordLiveMatch).toHaveBeenCalledWith(icpContext, "competition-icp", "home-1", "away-1");
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 });

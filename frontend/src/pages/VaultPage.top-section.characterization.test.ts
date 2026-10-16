@@ -65,7 +65,7 @@ describe("VaultPage header, storage, and action-toolbar presentation contract", 
 
   it("keeps Upload, Add, and More menus under the existing gates", () => {
     expect(clusterSource).toMatch(/!selectionMode && !isExporting && \(/);
-    expect(clusterSource).toMatch(/\{canUpload && \([\s\S]{0,350}setUploadDialogOpen\(true\)/);
+    expect(clusterSource).toMatch(/\{canUpload && !isIcpMediaUploadUnavailable\(\) && \([\s\S]{0,350}setUploadDialogOpen\(true\)/);
     expect(clusterSource).toContain("Upload photos or files");
     expect(clusterSource).toContain("setNewFolderDialogOpen(true)");
     expect(clusterSource).toContain("New Folder");

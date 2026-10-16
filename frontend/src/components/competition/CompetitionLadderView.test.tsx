@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { LadderView } from "./CompetitionLadderView";
 
@@ -13,9 +14,17 @@ const rows = [
   { team_id: "t3", division_id: "div-2", teams: { name: "Charlie FC" }, played: 2, wins: 2, draws: 0, losses: 0, goal_diff: 3, points: 6 },
 ];
 
+function renderLadder(props: React.ComponentProps<typeof LadderView>) {
+  return render(
+    <MemoryRouter>
+      <LadderView {...props} />
+    </MemoryRouter>,
+  );
+}
+
 describe("LadderView", () => {
   it("renders a division card per group with team standings", () => {
-    render(<LadderView rows={rows} divisions={divisions} />);
+    renderLadder({ rows, divisions });
     expect(screen.getByText("Division A")).toBeInTheDocument();
     expect(screen.getByText("Division B")).toBeInTheDocument();
     expect(screen.getByText("Alpha FC")).toBeInTheDocument();
@@ -23,18 +32,18 @@ describe("LadderView", () => {
   });
 
   it("shows the division filter when more than one division is present", () => {
-    render(<LadderView rows={rows} divisions={divisions} />);
+    renderLadder({ rows, divisions });
     expect(screen.getByText("All divisions")).toBeInTheDocument();
   });
 
   it("hides the division filter when only one division is present", () => {
     const singleDivisionRows = rows.filter((r) => r.division_id === "div-1");
-    render(<LadderView rows={singleDivisionRows} divisions={divisions} />);
+    renderLadder({ rows: singleDivisionRows, divisions });
     expect(screen.queryByText("All divisions")).not.toBeInTheDocument();
   });
 
   it("shows a team-filter sheet trigger when more than one team is present", () => {
-    render(<LadderView rows={rows} divisions={divisions} />);
+    renderLadder({ rows, divisions });
     expect(screen.getByText("All teams")).toBeInTheDocument();
   });
 
@@ -43,7 +52,7 @@ describe("LadderView", () => {
       { id: "div-1", name: "Division A", hide_ladder: true },
       { id: "div-2", name: "Division B", hide_ladder: false },
     ];
-    render(<LadderView rows={rows} divisions={hiddenDivisions} isAdmin={false} />);
+    renderLadder({ rows, divisions: hiddenDivisions, isAdmin: false });
     expect(screen.getByText("No standings match the current filter.")).toBeInTheDocument();
   });
 
@@ -52,7 +61,7 @@ describe("LadderView", () => {
       { id: "div-1", name: "Division A", hide_ladder: true },
       { id: "div-2", name: "Division B", hide_ladder: false },
     ];
-    render(<LadderView rows={rows} divisions={hiddenDivisions} isAdmin />);
+    renderLadder({ rows, divisions: hiddenDivisions, isAdmin: true });
     const divisionACard = screen.getByText("Division A").closest("button")!;
     expect(within(divisionACard).getByText("Hidden")).toBeInTheDocument();
   });
@@ -61,7 +70,7 @@ describe("LadderView", () => {
     const notStartedRows = [
       { team_id: "t1", division_id: "div-1", teams: { name: "Alpha FC" }, played: 0, wins: 0, draws: 0, losses: 0, goal_diff: 0, points: 0 },
     ];
-    render(<LadderView rows={notStartedRows} divisions={divisions} />);
+    renderLadder({ rows: notStartedRows, divisions });
     expect(screen.getByText("No results entered yet. Rankings will appear once matches are completed.")).toBeInTheDocument();
   });
 });

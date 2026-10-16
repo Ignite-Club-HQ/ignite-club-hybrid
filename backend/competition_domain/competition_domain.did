@@ -11,6 +11,7 @@ type State =
    chatSettings: vec ChatSettings;
    competitionInvites: vec CompetitionInvite;
    competitionJoinLinks: vec CompetitionJoinLink;
+   competitionOfficialEmailInvites: vec CompetitionOfficialEmailInvite;
    competitions: vec Competition;
    entries: vec TeamEntry;
    eoiSubmissions: vec EoiSubmission;
@@ -61,6 +62,12 @@ type Main =
     (variant {
        Err: text;
        Ok: CompetitionInvite;
+     });
+   accept_competition_official_email_invite: (token: text, email_hash: 
+    text, verification_code_hash: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleGrant;
      });
    addBulkAccessPrincipal: ("principal": principal) ->
     (variant {
@@ -134,16 +141,22 @@ type Main =
        Err: text;
        Ok: CompetitionInvite;
      });
-   create_competition_official_link: (competition_id: text, role: text,
-    token: text) -> (variant {
-                       Err: text;
-                       Ok: CompetitionJoinLink;
-                     });
    create_competition_join_link: (competition_id: text, role: text, team_id:
     opt text) -> (variant {
                     Err: text;
                     Ok: CompetitionJoinLink;
                   });
+   create_competition_official_email_invite: (competition_id: text, role:
+    text, token: text, email_hash: text, verification_code_hash: text) ->
+    (variant {
+       Err: text;
+       Ok: CompetitionOfficialEmailInvite;
+     });
+   create_competition_official_link: (competition_id: text, role: text,
+    token: text) -> (variant {
+                       Err: text;
+                       Ok: CompetitionJoinLink;
+                     });
    create_season: (competition_id: text, name: text) ->
     (variant {
        Err: text;
@@ -182,6 +195,17 @@ type Main =
     (variant {
        Err: text;
        Ok: bool;
+     }) query;
+   get_competition_official_email_invite_preview: (token: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          competition_id: text;
+          competition_name: text;
+          role: text;
+          status: text;
+        };
      }) query;
    get_eoi_stats: (club_id: text, season_id: opt text) ->
     (variant {
@@ -314,6 +338,11 @@ type Main =
        Err: text;
        Ok: vec Competition;
      }) query;
+   list_public_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
    list_seasons: (competition_id: text) ->
     (variant {
        Err: text;
@@ -349,6 +378,11 @@ type Main =
                 Ok: TeamEntry;
               });
    revoke_competition_join_link: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_competition_official_email_invite: (token: text) ->
     (variant {
        Err: text;
        Ok;
@@ -550,7 +584,21 @@ type DivisionSetting =
    division: text;
    hide_ladder: bool;
  };
-type CompetitionNewsAudience =
+type CompetitionOfficialEmailInvite = 
+ record {
+   accepted_by: opt principal;
+   attempts: nat8;
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   email_hash: text;
+   expires_at_ms: nat64;
+   revoked: bool;
+   role: text;
+   token: text;
+   verification_code_hash: text;
+ };
+type CompetitionNewsAudience = 
  record {
    can_publish: bool;
    club_id: text;

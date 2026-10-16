@@ -23,9 +23,11 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { linkLiveGuardian, unlinkLiveGuardian } from "@/live/features/club";
+import { linkLiveGuardian, listLiveChildGuardians, unlinkLiveGuardian } from "@/live/features/club";
 import { grantLiveGuardianChildNameRead } from "@/live/features/vault";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { Principal } from "@icp-sdk/core/principal";
 
 interface Guardian {
@@ -33,6 +35,7 @@ interface Guardian {
   guardian_id: string;
   relationship_type: string;
   is_primary: boolean;
+  canRemove?: boolean;
   created_at: string;
   profiles: {
     id: string;
@@ -75,6 +78,7 @@ export default function ManageGuardiansDialog({
 }: ManageGuardiansDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const isIcp = resolveAuthBackend() === "icp";
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [relationshipType, setRelationshipType] = useState("guardian");
@@ -82,15 +86,38 @@ export default function ManageGuardiansDialog({
   // Fetch current guardians
   const { data: guardians, isLoading: loadingGuardians } = useQuery({
     queryKey: ["child_guardians", childId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("child_guardians")
-        .select("*, profiles:guardian_id(id, display_name, avatar_url)")
-        .eq("child_id", childId)
-        .order("is_primary", { ascending: false });
-      if (error) throw error;
-      return data as Guardian[];
-    },
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("child_guardians")
+          .select("*, profiles:guardian_id(id, display_name, avatar_url)")
+          .eq("child_id", childId)
+          .order("is_primary", { ascending: false });
+        if (error) throw error;
+        return data as Guardian[];
+      },
+      icp: async (ctx) => {
+        const principals = (await listLiveChildGuardians(ctx, childId)).map((principal) => principal.toText());
+        const profiles = await listLiveProfilesByIds(ctx, principals).catch(() => []);
+        const profileByPrincipal = new Map(profiles.map((profile: any) => [profile.account_id, profile]));
+        return principals.map((principal) => {
+          const profile = profileByPrincipal.get(principal) as any;
+          return {
+            id: principal,
+            guardian_id: principal,
+            relationship_type: "guardian",
+            is_primary: false,
+            canRemove: false,
+            created_at: "",
+            profiles: {
+              id: principal,
+              display_name: profile?.display_name ?? null,
+              avatar_url: profile?.avatar_ref?.[0] ?? null,
+            },
+          } satisfies Guardian;
+        });
+      },
+    }),
     enabled: open && !!childId,
   });
 
@@ -99,6 +126,7 @@ export default function ManageGuardiansDialog({
     queryKey: ["potential_guardians", teamIds, childId],
     queryFn: async () => {
       if (!teamIds.length) return [];
+      if (isIcp) return [];
       const { data, error } = await supabase
         .from("user_roles")
         .select("user_id, profiles:user_id(id, display_name, avatar_url)")
@@ -117,7 +145,7 @@ export default function ManageGuardiansDialog({
       );
       return uniqueMembers;
     },
-    enabled: open && teamIds.length > 0 && !!guardians,
+    enabled: open && teamIds.length > 0 && !!guardians && !isIcp,
   });
 
   // Filter by search
@@ -246,7 +274,7 @@ export default function ManageGuardiansDialog({
                         </div>
                       </div>
                     </div>
-                    {!guardian.is_primary && (
+                    {(guardian.canRemove ?? !guardian.is_primary) && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -263,6 +291,11 @@ export default function ManageGuardiansDialog({
           </div>
 
           {/* Add Guardian */}
+          {isIcp && (
+            <p role="status" className="border-t pt-3 text-sm text-muted-foreground">
+              Adding or removing other guardians from this team is not available in ICP yet.
+            </p>
+          )}
           {potentialGuardians && potentialGuardians.length > 0 && (
             <div className="space-y-3 pt-2 border-t">
               <Label className="text-sm font-medium">Add Guardian</Label>
@@ -330,7 +363,7 @@ export default function ManageGuardiansDialog({
             </div>
           )}
 
-          {!potentialGuardians?.length && !loadingGuardians && (
+          {!isIcp && !potentialGuardians?.length && !loadingGuardians && (
             <p className="text-sm text-muted-foreground text-center py-2 border-t pt-4">
               Assign this child to a team first to link other parents as guardians.
             </p>

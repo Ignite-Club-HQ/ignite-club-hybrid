@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
+  listLiveInbox,
   markLiveNotificationRead,
   markAllLiveNotificationsRead,
   deleteLiveNotification,
@@ -36,24 +37,42 @@ export async function listNotifications(
   activeClubId: string | null,
   client: IgniteSupabaseClient = supabase,
 ): Promise<NotificationListItem[]> {
-  let query = client
-    .from("notifications")
-    .select("id, user_id, type, message, related_id, is_read, created_at, club_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (activeClubId) query = query.or(clubScopeFilter(activeClubId));
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data ?? []).map((notification) => ({
-    id: notification.id,
-    user_id: notification.user_id,
-    type: notification.type,
-    message: notification.message,
-    related_id: notification.related_id,
-    created_at: notification.created_at,
-    read: notification.is_read,
-  }));
+  return withFeatureBackend("notifications", {
+    supabase: async () => {
+      let query = client
+        .from("notifications")
+        .select("id, user_id, type, message, related_id, is_read, created_at, club_id")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (activeClubId) query = query.or(clubScopeFilter(activeClubId));
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []).map((notification) => ({
+        id: notification.id,
+        user_id: notification.user_id,
+        type: notification.type,
+        message: notification.message,
+        related_id: notification.related_id,
+        created_at: notification.created_at,
+        read: notification.is_read,
+      }));
+    },
+    icp: async (ctx) => {
+      const inbox = await listLiveInbox(ctx, userId, activeClubId, 500);
+      return (inbox as any[]).map((notification) => ({
+        id: notification.id,
+        user_id: notification.user,
+        type: notification.kind,
+        message: notification.body,
+        related_id: Array.isArray(notification.related_id)
+          ? notification.related_id[0] ?? null
+          : notification.related_id ?? null,
+        created_at: new Date(Number(notification.created_at_ms)).toISOString(),
+        read: notification.read,
+      }));
+    },
+  });
 }
 
 export async function markNotificationRead(

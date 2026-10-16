@@ -4,14 +4,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 type QueryResult = { data: any; error: any };
 
 const mocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  listMatches: vi.fn(),
+  listEntries: vi.fn(),
+  icpGetTeam: vi.fn(),
   from: vi.fn(),
   queryConfigs: [] as any[],
   queryData: new Map<string, any>(),
   results: new Map<string, QueryResult[]>(),
   calls: [] as Array<{ table: string; method: string; args: any[] }>,
 }));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.backend === "icp" ? providers.icp({ identity: {}, target: { alias: "test" } }) : providers.supabase(),
+}));
+vi.mock("@/live/features/competitions", () => ({
+  listLiveCompetitionMatches: (...args: unknown[]) => mocks.listMatches(...args),
+  listLiveCompetitionEntries: (...args: unknown[]) => mocks.listEntries(...args),
+}));
+vi.mock("@/lib/icpClubTeamLookup", () => ({
+  icpGetTeam: (...args: unknown[]) => mocks.icpGetTeam(...args),
+}));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/components/AddressAutocomplete", () => ({ AddressAutocomplete: () => null }));
@@ -61,9 +77,10 @@ function seed(table: string, ...responses: QueryResult[]) {
   mocks.results.set(table, responses);
 }
 
-describe("Competition fixture and ladder query contracts", () => {
+describe.runIf(supabaseMode)("Competition fixture and ladder query contracts — Supabase", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.backend = "supabase";
     mocks.queryConfigs = [];
     mocks.queryData = new Map();
     mocks.results = new Map();
@@ -135,5 +152,97 @@ describe("Competition fixture and ladder query contracts", () => {
     render(<CompetitionLadderPanel competitionId="competition-1" divisions={[]} />);
 
     await expect(configFor("competition-ladder").queryFn()).rejects.toMatchObject({ message: "teams unavailable" });
+  });
+});
+
+describe.runIf(!supabaseMode)("Competition fixture query contract — ICP", () => {
+  beforeEach(() => {
+    mocks.backend = "icp";
+    mocks.queryConfigs = [];
+    mocks.queryData = new Map();
+    mocks.calls = [];
+    mocks.listMatches.mockReset();
+    mocks.listEntries.mockReset();
+    mocks.icpGetTeam.mockReset();
+  });
+
+  it("reads and maps fixture rows through competition_domain", async () => {
+    mocks.listMatches.mockResolvedValue([{
+      id: "match-icp",
+      competition_id: "competition-1",
+      home_team: "team-home",
+      away_team: "team-away",
+      division_id: [],
+      round_number: [1n],
+      home_score: 0n,
+      away_score: 0n,
+      status: "scheduled",
+      scheduled_at_ms: [1_786_032_000_000n],
+      venue: ["Ground"],
+      pitch_number: ["2"],
+      duration_minutes: [60],
+      arrival_minutes_before: [20],
+      notes: [],
+      revision: 1n,
+    }]);
+    render(<CompetitionFixturesPanel competitionId="competition-1" isAdmin divisions={[]} entries={[]} />);
+
+    await expect(configFor("competition-matches").queryFn()).resolves.toMatchObject([{
+      id: "match-icp",
+      home_team_id: "team-home",
+      away_team_id: "team-away",
+      home: { id: "team-home", name: "team-home" },
+      away: { id: "team-away", name: "team-away" },
+      scheduled_at: new Date(1_786_032_000_000).toISOString(),
+      venue: "Ground",
+      pitch_number: "2",
+      round_number: 1,
+    }]);
+    expect(mocks.listMatches).toHaveBeenCalledWith(expect.anything(), "competition-1");
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("builds an ICP ladder from accepted entries, completed scores, and configured points", async () => {
+    mocks.listEntries.mockResolvedValue([
+      { competition_id: "competition-1", team_id: "team-home", club_id: "club-1", status: "accepted", division_id: ["division-1"] },
+      { competition_id: "competition-1", team_id: "team-away", club_id: "club-2", status: "accepted", division_id: ["division-1"] },
+      { competition_id: "competition-1", team_id: "team-waiting", club_id: "club-3", status: "invited", division_id: ["division-1"] },
+    ]);
+    mocks.listMatches.mockResolvedValue([
+      { id: "match-complete", home_team: "team-home", away_team: "team-away", home_score: 2n, away_score: 0n, status: "completed", division_id: ["division-1"] },
+      { id: "match-scheduled", home_team: "team-away", away_team: "team-home", home_score: 0n, away_score: 0n, status: "scheduled", division_id: ["division-1"] },
+    ]);
+    mocks.icpGetTeam.mockImplementation(async (id: string) => ({
+      id,
+      name: id === "team-home" ? "Home" : "Away",
+      club_id: id === "team-home" ? "club-1" : "club-2",
+    }));
+    render(
+      <CompetitionLadderPanel
+        competitionId="competition-1"
+        divisions={[]}
+        pointsWin={5}
+        pointsDraw={2}
+        pointsLoss={1}
+      />,
+    );
+
+    const rows = await configFor("competition-ladder").queryFn();
+
+    expect(mocks.listEntries).toHaveBeenCalledWith(expect.anything(), "competition-1");
+    expect(mocks.listMatches).toHaveBeenCalledWith(expect.anything(), "competition-1");
+    expect(rows).toEqual([
+      expect.objectContaining({
+        team_id: "team-home", division_id: "division-1", played: 1,
+        wins: 1, draws: 0, losses: 0, goals_for: 2, goals_against: 0,
+        goal_diff: 2, points: 5, teams: expect.objectContaining({ name: "Home" }),
+      }),
+      expect.objectContaining({
+        team_id: "team-away", division_id: "division-1", played: 1,
+        wins: 0, draws: 0, losses: 1, goals_for: 0, goals_against: 2,
+        goal_diff: -2, points: 1, teams: expect.objectContaining({ name: "Away" }),
+      }),
+    ]);
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 
+const liveMocks = vi.hoisted(() => ({
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  deleteLiveAsset: vi.fn(),
+  context: { identity: {}, target: {} },
+}));
+const supabaseMode = liveMocks.backend === "supabase";
+
 // ─── Supabase mock ─────────────────────────────────────────────────────────
 // Fluent builder that resolves on `.maybeSingle()` / `.single()` with values
 // programmed per test via the shared handler refs below.
@@ -72,6 +79,16 @@ vi.mock("@/integrations/supabase/client", () => {
     },
   };
 });
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => liveMocks.backend === "icp",
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    liveMocks.backend === "icp" ? providers.icp(liveMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/media", () => ({
+  deleteLiveAsset: (...args: unknown[]) => liveMocks.deleteLiveAsset(...args),
+}));
 
 // Import AFTER mock is registered.
 import {
@@ -125,7 +142,7 @@ describe("publishChatImageToGallery", () => {
     ).rejects.toThrow(/teamId or clubId/);
   });
 
-  it("returns alreadyPublished without downloading when a row exists", async () => {
+  it.runIf(supabaseMode)("returns alreadyPublished without downloading when a row exists", async () => {
     state.lookup = { data: { id: "existing-id" }, error: null };
     const fetchSpy = vi.fn();
     globalThis.fetch = fetchSpy as any;
@@ -143,7 +160,7 @@ describe("publishChatImageToGallery", () => {
     expect(state.insertPayload).toBeNull();
   });
 
-  it("must stop before copying media when the idempotency lookup fails", async () => {
+  it.runIf(supabaseMode)("must stop before copying media when the idempotency lookup fails", async () => {
     state.lookup = { data: null, error: { message: "permission denied" } };
     const fetchSpy = vi.fn();
     globalThis.fetch = fetchSpy as any;
@@ -163,7 +180,7 @@ describe("publishChatImageToGallery", () => {
     expect(state.insertPayload).toBeNull();
   });
 
-  it("uses a fallback error message when the lookup error has none", async () => {
+  it.runIf(supabaseMode)("uses a fallback error message when the lookup error has none", async () => {
     state.lookup = { data: null, error: { message: "" } };
     const fetchSpy = vi.fn();
     globalThis.fetch = fetchSpy as any;
@@ -180,7 +197,7 @@ describe("publishChatImageToGallery", () => {
     expect(state.uploaded).toHaveLength(0);
   });
 
-  it("throws a friendly error when the source image cannot be downloaded", async () => {
+  it.runIf(supabaseMode)("throws a friendly error when the source image cannot be downloaded", async () => {
     globalThis.fetch = vi.fn(async () => ({ ok: false, status: 404 })) as any;
 
     await expect(
@@ -195,7 +212,7 @@ describe("publishChatImageToGallery", () => {
     expect(state.insertPayload).toBeNull();
   });
 
-  it("uploads to clubs/{clubId}/teams/{teamId}/{uploaderId}/... when both are supplied and inserts scoped row", async () => {
+  it.runIf(supabaseMode)("uploads to clubs/{clubId}/teams/{teamId}/{uploaderId}/... when both are supplied and inserts scoped row", async () => {
     stubFetch(new Blob(["hi"], { type: "image/jpeg" }));
 
     const result = await publishChatImageToGallery({
@@ -223,7 +240,7 @@ describe("publishChatImageToGallery", () => {
     });
   });
 
-  it("uploads to teams/{teamId}/... when only teamId is provided", async () => {
+  it.runIf(supabaseMode)("uploads to teams/{teamId}/... when only teamId is provided", async () => {
     stubFetch(new Blob(["hi"], { type: "image/png" }));
 
     await publishChatImageToGallery({
@@ -237,7 +254,7 @@ describe("publishChatImageToGallery", () => {
     expect(state.uploaded[0].path.endsWith(".png")).toBe(true);
   });
 
-  it("uploads to clubs/{clubId}/{uploaderId}/... for club-wide chats", async () => {
+  it.runIf(supabaseMode)("uploads to clubs/{clubId}/{uploaderId}/... for club-wide chats", async () => {
     stubFetch(new Blob(["hi"], { type: "image/webp" }));
 
     await publishChatImageToGallery({
@@ -251,7 +268,7 @@ describe("publishChatImageToGallery", () => {
     expect(state.uploaded[0].path.endsWith(".webp")).toBe(true);
   });
 
-  it("cleans up storage when the photos insert fails", async () => {
+  it.runIf(supabaseMode)("cleans up storage when the photos insert fails", async () => {
     stubFetch(new Blob(["hi"], { type: "image/jpeg" }));
     state.insert = { data: null, error: { message: "rls denied" } };
 
@@ -268,10 +285,39 @@ describe("publishChatImageToGallery", () => {
     expect(state.removed[0][0]).toBe(state.uploaded[0].path);
   });
 
-  it("unpublishGalleryPhoto soft-deletes the given photo and surfaces errors", async () => {
+  it.runIf(supabaseMode)("unpublishGalleryPhoto soft-deletes the given photo and surfaces errors", async () => {
     await expect(unpublishGalleryPhoto("photo-1")).resolves.toBeUndefined();
 
     state.updateError = { message: "boom" };
     await expect(unpublishGalleryPhoto("photo-2")).rejects.toThrow(/undo/);
+  });
+});
+
+describe.runIf(!supabaseMode)("chat image gallery ICP boundary", () => {
+  beforeEach(() => {
+    liveMocks.deleteLiveAsset.mockReset();
+    state.uploaded = [];
+    state.insertPayload = null;
+  });
+
+  it("does not copy a chat image into the Supabase gallery under ICP", async () => {
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as any;
+    await expect(publishChatImageToGallery({
+      imageUrl: IMG,
+      uploaderId: "principal-1",
+      teamId: "team-1",
+      clubId: "club-1",
+    })).rejects.toThrow(/not available yet for Internet Identity accounts/);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(state.uploaded).toHaveLength(0);
+    expect(state.insertPayload).toBeNull();
+  });
+
+  it("unpublishes an ICP gallery asset through the media canister", async () => {
+    liveMocks.deleteLiveAsset.mockResolvedValue(undefined);
+    await expect(unpublishGalleryPhoto("asset-1")).resolves.toBeUndefined();
+    expect(liveMocks.deleteLiveAsset).toHaveBeenCalledWith(liveMocks.context, "asset-1");
   });
 });

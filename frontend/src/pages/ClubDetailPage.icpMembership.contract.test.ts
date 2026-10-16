@@ -17,7 +17,8 @@ describe("ClubDetailPage ICP membership wiring", () => {
     expect(source).toContain('supabase.from("role_requests").insert({');
   });
 
-  it("keeps the ICP lab short-circuit ahead of the ICP-account branch for role requests", () => {
-    expect(source).toContain('if (useIcpLab) throw new Error("Club role requests are unavailable in ICP lab mode.");');
+  it("routes role requests through the live membership provider", () => {
+    expect(source).toContain('withFeatureBackend("membership", {');
+    expect(source).toContain("icp: async (ctx) => { await requestLiveRole(ctx, id!, selectedRole); }");
   });
 });

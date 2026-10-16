@@ -2,15 +2,27 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
   from: vi.fn(),
   toast: vi.fn(),
   invalidateQueries: vi.fn(),
   matches: [] as any[],
   mutationResult: { error: null as any },
   lastQuery: null as any,
+  setLiveMatchResult: vi.fn(),
+  updateLiveMatchDetails: vi.fn(),
 }));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.backend === "icp" ? providers.icp({ identity: {}, target: { alias: "test" } }) : providers.supabase(),
+}));
+vi.mock("@/live/features/competitions", () => ({
+  setLiveMatchResult: (...args: unknown[]) => mocks.setLiveMatchResult(...args),
+  updateLiveMatchDetails: (...args: unknown[]) => mocks.updateLiveMatchDetails(...args),
+}));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/components/AddressAutocomplete", () => ({
@@ -89,6 +101,7 @@ async function editScores(home: string, away: string) {
 describe("CompetitionFixturesPanel result management", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.backend = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
     mocks.matches = [match()];
     mocks.mutationResult.error = null;
     mocks.lastQuery = null;
@@ -156,7 +169,7 @@ describe("CompetitionFixturesPanel result management", () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it("saves both scores, completes the match, and refreshes fixtures and ladder", async () => {
+  it.runIf(supabaseMode)("saves both scores, completes the match, and refreshes fixtures and ladder", async () => {
     renderPanel();
     await editScores("3", "1");
 
@@ -175,7 +188,7 @@ describe("CompetitionFixturesPanel result management", () => {
     });
   });
 
-  it("keeps a match scheduled when only one score is entered", async () => {
+  it.runIf(supabaseMode)("keeps a match scheduled when only one score is entered", async () => {
     renderPanel();
     await editScores("2", "");
 
@@ -186,7 +199,7 @@ describe("CompetitionFixturesPanel result management", () => {
     }));
   });
 
-  it("reverts a completed match to scheduled when its scores are cleared", async () => {
+  it.runIf(supabaseMode)("reverts a completed match to scheduled when its scores are cleared", async () => {
     mocks.matches = [match({ home_score: 2, away_score: 1, status: "completed" })];
     renderPanel();
     await editScores("", "");
@@ -198,7 +211,7 @@ describe("CompetitionFixturesPanel result management", () => {
     }));
   });
 
-  it("marks the first local edit of an externally sourced match as overridden", async () => {
+  it.runIf(supabaseMode)("marks the first local edit of an externally sourced match as overridden", async () => {
     mocks.matches = [match({ source: "playhq", manually_overridden_at: null })];
     renderPanel();
     await editScores("1", "0");
@@ -215,7 +228,7 @@ describe("CompetitionFixturesPanel result management", () => {
     }));
   });
 
-  it("does not replace the original override timestamp on later edits", async () => {
+  it.runIf(supabaseMode)("does not replace the original override timestamp on later edits", async () => {
     mocks.matches = [match({
       source: "playhq",
       manually_overridden_at: "2026-07-20T09:00:00.000Z",
@@ -227,7 +240,7 @@ describe("CompetitionFixturesPanel result management", () => {
     expect(mocks.lastQuery.update.mock.calls[0][0]).not.toHaveProperty("manually_overridden_at");
   });
 
-  it("reports a rejected score update without invalidating successful caches", async () => {
+  it.runIf(supabaseMode)("reports a rejected score update without invalidating successful caches", async () => {
     mocks.mutationResult.error = { message: "result update denied" };
     renderPanel();
     await editScores("3", "2");
@@ -240,7 +253,7 @@ describe("CompetitionFixturesPanel result management", () => {
     expect(mocks.invalidateQueries).not.toHaveBeenCalled();
   });
 
-  it("keeps a rejected score edit retryable and invalidates only after the retry succeeds", async () => {
+  it.runIf(supabaseMode)("keeps a rejected score edit retryable and invalidates only after the retry succeeds", async () => {
     mocks.mutationResult.error = { message: "temporary failure" };
     renderPanel();
     await editScores("3", "2");
@@ -259,5 +272,37 @@ describe("CompetitionFixturesPanel result management", () => {
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["competition-ladder", "competition-1"],
     });
+  });
+
+  it.runIf(!supabaseMode)("saves a complete result through competition_domain and refreshes fixture caches", async () => {
+    mocks.setLiveMatchResult.mockResolvedValue(undefined);
+    renderPanel();
+    await editScores("3", "1");
+
+    await waitFor(() => expect(mocks.setLiveMatchResult).toHaveBeenCalledWith(
+      { identity: {}, target: { alias: "test" } },
+      "match-1",
+      3,
+      1,
+      expect.any(Number),
+    ));
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["competition-matches", "competition-1"] });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["competition-ladder", "competition-1"] });
+  });
+
+  it.runIf(!supabaseMode)("rejects a partial result without mutating fixture details", async () => {
+    renderPanel();
+    await editScores("2", "");
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Could not save",
+      description: "Both scores are required to update a result on ICP.",
+      variant: "destructive",
+    })));
+    expect(mocks.setLiveMatchResult).not.toHaveBeenCalled();
+    expect(mocks.updateLiveMatchDetails).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
   });
 });

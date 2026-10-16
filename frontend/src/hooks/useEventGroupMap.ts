@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { myLiveRoleGrants } from "@/live/features/club";
+import { listLiveTeams, myLiveRoleGrants } from "@/live/features/club";
 
 export type EventGrouping = "level" | "team";
 
@@ -88,20 +88,29 @@ export function useEventGroupMap({ clubId, grouping, targetTeamIds, scopedRoster
     enabled: !!enabled && !!clubId && (grouping === "level" || grouping === "team"),
     staleTime: 60_000,
     queryFn: async () => {
-      let teamsQ = supabase
-        .from("teams")
-        .select("id, name, level_age")
-        .eq("club_id", clubId!);
-      if (targetKey) teamsQ = teamsQ.in("id", targetKey.split(","));
-      const { data: teams, error: teamsErr } = await teamsQ;
-      if (teamsErr) throw teamsErr;
+      const teams = await withFeatureBackend("membership", {
+        supabase: async () => {
+          let teamsQuery = supabase
+            .from("teams")
+            .select("id, name, level_age")
+            .eq("club_id", clubId!);
+          if (targetKey) teamsQuery = teamsQuery.in("id", targetKey.split(","));
+          const { data, error } = await teamsQuery;
+          if (error) throw error;
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const rows = await listLiveTeams(ctx, clubId!);
+          return targetKey ? rows.filter((team) => targetKey.split(",").includes(team.id)) : rows;
+        },
+      });
 
-      const teamIds = (teams ?? []).map((t: any) => t.id);
+      const teamIds = teams.map((t: any) => t.id);
 
       if (hasScopedRoster) {
         const scopedRows = scopedRosterRows ?? [];
         return {
-          teams: teams ?? [],
+          teams,
           roles: scopedRows
             .filter((r) => r.kind === "adult")
             .flatMap((r) => (r.team_ids ?? []).map((teamId) => ({ user_id: r.person_id, team_id: teamId }))),
@@ -120,7 +129,7 @@ export function useEventGroupMap({ clubId, grouping, targetTeamIds, scopedRoster
           icp: (ctx) => myLiveRoleGrants(ctx),
         });
         return {
-          teams: teams ?? [],
+          teams,
           roles: grants
             .filter((g) => g.team && teamIds.includes(g.team))
             .map((g) => ({ user_id: g.user.toText(), team_id: g.team as string })),
@@ -147,7 +156,7 @@ export function useEventGroupMap({ clubId, grouping, targetTeamIds, scopedRoster
       if (assignmentsRes.error) throw assignmentsRes.error;
 
       return {
-        teams: teams ?? [],
+        teams,
         roles: rolesRes.data ?? [],
         assignments: assignmentsRes.data ?? [],
       };

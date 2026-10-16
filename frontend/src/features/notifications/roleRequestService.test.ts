@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import { friendlyRoleRequestError, processRoleRequest } from "./roleRequestService";
 
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
 function fakeClient(options: { request?: unknown; fetchError?: unknown; actionError?: unknown; email?: string | null; invokeError?: Error } = {}) {
@@ -37,7 +39,7 @@ const profileLookup = async () => ({ data: { display_name: "Alex" } });
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("role request service", () => {
+describe.runIf(supabaseMode)("role request service", () => {
   it.each([
     ["approve", "approve_role_request"],
     ["deny", "deny_role_request"],
@@ -86,6 +88,15 @@ describe("role request service", () => {
     const fake = fakeClient({ request, email: "alex@example.com", invokeError: new Error("email offline") });
     await expect(processRoleRequest("request-a", "approve", fake.client, profileLookup)).resolves.toBeUndefined();
     expect(console.warn).toHaveBeenCalled();
+  });
+});
+
+describe.runIf(!supabaseMode)("role request service — ICP boundary", () => {
+  it("fails closed before reading or writing Supabase role requests", async () => {
+    const fake = fakeClient({ request });
+    await expect(processRoleRequest("request-a", "approve", fake.client, profileLookup))
+      .rejects.toThrow(/not available yet for internet identity accounts/i);
+    expect(fake.calls).toEqual([]);
   });
 });
 

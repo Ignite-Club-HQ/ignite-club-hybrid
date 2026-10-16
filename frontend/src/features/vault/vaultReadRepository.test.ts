@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import {
   buildVaultFolderTree,
@@ -13,6 +13,27 @@ import {
   searchVaultContents,
   type VaultFolderTreeRow,
 } from "./vaultReadRepository";
+
+const readMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  folders: vi.fn(),
+  clubFiles: vi.fn(),
+  folderFiles: vi.fn(),
+  trash: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = { identity: {}, target: { alias: "test" } };
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    readMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/vault", () => ({
+  listLiveVaultFolders: (...args: unknown[]) => readMocks.folders(...args),
+  listLiveVaultClubFilesWithFolder: (...args: unknown[]) => readMocks.clubFiles(...args),
+  listLiveVaultFilesWithFolder: (...args: unknown[]) => readMocks.folderFiles(...args),
+  listLiveVaultTrashWithFolder: (...args: unknown[]) => readMocks.trash(...args),
+}));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type Call = { table: string; method: string; args: unknown[] };
@@ -165,7 +186,7 @@ describe("Vault folder read repository", () => {
     expect(calls).toEqual([]);
   });
 
-  it("scopes a club root to the exact club, null team, null parent, and active rows", async () => {
+  it.runIf(supabaseMode)("scopes a club root to the exact club, null team, null parent, and active rows", async () => {
     const { client, calls } = folderClient([folder()]);
     await fetchVaultSubfolders({
       view: clubView,
@@ -183,7 +204,7 @@ describe("Vault folder read repository", () => {
     ]));
   });
 
-  it("scopes a nested team folder by exact team and parent", async () => {
+  it.runIf(supabaseMode)("scopes a nested team folder by exact team and parent", async () => {
     const { client, calls } = folderClient([folder()]);
     await fetchVaultSubfolders({
       view: {
@@ -206,7 +227,7 @@ describe("Vault folder read repository", () => {
     expect(calls.some((call) => call.method === "eq" && call.args[0] === "club_id")).toBe(false);
   });
 
-  it("shows a coach only generic chat folders and matching restricted folders", async () => {
+  it.runIf(supabaseMode)("shows a coach only generic chat folders and matching restricted folders", async () => {
     const { client } = folderClient([
       folder({ id: "policies", name: "Policies" }),
       folder({ id: "images", name: "Chat Images" }),
@@ -223,7 +244,7 @@ describe("Vault folder read repository", () => {
     expect(result.map((item) => item.id)).toEqual(["images", "coach"]);
   });
 
-  it("allows privileged viewers to retain unrestricted and restricted folders", async () => {
+  it.runIf(supabaseMode)("allows privileged viewers to retain unrestricted and restricted folders", async () => {
     const rows = [
       folder({ id: "policies" }),
       folder({ id: "admin", restricted_roles: ["club_admin"] }),
@@ -276,7 +297,7 @@ describe("Vault active-item read model", () => {
     expect(calls.some((call) => call.method === "order")).toBe(false);
   });
 
-  it("does not expose loose club-root files to a coach", async () => {
+  it.runIf(supabaseMode)("does not expose loose club-root files to a coach", async () => {
     const { client, calls } = fileClient([]);
     await expect(fetchVaultItems({
       view: clubView,
@@ -291,7 +312,7 @@ describe("Vault active-item read model", () => {
     expect(calls.some((call) => call.method === "order")).toBe(false);
   });
 
-  it("allows scoped coach files inside an explicit club folder", async () => {
+  it.runIf(supabaseMode)("allows scoped coach files inside an explicit club folder", async () => {
     const rows = [{ id: "file-a", name: "Chat file" }];
     const { client, calls } = fileClient(rows);
     await expect(fetchVaultItems({
@@ -305,7 +326,7 @@ describe("Vault active-item read model", () => {
     ]));
   });
 
-  it("uses mutually exclusive exact team and mini-league scopes", async () => {
+  it.runIf(supabaseMode)("uses mutually exclusive exact team and mini-league scopes", async () => {
     const team = fileClient([]);
     await fetchVaultItems({
       view: {
@@ -396,7 +417,7 @@ describe("Vault recursive folder tree", () => {
     expect(fake.calls).toEqual([]);
   });
 
-  it("queries the exact club tree and excludes team folders", async () => {
+  it.runIf(supabaseMode)("queries the exact club tree and excludes team folders", async () => {
     const fake = treeClient([]);
     await fetchVaultFolderTree({
       view: clubView,
@@ -409,7 +430,7 @@ describe("Vault recursive folder tree", () => {
     ]));
   });
 
-  it("queries an exact team tree without adding a broader club filter", async () => {
+  it.runIf(supabaseMode)("queries an exact team tree without adding a broader club filter", async () => {
     const fake = treeClient([]);
     await fetchVaultFolderTree({
       view: {
@@ -426,7 +447,7 @@ describe("Vault recursive folder tree", () => {
     expect(fake.calls.some((call) => call.method === "eq" && call.args[0] === "club_id")).toBe(false);
   });
 
-  it("queries a competition tree by organizer club and competition", async () => {
+  it.runIf(supabaseMode)("queries a competition tree by organizer club and competition", async () => {
     const fake = treeClient([]);
     await fetchVaultFolderTree({
       view: {
@@ -444,7 +465,7 @@ describe("Vault recursive folder tree", () => {
   });
 });
 
-describe("Vault recursive content search", () => {
+describe.runIf(supabaseMode)("Vault recursive content search — Supabase", () => {
   const tree = {
     descendants: [
       { id: "public", name: "Public Policies", parent_id: null, restricted_roles: null },
@@ -526,7 +547,7 @@ describe("Vault recursive content search", () => {
   });
 });
 
-describe("competition Vault signed URLs", () => {
+describe.runIf(supabaseMode)("competition Vault signed URLs — Supabase", () => {
   it("signs only competition-vault objects", async () => {
     const calls: Array<{ bucket: string; path: string; expiresIn: number }> = [];
     const client = {
@@ -570,7 +591,7 @@ describe("Vault trash read model", () => {
     expect(fake.calls).toEqual([]);
   });
 
-  it("uses club-wide trash scope even when opened from a team", async () => {
+  it.runIf(supabaseMode)("uses club-wide trash scope even when opened from a team", async () => {
     const fake = trashClient([]);
     await fetchVaultTrash({
       type: "team",
@@ -587,7 +608,7 @@ describe("Vault trash read model", () => {
     expect(fake.calls.some((call) => call.method === "eq" && call.args[0] === "team_id")).toBe(false);
   });
 
-  it("requests joined folder and team labels for trash presentation", async () => {
+  it.runIf(supabaseMode)("requests joined folder and team labels for trash presentation", async () => {
     const fake = trashClient([]);
     await fetchVaultTrash(clubView, fake.client);
     const select = fake.calls.find((call) => call.method === "select");
@@ -595,7 +616,7 @@ describe("Vault trash read model", () => {
     expect(String(select?.args[0])).toContain("team:teams(id, name)");
   });
 
-  it("partitions deleted images and documents while retaining joined metadata", async () => {
+  it.runIf(supabaseMode)("partitions deleted images and documents while retaining joined metadata", async () => {
     const photo = {
       id: "photo-a",
       name: "Photo.jpg",
@@ -620,5 +641,71 @@ describe("Vault trash read model", () => {
       expect.objectContaining({ id: "photo-a", image_url: "photo-url", folder: photo.folder }),
     ]);
     expect(result.files).toEqual([file]);
+  });
+});
+
+describe.runIf(!supabaseMode)("Vault read repository — ICP", () => {
+  beforeEach(() => {
+    readMocks.backend = "icp";
+    readMocks.folders.mockReset();
+    readMocks.clubFiles.mockReset();
+    readMocks.folderFiles.mockReset();
+    readMocks.trash.mockReset();
+  });
+
+  it("maps canister folders and preserves frontend role filtering", async () => {
+    readMocks.folders.mockResolvedValue([
+      { id: "public", name: "Public", club: "club-a", team: [], mini_league_id: [], competition_id: [], parent_id: [], restricted_roles: [], created_at_ms: 1_000n, deleted_at_ms: [] },
+      { id: "coach", name: "Coaches", club: "club-a", team: [], mini_league_id: [], competition_id: [], parent_id: [], restricted_roles: ["coach"], created_at_ms: 1_000n, deleted_at_ms: [] },
+      { id: "admin", name: "Admins", club: "club-a", team: [], mini_league_id: [], competition_id: [], parent_id: [], restricted_roles: ["club_admin"], created_at_ms: 1_000n, deleted_at_ms: [] },
+    ]);
+    const fake = folderClient([]);
+    await expect(fetchVaultSubfolders({
+      view: clubView,
+      isAppAdmin: false,
+      isClubAdmin: false,
+      isCoachOrTeamAdmin: true,
+      clubRoles: new Set(["coach"]),
+    }, fake.client)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "coach" }),
+    ]));
+    expect(readMocks.folders).toHaveBeenCalledWith(icpContext, "club-a", null, null, null);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("maps canister club files into the shared photo/document rows", async () => {
+    readMocks.clubFiles.mockResolvedValue([{
+      file: {
+        id: "file-a", folder_id: [], club: "club-a", team: [], mini_league_id: [], competition_id: [],
+        name: "Photo.jpg", file_url: "clubs/club-a/photo.jpg", size: 12n, mime: "image/jpeg",
+        uploaded_by: { toText: () => "principal-a" }, created_at_ms: 1_000n, deleted_at_ms: [], deleted_by: [], is_external_link: false,
+      },
+      folder_name: [],
+      folder_path: [],
+    }]);
+    const fake = fileClient([]);
+    await expect(fetchVaultItems({ view: clubView, isClubAdmin: true, isCoachOrTeamAdmin: true }, fake.client))
+      .resolves.toEqual([expect.objectContaining({ id: "file-a", file_size: 12, uploaded_by: "principal-a" })]);
+    expect(readMocks.clubFiles).toHaveBeenCalledWith(icpContext, "club-a", null, null, null);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("maps canister trash rows and partitions images from documents", async () => {
+    readMocks.trash.mockResolvedValue([{
+      file: {
+        id: "trash-photo", folder_id: [], club: "club-a", team: [], mini_league_id: [], competition_id: [],
+        name: "Photo.jpg", file_url: "clubs/club-a/photo.jpg", size: 12n, mime: "image/jpeg",
+        uploaded_by: { toText: () => "principal-a" }, created_at_ms: 1_000n, deleted_at_ms: [2_000n], deleted_by: [], is_external_link: false,
+      },
+      folder_name: [],
+      folder_path: [],
+    }]);
+    const fake = trashClient([]);
+    await expect(fetchVaultTrash(clubView, fake.client)).resolves.toMatchObject({
+      photos: [expect.objectContaining({ id: "trash-photo", image_url: "clubs/club-a/photo.jpg" })],
+      files: [],
+    });
+    expect(readMocks.trash).toHaveBeenCalledWith(icpContext, "club-a");
+    expect(fake.calls).toEqual([]);
   });
 });

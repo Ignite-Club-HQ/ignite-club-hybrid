@@ -12,6 +12,15 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import InviteOtherParentSheet from "./InviteOtherParentSheet";
 
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  getLiveTeam: vi.fn(),
+  createLivePendingInvite: vi.fn(),
+  linkLiveGuardian: vi.fn(),
+  searchLiveProfiles: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
 // ---------------------------------------------------------------- mocks ----
 
 const toastMock = vi.fn();
@@ -20,6 +29,20 @@ vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "me" } }) }));
 vi.mock("@/hooks/useDebounce", () => ({ useDebounce: (v: unknown) => v }));
 vi.mock("@capacitor/core", () => ({ Capacitor: { isNativePlatform: () => false } }));
 vi.mock("@capacitor/share", () => ({ Share: { share: vi.fn() } }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp"
+      ? providers.icp({ identity: {}, target: {} })
+      : providers.supabase(),
+}));
+vi.mock("@/live/features/club", () => ({
+  getLiveTeam: (...args: unknown[]) => backendMocks.getLiveTeam(...args),
+  createLivePendingInvite: (...args: unknown[]) => backendMocks.createLivePendingInvite(...args),
+  linkLiveGuardian: (...args: unknown[]) => backendMocks.linkLiveGuardian(...args),
+}));
+vi.mock("@/live/features/identityAccessClient", () => ({
+  searchLiveProfiles: (...args: unknown[]) => backendMocks.searchLiveProfiles(...args),
+}));
 
 interface Scenario {
   teamRow: { id: string; club_id: string | null } | null;
@@ -131,6 +154,11 @@ async function fillAndSubmit(opts: { email?: string } = {}) {
 }
 
 beforeEach(() => {
+  backendMocks.mode = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
+  backendMocks.getLiveTeam.mockReset();
+  backendMocks.createLivePendingInvite.mockReset();
+  backendMocks.linkLiveGuardian.mockReset();
+  backendMocks.searchLiveProfiles.mockReset().mockResolvedValue([]);
   toastMock.mockClear();
   invokeMock.mockClear();
   calls.inserts = [];
@@ -147,7 +175,7 @@ const sentAtUpdates = () => calls.updates.filter((u) => u.values?.email_sent_at)
 
 // ----------------------------------------------------------------- tests ---
 
-describe("scope resolution", () => {
+describe.runIf(supabaseMode)("scope resolution", () => {
   it("1. successful resolution creates exactly one correctly scoped invitation", async () => {
     renderSheet();
     await fillAndSubmit();
@@ -228,7 +256,7 @@ describe("scope resolution", () => {
   });
 });
 
-describe("email delivery verification", () => {
+describe.runIf(supabaseMode)("email delivery verification", () => {
   it("8. invocation transport error preserves the invite/manual link but writes no email_sent_at", async () => {
     scenario.invoke = { data: null, error: { message: "network" } };
     renderSheet();
@@ -322,5 +350,45 @@ describe("email delivery verification", () => {
     await fillAndSubmit({ email: "redacted@example.invalid" });
     expect(await screen.findByText(/invite created/i)).toBeInTheDocument();
     expect(inviteInserts()).toHaveLength(1);
+  });
+});
+
+describe.runIf(!supabaseMode)("ICP guardian invite creation", () => {
+  it("normalizes the optional team result and creates a shareable canister invite", async () => {
+    backendMocks.getLiveTeam.mockResolvedValue([{ id: "team-1", club_id: "club-1" }]);
+    backendMocks.createLivePendingInvite.mockResolvedValue({ invite: { id: "pending-icp-1" } });
+
+    renderSheet();
+    await fillAndSubmit();
+
+    await waitFor(() => expect(backendMocks.createLivePendingInvite).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        kind: "guardian",
+        clubId: "club-1",
+        email: "",
+        teamId: "team-1",
+        childId: "child-1",
+        role: "parent",
+      },
+    ));
+    expect(calls.inserts).toHaveLength(0);
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(await screen.findByText(/invite link created — share it with them/i)).toBeInTheDocument();
+  });
+
+  it("fails closed when the canister team result has no club scope", async () => {
+    backendMocks.getLiveTeam.mockResolvedValue([]);
+    renderSheet();
+    await fillAndSubmit();
+
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/couldn't verify the team and club/i),
+        variant: "destructive",
+      }),
+    ));
+    expect(backendMocks.createLivePendingInvite).not.toHaveBeenCalled();
+    expect(calls.inserts).toHaveLength(0);
   });
 });

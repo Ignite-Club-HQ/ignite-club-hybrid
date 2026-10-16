@@ -6,6 +6,12 @@ import React from "react";
 const rolesResult: { data: unknown; error: unknown } = { data: [], error: null };
 const teamsResult: { data: unknown; error: unknown } = { data: [], error: null };
 const subsResult: { data: unknown; error: unknown } = { data: [], error: null };
+const proMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  icp: { isPro: false, isLoading: false, isError: false },
+  from: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
 function makeBuilder(res: { data: unknown; error: unknown }) {
   return {
@@ -19,12 +25,20 @@ function makeBuilder(res: { data: unknown; error: unknown }) {
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (table: string) => {
+      proMocks.from(table);
       if (table === "user_roles") return makeBuilder(rolesResult);
       if (table === "teams") return makeBuilder(teamsResult);
       if (table === "club_subscriptions") return makeBuilder(subsResult);
       return makeBuilder({ data: [], error: null });
     },
   },
+}));
+
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => proMocks.backend,
+}));
+vi.mock("@/hooks/useIcpProAccess", () => ({
+  useIcpEntitlements: () => proMocks.icp,
 }));
 
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "u1" } }) }));
@@ -37,6 +51,8 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 beforeEach(() => {
+  proMocks.backend = "supabase";
+  proMocks.from.mockClear();
   rolesResult.data = [];
   rolesResult.error = null;
   teamsResult.data = [];
@@ -45,7 +61,7 @@ beforeEach(() => {
   subsResult.error = null;
 });
 
-describe("useUserHasAnyClubPro fail-safe", () => {
+describe.runIf(supabaseMode)("useUserHasAnyClubPro fail-safe — Supabase", () => {
   it("resolves Free when the user has no roles", async () => {
     const { result } = renderHook(() => useUserHasAnyClubPro(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -141,5 +157,26 @@ describe("useUserHasAnyClubPro fail-safe", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.isLoading).toBe(true);
     expect(result.current.hasAnyClubPro).toBe(false);
+  });
+});
+
+describe.runIf(!supabaseMode)("useUserHasAnyClubPro — ICP", () => {
+  beforeEach(() => {
+    proMocks.backend = "icp";
+    proMocks.icp = { isPro: false, isLoading: false, isError: false };
+  });
+
+  it("uses Internet Identity entitlement state and avoids Supabase subscription reads", () => {
+    proMocks.icp = { isPro: true, isLoading: false, isError: false };
+    const { result } = renderHook(() => useUserHasAnyClubPro(), { wrapper });
+    expect(result.current).toEqual({ hasAnyClubPro: true, isLoading: false, isError: false, error: null });
+    expect(proMocks.from).not.toHaveBeenCalled();
+  });
+
+  it("keeps access unknown while ICP entitlement is loading", () => {
+    proMocks.icp = { isPro: false, isLoading: true, isError: true };
+    const { result } = renderHook(() => useUserHasAnyClubPro(), { wrapper });
+    expect(result.current).toEqual({ hasAnyClubPro: false, isLoading: true, isError: true, error: null });
+    expect(proMocks.from).not.toHaveBeenCalled();
   });
 });

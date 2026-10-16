@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   dm_attachments_disabled: vi.fn(),
   get_group_metadata: vi.fn(),
   my_unread_counts: vi.fn(),
+  send_message: vi.fn(),
 }));
 
 vi.mock("../domains", () => ({
@@ -14,6 +15,7 @@ vi.mock("../domains", () => ({
       dm_attachments_disabled: mocks.dm_attachments_disabled,
       get_group_metadata: mocks.get_group_metadata,
       my_unread_counts: mocks.my_unread_counts,
+      send_message: mocks.send_message,
     },
   })),
 }));
@@ -23,6 +25,7 @@ import {
   isLiveDmAttachmentsDisabled,
   getLiveGroupMetadata,
   myLiveUnreadCounts,
+  sendLiveMessage,
 } from "./messaging";
 
 const ctx = { target: {}, identity: {} } as never;
@@ -113,5 +116,28 @@ describe("myLiveUnreadCounts", () => {
   it("returns an empty list when the caller has no unread conversations", async () => {
     mocks.my_unread_counts.mockResolvedValueOnce([]);
     await expect(myLiveUnreadCounts(ctx)).resolves.toEqual([]);
+  });
+});
+
+describe("sendLiveMessage image attachment", () => {
+  it("sends the blob URL as an image attachment for team and competition chat readers", async () => {
+    mocks.send_message.mockResolvedValueOnce({ Ok: { id: "message-1" } });
+    await sendLiveMessage(ctx, "conversation-1", "Match photo", "message-key", {
+      kind: "image",
+      refId: "clubs/club-1/teams/team-1/chat/photo.jpg",
+      url: "https://blob.example/photo.jpg",
+    });
+
+    expect(mocks.send_message).toHaveBeenCalledWith(
+      "conversation-1",
+      "Match photo",
+      "message-key",
+      [{
+        kind: "image",
+        ref_id: "clubs/club-1/teams/team-1/chat/photo.jpg",
+        url: ["https://blob.example/photo.jpg"],
+      }],
+      [],
+    );
   });
 });

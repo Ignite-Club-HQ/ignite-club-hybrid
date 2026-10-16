@@ -1,5 +1,22 @@
 import { describe, it, expect, vi } from "vitest";
+
+const { mode, deleteLiveAsset, icpContext } = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  deleteLiveAsset: vi.fn(),
+  icpContext: { identity: {}, target: {} },
+}));
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mode === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/media", () => ({
+  deleteLiveAsset: (...args: unknown[]) => deleteLiveAsset(...args),
+}));
+
 import { deleteMediaPhoto } from "./mediaPhotoDeletion";
+
+const supabaseMode = mode === "supabase";
 
 type Err = { message: string; code?: string } | null;
 
@@ -55,7 +72,7 @@ function makeClient(opts: {
   return { rpc, from, calls } as any;
 }
 
-describe("deleteMediaPhoto — RPC path (transactional, server-authorized)", () => {
+describe.runIf(supabaseMode)("deleteMediaPhoto — RPC path (transactional, server-authorized)", () => {
   it("feed-only delegates to the RPC and never mutates Vault client-side", async () => {
     const client = makeClient({ rpc: { data: [{ vault_file_id: null, vault_updated: false }] } });
     const result = await deleteMediaPhoto(client, { photoId: "p1", mode: "feed_only" });
@@ -106,7 +123,7 @@ describe("deleteMediaPhoto — RPC path (transactional, server-authorized)", () 
   });
 });
 
-describe("deleteMediaPhoto — fallback path (RPC not yet deployed)", () => {
+describe.runIf(supabaseMode)("deleteMediaPhoto — fallback path (RPC not yet deployed)", () => {
   const missing = { message: "Could not find the function", code: "PGRST202" };
 
   it("feed-only updates only photos.show_in_feed and never reads vault_files", async () => {
@@ -195,5 +212,23 @@ describe("deleteMediaPhoto — fallback path (RPC not yet deployed)", () => {
     await expect(
       deleteMediaPhoto(client, { photoId: "p1", mode: "feed_and_vault" }),
     ).rejects.toThrow("vault update denied");
+  });
+});
+
+describe.runIf(!supabaseMode)("deleteMediaPhoto — ICP adapter", () => {
+  it("deletes the canister asset without issuing Supabase RPCs or table writes", async () => {
+    const client = makeClient({});
+    deleteLiveAsset.mockResolvedValue(undefined);
+
+    await expect(deleteMediaPhoto(client, { photoId: "asset-1", mode: "feed_and_vault" })).resolves.toEqual({
+      photoId: "asset-1",
+      mode: "feed_and_vault",
+      vaultFileId: null,
+      vaultUpdated: false,
+    });
+
+    expect(deleteLiveAsset).toHaveBeenCalledWith(icpContext, "asset-1");
+    expect(client.rpc).not.toHaveBeenCalled();
+    expect(client.from).not.toHaveBeenCalled();
   });
 });

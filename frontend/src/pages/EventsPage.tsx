@@ -57,7 +57,7 @@ import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } f
 import { getLiveAccountRosterScope, listLiveEventDutyTeams, listLiveEvents } from "@/live/features/events";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
-import { listLiveCompetitionMatches, listLiveCompetitionsMulti, listLiveMyNewsCompetitions } from "@/live/features/competitions";
+import { listLiveCompetitionMatches, listLiveCompetitionsMulti, listLiveMyNewsCompetitions, listLivePublicCompetitions } from "@/live/features/competitions";
 
 /** Derive the memberships shape the schedule filters need from the caller's
  * club_domain role grants + events_domain roster scope (live ICP path).
@@ -678,10 +678,6 @@ export default function EventsPage() {
     .map((role: { role: string; club_id: string | null; team_id: string | null }) => `${role.role}:${role.club_id ?? ""}:${role.team_id ?? ""}`)
     .sort()
     .join(",");
-  const viewerRoleScope = (userMemberships?.roles ?? [])
-    .map((role: { role: string; club_id: string | null; team_id: string | null }) => `${role.role}:${role.club_id ?? ""}:${role.team_id ?? ""}`)
-    .sort()
-    .join(",");
   const eventsScopeKey = useMemo(
     () => `${user?.id || "anon"}_${filter}_${teamFilter || "all"}_${clubFilter || "all"}_${viewerRoleScope}`,
     [user?.id, filter, teamFilter, clubFilter, viewerRoleScope]
@@ -720,10 +716,8 @@ export default function EventsPage() {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
             diagLog("events:icp-start", { clubs: clubIds.length });
-            if (teamIds.length === 0 && clubIds.length === 0) return [];
             const selectedTeamId = teamFilter && !teamFilter.startsWith("ml:") ? teamFilter : null;
             const scopeClubIds = clubFilter ? [clubFilter] : clubIds;
-            if (scopeClubIds.length === 0) return [];
 
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - Math.max(30, pastDaysBack));
@@ -758,9 +752,9 @@ export default function EventsPage() {
 
             // Fetch every club's events at once, then resolve all team/club
             // names in parallel so the loop below only reads from cache.
-            const rowsByClub = await Promise.all(
-              scopeClubIds.map((clubId) => listLiveEvents(ctx, clubId, selectedTeamId)),
-            );
+            const rowsByClub = scopeClubIds.length > 0
+              ? await Promise.all(scopeClubIds.map((clubId) => listLiveEvents(ctx, clubId, selectedTeamId)))
+              : [];
             const visibleEventRows = rowsByClub.flatMap((rows) => (rows as any[]).filter((event) => !event.deleted));
             const dutyTeams = await listLiveEventDutyTeams(ctx, visibleEventRows.map((event) => event.id)).catch(() => []);
             const dutyTeamByEventId = new Map(dutyTeams.map((assignment) => [assignment.event_id, assignment.team_id]));
@@ -827,14 +821,18 @@ export default function EventsPage() {
 
             if (filter === "all" || filter === "game") {
               const leagueClubIds = userMemberships?.leagueAdminClubIds ?? [];
-              const [managed, leagueClubCompetitions] = await Promise.all([
+              const [managed, leagueClubCompetitions, publicCompetitions] = await Promise.all([
                 listMyLiveNewsCompetitions(ctx).catch(() => [] as any[]),
                 leagueClubIds.length > 0
                   ? listLiveCompetitionsMulti(ctx, leagueClubIds).catch(() => [] as any[])
                   : Promise.resolve([] as any[]),
+                listLivePublicCompetitions(ctx).catch(() => [] as any[]),
               ]);
-              const competitions = [...new Map([...managed, ...leagueClubCompetitions]
+              const competitions = [...new Map([...managed, ...leagueClubCompetitions, ...publicCompetitions]
                 .filter((competition: any) => competition.status !== "archived")
+                .filter((competition: any) => competition.visibility === "public" ||
+                  managed.some((item: any) => item.id === competition.id) ||
+                  leagueClubCompetitions.some((item: any) => item.id === competition.id))
                 .filter((competition: any) => !clubFilter || competition.club_id === clubFilter)
                 .map((competition: any) => [competition.id, competition])).values()];
               const fixtures = await Promise.all(competitions.map(async (competition: any) => {

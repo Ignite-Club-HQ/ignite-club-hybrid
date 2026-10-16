@@ -163,9 +163,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
 // ── 1. Recovery-session validation ───────────────────────────────────────
 
-describe("ResetPasswordPage — recovery-session lifecycle", () => {
+describe.runIf(supabaseMode)("ResetPasswordPage — recovery-session lifecycle", () => {
   it("shows a loading state while checking and hides the password form", async () => {
     // Never resolves during this test — status stays `checking`.
     getSession.mockReturnValue(new Promise(() => {}));
@@ -250,7 +252,7 @@ describe("ResetPasswordPage — recovery-session lifecycle", () => {
 
 // ── 2. updateUser guard ──────────────────────────────────────────────────
 
-describe("ResetPasswordPage — updateUser guard", () => {
+describe.runIf(supabaseMode)("ResetPasswordPage — updateUser guard", () => {
   it("never calls updateUser() while the recovery session is invalid", async () => {
     renderPage();
     await waitFor(() =>
@@ -266,7 +268,7 @@ describe("ResetPasswordPage — updateUser guard", () => {
 
 // ── 3. Fallback sendRecoveryCode failure handling ────────────────────────
 
-describe("ResetPasswordPage — sendRecoveryCode fail-closed", () => {
+describe.runIf(supabaseMode)("ResetPasswordPage — sendRecoveryCode fail-closed", () => {
   const openOtpInterface = async () => {
     renderPage();
     await waitFor(() =>
@@ -384,7 +386,7 @@ describe("ResetPasswordPage — sendRecoveryCode fail-closed", () => {
 
 // ── 4. OTP verification hardening ────────────────────────────────────────
 
-describe("ResetPasswordPage — OTP verification", () => {
+describe.runIf(supabaseMode)("ResetPasswordPage — OTP verification", () => {
   const openOtpInterface = async () => {
     renderPage();
     await waitFor(() =>
@@ -484,5 +486,16 @@ describe("ResetPasswordPage — OTP verification", () => {
     fireEvent.change(hidden!, { target: { value: "999888" } });
     await waitFor(() => expect(verifyOtp).toHaveBeenCalledTimes(1));
     resolveVerify({ data: {}, error: null });
+  });
+});
+
+describe.runIf(!supabaseMode)("ResetPasswordPage — ICP recovery boundary", () => {
+  it("shows recovery as unavailable without calling Supabase auth", () => {
+    renderPage();
+    expect(screen.getByText(/password recovery is unavailable in icp lab mode/i)).toBeInTheDocument();
+    expect(exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(resetPasswordForEmail).not.toHaveBeenCalled();
+    expect(verifyOtp).not.toHaveBeenCalled();
   });
 });

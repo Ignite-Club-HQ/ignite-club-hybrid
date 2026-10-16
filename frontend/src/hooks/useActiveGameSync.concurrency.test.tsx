@@ -57,6 +57,25 @@ let nextInsertConflict: { stealRow: FakeRow } | null = null;
 let rowIdSeq = 0;
 
 const recordSyncWriteSpy = vi.fn();
+const activeGameBackendMocks = vi.hoisted(() => ({
+  mode: "supabase" as "supabase" | "icp",
+  sync: vi.fn(),
+  deactivate: vi.fn(),
+}));
+
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => activeGameBackendMocks.mode,
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    activeGameBackendMocks.mode === "icp"
+      ? providers.icp({ identity: {}, target: {} })
+      : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  syncLiveActiveGame: (...args: unknown[]) => activeGameBackendMocks.sync(...args),
+  deactivateLiveActiveGame: (...args: unknown[]) => activeGameBackendMocks.deactivate(...args),
+}));
 
 vi.mock("@/lib/syncWriteRateMonitor", () => ({
   recordSyncWrite: (...args: unknown[]) => recordSyncWriteSpy(...args),
@@ -220,6 +239,9 @@ const insertWrites = () => writeLog.filter((w) => w.op === "insert" && w.table =
 const updateWrites = () => writeLog.filter((w) => w.op === "update" && w.table === "active_games");
 
 beforeEach(() => {
+  activeGameBackendMocks.mode = "supabase";
+  activeGameBackendMocks.sync.mockReset();
+  activeGameBackendMocks.deactivate.mockReset();
   writeLog.length = 0;
   fakeRows = [];
   nextInsertConflict = null;
@@ -231,7 +253,9 @@ beforeEach(() => {
 // ────────────────────────────────────────────────────────────────────────────
 // Tests
 // ────────────────────────────────────────────────────────────────────────────
-describe("useActiveGameSync soccer multi-tenant write concurrency", () => {
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
+describe.runIf(supabaseMode)("useActiveGameSync soccer multi-tenant write concurrency", () => {
   it("stamps a stable board_session_id on insert and every subsequent update", async () => {
     seedSoccerBoard("team-001");
     const { result } = renderHook(() => useActiveGameSync());
@@ -484,5 +508,26 @@ describe("useActiveGameSync soccer multi-tenant write concurrency", () => {
     expect(fakeRows.find((r) => r.id === "row-team-B")?.is_active).toBe(true);
     expect(fakeRows.find((r) => r.id === "row-team-C")?.is_active).toBe(true);
     expect(fakeRows.find((r) => r.id === "row-team-A")?.is_active).toBe(true);
+  });
+});
+
+describe.runIf(!supabaseMode)("useActiveGameSync ICP routing", () => {
+  it("syncs timer and pitch state through events_domain without reading Supabase", async () => {
+    activeGameBackendMocks.mode = "icp";
+    activeGameBackendMocks.sync.mockResolvedValue({ id: "icp-active-game" });
+    seedSoccerBoard("team-icp");
+    const { result } = renderHook(() => useActiveGameSync());
+
+    await act(async () => {
+      await result.current.forceSync();
+    });
+
+    expect(activeGameBackendMocks.sync).toHaveBeenCalledWith(
+      { identity: {}, target: {} },
+      expect.objectContaining({ teamId: "team-icp", boardSessionId: expect.any(String) }),
+    );
+    expect(JSON.parse(activeGameBackendMocks.sync.mock.calls[0][1].timerStateJson)).toMatchObject({ teamId: "team-icp" });
+    expect(JSON.parse(activeGameBackendMocks.sync.mock.calls[0][1].pitchStateJson).players).toHaveLength(1);
+    expect(writeLog).toEqual([]);
   });
 });

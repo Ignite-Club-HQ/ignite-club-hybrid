@@ -10,8 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveCompetitionOfficialLink, listLiveCompetitionJoinLinks, revokeLiveCompetitionOfficialLink } from "@/live/features/competitions";
+import {
+  createLiveCompetitionOfficialEmailInvite,
+  createLiveCompetitionOfficialLink,
+  listLiveCompetitionJoinLinks,
+  revokeLiveCompetitionOfficialEmailInvite,
+  revokeLiveCompetitionOfficialLink,
+} from "@/live/features/competitions";
 import { useToast } from "@/hooks/use-toast";
+import { createOfficialEmailInviteSecrets } from "@/features/competitions/officialEmailInvite";
 
 type OfficialRole = "referee" | "committee_member";
 type OfficialLink = { id: string; token: string; role: OfficialRole };
@@ -19,6 +26,10 @@ const roles: { id: OfficialRole; label: string }[] = [
   { id: "referee", label: "Referee" },
   { id: "committee_member", label: "Committee" },
 ];
+
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+}[char]!));
 
 function newToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
@@ -125,18 +136,52 @@ export function CompetitionOfficialJoinLinksCard({
 
   const sendEmail = useMutation({
     mutationFn: async () => {
-      if (!activeLink) throw new Error("Create a join link first.");
       const recipient = email.trim();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) throw new Error("Enter a valid email address.");
       const roleLabel = roles.find((item) => item.id === role)?.label.toLowerCase() ?? "official";
-      const { error } = await supabase.functions.invoke("send-email", {
-        body: {
-          to: recipient,
-          subject: `Join ${competitionName} as a ${roleLabel}`,
-          html: `<p>You've been invited to join ${competitionName} as a ${roleLabel}.</p><p><a href="${joinUrl}">Accept the invitation</a></p>`,
-        },
-      });
-      if (error) throw error;
+      const secrets = await createOfficialEmailInviteSecrets(recipient);
+      const emailInviteUrl = `${window.location.origin}/competitions/officials/join?email=1&token=${encodeURIComponent(secrets.token)}`;
+      let inviteCreated = false;
+      try {
+        await withFeatureBackend("competitions", {
+          supabase: async () => {
+            const { error } = await (supabase as any).rpc("create_competition_role_email_invite", {
+              _competition_id: competitionId,
+              _role: role,
+              _token: secrets.token,
+              _email: recipient,
+              _verification_code_hash: secrets.codeHash,
+            });
+            if (error) throw error;
+          },
+          icp: async (ctx) => {
+            await createLiveCompetitionOfficialEmailInvite(
+              ctx, competitionId, role, secrets.token, secrets.emailHash, secrets.codeHash,
+            );
+          },
+        });
+        inviteCreated = true;
+
+        const { error } = await supabase.functions.invoke("send-email", {
+          body: {
+            to: recipient,
+            subject: `Join ${competitionName} as a ${roleLabel}`,
+            html: `<p>You've been invited to join ${escapeHtml(competitionName)} as a ${roleLabel}.</p><p><a href="${emailInviteUrl}">Accept the invitation</a></p><p>Your one-time verification code is <strong>${secrets.code}</strong>. It expires in 48 hours.</p>`,
+          },
+        });
+        if (error) throw error;
+      } catch (error) {
+        if (inviteCreated) {
+          await withFeatureBackend("competitions", {
+            supabase: async () => {
+              const { error } = await (supabase as any).rpc("revoke_competition_role_email_invite", { _token: secrets.token });
+              if (error) throw error;
+            },
+            icp: async (ctx) => revokeLiveCompetitionOfficialEmailInvite(ctx, secrets.token),
+          }).catch(() => undefined);
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       setEmail("");
@@ -167,13 +212,6 @@ export function CompetitionOfficialJoinLinksCard({
               <Button variant="outline" size="icon" aria-label={showQr ? "Hide QR code" : "Show QR code"} onClick={() => setShowQr((value) => !value)}><QrCode className="h-4 w-4" /></Button>
             </div>
             {showQr && <div className="flex justify-center rounded-md border bg-white p-3"><QRCodeSVG value={joinUrl} size={176} /></div>}
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-              <Input aria-label="Invitee email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" />
-              <Button variant="outline" disabled={!email.trim() || sendEmail.isPending} onClick={() => sendEmail.mutate()}>
-                {sendEmail.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                <span className="ml-2">Email</span>
-              </Button>
-            </div>
             <Button variant="ghost" size="sm" disabled={revokeLink.isPending} onClick={() => revokeLink.mutate()}>
               {revokeLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
               <span className="ml-2">Turn off this link</span>
@@ -185,6 +223,23 @@ export function CompetitionOfficialJoinLinksCard({
             Create {roles.find((item) => item.id === role)?.label.toLowerCase()} link
           </Button>
         )}
+        <div className="space-y-2 border-t pt-4">
+          <Label htmlFor={`official-email-${competitionId}`}>Email a verified invitation</Label>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+            <Input
+              id={`official-email-${competitionId}`}
+              aria-label="Invitee email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="Email address"
+            />
+            <Button variant="outline" disabled={!email.trim() || sendEmail.isPending} onClick={() => sendEmail.mutate()}>
+              {sendEmail.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              <span className="ml-2">Email</span>
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

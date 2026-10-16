@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, Loader2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventRsvp } from "@/live/features/events";
+import { setLiveEventRsvp, setLiveRsvpNote } from "@/live/features/events";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { hapticImpactLight } from "@/lib/haptics";
@@ -138,25 +138,35 @@ export function InlineRsvpActions({ eventId, messageId }: Props) {
           statusLabel={LABELS[answered]}
           initialNote={note}
           onSave={async (value) => {
-            const { data: auth } = await supabase.auth.getUser();
-            const userId = auth?.user?.id;
-            if (!userId) return;
-            const { error } = await supabase
-              .from("rsvps")
-              .update({ notes: value })
-              .eq("event_id", eventId)
-              .eq("user_id", userId)
-              .is("child_id", null);
-            if (error) {
+            try {
+              await withFeatureBackend("events", {
+                supabase: async () => {
+                  const { data: auth } = await supabase.auth.getUser();
+                  const userId = auth?.user?.id;
+                  if (!userId) return;
+                  const { error } = await supabase
+                    .from("rsvps")
+                    .update({ notes: value })
+                    .eq("event_id", eventId)
+                    .eq("user_id", userId)
+                    .is("child_id", null);
+                  if (error) throw error;
+                },
+                icp: async (ctx) => {
+                  if (!user?.id) throw new Error("Not signed in");
+                  await setLiveRsvpNote(ctx, eventId, user.id, value);
+                },
+              });
+              setNote(value);
+              toast({ title: value ? "Note saved" : "Note removed" });
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Unknown error";
               toast({
                 title: "Couldn't save note",
-                description: error.message,
+                description: message,
                 variant: "destructive",
               });
-              return;
             }
-            setNote(value);
-            toast({ title: value ? "Note saved" : "Note removed" });
           }}
         />
       </div>

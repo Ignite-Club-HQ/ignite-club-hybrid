@@ -235,6 +235,15 @@ describe("match mutation targeting", () => {
     ]);
   });
 
+  it("rejects partial ICP scores instead of sending empty fixture details", async () => {
+    mocks.backend = "icp";
+    const client = { from: vi.fn() };
+    await expect(updateCompetitionMatch("match-1", { home_score: 2, away_score: null }))
+      .resolves.toEqual({ error: { message: "Both scores are required to update a result on ICP." } });
+    expect(mocks.updateLiveMatchDetails).not.toHaveBeenCalled();
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
   it("deletes exactly one match id", async () => {
     await expect(deleteCompetitionMatch("match-1")).resolves.toEqual({ error: null });
     expect(mocks.calls).toEqual([

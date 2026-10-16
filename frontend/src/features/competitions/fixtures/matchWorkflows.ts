@@ -127,12 +127,15 @@ export async function updateCompetitionMatch(
       return { error };
     },
     icp: async (ctx) => {
-      // Only the score-update shape (home_score/away_score) has a canister
-      // counterpart (`set_match_result`); schedule/venue/notes edits have no
-      // canister shape and fall back to Supabase. Provisional — verify
-      // field mapping post-deploy.
+      // The canister result method requires both scores. Never route a partial
+      // or cleared result payload into update_match_details, whose shape has
+      // no score fields and could otherwise overwrite fixture metadata.
       const homeScore = payload.home_score;
       const awayScore = payload.away_score;
+      const hasScoreUpdate = "home_score" in payload || "away_score" in payload;
+      if (hasScoreUpdate && (typeof homeScore !== "number" || typeof awayScore !== "number")) {
+        return { error: { message: "Both scores are required to update a result on ICP." } };
+      }
       if (typeof homeScore === "number" && typeof awayScore === "number") {
         try {
           await setLiveMatchResult(ctx, matchId, homeScore, awayScore, Date.now());

@@ -78,6 +78,10 @@ export async function createEventTransaction(
         opponent: optText(eventRecord.opponent),
         address: optText(eventRecord.address),
         miniLeagueId: (eventRecord.mini_league_id as string | null | undefined) ?? null,
+        rsvpAudience: (eventRecord.rsvp_audience as string | null | undefined) ?? null,
+        adultsOnly: eventRecord.adults_only === true,
+        restrictedToRoles: (eventRecord.restricted_to_roles as string[] | null | undefined) ?? null,
+        targetTeamIds: (eventRecord.target_team_ids as string[] | null | undefined) ?? null,
       };
 
       const reminderHours = eventRecord.reminder_hours_before as number | null | undefined;

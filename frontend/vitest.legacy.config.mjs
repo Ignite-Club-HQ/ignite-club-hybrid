@@ -1,6 +1,19 @@
 import { defineConfig } from 'vitest/config';
 import path from 'node:path';
 
+const backendMode = process.env.IGNITE_TEST_BACKEND_MODE === 'icp' ? 'icp' : 'supabase';
+const testCanisterIds = backendMode === 'icp' ? {
+  events_domain: 'aaaaa-aa',
+  messaging_domain: 'aaaaa-aa',
+  media_metadata: 'aaaaa-aa',
+  club_domain: 'aaaaa-aa',
+  competition_domain: 'aaaaa-aa',
+  notification_queue: 'aaaaa-aa',
+  vault_domain: 'aaaaa-aa',
+  mini_league_domain: 'aaaaa-aa',
+  club_points_domain: 'aaaaa-aa',
+  insights_domain: 'aaaaa-aa',
+} : {};
 // Unit and guard tests for the live application. Module resolution mirrors
 // vite.live.config.ts so tests exercise the same live Supabase client and
 // fail-closed replacements for removed lab-only runtime modules.
@@ -27,11 +40,12 @@ export default defineConfig({
     // Synthetic, non-routable values so modules that build the live target
     // registry can load; tests mock the Supabase client instead of calling it.
     env: {
+      IGNITE_TEST_BACKEND_MODE: backendMode,
       IGNITE_LIVE_SUPABASE_ALIAS: 'test',
       IGNITE_LIVE_SUPABASE_URL: 'https://example.invalid',
       IGNITE_LIVE_SUPABASE_ANON_KEY: 'synthetic-public-anon-key',
       IGNITE_LIVE_ICP_HOST: 'https://icp-api.io',
-      IGNITE_LIVE_ICP_CANISTER_IDS_JSON: '{}',
+      IGNITE_LIVE_ICP_CANISTER_IDS_JSON: JSON.stringify(testCanisterIds),
     },
     // These source-inspection guards read Supabase migrations/functions,
     // native Capacitor harnesses or deploy workflows that are not part of

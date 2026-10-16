@@ -1,10 +1,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import {
   permanentlyDeleteVaultTrash,
   softDeleteVaultSelection,
 } from "./vaultBulkMutationService";
+
+const bulkMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  trashFile: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = { identity: {}, target: { alias: "test" } };
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    bulkMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/vault", () => ({
+  trashLiveVaultFile: (...args: unknown[]) => bulkMocks.trashFile(...args),
+}));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -54,7 +69,12 @@ function trashLookupClient(records: Record<string, string | null>) {
 }
 
 describe("bulk Vault soft deletion", () => {
-  it("deletes photos before files and returns exact successful IDs", async () => {
+  beforeEach(() => {
+    bulkMocks.backend = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
+    bulkMocks.trashFile.mockReset().mockResolvedValue(undefined);
+  });
+
+  it.runIf(supabaseMode)("deletes photos before files and returns exact successful IDs", async () => {
     const fake = softDeleteClient();
     const result = await softDeleteVaultSelection({
       photoIds: ["photo-a", "photo-b"],
@@ -74,7 +94,7 @@ describe("bulk Vault soft deletion", () => {
     });
   });
 
-  it("continues after individual failures and reports their kind and original error", async () => {
+  it.runIf(supabaseMode)("continues after individual failures and reports their kind and original error", async () => {
     const fake = softDeleteClient(["photo-b", "file-a"]);
     const result = await softDeleteVaultSelection({
       photoIds: ["photo-a", "photo-b"],
@@ -98,6 +118,22 @@ describe("bulk Vault soft deletion", () => {
     }, fake.client)).resolves.toEqual({
       deletedPhotoIds: [], deletedFileIds: [], failed: [],
     });
+    expect(fake.writes).toEqual([]);
+  });
+
+  it.runIf(!supabaseMode)("trashes every selected ICP file without Supabase updates", async () => {
+    const fake = softDeleteClient();
+    await expect(softDeleteVaultSelection({
+      photoIds: ["photo-a"],
+      fileIds: ["file-a"],
+      deletedBy: "principal-a",
+    }, fake.client)).resolves.toEqual({
+      deletedPhotoIds: ["photo-a"],
+      deletedFileIds: ["file-a"],
+      failed: [],
+    });
+    expect(bulkMocks.trashFile).toHaveBeenNthCalledWith(1, icpContext, "photo-a");
+    expect(bulkMocks.trashFile).toHaveBeenNthCalledWith(2, icpContext, "file-a");
     expect(fake.writes).toEqual([]);
   });
 });

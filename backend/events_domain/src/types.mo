@@ -7,7 +7,7 @@ module {
   // updated_at_ms mirrors Supabase's updated_at for staleness checks; existing
   // rows migrate with nulls and updated_at_ms = starts_at_ms (migration
   // 20261009_000000).
-  public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; cancelled : Bool; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; series_id : ?Text; revision : Nat64; deleted : Bool; opponent : ?Text; address : ?Text; mini_league_id : ?Text; updated_at_ms : Nat64 };
+  public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; cancelled : Bool; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; series_id : ?Text; revision : Nat64; deleted : Bool; opponent : ?Text; address : ?Text; mini_league_id : ?Text; updated_at_ms : Nat64; rsvp_audience : ?Text; adults_only : Bool; restricted_to_roles : ?[Text]; target_team_ids : ?[Text] };
   // Association-scoped fan-out parent (Phase 3, F5) — mirrors the Supabase
   // events row with association_id set and association_event_id null. Kept
   // as a separate store so the core Event type (and every existing event
@@ -49,7 +49,7 @@ module {
   // calendar math canister-side). deleted: soft-delete flag — soft_delete_series
   // sets this true and cascades to every child occurrence's own deleted flag
   // without removing rows (distinct from delete_series's hard cascade/trim).
-  public type EventSeries = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; frequency : Text; first_starts_at_ms : Nat64; first_ends_at_ms : Nat64; until_ms : Nat64; creator : Principal; revision : Nat64; deleted : Bool };
+  public type EventSeries = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; frequency : Text; first_starts_at_ms : Nat64; first_ends_at_ms : Nat64; until_ms : Nat64; creator : Principal; revision : Nat64; deleted : Bool; rsvp_audience : ?Text; adults_only : Bool; restricted_to_roles : ?[Text]; target_team_ids : ?[Text] };
 
   // ---- Attendance (class_attendance parity) ----
   // Mirrors Supabase class_attendance's status/marked_by/marked_at/notes

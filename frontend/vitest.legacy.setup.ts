@@ -2,6 +2,10 @@
 // suite (jest-dom matchers, TouchEvent polyfill, RAF/performance wiring for
 // fake timers) but was never referenced by any vitest config until now.
 import './src/test/setup.ts';
+import { applyBackendRoutingConfig, DEFAULT_BACKEND_ROUTING_CONFIG } from './src/live/backendRouting';
+
+const testBackendMode = process.env.IGNITE_TEST_BACKEND_MODE === 'icp' ? 'icp' : 'supabase';
+applyBackendRoutingConfig({ ...DEFAULT_BACKEND_ROUTING_CONFIG, defaultBackend: testBackendMode });
 
 // Minimal jsdom shims needed by the imported legacy test suite.
 // jsdom does not implement these browser APIs; several component tests call

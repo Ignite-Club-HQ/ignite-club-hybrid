@@ -85,6 +85,10 @@ export interface LiveEventInput {
   address?: string | null;
   /** Link to the owning mini league (Supabase events.mini_league_id). */
   miniLeagueId?: string | null;
+  rsvpAudience?: string | null;
+  adultsOnly?: boolean;
+  restrictedToRoles?: string[] | null;
+  targetTeamIds?: string[] | null;
   startsAtMs: number | Date;
   endsAtMs: number | Date;
 }
@@ -162,6 +166,10 @@ export async function createLiveEvent(ctx: FeatureBackendContext, input: LiveEve
       candidOpt(input.miniLeagueId),
       toNat64(input.startsAtMs),
       toNat64(input.endsAtMs),
+      candidOpt(input.rsvpAudience),
+      input.adultsOnly ?? false,
+      candidOpt(input.restrictedToRoles),
+      candidOpt(input.targetTeamIds),
     ),
     "Create event",
   );
@@ -185,6 +193,10 @@ export async function updateLiveEvent(
       candidOpt(input.miniLeagueId),
       toNat64(input.startsAtMs),
       toNat64(input.endsAtMs),
+      candidOpt(input.rsvpAudience),
+      input.adultsOnly ?? false,
+      candidOpt(input.restrictedToRoles),
+      candidOpt(input.targetTeamIds),
     ),
     "Update event",
   );
@@ -404,6 +416,10 @@ export interface LiveEventSeriesInput {
   firstStartsAtMs: number | Date;
   firstEndsAtMs: number | Date;
   untilMs: number | Date;
+  rsvpAudience?: string | null;
+  adultsOnly?: boolean;
+  restrictedToRoles?: string[] | null;
+  targetTeamIds?: string[] | null;
 }
 
 /**
@@ -429,6 +445,10 @@ export async function createLiveEventSeries(
       toNat64(input.firstStartsAtMs),
       toNat64(input.firstEndsAtMs),
       toNat64(input.untilMs),
+      candidOpt(input.rsvpAudience),
+      input.adultsOnly ?? false,
+      candidOpt(input.restrictedToRoles),
+      candidOpt(input.targetTeamIds),
     ),
     "Create event series",
   );
@@ -443,6 +463,10 @@ export async function updateLiveEventSeries(
     eventType: string;
     location?: string | null;
     fromMs: number | Date;
+    rsvpAudience?: string | null;
+    adultsOnly?: boolean;
+    restrictedToRoles?: string[] | null;
+    targetTeamIds?: string[] | null;
   },
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
@@ -454,6 +478,10 @@ export async function updateLiveEventSeries(
       input.eventType,
       candidOpt(input.location),
       toNat64(input.fromMs),
+      candidOpt(input.rsvpAudience),
+      input.adultsOnly ?? false,
+      candidOpt(input.restrictedToRoles),
+      candidOpt(input.targetTeamIds),
     ),
     "Update event series",
   );
@@ -774,6 +802,10 @@ export interface LiveRecurringEventSeriesInput {
   /** Exactly one of occurrences/untilMs is normally supplied; both are optional canister-side. */
   occurrences?: number | null;
   untilMs?: number | Date | null;
+  rsvpAudience?: string | null;
+  adultsOnly?: boolean;
+  restrictedToRoles?: string[] | null;
+  targetTeamIds?: string[] | null;
 }
 
 /**
@@ -800,6 +832,10 @@ export async function createLiveRecurringEventSeries(
       toNat64(input.firstEndsAtMs),
       candidOpt(input.occurrences),
       input.untilMs == null ? [] : [toNat64(input.untilMs)],
+      candidOpt(input.rsvpAudience),
+      input.adultsOnly ?? false,
+      candidOpt(input.restrictedToRoles),
+      candidOpt(input.targetTeamIds),
     ),
     "Create recurring event series",
   );

@@ -15,6 +15,13 @@ const ASSIGNMENTS = [
 ];
 
 let failTeams = false;
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  listTeams: vi.fn(),
+  roleGrants: vi.fn(),
+  supabaseTables: [] as string[],
+}));
 
 vi.mock("@/integrations/supabase/client", () => {
   const teamsBuilder = () => {
@@ -41,6 +48,7 @@ vi.mock("@/integrations/supabase/client", () => {
   return {
     supabase: {
       from: (table: string) => {
+        backendMocks.supabaseTables.push(table);
         if (table === "teams") return teamsBuilder();
         if (table === "user_roles") return simple(ROLES);
         return simple(ASSIGNMENTS);
@@ -48,6 +56,15 @@ vi.mock("@/integrations/supabase/client", () => {
     },
   };
 });
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => backendMocks.mode === "icp" }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/club", () => ({
+  listLiveTeams: (...args: unknown[]) => backendMocks.listTeams(...args),
+  myLiveRoleGrants: (...args: unknown[]) => backendMocks.roleGrants(...args),
+}));
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -64,16 +81,21 @@ const scopedParams = {
 describe("useEventGroupMap scoping", () => {
   beforeEach(() => {
     failTeams = false;
+    backendMocks.supabaseTables = [];
+    backendMocks.listTeams.mockReset().mockResolvedValue(TEAMS);
+    backendMocks.roleGrants.mockReset().mockResolvedValue([
+      { user: { toText: () => "adult-1" }, role: "coach", team: "t-u8-blue" },
+    ]);
   });
 
-  it("merges multiple teams with the same age level into one group", async () => {
+  it.runIf(backendMocks.mode === "supabase")("merges multiple teams with the same age level into one group", async () => {
     const { result } = renderHook(() => useEventGroupMap(scopedParams), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     const labels = result.current.orderedGroups.map((g) => g.label);
     expect(labels.filter((l) => l === "U8")).toHaveLength(1);
   });
 
-  it("keeps selected teams separate when grouping by team", async () => {
+  it.runIf(backendMocks.mode === "supabase")("keeps selected teams separate when grouping by team", async () => {
     const { result } = renderHook(
       () => useEventGroupMap({ ...scopedParams, grouping: "team" }),
       { wrapper },
@@ -84,21 +106,21 @@ describe("useEventGroupMap scoping", () => {
     expect(labels).toContain("U8 Red");
   });
 
-  it("returns null (out of scope) for a child on an unselected team", async () => {
+  it.runIf(backendMocks.mode === "supabase")("returns null (out of scope) for a child on an unselected team", async () => {
     const { result } = renderHook(() => useEventGroupMap(scopedParams), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.groupOf({ childId: "kid-u12" })).toBeNull();
     expect(result.current.groupOf({ childId: "kid-u8" })?.label).toBe("U8");
   });
 
-  it("places an in-scope club-level admin without a team into Other", async () => {
+  it.runIf(backendMocks.mode === "supabase")("places an in-scope club-level admin without a team into Other", async () => {
     const { result } = renderHook(() => useEventGroupMap(scopedParams), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.groupOf({ userId: "club-admin" })?.label).toBe("Other");
     expect(result.current.groupOf({ userId: "adult-1" })?.label).toBe("U8");
   });
 
-  it("keeps the whole-club audience when there is no target list", async () => {
+  it.runIf(backendMocks.mode === "supabase")("keeps the whole-club audience when there is no target list", async () => {
     const { result } = renderHook(
       () => useEventGroupMap({ ...scopedParams, targetTeamIds: null }),
       { wrapper },
@@ -108,7 +130,7 @@ describe("useEventGroupMap scoping", () => {
     expect(result.current.groupOf({ childId: "kid-unknown" })?.label).toBe("Other");
   });
 
-  it("exposes isError and refetch when the roster query fails", async () => {
+  it.runIf(backendMocks.mode === "supabase")("exposes isError and refetch when the roster query fails", async () => {
     failTeams = true;
     const { result } = renderHook(() => useEventGroupMap(scopedParams), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -132,5 +154,16 @@ describe("useEventGroupMap scoping", () => {
     expect(result.current.groupOf({ childId: "kid-rpc" })?.label).toBe("U8");
     expect(result.current.groupOf({ userId: "adult-rpc" })?.label).toBe("U8");
     expect(result.current.groupOf({ childId: "kid-u8" })).toBeNull();
+  });
+
+  it.runIf(backendMocks.mode === "icp")("loads team labels and caller role grants from club_domain", async () => {
+    const { result } = renderHook(() => useEventGroupMap(scopedParams), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.orderedGroups).toContainEqual({ key: "level:U8", label: "U8" });
+    expect(result.current.groupOf({ userId: "adult-1" })?.label).toBe("U8");
+    expect(backendMocks.listTeams).toHaveBeenCalledWith(backendMocks.context, "club-1");
+    expect(backendMocks.roleGrants).toHaveBeenCalledWith(backendMocks.context);
+    expect(backendMocks.supabaseTables).toEqual([]);
   });
 });

@@ -25,6 +25,13 @@ const testState = vi.hoisted(() => ({
   failure: null as null | { operation: string; error: { code: string; message: string } },
   toast: vi.fn(),
 }));
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  listOccurrences: vi.fn(),
+  addOccurrence: vi.fn(),
+  deleteEvent: vi.fn(),
+}));
 
 function responseFor(operation: string) {
   const failure = testState.failure?.operation === operation ? testState.failure.error : null;
@@ -130,6 +137,16 @@ vi.mock("@/integrations/supabase/client", () => ({
     },
   },
 }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => backendMocks.mode === "icp" }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  listLiveSeriesOccurrences: (...args: unknown[]) => backendMocks.listOccurrences(...args),
+  addLiveSeriesOccurrence: (...args: unknown[]) => backendMocks.addOccurrence(...args),
+  deleteLiveEvent: (...args: unknown[]) => backendMocks.deleteEvent(...args),
+}));
 
 const parentId = "10000000-0000-4000-8000-000000000001";
 
@@ -193,11 +210,28 @@ beforeEach(() => {
   testState.calls = [];
   testState.failure = null;
   testState.toast.mockReset();
+  backendMocks.listOccurrences.mockImplementation(async () => testState.events.map((event) => ({
+    id: event.id,
+    deleted: false,
+    starts_at_ms: BigInt(new Date(event.event_date).getTime()),
+    ends_at_ms: BigInt(new Date(event.end_time ?? event.event_date).getTime()),
+  })));
+  backendMocks.addOccurrence.mockImplementation(async (_ctx: unknown, parentId: string, startsAt: number, endsAt: number) => {
+    testState.events.push(occurrence(`live-${testState.events.length}`, new Date(startsAt).toISOString().slice(0, 10), parentId));
+    const added = testState.events[testState.events.length - 1];
+    added.event_date = new Date(startsAt).toISOString();
+    added.start_time = new Date(startsAt).toISOString();
+    added.end_time = new Date(endsAt).toISOString();
+    return { id: added.id };
+  });
+  backendMocks.deleteEvent.mockImplementation(async (_ctx: unknown, id: string) => {
+    testState.events = testState.events.filter((event) => event.id !== id);
+  });
 });
 
 afterEach(() => cleanup());
 
-describe("SeriesEndDateEditor", () => {
+describe.runIf(backendMocks.mode === "supabase")("SeriesEndDateEditor", () => {
   it("shows the current series without exposing edit controls to a read-only member", async () => {
     renderEditor(false);
 
@@ -303,5 +337,36 @@ describe("SeriesEndDateEditor", () => {
     expect(testState.toast).not.toHaveBeenCalledWith(
       expect.objectContaining({ title: "Series end date updated" }),
     );
+  });
+});
+
+describe.runIf(backendMocks.mode === "icp")("SeriesEndDateEditor ICP series operations", () => {
+  it("extends a canister series with new occurrences and no Supabase writes", async () => {
+    const { onUpdated } = renderEditor();
+    await changeEndDate("2099-08-29");
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledOnce());
+    expect(backendMocks.listOccurrences).toHaveBeenCalledWith(backendMocks.context, parentId);
+    expect(backendMocks.addOccurrence).toHaveBeenCalledTimes(2);
+    expect(testState.calls).toEqual([]);
+    expect(testState.toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Series end date updated" }));
+  });
+
+  it("trims only occurrences after the selected end date", async () => {
+    seedSeries(["2099-08-01", "2099-08-08", "2099-08-15", "2099-08-22"]);
+    const { onUpdated } = renderEditor();
+    await changeEndDate("2099-08-08");
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledOnce());
+    expect(backendMocks.deleteEvent).toHaveBeenCalledTimes(2);
+    expect(backendMocks.deleteEvent.mock.calls.map((call) => call[1])).toEqual([
+      "10000000-0000-4000-8000-000000000003",
+      "10000000-0000-4000-8000-000000000004",
+    ]);
+    expect(testState.calls).toEqual([]);
   });
 });

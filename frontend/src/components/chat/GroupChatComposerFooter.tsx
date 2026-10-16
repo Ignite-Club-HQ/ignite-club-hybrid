@@ -142,6 +142,7 @@ export function GroupChatComposerFooter({
                 imageUrl={imageUrl}
                 clubId={clubId || undefined}
                 teamId={teamId || undefined}
+                competitionId={competitionId || undefined}
                 showEventPicker
                 onEventSelect={() => onEventPickerOpenChange(true)}
                 showNewsPicker={!!clubId}

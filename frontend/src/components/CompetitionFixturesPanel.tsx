@@ -36,6 +36,7 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import {
   createGeneratedMatches,
   deleteCompetitionMatch,
@@ -68,6 +69,93 @@ interface Props {
   divisions: any[];
   entries: any[]; // includes teams:team_id(id,name)
   source?: string;
+}
+
+export function buildCompetitionLadderRows(
+  entries: any[],
+  matches: any[],
+  teamById: Map<string, any>,
+  points: { win: number; draw: number; loss: number },
+) {
+  const optional = (value: any) => Array.isArray(value) ? value[0] ?? null : value ?? null;
+  const number = (value: any) => Number(optional(value) ?? 0);
+  const rowKey = (teamId: string, divisionId: string | null) => `${teamId}::${divisionId ?? ""}`;
+  const rows = new Map<string, any>();
+  const entriesByTeam = new Map<string, any[]>();
+
+  for (const entry of entries) {
+    if (entry.status !== "accepted" || !entry.team_id) continue;
+    const divisionId = optional(entry.division_id);
+    const key = rowKey(entry.team_id, divisionId);
+    if (!rows.has(key)) {
+      rows.set(key, {
+        competition_id: entry.competition_id,
+        team_id: entry.team_id,
+        division_id: divisionId,
+        played: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goals_for: 0,
+        goals_against: 0,
+        goal_diff: 0,
+        points: 0,
+        teams: teamById.get(entry.team_id) ?? null,
+      });
+    }
+    const teamEntries = entriesByTeam.get(entry.team_id) ?? [];
+    teamEntries.push(rows.get(key));
+    entriesByTeam.set(entry.team_id, teamEntries);
+  }
+
+  for (const match of matches) {
+    if (match.status !== "completed") continue;
+    const homeId = match.home_team ?? match.home_team_id;
+    const awayId = match.away_team ?? match.away_team_id;
+    const homeScore = number(match.home_score);
+    const awayScore = number(match.away_score);
+    if (!homeId || !awayId || !Number.isFinite(homeScore) || !Number.isFinite(awayScore)) continue;
+    const divisionId = optional(match.division_id);
+    const findRow = (teamId: string) => {
+      const candidates = entriesByTeam.get(teamId) ?? [];
+      return candidates.find((row) => row.division_id === divisionId) ??
+        (candidates.length === 1 ? candidates[0] : undefined);
+    };
+    const home = findRow(homeId);
+    const away = findRow(awayId);
+    if (!home || !away) continue;
+
+    home.played += 1;
+    away.played += 1;
+    home.goals_for += homeScore;
+    home.goals_against += awayScore;
+    away.goals_for += awayScore;
+    away.goals_against += homeScore;
+
+    if (homeScore > awayScore) {
+      home.wins += 1;
+      away.losses += 1;
+      home.points += points.win;
+      away.points += points.loss;
+    } else if (homeScore < awayScore) {
+      away.wins += 1;
+      home.losses += 1;
+      away.points += points.win;
+      home.points += points.loss;
+    } else {
+      home.draws += 1;
+      away.draws += 1;
+      home.points += points.draw;
+      away.points += points.draw;
+    }
+  }
+
+  const result = [...rows.values()];
+  for (const row of result) row.goal_diff = row.goals_for - row.goals_against;
+  return result.sort((a, b) =>
+    b.points - a.points || b.goal_diff - a.goal_diff || b.goals_for - a.goals_for ||
+    String(a.teams?.name ?? a.team_id).localeCompare(String(b.teams?.name ?? b.team_id)),
+  );
 }
 
 export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, entries, source }: Props) {
@@ -1852,10 +1940,54 @@ function AddMatchButton({ competitionId, entries, divisions, defaultOpen = false
 }
 
 
-export function CompetitionLadderPanel({ competitionId, divisions, isAdmin = false }: { competitionId: string; divisions: any[]; isAdmin?: boolean }) {
+export function CompetitionLadderPanel({
+  competitionId,
+  divisions,
+  isAdmin = false,
+  pointsWin = 3,
+  pointsDraw = 1,
+  pointsLoss = 0,
+}: {
+  competitionId: string;
+  divisions: any[];
+  isAdmin?: boolean;
+  pointsWin?: number;
+  pointsDraw?: number;
+  pointsLoss?: number;
+}) {
   const { data: rows = [], isLoading, isError } = useQuery({
     queryKey: ["competition-ladder", competitionId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const [{ withFeatureBackend }, competitions, { icpGetTeam }] = await Promise.all([
+          import("@/live/featureRouter"),
+          import("@/live/features/competitions"),
+          import("@/lib/icpClubTeamLookup"),
+        ]);
+        return withFeatureBackend("competitions", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const [entries, matches] = await Promise.all([
+              competitions.listLiveCompetitionEntries(ctx, competitionId),
+              competitions.listLiveCompetitionMatches(ctx, competitionId),
+            ]);
+            const acceptedTeamIds = [...new Set(
+              entries.filter((entry: any) => entry.status === "accepted").map((entry: any) => entry.team_id),
+            )];
+            const teamRows = await Promise.all(acceptedTeamIds.map(async (teamId) => {
+              const team = await icpGetTeam(teamId).catch(() => null);
+              return [teamId, team ? { id: team.id, name: team.name, logo_url: null } : null] as const;
+            }));
+            return buildCompetitionLadderRows(
+              entries,
+              matches,
+              new Map(teamRows),
+              { win: pointsWin, draw: pointsDraw, loss: pointsLoss },
+            );
+          },
+        });
+      }
+
       const [ladderRes, entriesRes] = await Promise.all([
         supabase
           .from("competition_ladder")

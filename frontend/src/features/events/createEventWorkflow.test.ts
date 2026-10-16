@@ -1,7 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
+
+const eventMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  createLiveEvent: vi.fn(),
+  createLiveEventSeries: vi.fn(),
+  addLiveSeriesOccurrence: vi.fn(),
+  createLiveOpenDuty: vi.fn(),
+  setLiveEventAutoReminder: vi.fn(),
+  setLiveEventDuty: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = { identity: {}, target: { alias: "test" } };
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    eventMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  createLiveEvent: (...args: unknown[]) => eventMocks.createLiveEvent(...args),
+  createLiveEventSeries: (...args: unknown[]) => eventMocks.createLiveEventSeries(...args),
+  addLiveSeriesOccurrence: (...args: unknown[]) => eventMocks.addLiveSeriesOccurrence(...args),
+  createLiveOpenDuty: (...args: unknown[]) => eventMocks.createLiveOpenDuty(...args),
+  setLiveEventAutoReminder: (...args: unknown[]) => eventMocks.setLiveEventAutoReminder(...args),
+  setLiveEventDuty: (...args: unknown[]) => eventMocks.setLiveEventDuty(...args),
+}));
+
 import { createEventTransaction } from "@/features/events/createEventWorkflow";
 
-describe("atomic event create workflow", () => {
+describe.runIf(supabaseMode)("atomic event create workflow — Supabase", () => {
   const input = {
     event: { title: "Match", club_id: "club-1", team_id: "team-1" },
     eventDate: "2026-08-20T09:00:00.000Z",
@@ -52,5 +78,31 @@ describe("atomic event create workflow", () => {
     await createEventTransaction({ rpc }, { ...input, event });
     expect(event).toEqual(input.event);
     expect(event).not.toHaveProperty("event_date");
+  });
+});
+
+describe.runIf(!supabaseMode)("atomic event create workflow — ICP", () => {
+  it("creates the event through events_domain without using the Supabase RPC", async () => {
+    eventMocks.backend = "icp";
+    eventMocks.createLiveEvent.mockResolvedValue({ id: "icp-event-1" });
+    const rpc = vi.fn();
+    const eventDate = "2026-08-20T09:00:00.000Z";
+
+    await expect(createEventTransaction({ rpc }, {
+      event: { title: "Match", club_id: "club-1", team_id: "team-1", type: "game" },
+      eventDate,
+      childDates: null,
+      duties: [],
+    })).resolves.toBe("icp-event-1");
+
+    expect(eventMocks.createLiveEvent).toHaveBeenCalledWith(icpContext, expect.objectContaining({
+      clubId: "club-1",
+      teamId: "team-1",
+      title: "Match",
+      eventType: "game",
+      startsAtMs: new Date(eventDate).getTime(),
+      endsAtMs: new Date(eventDate).getTime() + 3_600_000,
+    }));
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

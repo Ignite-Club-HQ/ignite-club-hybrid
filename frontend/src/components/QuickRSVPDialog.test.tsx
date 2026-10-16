@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   from: vi.fn(),
   navigate: vi.fn(),
   toast: vi.fn(),
@@ -11,13 +12,46 @@ const mocks = vi.hoisted(() => ({
   auth: { user: { id: "parent-1" } as null | { id: string } },
   results: new Map<string, any[]>(),
   queries: [] as Array<{ table: string; chain: any }>,
+  listLiveEvents: vi.fn(),
+  listLiveMyRsvps: vi.fn(),
+  getMyLiveChildRsvps: vi.fn(),
+  setLiveEventRsvp: vi.fn(),
+  adminUpsertLiveRsvp: vi.fn(),
+  getLiveMyChildren: vi.fn(),
+  getLiveMyChildTeamAssignments: vi.fn(),
+  myLiveRoleGrants: vi.fn(),
 }));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
-vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: (...args: unknown[]) => mocks.from(...args) } }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => mocks.auth }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("@/lib/earlyRsvpPoints", () => ({ awardEarlyRsvpPoints: mocks.awardPoints }));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: (feature: string) => mocks.backend === "icp" && (feature === "events" || feature === "membership"),
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.backend === "icp" ? providers.icp({ identity: {}, target: {} }) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  listLiveEvents: (...args: unknown[]) => mocks.listLiveEvents(...args),
+  listLiveMyRsvps: (...args: unknown[]) => mocks.listLiveMyRsvps(...args),
+  getMyLiveChildRsvps: (...args: unknown[]) => mocks.getMyLiveChildRsvps(...args),
+  setLiveEventRsvp: (...args: unknown[]) => mocks.setLiveEventRsvp(...args),
+  adminUpsertLiveRsvp: (...args: unknown[]) => mocks.adminUpsertLiveRsvp(...args),
+  getLiveMyChildren: (...args: unknown[]) => mocks.getLiveMyChildren(...args),
+  getLiveMyChildTeamAssignments: (...args: unknown[]) => mocks.getLiveMyChildTeamAssignments(...args),
+}));
+vi.mock("@/live/features/club", () => ({
+  myLiveRoleGrants: (...args: unknown[]) => mocks.myLiveRoleGrants(...args),
+}));
+vi.mock("@/live/features/vault", () => ({
+  resolveLivePiiTextBatch: vi.fn(async (_ctx: unknown, childIds: string[]) =>
+    new Map(childIds.map((id) => [id, "Ava"])),
+  ),
+}));
 vi.mock("@/components/ui/responsive-dialog", () => ({
   ResponsiveDialog: ({ open, children }: any) => open ? <div>{children}</div> : null,
   ResponsiveDialogContent: ({ children }: any) => <div>{children}</div>,
@@ -86,9 +120,10 @@ function renderDialog(overrides: Partial<typeof baseProps & { eventAmount: numbe
   return render(<QuickRSVPDialog {...baseProps} {...overrides} />, { wrapper });
 }
 
-describe("QuickRSVPDialog business behaviour", () => {
+describe.runIf(supabaseMode)("QuickRSVPDialog business behaviour", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.backend = "supabase";
     mocks.results.clear();
     mocks.queries.length = 0;
     mocks.auth.user = { id: "parent-1" };
@@ -288,5 +323,75 @@ describe("QuickRSVPDialog business behaviour", () => {
 
     await waitFor(() => expect(mocks.awardPoints).toHaveBeenCalled());
     expect(screen.queryByText("Payment Required")).not.toBeInTheDocument();
+  });
+});
+
+describe.runIf(!supabaseMode)("QuickRSVPDialog ICP RSVP journeys", () => {
+  const context = { identity: {}, target: {} };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.backend = "icp";
+    mocks.from.mockClear();
+    mocks.listLiveEvents.mockReset();
+    mocks.listLiveMyRsvps.mockReset().mockResolvedValue([]);
+    mocks.getMyLiveChildRsvps.mockReset().mockResolvedValue([]);
+    mocks.setLiveEventRsvp.mockReset().mockResolvedValue(undefined);
+    mocks.adminUpsertLiveRsvp.mockReset().mockResolvedValue(undefined);
+    mocks.getLiveMyChildren.mockReset().mockResolvedValue([]);
+    mocks.getLiveMyChildTeamAssignments.mockReset().mockResolvedValue([]);
+    mocks.myLiveRoleGrants.mockReset().mockResolvedValue([]);
+  });
+
+  function setIcpEvent(policy: {
+    audience: string;
+    adultsOnly?: boolean;
+    restrictedRoles?: string[];
+    targetTeamIds?: string[];
+  }) {
+    mocks.listLiveEvents.mockResolvedValue([{
+      id: "event-1",
+      club_id: "club-1",
+      team_id: ["team-1"],
+      target_team_ids: policy.targetTeamIds ? [policy.targetTeamIds] : [],
+      rsvp_audience: [policy.audience],
+      adults_only: policy.adultsOnly ?? false,
+      restricted_to_roles: policy.restrictedRoles ? [policy.restrictedRoles] : [],
+    }]);
+  }
+
+  it("loads ICP event policy and writes a self RSVP through events_domain", async () => {
+    setIcpEvent({ audience: "players_only" });
+    mocks.myLiveRoleGrants.mockResolvedValue([{ role: "player", club: "club-1", team: "team-1" }]);
+    renderDialog();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Going/i }));
+
+    await waitFor(() => expect(mocks.setLiveEventRsvp).toHaveBeenCalledWith(
+      context,
+      "event-1",
+      "parent-1",
+      "going",
+    ));
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("loads caller child scope and writes a guardian RSVP through the admin canister path", async () => {
+    setIcpEvent({ audience: "players_and_parents", targetTeamIds: ["team-1"] });
+    mocks.getLiveMyChildren.mockResolvedValue([{ id: "child-1", parent_id: ["parent-1"] }]);
+    mocks.getLiveMyChildTeamAssignments.mockResolvedValue([{ team_id: "team-1", club_id: "club-1" }]);
+    renderDialog();
+
+    const childBlock = (await screen.findByText("Ava")).parentElement!;
+    fireEvent.click(within(childBlock).getByRole("button", { name: /Going/i }));
+
+    await waitFor(() => expect(mocks.adminUpsertLiveRsvp).toHaveBeenCalledWith(
+      context,
+      "event-1",
+      "parent-1",
+      "going",
+      { childId: "child-1" },
+    ));
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 });

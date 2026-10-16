@@ -3017,6 +3017,62 @@ export type Database = {
           },
         ]
       }
+      competition_role_email_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_user_id: string | null
+          attempts: number
+          competition_id: string
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          invited_email: string
+          role: string
+          status: string
+          token: string
+          verification_code_hash: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          attempts?: number
+          competition_id: string
+          created_at?: string
+          created_by: string
+          expires_at?: string
+          id?: string
+          invited_email: string
+          role: string
+          status?: string
+          token: string
+          verification_code_hash: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          attempts?: number
+          competition_id?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          invited_email?: string
+          role?: string
+          status?: string
+          token?: string
+          verification_code_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competition_role_email_invites_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       competitions: {
         Row: {
           contact_email: string | null
@@ -12113,6 +12169,37 @@ export type Database = {
       }
       is_competition_admin: {
         Args: { _competition_id: string; _user_id: string }
+        Returns: boolean
+      }
+      create_competition_role_email_invite: {
+        Args: {
+          _competition_id: string
+          _email: string
+          _role: string
+          _token: string
+          _verification_code_hash: string
+        }
+        Returns: string
+      }
+      get_competition_role_email_invite_status: {
+        Args: { p_token: string }
+        Returns: {
+          competition_id: string | null
+          competition_name: string | null
+          role: string | null
+          status: string
+        }[]
+      }
+      accept_competition_role_email_invite: {
+        Args: { p_token: string; p_verification_code_hash: string }
+        Returns: {
+          competition_id: string | null
+          role: string | null
+          status: string
+        }[]
+      }
+      revoke_competition_role_email_invite: {
+        Args: { _token: string }
         Returns: boolean
       }
       can_access_competition_vault: {

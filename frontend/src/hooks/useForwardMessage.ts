@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { forwardLiveMessage } from "@/live/features/messaging";
+import { forwardLiveMessage, listLiveGroupsByClub, listLiveGroupsByTeam } from "@/live/features/messaging";
 import { recordLiveChatNotifyBatch } from "@/live/features/notifications";
+import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { toast } from "sonner";
 
@@ -25,6 +27,8 @@ export function useForwardDestinations(userId: string | undefined, enabled: bool
     enabled: !!userId && enabled,
     staleTime: 60_000,
     queryFn: async (): Promise<ForwardDestinationGroup[]> => {
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
       // 1) membership → group ids
       const { data: memberships, error: memErr } = await supabase
         .from("group_members")
@@ -64,6 +68,44 @@ export function useForwardDestinations(userId: string | undefined, enabled: bool
           club_name: g.club_id ? (clubMap.get(g.club_id) ?? null) : null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
+        },
+        icp: async (ctx) => {
+          const optionText = (value: unknown): string | null =>
+            Array.isArray(value) ? (value[0] as string | undefined) ?? null : (value as string | null | undefined) ?? null;
+          const grants = await getLiveMyRoleGrants(ctx);
+          const clubIds = [...new Set(grants.map((grant) => optionText(grant.club)).filter((id): id is string => !!id))];
+          const teamIds = [...new Set(grants.map((grant) => optionText(grant.team)).filter((id): id is string => !!id))];
+          const [clubGroups, teamGroups] = await Promise.all([
+            ...clubIds.map((id) => listLiveGroupsByClub(ctx, id).catch(() => [])),
+            ...teamIds.map((id) => listLiveGroupsByTeam(ctx, id).catch(() => [])),
+          ]);
+          const groupsById = new Map<string, { id: string; name: string; club_id: string | null; team_id: string | null }>();
+          for (const group of [...clubGroups.flat(), ...teamGroups.flat()]) {
+            if (!group.isMember || !group.clubId) continue;
+            groupsById.set(group.conversationId, {
+              id: group.conversationId,
+              name: group.name,
+              club_id: group.clubId,
+              team_id: group.teamId,
+            });
+          }
+
+          const groups = [...groupsById.values()];
+          const names = await Promise.all([...new Set(groups.map((group) => group.club_id!))].map(async (id) => {
+            try {
+              const option = await getLiveClubProfile(ctx, id) as any;
+              const profile = Array.isArray(option) ? option[0] : option;
+              return [id, profile?.name ?? null] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          }));
+          const clubNames = new Map(names);
+          return groups
+            .map((group) => ({ ...group, club_name: clubNames.get(group.club_id!) ?? null }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        },
+      });
     },
   });
 }

@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 type InviteRole = "player" | "parent" | "coach" | "team_admin";
 
@@ -56,6 +57,7 @@ const newRow = (): DraftInvite => ({
 });
 
 export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) {
+  const isIcp = resolveAuthBackend() === "icp";
   const { user } = useAuth();
   const [rows, setRows] = useState<DraftInvite[]>([newRow()]);
 
@@ -70,11 +72,12 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
       if (error) throw error;
       return data;
     },
+    enabled: !isIcp,
   });
 
   const { data: teams = [] } = useQuery({
     queryKey: ["season-target-teams", targetSeasonId],
-    enabled: !!targetSeasonId,
+    enabled: !!targetSeasonId && !isIcp,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("teams")
@@ -88,6 +91,14 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
   });
 
   const sentCount = useMemo(() => rows.filter((r) => r.status === "sent").length, [rows]);
+
+  if (isIcp) {
+    return (
+      <div role="status" className="rounded-md border p-4 text-sm text-muted-foreground">
+        Email invites for new season members are not available in ICP yet. No invite data was sent.
+      </div>
+    );
+  }
 
   const patch = (tempId: string, next: Partial<DraftInvite>) =>
     setRows((prev) => prev.map((r) => (r.tempId === tempId ? { ...r, ...next } : r)));

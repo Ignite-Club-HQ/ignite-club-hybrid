@@ -3,11 +3,16 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
   insert: vi.fn(),
   deleteIn: vi.fn(),
   toast: vi.fn(),
   invalidateQueries: vi.fn(),
   invalidateRolesCache: vi.fn(),
+  addRole: vi.fn(),
+  removeRole: vi.fn(),
+  fanOut: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
@@ -38,6 +43,17 @@ vi.mock("@/integrations/supabase/client", () => ({
     }),
   },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.mode === "icp" ? providers.icp(mocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/membership", () => ({
+  addLiveRoleGrant: (...args: unknown[]) => mocks.addRole(...args),
+  removeLiveRoleGrant: (...args: unknown[]) => mocks.removeRole(...args),
+}));
+vi.mock("@/live/features/notifications", () => ({ fanOutLiveNotifications: (...args: unknown[]) => mocks.fanOut(...args) }));
+vi.mock("@icp-sdk/core/principal", () => ({ Principal: { fromText: (text: string) => ({ text }) } }));
 
 import ManageRolesDialog from "./ManageRolesDialog";
 
@@ -54,7 +70,7 @@ const baseProps = {
   onSaved: vi.fn(),
 };
 
-describe("ManageRolesDialog membership and role isolation", () => {
+describe.runIf(mocks.mode === "supabase")("ManageRolesDialog membership and role isolation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.insert.mockResolvedValue({ error: null });
@@ -150,5 +166,49 @@ describe("ManageRolesDialog membership and role isolation", () => {
     await waitFor(() => expect(mocks.invalidateRolesCache).toHaveBeenCalledOnce());
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["team-roles", "team-a"] });
     expect(baseProps.onSaved).toHaveBeenCalledOnce();
+  });
+});
+
+describe.runIf(mocks.mode === "icp")("ManageRolesDialog ICP role grants", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.addRole.mockResolvedValue(undefined);
+    mocks.removeRole.mockResolvedValue(undefined);
+  });
+
+  it("grants a role through club_domain using the member principal and exact scope", async () => {
+    render(<ManageRolesDialog {...baseProps} userId="2vxsx-fae" />);
+    fireEvent.click(screen.getByText("Coach").closest("button")!);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.addRole).toHaveBeenCalledWith(
+      mocks.context,
+      { text: "2vxsx-fae" },
+      "club-a",
+      "coach",
+      "team-a",
+    ));
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.deleteIn).not.toHaveBeenCalled();
+  });
+
+  it("revokes only the selected role through club_domain", async () => {
+    render(<ManageRolesDialog {...baseProps} userId="2vxsx-fae" currentRoles={[
+      { id: "role-player", role: "player" },
+      { id: "role-coach", role: "coach" },
+    ]} />);
+    fireEvent.click(screen.getByText("Coach").closest("button")!);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.removeRole).toHaveBeenCalledWith(
+      mocks.context,
+      { text: "2vxsx-fae" },
+      "club-a",
+      "coach",
+      "team-a",
+    ));
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.deleteIn).not.toHaveBeenCalled();
   });
 });

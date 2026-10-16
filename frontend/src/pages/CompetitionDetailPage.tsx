@@ -292,6 +292,9 @@ function SupabaseCompetitionDetailPage() {
           season: found.season,
           status: found.status,
           organizer_club_id: found.club_id,
+          points_win: Number(found.points_win ?? 3),
+          points_draw: Number(found.points_draw ?? 1),
+          points_loss: Number(found.points_loss ?? 0),
           source: null,
           clubs: { id: found.club_id, name: clubName, kind: null },
         };
@@ -713,7 +716,14 @@ function SupabaseCompetitionDetailPage() {
 
         {canViewLadder && (
           <TabsContent value="ladder" className="space-y-2">
-            <CompetitionLadderPanel competitionId={id!} divisions={divisions} isAdmin={canManage} />
+            <CompetitionLadderPanel
+              competitionId={id!}
+              divisions={divisions}
+              isAdmin={canManage}
+              pointsWin={Number((competition as any)?.points_win ?? 3)}
+              pointsDraw={Number((competition as any)?.points_draw ?? 1)}
+              pointsLoss={Number((competition as any)?.points_loss ?? 0)}
+            />
           </TabsContent>
         )}
 

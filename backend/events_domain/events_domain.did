@@ -186,20 +186,22 @@ type Main =
                                     Err: text;
                                     Ok: nat16;
                                   });
+   create_competition_events: (operation_id: text, competition_id: text,
+    creator: principal, competition_club_id: text, targets:
+    vec CompetitionEventTarget, title: text, description: text, event_type:
+    text, location: opt text, starts_at_ms: nat64, ends_at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
    create_event: (club_id: text, team_id: opt text, title: text, description:
     text, event_type: text, location: opt text, opponent: opt text, address:
     opt text, mini_league_id: opt text, starts_at_ms: nat64, ends_at_ms:
-    nat64) -> (variant {
-                 Err: text;
-                 Ok: Event;
-               });
-   create_competition_events: (operation_id: text, competition_id: text,
-    creator: principal, competition_club_id: text,
-    targets: vec record { club_id: text; team_id: text }, title: text,
-    description: text, event_type: text, location: opt text,
-    starts_at_ms: nat64, ends_at_ms: nat64) -> (variant {
+    nat64, rsvp_audience: opt text, adults_only: bool, restricted_to_roles:
+    opt vec text, target_team_ids: opt vec text) ->
+    (variant {
        Err: text;
-       Ok: vec text;
+       Ok: Event;
      });
    create_event_group: (event_id: text, name: text, team_letter: opt text,
     colour: opt text, ability_band: opt text, pitch_name: opt text) ->
@@ -215,7 +217,9 @@ type Main =
    create_recurring_series: (club_id: text, team_id: opt text, title: 
     text, description: text, event_type: text, location: opt text, frequency:
     text, first_starts_at_ms: nat64, first_ends_at_ms: nat64, occurrences:
-    opt nat32, until_ms: opt nat64) ->
+    opt nat32, until_ms: opt nat64, rsvp_audience: opt text, adults_only:
+    bool, restricted_to_roles: opt vec text, target_team_ids:
+    opt vec text) ->
     (variant {
        Err: text;
        Ok: record {
@@ -226,7 +230,8 @@ type Main =
    create_series: (club_id: text, team_id: opt text, title: text,
     description: text, event_type: text, location: opt text, frequency: 
     text, first_starts_at_ms: nat64, first_ends_at_ms: nat64, until_ms:
-    nat64) ->
+    nat64, rsvp_audience: opt text, adults_only: bool, restricted_to_roles:
+    opt vec text, target_team_ids: opt vec text) ->
     (variant {
        Err: text;
        Ok: record {
@@ -290,24 +295,25 @@ type Main =
           childTeamAssignments: vec ChildTeamAssignment;
           children: vec Child;
           coachNotes: vec CoachNote;
+          competitionEventOperations: vec CompetitionEventOperation;
           duties: vec Duty;
           dutyTeamReminderSent: vec text;
-          individualDutyReminderSent: vec text;
           eventAttendance: vec EventAttendance;
+          eventDutyTeams: vec EventDutyTeam;
           eventGroupDuties: vec EventGroupDuty;
           eventGroupPlayers: vec EventGroupPlayer;
           eventGroups: vec EventGroup;
           eventGuests: vec EventGuest;
-          eventDutyTeams: vec EventDutyTeam;
           eventViews: vec EventView;
           events: vec Event;
           governor: principal;
+          individualDutyReminderSent: vec text;
           lineupSnapshots: vec LineupSnapshot;
           lineups: vec LineupEntry;
           miniLeagueRsvps: vec MiniLeagueRsvp;
           openDuties: vec OpenDuty;
-          pushReachability: vec PushReachability;
           pointsReminderSent: vec text;
+          pushReachability: vec PushReachability;
           recurrences: vec Recurrence;
           reminderLogs: vec ReminderLog;
           roles: vec RoleGrant;
@@ -338,20 +344,15 @@ type Main =
            hours_before: nat16;
            sent: bool;
          }) query;
-   get_event_duty_team: (event_id: text) ->
-    (variant {
-       Err: text;
-       Ok: opt EventDutyTeam;
-     }) query;
-   list_event_duty_teams: (event_ids: vec text) ->
-    (variant {
-       Err: text;
-       Ok: vec EventDutyTeam;
-     }) query;
    get_event_child: (event_id: text, child_id: text) ->
     (variant {
        Err: text;
        Ok: Child;
+     }) query;
+   get_event_duty_team: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventDutyTeam;
      }) query;
    get_event_roster: (event_id: text) ->
     (variant {
@@ -442,6 +443,11 @@ type Main =
        Err: text;
        Ok: vec Duty;
      }) query;
+   list_event_duty_teams: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventDutyTeam;
+     }) query;
    list_event_groups: (event_id: text) ->
     (variant {
        Err: text;
@@ -453,12 +459,12 @@ type Main =
        Ok: vec EventView;
      }) query;
    list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
-   list_events_multi: (club_ids: vec text, team_ids: vec text) ->
+   list_events_for_duty_teams: (team_ids: vec text) ->
     (variant {
        Err: text;
        Ok: vec Event;
      }) query;
-   list_events_for_duty_teams: (team_ids: vec text) ->
+   list_events_multi: (club_ids: vec text, team_ids: vec text) ->
     (variant {
        Err: text;
        Ok: vec Event;
@@ -646,14 +652,15 @@ type Main =
                                                    Err: text;
                                                    Ok;
                                                  });
-   set_competition_domain_canister: (id: principal) -> (variant {
-       Err: text;
-       Ok;
-     });
    set_coach_note: (event_id: text, note: text) ->
     (variant {
        Err: text;
        Ok: CoachNote;
+     });
+   set_competition_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    set_duty: (event_id: text, account_id: text, duty: text) ->
     (variant {
@@ -665,15 +672,15 @@ type Main =
        Err: text;
        Ok;
      });
-   set_event_duty_team: (event_id: text, team_id: opt text) ->
-    (variant {
-       Err: text;
-       Ok;
-     });
    set_event_cancelled: (id: text, cancelled: bool) ->
     (variant {
        Err: text;
        Ok: Event;
+     });
+   set_event_duty_team: (event_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    set_event_group_appearance: (group_id: text, team_letter: opt text,
     colour: opt text, ability_band: opt text, pitch_name: opt text,
@@ -762,17 +769,20 @@ type Main =
      });
    update_event: (id: text, title: text, description: text, event_type: 
     text, location: opt text, opponent: opt text, address: opt text,
-    mini_league_id: opt text, starts_at_ms: nat64, ends_at_ms: nat64) ->
+    mini_league_id: opt text, starts_at_ms: nat64, ends_at_ms: nat64,
+    rsvp_audience: opt text, adults_only: bool, restricted_to_roles:
+    opt vec text, target_team_ids: opt vec text) ->
     (variant {
        Err: text;
        Ok: Event;
      });
    update_series: (id: text, title: text, description: text, event_type:
-    text, location: opt text, from_ms: nat64) ->
-    (variant {
-       Err: text;
-       Ok: EventSeries;
-     });
+    text, location: opt text, from_ms: nat64, rsvp_audience: opt text,
+    adults_only: bool, restricted_to_roles: opt vec text, target_team_ids:
+    opt vec text) -> (variant {
+                        Err: text;
+                        Ok: EventSeries;
+                      });
  };
 type LineupSnapshot = 
  record {
@@ -894,6 +904,7 @@ type EventView =
  };
 type EventSeries = 
  record {
+   adults_only: bool;
    club_id: text;
    creator: principal;
    deleted: bool;
@@ -904,7 +915,10 @@ type EventSeries =
    frequency: text;
    id: text;
    location: opt text;
+   restricted_to_roles: opt vec text;
    revision: nat64;
+   rsvp_audience: opt text;
+   target_team_ids: opt vec text;
    team_id: opt text;
    title: text;
    until_ms: nat64;
@@ -947,6 +961,11 @@ type EventGroup =
    team_b_colour: opt text;
    team_letter: opt text;
  };
+type EventDutyTeam = 
+ record {
+   event_id: text;
+   team_id: text;
+ };
 type EventAttendance = 
  record {
    event_id: text;
@@ -960,6 +979,7 @@ type EventAttendance =
 type Event = 
  record {
    address: opt text;
+   adults_only: bool;
    cancelled: bool;
    club_id: text;
    creator: principal;
@@ -971,20 +991,33 @@ type Event =
    location: opt text;
    mini_league_id: opt text;
    opponent: opt text;
+   restricted_to_roles: opt vec text;
    revision: nat64;
+   rsvp_audience: opt text;
    series_id: opt text;
    starts_at_ms: nat64;
+   target_team_ids: opt vec text;
    team_id: opt text;
    title: text;
    updated_at_ms: nat64;
  };
-type EventDutyTeam = record { event_id: text; team_id: text };
 type Duty = 
  record {
    account_id: text;
    completed: bool;
    duty: text;
    event_id: text;
+ };
+type CompetitionEventTarget = 
+ record {
+   club_id: text;
+   team_id: text;
+ };
+type CompetitionEventOperation = 
+ record {
+   competition_id: text;
+   event_ids: vec text;
+   operation_id: text;
  };
 type CoachNote = 
  record {

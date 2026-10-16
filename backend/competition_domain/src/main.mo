@@ -28,6 +28,7 @@ persistent actor class Main(governorInit : Principal) {
   var chatSettings : [Types.ChatSettings];
   var competitionInvites : [Types.CompetitionInvite];
   var competitionJoinLinks : [Types.CompetitionJoinLink];
+  var competitionOfficialEmailInvites : [Types.CompetitionOfficialEmailInvite];
   var eoiSubmissions : [Types.EoiSubmission];
   var divisionSettings : [Types.DivisionSetting];
   var competitionLadderSettings : [Types.CompetitionLadderSetting];
@@ -466,6 +467,11 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(competitions.filter(func(item) = club_ids.any(func(id) = id == item.club_id)))
   };
 
+  public query ({ caller }) func list_public_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
+    auth(caller);
+    #Ok(competitions.filter(func(item) = item.visibility == "public" and item.status != "archived"))
+  };
+
   public query ({ caller }) func list_my_news_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
     auth(caller);
     #Ok(competitions.filter(func(item) = canManageCompetition(caller, item.id)))
@@ -511,7 +517,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 4; governor; roles; competitions; entries; tokens; seasons; matches; chatSettings; competitionInvites; competitionJoinLinks; eoiSubmissions })
+    #Ok({ schema = 5; governor; roles; competitions; entries; tokens; seasons; matches; chatSettings; competitionInvites; competitionJoinLinks; competitionOfficialEmailInvites; eoiSubmissions })
   };
 
   // ---------------- Competition roles (admin-managed, not governor-only) ----------------
@@ -683,6 +689,90 @@ persistent actor class Main(governorInit : Principal) {
       { { item with revoked = true } } else item
     );
     #Ok
+  };
+
+  public shared ({ caller }) func create_competition_official_email_invite(
+    competition_id : Text,
+    role : Text,
+    token : Text,
+    email_hash : Text,
+    verification_code_hash : Text,
+  ) : async { #Ok : Types.CompetitionOfficialEmailInvite; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (role != "referee" and role != "committee_member") return #Err("Invalid official role");
+    if (token.size() < 32 or token.size() > 128 or email_hash.size() != 64 or verification_code_hash.size() != 64) return #Err("Invalid email invitation");
+    if (competitionOfficialEmailInvites.any(func(item) = item.token == token)) return #Err("Invitation token already exists");
+    let now = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    let invite : Types.CompetitionOfficialEmailInvite = {
+      competition_id; token; role; email_hash; verification_code_hash; created_by = caller;
+      created_at_ms = now; expires_at_ms = now + 172_800_000; attempts = 0;
+      accepted_by = null; revoked = false;
+    };
+    competitionOfficialEmailInvites := competitionOfficialEmailInvites.concat([invite]);
+    #Ok(invite)
+  };
+
+  public query func get_competition_official_email_invite_preview(token : Text) : async { #Ok : { status : Text; competition_id : Text; competition_name : Text; role : Text }; #Err : Text } {
+    switch (competitionOfficialEmailInvites.find(func(item) = item.token == token)) {
+      case null { #Err("Invitation not found") };
+      case (?invite) {
+        let competition = switch (competitions.find(func(item) = item.id == invite.competition_id)) {
+          case null { return #Err("Competition not found") };
+          case (?value) value;
+        };
+        let status = if (invite.revoked) "revoked" else if (invite.accepted_by != null) "used" else if (nowMs() >= invite.expires_at_ms) "expired" else if (competition.status == "archived") "archived" else "valid";
+        #Ok({ status; competition_id = invite.competition_id; competition_name = competition.name; role = invite.role })
+      };
+    }
+  };
+
+  public shared ({ caller }) func accept_competition_official_email_invite(token : Text, email_hash : Text, verification_code_hash : Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
+    auth(caller);
+    var inviteIndex : ?Nat = null;
+    var position : Nat = 0;
+    for (candidate in competitionOfficialEmailInvites.values()) {
+      if (candidate.token == token) inviteIndex := ?position;
+      position += 1;
+    };
+    let index = switch (inviteIndex) {
+      case null { return #Err("Invitation not found") };
+      case (?value) value;
+    };
+    let invite = competitionOfficialEmailInvites[index];
+    if (invite.revoked or nowMs() >= invite.expires_at_ms) return #Err("Invitation expired or revoked");
+    if (not competitions.any(func(competition) = competition.id == invite.competition_id and competition.status != "archived")) return #Err("Competition is archived");
+    switch (invite.accepted_by) {
+      case (?acceptedBy) {
+        if (acceptedBy.equal(caller)) return #Ok({ user = caller; role = invite.role; competition_id = invite.competition_id; team_id = null });
+        return #Err("Invitation already used");
+      };
+      case null {};
+    };
+    if (invite.attempts >= 5) return #Err("Verification attempts exceeded");
+    if (invite.email_hash != email_hash or invite.verification_code_hash != verification_code_hash) {
+      let updated = { invite with attempts = invite.attempts + 1 };
+      competitionOfficialEmailInvites := Array.tabulate<Types.CompetitionOfficialEmailInvite>(competitionOfficialEmailInvites.size(), func(i) = if (i == index) updated else competitionOfficialEmailInvites[i]);
+      return #Err("Email or verification code is incorrect");
+    };
+    let updated = { invite with accepted_by = ?caller };
+    competitionOfficialEmailInvites := Array.tabulate<Types.CompetitionOfficialEmailInvite>(competitionOfficialEmailInvites.size(), func(i) = if (i == index) updated else competitionOfficialEmailInvites[i]);
+    if (not roles.any(func(item) = item.user.equal(caller) and item.role == invite.role and item.competition_id == invite.competition_id and item.team_id == null)) {
+      roles := roles.concat([{ user = caller; role = invite.role; competition_id = invite.competition_id; team_id = null }]);
+    };
+    #Ok({ user = caller; role = invite.role; competition_id = invite.competition_id; team_id = null })
+  };
+
+  public shared ({ caller }) func revoke_competition_official_email_invite(token : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (competitionOfficialEmailInvites.find(func(item) = item.token == token)) {
+      case null { #Err("Invitation not found") };
+      case (?invite) {
+        if (not canManageCompetition(caller, invite.competition_id)) return #Err("Competition management forbidden");
+        competitionOfficialEmailInvites := competitionOfficialEmailInvites.map(func(item) = if (item.token == token) { { item with revoked = true } } else item);
+        #Ok
+      };
+    }
   };
 
   public shared ({ caller }) func rotate_competition_join_link(competition_id : Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {

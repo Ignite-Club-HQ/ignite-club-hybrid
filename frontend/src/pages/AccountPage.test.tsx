@@ -75,10 +75,12 @@ beforeEach(() => {
   };
 });
 
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
 // ============================================================================
 // DELETE ACCOUNT
 // ============================================================================
-describe("AccountPage — delete account session validation", () => {
+describe.runIf(supabaseMode)("AccountPage — delete account session validation", () => {
   async function clickDeleteAndConfirm() {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /^Delete My Account$/ }));
@@ -179,7 +181,7 @@ describe("AccountPage — delete account session validation", () => {
 // ============================================================================
 // EXPORT DATA
 // ============================================================================
-describe("AccountPage — export data session validation", () => {
+describe.runIf(supabaseMode)("AccountPage — export data session validation", () => {
   async function clickExport() {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /download my data/i }));
@@ -325,5 +327,15 @@ describe("AccountPage — export data session validation", () => {
     await act(async () => {
       resolveFetch(zipResponse());
     });
+  });
+});
+
+describe.runIf(!supabaseMode)("AccountPage — ICP account boundaries", () => {
+  it("hides Supabase-only deletion and export actions", () => {
+    renderPage();
+    expect(screen.queryByRole("button", { name: /delete my account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /download my data/i })).not.toBeInTheDocument();
+    expect(invokeFn).not.toHaveBeenCalled();
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 });

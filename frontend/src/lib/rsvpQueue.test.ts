@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+const liveMocks = vi.hoisted(() => ({
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  setLiveEventRsvp: vi.fn(),
+  adminUpsertLiveRsvp: vi.fn(),
+  supabaseFromCalls: [] as unknown[][],
+}));
+const supabaseMode = liveMocks.backend === "supabase";
+
 // Mock supabase client BEFORE importing rsvpQueue
 type MockResult = { error: null | { code?: string; message?: string } };
 
@@ -11,15 +20,29 @@ const insertMock: any = vi.fn();
 vi.mock("@/integrations/supabase/client", () => {
   return {
     supabase: {
-      from: (_table: string) => ({
+      from: (...args: unknown[]) => {
+        liveMocks.supabaseFromCalls.push(args);
+        return {
         update: (_vals: unknown) => ({
           eq: (_col: string, _val: unknown) => updateMock(),
         }),
         insert: (vals: unknown) => insertMock(vals),
-      }),
+        };
+      },
     },
   };
 });
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => liveMocks.backend === "icp",
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    liveMocks.backend === "icp" ? providers.icp(liveMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  setLiveEventRsvp: (...args: unknown[]) => liveMocks.setLiveEventRsvp(...args),
+  adminUpsertLiveRsvp: (...args: unknown[]) => liveMocks.adminUpsertLiveRsvp(...args),
+}));
 
 import {
   getQueuedRsvps,
@@ -57,6 +80,9 @@ beforeEach(() => {
   localStorage.clear();
   updateMock.mockReset();
   insertMock.mockReset();
+  liveMocks.setLiveEventRsvp.mockReset();
+  liveMocks.adminUpsertLiveRsvp.mockReset();
+  liveMocks.supabaseFromCalls.length = 0;
   insertMock.mockResolvedValue({ error: null });
   updateMock.mockResolvedValue({ error: null });
 });
@@ -106,7 +132,7 @@ describe("queueRsvp identity semantics", () => {
   });
 });
 
-describe("syncQueuedRsvps (Defect 2 - concurrency safety)", () => {
+describe.runIf(supabaseMode)("syncQueuedRsvps (Defect 2 - concurrency safety)", () => {
   it("empty queue performs no mutations", async () => {
     const res = await syncQueuedRsvps();
     expect(res).toEqual({ synced: 0, failed: 0 });
@@ -261,5 +287,33 @@ describe("syncQueuedRsvps (Defect 2 - concurrency safety)", () => {
     expect(insertMock).toHaveBeenCalledTimes(1);
     expect(r1).toEqual(r2);
     expect(getQueuedRsvps()).toEqual([]);
+  });
+});
+
+describe.runIf(!supabaseMode)("syncQueuedRsvps ICP adapter", () => {
+  it("syncs self and child RSVPs through events_domain without Supabase writes", async () => {
+    queueRsvp({ eventId: "event-self", userId: "principal-1", status: "going" });
+    queueRsvp({ eventId: "event-child", userId: "principal-1", childId: "child-1", status: "maybe", notes: "late" });
+
+    await expect(syncQueuedRsvps()).resolves.toEqual({ synced: 2, failed: 0 });
+    expect(liveMocks.setLiveEventRsvp).toHaveBeenCalledWith(
+      liveMocks.context, "event-self", "principal-1", "going",
+    );
+    expect(liveMocks.adminUpsertLiveRsvp).toHaveBeenCalledWith(
+      liveMocks.context, "event-child", "principal-1", "maybe", { childId: "child-1", notes: "late" },
+    );
+    expect(getQueuedRsvps()).toEqual([]);
+    expect(liveMocks.supabaseFromCalls).toEqual([]);
+  });
+
+  it("retains unsupported mini-league-player RSVPs for retry without Supabase fallback", async () => {
+    queueRsvp({ eventId: "event-1", userId: "principal-1", miniLeaguePlayerId: "player-1", status: "going" });
+
+    await expect(syncQueuedRsvps()).resolves.toEqual({ synced: 0, failed: 0 });
+    expect(getQueuedRsvps()).toHaveLength(1);
+    expect(getQueuedRsvps()[0].retryCount).toBe(1);
+    expect(liveMocks.supabaseFromCalls).toEqual([]);
+    expect(liveMocks.setLiveEventRsvp).not.toHaveBeenCalled();
+    expect(liveMocks.adminUpsertLiveRsvp).not.toHaveBeenCalled();
   });
 });

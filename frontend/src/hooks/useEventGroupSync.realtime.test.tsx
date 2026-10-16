@@ -13,9 +13,17 @@ const { channel, removeChannel, from, channels, databaseState, syncControl, upda
   syncControl: { updateError: null as any },
   updateAttempts: [] as any[],
 }));
+const backend = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
+const supabaseMode = backend === "supabase";
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { channel, removeChannel, from },
+}));
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => backend,
+}));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => backend === "icp",
 }));
 
 import { useEventGroupSync } from "./useEventGroupSync";
@@ -64,7 +72,7 @@ const teamId = "event-group-group-1";
 const pitchKey = `ignite-pitch-board-state-team-${teamId}`;
 const timerKey = `pitch-board-timer-state-team-${teamId}`;
 
-describe("useEventGroupSync realtime lifecycle", () => {
+describe.runIf(supabaseMode)("useEventGroupSync realtime lifecycle", () => {
   beforeEach(() => {
     localStorage.clear();
     channels.clear();
@@ -238,5 +246,32 @@ describe("useEventGroupSync realtime lifecycle", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(updateAttempts).toHaveLength(1);
+  });
+});
+
+describe.runIf(!supabaseMode)("useEventGroupSync ICP boundary", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    channels.clear();
+    vi.clearAllMocks();
+    channel.mockImplementation(makeChannel);
+    from.mockImplementation(() => eventGroupQuery());
+  });
+
+  it("preserves local pitch state and never opens Supabase sync or realtime", async () => {
+    const localPitch = { players: [{ id: "local-player" }], teamId };
+    const localTimer = { elapsedSeconds: 120, teamId };
+    localStorage.setItem(pitchKey, JSON.stringify(localPitch));
+    localStorage.setItem(timerKey, JSON.stringify(localTimer));
+
+    const { result, unmount } = renderHook(() => useEventGroupSync(teamId, null));
+    await act(async () => result.current.forceSync());
+
+    expect(result.current.isEventGroup).toBe(true);
+    expect(JSON.parse(localStorage.getItem(pitchKey)!)).toEqual(localPitch);
+    expect(JSON.parse(localStorage.getItem(timerKey)!)).toEqual(localTimer);
+    expect(channel).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+    unmount();
   });
 });

@@ -1,16 +1,34 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { from, invalidateQueries, authState, queryOptions, mutations } = vi.hoisted(() => ({
+const { from, invalidateQueries, authState, queryOptions, mutations, mode, context, liveList, liveBlock, liveUnblock } = vi.hoisted(() => ({
   from: vi.fn(),
   invalidateQueries: vi.fn(),
   authState: { user: null as { id: string } | null },
   queryOptions: { current: null as any },
   mutations: [] as any[],
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  liveList: vi.fn(),
+  liveBlock: vi.fn(),
+  liveUnblock: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from } }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => authState }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mode === "icp" ? providers.icp(context) : providers.supabase(),
+}));
+vi.mock("@/live/features/messaging", () => ({
+  liveListBlockedUsers: (...args: unknown[]) => liveList(...args),
+  liveBlockUser: (...args: unknown[]) => liveBlock(...args),
+  liveUnblockUser: (...args: unknown[]) => liveUnblock(...args),
+}));
+vi.mock("@icp-sdk/core/principal", () => ({
+  Principal: { fromText: (text: string) => ({ text }) },
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries }),
   useQuery: (options: any) => {
@@ -61,6 +79,9 @@ describe("useBlockedUsers messaging permission boundary", () => {
     mutations.length = 0;
     queryOptions.current = null;
     authState.user = { id: "user-1" };
+    liveList.mockReset().mockResolvedValue(["blocked-principal"]);
+    liveBlock.mockReset().mockResolvedValue(undefined);
+    liveUnblock.mockReset().mockResolvedValue(undefined);
   });
 
   it("disables blocked-user discovery without an authenticated identity", () => {
@@ -73,7 +94,7 @@ describe("useBlockedUsers messaging permission boundary", () => {
     expect(result.current.isBlocked("blocked-existing")).toBe(false);
   });
 
-  it("loads only rows where the current user is the blocker", async () => {
+  it.runIf(mode === "supabase")("loads only rows where the current user is the blocker", async () => {
     const query = selectQuery([
       { blocked_id: "user-2" },
       { blocked_id: "user-3" },
@@ -90,7 +111,7 @@ describe("useBlockedUsers messaging permission boundary", () => {
     expect(query.eq).toHaveBeenCalledWith("blocker_id", "user-1");
   });
 
-  it("propagates permission failures instead of treating them as an empty block list", async () => {
+  it.runIf(mode === "supabase")("propagates permission failures instead of treating them as an empty block list", async () => {
     from.mockReturnValueOnce(selectQuery([], { message: "RLS denied" }));
     renderHook(() => useBlockedUsers());
 
@@ -99,7 +120,7 @@ describe("useBlockedUsers messaging permission boundary", () => {
     });
   });
 
-  it("creates a block with the authenticated blocker identity and optional reason", async () => {
+  it.runIf(mode === "supabase")("creates a block with the authenticated blocker identity and optional reason", async () => {
     const query = insertQuery();
     from.mockReturnValueOnce(query);
     const { result } = renderHook(() => useBlockedUsers());
@@ -121,7 +142,7 @@ describe("useBlockedUsers messaging permission boundary", () => {
     });
   });
 
-  it("does not invalidate successful state when block insertion is denied", async () => {
+  it.runIf(mode === "supabase")("does not invalidate successful state when block insertion is denied", async () => {
     from.mockReturnValueOnce(insertQuery({ message: "block denied" }));
     const { result } = renderHook(() => useBlockedUsers());
 
@@ -133,7 +154,7 @@ describe("useBlockedUsers messaging permission boundary", () => {
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
 
-  it("deletes only the current user's exact block relationship", async () => {
+  it.runIf(mode === "supabase")("deletes only the current user's exact block relationship", async () => {
     const query = deleteQuery();
     from.mockReturnValueOnce(query);
     const { result } = renderHook(() => useBlockedUsers());
@@ -155,5 +176,17 @@ describe("useBlockedUsers messaging permission boundary", () => {
 
     expect(result.current.isBlocked("blocked-existing")).toBe(true);
     expect(result.current.isBlocked("other-user")).toBe(false);
+  });
+
+  it.runIf(mode === "icp")("lists, blocks, and unblocks principals through messaging_domain", async () => {
+    const { result } = renderHook(() => useBlockedUsers());
+    await expect(queryOptions.current.queryFn()).resolves.toEqual(["blocked-principal"]);
+    await act(async () => result.current.blockUser.mutateAsync({ blockedId: "principal-b", reason: "reason" }));
+    await act(async () => result.current.unblockUser.mutateAsync("principal-b"));
+
+    expect(liveList).toHaveBeenCalledWith(context);
+    expect(liveBlock).toHaveBeenCalledWith(context, { text: "principal-b" });
+    expect(liveUnblock).toHaveBeenCalledWith(context, { text: "principal-b" });
+    expect(from).not.toHaveBeenCalled();
   });
 });

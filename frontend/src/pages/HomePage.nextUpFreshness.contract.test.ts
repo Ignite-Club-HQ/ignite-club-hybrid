@@ -18,7 +18,10 @@ function successfulCreateWindow(): string {
 describe("Home Next Up freshness after event creation", () => {
   it("invalidates the exact consolidated Home query before leaving a successful create", () => {
     const success = successfulCreateWindow();
-    expect(success).toContain("await queryClient.invalidateQueries(");
+    const invalidateIndex = success.indexOf("queryClient.invalidateQueries({");
+    const navigateIndex = success.indexOf("navigate(`/events/${newEventId}`)");
+    expect(invalidateIndex).toBeGreaterThanOrEqual(0);
+    expect(navigateIndex).toBeGreaterThan(invalidateIndex);
     expect(success).toContain("queryKey: eventKeys.home(user!.id)");
     expect(success).not.toContain("invalidateQueries()");
   });

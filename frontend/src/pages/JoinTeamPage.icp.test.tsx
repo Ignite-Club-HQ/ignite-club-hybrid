@@ -56,6 +56,11 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastMock }),
 }));
 
+const sendGamificationNotificationMock = vi.fn();
+vi.mock("@/lib/gamificationNotify", () => ({
+  sendGamificationNotification: (...args: unknown[]) => sendGamificationNotificationMock(...args),
+}));
+
 const rpcMock = vi.fn();
 const fromMock = vi.fn(() => ({
   select: () => ({
@@ -154,6 +159,18 @@ describe("JoinTeamPage team-invite acceptance routing", () => {
 
     await waitFor(() => expect(acceptLiveTeamInviteMock).toHaveBeenCalledWith(expect.anything(), "invite-1"));
     expect(getLiveTeamInviteMock).toHaveBeenCalledWith(expect.anything(), "invite-1");
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Successfully joined as Coach!" }),
+      ),
+    );
+    expect(sendGamificationNotificationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "principal-abc",
+        kind: "membership",
+        message: expect.stringContaining("Coach"),
+      }),
+    );
   });
 
   it("mini-league join under ICP shows an unavailable message instead of joining", async () => {

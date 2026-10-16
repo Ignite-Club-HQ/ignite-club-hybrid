@@ -1,4 +1,30 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const eventMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  createOpenDuty: vi.fn(),
+  createRecurringSeries: vi.fn(),
+  getEventsSnapshot: vi.fn(),
+  setDuty: vi.fn(),
+  updateEvent: vi.fn(),
+  updateSeries: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = { identity: {}, target: { alias: "test" } };
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    eventMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  createLiveOpenDuty: (...args: unknown[]) => eventMocks.createOpenDuty(...args),
+  createLiveRecurringEventSeries: (...args: unknown[]) => eventMocks.createRecurringSeries(...args),
+  getLiveEventsSnapshot: (...args: unknown[]) => eventMocks.getEventsSnapshot(...args),
+  setLiveEventDuty: (...args: unknown[]) => eventMocks.setDuty(...args),
+  updateLiveEvent: (...args: unknown[]) => eventMocks.updateEvent(...args),
+  updateLiveEventSeries: (...args: unknown[]) => eventMocks.updateSeries(...args),
+}));
+
 import {
   convertEventToRecurringSeries,
   syncEventDuties,
@@ -14,7 +40,7 @@ const updateInput = {
   updateSeries: false,
 };
 
-describe("event edit transaction", () => {
+describe.runIf(supabaseMode)("event edit transaction — Supabase", () => {
   it("updates only the selected occurrence with aligned timestamps", async () => {
     const eq = vi.fn().mockResolvedValue({ error: null });
     const update = vi.fn().mockReturnValue({ eq });
@@ -71,7 +97,7 @@ describe("event edit transaction", () => {
   });
 });
 
-describe("event duty transaction", () => {
+describe.runIf(supabaseMode)("event duty transaction — Supabase", () => {
   it("maps additions, edits and removals to the exact atomic RPC", async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [{ idx: 1, id: "new-duty" }],
@@ -113,7 +139,7 @@ describe("event duty transaction", () => {
   });
 });
 
-describe("single event to recurring-series conversion", () => {
+describe.runIf(supabaseMode)("single event to recurring-series conversion — Supabase", () => {
   const conversionInput = {
     eventId: "event-1",
     updates: { title: "Training", club_id: "selected-club", team_id: "selected-team" },
@@ -211,5 +237,66 @@ describe("single event to recurring-series conversion", () => {
   it("falls back to the generated count if an older compatible RPC omits it", async () => {
     const { client } = conversionClient({});
     await expect(convertEventToRecurringSeries(client, conversionInput)).resolves.toBe(3);
+  });
+});
+
+describe.runIf(!supabaseMode)("event workflows — ICP", () => {
+  beforeEach(() => {
+    eventMocks.backend = "icp";
+    eventMocks.createOpenDuty.mockReset();
+    eventMocks.createRecurringSeries.mockReset();
+    eventMocks.getEventsSnapshot.mockReset();
+    eventMocks.setDuty.mockReset();
+    eventMocks.updateEvent.mockReset();
+    eventMocks.updateSeries.mockReset();
+  });
+
+  it("updates a selected event through events_domain", async () => {
+    eventMocks.updateEvent.mockResolvedValue(undefined);
+    const client = { from: vi.fn(), rpc: vi.fn() };
+    await updateEventTransaction(client, updateInput);
+    expect(eventMocks.updateEvent).toHaveBeenCalledWith(icpContext, "event-1", expect.objectContaining({
+      title: "Final",
+      eventType: "training",
+      startsAtMs: new Date(updateInput.selectedStartTime).getTime(),
+    }));
+    expect(client.from).not.toHaveBeenCalled();
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("syncs assigned and open duties through events_domain", async () => {
+    eventMocks.setDuty.mockResolvedValue(undefined);
+    eventMocks.createOpenDuty.mockResolvedValue(undefined);
+    const client = { rpc: vi.fn() };
+    await expect(syncEventDuties(client, "event-1", [], [
+      { name: "Referee", assignedTo: "account-a" },
+      { name: "Scorer", assignedTo: null },
+    ])).resolves.toEqual([]);
+    expect(eventMocks.setDuty).toHaveBeenCalledWith(icpContext, "event-1", "account-a", "Referee");
+    expect(eventMocks.createOpenDuty).toHaveBeenCalledWith(icpContext, "event-1", "Scorer");
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("converts recurrence through the canister series adapter", async () => {
+    eventMocks.createRecurringSeries.mockResolvedValue({ events: [{ id: "first" }, { id: "second" }] });
+    const client = { rpc: vi.fn() };
+    const input = {
+      eventId: "event-1",
+      updates: { title: "Training", club_id: "selected-club", team_id: "selected-team" },
+      selectedDate: new Date("2026-08-20T09:15:00.000Z"),
+      selectedStartTime: "2026-08-20T09:15:00.000Z",
+      selectedEndTime: "2026-08-20T10:45:00.000Z",
+      occurrenceDates: [new Date("2026-08-20T09:15:00.000Z"), new Date("2026-08-27T09:15:00.000Z")],
+      recurrenceEndDate: "2026-08-27",
+      frequency: "weekly" as const,
+    };
+    await expect(convertEventToRecurringSeries(client, input)).resolves.toBe(2);
+    expect(eventMocks.createRecurringSeries).toHaveBeenCalledWith(icpContext, expect.objectContaining({
+      clubId: "selected-club",
+      teamId: "selected-team",
+      title: "Training",
+      frequency: "weekly",
+    }));
+    expect(client.rpc).not.toHaveBeenCalled();
   });
 });

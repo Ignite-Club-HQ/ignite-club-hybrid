@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import {
   fetchGalleryCardPhotoIds,
@@ -8,6 +8,25 @@ import {
   fetchMediaFeedPage,
   fetchMediaReactions,
 } from "./mediaReadRepository";
+
+const mediaReadMocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  listAssets: vi.fn(),
+  listComments: vi.fn(),
+  listReactions: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = { identity: {}, target: { alias: "test" } };
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mediaReadMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/media", () => ({
+  listLiveAssets: (...args: unknown[]) => mediaReadMocks.listAssets(...args),
+  listLiveComments: (...args: unknown[]) => mediaReadMocks.listComments(...args),
+  listLiveReactions: (...args: unknown[]) => mediaReadMocks.listReactions(...args),
+}));
 
 type Client = SupabaseClient<Database>;
 type Result = { data: any; error: any };
@@ -36,7 +55,11 @@ const noFilters = {
   cardId: null, cardPhotoIds: undefined,
 };
 
-describe("Media read repository", () => {
+describe.runIf(supabaseMode)("Media read repository — Supabase", () => {
+  beforeEach(() => {
+    mediaReadMocks.backend = "supabase";
+  });
+
   it("reads and normalizes one gallery-card photo-id scope", async () => {
     const { client, calls } = scriptedClient({
       gallery_chat_cards: [{ data: { photo_ids: ["photo-a", "photo-b"] }, error: null }],
@@ -113,6 +136,66 @@ describe("Media read repository", () => {
     const { client, calls } = scriptedClient({});
     await expect(fetchMediaReactions([], client)).resolves.toEqual([]);
     await expect(fetchMediaComments([], client)).resolves.toEqual([]);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe.runIf(!supabaseMode)("Media read repository — ICP", () => {
+  beforeEach(() => {
+    mediaReadMocks.backend = "icp";
+    mediaReadMocks.listAssets.mockReset();
+    mediaReadMocks.listComments.mockReset();
+    mediaReadMocks.listReactions.mockReset();
+  });
+
+  it("maps a club-scoped canister asset page to the frontend photo shape", async () => {
+    mediaReadMocks.listAssets.mockResolvedValue([{
+      id: "asset-a",
+      deleted: false,
+      club_id: "club-a",
+      storage_path: "clubs/club-a/photo-a",
+      kind: "photo",
+      owner: { toText: () => "principal-a" },
+      competition_id: ["competition-a"],
+    }]);
+    const { client } = scriptedClient({});
+    await expect(fetchMediaFeedPage({ ...noFilters, clubId: "club-a", offset: 0, pageSize: 9 }, client))
+      .resolves.toMatchObject({
+        photos: [{ id: "asset-a", club_id: "club-a", competition_id: "competition-a", uploader_id: "principal-a" }],
+        nextCursor: undefined,
+      });
+    expect(mediaReadMocks.listAssets).toHaveBeenCalledWith(icpContext, "club-a");
+  });
+
+  it("maps ICP reaction and comment records to the shared display contract", async () => {
+    mediaReadMocks.listReactions.mockResolvedValue([{
+      asset_id: "photo-a",
+      user: { toText: () => "principal-a" },
+      kind: "love",
+    }]);
+    mediaReadMocks.listComments.mockResolvedValue([{
+      id: "comment-a",
+      asset_id: "photo-a",
+      author: { toText: () => "principal-a" },
+      body: "Nice photo",
+      deleted: false,
+      created_at_ms: 10n,
+    }]);
+    const { client, calls } = scriptedClient({});
+    await expect(fetchMediaReactions(["photo-a"], client)).resolves.toEqual([
+      { photo_id: "photo-a", user_id: "principal-a", reaction_type: "love", profiles: null },
+    ]);
+    await expect(fetchMediaComments(["photo-a"], client)).resolves.toEqual([
+      expect.objectContaining({ id: "comment-a", text: "Nice photo", reply_to_id: null, user_id: "principal-a" }),
+    ]);
+    expect(calls).toEqual([]);
+  });
+
+  it("short-circuits empty gallery-card scopes without querying the canister", async () => {
+    const { client, calls } = scriptedClient({});
+    await expect(fetchMediaFeedPage({ ...noFilters, cardId: "card-a", cardPhotoIds: [], offset: 0, pageSize: 9 }, client))
+      .resolves.toEqual({ photos: [], nextCursor: undefined });
+    expect(mediaReadMocks.listAssets).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
 });

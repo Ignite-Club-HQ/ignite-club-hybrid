@@ -17,6 +17,27 @@ import {
   useAllScheduledMessages,
 } from "./useScheduledMessages";
 
+const liveMocks = vi.hoisted(() => ({
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  listLiveScheduledMessages: vi.fn(),
+  scheduleLiveMessage: vi.fn(),
+  updateLiveScheduledMessage: vi.fn(),
+  cancelLiveScheduledMessage: vi.fn(),
+  context: { identity: { getPrincipal: () => ({ toText: () => "principal-1" }) }, target: {} },
+}));
+const supabaseMode = liveMocks.backend === "supabase";
+
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    liveMocks.backend === "icp" ? providers.icp(liveMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/notifications", () => ({
+  listLiveScheduledMessages: (...args: unknown[]) => liveMocks.listLiveScheduledMessages(...args),
+  scheduleLiveMessage: (...args: unknown[]) => liveMocks.scheduleLiveMessage(...args),
+  updateLiveScheduledMessage: (...args: unknown[]) => liveMocks.updateLiveScheduledMessage(...args),
+  cancelLiveScheduledMessage: (...args: unknown[]) => liveMocks.cancelLiveScheduledMessage(...args),
+}));
+
 // ---- auth mock ---------------------------------------------------------
 let currentUser: { id: string } | null = { id: "user-1" };
 vi.mock("@/hooks/useAuth", () => ({
@@ -66,7 +87,7 @@ beforeEach(() => {
   setReadResponse([], null);
 });
 
-describe("useScheduledMessages auth guards", () => {
+describe.runIf(supabaseMode)("useScheduledMessages auth guards", () => {
   describe("useUpdateScheduledMessage", () => {
     it("rejects unauthenticated updates before invoking the Edge Function", async () => {
       currentUser = null;
@@ -292,5 +313,87 @@ describe("useScheduledMessages auth guards", () => {
       // Previous data must remain visible so the UI does not blank the list.
       expect(result.current.data).toEqual([initialRow]);
     }, 20000);
+  });
+});
+
+describe.runIf(!supabaseMode)("useScheduledMessages ICP adapters", () => {
+  const rawScheduledMessage = {
+    id: "scheduled-1",
+    author: "principal-1",
+    chatType: "team",
+    teamId: "team-1",
+    clubId: null,
+    groupId: null,
+    conversationId: null,
+    body: "Practice moved",
+    imageUrl: null,
+    replyToId: null,
+    scheduledForMs: 1_800_000_000_000,
+    status: "pending",
+    sentMessageId: null,
+    errorMessage: null,
+    attemptedAtMs: null,
+    recurrence: "none",
+    recurrenceUntilMs: null,
+    recurrenceParentId: null,
+    createdAtMs: 1_700_000_000_000,
+    updatedAtMs: 1_700_000_000_000,
+  };
+
+  beforeEach(() => {
+    liveMocks.backend = "icp";
+    liveMocks.listLiveScheduledMessages.mockReset().mockResolvedValue([rawScheduledMessage]);
+    liveMocks.scheduleLiveMessage.mockReset().mockResolvedValue(rawScheduledMessage);
+    liveMocks.updateLiveScheduledMessage.mockReset().mockResolvedValue(rawScheduledMessage);
+    liveMocks.cancelLiveScheduledMessage.mockReset().mockResolvedValue(undefined);
+    invokeSpy.mockReset();
+  });
+
+  it("maps and filters pending thread messages from the canister", async () => {
+    const { result } = renderHook(
+      () => useThreadScheduledMessages({ chat_type: "team", team_id: "team-1" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.data?.[0]).toMatchObject({
+      id: "scheduled-1",
+      author_id: "principal-1",
+      chat_type: "team",
+      team_id: "team-1",
+      text: "Practice moved",
+      scheduled_for: new Date(rawScheduledMessage.scheduledForMs).toISOString(),
+    }));
+    expect(liveMocks.listLiveScheduledMessages).toHaveBeenCalledWith(liveMocks.context, "principal-1");
+    expect(invokeSpy).not.toHaveBeenCalled();
+  });
+
+  it("creates, updates, and cancels through the notifications canister", async () => {
+    const { result: create } = renderHook(() => useCreateScheduledMessage(), { wrapper });
+    await act(async () => create.current.mutateAsync({
+      chat_type: "team",
+      team_id: "team-1",
+      text: "Practice moved",
+      scheduled_for: new Date(rawScheduledMessage.scheduledForMs),
+    }));
+    expect(liveMocks.scheduleLiveMessage).toHaveBeenCalledWith(liveMocks.context, expect.objectContaining({
+      author: "principal-1",
+      chatType: "team",
+      teamId: "team-1",
+      body: "Practice moved",
+      scheduledForMs: rawScheduledMessage.scheduledForMs,
+    }));
+
+    const { result: update } = renderHook(() => useUpdateScheduledMessage(), { wrapper });
+    await act(async () => update.current.mutateAsync({ id: "scheduled-1", text: "Updated" }));
+    expect(liveMocks.updateLiveScheduledMessage).toHaveBeenCalledWith(liveMocks.context, expect.objectContaining({
+      id: "scheduled-1",
+      author: "principal-1",
+      body: "Updated",
+    }));
+
+    const { result: cancel } = renderHook(() => useCancelScheduledMessage(), { wrapper });
+    await act(async () => cancel.current.mutateAsync("scheduled-1"));
+    expect(liveMocks.cancelLiveScheduledMessage).toHaveBeenCalledWith(liveMocks.context, "scheduled-1", "principal-1");
+    expect(invokeSpy).not.toHaveBeenCalled();
   });
 });

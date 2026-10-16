@@ -10,6 +10,23 @@ import {
 } from "./vaultUploadService";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
+const uploadMocks = vi.hoisted(() => ({
+  mode: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "icp" | "supabase",
+  registerFile: vi.fn(),
+}));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const icpContext = { identity: {}, target: { alias: "test" } };
+
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: (feature: string) => feature === "vault" && uploadMocks.mode === "icp",
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    uploadMocks.mode === "icp" ? providers.icp(icpContext) : providers.supabase(),
+}));
+vi.mock("@/live/features/vault", () => ({
+  registerLiveVaultFile: (...args: unknown[]) => uploadMocks.registerFile(...args),
+}));
 
 describe("Vault upload scope and storage paths", () => {
   it("builds exact club, team, mini-league, and competition scope fields", () => {
@@ -76,7 +93,7 @@ function insertClient(error: unknown = null) {
   return { client: { from: () => query } as unknown as IgniteSupabaseClient, inserts };
 }
 
-describe("Vault external-link creation", () => {
+describe.runIf(supabaseMode)("Vault external-link creation — Supabase", () => {
   it("creates a zero-byte team-scoped external link with exact ownership and folder", async () => {
     const fake = insertClient();
     await createVaultExternalLink({
@@ -179,7 +196,7 @@ function uploadTransaction(options: { uploadError?: unknown; insertError?: unkno
   return { client, dependencies, events, inserts, upload, uploadBuckets };
 }
 
-describe("Vault upload transaction", () => {
+describe.runIf(supabaseMode)("Vault upload transaction — Supabase", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("reserves before bytes, writes metadata after upload, then commits the reservation", async () => {
@@ -304,5 +321,66 @@ describe("Vault upload transaction", () => {
     }, fake.client, fake.dependencies)).rejects.toBe(insertError);
     expect(fake.events).toEqual(["reserve", "upload", "insert", "compensate", "settle:false"]);
     expect(fake.dependencies.reserveStorage).toHaveBeenCalledWith(null, 1);
+  });
+});
+
+describe.runIf(!supabaseMode)("Vault upload transaction — ICP", () => {
+  it("uploads encrypted bytes and registers metadata without Supabase storage or quota calls", async () => {
+    uploadMocks.mode = "icp";
+    uploadMocks.registerFile.mockReset().mockResolvedValue(undefined);
+    const fake = uploadTransaction();
+    const file = new File(["document"], "rules.pdf", { type: "application/pdf" });
+    const tryBlobUpload = vi.fn().mockResolvedValue({ url: "https://icp.invalid/blob", blobRef: "blob-ref-a" });
+
+    await uploadVaultItem({
+      kind: "file",
+      file,
+      name: "Competition rules",
+      userId: "principal-a",
+      folderId: "folder-a",
+      view: { type: "competition", clubId: "club-a", clubName: "Club A", competitionId: "competition-a", competitionName: "Competition A" },
+    }, fake.client, { ...fake.dependencies, tryBlobUpload });
+
+    expect(tryBlobUpload).toHaveBeenCalledWith(expect.objectContaining({
+      file,
+      lock: "own",
+      competitionId: "competition-a",
+    }));
+    expect(uploadMocks.registerFile).toHaveBeenCalledWith(
+      icpContext,
+      expect.any(String),
+      "folder-a",
+      "club-a",
+      null,
+      "Competition rules",
+      "https://icp.invalid/blob",
+      file.size,
+      "application/pdf",
+      false,
+      "blob-ref-a",
+      null,
+      "competition-a",
+    );
+    expect(fake.upload).not.toHaveBeenCalled();
+    expect(fake.inserts).toEqual([]);
+    expect(fake.dependencies.reserveStorage).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the blob store is unavailable without falling back to Supabase", async () => {
+    uploadMocks.mode = "icp";
+    uploadMocks.registerFile.mockReset();
+    const fake = uploadTransaction();
+    const tryBlobUpload = vi.fn().mockResolvedValue(null);
+    await expect(uploadVaultItem({
+      kind: "file",
+      file: new File(["x"], "x.txt"),
+      name: "x.txt",
+      userId: "principal-a",
+      folderId: null,
+      view: { type: "club", clubId: "club-a", clubName: "Club A" },
+    }, fake.client, { ...fake.dependencies, tryBlobUpload })).rejects.toThrow(/media canisters are configured/i);
+    expect(fake.upload).not.toHaveBeenCalled();
+    expect(fake.inserts).toEqual([]);
+    expect(fake.dependencies.reserveStorage).not.toHaveBeenCalled();
   });
 });

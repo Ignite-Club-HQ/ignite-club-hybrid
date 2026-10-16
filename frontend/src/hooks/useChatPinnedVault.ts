@@ -33,6 +33,7 @@ export function useChatPinnedVault(
 ) {
   const qc = useQueryClient();
   const enabledOpt = options?.enabled ?? true;
+  const isIcp = isFeatureRoutedToIcp("vault");
   // Owns the realtime channel. Default true preserves existing behaviour for
   // page-level consumers; secondary consumers (e.g. PinVaultSheet) pass false
   // to avoid a duplicate channel-name collision when both mount simultaneously.
@@ -40,7 +41,7 @@ export function useChatPinnedVault(
 
   const query = useQuery({
     queryKey: pinnedVaultKey(chatType, chatId ?? ""),
-    enabled: enabledOpt && !!chatId,
+    enabled: enabledOpt && !!chatId && !isIcp,
     queryFn: async (): Promise<PinnedVaultRecord | null> => {
       if (!chatId) return null;
       const { data, error } = await supabase
@@ -56,7 +57,7 @@ export function useChatPinnedVault(
   });
 
   useEffect(() => {
-    if (!chatId || !enabledOpt || !subscribeOpt) return;
+    if (!chatId || !enabledOpt || !subscribeOpt || isIcp) return;
     const channel = supabase
       .channel(`chat-pinned-vault-${chatType}-${chatId}`)
       .on(
@@ -75,7 +76,7 @@ export function useChatPinnedVault(
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chatType, chatId, qc, enabledOpt, subscribeOpt]);
+  }, [chatType, chatId, qc, enabledOpt, subscribeOpt, isIcp]);
 
   const save = useMutation({
     mutationFn: async (input: PinnedVaultTarget & { enabled?: boolean }) => {

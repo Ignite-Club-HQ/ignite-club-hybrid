@@ -55,7 +55,7 @@ function unwrapLiveVaultFileWithFolder(entry: any): any {
 function mapLiveVaultFile(file: any): VaultFileRow {
   return {
     id: file.id,
-    folder_id: file.folder_id || null,
+    folder_id: Array.isArray(file.folder_id) ? file.folder_id[0] ?? null : file.folder_id ?? null,
     club_id: file.club,
     team_id: file.team[0] ?? null,
     mini_league_id: file.mini_league_id?.[0] ?? null,

@@ -139,13 +139,14 @@ export function useActiveGameSync() {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
     const timerState = loadTimerState();
+    const isIcp = resolveAuthBackend() === "icp";
     // If the server-anchored timer (schema v2) is in play, the new
     // `pitch-timer-event` edge function owns timer_state. We must not
     // clobber it with the v1 elapsedSeconds/lastUpdateTime shape — but we
     // STILL need to keep pitch_state in sync so the cron can read
     // autoSubPlan / players for sub & halftime notifications. Update
     // pitch_state only on existing rows; never timer_state.
-    const isServerAnchored = hasAnchoredTimerMarker(timerState);
+    const isServerAnchored = !isIcp && hasAnchoredTimerMarker(timerState);
     if (isServerAnchored) {
       try {
         const ps = loadPitchState(timerState?.teamId);
@@ -167,7 +168,6 @@ export function useActiveGameSync() {
     }
 
     const pitchState = loadPitchState(timerState?.teamId);
-    const isIcp = resolveAuthBackend() === "icp";
 
     const deactivateActiveGame = async () => {
       if (isIcp) {
@@ -265,11 +265,10 @@ export function useActiveGameSync() {
     // server-anchored (another device / a newer app version owns the clock).
     // Publishing our v1 timer_state there strands every device at 00:00, so ask
     // the row itself before including the column.
-    const remoteTimerState = await readRemoteTimerState(
-      timerState.teamId || null,
-      activeGameIdRef.current,
-    );
-    const allowTimerWrite = mayWriteLegacyTimerState({
+    const remoteTimerState = isIcp
+      ? null
+      : await readRemoteTimerState(timerState.teamId || null, activeGameIdRef.current);
+    const allowTimerWrite = isIcp || mayWriteLegacyTimerState({
       local: timerState,
       remote: remoteTimerState,
     });

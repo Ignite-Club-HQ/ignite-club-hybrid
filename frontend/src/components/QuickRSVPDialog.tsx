@@ -21,7 +21,13 @@ import { resolveRsvpAudience, shouldPromptPlayer, shouldPromptSelf } from "@/lib
 import { useViewerIsAdultPlayer } from "@/hooks/useViewerIsAdultPlayer";
 import { resolveRsvpChildren } from "@/lib/resolveEventChildScope";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventRsvp, adminUpsertLiveRsvp } from "@/live/features/events";
+import {
+  adminUpsertLiveRsvp,
+  getMyLiveChildRsvps,
+  listLiveEvents,
+  listLiveMyRsvps,
+  setLiveEventRsvp,
+} from "@/live/features/events";
 
 
 
@@ -79,22 +85,40 @@ export function QuickRSVPDialog({
   // Resolve the event scope + effective RSVP audience (event override → team default)
   const { data: eventScope } = useQuery({
     queryKey: ["quick-rsvp-scope", eventId, teamId],
-    queryFn: async () => {
-      const [{ data: ev }, teamRes] = await Promise.all([
-        supabase
-          .from("events")
-          .select("team_id, club_id, target_team_ids, rsvp_audience, adults_only, restricted_to_roles")
-          .eq("id", eventId)
-          .maybeSingle(),
-        teamId
-          ? supabase.from("teams").select("default_rsvp_audience").eq("id", teamId).maybeSingle()
-          : Promise.resolve({ data: null } as any),
-      ]);
-      return {
-        event: (ev as any) ?? null,
-        teamDefault: (teamRes as any)?.data?.default_rsvp_audience ?? null,
-      };
-    },
+    queryFn: async () => withFeatureBackend("events", {
+      supabase: async () => {
+        const [{ data: ev }, teamRes] = await Promise.all([
+          supabase
+            .from("events")
+            .select("team_id, club_id, target_team_ids, rsvp_audience, adults_only, restricted_to_roles")
+            .eq("id", eventId)
+            .maybeSingle(),
+          teamId
+            ? supabase.from("teams").select("default_rsvp_audience").eq("id", teamId).maybeSingle()
+            : Promise.resolve({ data: null } as any),
+        ]);
+        return {
+          event: (ev as any) ?? null,
+          teamDefault: (teamRes as any)?.data?.default_rsvp_audience ?? null,
+        };
+      },
+      icp: async (ctx) => {
+        const events = await listLiveEvents(ctx, clubId, teamId);
+        const event = events.find((item) => item.id === eventId) as any;
+        const unwrap = (value: any) => Array.isArray(value) ? value[0] ?? null : value ?? null;
+        return {
+          event: event ? {
+            team_id: unwrap(event.team_id),
+            club_id: event.club_id,
+            target_team_ids: unwrap(event.target_team_ids),
+            rsvp_audience: unwrap(event.rsvp_audience),
+            adults_only: event.adults_only,
+            restricted_to_roles: unwrap(event.restricted_to_roles),
+          } : null,
+          teamDefault: null,
+        };
+      },
+    }),
     enabled: open && !!eventId,
   });
   const audience = resolveRsvpAudience(eventScope?.event?.rsvp_audience, eventScope?.teamDefault);
@@ -130,38 +154,56 @@ export function QuickRSVPDialog({
   // Fetch existing RSVPs for this event (self + all children by child_id)
   const { data: existingRsvps, isLoading: loadingRsvps } = useQuery({
     queryKey: ["quick-rsvp", eventId, user?.id, childrenOnTeam?.map(c => c.id).join(",")],
-    queryFn: async () => {
-      // Fetch own RSVP
-      const { data: myRsvps, error } = await supabase
-        .from("rsvps")
-        .select("id, status, child_id")
-        .eq("event_id", eventId)
-        .eq("user_id", user!.id);
-      if (error) throw error;
-
-      // Fetch child RSVPs by child_id (regardless of which parent created them)
-      const childIds = (childrenOnTeam || []).map((c: any) => c.id);
-      let childRsvpData: any[] = [];
-      if (childIds.length > 0) {
-        const { data, error: childErr } = await supabase
+    queryFn: async () => withFeatureBackend("events", {
+      supabase: async () => {
+        const { data: myRsvps, error } = await supabase
           .from("rsvps")
-          .select("id, status, child_id, user_id")
+          .select("id, status, child_id")
           .eq("event_id", eventId)
-          .in("child_id", childIds);
-        if (!childErr && data) childRsvpData = data;
-      }
+          .eq("user_id", user!.id);
+        if (error) throw error;
 
-      // Merge: own non-child RSVPs + child RSVPs (deduplicated by child_id)
-      const ownNonChild = (myRsvps || []).filter(r => !r.child_id);
-      const seenChildIds = new Set<string>();
-      const deduped = childRsvpData.filter(r => {
-        if (seenChildIds.has(r.child_id)) return false;
-        seenChildIds.add(r.child_id);
-        return true;
-      });
+        const childIds = (childrenOnTeam || []).map((c: any) => c.id);
+        let childRsvpData: any[] = [];
+        if (childIds.length > 0) {
+          const { data, error: childErr } = await supabase
+            .from("rsvps")
+            .select("id, status, child_id, user_id")
+            .eq("event_id", eventId)
+            .in("child_id", childIds);
+          if (!childErr && data) childRsvpData = data;
+        }
 
-      return [...ownNonChild, ...deduped];
-    },
+        const ownNonChild = (myRsvps || []).filter(r => !r.child_id);
+        const seenChildIds = new Set<string>();
+        const deduped = childRsvpData.filter(r => {
+          if (seenChildIds.has(r.child_id)) return false;
+          seenChildIds.add(r.child_id);
+          return true;
+        });
+        return [...ownNonChild, ...deduped];
+      },
+      icp: async (ctx) => {
+        const [ownRows, childRows] = await Promise.all([
+          listLiveMyRsvps(ctx),
+          getMyLiveChildRsvps(ctx, eventId, clubId),
+        ]);
+        const unwrap = (value: any) => Array.isArray(value) ? value[0] ?? null : value ?? null;
+        const own = ownRows
+          .filter((row) => row.event_id === eventId && !unwrap(row.child_id))
+          .map((row) => ({ id: `${row.event_id}:${row.account_id}`, status: row.state, child_id: null }));
+        const visibleChildren = new Set((childrenOnTeam ?? []).map((child) => child.id));
+        const children = childRows
+          .map((row: any) => row.rsvp ?? row)
+          .filter((row: any) => row.event_id === eventId && visibleChildren.has(unwrap(row.child_id)))
+          .map((row: any) => ({
+            id: `${row.event_id}:${row.account_id}:${unwrap(row.child_id)}`,
+            status: row.state,
+            child_id: unwrap(row.child_id),
+          }));
+        return [...own, ...children];
+      },
+    }),
     enabled: open && !!user,
   });
 

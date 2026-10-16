@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
   from: vi.fn(),
   toast: vi.fn(),
   invalidateQueries: vi.fn(),
@@ -9,9 +10,20 @@ const mocks = vi.hoisted(() => ({
   mutationError: null as any,
   selectedRows: [] as any[],
   operations: [] as Array<{ kind: string; table: string; payload?: any }>,
+  recordLiveMatch: vi.fn(),
+  updateLiveMatchDetails: vi.fn(),
 }));
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.backend === "icp" ? providers.icp({ identity: {}, target: { alias: "test" } }) : providers.supabase(),
+}));
+vi.mock("@/live/features/competitions", () => ({
+  recordLiveMatch: (...args: unknown[]) => mocks.recordLiveMatch(...args),
+  updateLiveMatchDetails: (...args: unknown[]) => mocks.updateLiveMatchDetails(...args),
+}));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/components/AddressAutocomplete", () => ({
@@ -135,6 +147,9 @@ async function previewWithVenue(venue = "Riverside Park") {
 describe("CompetitionFixturesPanel characterization — permissions and generation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.backend = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
+    mocks.recordLiveMatch.mockResolvedValue({ id: "match-icp", revision: 1n });
+    mocks.updateLiveMatchDetails.mockResolvedValue(undefined);
     Element.prototype.scrollIntoView = vi.fn();
     Object.defineProperties(HTMLElement.prototype, {
       hasPointerCapture: { configurable: true, value: () => false },
@@ -182,7 +197,7 @@ describe("CompetitionFixturesPanel characterization — permissions and generati
     expect(screen.getAllByText(/vs/i)).toHaveLength(3);
   });
 
-  it("saves the exact generated fixture contract in one bulk insert", async () => {
+  it.runIf(supabaseMode)("saves the exact generated fixture contract in one bulk insert", async () => {
     renderPanel();
     await previewWithVenue();
     fireEvent.click(screen.getByRole("button", { name: /save fixtures/i }));
@@ -203,7 +218,7 @@ describe("CompetitionFixturesPanel characterization — permissions and generati
     expect(new Set(pairs).size).toBe(3);
   });
 
-  it("closes and refreshes fixtures exactly once after successful generation", async () => {
+  it.runIf(supabaseMode)("closes and refreshes fixtures exactly once after successful generation", async () => {
     renderPanel();
     await previewWithVenue();
     fireEvent.click(screen.getByRole("button", { name: /save fixtures/i }));
@@ -214,7 +229,7 @@ describe("CompetitionFixturesPanel characterization — permissions and generati
     expect(mocks.toast).toHaveBeenCalledWith({ title: "Saved 3 fixtures" });
   });
 
-  it("prevents repeated save taps from inserting generated fixtures twice", async () => {
+  it.runIf(supabaseMode)("prevents repeated save taps from inserting generated fixtures twice", async () => {
     renderPanel();
     await previewWithVenue();
     const save = screen.getByRole("button", { name: /save fixtures/i });
@@ -224,7 +239,7 @@ describe("CompetitionFixturesPanel characterization — permissions and generati
     await waitFor(() => expect(mocks.operations.filter(op => op.kind === "insert")).toHaveLength(1));
   });
 
-  it.each([
+  it.runIf(supabaseMode).each([
     ["duplicate key", /already exist/i],
     ["row-level security denied", /don't have permission/i],
     ["network fetch failed", /couldn't reach the server/i],
@@ -242,6 +257,19 @@ describe("CompetitionFixturesPanel characterization — permissions and generati
     })));
     expect(mocks.invalidateQueries).not.toHaveBeenCalled();
     expect(screen.getByText("Fixture preview")).toBeInTheDocument();
+  });
+
+  it.runIf(!supabaseMode)("saves the round-robin preview through competition_domain", async () => {
+    mocks.backend = "icp";
+    renderPanel();
+    await previewWithVenue();
+    fireEvent.click(screen.getByRole("button", { name: /save fixtures/i }));
+
+    await waitFor(() => expect(mocks.recordLiveMatch).toHaveBeenCalledTimes(3));
+    expect(mocks.updateLiveMatchDetails).toHaveBeenCalledTimes(3);
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.toast).toHaveBeenCalledWith({ title: "Saved 3 fixtures" });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["competition-matches", "competition-1"] });
   });
 });
 
@@ -267,7 +295,7 @@ describe("CompetitionFixturesPanel characterization — existing fixture actions
     expect(mocks.operations.filter(op => op.kind === "delete")).toHaveLength(0);
   });
 
-  it("deletes a confirmed fixture and refreshes fixtures and ladder", async () => {
+  it.runIf(supabaseMode)("deletes a confirmed fixture and refreshes fixtures and ladder", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPanel({ matches: [fixture] });
     await openFixtureSettings();
@@ -278,7 +306,7 @@ describe("CompetitionFixturesPanel characterization — existing fixture actions
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["competition-ladder", "competition-1"] });
   });
 
-  it("reports a rejected deletion and leaves successful caches untouched", async () => {
+  it.runIf(supabaseMode)("reports a rejected deletion and leaves successful caches untouched", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     mocks.mutationError = { message: "delete denied" };
     renderPanel({ matches: [fixture] });
@@ -304,7 +332,7 @@ describe("CompetitionFixturesPanel characterization — existing fixture actions
     expect(mocks.operations.filter(op => op.kind === "update")).toHaveLength(0);
   });
 
-  it("keeps the edit dialog open and avoids invalidation when update is rejected", async () => {
+  it.runIf(supabaseMode)("keeps the edit dialog open and avoids invalidation when update is rejected", async () => {
     mocks.mutationError = { message: "update denied" };
     renderPanel({ matches: [fixture] });
     await openFixtureSettings();
@@ -321,7 +349,7 @@ describe("CompetitionFixturesPanel characterization — existing fixture actions
     expect(mocks.invalidateQueries).not.toHaveBeenCalled();
   });
 
-  it("trims later rounds and refreshes fixtures only after the delete succeeds", async () => {
+  it.runIf(supabaseMode)("trims later rounds and refreshes fixtures only after the delete succeeds", async () => {
     renderPanel({ matches: [fixture, { ...fixture, id: "match-3", round_number: 3 }] });
     fireEvent.click(screen.getByRole("button", { name: /set max/i }));
     const dialog = await screen.findByRole("dialog");
@@ -335,7 +363,7 @@ describe("CompetitionFixturesPanel characterization — existing fixture actions
     });
   });
 
-  it("keeps a rejected round trim retryable without invalidating fixtures", async () => {
+  it.runIf(supabaseMode)("keeps a rejected round trim retryable without invalidating fixtures", async () => {
     mocks.mutationError = { message: "trim denied" };
     renderPanel({ matches: [fixture, { ...fixture, id: "match-3", round_number: 3 }] });
     fireEvent.click(screen.getByRole("button", { name: /set max/i }));
@@ -384,7 +412,7 @@ describe("CompetitionFixturesPanel characterization — manual and finals creati
     expect(mocks.operations.filter(op => op.kind === "insert")).toHaveLength(0);
   });
 
-  it("prevents repeated manual-match save taps from inserting twice", async () => {
+  it.runIf(supabaseMode)("prevents repeated manual-match save taps from inserting twice", async () => {
     renderPanel();
     await chooseManagementAction("Add match");
     const sheet = await screen.findByRole("dialog");

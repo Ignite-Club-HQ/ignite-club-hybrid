@@ -15,6 +15,12 @@ import { purgeDeletedEventFromCaches } from "@/lib/eventDeletionCache";
  */
 
 const toastSpy = vi.fn();
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  deleteLiveEvent: vi.fn(),
+  deleteLiveSeries: vi.fn(),
+}));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
 
 const deleteResults: Array<{ data?: Array<{ id: string }> | null; error?: { message: string } | null }> = [];
@@ -43,6 +49,15 @@ vi.mock("@/integrations/supabase/client", () => ({
     }),
   },
 }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => backendMocks.mode === "icp" }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  deleteLiveEvent: (...args: unknown[]) => backendMocks.deleteLiveEvent(...args),
+  softDeleteLiveEventSeries: (...args: unknown[]) => backendMocks.deleteLiveSeries(...args),
+}));
 
 const { useDeleteEvent } = await import("@/hooks/useDeleteEvent");
 
@@ -59,9 +74,11 @@ beforeEach(() => {
   deleteResults.length = 0;
   deleteCallCount = 0;
   resolveGate = null;
+  backendMocks.deleteLiveEvent.mockReset().mockResolvedValue(undefined);
+  backendMocks.deleteLiveSeries.mockReset().mockResolvedValue(undefined);
 });
 
-describe("useDeleteEvent", () => {
+describe.runIf(backendMocks.mode === "supabase")("useDeleteEvent", () => {
   it("navigates and toasts success only after the database confirms", async () => {
     deleteResults.push({ data: [{ id: "e1" }] });
     const onDeleted = vi.fn();
@@ -132,6 +149,37 @@ describe("useDeleteEvent", () => {
       await hook.result.current.deleteEvent({ id: "root", is_recurring: true }, "series");
     });
     expect(deleteCallCount).toBe(2);
+  });
+});
+
+describe.runIf(backendMocks.mode === "icp")("useDeleteEvent ICP provider", () => {
+  it("deletes a single event through events_domain and reports success", async () => {
+    const onDeleted = vi.fn();
+    const { hook } = setup(onDeleted);
+    await act(async () => hook.result.current.deleteEvent({ id: "event-icp" }, "single"));
+
+    expect(backendMocks.deleteLiveEvent).toHaveBeenCalledWith(backendMocks.context, "event-icp");
+    expect(deleteCallCount).toBe(0);
+    expect(onDeleted).toHaveBeenCalledWith({ kind: "success", deletedIds: ["event-icp"] });
+    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Event deleted" }));
+  });
+
+  it("soft-deletes a recurring series through events_domain", async () => {
+    const { hook } = setup();
+    await act(async () => hook.result.current.deleteEvent({ id: "child", parent_event_id: "series-1" }, "series"));
+    expect(backendMocks.deleteLiveSeries).toHaveBeenCalledWith(backendMocks.context, "series-1");
+    expect(backendMocks.deleteLiveEvent).not.toHaveBeenCalled();
+    expect(deleteCallCount).toBe(0);
+  });
+
+  it("surfaces a canister failure without reporting success", async () => {
+    backendMocks.deleteLiveEvent.mockRejectedValueOnce(new Error("canister denied"));
+    const onDeleted = vi.fn();
+    const { hook } = setup(onDeleted);
+    await act(async () => hook.result.current.deleteEvent({ id: "event-icp" }, "single"));
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" }));
+    expect(deleteCallCount).toBe(0);
   });
 });
 

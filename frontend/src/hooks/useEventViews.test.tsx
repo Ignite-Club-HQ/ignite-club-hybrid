@@ -30,6 +30,14 @@ const state = {
   maybeSingleCalls: 0,
   inFilterCalls: [] as string[][],
 };
+const backend = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
+const supabaseMode = backend === "supabase";
+const liveMocks = vi.hoisted(() => ({
+  recordLiveEventView: vi.fn(),
+  listLiveEventViews: vi.fn(),
+  listLiveMyViewedEventIds: vi.fn(),
+  context: { identity: {}, target: {} },
+}));
 
 function makeChain(table: string) {
   const chain: any = {
@@ -73,6 +81,18 @@ function makeChain(table: string) {
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: (t: string) => makeChain(t) },
 }));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => backend === "icp",
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backend === "icp" ? providers.icp(liveMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  recordLiveEventView: (...args: unknown[]) => liveMocks.recordLiveEventView(...args),
+  listLiveEventViews: (...args: unknown[]) => liveMocks.listLiveEventViews(...args),
+  listLiveMyViewedEventIds: (...args: unknown[]) => liveMocks.listLiveMyViewedEventIds(...args),
+}));
 
 // ---------- imports (after mocks) --------------------------------------
 import {
@@ -105,7 +125,7 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
-describe("useEventViewTracking — Bug 1: lookup failure must not trigger insert", () => {
+describe.runIf(supabaseMode)("useEventViewTracking — Bug 1: lookup failure must not trigger insert", () => {
   it("must not attempt a write when checking existing view state fails", async () => {
     state.maybeSingle = { data: null, error: { message: "permission denied" } };
     const { Wrapper } = wrapper();
@@ -199,7 +219,7 @@ describe("useEventViewTracking — Bug 1: lookup failure must not trigger insert
   });
 });
 
-describe("useEventViewsAdmin — remains event-scoped", () => {
+describe.runIf(supabaseMode)("useEventViewsAdmin — remains event-scoped", () => {
   it("returns list rows for the supplied event", async () => {
     state.selectList = {
       data: [{ id: "v1", user_id: "u1", viewed_at: "2025-01-01" }],
@@ -214,7 +234,7 @@ describe("useEventViewsAdmin — remains event-scoped", () => {
   });
 });
 
-describe("useUserEventViews — Bug 2: caller array not mutated + stable cache key", () => {
+describe.runIf(supabaseMode)("useUserEventViews — Bug 2: caller array not mutated + stable cache key", () => {
   it("must not mutate the caller's event ID array while building its cache key", async () => {
     const input = ["c", "a", "b"];
     const snapshot = [...input];
@@ -280,5 +300,52 @@ describe("useUserEventViews — Bug 2: caller array not mutated + stable cache k
     await new Promise((r) => setTimeout(r, 20));
     expect(state.inFilterCalls.length).toBe(0);
     expect(state.insertCalls).toBe(0);
+  });
+});
+
+describe.runIf(!supabaseMode)("ICP event-view adapters", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("records the event view through the canister without checking a Supabase row", async () => {
+    const { Wrapper } = wrapper();
+    renderHook(() => useEventViewTracking("evt-1", "principal-1"), { wrapper: Wrapper });
+
+    await waitFor(() => expect(liveMocks.recordLiveEventView).toHaveBeenCalledWith(
+      liveMocks.context,
+      "evt-1",
+    ));
+    expect(state.maybeSingleCalls).toBe(0);
+    expect(state.insertCalls).toBe(0);
+  });
+
+  it("maps admin viewer rows from the event canister", async () => {
+    liveMocks.listLiveEventViews.mockResolvedValue([{
+      viewer: { toText: () => "principal-1" },
+      viewed_at_ms: 1_700_000_000_000n,
+    }]);
+    const { Wrapper } = wrapper();
+    const { result } = renderHook(() => useEventViewsAdmin("evt-1"), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.data).toEqual([{
+      id: "icp-view-evt-1-0",
+      user_id: "principal-1",
+      viewed_at: new Date(1_700_000_000_000).toISOString(),
+    }]));
+    expect(state.selectList.data).toEqual([]);
+  });
+
+  it("normalizes and queries viewed event IDs through the canister adapter", async () => {
+    liveMocks.listLiveMyViewedEventIds.mockResolvedValue(["evt-2", "evt-1"]);
+    const { Wrapper } = wrapper();
+    const { result } = renderHook(() => useUserEventViews("principal-1", ["evt-2", "evt-1", "evt-2"]), { wrapper: Wrapper });
+
+    await waitFor(() => expect(liveMocks.listLiveMyViewedEventIds).toHaveBeenCalledWith(
+      liveMocks.context,
+      ["evt-1", "evt-2"],
+    ));
+    await waitFor(() => expect(result.current.data).toEqual(new Set(["evt-2", "evt-1"])));
+    expect(state.inFilterCalls).toEqual([]);
   });
 });

@@ -25,6 +25,10 @@ vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: { id: "admin-user" } }),
 }));
 
+vi.mock("@/hooks/useIsAppAdmin", () => ({
+  useIsAppAdmin: () => ({ isAppAdmin: isAdmin, isLoading: false, error: null }),
+}));
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<any>("react-router-dom");
   return { ...actual, Navigate: () => <div data-testid="redirected" /> };

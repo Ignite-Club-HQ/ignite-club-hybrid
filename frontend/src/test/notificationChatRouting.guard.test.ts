@@ -9,18 +9,26 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 type Probe = { data: unknown; error: unknown };
 const probes: Probe[] = [];
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  lookups: 0,
+}));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    from: () => ({
+    from: () => {
+      backendMocks.lookups++;
+      return {
       select: () => ({
         eq: () => ({
           maybeSingle: async () => probes.shift() ?? { data: null, error: null },
         }),
       }),
-    }),
+      };
+    },
   },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => backendMocks.mode }));
 
 const empty = (): Probe => ({ data: null, error: null });
 const netFail = (): Probe => ({ data: null, error: { message: "Failed to fetch" } });
@@ -30,9 +38,10 @@ async function resolve(id: string) {
   return mod.resolveChatTargetResult(id);
 }
 
-describe("resolveChatTargetResult", () => {
+describe.runIf(backendMocks.mode === "supabase")("resolveChatTargetResult", () => {
   beforeEach(() => {
     probes.length = 0;
+    backendMocks.lookups = 0;
     vi.spyOn(console, "warn").mockImplementation(() => {});
     Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
   });
@@ -90,5 +99,18 @@ describe("resolveChatTargetResult", () => {
     const mod = await import("@/lib/notificationChatRouting");
     probes.push(netFail(), empty(), empty(), empty(), empty(), empty());
     expect(await mod.resolveChatTargetForMessageId("m9")).toBeNull();
+  });
+});
+
+describe.runIf(backendMocks.mode === "icp")("resolveChatTargetResult ICP boundary", () => {
+  beforeEach(() => {
+    probes.length = 0;
+    backendMocks.lookups = 0;
+  });
+
+  it("returns a safe miss without querying Supabase message tables", async () => {
+    expect((await resolve("message-icp")).status).toBe("not_found");
+    expect(backendMocks.lookups).toBe(0);
+    expect(probes).toEqual([]);
   });
 });

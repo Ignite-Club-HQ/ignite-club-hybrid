@@ -272,6 +272,11 @@ export async function listLiveCompetitionsMulti(
   return unwrapCandid(actor.list_competitions_multi(clubIds), "List competitions");
 }
 
+export async function listLivePublicCompetitions(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_public_competitions(), "List public competitions");
+}
+
 export async function listLiveMyNewsCompetitions(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_my_news_competitions(), "List publishable competitions");
@@ -458,6 +463,50 @@ export async function revokeLiveCompetitionOfficialLink(
     actor.revoke_competition_official_link(competitionId, role),
     "Revoke competition official link",
   );
+}
+
+export async function createLiveCompetitionOfficialEmailInvite(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  role: "referee" | "committee_member",
+  token: string,
+  emailHash: string,
+  verificationCodeHash: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_competition_official_email_invite(competitionId, role, token, emailHash, verificationCodeHash),
+    "Create email-bound competition official invite",
+  );
+}
+
+export async function getLiveCompetitionOfficialEmailInvitePreview(
+  ctx: FeatureBackendContext,
+  token: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_competition_official_email_invite_preview(token), "Get official invite preview");
+}
+
+export async function acceptLiveCompetitionOfficialEmailInvite(
+  ctx: FeatureBackendContext,
+  token: string,
+  emailHash: string,
+  verificationCodeHash: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.accept_competition_official_email_invite(token, emailHash, verificationCodeHash),
+    "Accept email-bound competition official invite",
+  );
+}
+
+export async function revokeLiveCompetitionOfficialEmailInvite(
+  ctx: FeatureBackendContext,
+  token: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.revoke_competition_official_email_invite(token), "Revoke official email invite");
 }
 
 export async function rotateLiveCompetitionJoinLink(ctx: FeatureBackendContext, competitionId: string) {

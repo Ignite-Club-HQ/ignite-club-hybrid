@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   getSession: vi.fn(),
   invoke: vi.fn(),
   success: vi.fn(),
@@ -14,20 +15,21 @@ vi.mock("@/integrations/supabase/client", () => ({
     functions: { invoke: mocks.invoke },
   },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
 vi.mock("sonner", () => ({ toast: { success: mocks.success, error: mocks.error } }));
 
 import { ReportMessageDialog } from "./ReportMessageDialog";
 
 function renderDialog(onClose = vi.fn()) {
-  render(<ReportMessageDialog isOpen onClose={onClose} messageId="message-42" messageType="team" />);
-  return { onClose };
+  const rendered = render(<ReportMessageDialog isOpen onClose={onClose} messageId="message-42" messageType="team" />);
+  return { ...rendered, onClose };
 }
 
 function chooseReason(label = "Harassment or bullying") {
   fireEvent.click(screen.getByLabelText(label));
 }
 
-describe("ReportMessageDialog characterization — authentication and submission", () => {
+describe.runIf(mocks.mode === "supabase")("ReportMessageDialog characterization — authentication and submission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ data: { session: { user: { id: "reporter-1" } } } });
@@ -95,5 +97,15 @@ describe("ReportMessageDialog characterization — authentication and submission
     fireEvent.change(screen.getByLabelText(/additional details/i), { target: { value: "context" } });
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe.runIf(mocks.mode === "icp")("ReportMessageDialog ICP boundary", () => {
+  it("does not expose the Supabase report form or call its Edge Function", () => {
+    const onClose = vi.fn();
+    const { container } = renderDialog(onClose);
+    expect(container).toBeEmptyDOMElement();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

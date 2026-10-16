@@ -89,6 +89,17 @@ persistent actor class Main(governorInit : Principal) {
   func validOptId(value : ?Text) : Bool {
     switch (value) { case null true; case (?text) text.size() <= 128 }
   };
+  func validRsvpAudience(value : ?Text) : Bool {
+    switch (value) {
+      case null true;
+      case (?(audience)) audience == "players_only" or audience == "players_and_parents" or audience == "parents_only";
+    }
+  };
+  func validRsvpPolicyLists(restricted : ?[Text], targets : ?[Text]) : Bool {
+    let rolesValid = switch (restricted) { case null true; case (?values) values.size() <= 32 and values.all(valid) };
+    let targetsValid = switch (targets) { case null true; case (?values) values.size() <= 500 and values.all(valid) };
+    rolesValid and targetsValid
+  };
   // "fortnightly" mirrors the frontend recurring-series workflow's step
   // classification (createEventTransaction in createEventWorkflow.ts), which
   // buckets a 8-14 day gap as fortnightly distinct from weekly/monthly.
@@ -136,6 +147,53 @@ persistent actor class Main(governorInit : Principal) {
     if (isGovernor(caller) or event.creator.equal(caller)) return true;
     isClubMember(caller, event.club_id)
   };
+  func roleInEventScope(caller : Principal, event : Types.Event, allowedRoles : [Text]) : Bool {
+    let targets = event.target_team_ids ?? [];
+    roles.any(func(grant) =
+      grant.user.equal(caller) and grant.club_id == event.club_id and
+      allowedRoles.any(func(role) = role == grant.role) and
+      (switch (event.team_id) {
+        case (?team) { grant.team_id == ?team or grant.team_id == null };
+        case null {
+          if (targets.size() == 0) true else
+            switch (grant.team_id) {
+              case (?team) targets.any(func(target) = target == team);
+              case null true;
+            }
+        };
+      })
+    )
+  };
+  func canSelfRsvp(caller : Principal, event : Types.Event) : Bool {
+    if (not canView(caller, event)) return false;
+    let audienceRoles = switch (event.rsvp_audience) {
+      case (?"players_only") ["player"];
+      case (?"parents_only") ["parent"];
+      case _ ["player", "parent"];
+    };
+    let allowedRoles = switch (event.restricted_to_roles) {
+      case (?restricted) { if (restricted.size() > 0) restricted else audienceRoles };
+      case _ audienceRoles;
+    };
+    roleInEventScope(caller, event, allowedRoles)
+  };
+  func canGuardianRsvpForChild(caller : Principal, event : Types.Event, account_id : Text, child_id : Text) : Bool {
+    if (account_id != caller.toText() or not canView(caller, event) or event.adults_only) return false;
+    if (event.rsvp_audience == ?"parents_only") return false;
+    if (switch (event.restricted_to_roles) { case (?restricted) restricted.size() > 0; case null false }) return false;
+    let callerId = caller.toText();
+    let linked = children.any(func(child) = child.id == child_id and child.parent_id == ?callerId) or
+      childGuardians.any(func(guardian) = guardian.child_id == child_id and guardian.guardian_id == callerId);
+    if (not linked) return false;
+    let targets = event.target_team_ids ?? [];
+    childTeamAssignments.any(func(assignment) =
+      assignment.child_id == child_id and assignment.club_id == event.club_id and
+      (switch (event.team_id) {
+        case (?team) assignment.team_id == team;
+        case null if (targets.size() > 0) targets.any(func(target) = target == assignment.team_id) else true;
+      })
+    )
+  };
   func canViewSeries(caller : Principal, item : Types.EventSeries) : Bool {
     if (caller.equal(Principal.anonymous())) return false;
     if (isGovernor(caller) or item.creator.equal(caller)) return true;
@@ -169,12 +227,12 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
-    auth(caller); await syncRolesFromClubDomain(caller, club_id); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
+  public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : Types.Event; #Err : Text } {
+    auth(caller); await syncRolesFromClubDomain(caller, club_id); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or not validRsvpAudience(rsvp_audience) or not validRsvpPolicyLists(restricted_to_roles, target_team_ids) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
-    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false; opponent; address; mini_league_id; updated_at_ms = nowMs() };
+    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false; opponent; address; mini_league_id; updated_at_ms = nowMs(); rsvp_audience; adults_only; restricted_to_roles; target_team_ids };
     events := events.concat([created]); #Ok(created)
   };
 
@@ -193,7 +251,7 @@ persistent actor class Main(governorInit : Principal) {
     var created : [Types.Event] = [];
     var index = 0;
     for (club_id in club_ids.values()) {
-      created := created.concat([({ id = "evt-" # club_id # "-" # Nat.toText(events.size() + index); club_id; team_id = null; title; description; event_type = "social"; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false; opponent = null; address = null; mini_league_id = null; updated_at_ms = nowMs() } : Types.Event)]);
+      created := created.concat([({ id = "evt-" # club_id # "-" # Nat.toText(events.size() + index); club_id; team_id = null; title; description; event_type = "social"; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false; opponent = null; address = null; mini_league_id = null; updated_at_ms = nowMs(); rsvp_audience = null; adults_only = false; restricted_to_roles = null; target_team_ids = null } : Types.Event)]);
       index += 1;
     };
     events := events.concat(created);
@@ -264,6 +322,10 @@ persistent actor class Main(governorInit : Principal) {
         address = null;
         mini_league_id = null;
         updated_at_ms = now;
+        rsvp_audience = null;
+        adults_only = false;
+        restricted_to_roles = null;
+        target_team_ids = null;
       };
       created := created.concat([event]);
       targetIndex += 1;
@@ -310,13 +372,13 @@ persistent actor class Main(governorInit : Principal) {
   // create_recurring_series both funnel through this (the latter converts
   // an occurrence count into until_ms first) — mirrors the Supabase
   // convert_event_to_recurring_series RPC's parent+children expansion.
-  func createSeriesInternal(caller : Principal, club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64) : { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
-    if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validFrequency(frequency) or first_starts_at_ms >= first_ends_at_ms or first_starts_at_ms > until_ms) return #Err("Invalid series");
+  func createSeriesInternal(caller : Principal, club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
+    if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validFrequency(frequency) or not validRsvpAudience(rsvp_audience) or not validRsvpPolicyLists(restricted_to_roles, target_team_ids) or first_starts_at_ms >= first_ends_at_ms or first_starts_at_ms > until_ms) return #Err("Invalid series");
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
     let seriesId = "ser-" # club_id # "-" # Nat.toText(series.size());
-    let created : Types.EventSeries = { id = seriesId; club_id; team_id; title; description; event_type; location; frequency; first_starts_at_ms; first_ends_at_ms; until_ms; creator = caller; revision = 1; deleted = false };
+    let created : Types.EventSeries = { id = seriesId; club_id; team_id; title; description; event_type; location; frequency; first_starts_at_ms; first_ends_at_ms; until_ms; creator = caller; revision = 1; deleted = false; rsvp_audience; adults_only; restricted_to_roles; target_team_ids };
     let step = frequencyStepMs(frequency);
     let duration = first_ends_at_ms - first_starts_at_ms;
     // Cap at 366 occurrences to bound message/state size.
@@ -324,16 +386,16 @@ persistent actor class Main(governorInit : Principal) {
     let base = events.size();
     let children = Array.tabulate<Types.Event>(maxCount, func(index) {
       let offset = step * Nat.toNat64(index);
-      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1; deleted = false; opponent = null; address = null; mini_league_id = null; updated_at_ms = nowMs() }
+      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1; deleted = false; opponent = null; address = null; mini_league_id = null; updated_at_ms = nowMs(); rsvp_audience; adults_only; restricted_to_roles; target_team_ids }
     });
     series := series.concat([created]);
     events := events.concat(children);
     #Ok({ series = created; events = children })
   };
 
-  public shared ({ caller }) func create_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
+  public shared ({ caller }) func create_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
     auth(caller); await syncRolesFromClubDomain(caller, club_id);
-    createSeriesInternal(caller, club_id, team_id, title, description, event_type, location, frequency, first_starts_at_ms, first_ends_at_ms, until_ms)
+    createSeriesInternal(caller, club_id, team_id, title, description, event_type, location, frequency, first_starts_at_ms, first_ends_at_ms, until_ms, rsvp_audience, adults_only, restricted_to_roles, target_team_ids)
   };
 
   // Occurrence-count variant of create_series — mirrors
@@ -341,7 +403,7 @@ persistent actor class Main(governorInit : Principal) {
   // "until date" mode. Only "weekly"/"fortnightly" are documented entry
   // points per the roadmap; daily/monthly remain accepted since
   // createSeriesInternal already validates them.
-  public shared ({ caller }) func create_recurring_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, occurrences : ?Nat32, until_ms : ?Nat64) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
+  public shared ({ caller }) func create_recurring_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, occurrences : ?Nat32, until_ms : ?Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
     auth(caller); await syncRolesFromClubDomain(caller, club_id);
     if (not validFrequency(frequency)) return #Err("Invalid series");
     let step = frequencyStepMs(frequency);
@@ -354,7 +416,7 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
-    createSeriesInternal(caller, club_id, team_id, title, description, event_type, location, frequency, first_starts_at_ms, first_ends_at_ms, resolvedUntil)
+    createSeriesInternal(caller, club_id, team_id, title, description, event_type, location, frequency, first_starts_at_ms, first_ends_at_ms, resolvedUntil, rsvp_audience, adults_only, restricted_to_roles, target_team_ids)
   };
 
   // Detaches a single occurrence from its series (series_id -> null) without
@@ -376,17 +438,17 @@ persistent actor class Main(governorInit : Principal) {
 
   // Updates series fields and every future (>= from_ms) child event's
   // details. Times of individual occurrences are preserved.
-  public shared ({ caller }) func update_series(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, from_ms : Nat64) : async { #Ok : Types.EventSeries; #Err : Text } {
+  public shared ({ caller }) func update_series(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, from_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : Types.EventSeries; #Err : Text } {
     auth(caller);
     switch (requireManageSeries(caller, id)) {
       case (#Err(e)) return #Err(e);
       case (#Ok(current)) {
-        if (not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location)) return #Err("Invalid series update");
-        let updated : Types.EventSeries = { current with title; description; event_type; location; revision = current.revision + 1 };
+        if (not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validRsvpAudience(rsvp_audience) or not validRsvpPolicyLists(restricted_to_roles, target_team_ids)) return #Err("Invalid series update");
+        let updated : Types.EventSeries = { current with title; description; event_type; location; rsvp_audience; adults_only; restricted_to_roles; target_team_ids; revision = current.revision + 1 };
         series := series.map(func(item) = if (item.id == id) updated else item);
         events := events.map(func(item) =
           if (item.series_id == ?id and item.starts_at_ms >= from_ms) {
-            { item with title; description; event_type; location; revision = item.revision + 1 }
+            { item with title; description; event_type; location; rsvp_audience; adults_only; restricted_to_roles; target_team_ids; revision = item.revision + 1 }
           } else item
         );
         #Ok(updated)
@@ -450,14 +512,14 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
+  public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : Types.Event; #Err : Text } {
     auth(caller);
     switch (events.find(func(e) = e.id == id)) { case (?e) { await syncRolesFromClubDomain(caller, e.club_id) }; case null {} };
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);
       case (#Ok(current)) {
-        if (not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or starts_at_ms >= ends_at_ms) return #Err("Invalid event update");
-        let updated : Types.Event = { current with title; description; event_type; location; opponent; address; mini_league_id; starts_at_ms; ends_at_ms; revision = current.revision + 1; updated_at_ms = nowMs() };
+        if (not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or not validRsvpAudience(rsvp_audience) or not validRsvpPolicyLists(restricted_to_roles, target_team_ids) or starts_at_ms >= ends_at_ms) return #Err("Invalid event update");
+        let updated : Types.Event = { current with title; description; event_type; location; opponent; address; mini_league_id; starts_at_ms; ends_at_ms; rsvp_audience; adults_only; restricted_to_roles; target_team_ids; revision = current.revision + 1; updated_at_ms = nowMs() };
         var index = 0;
         for (item in events.values()) { if (item.id == id) { replaceEvent(index, updated); return #Ok(updated) }; index += 1 };
         #Err("Event not found")
@@ -482,9 +544,12 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_rsvp(event_id : Text, account_id : Text, state : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
     auth(caller);
-    switch (requireManage(caller, event_id)) {
-      case (#Err(e)) return #Err(e);
-      case (#Ok(_)) {};
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null return #Err("Event not found");
+      case (?event) {
+        if (account_id != caller.toText()) return #Err("Cannot set another member's RSVP");
+        if (not canSelfRsvp(caller, event)) return #Err("Event RSVP not allowed for this member");
+      };
     };
     if (not valid(account_id) or not valid(state) or notes.size() > 2000) return #Err("Invalid RSVP");
     let value : Types.Rsvp = { event_id; account_id; child_id = null; state; notes; has_paid = null; source = "member"; updated_at_ms = nowMs() };
@@ -844,7 +909,18 @@ persistent actor class Main(governorInit : Principal) {
   // child — the canister equivalent of the admin_upsert_rsvp RPC.
   public shared ({ caller }) func admin_upsert_rsvp(event_id : Text, account_id : Text, child_id : ?Text, status : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
     auth(caller);
-    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    switch (events.find(func(event) = event.id == event_id)) {
+      case null return #Err("Event not found");
+      case (?event) {
+        if (not manages(caller, event)) {
+          let guardianAllowed = switch (child_id) {
+            case (?child) canGuardianRsvpForChild(caller, event, account_id, child);
+            case null false;
+          };
+          if (not guardianAllowed) return #Err("Event RSVP management forbidden");
+        };
+      };
+    };
     if (not valid(account_id) or not validRsvpStatus(status) or notes.size() > 2000) return #Err("Invalid RSVP");
     let value : Types.Rsvp = { event_id; account_id; child_id; state = status; notes; has_paid = null; source = "admin"; updated_at_ms = nowMs() };
     rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id and item.child_id == child_id));
@@ -933,6 +1009,8 @@ persistent actor class Main(governorInit : Principal) {
           event_type = item.event_type; location = item.location; cancelled = false; creator = caller;
           starts_at_ms; ends_at_ms; series_id = ?series_id; revision = 1; deleted = false;
           opponent = null; address = null; mini_league_id = null; updated_at_ms = nowMs();
+          rsvp_audience = item.rsvp_audience; adults_only = item.adults_only;
+          restricted_to_roles = item.restricted_to_roles; target_team_ids = item.target_team_ids;
         };
         events := events.concat([created]);
         #Ok(created)

@@ -12,6 +12,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // ---- mocks -----------------------------------------------------------------
 const toastSpy = vi.fn();
+const backendMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase";
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
 
 const removeAccountSpy = vi.fn();
@@ -36,6 +37,7 @@ vi.mock("@/hooks/useAuth", () => ({
 vi.mock("@capacitor/core", () => ({
   Capacitor: { isNativePlatform: () => false },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => backendMode }));
 
 // Programmable supabase-from mock — each test sets what select/delete return.
 let selectResult: { data: any[] | null; error: any } = { data: [], error: null };
@@ -112,7 +114,7 @@ describe("getErrorMessage helper", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. Loading failures vs empty list
 // ═══════════════════════════════════════════════════════════════════════════
-describe("PasskeyManagementDialog — load-failure vs empty (defect #1)", () => {
+describe.runIf(backendMode === "supabase")("PasskeyManagementDialog — load-failure vs empty (defect #1)", () => {
   it("shows the empty state (and Add button) when query returns []", async () => {
     selectResult = { data: [], error: null };
     render(wrap(<PasskeyManagementDialog open={true} onOpenChange={() => {}} />));
@@ -159,7 +161,7 @@ describe("PasskeyManagementDialog — load-failure vs empty (defect #1)", () => 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. Deletion error handling
 // ═══════════════════════════════════════════════════════════════════════════
-describe("PasskeyManagementDialog — deletion failure (defect #2)", () => {
+describe.runIf(backendMode === "supabase")("PasskeyManagementDialog — deletion failure (defect #2)", () => {
   const existingPasskey = {
     id: "pk-1",
     device_type: "ios",
@@ -233,7 +235,7 @@ describe("PasskeyManagementDialog — deletion failure (defect #2)", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // Signed-out authentication boundary
 // ═══════════════════════════════════════════════════════════════════════════
-describe("PasskeyManagementDialog — signed-out authentication boundary", () => {
+describe.runIf(backendMode === "supabase")("PasskeyManagementDialog — signed-out authentication boundary", () => {
   it("does not query user-scoped passkey data without an authenticated user", async () => {
     authUser = null;
 
@@ -241,6 +243,15 @@ describe("PasskeyManagementDialog — signed-out authentication boundary", () =>
 
     expect(screen.getByRole("heading", { name: /Manage Passkeys/i })).toBeInTheDocument();
     await Promise.resolve();
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(registerPasskeySpy).not.toHaveBeenCalled();
+  });
+});
+
+describe.runIf(backendMode === "icp")("PasskeyManagementDialog ICP boundary", () => {
+  it("does not query Supabase passkey data for an Internet Identity account", () => {
+    const { container } = render(wrap(<PasskeyManagementDialog open onOpenChange={() => {}} />));
+    expect(container).toBeEmptyDOMElement();
     expect(selectMock).not.toHaveBeenCalled();
     expect(registerPasskeySpy).not.toHaveBeenCalled();
   });

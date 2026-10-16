@@ -13,6 +13,12 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 const insertMock = vi.fn();
 const toastMock = vi.fn();
+const backendMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+  listLiveEvents: vi.fn(),
+  createEventTransaction: vi.fn(),
+}));
 
 // Existing games lookup (duplicate detection) + insert path.
 vi.mock("@/integrations/supabase/client", () => {
@@ -37,6 +43,16 @@ vi.mock("@/hooks/useAuth", () => ({
 
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastMock }),
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  listLiveEvents: (...args: unknown[]) => backendMocks.listLiveEvents(...args),
+}));
+vi.mock("@/features/events/createEventWorkflow", () => ({
+  createEventTransaction: (...args: unknown[]) => backendMocks.createEventTransaction(...args),
 }));
 
 import { FixturesCSVImport } from "./FixturesCSVImport";
@@ -93,6 +109,8 @@ beforeEach(() => {
   insertMock.mockReset();
   insertMock.mockResolvedValue({ error: null });
   toastMock.mockReset();
+  backendMocks.listLiveEvents.mockReset().mockResolvedValue([]);
+  backendMocks.createEventTransaction.mockReset().mockResolvedValue("event-live-1");
 });
 
 describe("validateFixtureImportAuthorization", () => {
@@ -243,8 +261,14 @@ describe("FixturesCSVImport authorization", () => {
     const btn = importButton();
     await waitFor(() => expect(btn).not.toBeDisabled());
     fireEvent.click(btn);
-    await waitFor(() => expect(insertMock).toHaveBeenCalledTimes(1));
-    expect((insertMock.mock.calls[0][0] as any[]).every((e) => e.team_id === "team-a")).toBe(true);
+    if (backendMocks.mode === "icp") {
+      await waitFor(() => expect(backendMocks.createEventTransaction).toHaveBeenCalledTimes(2));
+      expect(backendMocks.listLiveEvents).toHaveBeenCalledWith(backendMocks.context, "club-1", null);
+      expect(insertMock).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(insertMock).toHaveBeenCalledTimes(1));
+      expect((insertMock.mock.calls[0][0] as any[]).every((e) => e.team_id === "team-a")).toBe(true);
+    }
   });
 
   it("(7) a valid club-admin multi-team import still succeeds", async () => {
@@ -262,13 +286,22 @@ describe("FixturesCSVImport authorization", () => {
     const btn = importButton();
     await waitFor(() => expect(btn).not.toBeDisabled());
     fireEvent.click(btn);
-    await waitFor(() => expect(insertMock).toHaveBeenCalledTimes(1));
-    const rows = insertMock.mock.calls[0][0] as any[];
-    expect(new Set(rows.map((r) => r.team_id))).toEqual(new Set(["team-a", "team-b"]));
+    if (backendMocks.mode === "icp") {
+      await waitFor(() => expect(backendMocks.createEventTransaction).toHaveBeenCalledTimes(2));
+      expect(insertMock).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(insertMock).toHaveBeenCalledTimes(1));
+      const rows = insertMock.mock.calls[0][0] as any[];
+      expect(new Set(rows.map((r) => r.team_id))).toEqual(new Set(["team-a", "team-b"]));
+    }
   });
 
   it("(9) failed inserts do not claim success or clear the preview", async () => {
-    insertMock.mockResolvedValue({ error: { message: "boom" } });
+    if (backendMocks.mode === "icp") {
+      backendMocks.createEventTransaction.mockRejectedValueOnce(new Error("boom"));
+    } else {
+      insertMock.mockResolvedValue({ error: { message: "boom" } });
+    }
     const onComplete = vi.fn();
     const { container } = render(
       <FixturesCSVImport

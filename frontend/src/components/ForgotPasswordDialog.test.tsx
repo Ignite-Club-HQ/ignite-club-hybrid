@@ -87,8 +87,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
 // ── tests ────────────────────────────────────────────────────────────────
-describe("ForgotPasswordDialog — initial Send Code", () => {
+describe.runIf(supabaseMode)("ForgotPasswordDialog — initial Send Code", () => {
   it("advances to the code step and starts the cooldown on success", async () => {
     resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
     renderDialog();
@@ -212,7 +214,7 @@ describe("ForgotPasswordDialog — initial Send Code", () => {
   });
 });
 
-describe("ForgotPasswordDialog — Resend from code step", () => {
+describe.runIf(supabaseMode)("ForgotPasswordDialog — Resend from code step", () => {
   const advanceToCodeStep = async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     resetPasswordForEmail.mockResolvedValueOnce({ data: {}, error: null });
@@ -330,5 +332,14 @@ describe("ForgotPasswordDialog — Resend from code step", () => {
     await act(async () => {
       resolve({ data: {}, error: null });
     });
+  });
+});
+
+describe.runIf(!supabaseMode)("ForgotPasswordDialog — ICP recovery boundary", () => {
+  it("does not render Supabase recovery controls or send a reset email", () => {
+    const { container } = renderDialog();
+    expect(container).toBeEmptyDOMElement();
+    expect(resetPasswordForEmail).not.toHaveBeenCalled();
+    expect(verifyOtp).not.toHaveBeenCalled();
   });
 });

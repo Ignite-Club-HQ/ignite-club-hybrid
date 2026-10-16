@@ -4,9 +4,11 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import React from "react";
 
 const rpcMock = vi.fn();
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: (...args: unknown[]) => rpcMock(...args) },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => (icpMode ? "icp" : "supabase") }));
 vi.mock("@/assets/ignite-icon.png", () => ({ default: "icon.png" }));
 
 import ShortInviteRedirect from "./ShortInviteRedirect";
@@ -31,7 +33,7 @@ beforeEach(() => {
   rpcMock.mockReset();
 });
 
-describe("ShortInviteRedirect", () => {
+describe.runIf(!icpMode)("ShortInviteRedirect Supabase RPC", () => {
   it("navigates to /join/p/<token> when the RPC returns a token", async () => {
     rpcMock.mockResolvedValue({ data: "tok-123", error: null });
     renderAt("/i/abc");
@@ -70,5 +72,14 @@ describe("ShortInviteRedirect", () => {
 
     // Late response for the unmounted first code MUST NOT throw or navigate.
     expect(() => resolveFirst({ data: "tok-first", error: null })).not.toThrow();
+  });
+});
+
+describe.runIf(icpMode)("ShortInviteRedirect ICP boundary", () => {
+  it("shows the unavailable state without resolving a Supabase short code", async () => {
+    renderAt("/i/abc");
+    expect(await screen.findByText(/short invite links are unavailable in ICP/i)).toBeInTheDocument();
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("joined")).not.toBeInTheDocument();
   });
 });

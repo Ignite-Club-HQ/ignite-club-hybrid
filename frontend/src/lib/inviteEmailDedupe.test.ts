@@ -1,8 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const rpcMock = vi.fn();
+const { rpcMock, backend, context } = vi.hoisted(() => ({
+  rpcMock: vi.fn(),
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  context: { identity: {}, target: {} },
+}));
+const supabaseMode = backend === "supabase";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: (...args: unknown[]) => rpcMock(...args) },
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backend === "icp" ? providers.icp(context) : providers.supabase(),
 }));
 
 import { lookupInvitableUserByEmail, isPlausibleInvitableEmail } from "./inviteEmailDedupe";
@@ -45,14 +54,14 @@ describe("lookupInvitableUserByEmail — local validation", () => {
     },
   );
 
-  it("normalises (trim + lowercase) before calling the RPC", async () => {
+  it.runIf(supabaseMode)("normalises (trim + lowercase) before calling the RPC", async () => {
     rpcMock.mockResolvedValue({ data: null, error: null });
     await lookupInvitableUserByEmail({ email: "  redacted@example.invalid  " });
     expect(rpcMock).toHaveBeenCalledWith("lookup_invitable_user_by_email", expect.objectContaining({ _email: "redacted@example.invalid" }));
   });
 });
 
-describe("lookupInvitableUserByEmail — RPC response validation", () => {
+describe.runIf(supabaseMode)("lookupInvitableUserByEmail — RPC response validation", () => {
   const valid = {
     user_id: "u1",
     display_name: "Alice",
@@ -111,5 +120,16 @@ describe("lookupInvitableUserByEmail — RPC response validation", () => {
   it("returns null when RPC errors (privacy-safe fallback)", async () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: "boom" } });
     expect(await lookupInvitableUserByEmail({ email: "redacted@example.invalid" })).toBeNull();
+  });
+});
+
+describe.runIf(!supabaseMode)("lookupInvitableUserByEmail — ICP privacy fallback", () => {
+  it("returns the normal-invite fallback without querying Supabase", async () => {
+    await expect(lookupInvitableUserByEmail({
+      email: "  redacted@example.invalid  ",
+      clubId: "club-1",
+      teamId: "team-1",
+    })).resolves.toBeNull();
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 });

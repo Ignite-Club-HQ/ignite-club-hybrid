@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   from: vi.fn(),
   invoke: vi.fn(),
   lookup: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from, functions: { invoke: mocks.invoke } } }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/lib/inviteEmailDedupe", () => ({ lookupInvitableUserByEmail: mocks.lookup }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
 vi.mock("sonner", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError, message: mocks.toastMessage } }));
 vi.mock("@/components/ui/select", async () => {
   const React = await import("react");
@@ -69,7 +71,7 @@ async function selectTargetTeam() {
   fireEvent.change(combos[1], { target: { value: "team-new" } });
 }
 
-describe("SeasonInviteStep characterization", () => {
+describe.runIf(mocks.mode === "supabase")("SeasonInviteStep characterization", () => {
   beforeAll(() => {
     Element.prototype.scrollIntoView = vi.fn();
     HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
@@ -161,5 +163,18 @@ describe("SeasonInviteStep characterization", () => {
     expect(mocks.updates).toContainEqual({ table: "pending_invites", payload: { email_error: "Email failed" } });
     expect(mocks.toastMessage).toHaveBeenCalledWith("Invite created — email failed", expect.anything());
     expect(screen.getByText("1 invite sent")).toBeInTheDocument();
+  });
+});
+
+describe.runIf(mocks.mode === "icp")("SeasonInviteStep ICP boundary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("explains the unsupported email-invite path without reading Supabase", async () => {
+    renderStep();
+    expect(await screen.findByRole("status")).toHaveTextContent(/not available in ICP yet/i);
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.invoke).not.toHaveBeenCalled();
   });
 });

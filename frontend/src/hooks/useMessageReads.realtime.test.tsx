@@ -1,11 +1,28 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { channel, removeChannel, from, onAuthStateChange, channels, mutationCalls } = vi.hoisted(() => ({
+const { channel, removeChannel, from, onAuthStateChange, channels, mutationCalls, mode, listLiveReadReceipts } = vi.hoisted(() => ({
   channel: vi.fn(), removeChannel: vi.fn(), from: vi.fn(), onAuthStateChange: vi.fn(), channels: new Map<string, any>(), mutationCalls: [] as string[][],
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  listLiveReadReceipts: vi.fn(),
 }));
+const supabaseMode = mode === "supabase";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { channel, removeChannel, from, auth: { onAuthStateChange, getSession: vi.fn() }, rpc: vi.fn() },
+}));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => mode === "icp",
+}));
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => mode,
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mode === "icp" ? providers.icp({ identity: {}, target: {} }) : providers.supabase(),
+}));
+vi.mock("@/live/features/messaging", () => ({
+  listLiveReadReceipts: (...args: unknown[]) => listLiveReadReceipts(...args),
+  markLiveConversationRead: vi.fn(),
 }));
 vi.mock("@/lib/profileCache", () => ({
   selectCachedProfilesByIds: vi.fn().mockResolvedValue({ data: [] }),
@@ -34,7 +51,7 @@ function makeChannel(name: string) {
   return record;
 }
 
-describe("useMessageReads realtime scoping", () => {
+describe.runIf(supabaseMode)("useMessageReads realtime scoping", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
@@ -141,5 +158,33 @@ describe("useMessageReads realtime scoping", () => {
     expect(removeChannel).toHaveBeenCalledWith(first);
     unmount();
     expect(removeChannel).toHaveBeenCalledWith(second);
+  });
+});
+
+describe.runIf(!supabaseMode)("useMessageReads ICP receipt polling", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    listLiveReadReceipts.mockResolvedValue([
+      { messageId: "message-1", user: { toText: () => "user-2" }, read: true },
+      { messageId: "outside-window", user: { toText: () => "user-3" }, read: true },
+    ]);
+  });
+
+  it("maps only visible canister receipts without subscribing to Supabase realtime", async () => {
+    const { result } = renderHook(() => useMessageReads(
+      "team", "team-1", ["message-1", "message-2"], "user-1",
+    ));
+
+    await waitFor(() => expect(listLiveReadReceipts).toHaveBeenCalledWith(
+      { identity: {}, target: {} },
+      "team-1",
+    ));
+    expect(result.current.readCounts).toEqual({ "message-1": 1 });
+    expect(result.current.readFrontier).toEqual({ "message-1": [
+      { user_id: "user-2", display_name: null, avatar_url: null },
+    ] });
+    expect(channel).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
   });
 });

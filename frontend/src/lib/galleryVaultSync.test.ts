@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  icpMode: process.env.IGNITE_TEST_BACKEND_MODE === "icp",
   rpc: vi.fn(),
   from: vi.fn(),
   existingFile: null as { id: string } | null,
@@ -15,6 +16,9 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: state.rpc, from: state.from },
+}));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => state.icpMode,
 }));
 
 import { syncGalleryPhotoToVault } from "./galleryVaultSync";
@@ -83,7 +87,7 @@ describe("gallery photo to vault synchronization", () => {
     expect(state.from).not.toHaveBeenCalled();
   });
 
-  it("does not mirror gallery files for a Free club", async () => {
+  it.runIf(!state.icpMode)("does not mirror gallery files for a Free club", async () => {
     state.rpc.mockResolvedValue({ data: false, error: null });
     const request = input();
     await syncGalleryPhotoToVault(request);
@@ -91,7 +95,7 @@ describe("gallery photo to vault synchronization", () => {
     expect(state.from).not.toHaveBeenCalled();
   });
 
-  it("deduplicates by exact club and source URL before creating folders", async () => {
+  it.runIf(!state.icpMode)("deduplicates by exact club and source URL before creating folders", async () => {
     state.existingFile = { id: "already-mirrored" };
     const request = input();
     await syncGalleryPhotoToVault(request);
@@ -104,7 +108,7 @@ describe("gallery photo to vault synchronization", () => {
     expect(state.fileInsertPayloads).toEqual([]);
   });
 
-  it("uses an existing team Gallery Uploads folder and writes the complete scoped row", async () => {
+  it.runIf(!state.icpMode)("uses an existing team Gallery Uploads folder and writes the complete scoped row", async () => {
     state.existingFolder = { id: "folder-existing" };
     const request = input({ miniLeagueId: "league-1" });
     await syncGalleryPhotoToVault(request);
@@ -126,7 +130,7 @@ describe("gallery photo to vault synchronization", () => {
     expect(folderLookup.filters).toContainEqual(["team_id", "team-1"]);
   });
 
-  it("creates a club-level Gallery Uploads folder when none exists", async () => {
+  it.runIf(!state.icpMode)("creates a club-level Gallery Uploads folder when none exists", async () => {
     const request = input({ teamId: null });
     await syncGalleryPhotoToVault(request);
 
@@ -141,23 +145,29 @@ describe("gallery photo to vault synchronization", () => {
     expect(folderLookup.filters).toContainEqual(["team_id", null]);
   });
 
-  it("still mirrors without a folder when folder creation is rejected", async () => {
+  it.runIf(!state.icpMode)("still mirrors without a folder when folder creation is rejected", async () => {
     state.createdFolder = null;
     state.folderError = { message: "folder RLS denied" };
     await syncGalleryPhotoToVault(input());
     expect(state.fileInsertPayloads[0]).toMatchObject({ folder_id: null });
   });
 
-  it("is best-effort and does not fail the completed gallery upload when vault insertion fails", async () => {
+  it.runIf(!state.icpMode)("is best-effort and does not fail the completed gallery upload when vault insertion fails", async () => {
     state.existingFolder = { id: "folder-existing" };
     state.fileInsertError = { message: "vault unavailable" };
     await expect(syncGalleryPhotoToVault(input())).resolves.toBeUndefined();
     expect(console.warn).toHaveBeenCalledWith("galleryVaultSync insert failed:", state.fileInsertError);
   });
 
-  it("contains unexpected Pro-check failures rather than breaking gallery upload", async () => {
+  it.runIf(!state.icpMode)("contains unexpected Pro-check failures rather than breaking gallery upload", async () => {
     state.rpc.mockRejectedValue(new Error("network unavailable"));
     await expect(syncGalleryPhotoToVault(input())).resolves.toBeUndefined();
+    expect(state.from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(state.icpMode)("does not mirror gallery files into Supabase when Vault is ICP-routed", async () => {
+    await syncGalleryPhotoToVault(input());
+    expect(state.rpc).not.toHaveBeenCalled();
     expect(state.from).not.toHaveBeenCalled();
   });
 });

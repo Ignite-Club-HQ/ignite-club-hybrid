@@ -16,6 +16,14 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
+const liveMocks = vi.hoisted(() => ({
+  backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  listLiveMessages: vi.fn(),
+  context: { identity: {}, target: {} },
+  supabaseTables: [] as string[],
+}));
+const supabaseMode = liveMocks.backend === "supabase";
+
 // ---------- profile cache mock ----------
 vi.mock("@/lib/profileCache", () => ({
   selectCachedProfilesByIds: async () => ({ data: [] }),
@@ -37,6 +45,7 @@ const lastFilters: Record<string, unknown> = {};
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (table: string) => {
+      liveMocks.supabaseTables.push(table);
       // vault lookups return empty arrays — parsing itself is not the SUT.
       if (table === "vault_files" || table === "vault_folders") {
         const chain: any = {
@@ -64,6 +73,16 @@ vi.mock("@/integrations/supabase/client", () => ({
       return chain;
     },
   },
+}));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => liveMocks.backend === "icp",
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    liveMocks.backend === "icp" ? providers.icp(liveMocks.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/messaging", () => ({
+  listLiveMessages: (...args: unknown[]) => liveMocks.listLiveMessages(...args),
 }));
 
 import { useChatSharedMedia } from "./useChatSharedMedia";
@@ -98,7 +117,7 @@ afterEach(() => {
 });
 
 
-describe("useChatSharedMedia — result-limit enforcement", () => {
+describe.runIf(supabaseMode)("useChatSharedMedia — result-limit enforcement", () => {
   it("must enforce the requested result limit after deriving media items", async () => {
     // One message → one photo + three external links → 4 derived items.
     messageRows = [
@@ -242,5 +261,55 @@ describe("useChatSharedMedia — result-limit enforcement", () => {
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data!.length).toBe(3);
+  });
+});
+
+describe.runIf(!supabaseMode)("useChatSharedMedia — ICP adapter", () => {
+  beforeEach(() => {
+    liveMocks.backend = "icp";
+    liveMocks.listLiveMessages.mockReset();
+    liveMocks.supabaseTables.length = 0;
+  });
+
+  it("maps image attachments and deduped links, enforces the limit, and avoids Supabase", async () => {
+    liveMocks.listLiveMessages.mockResolvedValue([
+      {
+        id: "message-new",
+        created_at_ms: 1_800_000_000_000n,
+        sender: { toText: () => "principal-author" },
+        body: "Visit https://example.invalid https://example.invalid",
+        attachment: [{ kind: "image", url: ["https://example.invalid/photo.jpg"] }],
+      },
+      {
+        id: "message-old",
+        created_at_ms: 1_700_000_000_000n,
+        sender: { toText: () => "principal-author" },
+        body: "https://older.invalid",
+        attachment: [],
+      },
+    ]);
+    const { result } = renderHook(
+      () => useChatSharedMedia("team", "team-1", { limit: 2 }),
+      { wrapper: wrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([
+      expect.objectContaining({
+        id: "message-new:photo",
+        message_id: "message-new",
+        kind: "photo",
+        image_url: "https://example.invalid/photo.jpg",
+        author_id: "principal-author",
+      }),
+      expect.objectContaining({
+        id: "message-new:link:1",
+        message_id: "message-new",
+        kind: "link",
+        url: "https://example.invalid",
+      }),
+    ]);
+    expect(liveMocks.listLiveMessages).toHaveBeenCalledWith(liveMocks.context, "team-1", null);
+    expect(liveMocks.supabaseTables).toEqual([]);
   });
 });
