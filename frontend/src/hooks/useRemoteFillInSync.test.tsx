@@ -1,10 +1,18 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { from, channel, removeChannel, channels, fetchState } = vi.hoisted(() => ({
+const { from, channel, removeChannel, channels, fetchState, getLiveActiveGame, icpMode } = vi.hoisted(() => ({
   from: vi.fn(), channel: vi.fn(), removeChannel: vi.fn(), channels: new Map<string, any>(), fetchState: { data: null as any, error: null as any },
+  getLiveActiveGame: vi.fn(),
+  icpMode: process.env.IGNITE_TEST_BACKEND_MODE === "icp",
 }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from, channel, removeChannel } }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => (icpMode ? "icp" : "supabase") }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, handlers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    icpMode ? handlers.icp({}) : handlers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({ getLiveActiveGame }));
 
 import { useRemoteFillInSync } from "./useRemoteFillInSync";
 
@@ -27,6 +35,7 @@ const freshRow = { pitch_state: { players: [fillIn, member] }, timer_state: { la
 describe("useRemoteFillInSync", () => {
   beforeEach(() => {
     vi.clearAllMocks(); channels.clear(); fetchState.data = null; fetchState.error = null;
+    getLiveActiveGame.mockResolvedValue([]);
     vi.spyOn(Date, "now").mockReturnValue(now); from.mockImplementation(query); channel.mockImplementation(makeChannel);
   });
 
@@ -37,7 +46,7 @@ describe("useRemoteFillInSync", () => {
     expect(from).not.toHaveBeenCalled(); expect(channel).not.toHaveBeenCalled();
   });
 
-  it("loads only valid fill-ins from a fresh active row", async () => {
+  it.runIf(!icpMode)("loads only valid fill-ins from a fresh active row", async () => {
     fetchState.data = freshRow;
     const { result } = renderHook(() => useRemoteFillInSync("team-1", true));
     await waitFor(() => expect(result.current).toEqual([fillIn]));
@@ -51,14 +60,14 @@ describe("useRemoteFillInSync", () => {
     [{ ...freshRow, timer_state: { isGameFinished: true, lastUpdateTime: now } }, "camel-case finished timer"],
     [{ ...freshRow, timer_state: { lastUpdateTime: now - 12 * 60 * 60 * 1000 - 1 } }, "stale timer"],
   ];
-  it.each(rejectedRows)("rejects fill-ins from a %s", async (row) => {
+  it.runIf(!icpMode).each(rejectedRows)("rejects fill-ins from a %s", async (row) => {
     fetchState.data = row;
     const { result } = renderHook(() => useRemoteFillInSync("team-1", true));
     await act(async () => { await Promise.resolve(); });
     expect(result.current).toEqual([]);
   });
 
-  it("scopes realtime to the exact team and clears when the game becomes inactive", async () => {
+  it.runIf(!icpMode)("scopes realtime to the exact team and clears when the game becomes inactive", async () => {
     const { result } = renderHook(() => useRemoteFillInSync("team-1", true));
     await act(async () => { await Promise.resolve(); });
     const record = channels.get("soccer-fillins-team-1");
@@ -69,7 +78,7 @@ describe("useRemoteFillInSync", () => {
     expect(result.current).toEqual([]);
   });
 
-  it("removes the previous team channel before switching and on unmount", () => {
+  it.runIf(!icpMode)("removes the previous team channel before switching and on unmount", () => {
     const { rerender, unmount } = renderHook(({ teamId }) => useRemoteFillInSync(teamId, true), { initialProps: { teamId: "team-1" } });
     const first = channels.get("soccer-fillins-team-1");
     rerender({ teamId: "team-2" });
@@ -77,5 +86,46 @@ describe("useRemoteFillInSync", () => {
     expect(removeChannel).toHaveBeenCalledWith(first);
     unmount();
     expect(removeChannel).toHaveBeenCalledWith(second);
+  });
+
+  it.runIf(icpMode)("loads fresh fill-ins through events_domain and skips Supabase queries and channels", async () => {
+    getLiveActiveGame.mockResolvedValue([{
+      pitch_state_json: JSON.stringify({ players: [fillIn, member] }),
+      timer_state_json: JSON.stringify({ lastUpdateTime: now }),
+      updated_at_ms: BigInt(now),
+      is_active: true,
+    }]);
+    const { result } = renderHook(() => useRemoteFillInSync("team-1", true));
+    await waitFor(() => expect(result.current).toEqual([fillIn]));
+    expect(getLiveActiveGame).toHaveBeenCalledWith({}, "team-1");
+    expect(from).not.toHaveBeenCalled();
+    expect(channel).not.toHaveBeenCalled();
+  });
+
+  it.runIf(icpMode)("rejects stale live active-game fill-ins", async () => {
+    getLiveActiveGame.mockResolvedValue([{
+      pitch_state_json: JSON.stringify({ players: [fillIn, member] }),
+      timer_state_json: JSON.stringify({ lastUpdateTime: now - 12 * 60 * 60 * 1000 - 1 }),
+      updated_at_ms: BigInt(now),
+      is_active: true,
+    }]);
+    const { result } = renderHook(() => useRemoteFillInSync("team-1", true));
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current).toEqual([]);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(icpMode)("clears the canister polling timer on unmount", () => {
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    const { unmount } = renderHook(() => useRemoteFillInSync("team-1", true));
+    const pollTimer = setIntervalSpy.mock.results.at(-1)?.value;
+
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5_000);
+    unmount();
+    expect(clearIntervalSpy).toHaveBeenCalledWith(pollTimer);
+
+    setIntervalSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
   });
 });

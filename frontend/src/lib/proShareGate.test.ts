@@ -11,7 +11,9 @@ const mockSupabase = await vi.hoisted(async () => {
   const { createMockSupabaseClient } = await import("@/test/mockSupabaseClient");
   return createMockSupabaseClient();
 });
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 vi.mock("@/integrations/supabase/client", () => ({ supabase: mockSupabase }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "icp" : "supabase" }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 import { checkProForShare } from "./proShareGate";
@@ -28,7 +30,7 @@ describe("checkProForShare", () => {
     expect(mockSupabase.rpc).not.toHaveBeenCalled();
   });
 
-  it("allows an entitled team and resolves its club for upgrade routing", async () => {
+  it.runIf(!icpMode)("allows an entitled team and resolves its club for upgrade routing", async () => {
     mockSupabase.rpc.mockResolvedValueOnce({ data: true });
     maybeSingle.mockResolvedValueOnce({ data: { club_id: "club-1" } });
 
@@ -39,7 +41,7 @@ describe("checkProForShare", () => {
     expect(mockSupabase.rpc).toHaveBeenCalledWith("has_active_pro_for_team", { _team_id: "team-1" });
   });
 
-  it("falls back from a non-Pro team to its Pro club", async () => {
+  it.runIf(!icpMode)("falls back from a non-Pro team to its Pro club", async () => {
     mockSupabase.rpc
       .mockResolvedValueOnce({ data: false })
       .mockResolvedValueOnce({ data: true });
@@ -52,11 +54,21 @@ describe("checkProForShare", () => {
     expect(mockSupabase.rpc).toHaveBeenLastCalledWith("has_active_pro_for_club", { _club_id: "club-1" });
   });
 
-  it("fails closed when the entitlement check throws", async () => {
+  it.runIf(!icpMode)("fails closed when the entitlement check throws", async () => {
     mockSupabase.rpc.mockRejectedValueOnce(new Error("network"));
     await expect(checkProForShare({ clubId: "club-1" })).resolves.toEqual({
       allowed: false,
       clubId: "club-1",
     });
+  });
+
+  it.runIf(icpMode)("fails closed without an ICP entitlement session and never queries Supabase", async () => {
+    localStorage.removeItem("ignite_icp_internet_identity_session");
+    await expect(checkProForShare({ teamId: "team-1" })).resolves.toEqual({
+      allowed: false,
+      clubId: null,
+    });
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 });

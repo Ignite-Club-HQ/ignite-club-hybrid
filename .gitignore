@@ -2,6 +2,7 @@ node_modules/
 frontend/dist*/
 frontend/.lab-cache*/
 frontend/.vitest-cache/
+frontend/.test-results/
 .mops/
 .env*
 **/.env*

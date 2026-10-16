@@ -3,9 +3,16 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { from } = vi.hoisted(() => ({ from: vi.fn() }));
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
+const { from, checkLiveEventMembership } = vi.hoisted(() => ({ from: vi.fn(), checkLiveEventMembership: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from } }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "user-1" } }) }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => icpMode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, handlers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    icpMode ? handlers.icp({}) : handlers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({ checkLiveEventMembership }));
 
 import { useEventMembership } from "./useEventMembership";
 
@@ -24,7 +31,7 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>;
 }
 
-describe("useEventMembership", () => {
+describe.runIf(!icpMode)("useEventMembership Supabase membership", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("accepts a direct team role without querying child membership", async () => {
@@ -80,5 +87,32 @@ describe("useEventMembership", () => {
       { wrapper },
     );
     await waitFor(() => expect(result.current.data).toBe(true));
+  });
+});
+
+describe.runIf(icpMode)("useEventMembership ICP membership", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("delegates event-scoped membership to events_domain", async () => {
+    checkLiveEventMembership.mockResolvedValue(true);
+    const { result } = renderHook(
+      () => useEventMembership({ id: "event-icp", team_id: "team-1", club_id: "club-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.data).toBe(true));
+    expect(checkLiveEventMembership).toHaveBeenCalledWith({}, "user-1", "event-icp");
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when events_domain reports no membership", async () => {
+    checkLiveEventMembership.mockResolvedValue(false);
+    const { result } = renderHook(
+      () => useEventMembership({ id: "event-icp", team_id: null, club_id: "club-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.data).toBe(false));
+    expect(from).not.toHaveBeenCalled();
   });
 });

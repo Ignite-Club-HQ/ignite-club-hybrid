@@ -4,6 +4,21 @@ import { describe, expect, it, vi } from "vitest";
 import { cacheClub, cacheTeam } from "@/lib/clubTeamCache";
 import { useTeamChatTeamData, type TeamChatTeamSupabaseClient } from "./useTeamChatTeamData";
 
+const liveMocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
+  getCurrentInternetIdentity: vi.fn(),
+  getActiveIcpTarget: vi.fn(),
+  getLiveTeam: vi.fn(),
+  getLiveClubProfile: vi.fn(),
+}));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => liveMocks.mode }));
+vi.mock("@/live/internetIdentityAuth", () => ({ getCurrentInternetIdentity: liveMocks.getCurrentInternetIdentity }));
+vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: liveMocks.getActiveIcpTarget }));
+vi.mock("@/live/features/club", () => ({
+  getLiveTeam: liveMocks.getLiveTeam,
+  getLiveClubProfile: liveMocks.getLiveClubProfile,
+}));
+
 function makeWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: React.ReactNode }) => (
@@ -24,7 +39,7 @@ function makeSupabaseClient(data: any, error: any = null): TeamChatTeamSupabaseC
 }
 
 describe("useTeamChatTeamData", () => {
-  it("fetches the team via the supabase client and returns it", async () => {
+  it.runIf(liveMocks.mode === "supabase")("fetches the team via the supabase client and returns it", async () => {
     const supabaseClient = makeSupabaseClient({
       id: "team-1",
       name: "Under 10s",
@@ -122,5 +137,36 @@ describe("useTeamChatTeamData", () => {
     await waitFor(() => expect(result.current.loadingTeam).toBe(false));
     expect(typeof result.current.refetchTeam).toBe("function");
     expect(result.current.teamIsFetching).toBe(false);
+  });
+
+  it.runIf(liveMocks.mode === "icp")("loads team and club metadata from the live club adapter", async () => {
+    const identity = {};
+    const target = { host: "https://ic0.app", canisterIds: {} };
+    liveMocks.getCurrentInternetIdentity.mockResolvedValue(identity);
+    liveMocks.getActiveIcpTarget.mockReturnValue(target);
+    liveMocks.getLiveTeam.mockResolvedValue([{
+      id: "team-icp",
+      name: "ICP Team",
+      logo_url: [],
+      club_id: "club-icp",
+    }]);
+    liveMocks.getLiveClubProfile.mockResolvedValue([{
+      name: "ICP Club",
+      logo_url: [],
+    }]);
+    const supabaseClient = { from: vi.fn() } as unknown as TeamChatTeamSupabaseClient;
+    const { result } = renderHook(
+      () => useTeamChatTeamData({
+        supabaseClient,
+        teamId: "team-icp",
+        useIcpLab: false,
+        getLocalLabChatTeam: vi.fn(),
+      }),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.team?.name).toBe("ICP Team"));
+    expect(result.current.team?.clubs?.name).toBe("ICP Club");
+    expect(liveMocks.getLiveTeam).toHaveBeenCalledWith({ identity, target }, "team-icp");
+    expect(supabaseClient.from).not.toHaveBeenCalled();
   });
 });

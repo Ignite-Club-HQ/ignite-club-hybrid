@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ safeOpenUrl: vi.fn() }));
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 vi.mock("@/lib/safeOpenUrl", () => ({ safeOpenUrl: mocks.safeOpenUrl }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => icpMode }));
 
 import { MessageActionSheet } from "./MessageActionSheet";
 
@@ -143,7 +145,7 @@ describe("MessageActionSheet characterization — permissions and safety actions
     expect(onPublishToGallery).not.toHaveBeenCalled();
   });
 
-  it("prevents repeat publication while an image is publishing or already published", async () => {
+  it.runIf(!icpMode)("prevents repeat publication while an image is publishing or already published", async () => {
     const onPublish = vi.fn();
     const { rerender } = render(<MessageActionSheet {...props({
       hasImage: true,
@@ -164,6 +166,16 @@ describe("MessageActionSheet characterization — permissions and safety actions
     await openMore();
     fireEvent.click(screen.getByRole("button", { name: "Published to Gallery" }));
     expect(onPublish).not.toHaveBeenCalled();
+  });
+
+  it.runIf(icpMode)("hides gallery publication while the media feature is routed to ICP", async () => {
+    render(<MessageActionSheet {...props({
+      hasImage: true,
+      canPublishToGallery: true,
+      onPublishToGallery: vi.fn(),
+    })} />);
+    await openMore();
+    expect(screen.queryByRole("button", { name: /publish to gallery/i })).not.toBeInTheDocument();
   });
 
   it("normalizes a bare domain before opening it", async () => {

@@ -14,6 +14,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { CancelEventConfirmDialog } from "./CancelEventConfirmDialog";
 
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
+
 // ---- supabase mock ----------------------------------------------------
 
 type TableResp = { data: unknown; error: { message: string } | null };
@@ -46,6 +48,9 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/hooks/useNativeKeyboardBottomInset", () => ({
   useNativeKeyboardBottomInset: () => 0,
 }));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => process.env.IGNITE_TEST_BACKEND_MODE === "icp",
+}));
 
 // ---- helpers ----------------------------------------------------------
 
@@ -73,7 +78,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 // ---- tests ------------------------------------------------------------
 
-describe("CancelEventConfirmDialog — fail-closed on recipient lookup failure", () => {
+describe.runIf(!icpMode)("CancelEventConfirmDialog — fail-closed on recipient lookup failure", () => {
   it("counts members and enables push when recipient lookup succeeds", async () => {
     setUserRoles([{ user_id: "u1" }, { user_id: "u2" }, { user_id: "u1" }]);
     const onConfirm = vi.fn();
@@ -179,5 +184,17 @@ describe("CancelEventConfirmDialog — fail-closed on recipient lookup failure",
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     await flush();
     expect(screen.queryByText(/0 members? will be notified/i)).toBeNull();
+  });
+});
+
+describe.runIf(icpMode)("CancelEventConfirmDialog ICP boundary", () => {
+  it("keeps cancellation available but disables unverifiable push delivery", async () => {
+    const onConfirm = vi.fn();
+    render(<CancelEventConfirmDialog {...baseProps} onConfirm={onConfirm} />);
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel (Event|Training)/i }));
+    expect(onConfirm).toHaveBeenCalledWith(undefined, false);
+    expect(Object.values(tableCalls).reduce((total, count) => total + count, 0)).toBe(0);
   });
 });

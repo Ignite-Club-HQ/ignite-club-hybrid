@@ -2,6 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MessagesPageHeader } from "./MessagesPageHeader";
 
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => icpMode }));
+
 function renderHeader(overrides: Partial<React.ComponentProps<typeof MessagesPageHeader>> = {}) {
   const props: React.ComponentProps<typeof MessagesPageHeader> = {
     isLoadingFreshData: false,
@@ -31,12 +34,16 @@ describe("MessagesPageHeader", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Filter" }));
     fireEvent.click(screen.getByRole("button", { name: "Recap all chats" }));
-    fireEvent.click(screen.getByRole("button", { name: "Scheduled messages" }));
+    if (icpMode) {
+      expect(screen.queryByRole("button", { name: "Scheduled messages" })).not.toBeInTheDocument();
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: "Scheduled messages" }));
+      expect(props.onNavigateToScheduledMessages).toHaveBeenCalledOnce();
+    }
     fireEvent.click(screen.getByRole("button", { name: "New message" }));
 
     expect(props.onOpenClubFilter).toHaveBeenCalledOnce();
     expect(props.onOpenRecap).toHaveBeenCalledOnce();
-    expect(props.onNavigateToScheduledMessages).toHaveBeenCalledOnce();
     expect(props.onOpenNewMessage).toHaveBeenCalledOnce();
   });
 

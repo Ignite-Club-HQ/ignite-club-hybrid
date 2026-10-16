@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -14,9 +14,17 @@ vi.mock("@/live/authBackendMode", () => ({
 }));
 
 const getLiveAccountRosterScopeMock = vi.fn();
+const competitionMocks = vi.hoisted(() => ({
+  listLivePublicCompetitions: vi.fn(),
+  listLiveCompetitionMatches: vi.fn(),
+  listLiveCompetitionsMulti: vi.fn(),
+  listLiveMyNewsCompetitions: vi.fn(),
+}));
+const getLiveTeamMock = vi.fn();
 vi.mock("@/live/features/events", () => ({
   getLiveAccountRosterScope: (...args: unknown[]) => getLiveAccountRosterScopeMock(...args),
   listLiveEvents: async () => [],
+  listLiveEventDutyTeams: async () => [],
 }));
 
 vi.mock("@/live/features/membership", () => ({
@@ -24,11 +32,17 @@ vi.mock("@/live/features/membership", () => ({
 }));
 
 vi.mock("@/live/features/club", () => ({
-  getLiveTeam: async () => [],
+  getLiveTeam: (...args: unknown[]) => getLiveTeamMock(...args),
   getLiveClubProfile: async () => [],
   listLiveTeams: async () => [],
   listLiveSponsors: async () => [],
   getLiveClubSubscription: async () => null,
+}));
+vi.mock("@/live/features/competitions", () => ({
+  listLivePublicCompetitions: (...args: unknown[]) => competitionMocks.listLivePublicCompetitions(...args),
+  listLiveCompetitionMatches: (...args: unknown[]) => competitionMocks.listLiveCompetitionMatches(...args),
+  listLiveCompetitionsMulti: (...args: unknown[]) => competitionMocks.listLiveCompetitionsMulti(...args),
+  listLiveMyNewsCompetitions: (...args: unknown[]) => competitionMocks.listLiveMyNewsCompetitions(...args),
 }));
 
 vi.mock("@/live/features/miniLeagues", () => ({
@@ -118,19 +132,30 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/events"]}>
         <EventsPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 beforeEach(() => {
   eventsRoutedToIcp = false;
   getLiveAccountRosterScopeMock.mockReset();
   getLiveAccountRosterScopeMock.mockResolvedValue({ teamIds: ["icp-team-1"], clubIds: [], miniLeagueIds: [] });
+  getLiveTeamMock.mockReset();
+  getLiveTeamMock.mockResolvedValue([]);
+  competitionMocks.listLivePublicCompetitions.mockReset();
+  competitionMocks.listLivePublicCompetitions.mockResolvedValue([]);
+  competitionMocks.listLiveCompetitionMatches.mockReset();
+  competitionMocks.listLiveCompetitionMatches.mockResolvedValue([]);
+  competitionMocks.listLiveCompetitionsMulti.mockReset();
+  competitionMocks.listLiveCompetitionsMulti.mockResolvedValue([]);
+  competitionMocks.listLiveMyNewsCompetitions.mockReset();
+  competitionMocks.listLiveMyNewsCompetitions.mockResolvedValue([]);
   fromMock.mockClear();
   queriedTables.length = 0;
 });
@@ -152,5 +177,42 @@ describe("EventsPage roster-derived team scope routing", () => {
     await waitFor(() => expect(getLiveAccountRosterScopeMock).toHaveBeenCalledWith(expect.anything(), "principal-abc"));
     expect(queriedTables).not.toContain("child_guardians");
     expect(queriedTables).not.toContain("child_team_assignments");
+  });
+
+  it("shows public competition fixtures to an ordinary member without an organizer-club role", async () => {
+    eventsRoutedToIcp = true;
+    getLiveAccountRosterScopeMock.mockResolvedValue({ teamIds: [], clubIds: [], miniLeagueIds: [] });
+    competitionMocks.listLivePublicCompetitions.mockResolvedValue([{
+      id: "competition-public",
+      club_id: "organizer-club",
+      name: "Public Cup",
+      status: "open",
+      visibility: "public",
+    }]);
+    const scheduledAt = Date.now() + 24 * 60 * 60 * 1000;
+    competitionMocks.listLiveCompetitionMatches.mockResolvedValue([{
+      id: "fixture-public",
+      home_team: "home-team",
+      away_team: "away-team",
+      scheduled_at_ms: [BigInt(scheduledAt)],
+      status: "scheduled",
+      venue: ["Main Ground"],
+    }]);
+    getLiveTeamMock.mockImplementation(async (_ctx: unknown, teamId: string) => [{
+      id: teamId,
+      name: teamId === "home-team" ? "Home FC" : "Away FC",
+    }]);
+
+    const queryClient = renderPage();
+
+    await waitFor(() => expect(competitionMocks.listLivePublicCompetitions).toHaveBeenCalled());
+    const eventsQuery = queryClient.getQueryCache().getAll().find((query) =>
+      query.queryKey[0] === "events" && query.queryKey[1] === "supabase",
+    );
+    expect(eventsQuery?.state.error).toBeNull();
+    expect(await screen.findByText("Home FC vs Away FC")).toBeInTheDocument();
+    expect(screen.getByText(/Public Cup/)).toBeInTheDocument();
+    expect(competitionMocks.listLiveCompetitionMatches).toHaveBeenCalledWith(expect.anything(), "competition-public");
+    expect(queriedTables).not.toContain("teams");
   });
 });

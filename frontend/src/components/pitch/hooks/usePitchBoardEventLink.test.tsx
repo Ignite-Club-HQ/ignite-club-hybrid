@@ -10,8 +10,10 @@ const { from, rpc, loadPitchNotifyFlags, enabledRoleListFromFlags, tableData } =
   enabledRoleListFromFlags: vi.fn(),
   tableData: new Map<string, unknown>(),
 }));
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from, rpc } }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "icp" : "supabase" }));
 vi.mock("@/components/pitch/pitchBoardNotifyFlags", () => ({
   loadPitchNotifyFlags,
   enabledRoleListFromFlags,
@@ -67,7 +69,7 @@ describe("usePitchBoardEventLink", () => {
     expect(result.current.linkedEventId).toBe("event-new");
   });
 
-  it("deduplicates role and duty recipients and never emails the linking user", async () => {
+  it.runIf(!icpMode)("deduplicates role and duty recipients and never emails the linking user", async () => {
     tableData.set("user_roles", [
       { user_id: "coach-1" },
       { user_id: "shared-user" },
@@ -107,7 +109,7 @@ describe("usePitchBoardEventLink", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("uses only match-specific referee and Subs Manager duties for event-group boards", async () => {
+  it.runIf(!icpMode)("uses only match-specific referee and Subs Manager duties for event-group boards", async () => {
     tableData.set("event_group_duties", [
       { assigned_to: "referee-1" },
       { assigned_to: "subs-1" },
@@ -175,5 +177,14 @@ describe("usePitchBoardEventLink", () => {
     );
 
     await waitFor(() => expect(result.current.linkedEventId).toBeNull());
+  });
+
+  it.runIf(icpMode)("does not query Supabase or send unsupported pitch-board notifications", async () => {
+    const { result } = renderHook(() => usePitchBoardEventLink(args()), { wrapper: createWrapper() });
+    await act(async () => result.current.handleLinkEvent("event-1"));
+    expect(from).not.toHaveBeenCalledWith("user_roles");
+    expect(from).not.toHaveBeenCalledWith("duties");
+    expect(from).not.toHaveBeenCalledWith("event_group_duties");
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

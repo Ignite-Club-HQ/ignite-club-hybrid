@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend } from "@/live/featureRouter";
-import { myLiveRoleGrants } from "@/live/features/club";
 
 type EventCancellationRecipientScope = {
   open: boolean;
@@ -37,6 +35,15 @@ export function useEventCancellationRecipients({
       const isCurrent = () => requestIdRef.current === reqId;
 
       try {
+        if (isFeatureRoutedToIcp("membership")) {
+          // ICP cannot enumerate every push recipient, so never present the
+          // caller's own role grants as a complete recipient list.
+          if (!isCurrent()) return;
+          setMemberCount(null);
+          setRecipientLookupFailed(true);
+          return;
+        }
+
         if (miniLeagueId) {
           const { data: league, error: leagueError } = await supabase
             .from("mini_leagues")
@@ -73,16 +80,6 @@ export function useEventCancellationRecipients({
           const allUserIds = [...new Set([...parentIds, ...adminIds])];
           if (!isCurrent()) return;
           setMemberCount(allUserIds.length);
-        } else if (isFeatureRoutedToIcp("membership")) {
-          // Internet Identity users: the canister only exposes the caller's
-          // own role grants, so the recipient count is scoped to the caller.
-          const grants = await withFeatureBackend("membership", {
-            supabase: async () => [],
-            icp: (ctx) => myLiveRoleGrants(ctx),
-          });
-          const matches = grants.filter((g) => (teamId ? g.team === teamId : g.club === clubId));
-          if (!isCurrent()) return;
-          setMemberCount(matches.length);
         } else {
           let memberQuery = supabase.from("user_roles").select("user_id");
           if (teamId) {

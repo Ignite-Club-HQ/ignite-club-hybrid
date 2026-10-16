@@ -9,9 +9,11 @@ const { savePitchState, from, update, eq, then, dbResult } = vi.hoisted(() => {
   const from = vi.fn();
   return { savePitchState: vi.fn(), from, update, eq, then, dbResult };
 });
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 
 vi.mock("../pitchStateUtils", () => ({ savePitchState }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from } }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "icp" : "supabase" }));
 
 import { usePitchBoardPersistence } from "./usePitchBoardPersistence";
 
@@ -103,7 +105,7 @@ describe("usePitchBoardPersistence", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("mirrors an active autosub plan to the active game for unlinked boards", async () => {
+  it.runIf(!icpMode)("mirrors an active autosub plan to the active game for unlinked boards", async () => {
     const plan = [{
       half: 1,
       time: 300,
@@ -133,7 +135,7 @@ describe("usePitchBoardPersistence", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("does not repeat a backend write when rerendered with an equivalent plan", async () => {
+  it.runIf(!icpMode)("does not repeat a backend write when rerendered with an equivalent plan", async () => {
     const plan = [{ half: 1, time: 300, playerOut: { id: "p1" }, playerIn: { id: "p2" }, executed: false }];
     const { rerender } = renderHook(
       ({ input }) => usePitchBoardPersistence(input),
@@ -145,5 +147,12 @@ describe("usePitchBoardPersistence", () => {
     rerender({ input: props({ autoSubActive: true, autoSubPlan: [...plan] }) });
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(from).toHaveBeenCalledTimes(1);
+  });
+
+  it.runIf(icpMode)("keeps local pitch persistence but skips unsupported active-game writes", async () => {
+    renderHook(() => usePitchBoardPersistence(props({ autoSubActive: true, autoSubPlan: [{ half: 1 }] })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(savePitchState).toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
   });
 });

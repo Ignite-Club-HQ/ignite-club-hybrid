@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { onlineManager } from "@tanstack/react-query";
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 
 let sessionResponse: any = {
   data: { session: { expires_at: Math.floor(Date.now() / 1000) + 3600 } },
@@ -22,6 +23,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     auth: { getSession: async () => sessionResponse },
   },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "icp" : "supabase" }));
 
 import { isTransientAuthFailure } from "@/lib/authRecoveryClassification";
 import {
@@ -64,7 +66,7 @@ describe("coverage-loss resilience for club theme", () => {
     onlineManager.setOnline(true);
   });
 
-  it("rejects an empty club list when the session is missing or expired", async () => {
+  it.runIf(!icpMode)("rejects an empty club list when the session is missing or expired", async () => {
     await guardClubListResult("club-themes:u1", [{ clubId: "a" }]);
 
     sessionResponse = { data: { session: null }, error: null };
@@ -75,6 +77,12 @@ describe("coverage-loss resilience for club theme", () => {
       error: null,
     };
     await expect(guardClubListResult("club-themes:u1", [])).rejects.toBeInstanceOf(TransientEmptyClubListError);
+  });
+
+  it.runIf(icpMode)("accepts empty membership without checking a Supabase session", async () => {
+    await guardClubListResult("club-themes:u1", [{ clubId: "a" }]);
+    sessionResponse = { data: { session: null }, error: null };
+    await expect(guardClubListResult("club-themes:u1", [])).resolves.toEqual([]);
   });
 
   it("accepts a genuine empty list under a healthy online session", async () => {

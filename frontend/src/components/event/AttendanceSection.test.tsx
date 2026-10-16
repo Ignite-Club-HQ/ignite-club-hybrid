@@ -4,15 +4,31 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   from: vi.fn(),
   invoke: vi.fn(),
   toast: vi.fn(),
   refetches: vi.fn(),
   tableResults: new Map<string, any>(),
+  getLiveReminderLog: vi.fn(),
+  listLiveEventViews: vi.fn(),
+  isLiveReachable: vi.fn(),
+  recordLiveReminderSent: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: mocks.from, functions: { invoke: mocks.invoke } },
+}));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => mocks.mode === "icp" }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, handlers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.mode === "icp" ? handlers.icp({}) : handlers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({
+  getLiveReminderLog: mocks.getLiveReminderLog,
+  listLiveEventViews: mocks.listLiveEventViews,
+  isLiveReachable: mocks.isLiveReachable,
+  recordLiveReminderSent: mocks.recordLiveReminderSent,
 }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
 vi.mock("@/components/EventViewMemberRow", () => ({
@@ -90,6 +106,10 @@ describe("AttendanceSection permissions and reminder behaviour", () => {
     mocks.tableResults.set("event_reminder_log", { data: null, error: null });
     mocks.from.mockImplementation(queryFor);
     mocks.invoke.mockResolvedValue({ data: { pushSent: 2, emailsSent: 0 }, error: null });
+    mocks.getLiveReminderLog.mockResolvedValue({ sent_at_ms: [], recipients_count: 0 });
+    mocks.listLiveEventViews.mockResolvedValue([]);
+    mocks.isLiveReachable.mockResolvedValue(false);
+    mocks.recordLiveReminderSent.mockResolvedValue(undefined);
   });
 
   it("does not query sensitive view or reminder data for non-admins", async () => {
@@ -151,7 +171,7 @@ describe("AttendanceSection permissions and reminder behaviour", () => {
     }));
   });
 
-  it("scopes the viewed count to addressable event members", async () => {
+  it.runIf(mocks.mode === "supabase")("scopes the viewed count to addressable event members", async () => {
     mocks.tableResults.set("event_views", { data: [
       { user_id: "member-1", viewed_at: "2026-07-20T10:00:00Z" },
       { user_id: "outsider", viewed_at: "2026-07-20T10:01:00Z" },
@@ -169,7 +189,7 @@ describe("AttendanceSection permissions and reminder behaviour", () => {
     expect(screen.getByText("Not opened (1)")).toBeInTheDocument();
   });
 
-  it("sends a per-member reminder only to the selected non-viewer", async () => {
+  it.runIf(mocks.mode === "supabase")("sends a per-member reminder only to the selected non-viewer", async () => {
     renderSection({
       addressableMembers: [{ id: "member-1", display_name: "Alex" }],
       notRespondedUserIds: ["member-1"],
@@ -181,7 +201,7 @@ describe("AttendanceSection permissions and reminder behaviour", () => {
     }));
   });
 
-  it("disables bulk reminders during the server-recorded 24-hour cooldown", async () => {
+  it.runIf(mocks.mode === "supabase")("disables bulk reminders during the server-recorded 24-hour cooldown", async () => {
     mocks.tableResults.set("event_reminder_log", {
       data: { sent_at: new Date(Date.now() - 60_000).toISOString(), recipients_count: 2 }, error: null,
     });
@@ -190,6 +210,32 @@ describe("AttendanceSection permissions and reminder behaviour", () => {
     const button = await screen.findByRole("button", { name: /Reminded .* ago/i });
     expect(button).toBeDisabled();
     expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it.runIf(mocks.mode === "icp")("loads event views and reminder cooldown through events_domain", async () => {
+    mocks.getLiveReminderLog.mockResolvedValue({
+      sent_at_ms: [String(Date.now() - 60_000)],
+      recipients_count: 2,
+    });
+    mocks.listLiveEventViews.mockResolvedValue([{
+      viewer: { toText: () => "member-1" },
+      viewed_at_ms: BigInt(Date.now()),
+    }]);
+    renderSection({
+      addressableMembers: [
+        { id: "member-1", display_name: "Alex" },
+        { id: "member-2", display_name: "Blair" },
+      ],
+    });
+
+    expect(await screen.findByRole("button", { name: /Reminded .* ago/i })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /1 viewed/i })).toBeInTheDocument();
+    expect(screen.getByText("Viewed (1)")).toBeInTheDocument();
+    expect(screen.getByText("Not opened (1)")).toBeInTheDocument();
+    expect(mocks.from).not.toHaveBeenCalledWith("event_views");
+    expect(mocks.from).not.toHaveBeenCalledWith("event_reminder_log");
+    expect(mocks.getLiveReminderLog).toHaveBeenCalledWith({}, "event-1");
+    expect(mocks.listLiveEventViews).toHaveBeenCalledWith({}, "event-1");
   });
 
   it("surfaces an edge-function failure and restores the reminder action", async () => {

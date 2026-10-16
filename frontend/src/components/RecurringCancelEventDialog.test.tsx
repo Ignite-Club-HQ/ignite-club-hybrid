@@ -14,6 +14,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { RecurringCancelEventDialog } from "./RecurringCancelEventDialog";
 
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
+
 // ---- supabase mock ----------------------------------------------------
 
 type TableResp = { data: unknown; error: { message: string } | null };
@@ -42,6 +44,9 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/hooks/useNativeKeyboardBottomInset", () => ({
   useNativeKeyboardBottomInset: () => 0,
 }));
+vi.mock("@/live/loadBackendRouting", () => ({
+  isFeatureRoutedToIcp: () => process.env.IGNITE_TEST_BACKEND_MODE === "icp",
+}));
 
 // ---- helpers ----------------------------------------------------------
 
@@ -65,7 +70,7 @@ beforeEach(() => {
 
 // ---- tests ------------------------------------------------------------
 
-describe("RecurringCancelEventDialog — fail-closed on recipient lookup failure", () => {
+describe.runIf(!icpMode)("RecurringCancelEventDialog — fail-closed on recipient lookup failure", () => {
   it("counts members and enables push when recipient lookup succeeds", async () => {
     setUserRoles([{ user_id: "u1" }, { user_id: "u2" }]);
     render(
@@ -188,5 +193,24 @@ describe("RecurringCancelEventDialog — fail-closed on recipient lookup failure
 
     fireEvent.click(screen.getByRole("button", { name: /Cancel This/i }));
     expect(onSingleAction).toHaveBeenLastCalledWith(undefined, true);
+  });
+});
+
+describe.runIf(icpMode)("RecurringCancelEventDialog ICP boundary", () => {
+  it("keeps series cancellation available but disables unverifiable push delivery", async () => {
+    const onSingleAction = vi.fn();
+    const onSeriesAction = vi.fn();
+    render(
+      <RecurringCancelEventDialog
+        {...baseProps}
+        onSingleAction={onSingleAction}
+        onSeriesAction={onSeriesAction}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /Cancel Entire Series/i }));
+    expect(onSeriesAction).toHaveBeenCalledWith(undefined, false);
+    expect(onSingleAction).not.toHaveBeenCalled();
   });
 });

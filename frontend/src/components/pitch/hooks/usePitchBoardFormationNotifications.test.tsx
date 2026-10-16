@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
 }));
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -17,6 +18,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     rpc: mocks.rpc,
   },
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "icp" : "supabase" }));
 
 function queryReturning(data: unknown[]) {
   const query: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -93,7 +95,7 @@ describe("usePitchBoardFormationNotifications", () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it("notifies current user, team staff and event Subs Managers exactly once", async () => {
+  it.runIf(!icpMode)("notifies current user, team staff and event Subs Managers exactly once", async () => {
     const staff = userRolesQuery([
       { user_id: "coach-1" },
       { user_id: "current-user" },
@@ -131,7 +133,7 @@ describe("usePitchBoardFormationNotifications", () => {
     });
   });
 
-  it("uses only match duties for a mini-league event group", async () => {
+  it.runIf(!icpMode)("uses only match duties for a mini-league event group", async () => {
     const duties = queryReturning([
       { assigned_to: "referee" },
       { assigned_to: "subs-manager" },
@@ -162,7 +164,7 @@ describe("usePitchBoardFormationNotifications", () => {
     });
   });
 
-  it("contains RPC failures instead of breaking the formation workflow", async () => {
+  it.runIf(!icpMode)("contains RPC failures instead of breaking the formation workflow", async () => {
     const error = { message: "function unavailable" };
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.from.mockReturnValue(userRolesQuery([]));
@@ -181,5 +183,17 @@ describe("usePitchBoardFormationNotifications", () => {
       JSON.stringify(error),
     );
     consoleError.mockRestore();
+  });
+
+  it.runIf(icpMode)("does not query Supabase or send unsupported formation notifications", async () => {
+    const { result } = renderHook(() => usePitchBoardFormationNotifications({
+      userId: "current-user",
+      teamId: "team-1",
+      readOnly: false,
+      isGameFinished: () => false,
+    }));
+    await act(async () => result.current("formation", "2-3-1"));
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });

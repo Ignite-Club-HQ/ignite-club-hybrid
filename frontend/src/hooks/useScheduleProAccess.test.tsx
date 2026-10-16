@@ -15,6 +15,8 @@ import React from "react";
 
 // ---- Mocks --------------------------------------------------------------
 
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
+const { getLiveTeam, from } = vi.hoisted(() => ({ getLiveTeam: vi.fn(), from: vi.fn() }));
 const clubProResponses: Record<string, { hasPro: boolean; isLoading: boolean }> = {};
 const anyClubProResponse = { hasAnyClubPro: false, isLoading: false };
 
@@ -60,10 +62,14 @@ vi.mock("@/integrations/supabase/client", () => {
     };
     return chain;
   };
-  return {
-    supabase: { from: (_t: string) => makeChain() },
-  };
+  from.mockImplementation(() => makeChain());
+  return { supabase: { from } };
 });
+vi.mock("@/live/features/club", () => ({ getLiveTeam }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, handlers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    icpMode ? handlers.icp({}) : handlers.supabase(),
+}));
 
 // ---- Import after mocks -------------------------------------------------
 import { useScheduleProAccess } from "./useScheduleProAccess";
@@ -81,6 +87,7 @@ beforeEach(() => {
   Object.keys(teamLookup.data).forEach((k) => delete teamLookup.data[k]);
   Object.keys(teamLookup.error).forEach((k) => delete teamLookup.error[k]);
   teamLookup.delay = 0;
+  getLiveTeam.mockReset();
   anyClubProResponse.hasAnyClubPro = false;
   anyClubProResponse.isLoading = false;
 });
@@ -118,7 +125,7 @@ describe("useScheduleProAccess", () => {
     expect(result.current.hasAccess).toBe(false);
   });
 
-  it("4. team-only target resolves to owning Pro club and grants access", async () => {
+  it.runIf(!icpMode)("4. team-only target resolves to owning Pro club and grants access", async () => {
     teamLookup.data["team-1"] = { club_id: "club-Pro" };
     clubProResponses["club-Pro"] = { hasPro: true, isLoading: false };
     const { result } = renderHook(
@@ -129,7 +136,7 @@ describe("useScheduleProAccess", () => {
     expect(result.current.isLoading).toBe(false);
   });
 
-  it("5. team-only target resolving to a free club is denied (no any-club fallback)", async () => {
+  it.runIf(!icpMode)("5. team-only target resolving to a free club is denied (no any-club fallback)", async () => {
     teamLookup.data["team-free"] = { club_id: "club-free" };
     clubProResponses["club-free"] = { hasPro: false, isLoading: false };
     anyClubProResponse.hasAnyClubPro = true; // Pro at unrelated club
@@ -141,7 +148,7 @@ describe("useScheduleProAccess", () => {
     expect(result.current.hasAccess).toBe(false);
   });
 
-  it("6. while team ownership is loading, access is false and loading is true (never leaks any-club Pro)", async () => {
+  it.runIf(!icpMode)("6. while team ownership is loading, access is false and loading is true (never leaks any-club Pro)", async () => {
     teamLookup.delay = 50;
     teamLookup.data["team-slow"] = { club_id: "club-Pro" };
     clubProResponses["club-Pro"] = { hasPro: true, isLoading: false };
@@ -155,7 +162,7 @@ describe("useScheduleProAccess", () => {
     await waitFor(() => expect(result.current.hasAccess).toBe(true));
   });
 
-  it("7. team resolving to no club fails closed", async () => {
+  it.runIf(!icpMode)("7. team resolving to no club fails closed", async () => {
     teamLookup.data["team-orphan"] = { club_id: null };
     anyClubProResponse.hasAnyClubPro = true;
     const { result } = renderHook(
@@ -166,7 +173,7 @@ describe("useScheduleProAccess", () => {
     expect(result.current).toEqual({ hasAccess: false, isLoading: false });
   });
 
-  it("8. team lookup error fails closed (no any-club fallback)", async () => {
+  it.runIf(!icpMode)("8. team lookup error fails closed (no any-club fallback)", async () => {
     teamLookup.error["team-err"] = { message: "network" };
     anyClubProResponse.hasAnyClubPro = true;
     const { result } = renderHook(
@@ -226,7 +233,7 @@ describe("useScheduleProAccess", () => {
     expect(result.current).toEqual({ hasAccess: false, isLoading: true });
   });
 
-  it("13. UI does not briefly render enabled scheduling controls during team lookup", async () => {
+  it.runIf(!icpMode)("13. UI does not briefly render enabled scheduling controls during team lookup", async () => {
     teamLookup.delay = 30;
     teamLookup.data["team-flash"] = { club_id: "club-Pro" };
     clubProResponses["club-Pro"] = { hasPro: true, isLoading: false };
@@ -246,5 +253,28 @@ describe("useScheduleProAccess", () => {
       if (s.isLoading) expect(s.hasAccess).toBe(false);
     }
     await waitFor(() => expect(result.current.hasAccess).toBe(true));
+  });
+
+  it.runIf(icpMode)("resolves a team's owning Pro club through the club canister", async () => {
+    getLiveTeam.mockResolvedValue([{ club_id: "club-icp" }]);
+    clubProResponses["club-icp"] = { hasPro: true, isLoading: false };
+    const { result } = renderHook(
+      () => useScheduleProAccess({ chat_type: "team", team_id: "team-icp" }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(result.current).toEqual({ hasAccess: true, isLoading: false }));
+    expect(getLiveTeam).toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(icpMode)("fails closed when the club canister cannot resolve a team", async () => {
+    getLiveTeam.mockResolvedValue([]);
+    anyClubProResponse.hasAnyClubPro = true;
+    const { result } = renderHook(
+      () => useScheduleProAccess({ chat_type: "team", team_id: "missing-team" }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(result.current).toEqual({ hasAccess: false, isLoading: false }));
+    expect(from).not.toHaveBeenCalled();
   });
 });

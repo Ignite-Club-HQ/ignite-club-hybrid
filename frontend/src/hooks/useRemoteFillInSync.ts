@@ -4,6 +4,7 @@ import type { Player } from "@/components/pitch/types";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const ICP_POLL_INTERVAL_MS = 5_000;
 
 const isFreshActiveGameRow = (row: { updated_at?: string | null; timer_state?: unknown } | null | undefined) => {
   if (!row?.updated_at) return false;
@@ -49,13 +50,7 @@ export function useRemoteFillInSync(teamId: string | null | undefined, enabled: 
       setRemoteFillIns([]);
       return;
     }
-    // NEEDS-CANISTER: live pitch-board fill-in sync has no canister
-    // counterpart (active_games is a Supabase-only realtime feature). No-op
-    // for II users rather than firing Supabase.
-    if (resolveAuthBackend() === "icp") {
-      setRemoteFillIns([]);
-      return;
-    }
+    const isIcp = resolveAuthBackend() === "icp";
 
     let cancelled = false;
 
@@ -76,6 +71,43 @@ export function useRemoteFillInSync(teamId: string | null | undefined, enabled: 
     };
 
     const fetchCurrent = async () => {
+      if (isIcp) {
+        try {
+          const [{ withFeatureBackend }, { getLiveActiveGame }] = await Promise.all([
+            import("@/live/featureRouter"),
+            import("@/live/features/events"),
+          ]);
+          const row = await withFeatureBackend("events", {
+            supabase: async () => null,
+            icp: async (ctx) => {
+              const [activeGame] = await getLiveActiveGame(ctx, teamId);
+              if (!activeGame) return null;
+              const parseJson = (value: unknown) => {
+                if (typeof value !== "string") return {};
+                try {
+                  return JSON.parse(value);
+                } catch {
+                  return {};
+                }
+              };
+              return {
+                pitch_state: parseJson(activeGame.pitch_state_json),
+                timer_state: parseJson(activeGame.timer_state_json),
+                updated_at: new Date(Number(activeGame.updated_at_ms)).toISOString(),
+                is_active: activeGame.is_active,
+              };
+            },
+          });
+          applyRow(row);
+        } catch (error) {
+          if (!cancelled) {
+            console.warn("[RemoteFillInSync] ICP fetch error", error);
+            setRemoteFillIns([]);
+          }
+        }
+        return;
+      }
+
       const { data, error } = await supabase
         .from("active_games")
         .select("pitch_state, timer_state, updated_at")
@@ -92,26 +124,30 @@ export function useRemoteFillInSync(teamId: string | null | undefined, enabled: 
     };
 
     fetchCurrent();
+    const pollTimer = isIcp ? setInterval(fetchCurrent, ICP_POLL_INTERVAL_MS) : null;
 
-    const channel = supabase
-      .channel(`soccer-fillins-${teamId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "active_games", filter: `team_id=eq.${teamId}` },
-        (payload) => {
-          const row = (payload.new ?? payload.old) as { pitch_state?: unknown; timer_state?: unknown; updated_at?: string | null; is_active?: boolean } | null;
-          if (row && row.is_active !== false) {
-            applyRow(row as { pitch_state: unknown; timer_state?: unknown; updated_at?: string | null });
-          } else {
-            setRemoteFillIns([]);
-          }
-        }
-      )
-      .subscribe();
+    const channel = isIcp
+      ? null
+      : supabase
+          .channel(`soccer-fillins-${teamId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "active_games", filter: `team_id=eq.${teamId}` },
+            (payload) => {
+              const row = (payload.new ?? payload.old) as { pitch_state?: unknown; timer_state?: unknown; updated_at?: string | null; is_active?: boolean } | null;
+              if (row && row.is_active !== false) {
+                applyRow(row as { pitch_state: unknown; timer_state?: unknown; updated_at?: string | null });
+              } else {
+                setRemoteFillIns([]);
+              }
+            }
+          )
+          .subscribe();
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
+      if (pollTimer) clearInterval(pollTimer);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [teamId, enabled]);
 
