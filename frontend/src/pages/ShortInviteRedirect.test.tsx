@@ -4,12 +4,17 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import React from "react";
 
 const rpcMock = vi.fn();
+const resolveShortCodeMock = vi.fn();
 const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: (...args: unknown[]) => rpcMock(...args) },
 }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => (icpMode ? "icp" : "supabase") }));
 vi.mock("@/assets/ignite-icon.png", () => ({ default: "icon.png" }));
+vi.mock("@/live/features/club", () => ({
+  resolveLiveInviteShortCode: (...args: unknown[]) => resolveShortCodeMock(...args),
+}));
+vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: () => ({ name: "test-target" }) }));
 
 import ShortInviteRedirect from "./ShortInviteRedirect";
 
@@ -31,6 +36,7 @@ function renderAt(path: string) {
 
 beforeEach(() => {
   rpcMock.mockReset();
+  resolveShortCodeMock.mockReset();
 });
 
 describe.runIf(!icpMode)("ShortInviteRedirect Supabase RPC", () => {
@@ -76,10 +82,27 @@ describe.runIf(!icpMode)("ShortInviteRedirect Supabase RPC", () => {
 });
 
 describe.runIf(icpMode)("ShortInviteRedirect ICP boundary", () => {
-  it("shows the unavailable state without resolving a Supabase short code", async () => {
+  it("rejects an unknown on-chain code without resolving a Supabase short code", async () => {
+    resolveShortCodeMock.mockRejectedValue(new Error("Invite not found"));
     renderAt("/i/abc");
-    expect(await screen.findByText(/short invite links are unavailable in ICP/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("auth")).toBeInTheDocument();
     expect(rpcMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId("joined")).not.toBeInTheDocument();
+  });
+  it("resolves an on-chain code anonymously and opens the invite without Supabase", async () => {
+    resolveShortCodeMock.mockResolvedValue("invite-123");
+    renderAt("/i/abc");
+    expect(await screen.findByTestId("joined")).toBeInTheDocument();
+    expect(resolveShortCodeMock).toHaveBeenCalledWith({
+      identity: expect.objectContaining({ getPrincipal: expect.any(Function) }),
+      target: { name: "test-target" },
+    }, "abc");
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+  it("returns to sign-in instead of spinning forever when no invite is returned", async () => {
+    resolveShortCodeMock.mockResolvedValue(null);
+    renderAt("/i/missing");
+    expect(await screen.findByTestId("auth")).toBeInTheDocument();
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 });
