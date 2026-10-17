@@ -1,4 +1,5 @@
 ## Codespaces ICP coverage — first tranche
+- [ ] Batch 10: close update-reminder audience authorization gaps on-canister, add regression coverage and verify contracts; platform/version parity follows where device metadata permits.
 - [x] Batch 9: admin gates and failed-read feedback repaired; AI rollout, vault metadata backup CRUD/downloads, reminder queue counts and guide downloads tested (32 tests pass in each mode).
 - [x] Competition welcome settings on-chain; photo reminder Run now enabled and behavior-tested; canister reachability tests verified.
 - [ ] Remaining admin tools: comprehensive backup scope (ICP currently backs up vault metadata only), update-reminder platform/version filters, minimum-version/test-send parity and independent canister manager/recipient verification. Photo reminder automatic cadence and competition email delivery still need completion.
