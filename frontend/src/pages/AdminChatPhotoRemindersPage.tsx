@@ -241,16 +241,11 @@ export default function AdminChatPhotoRemindersPage() {
                   <Save className="h-4 w-4 mr-2" />
                   {saving ? "Saving…" : "Save settings"}
                 </Button>
-                <Button variant="outline" onClick={handleRunNow} disabled={running || isIcp}>
+                <Button variant="outline" onClick={handleRunNow} disabled={running}>
                   <Play className="h-4 w-4 mr-2" />
                   {running ? "Running…" : "Run now"}
                 </Button>
               </div>
-              {isIcp && (
-                <p className="text-xs text-muted-foreground">
-                  "Run now" triggers the Supabase edge function and is unavailable in ICP mode.
-                </p>
-              )}
             </>
           )}
         </CardContent>

@@ -9,15 +9,16 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Preview runs frontend/ via lovable.toml + scripts/*-preview.mjs, mapping SUPABASE_URL/SUPABASE_PUBLISHABLE_KEY onto IGNITE_LIVE_SUPABASE_URL/ANON_KEY; the root package.json is a dependency-free shim (publishing runs a root `bun install` before building) — never add dependencies to it.
+- Preview runs frontend/ via lovable.toml and scripts/*-preview.mjs; maps SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Root stays dependency-free.
 - Install frontend via scripts/ensure-frontend-deps.mjs only; bare npm ci wipes the running preview's dependencies.
-- build-preview.mjs must emit dist/index.html (copy of live-index.html) — static hosting serves index.html for / and SPA fallback; without it every URL is "Not found".
+- build-preview.mjs must copy live-index.html to dist/index.html for static hosting and SPA fallback.
 - Keep retired URLs alive as redirects in App.tsx (ParamRedirect) instead of letting them hit the 404 page.
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
 - notification_queue verifies schedule managers/recipients; refresh polls use caller-scoped signals. Why: browsers cannot authorize writes.
 - Schedule updates: omitted options keep; empty image/zero end-date clear. Monthly recurrence clamps in UTC. Why: retain Candid compatibility.
 - Account erasure revokes club roles first; gallery publication copies decrypted photos under club encryption. Why: prevent residual access and broken shared photos.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
+- Competition welcome settings live on competition_domain behind refreshed manager access; club-role mirrors fail closed. Why: no Supabase fallback or stale access.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: use StatusBarBackdrop after SystemBars icon styling (which resets the background); honour its remaining CSS top inset without a forced floor (native padding already reserves it). Both Codemagic Android workflows run scripts/configure-android-status-bar.py; preserve keyboard handling.
 - Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.

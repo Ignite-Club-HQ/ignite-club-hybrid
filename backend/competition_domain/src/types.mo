@@ -142,6 +142,7 @@ module {
     seasons : [Season];
     matches : [Match];
     chatSettings : [ChatSettings];
+    competitionWelcomeSettings : [{ competition_id : Text; enabled : Bool; subject : Text; message : Text }];
     competitionInvites : [CompetitionInvite];
     competitionJoinLinks : [CompetitionJoinLink];
     competitionOfficialEmailInvites : [CompetitionOfficialEmailInvite];

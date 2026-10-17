@@ -163,6 +163,14 @@ export const idlFactory = ({ IDL }) => {
   });
   const State = IDL.Record({
     'seasons' : IDL.Vec(Season),
+    'competitionWelcomeSettings' : IDL.Vec(
+      IDL.Record({
+        'subject' : IDL.Text,
+        'enabled' : IDL.Bool,
+        'message' : IDL.Text,
+        'competition_id' : IDL.Text,
+      })
+    ),
     'schema' : IDL.Nat32,
     'eoiSubmissions' : IDL.Vec(EoiSubmission),
     'entries' : IDL.Vec(TeamEntry),
@@ -176,6 +184,13 @@ export const idlFactory = ({ IDL }) => {
     'competitions' : IDL.Vec(Competition),
     'roles' : IDL.Vec(RoleGrant),
   });
+  const Settings = IDL.Record({
+    'subject' : IDL.Text,
+    'enabled' : IDL.Bool,
+    'message' : IDL.Text,
+    'competition_id' : IDL.Text,
+  });
+  const Result = IDL.Variant({ 'Ok' : Settings, 'Err' : IDL.Text });
   const EoiStats = IDL.Record({
     'conversion_rate' : IDL.Float64,
     'new_players' : IDL.Nat,
@@ -421,6 +436,7 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'get_competition_welcome_email' : IDL.Func([IDL.Text], [Result], []),
     'get_eoi_stats' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : EoiStats, 'Err' : IDL.Text })],
@@ -699,6 +715,11 @@ export const idlFactory = ({ IDL }) => {
     'set_competition_hide_ladder' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_competition_welcome_email' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Text, IDL.Text],
+        [Result],
         [],
       ),
     'set_division_hide_ladder' : IDL.Func(
