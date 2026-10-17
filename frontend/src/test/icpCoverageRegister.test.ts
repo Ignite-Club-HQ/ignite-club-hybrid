@@ -33,7 +33,7 @@ const REGISTER: Record<string, { status: Status; reason?: string }> = {
   "Payment settings": { status: "offchain", reason: "payments stay off-chain" },
   "Administrative video guides": { status: "todo" },
   "Account deletion": { status: "todo" },
-  "Chat vault pinning": { status: "todo" },
+  "Chat vault pinning": { status: "onchain", reason: "ICP saved-pin query enabled; read/save/remove behavior tested in useChatPinnedVault.test.tsx; writes validate club scope on vault_domain" },
   "Chat-image gallery publication": { status: "todo" },
   "Pitch-board event-link notifications": { status: "todo" },
   "Pitch-board formation notifications": { status: "todo" },

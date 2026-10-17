@@ -641,7 +641,29 @@ persistent actor class Main(governorInit : Principal) {
     if (vault_file_id == null and vault_folder_id == null and root_id == null) {
       return #Err("Nothing to pin");
     };
+    switch (pinned_vaults.find(func(p) = p.chat_type == chat_type and p.chat_id == chat_id)) {
+      case (?existing) { if (existing.club != club) return #Err("Cannot change a chat's club scope") };
+      case null {};
+    };
+    switch (vault_file_id) {
+      case (?id) {
+        if (not files.any(func(f) = f.id == id and f.club == club and f.deleted_at_ms == null)) return #Err("File is not in the pinned club");
+      };
+      case null {};
+    };
+    switch (vault_folder_id) {
+      case (?id) {
+        if (not folders.any(func(f) = f.id == id and f.club == club and f.deleted_at_ms == null)) return #Err("Folder is not in the pinned club");
+      };
+      case null {};
+    };
+    if (root_scope == ?"club" and root_id != ?club) return #Err("Root is not in the pinned club");
     if (not (await canWrite(caller, club, null, null))) return #Err("Club role required");
+    // Another writer may have created the pin while permission was checked.
+    switch (pinned_vaults.find(func(p) = p.chat_type == chat_type and p.chat_id == chat_id)) {
+      case (?existing) { if (existing.club != club) return #Err("Cannot change a chat's club scope") };
+      case null {};
+    };
     let pin : Types.PinnedVault = {
       chat_type; chat_id; club; vault_file_id; vault_folder_id; root_scope; root_id;
       enabled; set_by = caller; updated_at_ms = nowMs();
