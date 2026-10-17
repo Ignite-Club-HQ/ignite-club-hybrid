@@ -8,6 +8,8 @@
 - [x] Batch 4: enforce scheduled-message caller ownership and schedule-refresh manager permissions on-canister; cover photo-only writes and frontend broadcasts with focused behavior tests.
 - [x] Batch 5: calendar-month recurrence and explicit attachment/end-date clearing implemented; focused tests pass in both modes and executable Motoko tests pass. Requires notification_queue upgrade; live delivery remains unverified.
 - [ ] Schedule completion: recipient relationship validation and actual broadcast signal; timer delivery/read-back requires deployed canisters and an Internet Identity session.
+- [ ] Requested batch: account deletion, chat vault pinning and chat-photo gallery publication — implement and verify real ICP paths.
+- [ ] Deploy updated canisters and verify signed-in scheduled delivery/read-back — requires deployer access and an Internet Identity session.
 - [ ] Remaining coverage groups and full-suite parity: not completed; exact current failures recorded in docs/ICP_COVERAGE_STEP0_RESULTS.md.
 
 ## Supabase role requests
