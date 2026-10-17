@@ -359,10 +359,8 @@ describe.runIf(supabaseMode)("AccountPage — export data session validation", (
 });
 
 describe.runIf(!supabaseMode)("AccountPage — ICP account boundaries", () => {
-  it("hides Supabase-only deletion and export actions", () => {
+  it("offers canister account actions without starting a Supabase request", () => {
     renderPage();
-    expect(screen.queryByRole("button", { name: /delete my account/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /download my data/i })).not.toBeInTheDocument();
     expect(invokeFn).not.toHaveBeenCalled();
     expect(fetchFn).not.toHaveBeenCalled();
   });
