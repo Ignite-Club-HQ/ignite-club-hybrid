@@ -11,6 +11,7 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Timer "mo:core/Timer";
 import Types "types";
+import ScheduleAccess "scheduleAccess";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -315,6 +316,23 @@ persistent actor class Main(governorInit : Principal) {
     if (users.size() == 0 or users.size() > 500) { return #Err("Invalid recipient count") };
     if (not valid(club) or not valid(kind) or not valid(key_prefix)) { return #Err("Invalid fan-out fields") };
     if (users.any(func(u) = not valid(u))) { return #Err("Invalid recipient") };
+    // Schedule refresh is a staff command, not a browser-authorized action.
+    if (kind == "schedule_refresh") {
+      let cd = switch (clubDomainCanister) {
+        case null { return #Err("club_domain canister not configured") };
+        case (?id) { id };
+      };
+      let clubs = actor (Principal.toText(cd)) : actor {
+        list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)];
+        is_app_admin : shared query (Principal) -> async Bool;
+      };
+      let permitted = try {
+        let roles = await clubs.list_user_club_roles(caller, club);
+        if (ScheduleAccess.canBroadcast(roles, related_id)) { true }
+        else { await clubs.is_app_admin(caller) }
+      } catch (_) { false };
+      if (not permitted) { return #Err("Schedule manager required") };
+    };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
     var created : Nat16 = 0;
     for (user in users.values()) {
@@ -558,7 +576,8 @@ persistent actor class Main(governorInit : Principal) {
     recurrence_until_ms : ?Nat64,
   ) : async Types.ScheduledResult {
     authenticated(caller);
-    if (not valid(id) or not valid(author) or not valid(body)) {
+    if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
+    if (not valid(id) or not valid(author) or (not valid(body) and image_url == null)) {
       return #Err("Invalid scheduled message fields");
     };
     if (scheduled_for_ms == 0) { return #Err("scheduled_for_ms required") };
@@ -590,6 +609,7 @@ persistent actor class Main(governorInit : Principal) {
   // optionally narrowed to a single target id (team/club/group/conversation).
   public query ({ caller }) func list_scheduled(author : Text, target : ?Text) : async Types.ScheduledResults {
     authenticated(caller);
+    if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     if (not valid(author)) { return #Err("Invalid author") };
     var res : [Types.ScheduledMessage] = [];
     for (item in scheduled.values()) {
@@ -612,14 +632,16 @@ persistent actor class Main(governorInit : Principal) {
     recurrence_until_ms : ?Nat64,
   ) : async Types.ScheduledResult {
     authenticated(caller);
+    if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     switch (findScheduledIndex(id)) {
       case null { #Err("Unknown scheduled message") };
       case (?index) {
         let item = scheduled[index];
         if (item.author != author) { return #Err("Author mismatch") };
         if (item.status != #Pending) { return #Err("Only pending messages can be edited") };
-        let newBody = switch (body) { case (?b) { if (not valid(b)) { return #Err("Invalid body") }; b }; case null { item.body } };
         let newImage = switch (image_url) { case (?_) { image_url }; case null { item.image_url } };
+        let newBody = switch (body) { case (?b) { b }; case null { item.body } };
+        if (not valid(newBody) and newImage == null) { return #Err("Invalid body") };
         let newScheduledFor = switch (scheduled_for_ms) { case (?s) { if (s == 0) { return #Err("scheduled_for_ms required") }; s }; case null { item.scheduled_for_ms } };
         let newRecurrence = switch (recurrence) { case (?r) { r }; case null { item.recurrence } };
         let newRecurrenceUntil = switch (recurrence_until_ms) { case (?_) { recurrence_until_ms }; case null { item.recurrence_until_ms } };
@@ -640,6 +662,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func cancel_scheduled(id : Text, author : Text) : async Types.ScheduledResult {
     authenticated(caller);
+    if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     switch (findScheduledIndex(id)) {
       case null { #Err("Unknown scheduled message") };
       case (?index) {
@@ -700,7 +723,7 @@ persistent actor class Main(governorInit : Principal) {
 
 
   // ======================================================================
-  // Scheduled-message delivery. A transient 60-second timer posts every due
+  // Scheduled-message delivery. A transient 5-minute timer posts every due
   // Pending scheduled message to messaging_domain as its author (via
   // deliver_scheduled_message, which trusts only this canister and re-runs
   // all send checks). Recurring messages roll forward to their next slot.

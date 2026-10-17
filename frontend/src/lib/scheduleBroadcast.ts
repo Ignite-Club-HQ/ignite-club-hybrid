@@ -111,11 +111,9 @@ async function sendScheduleBroadcastIcp(
       : await membership.listLiveRoleGrants(ctx, clubId);
     const accountId = (g: { account_id?: string; user?: { toText: () => string } }) =>
       (g.account_id ?? g.user?.toText() ?? "").replace(/^principal:/, "");
-    const opt = (v: unknown): string | null => (Array.isArray(v) ? (v[0] as string) ?? null : (v as string | null));
     const userIds = [
       ...new Set(
-        (grants as unknown as Array<{ account_id?: string; user?: { toText: () => string }; team?: unknown }>)
-          .filter((g) => !teamId || opt(g.team) === teamId)
+        (grants as unknown as Array<{ account_id?: string; user?: { toText: () => string } }>)
           .map(accountId)
           .filter(Boolean),
       ),
