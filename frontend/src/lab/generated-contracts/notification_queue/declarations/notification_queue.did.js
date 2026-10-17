@@ -274,6 +274,19 @@ export const idlFactory = ({ IDL }) => {
         [PushDeliveryHealthResult],
         [],
       ),
+    'get_schedule_refreshes' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Vec(
+            IDL.Record({
+              'key' : IDL.Text,
+              'club' : IDL.Text,
+              'team' : IDL.Opt(IDL.Text),
+            })
+          ),
+        ],
+        ['query'],
+      ),
     'grant_worker' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

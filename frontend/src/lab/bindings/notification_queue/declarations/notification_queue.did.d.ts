@@ -91,6 +91,10 @@ export interface Main {
   'get_preferences' : ActorMethod<[string], Preferences>,
   'get_push_alert_settings' : ActorMethod<[], PushAlertSettings>,
   'get_push_delivery_health' : ActorMethod<[bigint], PushDeliveryHealthResult>,
+  'get_schedule_refreshes' : ActorMethod<
+    [Array<string>],
+    Array<{ 'key' : string, 'club' : string, 'team' : [] | [string] }>
+  >,
   'grant_worker' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
