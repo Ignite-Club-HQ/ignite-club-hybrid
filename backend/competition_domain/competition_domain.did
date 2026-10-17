@@ -12,6 +12,14 @@ type State =
    competitionInvites: vec CompetitionInvite;
    competitionJoinLinks: vec CompetitionJoinLink;
    competitionOfficialEmailInvites: vec CompetitionOfficialEmailInvite;
+   competitionWelcomeSettings:
+    vec
+     record {
+       competition_id: text;
+       enabled: bool;
+       message: text;
+       subject: text;
+     };
    competitions: vec Competition;
    entries: vec TeamEntry;
    eoiSubmissions: vec EoiSubmission;

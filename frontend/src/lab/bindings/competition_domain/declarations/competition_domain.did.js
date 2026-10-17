@@ -163,6 +163,14 @@ export const idlFactory = ({ IDL }) => {
   });
   const State = IDL.Record({
     'seasons' : IDL.Vec(Season),
+    'competitionWelcomeSettings' : IDL.Vec(
+      IDL.Record({
+        'subject' : IDL.Text,
+        'enabled' : IDL.Bool,
+        'message' : IDL.Text,
+        'competition_id' : IDL.Text,
+      })
+    ),
     'schema' : IDL.Nat32,
     'eoiSubmissions' : IDL.Vec(EoiSubmission),
     'entries' : IDL.Vec(TeamEntry),

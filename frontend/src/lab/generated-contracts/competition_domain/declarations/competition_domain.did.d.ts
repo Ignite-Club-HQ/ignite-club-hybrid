@@ -756,6 +756,14 @@ export interface Settings {
 }
 export interface State {
   'seasons' : Array<Season>,
+  'competitionWelcomeSettings' : Array<
+    {
+      'subject' : string,
+      'enabled' : boolean,
+      'message' : string,
+      'competition_id' : string,
+    }
+  >,
   'schema' : number,
   'eoiSubmissions' : Array<EoiSubmission>,
   'entries' : Array<TeamEntry>,

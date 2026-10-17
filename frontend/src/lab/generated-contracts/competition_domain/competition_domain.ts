@@ -935,6 +935,12 @@ export interface CompetitionJoinLink {
 }
 export interface State {
     seasons: Array<Season>;
+    competitionWelcomeSettings: Array<{
+        subject: string;
+        enabled: boolean;
+        message: string;
+        competition_id: string;
+    }>;
     schema: number;
     eoiSubmissions: Array<EoiSubmission>;
     entries: Array<TeamEntry>;
@@ -2314,6 +2320,12 @@ function from_candid_record_n31(value: {
 }
 function from_candid_record_n36(value: {
     seasons: Array<_Season>;
+    competitionWelcomeSettings: Array<{
+        subject: string;
+        enabled: boolean;
+        message: string;
+        competition_id: string;
+    }>;
     schema: number;
     eoiSubmissions: Array<_EoiSubmission>;
     entries: Array<_TeamEntry>;
@@ -2328,6 +2340,12 @@ function from_candid_record_n36(value: {
     roles: Array<_RoleGrant>;
 }): {
     seasons: Array<Season>;
+    competitionWelcomeSettings: Array<{
+        subject: string;
+        enabled: boolean;
+        message: string;
+        competition_id: string;
+    }>;
     schema: number;
     eoiSubmissions: Array<EoiSubmission>;
     entries: Array<TeamEntry>;
@@ -2343,6 +2361,7 @@ function from_candid_record_n36(value: {
 } {
     return {
         seasons: value.seasons,
+        competitionWelcomeSettings: value.competitionWelcomeSettings,
         schema: value.schema,
         eoiSubmissions: from_candid_vec_n37(value.eoiSubmissions),
         entries: from_candid_vec_n38(value.entries),
