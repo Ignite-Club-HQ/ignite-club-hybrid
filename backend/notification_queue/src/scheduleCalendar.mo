@@ -41,7 +41,7 @@ module {
       case (#None) { return null };
       case (#Daily or #Weekly) {
         let step : Nat64 = if (recurrence == #Daily) { 86_400_000 } else { 604_800_000 };
-        let count = if (now >= slot) { (now - slot) / step + 1 } else { 1 };
+        let count : Nat64 = if (now >= slot) { (now - slot) / step + 1 } else { 1 };
         slot + count * step
       };
       case (#Monthly) {
