@@ -98,7 +98,9 @@ function IcpSendUpdateReminderPage() {
             // dedupe to unique account ids before fanning out so a member
             // with several roles in the same club is notified once.
             const grants = await listLiveRoleGrants(ctx, clubId);
-            const recipientIds = Array.from(new Set(grants.map((g: { account_id: string }) => g.account_id)));
+            const recipientIds = Array.from(new Set(grants.map((g: { account_id: string }) =>
+              g.account_id.startsWith("principal:") ? g.account_id.slice("principal:".length) : g.account_id,
+            )));
             const batches = batchRecipientIds(recipientIds);
             for (let i = 0; i < batches.length; i++) {
               const created = await fanOutLiveNotifications(ctx, {

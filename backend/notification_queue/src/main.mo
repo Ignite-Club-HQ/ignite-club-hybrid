@@ -14,6 +14,7 @@ import Types "types";
 import ScheduleAccess "scheduleAccess";
 import ScheduleCalendar "scheduleCalendar";
 import SchedulePatch "schedulePatch";
+import UpdateReminderAccess "updateReminderAccess";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -87,6 +88,23 @@ persistent actor class Main(governorInit : Principal) {
 
   func authenticated(caller : Principal) {
     if (caller.equal(Principal.anonymous())) { Runtime.trap("Forbidden") };
+  };
+
+  func authorizeUpdateReminder(caller : Principal, users : [Text], club : Text) : async { #Ok; #Err : Text } {
+    let cd = switch (clubDomainCanister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?id) { id };
+    };
+    let clubs = actor (Principal.toText(cd)) : actor {
+      is_club_member : shared query (Principal, Text) -> async Bool;
+    };
+    func adminCheck(p : Principal) : async Bool {
+      switch (await appAdminOnly(p)) { case (#Ok) { true }; case (#Err(_)) { false } }
+    };
+    func memberCheck(p : Principal, clubId : Text) : async Bool {
+      await clubs.is_club_member(p, clubId)
+    };
+    await UpdateReminderAccess.authorize(caller, users, club, adminCheck, memberCheck)
   };
 
   func worker(caller : Principal) {
@@ -275,6 +293,12 @@ persistent actor class Main(governorInit : Principal) {
     if (not valid(id) or not valid(user) or not valid(club) or not valid(kind) or not valid(key)) {
       return #Err("Invalid notification fields");
     };
+    if (UpdateReminderAccess.protectedKind(kind)) {
+      switch (await authorizeUpdateReminder(caller, [user], club)) {
+        case (#Err(e)) { return #Err(e) };
+        case (#Ok) {};
+      };
+    };
     switch (get(id)) {
       case (?existing) {
         if (existing.idempotency_key != key) return #Err("Notification id already exists with a different idempotency key");
@@ -318,6 +342,12 @@ persistent actor class Main(governorInit : Principal) {
     if (users.size() == 0 or users.size() > 500) { return #Err("Invalid recipient count") };
     if (not valid(club) or not valid(kind) or not valid(key_prefix)) { return #Err("Invalid fan-out fields") };
     if (users.any(func(u) = not valid(u))) { return #Err("Invalid recipient") };
+    if (UpdateReminderAccess.protectedKind(kind)) {
+      switch (await authorizeUpdateReminder(caller, users, club)) {
+        case (#Err(e)) { return #Err(e) };
+        case (#Ok) {};
+      };
+    };
     // Schedule refresh is a staff command, not a browser-authorized action.
     if (kind == "schedule_refresh") {
       let cd = switch (clubDomainCanister) {
