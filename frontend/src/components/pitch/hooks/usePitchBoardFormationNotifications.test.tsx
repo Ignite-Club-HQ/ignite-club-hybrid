@@ -9,6 +9,7 @@ import type { Player } from "../types";
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
+  recipients: vi.fn(), fan: vi.fn(),
 }));
 const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 
@@ -19,6 +20,9 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "icp" : "supabase" }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: async (_: string, providers: { icp: (ctx: unknown) => unknown }) => providers.icp({}) }));
+vi.mock("./livePitchNotifications", () => ({ livePitchRecipients: mocks.recipients }));
+vi.mock("@/live/features/notifications", () => ({ fanOutLiveNotifications: mocks.fan }));
 
 function queryReturning(data: unknown[]) {
   const query: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -70,6 +74,7 @@ describe("usePitchBoardFormationNotifications", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rpc.mockResolvedValue({ error: null });
+    mocks.recipients.mockResolvedValue({ userIds: ["current-user", "coach", "admin", "subs"], clubId: "club-1" });
   });
 
   it.each([
@@ -93,6 +98,7 @@ describe("usePitchBoardFormationNotifications", () => {
 
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.fan).not.toHaveBeenCalled();
   });
 
   it.runIf(!icpMode)("notifies current user, team staff and event Subs Managers exactly once", async () => {
@@ -185,15 +191,18 @@ describe("usePitchBoardFormationNotifications", () => {
     consoleError.mockRestore();
   });
 
-  it.runIf(icpMode)("does not query Supabase or send unsupported formation notifications", async () => {
+  it.runIf(icpMode)("sends ICP formation alerts to the resolved club without putting child names in notifications", async () => {
     const { result } = renderHook(() => usePitchBoardFormationNotifications({
       userId: "current-user",
       teamId: "team-1",
       readOnly: false,
+      linkedEventId: "event-1",
       isGameFinished: () => false,
     }));
-    await act(async () => result.current("formation", "2-3-1"));
+    await act(async () => result.current("formation", "2-3-1", { benchMoves: [{ player: player("child", "Private Child"), direction: "to-bench" }], positionSwaps: [] }));
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.recipients).toHaveBeenCalledWith({}, "team-1", "event-1", "current-user", true, false);
+    expect(mocks.fan).toHaveBeenCalledWith({}, expect.objectContaining({ clubId: "club-1", kind: "pitch_board", relatedId: "team-1", body: "Formation changed to 2-3-1" }));
   });
 });
