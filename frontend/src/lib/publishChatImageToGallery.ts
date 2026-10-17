@@ -157,9 +157,8 @@ async function publishChatImageToGallerySupabase(
 
 /**
  * ICP path: the chat image's bytes already live in a media_blob_store
- * canister (chat attachments on Internet Identity accounts upload there, not
- * to Supabase), so publishing is just registering a media_metadata asset
- * that points at the *same* blob_ref — no re-upload, no re-encryption.
+ * canister. Copy authorized plaintext into a gallery-owned encrypted blob:
+ * deleting the original chat image must not break the gallery photo.
  */
 async function publishChatImageToGalleryIcp(
   ctx: FeatureBackendContext,
@@ -175,23 +174,25 @@ async function publishChatImageToGalleryIcp(
     throw new Error("This chat photo cannot be published to the gallery yet");
   }
 
-  // Idempotency: re-registering the same bytes as a new asset would create a
-  // duplicate gallery post, so look for an existing asset with this blob_ref
-  // first. list_assets already filters to the caller's club.
+  const sourceHash = await sha256Hex(new TextEncoder().encode(imageUrl));
+  const storagePath = `clubs/${clubId}/gallery/chat-${sourceHash}.jpg`;
   const existing = await listLiveAssets(ctx, clubId);
-  const already = existing.find((asset: { blob_ref?: unknown[]; id: string }) => {
+  const already = existing.find((asset: { blob_ref?: unknown[]; storage_path?: string; id: string }) => {
     const ref = (asset.blob_ref as Array<{ path: string; canister: string }> | undefined)?.[0];
-    return ref?.path === blobLocation.path && ref?.canister === blobLocation.canisterId;
+    return asset.storage_path === storagePath || ref?.path === storagePath ||
+      (ref?.path === blobLocation.path && ref?.canister === blobLocation.canisterId);
   });
   if (already) {
     return { photoId: (already as { id: string }).id, alreadyPublished: true };
   }
 
-  // Fetch the (already-uploaded) bytes once to learn size/mime/checksum for
-  // register_asset — the bytes themselves are not re-uploaded anywhere.
+  // Never fetch the raw ICP URL as image bytes: it serves ciphertext.
   let blob: Blob;
   try {
-    const res = await fetch(imageUrl);
+    const { resolveIcpBlobObjectUrl } = await import("@/live/mediaDecrypt");
+    const authorizedUrl = await resolveIcpBlobObjectUrl(imageUrl);
+    if (!authorizedUrl) throw new Error("Could not unlock the chat photo");
+    const res = await fetch(authorizedUrl);
     if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
     blob = await res.blob();
   } catch (err) {
@@ -200,16 +201,19 @@ async function publishChatImageToGalleryIcp(
   }
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const checksum = await sha256Hex(bytes);
+  const { tryUploadMediaToBlobStore } = await import("@/live/mediaUpload");
+  const uploaded = await tryUploadMediaToBlobStore({ storagePath, file: blob, mime: blob.type || "image/jpeg", lock: "club" });
+  if (!uploaded) throw new Error("Could not save the encrypted gallery photo");
 
   const asset = await registerLiveAsset(ctx, {
     clubId,
     kind: "photo",
     mime: blob.type || "image/jpeg",
     checksum,
-    storagePath: blobLocation.path,
+    storagePath,
     visibility: "club",
     contentLength: blob.size,
-    blobRef: { canister: blobLocation.canisterId, path: blobLocation.path, content_hash: checksum },
+    blobRef: uploaded.blobRef,
   });
 
   try {
@@ -219,9 +223,8 @@ async function publishChatImageToGalleryIcp(
       albumId: albumId ?? null,
     });
   } catch (err) {
-    // Matches IcpUploadPhotoSheet: tags are best-effort until the deployed
-    // canister has set_asset_scope — don't fail the whole publish for it.
-    console.warn("[publishChatImageToGallery] icp scope set failed", err);
+    await deleteLiveAsset(ctx, asset.id);
+    throw err;
   }
 
   return { photoId: asset.id, alreadyPublished: false };
