@@ -24,7 +24,7 @@ const REGISTER: Record<string, { status: Status; reason?: string }> = {
   "Subscription management": { status: "offchain", reason: "payments; native IAP only in ICP" },
   "Schedule broadcasts": { status: "todo" },
   "Fee payments": { status: "offchain", reason: "payments stay off-chain" },
-  "Public competition pages": { status: "todo" },
+  "Public competition pages": { status: "onchain", reason: "anonymous competition_domain get_public_competition_page; ladder computed on-device (PublicCompetitionPage.ladder.test.ts); needs competition_domain redeploy" },
   "Realtime health monitoring": { status: "todo" },
   "Password recovery and reset-code verification": { status: "offchain", reason: "Internet Identity has no passwords" },
   "Scheduled messages": { status: "todo" },
