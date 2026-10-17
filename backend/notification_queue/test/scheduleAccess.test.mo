@@ -13,3 +13,7 @@ assert not Access.canBroadcast([("coach", ?"team-1")], ?"team-2");
 assert not Access.canBroadcast([("coach", ?"team-1")], null);
 assert not Access.canBroadcast([("player", ?"team-1")], ?"team-1");
 assert not Access.canBroadcast([], null);
+assert Access.recipient([("player", ?"team-1")], ?"team-1");
+assert not Access.recipient([("player", ?"team-2")], ?"team-1");
+assert not Access.recipient([], null);
+assert Access.recipient([("parent", null)], null);

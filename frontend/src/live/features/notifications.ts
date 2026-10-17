@@ -96,6 +96,11 @@ export async function listLiveInbox(
   );
 }
 
+export async function getLiveScheduleRefreshes(ctx: FeatureBackendContext, clubIds: string[]) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return actor.get_schedule_refreshes(clubIds);
+}
+
 export async function markLiveNotificationRead(ctx: FeatureBackendContext, notificationId: string) {
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandid(actor.mark_read(notificationId), "Mark notification read");

@@ -327,7 +327,7 @@ export default function AccountPage() {
             Delete Account
           </CardTitle>
           <CardDescription>
-            Schedule your account for deletion with a 30-day recovery period
+            {useIcpLab ? "Erase your account immediately" : "Schedule your account for deletion with a 30-day recovery period"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

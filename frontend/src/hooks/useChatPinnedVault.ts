@@ -64,7 +64,7 @@ export function useChatPinnedVault(
 
   const query = useQuery({
     queryKey: pinnedVaultKey(chatType, chatId ?? ""),
-    enabled: enabledOpt && !!chatId && !isIcp,
+    enabled: enabledOpt && !!chatId,
     queryFn: async (): Promise<PinnedVaultRecord | null> => {
       if (!chatId) return null;
       return withFeatureBackend("vault", {
@@ -85,6 +85,7 @@ export function useChatPinnedVault(
       });
     },
     staleTime: 60 * 1000,
+    refetchInterval: isIcp && subscribeOpt ? 30000 : false,
   });
 
   useEffect(() => {
@@ -134,7 +135,7 @@ export function useChatPinnedVault(
           if (error) throw error;
         },
         icp: async (ctx) => {
-          const clubId = clubIdOpt ?? query.data?.root_id ?? null;
+          const clubId = clubIdOpt;
           if (!clubId) throw new Error("Missing club id for pinned vault");
           await setLivePinnedVault(ctx, chatType, chatId, {
             clubId,
