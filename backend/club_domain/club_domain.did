@@ -561,6 +561,10 @@ type Main =
        Err: text;
        Ok: nat32;
      });
+   erase_my_membership: () -> (variant {
+                                 Err: text;
+                                 Ok;
+                               });
    export_acl: () -> (variant {
                         Err: text;
                         Ok: Config;
