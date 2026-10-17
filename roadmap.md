@@ -1,4 +1,5 @@
 ## Codespaces ICP coverage — first tranche
+- [ ] Next batch: complete pitch-board link/formation alerts, role preferences, match duties and on-chain linked-event reads; run both-mode behavior checks.
 - [x] Verify and repair ordinary-member public competition fixtures in both test modes (three real errors fixed).
 - [x] Verify successful, rejected and missing ICP short invite resolution without Supabase calls; missing results no longer spin forever.
 - [ ] Competition welcome-settings storage: requires new competition_domain state/methods, bindings and mainnet upgrade; failing behavior test retained.
