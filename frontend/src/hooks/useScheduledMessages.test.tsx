@@ -396,4 +396,42 @@ describe.runIf(!supabaseMode)("useScheduledMessages ICP adapters", () => {
     expect(liveMocks.cancelLiveScheduledMessage).toHaveBeenCalledWith(liveMocks.context, "scheduled-1", "principal-1");
     expect(invokeSpy).not.toHaveBeenCalled();
   });
+
+  it("keeps scheduled photo and reply references in the canister write", async () => {
+    const { result } = renderHook(() => useCreateScheduledMessage(), { wrapper });
+    await act(async () => result.current.mutateAsync({
+      chat_type: "team", team_id: "team-1", text: "",
+      image_url: "https://photos.example/scheduled-photo", reply_to_id: "reply-1",
+      scheduled_for: new Date(rawScheduledMessage.scheduledForMs), recurrence: "weekly",
+    }));
+    expect(liveMocks.scheduleLiveMessage).toHaveBeenCalledWith(liveMocks.context, expect.objectContaining({
+      body: "", imageUrl: "https://photos.example/scheduled-photo", replyToId: "reply-1", recurrence: "weekly",
+    }));
+    expect(invokeSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects signed-out writes before contacting either backend", async () => {
+    currentUser = null;
+    const { result } = renderHook(() => useCancelScheduledMessage(), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync("scheduled-1")).rejects.toThrow("Not authenticated");
+    });
+    expect(liveMocks.cancelLiveScheduledMessage).not.toHaveBeenCalled();
+    expect(invokeSpy).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a canister write rejection without invalidating saved-message caches", async () => {
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    const localWrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    liveMocks.cancelLiveScheduledMessage.mockRejectedValue(new Error("Author mismatch"));
+    const { result } = renderHook(() => useCancelScheduledMessage(), { wrapper: localWrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync("scheduled-1")).rejects.toThrow("Author mismatch");
+    });
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(invokeSpy).not.toHaveBeenCalled();
+  });
 });

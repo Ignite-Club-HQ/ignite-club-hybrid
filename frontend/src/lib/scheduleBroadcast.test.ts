@@ -21,7 +21,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getIdentity.mockResolvedValue(mocks.identity);
-  mocks.listTeam.mockResolvedValue([{ account_id: "principal:member", team_id: ["team-1"] }]);
+  mocks.listTeam.mockResolvedValue([{ account_id: "principal:member", team: ["team-1"] }]);
   mocks.listClub.mockResolvedValue([{ account_id: "principal:member" }]);
   mocks.fanOut.mockResolvedValue(1);
   mocks.insert.mockResolvedValue({ error: null });
@@ -32,9 +32,9 @@ afterEach(() => vi.useRealTimers());
 describe.runIf(mocks.mode === "icp")("ICP schedule broadcasts", () => {
   it("notifies the team-scoped roster without dropping account-role rows", async () => {
     mocks.listTeam.mockResolvedValue([
-      { account_id: "principal:member", team_id: ["team-1"] },
-      { account_id: "principal:member", team_id: ["team-1"] },
-      { account_id: "principal:coach", team_id: ["team-1"] },
+      { account_id: "principal:member", team: ["team-1"] },
+      { account_id: "principal:member", team: ["team-1"] },
+      { account_id: "principal:coach", team: ["team-1"] },
     ]);
     expect(await sendScheduleBroadcast("club-1", "team-1")).toEqual({ ok: true });
     expect(mocks.listTeam).toHaveBeenCalledWith(expect.anything(), "team-1");

@@ -63,3 +63,12 @@ Payment processing/password boundaries remain intentionally separate from the wo
 - New `src/test/icpOffchainHides.test.ts` (9 tests, ICP mode only) asserts each page shows its clear "unavailable" notice — the clean hide IS the correct behaviour; a missing notice now fails loudly with instructions to update the register.
 - Those 9 entries removed from `icpFeatureParityGaps.test.ts` sentinels; remaining sentinels cover the still-open todo groups.
 - Focused run both modes: Supabase 2 passed / 31 skipped / 13 todo; ICP 33 passed / 13 todo. Zero failures in either mode.
+
+## Batch 4 (2026-10-17): scheduled-message security and schedule broadcasts
+- Closed a genuine security gap: schedule create/list/update/cancel now require the author to equal the authenticated caller. Previously another signed-in caller could supply someone else's author ID. Existing worker-only delivery methods remain worker-only.
+- Photo-only schedules no longer fail the canister's nonempty-text check; editing still rejects a message with neither text nor a photo.
+- Schedule-refresh fan-out now checks live club roles (club/app/league admin or the target team's admin/coach) inside notification_queue; missing role service or failed verification denies the operation.
+- Added executable Motoko ownership and scope-isolation tests, and frontend behavior tests for recipient deduplication, denied writes, session requirements, photo/reply references and both backend paths. Foreground schedule refresh remains periodic polling, not a realtime event stream.
+- No API signatures or stored state changed, so no migration or binding regeneration is needed. The notification_queue must be upgraded before its security and photo-only changes apply live.
+- Coverage entries remain TODO deliberately: calendar-month recurrence still uses 30 days; explicit attachment/recurrence-end clearing and complete timer/read-back coverage are not verified. Broadcast recipient validation and real event-triggered refresh also remain open. This batch does not claim those complete.
+- Real Internet Identity signed-in create → timer delivery → chat read-back was not available in this sandbox; tests use mocked frontend canister responses and executable pure canister guards. No full-suite parity claim.
