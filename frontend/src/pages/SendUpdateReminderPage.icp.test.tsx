@@ -27,6 +27,17 @@ describe("ICP update reminder queueing", () => {
     expect(await screen.findByText("Queued 1 reminder.")).toBeInTheDocument(); expect(m.from).not.toHaveBeenCalled(); expect(m.invoke).not.toHaveBeenCalled();
   });
   it("does not fan out empty recipients", async () => { m.roles.mockResolvedValue([]); open(); await send(); expect(await screen.findByText("Queued 0 reminders.")).toBeInTheDocument(); expect(m.fan).not.toHaveBeenCalled(); });
+  it("normalizes principal-prefixed role IDs before deduplication", async () => {
+    m.roles.mockResolvedValue([{ account_id: "principal:aaaaa-aa" }, { account_id: "aaaaa-aa" }]);
+    open(); await send();
+    await waitFor(() => expect(m.fan).toHaveBeenCalledWith({}, expect.objectContaining({ userIds: ["aaaaa-aa"] })));
+  });
+  it("surfaces authoritative club-recipient denial without fallback", async () => {
+    m.fan.mockRejectedValue(new Error("Recipient is not in the reminder club"));
+    open(); await send();
+    await waitFor(() => expect(m.error).toHaveBeenCalledWith("Recipient is not in the reminder club"));
+    expect(m.success).not.toHaveBeenCalled(); expect(m.invoke).not.toHaveBeenCalled();
+  });
   it("splits audiences at the canister's 500-recipient boundary", async () => {
     m.roles.mockResolvedValue(Array.from({ length: 501 }, (_, i) => ({ account_id: `member-${i}` }))); m.fan.mockResolvedValueOnce(500).mockResolvedValueOnce(1); open(); await send();
     expect(await screen.findByText("Queued 501 reminders.")).toBeInTheDocument(); expect(m.fan).toHaveBeenCalledTimes(2); expect(m.fan.mock.calls.map(c => c[1].userIds.length)).toEqual([500, 1]);
