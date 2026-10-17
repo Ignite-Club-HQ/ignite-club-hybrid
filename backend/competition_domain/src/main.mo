@@ -643,6 +643,31 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(competitions.filter(func(item) = item.visibility == "public" and item.status != "archived"))
   };
 
+  // Anonymous by design: backs the public competition web page. Returns the
+  // competition, its matches and ladder-visibility settings only when the
+  // competition is explicitly public and not archived. Team names on matches
+  // are plain text already shown on public fixtures; no PII is exposed.
+  public query func get_public_competition_page(competition_id : Text) : async {
+    #Ok : {
+      competition : Types.Competition;
+      matches : [Types.Match];
+      hide_ladder : Bool;
+      hidden_divisions : [Text];
+    };
+    #Err : Text;
+  } {
+    let found = competitions.filter(func(item) = item.id == competition_id and item.visibility == "public" and item.status != "archived");
+    if (found.size() == 0) return #Err("Competition not found");
+    let hideLadder = competitionLadderSettings.any(func(item) = item.competition_id == competition_id and item.hide_ladder);
+    let hiddenDivisions = divisionSettings.filter(func(item) = item.competition_id == competition_id and item.hide_ladder).map(func(item) = item.division);
+    #Ok({
+      competition = found[0];
+      matches = matches.filter(func(item) = item.competition_id == competition_id);
+      hide_ladder = hideLadder;
+      hidden_divisions = hiddenDivisions;
+    });
+  };
+
   public query ({ caller }) func list_my_news_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
     auth(caller);
     #Ok(competitions.filter(func(item) = canManageCompetition(caller, item.id)))
