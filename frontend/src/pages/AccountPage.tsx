@@ -327,7 +327,7 @@ export default function AccountPage() {
             Delete Account
           </CardTitle>
           <CardDescription>
-            Schedule your account for deletion with a 30-day recovery period
+            {useIcpLab ? "Erase your account immediately" : "Schedule your account for deletion with a 30-day recovery period"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -337,7 +337,8 @@ export default function AccountPage() {
               <ul className="list-disc list-inside text-muted-foreground space-y-1">
                 <li>Erasure is immediate and cannot be undone — there is no 30-day recovery window</li>
                 <li>Your identity_access profile, role grants, terms acceptance, and entitlements are deleted</li>
-                <li>Club, vault, events, and messaging records are not automatically purged yet</li>
+                <li>Your club/team role access is revoked; shared club records and parent-owned children are retained</li>
+                <li>Vault, events and messaging records are not automatically purged yet</li>
               </ul>
             ) : (
               <ul className="list-disc list-inside text-muted-foreground space-y-1">

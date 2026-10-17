@@ -13,4 +13,10 @@ module {
       (team != null and scope == team and (role == "team_admin" or role == "coach"))
     })
   };
+  public func recipient(roles : [(Text, ?Text)], team : ?Text) : Bool {
+    switch (team) {
+      case null { roles.size() > 0 };
+      case (?id) { roles.any(func(grant) = grant.1 == ?id) };
+    }
+  };
 }

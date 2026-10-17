@@ -8,6 +8,10 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+const icp = vi.hoisted(() => ({ identity: vi.fn(), erase: vi.fn() }));
+vi.mock("@/live/internetIdentityAuth", () => ({ getCurrentInternetIdentity: icp.identity }));
+vi.mock("@/live/accountData", () => ({ eraseMyIcpAccount: icp.erase }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase" }));
 
 // ---- mocks ----------------------------------------------------------------
 const toastFn = vi.fn();
@@ -76,6 +80,30 @@ beforeEach(() => {
 });
 
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+
+describe.runIf(!supabaseMode)("AccountPage — ICP erasure", () => {
+  async function confirmDeletion() {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /^Delete My Account$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /yes, delete my account/i }));
+  }
+  it("erases the signed-in identity and signs out only on success", async () => {
+    const identity = { principal: "own" };
+    icp.identity.mockResolvedValue(identity);
+    icp.erase.mockResolvedValue({ note: "Identity erased; shared club records retained" });
+    await confirmDeletion();
+    await waitFor(() => expect(signOutFn).toHaveBeenCalledTimes(1));
+    expect(icp.erase).toHaveBeenCalledWith(identity);
+    expect(invokeFn).not.toHaveBeenCalled();
+  });
+  it("keeps the user signed in when canister erasure is denied", async () => {
+    icp.identity.mockResolvedValue({ principal: "own" });
+    icp.erase.mockRejectedValue(new Error("Erasure denied"));
+    await confirmDeletion();
+    await waitFor(() => expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ title: "Failed to erase account" })));
+    expect(signOutFn).not.toHaveBeenCalled();
+  });
+});
 
 // ============================================================================
 // DELETE ACCOUNT
@@ -331,10 +359,8 @@ describe.runIf(supabaseMode)("AccountPage — export data session validation", (
 });
 
 describe.runIf(!supabaseMode)("AccountPage — ICP account boundaries", () => {
-  it("hides Supabase-only deletion and export actions", () => {
+  it("offers canister account actions without starting a Supabase request", () => {
     renderPage();
-    expect(screen.queryByRole("button", { name: /delete my account/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /download my data/i })).not.toBeInTheDocument();
     expect(invokeFn).not.toHaveBeenCalled();
     expect(fetchFn).not.toHaveBeenCalled();
   });

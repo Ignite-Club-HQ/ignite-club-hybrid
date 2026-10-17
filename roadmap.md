@@ -7,7 +7,10 @@
 - [x] Replaced the 9 off-chain sentinel failures (payments, passwords, AdMob) with hide-cleanly tests (icpOffchainHides.test.ts); both modes green.
 - [x] Batch 4: enforce scheduled-message caller ownership and schedule-refresh manager permissions on-canister; cover photo-only writes and frontend broadcasts with focused behavior tests.
 - [x] Batch 5: calendar-month recurrence and explicit attachment/end-date clearing implemented; focused tests pass in both modes and executable Motoko tests pass. Requires notification_queue upgrade; live delivery remains unverified.
-- [ ] Schedule completion: recipient relationship validation and actual broadcast signal; timer delivery/read-back requires deployed canisters and an Internet Identity session.
+- [x] Schedule completion code: validate every recipient on-canister; poll actual caller-scoped refresh signals rather than blindly invalidating. Focused tests pass; deployed timer/read-back still blocked below.
+- [x] Requested batch code: self-service identity deletion revokes club roles first; ICP vault reads enabled; gallery publication decrypts and copies under its own club lock. Focused dual-mode tests pass.
+- [ ] Complete per-user data purge and admin account-deletion coverage beyond self-service — vault/events/messaging records retained; shared club and parent-owned child records intentionally retained.
+- [ ] Deploy updated canisters and verify signed-in scheduled delivery/read-back — requires deployer access and an Internet Identity session.
 - [ ] Remaining coverage groups and full-suite parity: not completed; exact current failures recorded in docs/ICP_COVERAGE_STEP0_RESULTS.md.
 
 ## Supabase role requests

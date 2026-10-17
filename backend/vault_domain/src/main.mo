@@ -9,6 +9,7 @@ import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
+import PinScope "pinScope";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -641,7 +642,33 @@ persistent actor class Main(governorInit : Principal) {
     if (vault_file_id == null and vault_folder_id == null and root_id == null) {
       return #Err("Nothing to pin");
     };
+    switch (pinned_vaults.find(func(p) = p.chat_type == chat_type and p.chat_id == chat_id)) {
+      case (?existing) { if (not PinScope.sameClub(?existing.club, club)) return #Err("Cannot change a chat's club scope") };
+      case null {};
+    };
+    switch (vault_file_id) {
+      case (?id) {
+        let target = files.find(func(f) = f.id == id);
+        let scope = switch (target) { case null { null }; case (?f) { ?(f.club, f.deleted_at_ms != null) } };
+        if (not PinScope.targetClub(scope, club)) return #Err("File is not in the pinned club");
+      };
+      case null {};
+    };
+    switch (vault_folder_id) {
+      case (?id) {
+        let target = folders.find(func(f) = f.id == id);
+        let scope = switch (target) { case null { null }; case (?f) { ?(f.club, f.deleted_at_ms != null) } };
+        if (not PinScope.targetClub(scope, club)) return #Err("Folder is not in the pinned club");
+      };
+      case null {};
+    };
+    if (root_scope == ?"club" and root_id != ?club) return #Err("Root is not in the pinned club");
     if (not (await canWrite(caller, club, null, null))) return #Err("Club role required");
+    // Another writer may have created the pin while permission was checked.
+    switch (pinned_vaults.find(func(p) = p.chat_type == chat_type and p.chat_id == chat_id)) {
+      case (?existing) { if (not PinScope.sameClub(?existing.club, club)) return #Err("Cannot change a chat's club scope") };
+      case null {};
+    };
     let pin : Types.PinnedVault = {
       chat_type; chat_id; club; vault_file_id; vault_folder_id; root_scope; root_id;
       enabled; set_by = caller; updated_at_ms = nowMs();

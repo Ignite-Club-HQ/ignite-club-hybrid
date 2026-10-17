@@ -334,6 +334,17 @@ persistent actor class Main(governorInit : Principal) {
         else { await clubs.is_app_admin(caller) }
       } catch (_) { false };
       if (not permitted) { return #Err("Schedule manager required") };
+      // Validate the full batch before writing any notification. Never trust
+      // a manager's browser to choose recipients from another club/team.
+      for (user in users.values()) {
+        let principal = Principal.fromText(user);
+        if (Principal.isAnonymous(principal)) { return #Err("Invalid recipient") };
+        let roles = try { await clubs.list_user_club_roles(principal, club) }
+          catch (_) { return #Err("Could not verify schedule recipient") };
+        if (not ScheduleAccess.recipient(roles, related_id)) {
+          return #Err("Recipient is not in the schedule scope")
+        };
+      };
     };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
     var created : Nat16 = 0;
@@ -363,6 +374,21 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // ---- Browser inbox surface ----
+  // Latest durable schedule signal per club/team for the actual caller.
+  // Kept separate from inbox pagination so old notifications cannot mask it.
+  public query ({ caller }) func get_schedule_refreshes(clubs : [Text]) : async [{ club : Text; team : ?Text; key : Text }] {
+    authenticated(caller);
+    if (clubs.size() > 100) { return [] };
+    let user = Principal.toText(caller);
+    var signals : [{ club : Text; team : ?Text; key : Text }] = [];
+    for (item in items.values()) {
+      if (item.user == user and item.kind == "schedule_refresh" and clubs.any(func(id) = id == item.club)) {
+        signals := signals.filter(func(s) = not (s.club == item.club and s.team == item.related_id));
+        signals := signals.concat([{ club = item.club; team = item.related_id; key = item.idempotency_key }]);
+      };
+    };
+    signals
+  };
   // NOTE: the `user` field carries the app's account id (a Text), not the
   // caller's II principal, so the canister cannot verify inbox ownership.
   // Provisional until account ids are bound to principals (identity_access).

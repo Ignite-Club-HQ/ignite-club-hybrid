@@ -56,11 +56,36 @@ export function subscribeToScheduleBroadcasts(
   // schedule_broadcasts row (see sendScheduleBroadcast above). Poll instead,
   // same Stage-D pattern as startChatRealtimeChannel / useClubRealtimeMode.
   if (isFeatureRoutedToIcp("events")) {
-    const poll = setInterval(() => {
+    let stopped = false;
+    let inFlight = false;
+    const seen = new Map<string, string>();
+    const check = async () => {
+      if (stopped || inFlight) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      onBump({ club_id: clubIds[0], team_id: null });
-    }, 30000);
-    return () => clearInterval(poll);
+      inFlight = true;
+      try {
+        const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, { getLiveScheduleRefreshes }] = await Promise.all([
+          import("@/live/internetIdentityAuth"), import("@/live/targetRegistry"), import("@/live/features/notifications"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity || stopped) return;
+        const signals = await getLiveScheduleRefreshes({ identity, target: getActiveIcpTarget() }, clubIds);
+        if (stopped) return;
+        for (const signal of signals) {
+          const team = signal.team[0] ?? null;
+          const scope = JSON.stringify([signal.club, team]);
+          if (seen.get(scope) !== signal.key) {
+            seen.set(scope, signal.key);
+            onBump({ club_id: signal.club, team_id: team });
+          }
+        }
+      } catch (error) {
+        console.warn("[schedule-broadcast] refresh check failed", error);
+      } finally { inFlight = false; }
+    };
+    void check();
+    const poll = setInterval(() => { void check(); }, 30000);
+    return () => { stopped = true; clearInterval(poll); };
   }
 
   const channel = supabase

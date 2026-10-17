@@ -181,6 +181,25 @@ describe("useChatPinnedVault", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Pinned vault updated");
   });
 
+  it.runIf(mode === "icp")("enables saved-pin reads and maps the canister response", async () => {
+    routeViaIcp.value = true;
+    getLivePinnedVault.mockResolvedValue({ chat_type: "team", chat_id: "team-1", vault_file_id: ["file-1"],
+      vault_folder_id: [], root_scope: ["team"], root_id: ["team-1"], enabled: true,
+      set_by: { toText: () => "setter" }, updated_at_ms: 1800000000000n });
+    renderHook(() => useChatPinnedVault("team", "team-1", { clubId: "club-1" }));
+    expect(queryOptions.current.enabled).toBe(true);
+    expect(await queryOptions.current.queryFn()).toMatchObject({ vault_file_id: "file-1", enabled: true, set_by: "setter" });
+    expect(getLivePinnedVault).toHaveBeenCalledWith(expect.anything(), "team", "team-1");
+  });
+
+  it.runIf(mode === "icp")("does not write a pin without its verified club scope", async () => {
+    routeViaIcp.value = true;
+    const { result } = renderHook(() => useChatPinnedVault("team", "team-1"));
+    await act(async () => result.current.save({ root_scope: "team", root_id: "team-1" }));
+    expect(setLivePinnedVault).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith("Couldn't pin vault", { description: "Missing club id for pinned vault" });
+  });
+
   it.runIf(mode === "icp")("removes through the vault canister in ICP mode", async () => {
     routeViaIcp.value = true;
     clearLivePinnedVault.mockResolvedValue(undefined);

@@ -184,7 +184,6 @@ type Main =
    clear_inbox: (user: text, club: opt text) -> (ResultNat16);
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
-   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_notification: (id: text) -> (variant {
                                          Err: text;
                                          Ok;
@@ -201,6 +200,12 @@ type Main =
    get_preferences: (user: text) -> (Preferences) query;
    get_push_alert_settings: () -> (PushAlertSettings) query;
    get_push_delivery_health: (now_ms: nat64) -> (PushDeliveryHealthResult);
+   get_schedule_refreshes: (clubs: vec text) ->
+    (vec record {
+           club: text;
+           key: text;
+           team: opt text;
+         }) query;
    grant_worker: ("principal": principal) -> (variant {
                                                 Err: text;
                                                 Ok;
@@ -215,6 +220,12 @@ type Main =
    mark_failed: (id: text, error: text) -> (ScheduledResult);
    mark_read: (id: text) -> (Result);
    mark_sent: (id: text, sent_message_id: text) -> (ScheduledResult);
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
    merge_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;

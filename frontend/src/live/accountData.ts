@@ -72,12 +72,9 @@ export async function exportMyIcpAccountData(
  * the account, profile, role grants, family links, exclusions, external
  * bindings, privacy consents and terms acceptance on identity_access.
  *
- * Club/vault/events/messaging data is NOT fanned out here: those domains
- * have no caller-scoped "erase everything I own" entry point today (their
- * existing purge paths are club-initiated, not per-user), and club/team
- * membership is owned by a parallel workstream — out of scope for this
- * change. Reported to the caller via the returned note so the UI never
- * implies a more complete deletion than actually happened.
+ * club_domain revokes all linked principals' role access before identity
+ * erasure. Shared club records and children remain; vault/events/messaging
+ * content is not purged, and the returned note discloses that limitation.
  */
 export async function eraseMyIcpAccount(
   identity: Identity,
@@ -89,11 +86,17 @@ export async function eraseMyIcpAccount(
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
   try {
     const account = await client.whoami();
+    // Revoke the independent club authorization source before erasing the
+    // identity profile. Partial failure is surfaced and safe to retry.
+    const { connectLiveClubDomain } = await import("./domains");
+    const { actor } = await connectLiveClubDomain(target, identity);
+    const revoked = await actor.erase_my_membership();
+    if ("Err" in revoked) throw new Error(revoked.Err);
     await client.eraseAccount(account.id);
     return {
       note:
-        "Your identity_access account (profile, roles, terms acceptance, entitlements) has been erased. " +
-        "Club, vault, events and messaging records tied to your account are not yet covered by an automated " +
+        "Your identity_access account has been erased and club/team role access revoked. " +
+        "Shared club records and parent-owned children are retained. Vault, events and messaging records are not yet covered by an automated " +
         "per-user purge and may require a manual request to your club.",
     };
   } finally {

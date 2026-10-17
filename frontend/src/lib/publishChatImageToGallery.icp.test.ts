@@ -35,6 +35,10 @@ vi.mock("@/live/features/media", () => ({
   deleteLiveAsset: vi.fn(),
 }));
 
+const secure = vi.hoisted(() => ({ unlock: vi.fn(), upload: vi.fn() }));
+vi.mock("@/live/mediaDecrypt", () => ({ resolveIcpBlobObjectUrl: secure.unlock }));
+vi.mock("@/live/mediaUpload", () => ({ tryUploadMediaToBlobStore: secure.upload }));
+
 import { publishChatImageToGallery } from "./publishChatImageToGallery";
 
 const originalFetch = globalThis.fetch;
@@ -48,6 +52,10 @@ beforeEach(() => {
   state.assets = [];
   state.registered = [];
   state.scoped = [];
+  secure.unlock.mockReset().mockResolvedValue("blob:authorized-photo");
+  secure.upload.mockReset().mockResolvedValue({ url: "https://store.raw.icp0.io/gallery-copy", blobRef: {
+    canister: "gallery-store", path: "gallery-copy", content_hash: "encrypted-hash",
+  } });
 });
 
 afterEach(() => {
@@ -56,7 +64,7 @@ afterEach(() => {
 });
 
 describe("publishChatImageToGallery (ICP)", () => {
-  it("registers the already-uploaded blob as a media_metadata asset scoped to the club/team", async () => {
+  it("unlocks and copies the image under gallery encryption before registering its scope", async () => {
     stubFetch(new Blob(["hi"], { type: "image/jpeg" }));
 
     const result = await publishChatImageToGallery({
@@ -75,9 +83,12 @@ describe("publishChatImageToGallery (ICP)", () => {
     expect(state.registered[0]).toMatchObject({
       clubId: "c1",
       kind: "photo",
-      storagePath: "/clubs/c1/photo.jpg",
-      blobRef: { canister: "abc123-canister", path: "/clubs/c1/photo.jpg" },
+      storagePath: expect.stringMatching(/^clubs\/c1\/gallery\/chat-/),
+      blobRef: { canister: "gallery-store", path: "gallery-copy", content_hash: "encrypted-hash" },
     });
+    expect(secure.unlock).toHaveBeenCalledWith(BLOB_URL);
+    expect(globalThis.fetch).toHaveBeenCalledWith("blob:authorized-photo");
+    expect(secure.upload).toHaveBeenCalledWith(expect.objectContaining({ lock: "club", mime: "image/jpeg" }));
 
     expect(state.scoped).toHaveLength(1);
     expect(state.scoped[0]).toMatchObject({
@@ -122,19 +133,24 @@ describe("publishChatImageToGallery (ICP)", () => {
     ).rejects.toThrow(/cannot be published/);
   });
 
-  it("does not fail the publish when set_asset_scope is unsupported by the deployed canister", async () => {
+  it("removes the registered gallery row and reports failure if audience scoping fails", async () => {
     stubFetch(new Blob(["hi"], { type: "image/jpeg" }));
     const media = await import("@/live/features/media");
     (media.setLiveAssetScope as any).mockRejectedValueOnce(new Error("has no update method set_asset_scope"));
 
-    const result = await publishChatImageToGallery({
+    await expect(publishChatImageToGallery({
       imageUrl: BLOB_URL,
       uploaderId: "u1",
       teamId: "t1",
       clubId: "c1",
-    });
+    })).rejects.toThrow("has no update method set_asset_scope");
+    expect(media.deleteLiveAsset).toHaveBeenCalledWith(expect.anything(), "asset-1");
+  });
 
-    expect(result.photoId).toBe("asset-1");
-    expect(result.alreadyPublished).toBe(false);
+  it("does not upload or register when the source image cannot be decrypted", async () => {
+    secure.unlock.mockRejectedValue(new Error("Access denied"));
+    await expect(publishChatImageToGallery({ imageUrl: BLOB_URL, uploaderId: "u1", teamId: "t1", clubId: "c1" })).rejects.toThrow("Could not load the image");
+    expect(secure.upload).not.toHaveBeenCalled();
+    expect(state.registered).toHaveLength(0);
   });
 });

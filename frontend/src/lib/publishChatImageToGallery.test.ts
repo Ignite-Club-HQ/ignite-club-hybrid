@@ -308,7 +308,7 @@ describe.runIf(!supabaseMode)("chat image gallery ICP boundary", () => {
       uploaderId: "principal-1",
       teamId: "team-1",
       clubId: "club-1",
-    })).rejects.toThrow(/not available yet for Internet Identity accounts/);
+    })).rejects.toThrow(/cannot be published/);
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(state.uploaded).toHaveLength(0);
