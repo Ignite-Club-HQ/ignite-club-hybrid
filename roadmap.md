@@ -1,4 +1,5 @@
 ## Codespaces ICP coverage — first tranche
+- [ ] Batch 9: verify and repair remaining ICP admin controls (AI catch-up, backups, update reminders, video guides) with focused behavior tests.
 - [x] Competition welcome settings on-chain; photo reminder Run now enabled and behavior-tested; canister reachability tests verified.
 - [ ] Remaining admin tools: AI catch-up controls, backup scope, update-reminder fan-out and video guide behavior coverage; photo reminder automatic cadence and competition email delivery need completion.
 - [x] Pitch-board alerts: real club scope, role flags, match Subs Manager/group duties; linked-event reads on-chain, formation alerts omit child names. Dual-mode tests pass.
