@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 type Status = "onchain" | "offchain" | "blocked" | "todo";
 const REGISTER: Record<string, { status: Status; reason?: string }> = {
   "AdMob settings": { status: "offchain", reason: "ads config is not user data; approved exception" },
-  "AI catch-up administration": { status: "todo" },
+  "AI catch-up administration": { status: "onchain", reason: "AdminAICatchUpPage.test.tsx verifies admin gates, rollout saves, Pro eligibility and rejected operations; settings coverage does not prove AI execution" },
   "Photo-reminder administration": { status: "onchain", reason: "AdminChatPhotoRemindersPage.test.tsx covers on-chain settings, Run now, denial and errors; automatic cadence remains to verify" },
   "LLM testing": { status: "blocked", reason: "static app cannot hold the AI key" },
   "Temporary passwords": { status: "offchain", reason: "Internet Identity has no passwords" },
@@ -31,7 +31,7 @@ const REGISTER: Record<string, { status: Status; reason?: string }> = {
   "Update reminders": { status: "todo" },
   "Short invite resolution": { status: "onchain", reason: "Anonymous club_domain resolution; ShortInviteRedirect.test.tsx verifies success, rejection and missing results without Supabase" },
   "Payment settings": { status: "offchain", reason: "payments stay off-chain" },
-  "Administrative video guides": { status: "todo" },
+  "Administrative video guides": { status: "onchain", reason: "VideoGuideDownloadPage.test.tsx verifies sign-in/admin gates and local text/PDF downloads; static guide needs no external storage" },
   "Account deletion": { status: "todo" },
   "Chat vault pinning": { status: "onchain", reason: "ICP saved-pin query enabled; read/save/remove behavior tested in useChatPinnedVault.test.tsx; writes validate club scope on vault_domain" },
   "Chat-image gallery publication": { status: "todo" },

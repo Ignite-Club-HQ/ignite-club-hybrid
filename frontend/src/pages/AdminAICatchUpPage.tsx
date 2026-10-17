@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 interface ProClubRow {
   id: string;
@@ -34,7 +35,10 @@ interface ProClubRow {
 const ICP_SETTING_KEY = "ai_catch_up_global_rollout_enabled";
 
 export default function AdminAICatchUpPage() {
+  const { isAppAdmin, isLoading } = useIsAppAdmin();
   const isIcp = resolveAuthBackend() === "icp";
+  if (isLoading) return <div className="p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAppAdmin) return <p className="p-6 text-muted-foreground">Access denied. App admin role required.</p>;
   if (isIcp) {
     return <IcpAdminAICatchUpPage />;
   }
@@ -49,11 +53,11 @@ function IcpAdminAICatchUpPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [scope, setScope] = useState<"all" | "selected">("selected");
 
-  const { data: enabled, isLoading } = useQuery({
+  const { data: enabled, isLoading, error: settingError } = useQuery({
     queryKey: ["icp-ai-catch-up-rollout-setting"],
     queryFn: () =>
       withFeatureBackend("admin", {
-        supabase: async () => false,
+        supabase: async () => { throw new Error("Internet Identity connection required"); },
         icp: async (ctx) => {
           const { getLiveAppSetting, decodeAppSettingBool } = await import("@/live/features/appSettings");
           const raw = await getLiveAppSetting(ctx, ICP_SETTING_KEY);
@@ -65,7 +69,7 @@ function IcpAdminAICatchUpPage() {
   const updateMutation = useMutation({
     mutationFn: async (value: boolean) =>
       withFeatureBackend("admin", {
-        supabase: async () => {},
+        supabase: async () => { throw new Error("Internet Identity connection required"); },
         icp: async (ctx) => {
           const { setLiveAppSetting } = await import("@/live/features/appSettings");
           await setLiveAppSetting(ctx, ICP_SETTING_KEY, value);
@@ -81,11 +85,11 @@ function IcpAdminAICatchUpPage() {
   // Pro clubs list (club_domain is the source of truth for clubs + Pro
   // status on ICP) joined with each club's AI catch-up flag from
   // messaging_domain's club DM settings.
-  const { data: clubs = [], isLoading: isLoadingClubs, refetch } = useQuery({
+  const { data: clubs = [], isLoading: isLoadingClubs, error: clubsError, refetch } = useQuery({
     queryKey: ["icp-admin-pro-clubs-ai-catchup"],
     queryFn: () =>
       withFeatureBackend("membership", {
-        supabase: async (): Promise<ProClubRow[]> => [],
+        supabase: async (): Promise<ProClubRow[]> => { throw new Error("Internet Identity connection required"); },
         icp: async (ctx): Promise<ProClubRow[]> => {
           const { listLiveClubs } = await import("@/live/features/club");
           const { listLiveClubSubscriptions } = await import("@/live/features/proAccess");
@@ -99,7 +103,9 @@ function IcpAdminAICatchUpPage() {
               if (c.is_active && c.deleted_at_ms.length === 0) allClubs.push({ id: c.id, name: c.name });
             }
             if (batch.length < 50) break;
-            cursor = batch[batch.length - 1]!.id;
+            const last = batch.at(-1);
+            if (!last) break;
+            cursor = last.id;
           }
 
           const [subsById, dmSettings] = await Promise.all([
@@ -139,7 +145,7 @@ function IcpAdminAICatchUpPage() {
   const enableMutation = useMutation({
     mutationFn: async (payload: { all: boolean; ids: string[] }) =>
       withFeatureBackend("membership", {
-        supabase: async () => ({ clubs_updated: 0, members_updated: 0, total_pro_clubs: 0 }),
+        supabase: async () => { throw new Error("Internet Identity connection required"); },
         icp: async (ctx) => {
           const { setLiveClubAiCatchUp, enableLiveAiCatchUpForAllMembers } = await import("@/live/features/messaging");
           const ids = payload.all ? clubs.map((c) => c.id) : payload.ids;
@@ -209,7 +215,9 @@ function IcpAdminAICatchUpPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isLoading ? (
+          {settingError ? (
+            <p role="alert" className="text-destructive">Could not load rollout setting: {settingError.message}</p>
+          ) : isLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
@@ -273,7 +281,9 @@ function IcpAdminAICatchUpPage() {
             />
           </div>
 
-          {isLoadingClubs ? (
+          {clubsError ? (
+            <p role="alert" className="text-destructive">Could not load Pro clubs: {clubsError.message}</p>
+          ) : isLoadingClubs ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>

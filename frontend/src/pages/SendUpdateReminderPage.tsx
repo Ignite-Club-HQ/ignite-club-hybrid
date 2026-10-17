@@ -49,14 +49,16 @@ export default function SendUpdateReminderPage() {
 
 function IcpSendUpdateReminderPage() {
   const navigate = useNavigate();
+  const { isAppAdmin, isLoading: adminLoading } = useIsAppAdmin();
   const [selectedClubId, setSelectedClubId] = useState<string>("all");
   const [body, setBody] = useState(
     "A new version of the app is available. Please update to continue using all features.",
   );
   const [lastResult, setLastResult] = useState<string | null>(null);
 
-  const { data: clubs, isLoading: clubsLoading } = useQuery({
+  const { data: clubs, isLoading: clubsLoading, error: clubsError } = useQuery({
     queryKey: ["icp-admin-clubs-list"],
+    enabled: isAppAdmin,
     queryFn: () =>
       withFeatureBackend("notifications", {
         supabase: async () => {
@@ -69,7 +71,9 @@ function IcpSendUpdateReminderPage() {
             const page: Array<{ id: string; name: string }> = await listLiveClubs(ctx, cursor, 100);
             out.push(...page.map((c) => ({ id: c.id, name: c.name })));
             if (page.length < 100) break;
-            cursor = page[page.length - 1].id;
+            const last = page.at(-1);
+            if (!last || last.id === cursor) throw new Error("Could not finish loading clubs");
+            cursor = last.id;
           }
           return out;
         },
@@ -78,6 +82,9 @@ function IcpSendUpdateReminderPage() {
 
   const sendMutation = useMutation({
     mutationFn: async () => {
+      if (!isAppAdmin) throw new Error("App admin role required");
+      if (!body.trim()) throw new Error("Enter a message");
+      setLastResult(null);
       return withFeatureBackend("notifications", {
         supabase: async () => {
           throw new Error("ICP-only page");
@@ -94,14 +101,14 @@ function IcpSendUpdateReminderPage() {
             const recipientIds = Array.from(new Set(grants.map((g: { account_id: string }) => g.account_id)));
             const batches = batchRecipientIds(recipientIds);
             for (let i = 0; i < batches.length; i++) {
-              await fanOutLiveNotifications(ctx, {
+              const created = await fanOutLiveNotifications(ctx, {
                 userIds: batches[i],
                 clubId,
                 kind: "update_reminder",
-                body,
+                body: body.trim(),
                 idempotencyKeyPrefix: `${prefix}-${clubId}-${i}`,
               });
-              totalRecipients += batches[i].length;
+              totalRecipients += Number(created);
             }
           }
           return totalRecipients;
@@ -109,13 +116,16 @@ function IcpSendUpdateReminderPage() {
       });
     },
     onSuccess: (count) => {
-      setLastResult(`Sent to ${count} recipient${count === 1 ? "" : "s"}.`);
-      toast.success(`Update reminder sent to ${count} recipient${count === 1 ? "" : "s"}.`);
+      setLastResult(`Queued ${count} reminder${count === 1 ? "" : "s"}.`);
+      toast.success(`Queued ${count} update reminder${count === 1 ? "" : "s"}.`);
     },
     onError: (err: any) => {
       toast.error(err?.message || "Failed to send notifications");
     },
   });
+
+  if (adminLoading) return <PageLoading />;
+  if (!isAppAdmin) return <p className="p-6 text-muted-foreground">App admin role required.</p>;
 
   return (
     <div className="py-6 space-y-6">
@@ -156,13 +166,14 @@ function IcpSendUpdateReminderPage() {
               </SelectContent>
             </Select>
           </div>
+          {clubsError && <p role="alert" className="text-destructive">Could not load clubs: {clubsError.message}</p>}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Message</Label>
-            <Input value={body} onChange={(e) => setBody(e.target.value)} />
+            <Label htmlFor="icp-update-message" className="text-sm font-medium">Message</Label>
+            <Input id="icp-update-message" value={body} onChange={(e) => setBody(e.target.value)} />
           </div>
           <Button
             className="gap-1.5"
-            disabled={sendMutation.isPending || !body.trim()}
+            disabled={sendMutation.isPending || clubsLoading || !!clubsError || !clubs?.length || !body.trim()}
             onClick={() => sendMutation.mutate()}
           >
             <Send className="h-4 w-4" />
