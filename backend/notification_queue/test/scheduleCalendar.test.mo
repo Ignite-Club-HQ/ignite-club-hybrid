@@ -1,0 +1,11 @@
+import Calendar "../src/scheduleCalendar";
+assert Calendar.addMonth(1769850900000) == 1772270100000;
+assert Calendar.addMonth(1706692500000) == 1709198100000;
+assert Calendar.addMonth(1798708500000) == 1801386900000;
+assert Calendar.addMonth(1777540500000) == 1780132500000;
+assert Calendar.next(1769850900000, #Monthly, 1772270100000, null) == ?1774689300000;
+assert Calendar.next(1769850900000, #Monthly, 1769850900000, ?1772270100000) == ?1772270100000;
+assert Calendar.next(1769850900000, #Monthly, 1769850900000, ?1772270099999) == null;
+assert Calendar.next(1769850900000, #None, 1769850900000, null) == null;
+assert Calendar.next(1769850900000, #Daily, 1770110100000, null) == ?1770196500000;
+assert Calendar.next(1769850900000, #Weekly, 1769850900000, null) == ?1770455700000;
