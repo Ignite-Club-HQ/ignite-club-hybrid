@@ -1,4 +1,5 @@
 ## Codespaces ICP coverage — first tranche
+- [ ] Next stage: add competition welcome settings on-chain and verify remaining admin-tool paths with behavior tests; email delivery remains separate.
 - [x] Pitch-board alerts: real club scope, role flags, match Subs Manager/group duties; linked-event reads on-chain, formation alerts omit child names. Dual-mode tests pass.
 - [ ] Verify pitch-board delivery/tapping signed in — needs deployed app/canisters and a real Internet Identity session.
 - [x] Verify and repair ordinary-member public competition fixtures in both test modes (three real errors fixed).
