@@ -22,6 +22,13 @@ type State =
    seasons: vec Season;
    tokens: vec JoinToken;
  };
+type Settings = 
+ record {
+   competition_id: text;
+   enabled: bool;
+   message: text;
+   subject: text;
+ };
 type Season = 
  record {
    competition_id: text;
@@ -51,6 +58,11 @@ type RoleGrant =
    role: text;
    team_id: opt text;
    user: principal;
+ };
+type Result = 
+ variant {
+   Err: text;
+   Ok: Settings;
  };
 type OfficialChat = 
  record {
@@ -242,6 +254,7 @@ type Main =
           status: text;
         };
      }) query;
+   get_competition_welcome_email: (competition_id: text) -> (Result);
    get_eoi_stats: (club_id: text, season_id: opt text) ->
     (variant {
        Err: text;
@@ -499,6 +512,8 @@ type Main =
        Err: text;
        Ok;
      });
+   set_competition_welcome_email: (competition_id: text, enabled: bool,
+    subject: text, message: text) -> (Result);
    set_division_hide_ladder: (competition_id: text, division: text,
     hide_ladder: bool) -> (variant {
                              Err: text;

@@ -315,6 +315,7 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'get_competition_welcome_email' : ActorMethod<[string], Result>,
   'get_eoi_stats' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : EoiStats } |
@@ -573,6 +574,10 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_competition_welcome_email' : ActorMethod<
+    [string, boolean, string, string],
+    Result
+  >,
   'set_division_hide_ladder' : ActorMethod<
     [string, string, boolean],
     { 'Ok' : DivisionSetting } |
@@ -715,6 +720,8 @@ export interface OfficialChat {
   'scope' : string,
   'competition_id' : string,
 }
+export type Result = { 'Ok' : Settings } |
+  { 'Err' : string };
 export interface RoleGrant {
   'role' : string,
   'user' : Principal,
@@ -739,6 +746,12 @@ export interface Season {
   'name' : string,
   'divisions' : Array<string>,
   'revision' : bigint,
+  'competition_id' : string,
+}
+export interface Settings {
+  'subject' : string,
+  'enabled' : boolean,
+  'message' : string,
   'competition_id' : string,
 }
 export interface State {
