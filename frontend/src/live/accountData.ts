@@ -89,11 +89,17 @@ export async function eraseMyIcpAccount(
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
   try {
     const account = await client.whoami();
+    // Revoke the independent club authorization source before erasing the
+    // identity profile. Partial failure is surfaced and safe to retry.
+    const { connectLiveClubDomain } = await import("./domains");
+    const { actor } = await connectLiveClubDomain(target, identity);
+    const revoked = await actor.erase_my_membership();
+    if ("Err" in revoked) throw new Error(revoked.Err);
     await client.eraseAccount(account.id);
     return {
       note:
-        "Your identity_access account (profile, roles, terms acceptance, entitlements) has been erased. " +
-        "Club, vault, events and messaging records tied to your account are not yet covered by an automated " +
+        "Your identity_access account has been erased and club/team role access revoked. " +
+        "Shared club records and parent-owned children are retained. Vault, events and messaging records are not yet covered by an automated " +
         "per-user purge and may require a manual request to your club.",
     };
   } finally {

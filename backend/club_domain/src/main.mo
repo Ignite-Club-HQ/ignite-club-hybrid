@@ -16,6 +16,7 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Timer "mo:core/Timer";
 import Types "types";
+import AccountErasure "accountErasure";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -1969,6 +1970,30 @@ persistent actor class Main(governorInit : Principal) {
       case (?account) { #Ok(account) };
       case null { #Err("Unlinked identity") };
     }
+  };
+
+  // Self-service erasure revokes all linked principals' club authority.
+  // Keep shared club/team records and parent-owned children intact.
+  public shared ({ caller }) func erase_my_membership() : async { #Ok; #Err : Text } {
+    auth(caller);
+    let principals = switch (accountFor(caller)) {
+      case (?account) { account.principals };
+      case null { [caller] };
+    };
+    if (principals.any(func(p) = p.equal(governor))) return #Err("Governor account cannot be erased");
+    var exclusions = acl.exclusions;
+    // Explicitly exclude every club, including family-derived membership.
+    for (club in acl.clubs.values()) {
+      for (user in principals.values()) {
+        if (not exclusions.any(func(e) = e.user.equal(user) and e.club == club)) {
+          exclusions := exclusions.concat([{ club; user }]);
+        };
+      };
+    };
+    acl := { acl with roles = acl.roles.filter(func(g) = AccountErasure.keepRole(g, principals)); exclusions };
+    let accountId = switch (accountFor(caller)) { case (?a) { a.id }; case null { "principal:" # Principal.toText(caller) } };
+    accountRoles := accountRoles.filter(func(g) = g.account_id != accountId);
+    #Ok
   };
 
   // Browser roster surface for the membership feature. Reads only; role
