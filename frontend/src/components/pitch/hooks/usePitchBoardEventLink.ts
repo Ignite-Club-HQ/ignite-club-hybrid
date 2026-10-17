@@ -157,7 +157,7 @@ export function usePitchBoardEventLink({
 
   // Fetch linked event details (for opponent name + expiry check)
   const { data: linkedEventDetails } = useQuery({
-    queryKey: ["pitch-linked-event", linkedEventId],
+    queryKey: ["pitch-linked-event", teamId, linkedEventId, resolveAuthBackend()],
     queryFn: async () => {
       if (!linkedEventId) return null;
       if (resolveAuthBackend() === "icp") {
