@@ -375,10 +375,10 @@ export async function updateLiveScheduledMessage(
       input.id,
       input.author,
       input.body !== undefined && input.body !== null ? [input.body] : [],
-      input.imageUrl !== undefined && input.imageUrl !== null ? [input.imageUrl] : [],
+      input.imageUrl === undefined ? [] : [input.imageUrl ?? ""],
       input.scheduledForMs != null ? [BigInt(Math.trunc(input.scheduledForMs))] : [],
       input.recurrence != null ? [recurrenceToCandid(input.recurrence)] : [],
-      input.recurrenceUntilMs != null ? [BigInt(Math.trunc(input.recurrenceUntilMs))] : [],
+      input.recurrenceUntilMs === undefined ? [] : [input.recurrenceUntilMs === null ? 0n : BigInt(Math.trunc(input.recurrenceUntilMs))],
     ),
     "Update scheduled message",
   );

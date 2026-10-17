@@ -15,6 +15,7 @@
 - Keep retired URLs alive as redirects in App.tsx (ParamRedirect) instead of letting them hit the 404 page.
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
 - Scheduled-message ownership and schedule-refresh permissions are enforced inside notification_queue using scheduleAccess; team recipients come from the already team-scoped roster query. Why: browser account IDs and UI gating cannot authorize canister writes.
+- Schedule updates: omitted options keep; empty image/zero end-date clear. Monthly recurrence clamps in UTC. Why: retain Candid compatibility.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: use StatusBarBackdrop after SystemBars icon styling (which resets the background); honour its remaining CSS top inset without a forced floor (native padding already reserves it). Both Codemagic Android workflows run scripts/configure-android-status-bar.py; preserve keyboard handling.
 - Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
