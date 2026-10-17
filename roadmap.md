@@ -6,7 +6,8 @@
 - [ ] Redeploy competition_domain (new get_public_competition_page) before public pages work live.
 - [x] Replaced the 9 off-chain sentinel failures (payments, passwords, AdMob) with hide-cleanly tests (icpOffchainHides.test.ts); both modes green.
 - [x] Batch 4: enforce scheduled-message caller ownership and schedule-refresh manager permissions on-canister; cover photo-only writes and frontend broadcasts with focused behavior tests.
-- [ ] Schedule completion: calendar-month recurrence, attachment/end-date clearing, recipient relationship validation and actual broadcast signal; timer delivery/read-back requires deployed canisters and an Internet Identity session.
+- [ ] Batch 5: correct calendar-month recurrence and explicit attachment/end-date clearing with focused tests.
+- [ ] Schedule completion: recipient relationship validation and actual broadcast signal; timer delivery/read-back requires deployed canisters and an Internet Identity session.
 - [ ] Remaining coverage groups and full-suite parity: not completed; exact current failures recorded in docs/ICP_COVERAGE_STEP0_RESULTS.md.
 
 ## Supabase role requests
