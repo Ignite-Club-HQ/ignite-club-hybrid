@@ -23,12 +23,12 @@ export default function IcpManageBackupsPage() {
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
-  const { data: backups = [], isLoading } = useQuery({
+  const { data: backups = [], isLoading, error } = useQuery({
     queryKey: ["icp-vault-backups"],
     enabled: isAppAdmin,
     queryFn: () =>
       withFeatureBackend("vault", {
-        supabase: async () => [] as Summary[],
+        supabase: async (): Promise<Summary[]> => { throw new Error("Internet Identity connection required"); },
         icp: async (ctx) => {
           const { listLiveVaultBackups } = await import("@/live/features/vault");
           const rows = await listLiveVaultBackups(ctx);
@@ -50,7 +50,7 @@ export default function IcpManageBackupsPage() {
   const create = useMutation({
     mutationFn: () =>
       withFeatureBackend("vault", {
-        supabase: async () => undefined,
+        supabase: async () => { throw new Error("Internet Identity connection required"); },
         icp: async (ctx) => {
           const { createLiveVaultBackup } = await import("@/live/features/vault");
           await createLiveVaultBackup(ctx, label.trim() || `Backup ${format(new Date(), "d MMM yyyy HH:mm")}`);
@@ -66,7 +66,7 @@ export default function IcpManageBackupsPage() {
     setBusy(id + kind);
     try {
       await withFeatureBackend("vault", {
-        supabase: async () => undefined,
+        supabase: async () => { throw new Error("Internet Identity connection required"); },
         icp: async (ctx) => {
           const v = await import("@/live/features/vault");
           if (kind === "download") {
@@ -119,6 +119,8 @@ export default function IcpManageBackupsPage() {
       </Card>
       {isLoading ? (
         <Skeleton className="h-24 w-full" />
+      ) : error ? (
+        <p role="alert" className="text-destructive">Could not load backups: {error.message}</p>
       ) : backups.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No backups yet.</p>
       ) : (
@@ -132,9 +134,9 @@ export default function IcpManageBackupsPage() {
                 </p>
               </div>
               <div className="flex gap-1">
-                <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run(b.id, "download")}><Download className="h-4 w-4" /></Button>
-                <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run(b.id, "restore")}><RotateCcw className="h-4 w-4" /></Button>
-                <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run(b.id, "delete")}><Trash2 className="h-4 w-4" /></Button>
+                <Button size="sm" variant="outline" disabled={!!busy} aria-label={`Download ${b.label}`} title="Download backup" onClick={() => run(b.id, "download")}><Download className="h-4 w-4" /></Button>
+                <Button size="sm" variant="outline" disabled={!!busy} aria-label={`Restore ${b.label}`} title="Restore missing records" onClick={() => run(b.id, "restore")}><RotateCcw className="h-4 w-4" /></Button>
+                <Button size="sm" variant="outline" disabled={!!busy} aria-label={`Delete ${b.label}`} title="Delete backup" onClick={() => run(b.id, "delete")}><Trash2 className="h-4 w-4" /></Button>
               </div>
             </CardContent>
           </Card>
