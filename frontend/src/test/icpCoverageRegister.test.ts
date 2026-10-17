@@ -29,7 +29,7 @@ const REGISTER: Record<string, { status: Status; reason?: string }> = {
   "Password recovery and reset-code verification": { status: "offchain", reason: "Internet Identity has no passwords" },
   "Scheduled messages": { status: "todo" },
   "Update reminders": { status: "todo" },
-  "Short invite resolution": { status: "todo" },
+  "Short invite resolution": { status: "onchain", reason: "Anonymous club_domain resolution; ShortInviteRedirect.test.tsx verifies success, rejection and missing results without Supabase" },
   "Payment settings": { status: "offchain", reason: "payments stay off-chain" },
   "Administrative video guides": { status: "todo" },
   "Account deletion": { status: "todo" },

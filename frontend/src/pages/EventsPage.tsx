@@ -45,6 +45,7 @@ import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logScheduleOpenLatency, resetScheduleOpenLog } from "@/lib/scheduleOpenLatency";
 import { format, parseISO, startOfDay, isSameDay, subHours } from "date-fns";
 import { hasValidScheduleDate, scheduleTimestampDate } from "@/lib/scheduleDates";
+import { formatCompactDateTime } from "@/lib/eventRelativeDate";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { EventsHeaderSponsorStrip } from "@/components/events/EventsHeaderSponsorStrip";
@@ -847,7 +848,7 @@ export default function EventsPage() {
             if (filter === "all" || filter === "game") {
               const leagueClubIds = userMemberships?.leagueAdminClubIds ?? [];
               const [managed, leagueClubCompetitions, publicCompetitions] = await Promise.all([
-                listMyLiveNewsCompetitions(ctx).catch(() => [] as any[]),
+                listLiveMyNewsCompetitions(ctx).catch(() => [] as any[]),
                 leagueClubIds.length > 0
                   ? listLiveCompetitionsMulti(ctx, leagueClubIds).catch(() => [] as any[])
                   : Promise.resolve([] as any[]),
@@ -875,8 +876,8 @@ export default function EventsPage() {
                 return scheduled.map((match: any) => {
                   const raw = Array.isArray(match.scheduled_at_ms) ? match.scheduled_at_ms[0] : match.scheduled_at_ms;
                   const start = new Date(Number(raw));
-                  const home = getTeamName(match.home_team) ?? "Home team";
-                  const away = getTeamName(match.away_team) ?? "Away team";
+                  const home = teamNameCache.get(match.home_team) ?? "Home team";
+                  const away = teamNameCache.get(match.away_team) ?? "Away team";
                   return {
                     id: `competition-fixture-${match.id}`,
                     title: competition.name,
