@@ -63,7 +63,7 @@ export default function StartTeamPage() {
     if (!user || working) return;
     if (useIcpLab) {
       toast({
-        title: "Personal team creation is unavailable in ICP lab mode",
+        title: "Preview only — no team is created",
         description: "No club or team data has been created.",
       });
       return;

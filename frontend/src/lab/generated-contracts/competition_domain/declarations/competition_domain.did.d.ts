@@ -335,6 +335,18 @@ export interface Main {
     { 'Ok' : CompetitionNewsAudience } |
       { 'Err' : string }
   >,
+  'get_public_competition_page' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'hidden_divisions' : Array<string>,
+          'matches' : Array<Match>,
+          'competition' : Competition,
+          'hide_ladder' : boolean,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'get_role_link' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [RoleLink] } |

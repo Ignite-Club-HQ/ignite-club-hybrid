@@ -929,3 +929,22 @@ export async function removeFromLiveOfficialChat(
     // Not a member — nothing to remove.
   }
 }
+
+/**
+ * Public competition web page read — anonymous by design (the canister method
+ * is an unauthenticated query that only returns data for competitions marked
+ * public). Uses an AnonymousIdentity so signed-out visitors can open the page.
+ */
+export async function fetchLivePublicCompetitionPage(competitionId: string) {
+  const [{ AnonymousIdentity }, { getActiveIcpTarget }, { connectLiveCompetitionDomain }] =
+    await Promise.all([
+      import("@icp-sdk/core/agent"),
+      import("../targetRegistry"),
+      import("../domains"),
+    ]);
+  const target = getActiveIcpTarget();
+  const { actor } = await connectLiveCompetitionDomain(target, new AnonymousIdentity());
+  const result = await actor.get_public_competition_page(competitionId);
+  if (result.__kind__ === "Err") throw new Error(result.Err);
+  return result.Ok;
+}

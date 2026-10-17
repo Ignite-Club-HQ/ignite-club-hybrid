@@ -52,3 +52,8 @@ Payment processing/password boundaries remain intentionally separate from the wo
 - No Candid, Motoko, migration or generated bindings were changed in this batch; no compiler or canister deployment is claimed.
 - Page tests exercise rendered navigation with mocked canister responses. Real Internet Identity sign-in and live canister read-back were not exercised.
 - Next batches remain club/team editing, personal teams, public competition pages and competition welcome-settings storage, followed by the other approved coverage groups. Full ICP and Supabase suites have not been run.
+## Batch 2 (2026-10-17): club/team editing, personal teams, public competition pages
+- Club editing, team editing, personal team creation: real ICP save paths already existed (withFeatureBackend -> club_domain); the sentinel markers were synthetic-fixture lab-preview notices, reworded. Register entries -> onchain.
+- Public competition pages: new anonymous query get_public_competition_page on competition_domain (competition + matches + ladder-visibility, public+non-archived only); .did and both binding dirs regenerated; IcpPublicCompetitionPage renders fixtures and an on-device ladder (computeLiveLadder, PublicCompetitionPage.ladder.test.ts, 4 tests). Requires competition_domain mainnet redeploy before live use.
+- Focused run (both modes): Supabase passed; ICP 28 passed, 9 failed, 13 todo. Remaining 9 failures are the approved off-chain exceptions (AdMob, temp passwords, app payment config, promo redemption, subscription management, fee payments, password recovery, reset codes, payment settings) — next batch replaces them with hide-cleanly tests.
+- Pre-existing unrelated drift: vault_domain bindings have 4 extra methods vs its .did (not touched here).

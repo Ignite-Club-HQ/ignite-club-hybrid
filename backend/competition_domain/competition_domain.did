@@ -262,6 +262,17 @@ type Main =
        Err: text;
        Ok: CompetitionNewsAudience;
      });
+   get_public_competition_page: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          competition: Competition;
+          hidden_divisions: vec text;
+          hide_ladder: bool;
+          matches: vec Match;
+        };
+     }) query;
    get_role_link: (competition_id: text, role: text) ->
     (variant {
        Err: text;
