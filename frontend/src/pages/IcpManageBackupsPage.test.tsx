@@ -40,7 +40,7 @@ describe("ICP vault metadata backup administration", () => {
     m.list.mockRejectedValue(new Error("App admin required")); open(); expect(await screen.findByRole("alert")).toHaveTextContent("Could not load backups: App admin required"); expect(screen.queryByText("No backups yet.")).not.toBeInTheDocument();
   });
   it("reports failed creation without success", async () => {
-    m.create.mockRejectedValue(new Error("Snapshot failed")); open(); fireEvent.click(screen.getByRole("button", { name: "Create" })); await waitFor(() => expect(m.error).toHaveBeenCalledWith("Snapshot failed")); expect(m.success).not.toHaveBeenCalled();
+    m.create.mockRejectedValue(new Error("Snapshot failed")); open(); await screen.findByText("Snapshot"); fireEvent.click(screen.getByRole("button", { name: "Create" })); await waitFor(() => expect(m.error).toHaveBeenCalledWith("Snapshot failed")); expect(m.success).not.toHaveBeenCalled();
   });
   it("downloads metadata preserving bigint and principal values", async () => {
     const objectUrl = vi.fn((_blob: Blob) => "blob:backup"); vi.stubGlobal("URL", { createObjectURL: objectUrl, revokeObjectURL: vi.fn() });
