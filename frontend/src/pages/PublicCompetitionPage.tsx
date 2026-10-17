@@ -12,25 +12,216 @@ export default function PublicCompetitionPage() {
   usePageTitle("Competition");
   const useIcpLab = isFeatureRoutedToIcp("competitions");
   if (useIcpLab) {
+    return <IcpPublicCompetitionPage />;
+  }
+
+  return <SupabasePublicCompetitionPage />;
+}
+
+type LiveMatch = {
+  id: string;
+  status: string;
+  round_number?: number;
+  home_team: string;
+  away_team: string;
+  home_score: number;
+  away_score: number;
+  division_id?: string;
+  scheduled_at_ms?: bigint;
+};
+
+type LadderRow = {
+  team: string;
+  division?: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalDiff: number;
+  points: number;
+};
+
+/** Ladder rows computed from completed matches using the competition's points rules. */
+export function computeLiveLadder(
+  matches: LiveMatch[],
+  pointsWin: number,
+  pointsDraw: number,
+  pointsLoss: number,
+): LadderRow[] {
+  const rows = new Map<string, LadderRow>();
+  const rowFor = (team: string, division?: string) => {
+    const key = `${division ?? ""} ${team}`;
+    let row = rows.get(key);
+    if (!row) {
+      row = { team, division, played: 0, wins: 0, draws: 0, losses: 0, goalDiff: 0, points: 0 };
+      rows.set(key, row);
+    }
+    return row;
+  };
+  for (const m of matches) {
+    if (m.status !== "completed" && m.status !== "played") continue;
+    const home = rowFor(m.home_team, m.division_id);
+    const away = rowFor(m.away_team, m.division_id);
+    home.played += 1;
+    away.played += 1;
+    home.goalDiff += m.home_score - m.away_score;
+    away.goalDiff += m.away_score - m.home_score;
+    if (m.home_score > m.away_score) {
+      home.wins += 1; home.points += pointsWin;
+      away.losses += 1; away.points += pointsLoss;
+    } else if (m.home_score < m.away_score) {
+      away.wins += 1; away.points += pointsWin;
+      home.losses += 1; home.points += pointsLoss;
+    } else {
+      home.draws += 1; home.points += pointsDraw;
+      away.draws += 1; away.points += pointsDraw;
+    }
+  }
+  return Array.from(rows.values()).sort((a, b) => b.points - a.points || b.goalDiff - a.goalDiff);
+}
+
+function IcpPublicCompetitionPage() {
+  const { id } = useParams<{ id: string }>();
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["public-competition-icp", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { fetchLivePublicCompetitionPage } = await import("@/live/features/competitions");
+      return fetchLivePublicCompetitionPage(id!);
+    },
+    retry: 1,
+  });
+
+  if (isLoading) {
+    return <div className="p-6 flex justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  }
+  if (isError || !data) {
     return (
-      <div className="container max-w-3xl mx-auto px-4 py-10">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-6 space-y-3 text-center">
-            <Trophy className="h-10 w-10 mx-auto text-muted-foreground" />
-            <h1 className="text-lg font-semibold">Public competitions are unavailable in ICP lab mode</h1>
-            <p className="text-sm text-muted-foreground">
-              Public competition details, fixtures, and ladders are not connected to an ICP service yet.
-            </p>
-            <Link to="/" className="underline text-primary inline-flex items-center gap-1">
-              Go to Ignite <ExternalLink className="h-3 w-3" />
-            </Link>
-          </CardContent>
-        </Card>
+      <div className="p-6 text-center text-sm text-muted-foreground space-y-2">
+        <p>This competition isn't publicly available.</p>
+        <Link to="/" className="underline text-primary inline-flex items-center gap-1">
+          Go to Ignite <ExternalLink className="h-3 w-3" />
+        </Link>
       </div>
     );
   }
 
-  return <SupabasePublicCompetitionPage />;
+  const { competition, matches, hide_ladder, hidden_divisions } = data;
+  const hidden = new Set(hidden_divisions);
+  const sortedMatches = [...matches].sort(
+    (a, b) => Number(a.scheduled_at_ms ?? 0n) - Number(b.scheduled_at_ms ?? 0n),
+  );
+  const ladder = hide_ladder
+    ? []
+    : computeLiveLadder(
+        matches.filter((m) => !m.division_id || !hidden.has(m.division_id)),
+        competition.points_win,
+        competition.points_draw,
+        competition.points_loss,
+      );
+  const ladderByDivision = new Map<string, LadderRow[]>();
+  ladder.forEach((row) => {
+    const k = row.division ?? "__none";
+    if (!ladderByDivision.has(k)) ladderByDivision.set(k, []);
+    ladderByDivision.get(k)!.push(row);
+  });
+
+  return (
+    <div className="container max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <header className="flex items-start gap-3">
+        <div className="rounded-xl bg-primary/10 p-3"><Trophy className="h-6 w-6 text-primary" /></div>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold truncate">{competition.name}</h1>
+          <p className="text-sm text-muted-foreground">{competition.season}</p>
+          <div className="flex gap-2 mt-2 flex-wrap">
+            <Badge variant="secondary" className="capitalize">{competition.status}</Badge>
+            <Badge variant="outline">Public</Badge>
+          </div>
+        </div>
+      </header>
+
+      {competition.description && (
+        <p className="text-sm whitespace-pre-wrap">{competition.description}</p>
+      )}
+
+      {!hide_ladder && (
+        <section className="space-y-2">
+          <h2 className="text-lg font-semibold">Ladder</h2>
+          {ladderByDivision.size === 0 ? (
+            <p className="text-sm text-muted-foreground">No ladder to display.</p>
+          ) : (
+            Array.from(ladderByDivision.entries()).map(([divId, list]) => (
+              <Card key={divId}>
+                <CardContent className="p-4">
+                  <div className="font-medium mb-3">{divId === "__none" ? "Overall" : divId}</div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-muted-foreground">
+                          <th className="py-1.5">#</th><th>Team</th>
+                          <th className="text-right">P</th><th className="text-right">W</th>
+                          <th className="text-right">D</th><th className="text-right">L</th>
+                          <th className="text-right">+/-</th><th className="text-right">Pts</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {list.map((r, i) => (
+                          <tr key={r.team} className="border-t">
+                            <td className="py-1.5 tabular-nums text-muted-foreground">{i + 1}</td>
+                            <td className="font-medium truncate">{r.team}</td>
+                            <td className="text-right tabular-nums">{r.played}</td>
+                            <td className="text-right tabular-nums">{r.wins}</td>
+                            <td className="text-right tabular-nums">{r.draws}</td>
+                            <td className="text-right tabular-nums">{r.losses}</td>
+                            <td className="text-right tabular-nums">{r.goalDiff > 0 ? `+${r.goalDiff}` : r.goalDiff}</td>
+                            <td className="text-right tabular-nums font-bold">{r.points}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </section>
+      )}
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Fixtures & results</h2>
+        {sortedMatches.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No fixtures published yet.</p>
+        ) : (
+          sortedMatches.map((m) => (
+            <Card key={m.id}>
+              <CardContent className="p-3 space-y-1">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {m.round_number != null && <Badge variant="outline">R{m.round_number}</Badge>}
+                  {m.division_id && <span>{m.division_id}</span>}
+                  {m.scheduled_at_ms != null && (
+                    <span>· {format(new Date(Number(m.scheduled_at_ms)), "EEE d MMM HH:mm")}</span>
+                  )}
+                  <Badge variant="secondary" className="capitalize ml-auto">{m.status.replace("_", " ")}</Badge>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 font-medium truncate text-right">{m.home_team}</span>
+                  <span className="px-2 font-bold tabular-nums">
+                    {m.status === "completed" || m.status === "played" ? `${m.home_score} : ${m.away_score}` : "– : –"}
+                  </span>
+                  <span className="flex-1 font-medium truncate">{m.away_team}</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </section>
+
+      <footer className="text-center text-xs text-muted-foreground pt-4">
+        Powered by <Link to="/" className="underline">Ignite</Link>
+      </footer>
+    </div>
+  );
 }
 
 function SupabasePublicCompetitionPage() {
