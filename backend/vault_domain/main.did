@@ -2,6 +2,7 @@ type VaultFolder =
  record {
    club: text;
    color: opt text;
+   competition_id: opt text;
    created_at_ms: nat64;
    created_by: principal;
    deleted_at_ms: opt nat64;
@@ -25,6 +26,7 @@ type VaultFile =
  record {
    blob_ref: opt BlobRef;
    club: text;
+   competition_id: opt text;
    created_at_ms: nat64;
    deleted_at_ms: opt nat64;
    deleted_by: opt principal;
@@ -65,14 +67,13 @@ type Main =
                                            });
    create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
     name: text, restricted_roles: vec text, mini_league_id: opt text,
-    sort_order: nat32, description: opt text, color: opt text) ->
-    (variant {
-       Err: text;
-       Ok: VaultFolder;
-     });
+    competition_id: opt text, sort_order: nat32, description: opt text,
+    color: opt text) -> (variant {
+                           Err: text;
+                           Ok: VaultFolder;
+                         });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
-   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_backup: (id: text) -> (variant {
                                    Err: text;
                                    Ok;
@@ -89,6 +90,11 @@ type Main =
                                 Err: text;
                                 Ok: Backup;
                               }) query;
+   get_competition_folder: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFolder;
+     });
    get_file: (id: text) -> (variant {
                               Err: text;
                               Ok: opt VaultFile;
@@ -121,6 +127,16 @@ type Main =
                     Err: text;
                     Ok: vec VaultFileWithFolder;
                   }) query;
+   list_competition_files_with_folder: (folder_id: text, competition_id:
+    text) -> (variant {
+                Err: text;
+                Ok: vec VaultFileWithFolder;
+              });
+   list_competition_folders: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFolder;
+     });
    list_files: (folder_id: text) ->
     (variant {
        Err: text;
@@ -146,6 +162,12 @@ type Main =
        Err: text;
        Ok: vec VaultFileWithFolder;
      }) query;
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
    move_file: (id: text, folder_id: text) ->
     (variant {
        Err: text;
@@ -153,16 +175,16 @@ type Main =
      });
    register_file: (id: text, folder_id: text, club: text, team: opt text,
     name: text, file_url: text, size: nat64, mime: text, is_external_link:
-    bool, blob_ref: opt BlobRef, mini_league_id: opt text) ->
-    (variant {
-       Err: text;
-       Ok: VaultFile;
-     });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
-    (variant {
-       err: text;
-       ok: nat;
-     });
+    bool, blob_ref: opt BlobRef, mini_league_id: opt text, competition_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: VaultFile;
+                  });
+   rekey_principal: (old: principal, new_principal: principal, dry_run:
+    bool) -> (variant {
+                err: text;
+                ok: nat;
+              });
    rename_file: (id: text, name: text) ->
     (variant {
        Err: text;
@@ -177,6 +199,11 @@ type Main =
                                   Ok: VaultFile;
                                 });
    set_club_domain_canister: (canister: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_competition_domain_canister: (canister: principal) ->
     (variant {
        Err: text;
        Ok;
