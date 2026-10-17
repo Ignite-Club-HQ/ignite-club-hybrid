@@ -80,6 +80,7 @@ describe("WelcomeEmailSettingsCard", () => {
     mocks.setLiveCompetitionWelcomeEmail.mockRejectedValue(new Error("Competition management forbidden"));
     renderCard("competition");
     await screen.findByDisplayValue("Welcome to {{competitionName}}");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({ title: "Could not save settings", description: "Competition management forbidden", variant: "destructive" }));
     expect(mocks.from).not.toHaveBeenCalled();

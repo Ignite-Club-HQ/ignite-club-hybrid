@@ -11,7 +11,7 @@ type Status = "onchain" | "offchain" | "blocked" | "todo";
 const REGISTER: Record<string, { status: Status; reason?: string }> = {
   "AdMob settings": { status: "offchain", reason: "ads config is not user data; approved exception" },
   "AI catch-up administration": { status: "todo" },
-  "Photo-reminder administration": { status: "todo" },
+  "Photo-reminder administration": { status: "onchain", reason: "AdminChatPhotoRemindersPage.test.tsx covers on-chain settings, Run now, denial and errors; automatic cadence remains to verify" },
   "LLM testing": { status: "blocked", reason: "static app cannot hold the AI key" },
   "Temporary passwords": { status: "offchain", reason: "Internet Identity has no passwords" },
   "Application payment configuration": { status: "offchain", reason: "payments stay off-chain" },
@@ -25,7 +25,7 @@ const REGISTER: Record<string, { status: Status; reason?: string }> = {
   "Schedule broadcasts": { status: "todo" },
   "Fee payments": { status: "offchain", reason: "payments stay off-chain" },
   "Public competition pages": { status: "onchain", reason: "anonymous competition_domain get_public_competition_page; ladder computed on-device (PublicCompetitionPage.ladder.test.ts); needs competition_domain redeploy" },
-  "Realtime health monitoring": { status: "todo" },
+  "Realtime health monitoring": { status: "onchain", reason: "IcpRealtimeHealthPanel.test.tsx verifies canister reachability and failure; ICP polling replaces Supabase websocket metrics" },
   "Password recovery and reset-code verification": { status: "offchain", reason: "Internet Identity has no passwords" },
   "Scheduled messages": { status: "todo" },
   "Update reminders": { status: "todo" },

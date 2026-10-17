@@ -1,10 +1,11 @@
 ## Codespaces ICP coverage — first tranche
-- [ ] Next stage: add competition welcome settings on-chain and verify remaining admin-tool paths with behavior tests; email delivery remains separate.
+- [x] Competition welcome settings on-chain; photo reminder Run now enabled and behavior-tested; canister reachability tests verified.
+- [ ] Remaining admin tools: AI catch-up controls, backup scope, update-reminder fan-out and video guide behavior coverage; photo reminder automatic cadence and competition email delivery need completion.
 - [x] Pitch-board alerts: real club scope, role flags, match Subs Manager/group duties; linked-event reads on-chain, formation alerts omit child names. Dual-mode tests pass.
 - [ ] Verify pitch-board delivery/tapping signed in — needs deployed app/canisters and a real Internet Identity session.
 - [x] Verify and repair ordinary-member public competition fixtures in both test modes (three real errors fixed).
 - [x] Verify successful, rejected and missing ICP short invite resolution without Supabase calls; missing results no longer spin forever.
-- [ ] Competition welcome-settings storage: requires new competition_domain state/methods, bindings and mainnet upgrade; failing behavior test retained.
+- [x] Competition welcome-settings storage added with a new migration, manager-gated methods and bindings; requires competition_domain mainnet upgrade for live use.
 - [x] Club/team editing and personal team creation verified on-chain (real ICP save paths already existed; false lab-mode markers removed); public competition pages built on-chain (anonymous get_public_competition_page on competition_domain + ICP page branch + ladder tests).
 - [ ] Redeploy competition_domain (new get_public_competition_page) before public pages work live.
 - [x] Replaced the 9 off-chain sentinel failures (payments, passwords, AdMob) with hide-cleanly tests (icpOffchainHides.test.ts); both modes green.

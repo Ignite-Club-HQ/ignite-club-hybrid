@@ -715,7 +715,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 5; governor; roles; competitions; entries; tokens; seasons; matches; chatSettings; competitionInvites; competitionJoinLinks; competitionOfficialEmailInvites; eoiSubmissions })
+    #Ok({ schema = 6; governor; roles; competitions; entries; tokens; seasons; matches; chatSettings; competitionWelcomeSettings; competitionInvites; competitionJoinLinks; competitionOfficialEmailInvites; eoiSubmissions })
   };
 
   // ---------------- Competition roles (admin-managed, not governor-only) ----------------
