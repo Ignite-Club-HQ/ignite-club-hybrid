@@ -441,6 +441,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : CompetitionNewsAudience, 'Err' : IDL.Text })],
         [],
       ),
+    'get_public_competition_page' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'hidden_divisions' : IDL.Vec(IDL.Text),
+              'matches' : IDL.Vec(Match),
+              'competition' : Competition,
+              'hide_ladder' : IDL.Bool,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_role_link' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(RoleLink), 'Err' : IDL.Text })],
