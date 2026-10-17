@@ -39,6 +39,10 @@ function IcpShortInviteRedirect() {
           resolvingCode,
         );
         if (cancelled || resolvingCode !== code) return;
+        if (!id) {
+          setNotFound(true);
+          return;
+        }
         setInviteId(id);
       } catch {
         if (cancelled || resolvingCode !== code) return;
