@@ -115,7 +115,6 @@ async function sendScheduleBroadcastIcp(
     const userIds = [
       ...new Set(
         (grants as unknown as Array<{ account_id?: string; user?: { toText: () => string }; team?: unknown }>)
-          .filter((g) => !teamId || opt(g.team) === teamId)
           .map(accountId)
           .filter(Boolean),
       ),
