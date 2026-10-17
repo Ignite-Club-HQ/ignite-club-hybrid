@@ -1,3 +1,10 @@
+## Codespaces ICP coverage — first tranche
+- [ ] Verify and repair ordinary-member public competition fixtures in both test modes.
+- [ ] Verify successful and missing ICP short invite resolution without Supabase calls.
+- [ ] Close competition welcome-settings storage gap; preserve the failing behavior test until supported.
+- [ ] Club/team editing, personal team creation and public competition pages: subsequent implementation batches.
+- [ ] Remaining coverage groups and full-suite parity: not yet verified.
+
 ## Supabase role requests
 - [x] Fresh sorted reads and dates implemented; scoped profile policy installed with no new security warnings; 21 regression tests and preview checks pass. Genuine old requests retained.
 - [ ] Confirm Paul's phone screen after frontend deployment — external Supabase session/device access required.
