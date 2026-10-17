@@ -9,6 +9,8 @@
  * return the default (all roles enabled).
  */
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 export interface PitchNotifyFlags {
   coach: boolean;
@@ -27,6 +29,15 @@ export async function loadPitchNotifyFlags(
 ): Promise<PitchNotifyFlags> {
   if (!teamId || teamId.startsWith("event-group-")) return DEFAULT_FLAGS;
   try {
+    if (resolveAuthBackend() === "icp") {
+      return await withFeatureBackend("membership", {
+        supabase: async () => DEFAULT_FLAGS,
+        icp: async (ctx) => {
+          const { getLiveTeamPitchNotify } = await import("@/live/features/club");
+          return getLiveTeamPitchNotify(ctx, teamId);
+        },
+      });
+    }
     const { data } = await supabase
       .from("team_subscriptions")
       .select(

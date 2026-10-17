@@ -1,6 +1,6 @@
 import type { FeatureBackendContext } from "@/live/featureRouter";
 import { getLiveTeam, getLiveTeamPitchNotify } from "@/live/features/club";
-import { listLiveDuties, listLiveGroupDuties, listLiveEvents } from "@/live/features/events";
+import { listLiveDuties, listLiveGroupDuties, listLiveEvents, listLiveEventGroups } from "@/live/features/events";
 import { listLiveTeamRoleGrants } from "@/live/features/membership";
 
 export async function livePitchEvent(ctx: FeatureBackendContext, teamId: string, eventId: string) {
@@ -21,7 +21,10 @@ export async function livePitchRecipients(
   if (group) {
     if (!event) throw new Error("A match must be linked to notify its duty holders");
     clubId = event.club_id;
-    const duties = await listLiveGroupDuties(ctx, teamId.slice("event-group-".length));
+    const groupId = teamId.slice("event-group-".length);
+    const groups = await listLiveEventGroups(ctx, event.id);
+    if (!groups.some((item) => item.id === groupId)) throw new Error("Pitch-board group is not in the linked match");
+    const duties = await listLiveGroupDuties(ctx, groupId);
     for (const duty of duties) {
       const id = duty.account_id[0];
       if ((duty.duty === "Referee" || duty.duty === "Subs Manager") && id) ids.add(id);
