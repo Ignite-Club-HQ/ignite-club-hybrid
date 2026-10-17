@@ -306,7 +306,7 @@ export default function EditTeamPage() {
 
     if (useIcpLab) {
       toast({
-        title: "Team editing is unavailable in ICP lab mode",
+        title: "Preview only — changes aren't saved",
         description: "Your preview changes were not persisted.",
       });
       return;
@@ -434,7 +434,7 @@ export default function EditTeamPage() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h1 className="text-lg font-semibold">Team editing is unavailable in ICP lab mode</h1>
+          <h1 className="text-lg font-semibold">Preview only — changes aren't saved</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {team.name} is a synthetic fixture. Settings, training breaks, and logo changes are not persisted.
           </p>

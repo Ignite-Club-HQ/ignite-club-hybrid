@@ -287,7 +287,7 @@ export default function EditClubPage() {
 
     if (useIcpLab) {
       toast({
-        title: "Club editing is unavailable in ICP lab mode",
+        title: "Preview only — changes aren't saved",
         description: "Your preview changes were not persisted.",
       });
       return;
