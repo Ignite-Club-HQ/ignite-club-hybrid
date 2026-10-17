@@ -9,6 +9,7 @@ import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
+import PinScope "pinScope";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -642,18 +643,22 @@ persistent actor class Main(governorInit : Principal) {
       return #Err("Nothing to pin");
     };
     switch (pinned_vaults.find(func(p) = p.chat_type == chat_type and p.chat_id == chat_id)) {
-      case (?existing) { if (existing.club != club) return #Err("Cannot change a chat's club scope") };
+      case (?existing) { if (not PinScope.sameClub(?existing.club, club)) return #Err("Cannot change a chat's club scope") };
       case null {};
     };
     switch (vault_file_id) {
       case (?id) {
-        if (not files.any(func(f) = f.id == id and f.club == club and f.deleted_at_ms == null)) return #Err("File is not in the pinned club");
+        let target = files.find(func(f) = f.id == id);
+        let scope = switch (target) { case null { null }; case (?f) { ?(f.club, f.deleted_at_ms != null) } };
+        if (not PinScope.targetClub(scope, club)) return #Err("File is not in the pinned club");
       };
       case null {};
     };
     switch (vault_folder_id) {
       case (?id) {
-        if (not folders.any(func(f) = f.id == id and f.club == club and f.deleted_at_ms == null)) return #Err("Folder is not in the pinned club");
+        let target = folders.find(func(f) = f.id == id);
+        let scope = switch (target) { case null { null }; case (?f) { ?(f.club, f.deleted_at_ms != null) } };
+        if (not PinScope.targetClub(scope, club)) return #Err("Folder is not in the pinned club");
       };
       case null {};
     };
@@ -661,7 +666,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not (await canWrite(caller, club, null, null))) return #Err("Club role required");
     // Another writer may have created the pin while permission was checked.
     switch (pinned_vaults.find(func(p) = p.chat_type == chat_type and p.chat_id == chat_id)) {
-      case (?existing) { if (existing.club != club) return #Err("Cannot change a chat's club scope") };
+      case (?existing) { if (not PinScope.sameClub(?existing.club, club)) return #Err("Cannot change a chat's club scope") };
       case null {};
     };
     let pin : Types.PinnedVault = {
