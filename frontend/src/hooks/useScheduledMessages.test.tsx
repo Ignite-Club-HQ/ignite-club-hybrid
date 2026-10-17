@@ -410,6 +410,14 @@ describe.runIf(!supabaseMode)("useScheduledMessages ICP adapters", () => {
     expect(invokeSpy).not.toHaveBeenCalled();
   });
 
+  it("preserves explicit image and recurrence-end removal through the ICP adapter", async () => {
+    const { result } = renderHook(() => useUpdateScheduledMessage(), { wrapper });
+    await act(async () => result.current.mutateAsync({ id: "scheduled-1", image_url: null, recurrence_until: null }));
+    expect(liveMocks.updateLiveScheduledMessage).toHaveBeenCalledWith(liveMocks.context, expect.objectContaining({
+      imageUrl: null, recurrenceUntilMs: null,
+    }));
+  });
+
   it("rejects signed-out writes before contacting either backend", async () => {
     currentUser = null;
     const { result } = renderHook(() => useCancelScheduledMessage(), { wrapper });
