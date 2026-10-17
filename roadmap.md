@@ -4,7 +4,7 @@
 - [ ] Competition welcome-settings storage: requires new competition_domain state/methods, bindings and mainnet upgrade; failing behavior test retained.
 - [x] Club/team editing and personal team creation verified on-chain (real ICP save paths already existed; false lab-mode markers removed); public competition pages built on-chain (anonymous get_public_competition_page on competition_domain + ICP page branch + ladder tests).
 - [ ] Redeploy competition_domain (new get_public_competition_page) before public pages work live.
-- [ ] Next batch: replace the 9 remaining off-chain sentinel failures (payments, passwords, AdMob) with hide-cleanly tests per plan Group A.
+- [x] Replaced the 9 off-chain sentinel failures (payments, passwords, AdMob) with hide-cleanly tests (icpOffchainHides.test.ts); both modes green.
 - [ ] Remaining coverage groups and full-suite parity: not completed; exact current failures recorded in docs/ICP_COVERAGE_STEP0_RESULTS.md.
 
 ## Supabase role requests

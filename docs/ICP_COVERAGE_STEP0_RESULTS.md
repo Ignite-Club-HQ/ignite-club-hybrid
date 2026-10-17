@@ -57,3 +57,9 @@ Payment processing/password boundaries remain intentionally separate from the wo
 - Public competition pages: new anonymous query get_public_competition_page on competition_domain (competition + matches + ladder-visibility, public+non-archived only); .did and both binding dirs regenerated; IcpPublicCompetitionPage renders fixtures and an on-device ladder (computeLiveLadder, PublicCompetitionPage.ladder.test.ts, 4 tests). Requires competition_domain mainnet redeploy before live use.
 - Focused run (both modes): Supabase passed; ICP 28 passed, 9 failed, 13 todo. Remaining 9 failures are the approved off-chain exceptions (AdMob, temp passwords, app payment config, promo redemption, subscription management, fee payments, password recovery, reset codes, payment settings) — next batch replaces them with hide-cleanly tests.
 - Pre-existing unrelated drift: vault_domain bindings have 4 extra methods vs its .did (not touched here).
+
+## Batch 3 (2026-10-17): off-chain exceptions reclassified as hide-cleanly tests
+- The 9 remaining ICP sentinel failures were the approved off-chain exceptions (AdMob settings, temporary passwords, application payment configuration, subscription management, promo-code redemption, fee payments, password recovery, reset-code verification, payment settings).
+- New `src/test/icpOffchainHides.test.ts` (9 tests, ICP mode only) asserts each page shows its clear "unavailable" notice — the clean hide IS the correct behaviour; a missing notice now fails loudly with instructions to update the register.
+- Those 9 entries removed from `icpFeatureParityGaps.test.ts` sentinels; remaining sentinels cover the still-open todo groups.
+- Focused run both modes: Supabase 2 passed / 31 skipped / 13 todo; ICP 33 passed / 13 todo. Zero failures in either mode.
