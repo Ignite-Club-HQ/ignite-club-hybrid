@@ -45,6 +45,7 @@ import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logScheduleOpenLatency, resetScheduleOpenLog } from "@/lib/scheduleOpenLatency";
 import { format, parseISO, startOfDay, isSameDay, subHours } from "date-fns";
 import { hasValidScheduleDate, scheduleTimestampDate } from "@/lib/scheduleDates";
+import { formatCompactDateTime } from "@/lib/eventRelativeDate";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { EventsHeaderSponsorStrip } from "@/components/events/EventsHeaderSponsorStrip";
