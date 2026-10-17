@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveTeamRoleGrants } from "@/live/features/membership";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
+import { livePitchEvent, livePitchRecipients } from "./livePitchNotifications";
 import {
   enabledRoleListFromFlags,
   loadPitchNotifyFlags,
@@ -49,39 +49,26 @@ export function usePitchBoardEventLink({
 
       // Only send email notifications when linking (not unlinking) and event is different
       if (!eventId || eventId === previousLinkedEventId || !userId) return;
-      // ICP: no email RPC equivalent, but in-app notifications can go out via
-      // the notification fan-out wrapper using team role grants as the
-      // recipient list (event-group mini-league duties have no canister
-      // mapping yet, so only regular team boards notify here).
       if (resolveAuthBackend() === "icp") {
-        if (!teamId.startsWith("event-group-")) {
           try {
             await withFeatureBackend("membership", {
               supabase: async () => {},
               icp: async (ctx) => {
-                const grants = await listLiveTeamRoleGrants(ctx, teamId);
-                const ids = new Set<string>();
-                (grants as Array<{ role: string; account_id: string }>).forEach((grant) => {
-                  if ((grant.role === "coach" || grant.role === "team_admin") && grant.account_id && grant.account_id !== userId) {
-                    ids.add(grant.account_id);
-                  }
-                });
-                const recipientUserIds = Array.from(ids);
-                if (recipientUserIds.length === 0) return;
+                const recipients = await livePitchRecipients(ctx, teamId, eventId, userId, false, true);
+                if (recipients.userIds.length === 0) return;
                 await fanOutLiveNotifications(ctx, {
-                  userIds: recipientUserIds,
-                  clubId: teamId,
-                  kind: "game_linked",
-                  body: `The pitch board has been linked to a game`,
+                  userIds: recipients.userIds,
+                  clubId: recipients.clubId,
+                  kind: "pitch_board",
+                  body: `The pitch board has been linked to "${recipients.event?.title || "a game"}"`,
                   idempotencyKeyPrefix: `pitch-link-${teamId}-${eventId}`,
-                  relatedId: eventId,
+                  relatedId: teamId,
                 });
               },
             });
           } catch (error) {
             console.error("[PitchBoard] Error sending ICP game linked notifications:", error);
           }
-        }
         return;
       }
 
@@ -170,12 +157,23 @@ export function usePitchBoardEventLink({
 
   // Fetch linked event details (for opponent name + expiry check)
   const { data: linkedEventDetails } = useQuery({
-    queryKey: ["pitch-linked-event", linkedEventId],
+    queryKey: ["pitch-linked-event", teamId, linkedEventId, resolveAuthBackend()],
     queryFn: async () => {
+      if (!linkedEventId) return null;
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const event = await livePitchEvent(ctx, teamId, linkedEventId);
+            return event ? { id: event.id, opponent: event.opponent[0] ?? null, title: event.title,
+              start_time: new Date(Number(event.starts_at_ms)).toISOString() } : null;
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("events")
         .select("id, opponent, title, start_time")
-        .eq("id", linkedEventId!)
+        .eq("id", linkedEventId)
         .maybeSingle();
       if (error) throw error;
       return data;

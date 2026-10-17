@@ -2,8 +2,8 @@ import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveTeamRoleGrants } from "@/live/features/membership";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
+import { livePitchRecipients } from "./livePitchNotifications";
 import type { Player } from "../types";
 import type { PitchPosition } from "../PositionBadge";
 
@@ -75,30 +75,18 @@ export function usePitchBoardFormationNotifications({
   ) => {
     if (!userId || readOnly || isGameFinished()) return;
 
-    // ICP: team role grants (club_domain) stand in for user_roles/duties;
-    // event-group (mini-league) match duties have no canister equivalent yet,
-    // so only regular team boards notify under ICP.
     if (resolveAuthBackend() === "icp") {
-      if (teamId.startsWith("event-group-")) return;
       try {
         await withFeatureBackend("membership", {
           supabase: async () => {},
           icp: async (ctx) => {
-            const grants = await listLiveTeamRoleGrants(ctx, teamId);
-            const recipientIds = new Set<string>([userId]);
-            (grants as Array<{ role: string; account_id: string }>).forEach((grant) => {
-              if ((grant.role === "coach" || grant.role === "team_admin") && grant.account_id) {
-                recipientIds.add(grant.account_id);
-              }
-            });
-            const recipientArray = Array.from(recipientIds);
+            const recipients = await livePitchRecipients(ctx, teamId, linkedEventId, userId, true, false);
             await fanOutLiveNotifications(ctx, {
-              userIds: recipientArray,
-              // clubId: this hook isn't passed the club id, so the team id is
-              // used as the fan-out grouping key (teams are club-scoped anyway).
-              clubId: teamId,
-              kind: "formation_change",
-              body: buildFormationNotificationMessage(changeType, detail, changeDetails),
+              userIds: recipients.userIds,
+              clubId: recipients.clubId,
+              kind: "pitch_board",
+              // Player names are child PII; notifications store only the summary.
+              body: buildFormationNotificationMessage(changeType, detail),
               idempotencyKeyPrefix: `formation-${teamId}-${Date.now()}`,
               relatedId: teamId,
             });

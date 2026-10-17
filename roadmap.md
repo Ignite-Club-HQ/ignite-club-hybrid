@@ -1,4 +1,6 @@
 ## Codespaces ICP coverage — first tranche
+- [x] Pitch-board alerts: real club scope, role flags, match Subs Manager/group duties; linked-event reads on-chain, formation alerts omit child names. Dual-mode tests pass.
+- [ ] Verify pitch-board delivery/tapping signed in — needs deployed app/canisters and a real Internet Identity session.
 - [x] Verify and repair ordinary-member public competition fixtures in both test modes (three real errors fixed).
 - [x] Verify successful, rejected and missing ICP short invite resolution without Supabase calls; missing results no longer spin forever.
 - [ ] Competition welcome-settings storage: requires new competition_domain state/methods, bindings and mainnet upgrade; failing behavior test retained.

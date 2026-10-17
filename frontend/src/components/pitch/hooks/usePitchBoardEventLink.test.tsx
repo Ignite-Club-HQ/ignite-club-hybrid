@@ -11,6 +11,10 @@ const { from, rpc, loadPitchNotifyFlags, enabledRoleListFromFlags, tableData } =
   tableData: new Map<string, unknown>(),
 }));
 const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
+const live = vi.hoisted(() => ({ recipients: vi.fn(), event: vi.fn(), fan: vi.fn() }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: async (_: string, providers: { icp: (ctx: unknown) => unknown }) => providers.icp({}) }));
+vi.mock("./livePitchNotifications", () => ({ livePitchRecipients: live.recipients, livePitchEvent: live.event }));
+vi.mock("@/live/features/notifications", () => ({ fanOutLiveNotifications: live.fan }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from, rpc } }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "icp" : "supabase" }));
@@ -59,6 +63,12 @@ describe("usePitchBoardEventLink", () => {
     rpc.mockResolvedValue({ data: null, error: null });
     loadPitchNotifyFlags.mockResolvedValue({ coaches: true, admins: true, subs_manager: true });
     enabledRoleListFromFlags.mockReturnValue(["coach", "admin"]);
+    live.recipients.mockResolvedValue({ userIds: [], clubId: "club-1", event: { title: "Match" } });
+    live.event.mockImplementation(async () => {
+      const event = tableData.get("events") as { opponent?: string; title?: string; start_time?: string } | undefined;
+      return event ? { id: "event-1", opponent: event.opponent ? [event.opponent] : [], title: event.title,
+        starts_at_ms: BigInt(new Date(event.start_time ?? Date.now()).getTime()) } : null;
+    });
   });
 
   it("prefers an explicitly linked event over an older saved link", () => {
@@ -179,12 +189,16 @@ describe("usePitchBoardEventLink", () => {
     await waitFor(() => expect(result.current.linkedEventId).toBeNull());
   });
 
-  it.runIf(icpMode)("does not query Supabase or send unsupported pitch-board notifications", async () => {
+  it.runIf(icpMode)("sends a club-scoped pitch-board alert without Supabase reads or email", async () => {
+    live.recipients.mockResolvedValue({ userIds: ["coach", "admin", "subs"], clubId: "club-1", event: { title: "Match" } });
     const { result } = renderHook(() => usePitchBoardEventLink(args()), { wrapper: createWrapper() });
     await act(async () => result.current.handleLinkEvent("event-1"));
     expect(from).not.toHaveBeenCalledWith("user_roles");
     expect(from).not.toHaveBeenCalledWith("duties");
     expect(from).not.toHaveBeenCalledWith("event_group_duties");
     expect(rpc).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+    expect(live.recipients).toHaveBeenCalledWith({}, "team-1", "event-1", "current-user", false, true);
+    expect(live.fan).toHaveBeenCalledWith({}, expect.objectContaining({ userIds: ["coach", "admin", "subs"], clubId: "club-1", kind: "pitch_board", relatedId: "team-1" }));
   });
 });
