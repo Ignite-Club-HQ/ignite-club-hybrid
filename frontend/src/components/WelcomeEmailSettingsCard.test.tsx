@@ -47,6 +47,7 @@ function renderCard(scopeKind: "team" | "competition" = "team") {
 }
 
 beforeEach(() => {
+  mocks.from.mockClear();
   mocks.row = null;
   mocks.inserted = [];
   mocks.updated = [];
@@ -74,6 +75,15 @@ beforeEach(() => {
 });
 
 describe("WelcomeEmailSettingsCard", () => {
+  it.runIf(mocks.mode === "icp")("shows rejected competition writes without saving or falling back to Supabase", async () => {
+    mocks.getLiveCompetitionWelcomeEmail.mockResolvedValue(null);
+    mocks.setLiveCompetitionWelcomeEmail.mockRejectedValue(new Error("Competition management forbidden"));
+    renderCard("competition");
+    await screen.findByDisplayValue("Welcome to {{competitionName}}");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({ title: "Could not save settings", description: "Competition management forbidden", variant: "destructive" }));
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
   it.runIf(mocks.mode === "supabase")("creates disabled-by-default team settings without storing recipient data", async () => {
     renderCard();
     await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).not.toBeDisabled());

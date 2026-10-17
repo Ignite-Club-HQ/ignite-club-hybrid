@@ -340,6 +340,23 @@ export async function getLiveCompetitionChatSettings(ctx: FeatureBackendContext,
   return unwrapCandid(actor.get_chat_settings(competitionId), "Get chat settings");
 }
 
+export async function getLiveCompetitionWelcomeEmail(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_competition_welcome_email(competitionId), "Get competition welcome settings");
+}
+
+export async function setLiveCompetitionWelcomeEmail(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  settings: { enabled: boolean; subject: string; message: string },
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_competition_welcome_email(competitionId, settings.enabled, settings.subject, settings.message),
+    "Save competition welcome settings",
+  );
+}
+
 export async function setLiveCompetitionChatSettings(
   ctx: FeatureBackendContext,
   competitionId: string,
