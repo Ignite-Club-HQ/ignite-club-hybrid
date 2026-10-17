@@ -61,7 +61,14 @@ export function WelcomeEmailSettingsCard({
           },
         });
       }
-      return loadSupabaseSettings();
+      return withFeatureBackend("competitions", {
+        supabase: () => loadSupabaseSettings(),
+        icp: async (ctx) => {
+          const { getLiveCompetitionWelcomeEmail } = await import("@/live/features/competitions");
+          const row = await getLiveCompetitionWelcomeEmail(ctx, scopeId);
+          return row ? { id: null, enabled: row.enabled, subject: row.subject, message: row.message } : null;
+        },
+      });
     },
   });
 
@@ -82,12 +89,24 @@ export function WelcomeEmailSettingsCard({
         updated_by: user?.id ?? null,
       };
       if (!values.subject) throw new Error("Add an email subject.");
+      if (values.subject.length > 160) throw new Error("Subject cannot exceed 160 characters.");
+      if (values.message.length > 4000) throw new Error("Message cannot exceed 4000 characters.");
       if (scopeKind === "team") {
         const handled = await withFeatureBackend("membership", {
           supabase: async () => false,
           icp: async (ctx) => {
             const { setLiveTeamWelcomeEmail } = await import("@/live/features/club");
             await setLiveTeamWelcomeEmail(ctx, scopeId, { enabled, subject: values.subject, message: values.message });
+            return true;
+          },
+        });
+        if (handled) return;
+      } else {
+        const handled = await withFeatureBackend("competitions", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            const { setLiveCompetitionWelcomeEmail } = await import("@/live/features/competitions");
+            await setLiveCompetitionWelcomeEmail(ctx, scopeId, { enabled, subject: values.subject, message: values.message });
             return true;
           },
         });

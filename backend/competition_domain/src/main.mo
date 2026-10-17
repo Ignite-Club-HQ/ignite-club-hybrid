@@ -13,6 +13,7 @@ import Text "mo:core/Text";
 import Nat8 "mo:core/Nat8";
 import Iter "mo:core/Iter";
 import Types "types";
+import Welcome "welcomeSettings";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -39,6 +40,7 @@ persistent actor class Main(governorInit : Principal) {
   var matches : [Types.Match];
   var bulkAccessPrincipals : [Principal];
   var chatSettings : [Types.ChatSettings];
+  var competitionWelcomeSettings : [Welcome.Settings];
   var competitionInvites : [Types.CompetitionInvite];
   var competitionJoinLinks : [Types.CompetitionJoinLink];
   var competitionOfficialEmailInvites : [Types.CompetitionOfficialEmailInvite];
@@ -744,6 +746,20 @@ persistent actor class Main(governorInit : Principal) {
 
   // ---------------- Chat settings ----------------
 
+  public shared ({ caller }) func get_competition_welcome_email(competition_id : Text) : async Welcome.Result {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    Welcome.read(competitionWelcomeSettings, competition_id, competitions.any(func(c) = c.id == competition_id), canManageCompetition(caller, competition_id))
+  };
+
+  public shared ({ caller }) func set_competition_welcome_email(competition_id : Text, enabled : Bool, subject : Text, message : Text) : async Welcome.Result {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    let settings : Welcome.Settings = { competition_id; enabled; subject; message };
+    switch (Welcome.write(competitionWelcomeSettings, settings, competitions.any(func(c) = c.id == competition_id), canManageCompetition(caller, competition_id))) {
+      case (#Err(error)) #Err(error);
+      case (#Ok(rows)) { competitionWelcomeSettings := rows; #Ok(settings) };
+    }
+  };
+
   func findChatSettings(competition_id : Text) : ?Types.ChatSettings {
     chatSettings.find(func(item) = item.competition_id == competition_id)
   };
@@ -1356,10 +1372,10 @@ persistent actor class Main(governorInit : Principal) {
 
   // ---------------- club_domain role mirror ----------------
   // Mirrors the caller's live club_admin grant for one club from club_domain
-  // (source of truth). Errors or an unwired club_domain leave roles untouched.
+  // (source of truth). Errors or an unwired club_domain revoke stale mirrors.
   func syncClubAdmin(caller : Principal, club_id : Text) : async () {
     switch (clubDomainCanister) {
-      case null {};
+      case null { roles := roles.filter(func(item) = not (item.user.equal(caller) and item.role == "club_admin" and item.competition_id == club_id)) };
       case (?cid) {
         let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
         try {
@@ -1367,7 +1383,9 @@ persistent actor class Main(governorInit : Principal) {
           let isAdmin = fresh.any(func((role, _)) = role == "club_admin");
           roles := roles.filter(func(item) = not (item.user.equal(caller) and item.role == "club_admin" and item.competition_id == club_id));
           if (isAdmin) roles := roles.concat([{ user = caller; role = "club_admin"; competition_id = club_id; team_id = null }]);
-        } catch (_) {};
+        } catch (_) {
+          roles := roles.filter(func(item) = not (item.user.equal(caller) and item.role == "club_admin" and item.competition_id == club_id));
+        };
       };
     };
   };
