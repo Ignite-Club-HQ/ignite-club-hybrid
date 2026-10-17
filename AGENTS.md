@@ -14,13 +14,13 @@
 - build-preview.mjs must copy live-index.html to dist/index.html for static hosting and SPA fallback.
 - Keep retired URLs alive as redirects in App.tsx (ParamRedirect) instead of letting them hit the 404 page.
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
-- notification_queue verifies schedule managers/recipients; refresh polls use caller-scoped signals. Why: browsers cannot authorize writes.
+- notification_queue verifies schedule scopes; polls use caller signals. ICP admin pages gate reads, surface failures and report actual queued counts. Why: browsers cannot authorize writes or prove delivery.
 - Schedule updates: omitted options keep; empty image/zero end-date clear. Monthly recurrence clamps in UTC. Why: retain Candid compatibility.
 - Account erasure revokes club roles first; gallery publication copies decrypted photos under club encryption. Why: prevent residual access and broken shared photos.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
 - Competition welcome settings live on competition_domain behind refreshed manager access; club-role mirrors fail closed. Why: no Supabase fallback or stale access.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
-- Android bars: use StatusBarBackdrop after SystemBars icon styling (which resets the background); honour its remaining CSS top inset without a forced floor (native padding already reserves it). Both Codemagic Android workflows run scripts/configure-android-status-bar.py; preserve keyboard handling.
+- Android bars: apply StatusBarBackdrop after SystemBars; keep its remaining CSS inset, no forced floor. Both Codemagic workflows run scripts/configure-android-status-bar.py; preserve keyboard handling. Why: native padding already reserves space.
 - Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
 - Pending-send recovery is scoped to each QueryClient and reconciles previews already in fetched snapshots as well as missing previews; this prevents duplicate photo bubbles after returning to chat.
 - ICP images wait for authenticated session restoration and share account-scoped in-flight unlocks; genuine failures retry after cooldown and foreground recovery. Why: cold startup must not cache missing identity as a failure or unlock the same logo repeatedly.
