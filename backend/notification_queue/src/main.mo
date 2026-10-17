@@ -12,6 +12,8 @@ import Time "mo:core/Time";
 import Timer "mo:core/Timer";
 import Types "types";
 import ScheduleAccess "scheduleAccess";
+import ScheduleCalendar "scheduleCalendar";
+import SchedulePatch "schedulePatch";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -639,12 +641,12 @@ persistent actor class Main(governorInit : Principal) {
         let item = scheduled[index];
         if (item.author != author) { return #Err("Author mismatch") };
         if (item.status != #Pending) { return #Err("Only pending messages can be edited") };
-        let newImage = switch (image_url) { case (?_) { image_url }; case null { item.image_url } };
+        let newImage = SchedulePatch.image(item.image_url, image_url);
         let newBody = switch (body) { case (?b) { b }; case null { item.body } };
         if (not valid(newBody) and newImage == null) { return #Err("Invalid body") };
         let newScheduledFor = switch (scheduled_for_ms) { case (?s) { if (s == 0) { return #Err("scheduled_for_ms required") }; s }; case null { item.scheduled_for_ms } };
         let newRecurrence = switch (recurrence) { case (?r) { r }; case null { item.recurrence } };
-        let newRecurrenceUntil = switch (recurrence_until_ms) { case (?_) { recurrence_until_ms }; case null { item.recurrence_until_ms } };
+        let newRecurrenceUntil = SchedulePatch.endDate(item.recurrence_until_ms, recurrence_until_ms);
         let updated = {
           item with
           body = newBody;
@@ -746,20 +748,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func nextSlot(item : Types.ScheduledMessage) : ?Nat64 {
-    let day : Nat64 = 86_400_000;
-    let step : Nat64 = switch (item.recurrence) {
-      case (#None) { return null };
-      case (#Daily) { day };
-      case (#Weekly) { 7 * day };
-      case (#Monthly) { 30 * day };
-    };
     let now = Nat64.fromIntWrap(Time.now() / 1_000_000);
-    var next = item.scheduled_for_ms + step;
-    while (next <= now) { next += step };
-    switch (item.recurrence_until_ms) {
-      case (?until) { if (next > until) { null } else { ?next } };
-      case null { ?next };
-    }
+    ScheduleCalendar.next(item.scheduled_for_ms, item.recurrence, now, item.recurrence_until_ms)
   };
 
   func settleScheduled(id : Text, slot : Nat64, outcome : { #Sent : Text; #Failed : Text }) {

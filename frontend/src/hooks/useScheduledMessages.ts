@@ -368,7 +368,7 @@ export function useUpdateScheduledMessage() {
             imageUrl: input.image_url,
             scheduledForMs: input.scheduled_for ? input.scheduled_for.getTime() : undefined,
             recurrence: input.recurrence,
-            recurrenceUntilMs: input.recurrence_until ? input.recurrence_until.getTime() : undefined,
+            recurrenceUntilMs: input.recurrence_until === null ? null : input.recurrence_until?.getTime(),
           });
           return rowFromLiveScheduledMessage(row);
         },
