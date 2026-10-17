@@ -170,7 +170,6 @@ const PublicEoiFormPage = lazyWithRetry(() => import("./pages/PublicEoiFormPage"
 const EoiCompletePage = lazyWithRetry(() => import("./pages/EoiCompletePage"));
 const ClaimTeamPage = lazyWithRetry(() => import("./pages/ClaimTeamPage"));
 const CompetitionJoinPage = lazyWithRetry(() => import("./pages/CompetitionJoinPage"));
-const CompetitionOfficialJoinPage = lazyWithRetry(() => import("./pages/CompetitionOfficialJoinPage"));
 const EmbeddedEoiFormPage = lazyWithRetry(() => import("./pages/EmbeddedEoiFormPage"));
 // WatchLiveTeamPage archived: only served basketball/netball spectator view (archive/sports/pages/)
 const LeaderboardPage = lazyWithRetry(() => import("./pages/LeaderboardPage"));
