@@ -42,6 +42,17 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
       if ('Err' in reply) throw new Error(reply.Err);
       return { clubs: reply.Ok.clubs, next: reply.Ok.next[0] ?? null, aclRevision: reply.Ok.acl_revision };
     },
+    async readMembershipsIndexed(context, after, limit) {
+      const { actor } = await connectLiveClubDomain(context.target, context.identity);
+      const reply = await actor.read_my_club_memberships_indexed(after === null ? [] : [after], limit);
+      if ('Err' in reply) throw new Error(reply.Err);
+      return { clubs: reply.Ok.clubs, next: reply.Ok.next[0] ?? null, aclRevision: reply.Ok.acl_revision };
+    },
+    async readHostedAssignment(clubId, revision) {
+      const reply = await router.read_hosted_club_assignment(clubId, ctx.target.alias, revision);
+      if ('Err' in reply) throw new Error(reply.Err);
+      return { clubId: reply.Ok.club_id, groupId: reply.Ok.group_id, revision: reply.Ok.revision };
+    },
     async readAssignments(clubs, revision) {
       const reply = await router.read_my_group_assignments(clubs, ctx.target.alias, revision);
       if ('Err' in reply) throw new Error(reply.Err);
