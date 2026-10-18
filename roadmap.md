@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] 10. Fix insights_domain M0250: initialize memoryReports through a new immutable migration, verify compiler/build and migration regression.
+
 - [x] 9. Correct memory-preserving mainnet upgrades: pinned ICP CLI 1.7.0 (verified upstream EOP keep option), reject older tools, explicit auto mode. Three offline safety tests pass; shell syntax and workflow YAML valid. Actual GitHub rerun remains an operator action; the screenshot's ignite_payments command is not in this checkout.
 
 - [x] 8. Layer 4 OQL implemented for events and caller-authorized clubs/teams: discovery, filters, projection, ordering, counts/grouping and paging; contracts regenerated. Event authorization/paging tests and 12 rejection tests pass; focused regressions pass both modes. Other domains retain per-method Candid access.
