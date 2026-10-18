@@ -49,6 +49,8 @@ persistent actor class Main(governorInit : Principal) {
   var photoEngagementEvents : [Types.PhotoEngagementEvent];
   var userActivity : [Types.UserActivityEntry];
   var transferFences : [Text];
+  var clubSponsorMetrics : [Types.ClubSponsorMetricCounter];
+  var clubSponsorReach : [Types.ClubSponsorReachCounter];
 
   transient let MAX_BATCH = 50;
   // list_user_activity is capped at this many rows per call (most-recent-first)
@@ -77,7 +79,7 @@ persistent actor class Main(governorInit : Principal) {
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
   };
-  type FenceSnapshot = { roles : [Types.RoleGrant]; engagement : [Types.EngagementCounter]; photo_uploads : [Types.PhotoUpload]; photo_events : [Types.PhotoEngagementEvent]; activity : [Types.UserActivityEntry] };
+  type FenceSnapshot = { roles : [Types.RoleGrant]; engagement : [Types.EngagementCounter]; photo_uploads : [Types.PhotoUpload]; photo_events : [Types.PhotoEngagementEvent]; activity : [Types.UserActivityEntry]; sponsor_metrics : [Types.ClubSponsorMetricCounter]; sponsor_reach : [Types.ClubSponsorReachCounter] };
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootP = photoUploads.filter(func(x) = x.club_id == c);
     let inP = func(k : Text) : Bool = rootP.any(func(x) = x.photo_id == k);
@@ -85,7 +87,9 @@ persistent actor class Main(governorInit : Principal) {
       engagement = engagementCounters.filter(func(x) = x.club_id == c);
       photo_uploads = photoUploads.filter(func(x) = x.club_id == c);
       photo_events = photoEngagementEvents.filter(func(x) = inP(x.photo_id));
-      activity = userActivity.filter(func(x) = x.club_id == ?c) }
+      activity = userActivity.filter(func(x) = x.club_id == ?c);
+      sponsor_metrics = clubSponsorMetrics.filter(func(x) = x.club_id == c);
+      sponsor_reach = clubSponsorReach.filter(func(x) = x.club_id == c) }
   };
   func fenceDrop(c : Text) {
     let rootP = photoUploads.filter(func(x) = x.club_id == c);
@@ -95,6 +99,8 @@ persistent actor class Main(governorInit : Principal) {
     photoUploads := photoUploads.filter(func(x) = not (x.club_id == c));
     photoEngagementEvents := photoEngagementEvents.filter(func(x) = not (inP(x.photo_id)));
     userActivity := userActivity.filter(func(x) = not (x.club_id == ?c));
+    clubSponsorMetrics := clubSponsorMetrics.filter(func(x) = x.club_id != c);
+    clubSponsorReach := clubSponsorReach.filter(func(x) = x.club_id != c);
   };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
@@ -113,7 +119,9 @@ persistent actor class Main(governorInit : Principal) {
         or s.engagement.any(func(x) = not (x.club_id == c))
         or s.photo_uploads.any(func(x) = not (x.club_id == c))
         or s.photo_events.any(func(x) = not (inP(x.photo_id)))
-        or s.activity.any(func(x) = not (x.club_id == ?c))) return #Err("Snapshot contains foreign records");
+        or s.activity.any(func(x) = not (x.club_id == ?c))
+        or s.sponsor_metrics.any(func(x) = x.club_id != c)
+        or s.sponsor_reach.any(func(x) = x.club_id != c)) return #Err("Snapshot contains foreign records");
     if (false) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
     roles := roles.concat(s.roles);
@@ -121,6 +129,8 @@ persistent actor class Main(governorInit : Principal) {
     photoUploads := photoUploads.concat(s.photo_uploads);
     photoEngagementEvents := photoEngagementEvents.concat(s.photo_events);
     userActivity := userActivity.concat(s.activity);
+    clubSponsorMetrics := clubSponsorMetrics.concat(s.sponsor_metrics);
+    clubSponsorReach := clubSponsorReach.concat(s.sponsor_reach);
     #Ok(s.engagement.size())
   };
   public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
@@ -613,10 +623,73 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  // Club-owned sponsor counter (preferred). Same metric semantics as
+  // record_sponsor_metric, but filed under (club, sponsor) so the numbers
+  // move with the club. Legacy sponsor-only rows for this sponsor are
+  // folded into this club on first use (a sponsor belongs to one club).
+  public shared ({ caller }) func record_club_sponsor_metric(club_id : Text, sponsor_id : Text, metric : Text, delta : Float, account_id : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(sponsor_id) or not valid(metric)) return #Err("Invalid sponsor metric");
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
+    claimLegacySponsor(club_id, sponsor_id);
+    let period = dayKey(nowMs());
+    if (metric == "unique_reach") {
+      let account = switch (account_id) { case (?a) a; case null return #Err("account_id required for unique_reach") };
+      if (not valid(account)) return #Err("Invalid sponsor metric");
+      addClubReach(club_id, sponsor_id, period, [account]);
+      return #Ok;
+    };
+    addClubMetric(club_id, sponsor_id, metric, period, delta);
+    #Ok
+  };
+
+  func addClubMetric(club_id : Text, sponsor_id : Text, metric : Text, period : Text, delta : Float) {
+    let hit = func(i : Types.ClubSponsorMetricCounter) : Bool = i.club_id == club_id and i.sponsor_id == sponsor_id and i.metric == metric and i.period == period;
+    if (clubSponsorMetrics.any(hit)) {
+      clubSponsorMetrics := clubSponsorMetrics.map(func(i) = if (hit(i)) { i with value = i.value + delta } else i);
+    } else {
+      clubSponsorMetrics := clubSponsorMetrics.concat([{ club_id; sponsor_id; metric; period; value = delta }]);
+    };
+  };
+
+  func mergeIds(a : [Text], b : [Text]) : [Text] = b.foldLeft(a, func(acc, id) = if (acc.any(func(x) = x == id)) acc else acc.concat([id]));
+
+  func addClubReach(club_id : Text, sponsor_id : Text, period : Text, ids : [Text]) {
+    let hit = func(i : Types.ClubSponsorReachCounter) : Bool = i.club_id == club_id and i.sponsor_id == sponsor_id and i.period == period;
+    if (clubSponsorReach.any(hit)) {
+      clubSponsorReach := clubSponsorReach.map(func(i) = if (hit(i)) { i with accountIds = mergeIds(i.accountIds, ids) } else i);
+    } else {
+      clubSponsorReach := clubSponsorReach.concat([{ club_id; sponsor_id; period; accountIds = mergeIds([], ids) }]);
+    };
+  };
+
+  func claimLegacySponsor(club_id : Text, sponsor_id : Text) {
+    let ms = sponsorMetrics.filter(func(i) = i.sponsor_id == sponsor_id);
+    let rs = sponsorReach.filter(func(i) = i.sponsor_id == sponsor_id);
+    if (ms.size() == 0 and rs.size() == 0) return;
+    for (i in ms.values()) addClubMetric(club_id, sponsor_id, i.metric, i.period, i.value);
+    for (i in rs.values()) addClubReach(club_id, sponsor_id, i.period, i.accountIds);
+    sponsorMetrics := sponsorMetrics.filter(func(i) = i.sponsor_id != sponsor_id);
+    sponsorReach := sponsorReach.filter(func(i) = i.sponsor_id != sponsor_id);
+  };
+
+  // Governor-only: fold legacy sponsor-only rows into a club before a move,
+  // so a sponsor that has not been shown since the upgrade still moves.
+  public shared ({ caller }) func claim_legacy_sponsor_metrics(club_id : Text, sponsor_ids : [Text]) : async { #Ok; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (sponsor_ids.size() > 500) return #Err("Too many sponsors");
+    for (s in sponsor_ids.values()) claimLegacySponsor(club_id, s);
+    #Ok
+  };
+
   public query ({ caller }) func get_sponsor_performance(sponsor_id : Text, period : Text) : async { #Ok : Types.SponsorPerformance; #Err : Text } {
     if (not isAppAdmin(caller)) return #Err("App admin required");
-    let matches = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period);
-    #Ok({ sponsor_id; period; metrics = matches.map(func(item) = { metric = item.metric; value = item.value }) })
+    let legacy = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period).map(func(item) = { metric = item.metric; value = item.value });
+    let owned = clubSponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period);
+    let metrics = owned.foldLeft(legacy, func(acc : [{ metric : Text; value : Float }], item) =
+      if (acc.any(func(x) = x.metric == item.metric)) acc.map(func(x : { metric : Text; value : Float }) : { metric : Text; value : Float } = if (x.metric == item.metric) { metric = x.metric; value = x.value + item.value } else x)
+      else acc.concat([{ metric = item.metric; value = item.value }]));
+    #Ok({ sponsor_id; period; metrics })
   };
 
   // Per-sponsor performance rows (impressions/clicks summed, distinct
@@ -626,10 +699,13 @@ persistent actor class Main(governorInit : Principal) {
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (sponsor_ids.size() == 0 or sponsor_ids.size() > 100) return #Err("Invalid sponsor list");
     #Ok(sponsor_ids.map(func(sponsor_id : Text) : Types.SponsorBenchmarkRow {
-      let metricMatches = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period >= since_period and item.period <= until_period);
+      let inRange = func(sid : Text, p : Text) : Bool = sid == sponsor_id and p >= since_period and p <= until_period;
+      let metricMatches = sponsorMetrics.filter(func(item) = inRange(item.sponsor_id, item.period))
+        .concat(clubSponsorMetrics.filter(func(item) = inRange(item.sponsor_id, item.period)).map(func(item) : Types.SponsorMetricCounter = { sponsor_id = item.sponsor_id; metric = item.metric; period = item.period; value = item.value }));
       let impressions = Nat.toNat32(Int.abs(Float.toInt(metricMatches.filter(func(item) = item.metric == "impressions").foldLeft(0.0, func(acc, item) = acc + item.value))));
       let clicks = Nat.toNat32(Int.abs(Float.toInt(metricMatches.filter(func(item) = item.metric == "clicks").foldLeft(0.0, func(acc, item) = acc + item.value))));
-      let reachMatches = sponsorReach.filter(func(item) = item.sponsor_id == sponsor_id and item.period >= since_period and item.period <= until_period);
+      let reachMatches = sponsorReach.filter(func(item) = inRange(item.sponsor_id, item.period))
+        .concat(clubSponsorReach.filter(func(item) = inRange(item.sponsor_id, item.period)).map(func(item) : Types.SponsorReachCounter = { sponsor_id = item.sponsor_id; period = item.period; accountIds = item.accountIds }));
       let reachSet = reachMatches.foldLeft([] : [Text], func(acc, item) = item.accountIds.foldLeft(acc, func(a, id) = if (a.any(func(x) = x == id)) a else a.concat([id])));
       let unique_reach = Nat.toNat32(reachSet.size());
       let ctr = if (impressions == 0) 0.0 else Int.toFloat(Nat32.toNat(clicks)) / Int.toFloat(Nat32.toNat(impressions));
@@ -938,7 +1014,16 @@ persistent actor class Main(governorInit : Principal) {
       } else s
     });
 
+    let newClubSponsorReach = clubSponsorReach.map(func(s : Types.ClubSponsorReachCounter) : Types.ClubSponsorReachCounter {
+      if (s.accountIds.any(func(a) = a == oldText)) {
+        let withoutOld = s.accountIds.filter(func(a) = a != oldText);
+        let accountIds = if (withoutOld.any(func(a) = a == newText)) withoutOld else withoutOld.concat([newText]);
+        { s with accountIds }
+      } else s
+    });
+
     if (not dry_run) {
+      clubSponsorReach := newClubSponsorReach;
       roles := newRoles;
       adminAlerts := newAdminAlerts;
       auditLogs := newAuditLogs;
