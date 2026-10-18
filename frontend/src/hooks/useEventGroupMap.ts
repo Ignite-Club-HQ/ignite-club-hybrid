@@ -103,7 +103,7 @@ export function useEventGroupMap({ clubId, grouping, targetTeamIds, scopedRoster
           const rows = await listLiveTeams(ctx, clubId!);
           return targetKey ? rows.filter((team) => targetKey.split(",").includes(team.id)) : rows;
         },
-      });
+      }, { clubId: clubId! });
 
       const teamIds = teams.map((t: any) => t.id);
 
@@ -127,7 +127,7 @@ export function useEventGroupMap({ clubId, grouping, targetTeamIds, scopedRoster
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: (ctx) => myLiveRoleGrants(ctx),
-        });
+        }, { shared: 'person' });
         return {
           teams,
           roles: grants

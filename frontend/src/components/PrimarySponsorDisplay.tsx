@@ -68,7 +68,7 @@ export function PrimarySponsorDisplay({ sponsorId, variant = "compact", context 
             tier: row.tier && row.tier !== "none" ? (row.tier as SponsorTier) : null,
           } as Sponsor;
         },
-      }),
+      }, { shared: 'app' }),
     enabled: !!sponsorId,
     // Sponsors change rarely — cache aggressively to eliminate the ~12k/day
     // duplicate PK lookups this component was generating across mounts.

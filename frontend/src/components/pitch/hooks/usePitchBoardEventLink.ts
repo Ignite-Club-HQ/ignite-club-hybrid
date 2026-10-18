@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { livePitchEvent, livePitchRecipients } from "./livePitchNotifications";
 import {
@@ -65,7 +66,7 @@ export function usePitchBoardEventLink({
                   relatedId: teamId,
                 });
               },
-            });
+            }, writeOnce({ teamId: teamId! }));
           } catch (error) {
             console.error("[PitchBoard] Error sending ICP game linked notifications:", error);
           }

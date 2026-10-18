@@ -33,6 +33,7 @@ import { Crown } from "lucide-react";
 import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveClubProfile, getLiveClubSettings, saveLiveTeam, listLiveTeams, getLiveClubThemeJson } from "@/live/features/club";
 import { candidOpt } from "@/live/features/candid";
 import { addLiveRoleGrant } from "@/live/features/membership";
@@ -147,7 +148,7 @@ export default function ClubSetupWizardPage() {
             getLiveClubThemeJson(ctx, clubId!),
           ]),
           supabase: async () => { throw new Error("unreachable"); },
-        });
+        }, { clubId: clubId! });
 
         let theme: any = {};
         if (themeJson) {
@@ -237,7 +238,7 @@ export default function ClubSetupWizardPage() {
         const teams = await withFeatureBackend("membership", {
           icp: (ctx) => listLiveTeams(ctx, clubId!),
           supabase: async () => { throw new Error("unreachable"); },
-        });
+        }, { clubId: clubId! });
         return teams.map((team: any) => ({ id: team.id, name: team.name, level_age: team.level_age?.[0] ?? null }));
       }
       const { data } = await supabase
@@ -342,7 +343,7 @@ export default function ClubSetupWizardPage() {
           if (error) throw error;
           return teamId as string;
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: (teamId, draft) => {
       setTeams((prev) =>
@@ -438,7 +439,7 @@ export default function ClubSetupWizardPage() {
           if (insErr) throw insErr;
           return token;
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     } catch (err: any) {
       setList((prev) =>
         prev.map((i) =>

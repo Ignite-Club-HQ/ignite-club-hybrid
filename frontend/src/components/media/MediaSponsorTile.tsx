@@ -77,7 +77,7 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
           teams.forEach((t) => t?.club_id && out.add(t.club_id));
           return out;
         },
-      });
+      }, { shared: 'person' });
       return ids.size === 1 ? Array.from(ids)[0] : null;
     },
   });

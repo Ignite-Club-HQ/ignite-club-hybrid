@@ -38,7 +38,7 @@ function useUserHasAnyClub() {
             const grants = await getLiveMyRoleGrants(ctx);
             return grants.some((g) => g.club[0] || g.team[0]);
           },
-        });
+        }, { shared: 'person' });
       }
       const { data, error } = await supabase
         .from("user_roles")

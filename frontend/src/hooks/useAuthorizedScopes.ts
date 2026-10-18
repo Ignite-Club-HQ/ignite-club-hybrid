@@ -60,7 +60,7 @@ async function fetchMemberships(userId: string): Promise<MembershipRow> {
     const grants = await withFeatureBackend("membership", {
       supabase: async () => [],
       icp: (ctx) => myLiveRoleGrants(ctx),
-    });
+    }, { shared: 'person' });
     return {
       clubIds: [...new Set(grants.map((g) => g.club).filter((c): c is string => !!c))],
       teamIds: [...new Set(grants.map((g) => g.team).filter((t): t is string => !!t))],

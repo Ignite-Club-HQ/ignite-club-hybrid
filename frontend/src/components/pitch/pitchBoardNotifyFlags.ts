@@ -36,7 +36,7 @@ export async function loadPitchNotifyFlags(
           const { getLiveTeamPitchNotify } = await import("@/live/features/club");
           return getLiveTeamPitchNotify(ctx, teamId);
         },
-      });
+      }, { teamId: teamId! });
     }
     const { data } = await supabase
       .from("team_subscriptions")

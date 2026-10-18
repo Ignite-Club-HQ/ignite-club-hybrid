@@ -84,7 +84,7 @@ export function useAddTeamMemberSearch({
             avatar_url: r.avatar_ref ?? null,
           }));
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: debouncedNameInput.length >= 2,
   });
@@ -177,7 +177,7 @@ export function useAddTeamMemberSearch({
               childName: null as string | null,
             }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: debouncedNameInput.length >= 2,
   });
@@ -228,7 +228,7 @@ export function useAddTeamMemberSearch({
           }
           return identities;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: identityLookupIds.length > 0 && !!clubId,
     staleTime: 60 * 1000,
@@ -387,7 +387,7 @@ export function useAddTeamMemberSearch({
                 .filter((result) => !resultProfileIds.has(result.id));
               return { term, results: [...profileResults, ...pendingResults] };
             },
-          }),
+          }, { clubId: clubId! }),
         ),
       );
       return searches;
@@ -436,7 +436,7 @@ export function useAddTeamMemberSearch({
               }));
               return { term, results };
             },
-          }),
+          }, { shared: 'person' }),
         ),
       ),
     enabled: open && mode === "bulk" && bulkSecondParentTerms.length > 0,
@@ -467,7 +467,7 @@ export function useAddTeamMemberSearch({
             avatar_url: r.avatar_ref ?? null,
           }));
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: debouncedSecondParentSearch.length >= 2 && !selectedSecondParent,
   });

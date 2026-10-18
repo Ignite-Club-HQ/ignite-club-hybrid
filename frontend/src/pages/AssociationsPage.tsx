@@ -91,7 +91,7 @@ function SupabaseAssociationsPage() {
               kind: "association" // canister shape doesn't have kind, but this is the Associations page
             }));
         }
-      });
+      }, { shared: 'person' });
     },
   });
 

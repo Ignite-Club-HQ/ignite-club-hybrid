@@ -148,7 +148,7 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
             return { isPro, media };
           },
           supabase: async () => null,
-        });
+        }, { clubId: clubId! });
         if (!live) return null;
 
         // Media caps are enforced by the photo-store canister per 30-day

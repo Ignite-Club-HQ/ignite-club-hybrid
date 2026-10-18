@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { getCachedRoles } from "@/lib/rolesCache";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { createLiveTeamInviteLink, listLiveTeamInviteLinks, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink, getLiveTeam } from "@/live/features/club";
 
 const APP_URL = "https://reference.invalid";
@@ -171,7 +172,7 @@ export default function TeamJoinLinkCard({
         }
         return map;
       },
-    }),
+    }, { teamId: teamId! }),
     staleTime: 30_000,
   });
 
@@ -261,7 +262,7 @@ export default function TeamJoinLinkCard({
           if (error) throw error;
           return { role, row: data as JoinLinkRow };
         },
-      }),
+      }, writeOnce({ teamId: teamId! })),
     onSuccess: ({ role }) => {
       queryClient.invalidateQueries({ queryKey });
       toast({ title: "Join link ready", description: `Share it with anyone joining as ${ALL_ROLE_OPTIONS.find(r => r.value === role)?.label.toLowerCase()}.` });

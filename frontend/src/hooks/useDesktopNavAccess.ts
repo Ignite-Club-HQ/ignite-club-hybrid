@@ -40,7 +40,7 @@ export function useDesktopNavAccess() {
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
-        });
+        }, { shared: 'person' });
         rows = grants.map((g) => ({ role: g.role, club_id: g.club ?? null, team_id: g.team ?? null }));
       } else {
         const { data: roles, error } = await supabase

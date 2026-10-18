@@ -469,7 +469,7 @@ const AllReactionsContent = memo(function AllReactionsContent({
           }[];
           return new Map(rows.map((r) => [r.account_id, r.display_name]));
         },
-      }).catch(() => null);
+      }, { shared: 'person' }).catch(() => null);
       if (icpNames) {
         return allUserIds.map((id) => ({
           id,

@@ -106,7 +106,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           }
           return { allowed: false, effectiveClubId: null as string | null };
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: isEventsPlacement,
   });
@@ -284,7 +284,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           }
           return sponsors.some((s) => s.is_active);
         },
-      });
+      }, { shared: 'app' });
     },
   });
 

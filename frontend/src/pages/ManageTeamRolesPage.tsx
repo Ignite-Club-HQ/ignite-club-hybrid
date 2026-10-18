@@ -82,7 +82,7 @@ function SupabaseManageTeamRolesPage() {
               clubs: { name: null, bot_user_id: null },
             } as any;
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("teams")
@@ -110,7 +110,7 @@ function SupabaseManageTeamRolesPage() {
               profiles: { id: g.account_id, display_name: g.account_id, avatar_url: null },
             }));
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("user_roles")
@@ -142,7 +142,7 @@ function SupabaseManageTeamRolesPage() {
                 requester: { id: r.account_id, display_name: r.account_id, avatar_url: null },
               }));
           },
-        });
+        }, { clubId: team?.club_id as string });
       }
       if (!teamId) return [];
       return listSupabaseRoleRequests({ teamId });

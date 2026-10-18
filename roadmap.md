@@ -68,4 +68,6 @@
 - [ ] 12. USER ACTION: top up timer_jobs (and any other canister reporting out of cycles, e.g. shard_router) before rerunning the deploy workflow.
 - [x] Routing speed: entity→club answers remembered on device (per principal, wiped at sign-out), concurrent lookups shared, list screens can pre-record owners (clubDispatch.remember). Next: call remember() from event/chat list reads; scope remaining duties/RSVP/messages/polls/reactions calls.
 - [x] Events + chat fully scoped (0 unscoped calls): entity/club scopes, `shared` for person/app data, `everyGroup` fan-out with merge for multi-club lists; chat bubbles/polls scope from the open chat page. Known limits: forwarding a message into a chat held by a different group, and DMs/presence/typing stay on shared canisters by design.
-- [ ] Next: scope membership (415), mini-leagues, points, competitions, notifications, vault, analytics, media, news, home.
+- [x] Membership batch 1: 254/415 calls scoped (club/team scopes, writes single-attempt, profiles/app settings shared); caller role grants merge from shared + every group (myRoleGrants.ts).
+- [ ] Membership remaining 161: multi-club loops (grants then per-club reads in one body — split per club), invite tokens/join links (need token→club lookup), season-id calls (need season→club), club creation (placement picks group), role-request ids, club directory listing (must come from global discovery, not shared club_domain).
+- [ ] Then: mini-leagues (81), points (65), competitions (68), notifications (46), vault (50), analytics (36), media (16), news (4), home (3).

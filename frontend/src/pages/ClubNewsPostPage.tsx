@@ -61,7 +61,7 @@ export default function ClubNewsPostPage() {
           const profiles = await listLiveProfilesByIds(ctx, [post!.author_id!]);
           return profiles[0]?.display_name ?? null;
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: !!post?.author_id,
   });

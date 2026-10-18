@@ -1965,7 +1965,7 @@ function SupabaseJoinTeamPage() {
               .filter((g) => g.role === "team_admin" || g.role === "coach" || g.role === "club_admin")
               .map((g) => ({ user_id: g.user.toText() }));
           },
-        });
+        }, { teamId: invite?.team_id as string });
       } else {
         const { data } = await supabase
           .from("user_roles")

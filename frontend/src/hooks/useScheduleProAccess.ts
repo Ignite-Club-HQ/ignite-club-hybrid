@@ -53,7 +53,7 @@ export function useScheduleProAccess(target: ScheduleTarget | null | undefined) 
         return withFeatureBackend("membership", {
           supabase: async () => null,
           icp: async (ctx) => (await getLiveTeam(ctx, teamId!))[0]?.club_id ?? null,
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("teams")

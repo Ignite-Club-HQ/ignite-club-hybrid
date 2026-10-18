@@ -671,7 +671,7 @@ export default function EventDetailPage() {
           if (event.mini_league_id && grants.some((g) => inClub(g) && ["league_admin", "coach", "committee_member"].includes(g.role))) return true;
           return false;
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user && !!event,
   });
@@ -706,7 +706,7 @@ export default function EventDetailPage() {
         icp: async (ctx) =>
           // Team grant → club grant → caller's IAP entitlement (proAccess).
           resolveLiveProFootballAccess(ctx, { teamId: event?.team_id ?? null, clubId: event?.club_id ?? null }),
-      });
+      }, { clubId: event?.club_id as string });
     },
     enabled: !!event?.team_id,
   });
@@ -743,7 +743,7 @@ export default function EventDetailPage() {
       icp: async (ctx) =>
         // Team grant → club grant → caller's IAP entitlement (proAccess).
         resolveLiveProAccess(ctx, { teamId: event?.team_id ?? null, clubId: event?.club_id ?? null }),
-    }),
+    }, { clubId: event?.club_id as string }),
     enabled: (!!event?.team_id || !!event?.club_id),
   });
 
@@ -987,7 +987,7 @@ export default function EventDetailPage() {
 
         return adultMembers;
       },
-    }),
+    }, { clubId: event?.club_id as string }),
     enabled: !!event?.team_id && !!event?.id && !!(canAccessPitchBoard || canViewPitchBoardReadOnly),
   });
 
@@ -1019,7 +1019,7 @@ export default function EventDetailPage() {
             const sub = await getLiveTeamSubscription(ctx, event.team_id!);
             return sub ? mapLiveTeamSubscriptionToRow(sub) : null;
           },
-        });
+        }, { teamId: event?.team_id as string });
       }
       const { data, error } = await supabase
         .from("team_subscriptions")
@@ -1085,7 +1085,7 @@ export default function EventDetailPage() {
         });
         return buildEventMemberRoster(rows, null);
       },
-    }),
+    }, { clubId: event?.club_id as string }),
     enabled: !!event && !useIcpLab,
   });
 

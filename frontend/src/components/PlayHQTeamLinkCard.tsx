@@ -68,7 +68,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             playhq_org_id: profile?.playhq_org_id[0] ?? null,
           };
         },
-      }),
+      }, { clubId: clubId! }),
   });
   const clubHasPlayHQ = !!(club?.playhq_tenant && club?.playhq_org_id);
 
@@ -94,7 +94,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             playhq_auto_create_events: liveTeam.playhq_auto_create_events,
           } as TeamRow;
         },
-      }),
+      }, { teamId: teamId! }),
     enabled: clubHasPlayHQ,
   });
 
@@ -208,7 +208,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
               .catch((e) => toast.error(e?.message ?? "Import failed"));
           }
         },
-      });
+      }, writeOnce({ teamId: teamId! }));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["team-playhq-link", teamId] });

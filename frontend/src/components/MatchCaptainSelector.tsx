@@ -150,7 +150,7 @@ export default function MatchCaptainSelector({
           isSeasonCaptain: true,
         };
       },
-    }),
+    }, { teamId: teamId! }),
   });
 
   const assignMutation = useMutation({

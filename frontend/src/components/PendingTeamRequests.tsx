@@ -83,7 +83,7 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
         requester: profileMap.get(r.requested_by),
       }));
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
   });
 

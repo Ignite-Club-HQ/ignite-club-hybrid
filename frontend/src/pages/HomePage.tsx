@@ -37,6 +37,7 @@ import {
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveClubProfile, getLiveTeam, listLiveClubs, listLiveTeams } from "@/live/features/club";
 import { requestLiveRole } from "@/live/features/membership";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
@@ -1797,7 +1798,7 @@ export default function HomePage() {
             const team = await getLiveTeam(ctx, teamId).catch(() => null);
             return resolveLiveProFootballAccess(ctx, { teamId, clubId: team?.club_id ?? null });
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data: teamSubscription } = await supabase
         .from("team_subscriptions")
@@ -1958,7 +1959,7 @@ export default function HomePage() {
           await withFeatureBackend("membership", {
             supabase: async () => { throw new Error("unreachable"); },
             icp: (ctx) => requestLiveRole(ctx, league.club_id, selectedLeagueRole!),
-          });
+          }, writeOnce({ clubId: league?.club_id as string }));
           return;
         }
         if (userRoles?.some(r => r.team_id === selectedTeam && r.role === selectedTeamRole)) {
@@ -1969,7 +1970,7 @@ export default function HomePage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: (ctx) => requestLiveRole(ctx, team.club_id, selectedTeamRole!, selectedTeam),
-        });
+        }, writeOnce({ clubId: team?.club_id as string }));
         return;
       }
       if (isLeagueSelected && actualLeagueId) {
@@ -2062,7 +2063,7 @@ export default function HomePage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: (ctx) => requestLiveRole(ctx, team.club_id, role, selectedTeam),
-        });
+        }, writeOnce({ clubId: team?.club_id as string }));
         return;
       }
       const { error } = await supabase.from("role_requests").insert({

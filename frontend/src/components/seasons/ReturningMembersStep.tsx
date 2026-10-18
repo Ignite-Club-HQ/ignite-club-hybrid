@@ -105,7 +105,7 @@ export function ReturningMembersStep({
             membership_role: "player",
           }));
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   const { data: targetTeams = [] } = useQuery({
@@ -138,7 +138,7 @@ export function ReturningMembersStep({
             .map((t) => ({ id: t.id, name: t.name }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   // Seed default assignments: same-named team in the new season, else unassigned.

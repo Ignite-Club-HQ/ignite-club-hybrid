@@ -122,7 +122,7 @@ export default function LeaderboardPage() {
       if (isIcpPoints) return withFeatureBackend("membership", {
         supabase: async () => [],
         icp: async (ctx) => (await listLiveTeams(ctx, clubId)).filter((t) => !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name })),
-      });
+      }, { clubId: clubId! });
       const { data, error } = await supabase.rpc("list_leaderboard_teams", { _club_id: clubId });
       if (error) throw error;
       return (data ?? []) as { id: string; name: string }[];
@@ -160,7 +160,7 @@ export default function LeaderboardPage() {
         const profiles = await withFeatureBackend("membership", {
           supabase: () => [],
           icp: (ctx) => listLiveProfilesByIds(ctx, entries.map((e) => e.subject_id)),
-        });
+        }, { shared: 'person' });
         const profileById = new Map(profiles.map((p) => [p.account_id, p]));
         return entries.map((e, i) => {
           const profile = profileById.get(e.subject_id);

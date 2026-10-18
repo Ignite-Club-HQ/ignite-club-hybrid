@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { createLiveChildForParentOnTeam } from "@/live/features/club";
 import { grantLiveClubChildNameRead, registerLiveChildNamePii } from "@/live/features/vault";
 
@@ -179,7 +180,7 @@ export default function AddPlayerToParentSheet({
           await grantLiveClubChildNameRead(ctx, childId, clubId);
           return childId;
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       toast({

@@ -89,7 +89,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
           const team = await withFeatureBackend("membership", {
             supabase: async () => null,
             icp: (ctx) => getLiveTeam(ctx, teamId),
-          });
+          }, { teamId: teamId! });
           teamName = team && team.length ? team[0].name : "";
         }
 

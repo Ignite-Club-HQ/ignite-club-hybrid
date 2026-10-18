@@ -761,7 +761,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
-        });
+        }, { shared: 'person' });
         clubIds = [...new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c))];
       } else {
         // Get user's clubs through their roles
@@ -954,7 +954,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
-        });
+        }, { shared: 'person' });
         // Candid opt fields arrive as [] | [string], so unwrap with [0].
         grants.forEach((g) => g.club[0] && ids.add(g.club[0]));
         // Team-scoped grants carry no club id; resolve each team's club so

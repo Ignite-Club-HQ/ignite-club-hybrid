@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { saveLiveMembershipTeam, addLiveRoleGrant, getLiveMyRoleGrants } from "@/live/features/membership";
@@ -98,7 +99,7 @@ export default function CreateTeamPage() {
                 }
               : null;
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data, error } = await supabase
         .from("clubs")
@@ -142,7 +143,7 @@ export default function CreateTeamPage() {
           const grants = await getLiveMyRoleGrants(ctx);
           return grants.some(g => g.role === "club_admin" && (g.club[0] ?? null) === clubId!);
         }
-      });
+      }, { shared: 'person' });
     },
     enabled: !!clubId && !!user,
   });
@@ -162,7 +163,7 @@ export default function CreateTeamPage() {
             const liveTeams = await listLiveTeams(ctx, clubId!);
             return liveTeams.filter((t) => t.deleted_at_ms.length === 0).length;
           },
-        });
+        }, { clubId: clubId! });
       }
       const { count, error } = await supabase
         .from("teams")
@@ -188,7 +189,7 @@ export default function CreateTeamPage() {
               ? { team_limit: sub.team_limit.length ? Number(sub.team_limit[0]) : null }
               : null;
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data } = await supabase
         .from("club_subscriptions")
@@ -222,7 +223,7 @@ export default function CreateTeamPage() {
               }))
               .sort((a, b) => a.sort_order - b.sort_order);
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data, error } = await supabase
         .from("team_folders")
@@ -352,7 +353,7 @@ export default function CreateTeamPage() {
         const unique = await checkLiveTeamNameUnique(ctx, clubId!, name.trim());
         return { data: unique ? null : { id: "duplicate" } };
       },
-    });
+    }, { clubId: clubId! });
 
     if (existingTeam) {
       setSaving(false);
@@ -396,7 +397,7 @@ export default function CreateTeamPage() {
               null,
               levelAge.trim() || null,
             ),
-          });
+          }, writeOnce({ clubId: clubId! }));
         } catch (error) {
           setSaving(false);
           toast({
@@ -532,7 +533,7 @@ export default function CreateTeamPage() {
           return { data: null, error: error as { code?: string } };
         }
       },
-    });
+    }, writeOnce({ clubId: clubId! }));
 
     if (teamError) {
       setSaving(false);
@@ -584,7 +585,7 @@ export default function CreateTeamPage() {
                   await saveLiveTeam(ctx, { ...existing[0], logo_url: [blobUpload.url] });
                 }
               }
-            });
+            }, writeOnce({ teamId: team?.id as string }));
           } else {
             await supabase
               .from("teams")
@@ -659,7 +660,7 @@ export default function CreateTeamPage() {
             email: adminAssignment.inviteEmail!,
             role: "team_admin",
           }),
-        });
+        }, writeOnce({ clubId: clubId! }));
         const inviteId = (result as { invite?: { id?: string } } | undefined)?.invite?.id;
         setSaving(false);
         await invalidateTeamLists(queryClient, user?.id);

@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Season } from "@/hooks/useClubSeasons";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { saveLiveSeason, type LiveSeason } from "@/live/features/club";
 import { ReturningMembersStep } from "./ReturningMembersStep";
@@ -102,7 +103,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
             currentSeason.end_date ?? "",
           ));
         },
-      });
+      }, writeOnce({ clubId: currentSeason?.club_id as string }));
     },
   });
 
@@ -141,7 +142,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
           );
           return created.id;
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
   });
 
@@ -159,7 +160,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
         icp: async (ctx) => {
           await saveLiveSeason(ctx, liveSeasonRecord(id, clubId, seasonName.trim(), "active"));
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
   });
 

@@ -22,6 +22,7 @@ import TeamTrainingPausesCard from "@/components/team/TeamTrainingPausesCard";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { saveLiveMembershipTeam } from "@/live/features/membership";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -128,7 +129,7 @@ export default function EditTeamPage() {
             } : null
           } as any;
         }
-      });
+      }, { teamId: id! });
     },
     enabled: !!id,
   });
@@ -155,7 +156,7 @@ export default function EditTeamPage() {
             .map((f) => ({ id: f.id, name: f.name, sort_order: f.sort_order }))
             .sort((a, b) => a.sort_order - b.sort_order);
         },
-      });
+      }, { clubId: team?.club_id as string });
     },
     enabled: !!team?.club_id,
   });
@@ -386,7 +387,7 @@ export default function EditTeamPage() {
           return error as Error;
         }
       },
-    });
+    }, writeOnce({ clubId: team?.club_id as string }));
 
     setSaving(false);
 

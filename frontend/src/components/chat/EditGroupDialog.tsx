@@ -181,7 +181,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
           }
           return false;
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user && open,
     staleTime: 5 * 60 * 1000,

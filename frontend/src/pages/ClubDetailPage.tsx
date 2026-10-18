@@ -107,6 +107,7 @@ import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, getLiveClubSettings, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
 import { markTeamDeleted, unmarkTeamDeleted } from "@/lib/deletedTeamTombstones";
 import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";
@@ -257,7 +258,7 @@ export default function ClubDetailPage() {
               theme_accent_l: null,
             };
           },
-        });
+        }, { clubId: id! });
       }
 
       const { data, error } = await supabase
@@ -549,7 +550,7 @@ export default function ClubDetailPage() {
               })
               .sort((a, b) => a.name.localeCompare(b.name));
           },
-        });
+        }, { teamId: id! });
       }
       const { data, error } = await supabase
         .from("teams")
@@ -607,7 +608,7 @@ export default function ClubDetailPage() {
               }))
               .sort((a, b) => a.sort_order - b.sort_order);
           },
-        });
+        }, { teamId: id! });
       }
       const { data, error } = await supabase
         .from("team_folders")
@@ -650,7 +651,7 @@ export default function ClubDetailPage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => { await setLiveTeamFolder(ctx, teamId, folderId); },
-        });
+        }, writeOnce({ teamId: teamId! }));
         return;
       }
       const { error } = await supabase
@@ -686,7 +687,7 @@ export default function ClubDetailPage() {
               created_at_ms: BigInt(Date.now()),
             });
           },
-        });
+        }, writeOnce({ clubId: id! }));
         return;
       }
       const { error } = await supabase.from("team_folders").insert({
@@ -729,7 +730,7 @@ export default function ClubDetailPage() {
                 : BigInt(Date.now()),
             });
           },
-        });
+        }, writeOnce({ clubId: id! }));
         return;
       }
       const { error } = await supabase
@@ -885,7 +886,7 @@ export default function ClubDetailPage() {
               .map((g) => g.role);
             return roles.includes("club_admin") ? "club_admin" : roles[0] ?? null;
           },
-        });
+        }, { shared: 'person' });
       }
       // Check for club_admin role - can have team_id null OR be associated with a team in this club
       const { data } = await supabase
@@ -1038,7 +1039,7 @@ export default function ClubDetailPage() {
               .filter((a) => a.allocated && teamIds.includes(a.team_id))
               .map((a) => ({ ...a, sponsors: sponsorById.get(a.sponsor_id) }));
           },
-        });
+        }, { teamId: id! });
       }
       const { data } = await supabase
         .from("team_sponsor_allocations")
@@ -1079,7 +1080,7 @@ export default function ClubDetailPage() {
                 : null,
             };
           },
-        });
+        }, { clubId: id! });
       }
       const { data } = await supabase
         .from("club_subscriptions")
@@ -1176,7 +1177,7 @@ export default function ClubDetailPage() {
             } catch { /* listing failed — club delete still committed */ }
             return deleted;
           },
-        });
+        }, writeOnce({ clubId: id! }));
         setShowDeleteDialog(false);
         clearClubSetupLocalState(id!);
         queryClient.invalidateQueries({ queryKey: ["club", id] });
@@ -1408,7 +1409,7 @@ export default function ClubDetailPage() {
             } catch { /* listing failed — club restore still committed */ }
             return restored;
           },
-        });
+        }, writeOnce({ clubId: id! }));
         queryClient.invalidateQueries({ queryKey: ["club", id] });
         await invalidateTeamLists(queryClient, user?.id);
         toast({ title: "Club restored!" });
@@ -1500,7 +1501,7 @@ export default function ClubDetailPage() {
           if (data?.error) throw new Error(data.error);
         },
         icp: (ctx) => deleteLiveClubPermanent(ctx, id!),
-      });
+      }, writeOnce({ clubId: id! }));
 
       setShowPermanentDeleteDialog(false);
       toast({ title: "Club permanently deleted", description: "All data has been removed." });
@@ -1545,7 +1546,7 @@ export default function ClubDetailPage() {
               expires_at_ms: [], // Admin-enabled = no expiry
             });
           },
-        });
+        }, writeOnce({ clubId: id! }));
         return;
       }
       // Check if subscription record exists
@@ -2190,7 +2191,7 @@ export default function ClubDetailPage() {
                 return e;
               }
             },
-          });
+          }, writeOnce({ clubId: id! }));
           if (error) {
             queryClient.setQueryData(["club", id], previousClub);
             toast({ title: "Error", description: "Failed to update setting.", variant: "destructive" });

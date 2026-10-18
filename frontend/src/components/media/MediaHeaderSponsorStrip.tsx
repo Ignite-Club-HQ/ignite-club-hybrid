@@ -106,7 +106,7 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
           return !!data?.is_pro;
         },
         icp: async (ctx) => isLiveClubPro(ctx, clubId!),
-      }),
+      }, { clubId: clubId! }),
   });
 
   // Pro toggle — any Pro club that has opted in
@@ -129,7 +129,7 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
           const settingsOpt = await getLiveClubSettings(ctx, clubId!);
           return !!settingsOpt[0]?.media_header_sponsors_enabled;
         },
-      });
+      }, { clubId: clubId! });
       return { media_header_sponsors_enabled: enabled };
     },
   });
@@ -163,7 +163,7 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
               website_url: r.website_url[0] ?? null,
               tier: r.tier as SponsorTier,
             })),
-      });
+      }, { clubId: clubId! });
     },
   });
 

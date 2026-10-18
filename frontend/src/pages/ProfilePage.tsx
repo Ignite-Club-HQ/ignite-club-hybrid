@@ -122,7 +122,7 @@ export default function ProfilePage() {
             (g) => (g.role === "team_admin" || g.role === "coach") && g.team.length > 0,
           );
         },
-      }),
+      }, { shared: 'person' }),
     enabled: !!user,
   });
 

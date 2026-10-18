@@ -10,6 +10,7 @@ import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { isDuplicateChildError } from "@/lib/childDedup";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { addLiveRoleGrant } from "@/live/features/membership";
 import { sendGamificationNotification } from "@/lib/gamificationNotify";
 import {
@@ -458,7 +459,7 @@ export function useAddExistingTeamMemberMutation({
             icp: true,
           };
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: async (result) => {
       refreshTeamRoleChange(queryClient, teamId);
