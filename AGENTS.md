@@ -14,7 +14,7 @@
 - build-preview.mjs must copy live-index.html to dist/index.html for static hosting and SPA fallback.
 - Retired URLs redirect via App.tsx ParamRedirect, never 404.
 - Read frontend/AGENTS.md for frontend rules; backend/AGENTS.md for canister, Motoko and mainnet deploy rules.
-- notification_queue verifies schedule scopes and update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principal IDs; admin pages gate reads and report queued counts. Why: browsers cannot authorize writes or prove delivery.
+- notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule updates: omitted options keep; empty image/zero end-date clear. Monthly recurrence clamps in UTC. Why: retain Candid compatibility.
 - Account erasure revokes club roles first; gallery publication copies decrypted photos under club encryption. Why: prevent residual access and broken shared photos.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
@@ -28,7 +28,7 @@
 - ICP reward writes verify caller roles against governor-configured club_domain; catalog/settings reads refresh the caller's role mirror first. Why: creating a club must not require a separate manual points-service role grant.
 - ICP profile batches use get_profile for missing callers. Why: linked accounts retain original IDs.
 - ICP media uses uploader avatars; inbox previews use scope IDs; DM settings read/write ICP. Chat files encrypt/register before token creation. Why: silent no-ops lost device attachments.
-- Club setup progress reads the active membership backend and determines saved branding from stored palettes/logo, independently of entitlement; sponsor/theme saves invalidate its query. Why: free clubs must not lose acknowledgement of saved setup, and ICP has no Supabase rows.
+- Club setup reads active membership backend; saved palettes/logo count independently of entitlement; sponsor/theme saves invalidate it. Why: acknowledge free-club setup without Supabase rows in ICP.
 - IcpSignInScreen owns login presentation; AuthPage retains provider invocation and redirects to preserve identity, invite and session semantics.
 - Sign-in footers and profile policy links share legalLinks destinations; open separately to preserve drafts and invite URLs, and reuse destinations for internal legal pages.
 
