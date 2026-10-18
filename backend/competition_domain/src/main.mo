@@ -983,7 +983,57 @@ persistent actor class Main(governorInit : Principal) {
       case (?invite) {
         if (not canManageCompetition(caller, invite.competition_id)) return #Err("Competition management forbidden");
         competitionOfficialEmailInvites := competitionOfficialEmailInvites.map(func(item) = if (item.token == token) { { item with revoked = true } } else item);
+        competitionWelcomeJobs := competitionWelcomeJobs.filter(func(job) = job.token != token);
         #Ok
+      };
+    }
+  };
+
+  // ---------------- Competition welcome email jobs ----------------
+  // A manager registers a pending welcome email when creating an official
+  // email invite, but only while the competition's welcome settings are
+  // enabled. The recipient address lives only here (keyed by the unguessable
+  // invite token); the delivery edge function reads it back after acceptance
+  // so the browser never has to be trusted for the recipient.
+
+  public shared ({ caller }) func register_competition_welcome_job(token : Text, to : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (competitionOfficialEmailInvites.find(func(item) = item.token == token)) {
+      case null { #Err("Invitation not found") };
+      case (?invite) {
+        if (invite.revoked or invite.accepted_by != null) return #Err("Invitation is no longer pending");
+        if (not canManageCompetition(caller, invite.competition_id)) return #Err("Competition management forbidden");
+        let enabled = switch (competitionWelcomeSettings.find(func(row) = row.competition_id == invite.competition_id)) {
+          case (?row) row.enabled;
+          case null false;
+        };
+        if (not enabled) return #Err("Welcome email is not enabled for this competition");
+        if (to.size() < 5 or to.size() > 254 or not Text.contains(to, #char '@')) return #Err("Invalid recipient address");
+        if (competitionWelcomeJobs.any(func(job) = job.token == token)) return #Err("Welcome email already registered");
+        competitionWelcomeJobs := competitionWelcomeJobs.concat([{ token; competition_id = invite.competition_id; to; created_at_ms = nowMs() }]);
+        #Ok
+      };
+    }
+  };
+
+  // Public capability query (like club_domain's get_welcome_email_job): the
+  // token is the secret. Returns nothing when the settings were disabled
+  // after registration, so a manager switching welcome emails off also
+  // stops pending deliveries.
+  public query func get_competition_welcome_email_job(token : Text) : async { #Ok : { competition_id : Text; to : Text; subject : Text; message : Text; competition_name : Text }; #Err : Text } {
+    switch (competitionWelcomeJobs.find(func(job) = job.token == token)) {
+      case null { #Err("No welcome email pending for this invitation") };
+      case (?job) {
+        let settings = switch (competitionWelcomeSettings.find(func(row) = row.competition_id == job.competition_id)) {
+          case null { return #Err("Welcome email is not enabled for this competition") };
+          case (?row) row;
+        };
+        if (not settings.enabled) return #Err("Welcome email is not enabled for this competition");
+        let competition = switch (competitions.find(func(item) = item.id == job.competition_id)) {
+          case null { return #Err("Competition not found") };
+          case (?value) value;
+        };
+        #Ok({ competition_id = job.competition_id; to = job.to; subject = settings.subject; message = settings.message; competition_name = competition.name })
       };
     }
   };
