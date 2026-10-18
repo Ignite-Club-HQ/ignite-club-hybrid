@@ -13,7 +13,7 @@
 - Install frontend via scripts/ensure-frontend-deps.mjs only; bare npm ci wipes the running preview's dependencies.
 - build-preview.mjs must copy live-index.html to dist/index.html for static hosting and SPA fallback.
 - Retired URLs redirect via App.tsx ParamRedirect, never 404.
-- Read frontend/AGENTS.md for frontend rules; backend/AGENTS.md for canister, Motoko and mainnet deploy rules.
+- Read frontend/AGENTS.md, backend/AGENTS.md and scripts/AGENTS.md before changes in those directories.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule updates: omitted options keep; empty image/zero end-date clear. Monthly recurrence clamps in UTC. Why: retain Candid compatibility.
 - Account erasure revokes club roles first; gallery publication copies decrypted photos under club encryption. Why: prevent residual access and broken shared photos.

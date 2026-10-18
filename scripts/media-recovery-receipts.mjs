@@ -29,7 +29,7 @@ function sameInventory(a, b) {
  * An interrupted restore can only be replayed in full while stopped. A failed
  * resume also requires a full restore before another approved restart.
  */
-export async function runRecoveryAction(directory, expected, adapter, action, approved = false) {
+export async function runRecoveryAction(directory, expected, adapter, action, approved = false, snapshotVerification) {
   if (!['checkpoint', 'restore', 'resume'].includes(action)) throw new Error('Invalid recovery action');
   const lockPath = join(directory, 'operator.lock');
   const lock = await open(lockPath, 'wx', 0o600).catch(error => {
@@ -51,9 +51,16 @@ export async function runRecoveryAction(directory, expected, adapter, action, ap
     }
     if (action === 'checkpoint') {
       if (receipt) throw new Error('Existing recovery receipt; use a new operator directory for a new checkpoint');
-      receipt = { version: 1, id: randomUUID(), inventory: structuredClone(expected), phase: 'checkpointing', steps: [], checkpoint: null };
+      receipt = { version: 1, id: randomUUID(), inventory: structuredClone(expected), phase: 'checkpointing', steps: [], checkpoint: null,
+        ...(snapshotVerification ? { snapshotVerificationRequired: true } : {}) };
     } else {
       if (!receipt?.checkpoint) throw new Error('Complete durable checkpoint required');
+      if (receipt.snapshotVerificationRequired === true) {
+        if (!snapshotVerification) throw new Error('Snapshot verification adapter required');
+        snapshotVerification.validateBaseline(receipt.checkpoint, receipt.snapshotBaseline);
+      } else if (snapshotVerification) {
+        throw new Error('Legacy receipt has no verified snapshot baseline; create a new checkpoint');
+      }
       if (action === 'resume' && (!['checkpointed', 'restored'].includes(receipt.phase) || approved !== true)) {
         throw new Error('Resume requires complete checkpoint/restore and explicit approval');
       }
@@ -63,6 +70,17 @@ export async function runRecoveryAction(directory, expected, adapter, action, ap
       receipt.phase = action === 'restore' ? 'restoring' : 'resuming';
     }
     await save();
+    const recordEvidence = async (method, canisterId, operation, snapshotId) => {
+      const step = { action, method, canisterId, state: 'attempted', ...(snapshotId ? { snapshotId } : {}) };
+      receipt.steps.push(step);
+      await save();
+      const result = await operation();
+      step.state = 'acknowledged';
+      if (method === 'takeObservationSnapshot') step.snapshotId = result;
+      else step.evidence = result;
+      await save();
+      return result;
+    };
     const wrapped = { ...adapter };
     for (const method of ['stop', 'takeSnapshot', 'loadSnapshot', 'start']) {
       wrapped[method] = async (...args) => {
@@ -78,8 +96,22 @@ export async function runRecoveryAction(directory, expected, adapter, action, ap
       };
     }
     try {
-      if (action === 'checkpoint') receipt.checkpoint = await checkpointMedia(expected, wrapped);
+      if (action === 'checkpoint') {
+        receipt.checkpoint = await checkpointMedia(expected, wrapped);
+        if (snapshotVerification) {
+          receipt.snapshotBaseline = await snapshotVerification.capture(receipt.checkpoint, false, recordEvidence);
+          snapshotVerification.validateBaseline(receipt.checkpoint, receipt.snapshotBaseline);
+        }
+      }
       if (action === 'restore') await restoreMedia(expected, receipt.checkpoint, wrapped);
+      if (snapshotVerification && action !== 'checkpoint') {
+        receipt.snapshotObservation = await snapshotVerification.capture(receipt.checkpoint, true, recordEvidence);
+        if (!snapshotVerification.compare(receipt.checkpoint, receipt.snapshotBaseline, receipt.snapshotObservation)) {
+          throw new Error('Restored snapshot bytes differ from checkpoint');
+        }
+        await save();
+      }
+      // Raw equality is an additional gate, not a semantic consistency substitute.
       if (action === 'resume') await resumeMedia(expected, receipt.checkpoint, wrapped, approved);
       receipt.phase = { checkpoint: 'checkpointed', restore: 'restored', resume: 'resumed' }[action];
       await save();
@@ -88,7 +120,7 @@ export async function runRecoveryAction(directory, expected, adapter, action, ap
       receipt.phase = `${action}_failed`;
       // Never rely on receipt storage to refence after any resume failure,
       // including failure to durably record the final successful restart.
-      if (action === 'resume') {
+      if (action === 'resume' || snapshotVerification) {
         const failed = [];
         for (const id of [...expected.stores, expected.authority]) {
           try {
