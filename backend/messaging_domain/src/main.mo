@@ -20,6 +20,8 @@ import IcWebSocketCdk "mo:ic-websocket-cdk";
 import IcWebSocketCdkState "mo:ic-websocket-cdk/State";
 import IcWebSocketCdkTypes "mo:ic-websocket-cdk/Types";
 import Types "types";
+import Timer "mo:core/Timer";
+import PhotoReminderPolicy "photoReminderPolicy";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -77,6 +79,13 @@ persistent actor class Main(governorInit : Principal) {
   var groupJoinPolicies : [{ conversation_id : Text; join_policy : Text; category : ?Text }];
   // Cooldown log for run_chat_photo_gallery_reminders (admin "run now").
   var chatPhotoReminderLog : [Types.ChatPhotoReminderLog];
+  var chatPhotoReminderSettings : PhotoReminderPolicy.Settings;
+  transient var photoReminderSweepRunning = false;
+  transient let photoReminderTimer = Timer.recurringTimer<system>(#seconds(3600), func() : async () {
+    if (chatPhotoReminderSettings.enabled) {
+      ignore await sweepChatPhotoReminders(nowMs(), chatPhotoReminderSettings);
+    };
+  });
   // Governor-set notification_queue canister id for the chat notify fan-out
   // hook. Fail-closed while unset: messages send fine, no chat notifications
   // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
@@ -877,7 +886,51 @@ persistent actor class Main(governorInit : Principal) {
         case (?cd) { if (not (await cd.is_app_admin(caller))) { return #Err("App admin required") } };
       };
     };
-    if (window_end_hours <= window_start_hours) return #Err("window_end_hours must exceed window_start_hours");
+    let settings : PhotoReminderPolicy.Settings = { enabled = true; window_start_hours; window_end_hours; cooldown_days };
+    if (not PhotoReminderPolicy.valid(settings)) return #Err("Invalid reminder window or cooldown");
+    // Browser clocks cannot advance the persistent cooldown or manufacture eligibility.
+    ignore now_ms;
+    await sweepChatPhotoReminders(nowMs(), settings)
+  };
+
+  public shared ({ caller }) func set_chat_photo_reminder_settings(settings : PhotoReminderPolicy.Settings) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) {
+      switch (await clubDomainRef()) {
+        case null { return #Err("club_domain canister not configured") };
+        case (?cd) {
+          let allowed = try { await cd.is_app_admin(caller) } catch (_) { false };
+          if (not allowed) return #Err("App admin required");
+        };
+      };
+    };
+    if (not PhotoReminderPolicy.valid(settings)) return #Err("Invalid reminder window or cooldown");
+    chatPhotoReminderSettings := settings;
+    #Ok
+  };
+
+  public shared ({ caller }) func get_chat_photo_reminder_settings() : async { #Ok : PhotoReminderPolicy.Settings; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) {
+      switch (await clubDomainRef()) {
+        case null { return #Err("club_domain canister not configured") };
+        case (?cd) {
+          let allowed = try { await cd.is_app_admin(caller) } catch (_) { false };
+          if (not allowed) return #Err("App admin required");
+        };
+      };
+    };
+    #Ok(chatPhotoReminderSettings)
+  };
+
+  func sweepChatPhotoReminders(now_ms : Nat64, settings : PhotoReminderPolicy.Settings) : async Types.ChatPhotoReminderResult {
+    if (photoReminderSweepRunning) return #Err("Reminder sweep already running");
+    if (not settings.enabled) return #Ok({ scanned = 0; posted = 0; skipped = 0 });
+    photoReminderSweepRunning := true;
+    try {
+    let window_start_hours = settings.window_start_hours;
+    let window_end_hours = settings.window_end_hours;
+    let cooldown_days = settings.cooldown_days;
     let startDeltaMs = Nat64.fromNat(Nat32.toNat(window_start_hours)) * 3_600_000;
     let endDeltaMs = Nat64.fromNat(Nat32.toNat(window_end_hours)) * 3_600_000;
     let newestEligibleMs : Nat64 = if (now_ms > startDeltaMs) { now_ms - startDeltaMs } else { 0 };
@@ -920,7 +973,10 @@ persistent actor class Main(governorInit : Principal) {
                       ?msg.conversation_id,
                     );
                     switch (result) {
-                      case (#Ok(_)) { posted += 1; recordReminded(team, msg.sender, now_ms) };
+                      case (#Ok(count)) {
+                        posted += Nat32.fromNat(Nat16.toNat(count));
+                        if (count > 0) recordReminded(team, msg.sender, now_ms) else skipped += 1;
+                      };
                       case (#Err(_)) { skipped += 1 };
                     };
                   } catch (_) { skipped += 1 };
@@ -933,6 +989,7 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok({ scanned; posted; skipped });
+    } finally { photoReminderSweepRunning := false };
   };
 
   func chatNotifyPreview(body : Text, attachment : ?Types.Attachment) : Text {
@@ -2743,7 +2800,15 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_minimum_app_versions(versions : [(Text, Text)]) : async { #Ok; #Err : Text } {
     auth(caller);
-    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isGovernor(caller)) {
+      switch (await clubDomainRef()) {
+        case null { return #Err("club_domain canister not configured") };
+        case (?cd) {
+          let allowed = try { await cd.is_app_admin(caller) } catch (_) { false };
+          if (not allowed) return #Err("App admin required");
+        };
+      };
+    };
     if (versions.size() > 16) return #Err("Too many platforms");
     for ((platform, version) in versions.values()) {
       if (not valid(platform) or not valid(version)) return #Err("Invalid version entry");
