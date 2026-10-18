@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { listLiveSponsors, listLiveTeamSponsorAllocations, setLiveTeamSponsorAllocation, getLiveTeam } from "@/live/features/club";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,7 +93,7 @@ export function TeamSponsorSelector({
               await setLiveTeamSponsorAllocation(ctx, sponsorId, teamId, true);
             }
           },
-        }, { teamId: teamId! });
+        }, writeOnce({ teamId: teamId! }));
         return;
       }
       const { error } = await supabase

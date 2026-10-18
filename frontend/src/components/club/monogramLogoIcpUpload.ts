@@ -1,4 +1,4 @@
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 
 /**
@@ -26,5 +26,5 @@ export async function saveIcpMonogramLogo(clubId: string, blob: Blob): Promise<s
       await saveLiveClubProfile(ctx, { ...profile, id: clubId, logo_url: uploaded.url } as any);
       return uploaded.url;
     },
-  }, { clubId: clubId! });
+  }, writeOnce({ clubId: clubId! }));
 }

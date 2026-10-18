@@ -168,7 +168,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
             account_id: r.account_id,
           }));
         },
-      }),
+      }, { shared: 'person' }),
     enabled: debouncedSearch.length >= 2,
   });
 

@@ -142,7 +142,7 @@ export default function CreateTeamPage() {
           const grants = await getLiveMyRoleGrants(ctx);
           return grants.some(g => g.role === "club_admin" && (g.club[0] ?? null) === clubId!);
         }
-      });
+      }, { shared: 'person' });
     },
     enabled: !!clubId && !!user,
   });
@@ -584,7 +584,7 @@ export default function CreateTeamPage() {
                   await saveLiveTeam(ctx, { ...existing[0], logo_url: [blobUpload.url] });
                 }
               }
-            }, { teamId: team?.id as string });
+            }, writeOnce({ teamId: team?.id as string }));
           } else {
             await supabase
               .from("teams")

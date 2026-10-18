@@ -193,7 +193,7 @@ function IcpPlatformEngagementPage() {
           }
           return out.sort((a, b) => a.name.localeCompare(b.name));
         },
-      }),
+      }, { shared: 'app' }),
   });
 
   if (pickedClubId) {

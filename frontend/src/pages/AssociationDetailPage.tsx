@@ -41,7 +41,7 @@ function SupabaseAssociationDetailPage() {
             getLiveClubKind(ctx, id!),
           ]),
           supabase: async () => { throw new Error("unreachable"); },
-        });
+        }, { clubId: id! });
         if (profile.length === 0) return null;
         return {
           id: profile[0].id,
@@ -63,7 +63,7 @@ function SupabaseAssociationDetailPage() {
         const grants = await withFeatureBackend("membership", {
           icp: (ctx) => import("@/live/features/membership").then(m => m.getLiveMyRoleGrants(ctx)),
           supabase: async () => [],
-        });
+        }, { shared: 'person' });
         return grants.some(g => g.club?.[0] === id && g.role === "club_admin");
       }
       const { data } = await supabase.rpc("is_association_admin", {
@@ -82,7 +82,7 @@ function SupabaseAssociationDetailPage() {
         const rows = await withFeatureBackend("membership", {
           icp: async (ctx) => (await import("@/live/features/club")).listLiveAssociationClubs(ctx, id!),
           supabase: async () => [],
-        });
+        }, { clubId: id! });
         return rows
           .map((c) => ({ id: c.id, name: c.name, logo_url: c.logo_url?.[0] ?? null, city: null, kind: "full" }))
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -266,7 +266,7 @@ function LinkClubForm({ associationId }: { associationId: string }) {
         const rows = await withFeatureBackend("membership", {
           icp: async (ctx) => (await import("@/live/features/club")).listLiveUnaffiliatedClubs(ctx, search.trim()),
           supabase: async () => [],
-        });
+        }, { shared: 'app' });
         return rows
           .map((c) => ({ id: c.id, name: c.name, city: null }))
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -293,7 +293,7 @@ function LinkClubForm({ associationId }: { associationId: string }) {
         await withFeatureBackend("membership", {
           icp: async (ctx) => (await import("@/live/features/club")).setLiveClubParentOrg(ctx, clubId, associationId),
           supabase: async () => {},
-        });
+        }, writeOnce({ clubId: clubId! }));
       } catch (e) {
         error = { message: e instanceof Error ? e.message : "Unknown error" };
       }
@@ -356,7 +356,7 @@ function UnlinkClubButton({ clubId, associationId }: { clubId: string; associati
         await withFeatureBackend("membership", {
           icp: async (ctx) => (await import("@/live/features/club")).setLiveClubParentOrg(ctx, clubId, null),
           supabase: async () => {},
-        });
+        }, writeOnce({ clubId: clubId! }));
       } catch (e) {
         error = { message: e instanceof Error ? e.message : "Unknown error" };
       }

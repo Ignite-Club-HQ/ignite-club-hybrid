@@ -243,7 +243,7 @@ export default function PlacementAdminSettingsPage() {
               cursor = batch[batch.length - 1]!.id;
             }
           },
-        });
+        }, { shared: 'app' });
       } catch {
         // canister list is best-effort too
       }
@@ -313,7 +313,7 @@ export default function PlacementAdminSettingsPage() {
             const fromCanister = await getLiveAppSetting(ctx, GIPHY_API_KEY_CONFIG_KEY);
             if (fromCanister) value = fromCanister;
           },
-        });
+        }, { shared: 'app' });
       } catch {
         // canister read is best-effort
       }

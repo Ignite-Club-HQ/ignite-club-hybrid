@@ -105,7 +105,7 @@ export function ReturningMembersStep({
             membership_role: "player",
           }));
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   const { data: targetTeams = [] } = useQuery({

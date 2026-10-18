@@ -36,7 +36,7 @@ export default function ClubRewardsPage() {
           return data;
         },
         icp: async (ctx) => ({ is_pro: await resolveLiveProAccess(ctx), is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false }),
-      });
+      }, { shared: 'person' });
     },
     enabled: !!clubId,
   });
@@ -64,7 +64,7 @@ export default function ClubRewardsPage() {
           const grants = await getLiveMyRoleGrants(ctx);
           return grants.some(g => g.role === "club_admin" && (g.club[0] ?? null) === clubId!);
         }
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user && !!clubId,
   });

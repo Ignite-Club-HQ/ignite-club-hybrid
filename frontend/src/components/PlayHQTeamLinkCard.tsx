@@ -208,7 +208,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
               .catch((e) => toast.error(e?.message ?? "Import failed"));
           }
         },
-      }, { teamId: teamId! });
+      }, writeOnce({ teamId: teamId! }));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["team-playhq-link", teamId] });

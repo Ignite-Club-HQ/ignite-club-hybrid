@@ -160,7 +160,7 @@ export default function LeaderboardPage() {
         const profiles = await withFeatureBackend("membership", {
           supabase: () => [],
           icp: (ctx) => listLiveProfilesByIds(ctx, entries.map((e) => e.subject_id)),
-        });
+        }, { shared: 'person' });
         const profileById = new Map(profiles.map((p) => [p.account_id, p]));
         return entries.map((e, i) => {
           const profile = profileById.get(e.subject_id);

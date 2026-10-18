@@ -325,7 +325,7 @@ function SupabaseClubAdminChatPage() {
               ? { id: memberId, display_name: profile.display_name, avatar_url: (profile as any).avatar_ref?.[0] ?? (profile as any).avatar_url ?? null }
               : null;
           },
-        });
+        }, { shared: 'person' });
       }
       const { data, error } = await selectCachedProfileById(memberId);
       if (error) throw error;

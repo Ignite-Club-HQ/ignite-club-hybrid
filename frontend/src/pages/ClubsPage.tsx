@@ -19,7 +19,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -116,7 +116,7 @@ export default function ClubsPage() {
         await withFeatureBackend("membership", {
           supabase: async () => undefined,
           icp: async (ctx) => { await (await import("@/live/features/club")).restoreLiveClub(ctx, clubId, true); },
-        });
+        }, writeOnce({ clubId: clubId! }));
       } catch (e) {
         error = { message: e instanceof Error ? e.message : "Unknown error" };
       }
@@ -293,7 +293,7 @@ export default function ClubsPage() {
               team_id: g.team[0] ?? null,
             }));
           },
-        });
+        }, { shared: 'person' });
       }
       const { data, error } = await supabase
         .from("user_roles")

@@ -128,7 +128,7 @@ export default function EditTeamPage() {
             } : null
           } as any;
         }
-      });
+      }, { teamId: id! });
     },
     enabled: !!id,
   });

@@ -92,7 +92,7 @@ async function flushBatch() {
           avatar_url: p.avatar_ref[0] ?? null,
         }));
       },
-    });
+    }, { shared: 'person' });
 
     const now = Date.now();
     const byId = new Map<string, CachedProfile>();

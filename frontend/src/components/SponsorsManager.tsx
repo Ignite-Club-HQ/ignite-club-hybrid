@@ -30,7 +30,7 @@ import {
   Loader2
 } from "lucide-react";
 import { compressImage } from "@/lib/imageCompression";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { deleteLiveSponsor, listLiveSponsors, saveLiveSponsor, type LiveClubSponsor } from "@/live/features/club";
 
 interface Sponsor {
@@ -211,7 +211,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
           };
           await saveLiveSponsor(ctx, sponsor);
         },
-      }, { clubId: clubId! });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       invalidateSponsorQueries();
@@ -290,7 +290,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
               };
           await saveLiveSponsor(ctx, sponsor);
         },
-      }, { clubId: clubId! });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       invalidateSponsorQueries();
@@ -349,7 +349,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
         if (!existing) throw new Error("Sponsor not found");
         await saveLiveSponsor(ctx, { ...existing, [field]: value });
       },
-    }, { clubId: clubId! });
+    }, writeOnce({ clubId: clubId! }));
 
   const toggleOptimistic = {
     onMutate: async ({ id, value, field }: { id: string; value: boolean; field: "is_active" | "is_team_only" }) => {

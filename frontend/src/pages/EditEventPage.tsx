@@ -663,7 +663,7 @@ function SupabaseEditEventPage() {
             const teams = await listLiveTeams(ctx, selectedClubId);
             return teams.filter((t) => ids.has(t.id) && !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name, club_id: t.club_id, default_match_arrival_minutes: null }));
           },
-        });
+        }, { clubId: selectedClubId! });
       }
       const query = supabase
         .from("user_roles")
@@ -719,7 +719,7 @@ function SupabaseEditEventPage() {
         return withFeatureBackend("membership", {
           supabase: async () => false,
           icp: async (ctx) => (await getLiveMyRoleGrants(ctx)).some((g) => g.club[0] === selectedClubId && ["club_admin", "committee_member", "league_admin", "app_admin"].includes(g.role)),
-        });
+        }, { shared: 'person' });
       }
       const { data: appAdmin } = await supabase
         .from("user_roles")

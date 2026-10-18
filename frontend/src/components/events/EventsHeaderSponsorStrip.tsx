@@ -122,7 +122,7 @@ export function EventsHeaderSponsorStrip({
           grants.forEach((g) => g.club[0] && ids.add(g.club[0]));
           return ids;
         },
-      });
+      }, { shared: 'person' });
       if (clubIds.size === 0) return { clubId: null as string | null };
       for (const candidateClubId of clubIds) {
         if (await isEventsStripEnabledForClub(candidateClubId)) {

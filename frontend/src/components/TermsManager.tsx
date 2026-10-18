@@ -37,7 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import {
   listLiveClubTerms,
   saveLiveClubTerm,
@@ -181,7 +181,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
         icp: async (ctx) => {
           await setLiveClubTermStatus(ctx, id, isActive ? "active" : "archived");
         },
-      });
+      }, writeOnce({ clubId: id! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });
@@ -202,7 +202,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
         icp: async (ctx) => {
           await setLiveClubTermStatus(ctx, id, status);
         },
-      });
+      }, writeOnce({ clubId: id! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });
@@ -219,7 +219,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
         icp: async (ctx) => {
           await deleteLiveClubTerm(ctx, id);
         },
-      });
+      }, writeOnce({ clubId: id! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });

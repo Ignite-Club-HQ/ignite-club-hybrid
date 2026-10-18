@@ -224,7 +224,7 @@ export default function TeamDetailPage() {
                 : null,
             };
           },
-        });
+        }, { teamId: id! });
       }
 
       const { data, error } = await supabase
@@ -383,7 +383,7 @@ export default function TeamDetailPage() {
               admin_pro_football_override: sub.admin_pro_football_override,
             };
           },
-        });
+        }, { teamId: id! });
       }
 
       const { data, error } = await supabase
@@ -436,7 +436,7 @@ export default function TeamDetailPage() {
               disable_team_pom_rewards: (teamSubscription as any)?.disable_team_pom_rewards ?? false,
             });
           },
-        });
+        }, writeOnce({ teamId: id! }));
       } catch {
         setIsSavingPitchSettings(false);
         toast({ title: failureTitle, variant: "destructive" });
@@ -504,7 +504,7 @@ export default function TeamDetailPage() {
               disable_team_pom_rewards: existing?.disable_team_pom_rewards ?? false,
             });
           },
-        });
+        }, writeOnce({ teamId: id! }));
       } catch {
         toast({ title: "Failed to update", variant: "destructive" });
         return;
@@ -613,7 +613,7 @@ export default function TeamDetailPage() {
             const grants = await getLiveMyRoleGrants(ctx);
             return grants.some((g) => g.role === "club_admin" && (g.club?.[0] ?? null) === team!.club_id);
           },
-        });
+        }, { shared: 'person' });
       }
       const { data, error } = await supabase
         .from("user_roles")
@@ -794,7 +794,7 @@ export default function TeamDetailPage() {
               };
             });
           },
-        });
+        }, { teamId: id! });
       }
       const { data, error } = await supabase
         .from("user_roles")
@@ -962,7 +962,7 @@ export default function TeamDetailPage() {
               .filter((g) => (g.team?.[0] ?? null) === id!)
               .map((g) => ({ role: g.role, via_captain: null as boolean | null }));
           },
-        });
+        }, { shared: 'person' });
       }
       const { data } = await supabase
         .from("user_roles")
@@ -1213,7 +1213,7 @@ export default function TeamDetailPage() {
         await withFeatureBackend("membership", {
           supabase: () => softDeleteLiveTeam({} as any, id!), // unreachable: gated by isFeatureRoutedToIcp above
           icp: (ctx) => softDeleteLiveTeam(ctx, id!),
-        });
+        }, writeOnce({ teamId: id! }));
         markTeamDeleted(id!);
         queryClient.invalidateQueries({ queryKey: ["team", id] });
         if (team?.club_id) {
@@ -1371,7 +1371,7 @@ export default function TeamDetailPage() {
           if (error) throw error;
         },
         icp: async (ctx) => { await restoreLiveTeam(ctx, id!); },
-      });
+      }, writeOnce({ teamId: id! }));
     } catch (error) {
       toast({ title: "Error", description: "Failed to restore team.", variant: "destructive" });
       return;
@@ -1402,7 +1402,7 @@ export default function TeamDetailPage() {
           if (data?.error) throw new Error(data.error);
         },
         icp: (ctx) => deleteLiveTeamPermanent(ctx, id!),
-      });
+      }, writeOnce({ teamId: id! }));
 
       setShowPermanentDeleteDialog(false);
       toast({ title: "Team permanently deleted", description: "All data has been removed." });

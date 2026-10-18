@@ -127,7 +127,7 @@ export function useEventGroupMap({ clubId, grouping, targetTeamIds, scopedRoster
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: (ctx) => myLiveRoleGrants(ctx),
-        });
+        }, { shared: 'person' });
         return {
           teams,
           roles: grants

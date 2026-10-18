@@ -127,7 +127,7 @@ export function usePhotoMentionSuggestions(
               const row = r as unknown as { account_id: string; display_name?: string | null; avatar_ref?: [] | [string] };
               return { id: row.account_id, display_name: row.display_name ?? null, avatar_url: row.avatar_ref?.[0] ?? null };
             }),
-        });
+        }, { shared: 'person' });
         return rows
           .filter((r) => r.display_name && (!needle || r.display_name.toLowerCase().includes(needle)))
           .slice(0, 6);

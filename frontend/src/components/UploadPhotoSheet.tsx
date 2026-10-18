@@ -132,7 +132,7 @@ export function UploadPhotoSheet({
         return withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await getLiveMyRoleGrants(ctx)).map((g) => ({ role: g.role, club_id: g.club[0] ?? null, team_id: g.team[0] ?? null })),
-        });
+        }, { shared: 'person' });
       }
       const { data, error } = await supabase
         .from("user_roles")

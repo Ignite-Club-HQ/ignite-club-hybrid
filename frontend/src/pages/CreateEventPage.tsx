@@ -538,7 +538,7 @@ function SupabaseCreateEventPage() {
               (g.club?.[0] ?? null) === clubId,
           );
         },
-      }),
+      }, { shared: 'person' }),
     enabled: !!clubId && !!user,
   });
 
@@ -613,7 +613,7 @@ function SupabaseCreateEventPage() {
           const grants = await getLiveMyRoleGrants(ctx);
           return [...new Set(grants.map((g) => g.team?.[0]).filter((t): t is string => !!t))];
         },
-      }),
+      }, { shared: 'person' }),
     enabled: !!clubId && !!user,
   });
 

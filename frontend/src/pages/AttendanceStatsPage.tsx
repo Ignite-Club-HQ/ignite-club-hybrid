@@ -300,7 +300,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       withFeatureBackend("membership", {
         supabase: async () => false,
         icp: (ctx) => fetchLiveCallerIapPro(ctx),
-      }),
+      }, { shared: 'person' }),
     enabled: !!user && isIcpPageMode(),
   });
 

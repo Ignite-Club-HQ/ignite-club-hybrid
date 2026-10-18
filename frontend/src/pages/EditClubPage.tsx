@@ -27,7 +27,7 @@ import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubDetail } from "@/lab/fixtureDataLayer";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import {
   getLiveClubProfile,
   getLiveClubGeneralSettings,
@@ -116,7 +116,7 @@ export default function EditClubPage() {
             club_subscriptions: null,
           };
         },
-      });
+      }, { clubId: id! });
     },
     enabled: !!id,
   });
@@ -393,7 +393,7 @@ export default function EditClubPage() {
               : prevGeneral?.eventsSponsorStripEnabled ?? false,
           });
         },
-      });
+      }, writeOnce({ clubId: id! }));
     } catch (error: any) {
       setSaving(false);
       toast({

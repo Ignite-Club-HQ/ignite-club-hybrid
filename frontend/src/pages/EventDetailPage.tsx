@@ -671,7 +671,7 @@ export default function EventDetailPage() {
           if (event.mini_league_id && grants.some((g) => inClub(g) && ["league_admin", "coach", "committee_member"].includes(g.role))) return true;
           return false;
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user && !!event,
   });

@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { livePitchRecipients } from "./livePitchNotifications";
 import type { Player } from "../types";
@@ -91,7 +91,7 @@ export function usePitchBoardFormationNotifications({
               relatedId: teamId,
             });
           },
-        });
+        }, writeOnce({ teamId: teamId! }));
       } catch (error) {
         console.error("Failed to send ICP formation change notification:", error);
       }

@@ -428,7 +428,7 @@ export function AppHeader() {
             const grants = await getLiveMyRoleGrants(ctx);
             return new Set(grants.map(g => g.club[0]).filter(Boolean)).size;
           },
-        });
+        }, { shared: 'person' });
       }
       const db = supabase as any;
       const [clubRoles, teamRoles, teamMemberships, clubPlayers] = await Promise.all([

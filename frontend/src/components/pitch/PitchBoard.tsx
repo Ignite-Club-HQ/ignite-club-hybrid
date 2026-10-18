@@ -56,7 +56,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import { usePitchBoardNotifications } from "@/hooks/usePitchBoardNotifications";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { listLiveTeamRoleGrants } from "@/live/features/membership";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { useIsLandscape } from "@/hooks/useIsLandscape";
@@ -1298,7 +1298,7 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
               relatedId: teamId,
             });
           },
-        }, { teamId: teamId! });
+        }, writeOnce({ teamId: teamId! }));
       } catch (error) {
         console.error("Failed to send ICP formation change notification:", error);
       }

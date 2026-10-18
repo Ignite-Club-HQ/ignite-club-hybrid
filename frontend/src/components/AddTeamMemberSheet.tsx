@@ -269,7 +269,7 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
           const grants = await getLiveMyRoleGrants(ctx);
           return grants.some((grant: any) => grant.role === "club_admin" && grant.club?.[0] === clubId);
         },
-      }),
+      }, { shared: 'person' }),
   });
 
   const inviteMessageClubIdRef = useRef(clubId);

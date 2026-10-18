@@ -73,7 +73,7 @@ function IcpOnlineUsersPage() {
       const profiles = await withFeatureBackend("membership", {
         supabase: async () => [],
         icp: (ctx) => listLiveProfilesByIds(ctx, rows.map((r) => r.accountId)),
-      });
+      }, { shared: 'person' });
       const nameByAccount = new Map(profiles.map((p) => [p.account_id, p.display_name]));
       return rows
         .slice()
