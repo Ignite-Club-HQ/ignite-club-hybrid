@@ -1,4 +1,5 @@
 ## Codespaces ICP coverage — first tranche
+- [ ] Batch 11: close remaining test gaps, expand backups, finish automatic reminders and safe account cleanup; retain explicit deployment/credential blockers and run both complete suites.
 - [x] Batch 10: update-reminder admin/club audience verification in fan_out AND enqueue; canonical recipient IDs; executable authorization and dual-mode frontend tests pass; contracts unchanged.
 - [x] Batch 9: admin gates and failed-read feedback repaired; AI rollout, vault metadata backup CRUD/downloads, reminder queue counts and guide downloads tested (32 tests pass in each mode).
 - [x] Competition welcome settings on-chain; photo reminder Run now enabled and behavior-tested; canister reachability tests verified.
