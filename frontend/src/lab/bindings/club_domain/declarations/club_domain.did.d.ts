@@ -467,7 +467,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'erase_my_membership' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'execute' : ActorMethod<[string], Result>,
+  'execute' : ActorMethod<[string], Result__1>,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
   'export_frozen_club' : ActorMethod<
     [string],
@@ -602,6 +602,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_pending_invite_label' : ActorMethod<[string], [] | [string]>,
+  'get_prepared_media_quota' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : [] | [Reservation] } |
+      { 'Err' : string }
+  >,
   'get_public_eoi_config' : ActorMethod<
     [string, string],
     {
@@ -956,6 +961,10 @@ export interface Main {
   >,
   'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
   'my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
+  'prepare_media_quota_reservation' : ActorMethod<
+    [Principal, string, string, string, bigint],
+    Result
+  >,
   'profile_team_history' : ActorMethod<
     [string],
     Array<ProfileTeamHistoryEntry>
@@ -990,6 +999,11 @@ export interface Main {
   'redeem_team_promo_code' : ActorMethod<
     [string, string, string, boolean],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'register_media_quota_store' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'reject_club_join_request' : ActorMethod<
@@ -1384,6 +1398,10 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'settle_prepared_media_quota' : ActorMethod<
+    [Principal, string, boolean],
+    Result
+  >,
   'soft_delete_club' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubProfile } |
@@ -1592,7 +1610,20 @@ export interface Request {
   'operation' : Operation,
   'expected_revision' : bigint,
 }
-export interface Result { 'hasMore' : boolean, 'rows' : Array<Row> }
+export interface Reservation {
+  'status' : { 'reserved' : null } |
+    { 'committed' : null } |
+    { 'released' : null },
+  'token' : string,
+  'cycle' : bigint,
+  'store' : Principal,
+  'category' : string,
+  'bytes' : bigint,
+  'club_id' : string,
+}
+export type Result = { 'Ok' : Reservation } |
+  { 'Err' : string };
+export interface Result__1 { 'hasMore' : boolean, 'rows' : Array<Row> }
 export interface RoleGrant {
   'club' : [] | [string],
   'role' : string,

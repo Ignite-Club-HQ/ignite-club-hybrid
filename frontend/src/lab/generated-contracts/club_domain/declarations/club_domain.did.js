@@ -252,7 +252,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Cell = IDL.Record({ 'value' : Value, 'name' : IDL.Text });
   const Row = IDL.Vec(Cell);
-  const Result = IDL.Record({ 'hasMore' : IDL.Bool, 'rows' : IDL.Vec(Row) });
+  const Result__1 = IDL.Record({ 'hasMore' : IDL.Bool, 'rows' : IDL.Vec(Row) });
   const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
   const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
   const Exclusion = IDL.Record({ 'club' : IDL.Text, 'user' : IDL.Principal });
@@ -359,6 +359,19 @@ export const idlFactory = ({ IDL }) => {
     'is_primary' : IDL.Bool,
     'relationship_type' : IDL.Text,
     'child_id' : IDL.Text,
+  });
+  const Reservation = IDL.Record({
+    'status' : IDL.Variant({
+      'reserved' : IDL.Null,
+      'committed' : IDL.Null,
+      'released' : IDL.Null,
+    }),
+    'token' : IDL.Text,
+    'cycle' : IDL.Nat,
+    'store' : IDL.Principal,
+    'category' : IDL.Text,
+    'bytes' : IDL.Nat,
+    'club_id' : IDL.Text,
   });
   const ClubSponsor = IDL.Record({
     'id' : IDL.Text,
@@ -538,6 +551,7 @@ export const idlFactory = ({ IDL }) => {
     'link' : IDL.Opt(Link),
     'revision' : IDL.Nat64,
   });
+  const Result = IDL.Variant({ 'Ok' : Reservation, 'Err' : IDL.Text });
   const ProfileTeamHistoryEntry = IDL.Record({
     'season_start_date' : IDL.Text,
     'season_id' : IDL.Text,
@@ -809,7 +823,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'execute' : IDL.Func([IDL.Text], [Result], ['query']),
+    'execute' : IDL.Func([IDL.Text], [Result__1], ['query']),
     'export_acl' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : Config, 'Err' : IDL.Text })],
@@ -988,6 +1002,11 @@ export const idlFactory = ({ IDL }) => {
     'get_pending_invite_label' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
+    'get_prepared_media_quota' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Reservation), 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_public_eoi_config' : IDL.Func(
@@ -1417,6 +1436,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'my_role_grants' : IDL.Func([], [IDL.Vec(RoleGrant)], ['query']),
+    'prepare_media_quota_reservation' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+        [Result],
+        [],
+      ),
     'profile_team_history' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(ProfileTeamHistoryEntry)],
@@ -1445,6 +1469,11 @@ export const idlFactory = ({ IDL }) => {
     'redeem_team_promo_code' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_media_quota_store' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'reject_club_join_request' : IDL.Func(
@@ -1845,6 +1874,11 @@ export const idlFactory = ({ IDL }) => {
     'set_theme_preference' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'settle_prepared_media_quota' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Bool],
+        [Result],
         [],
       ),
     'soft_delete_club' : IDL.Func(
