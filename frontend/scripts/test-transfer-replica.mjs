@@ -83,7 +83,7 @@ try {
   // Writable again on the target; source holds nothing.
   ok(await B.messaging_domain.send_message(conv.id, 'after move', 'k-after', [], []));
   ok(await as(B.vault_domain, staff, () => B.vault_domain.rename_file('file1', 'rules-v2.pdf')));
-  ok(await B.events_domain.create_event(CLUB, [], 'Match', 'Saturday', 'match', [], [], [], [], 3_000n, 4_000n, [], false, [], []));
+  ok(await B.events_domain.create_event(CLUB, [], 'Match', 'Saturday', 'game', [], [], [], [], 3_000n, 4_000n, [], false, [], []));
   assert.equal(ok(await A.club_domain.get_club_profile(CLUB)).length, 0);
   assert.equal((await A.events_domain.list_events([CLUB], [])).length, 0);
   assert.equal(ok(await as(A.vault_domain, staff, () => A.vault_domain.list_files('f1'))).length, 0);
