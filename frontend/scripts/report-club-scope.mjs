@@ -10,16 +10,17 @@ const stats = {};
 for (const f of files) {
   const src = readFileSync(f, 'utf8'); let i = 0;
   while ((i = src.indexOf('withFeatureBackend(', i)) !== -1) {
-    let j = i + 19, depth = 1, commas = 0, str = null;
+    let j = i + 19, depth = 1, commas = 0, str = null, last = -1;
     for (; j < src.length && depth; j++) {
       const c = src[j];
       if (str) { if (c === '\\') j++; else if (c === str) str = null; continue; }
       if (c === '"' || c === "'" || c === '`') str = c;
       else if ('([{'.includes(c)) depth++; else if (')]}'.includes(c)) depth--;
-      else if (c === ',' && depth === 1) commas++;
+      else if (c === ',' && depth === 1) { commas++; last = j; }
     }
     const feature = (src.slice(i + 19, i + 60).match(/^\s*["'](\w+)["']/) ?? [])[1] ?? '(dynamic)';
-    const scoped = commas >= 2 && !/,\s*\)$/.test(src.slice(i, j).replace(/,\s*\)$/, ')').slice(-3)) && commas >= 2;
+    const tail = src.slice(last + 1, j - 1).trim();
+    const scoped = commas >= 3 || (commas === 2 && tail !== '');
     stats[feature] ??= { scoped: 0, unscoped: 0 }; stats[feature][scoped ? 'scoped' : 'unscoped']++;
     i = j;
   }
