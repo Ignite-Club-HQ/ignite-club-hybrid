@@ -15,7 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 
 interface Props {
   teamId: string;

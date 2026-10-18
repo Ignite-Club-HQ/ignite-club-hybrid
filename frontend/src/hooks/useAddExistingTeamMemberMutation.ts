@@ -9,7 +9,8 @@ import {
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { isDuplicateChildError } from "@/lib/childDedup";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { addLiveRoleGrant } from "@/live/features/membership";
 import { sendGamificationNotification } from "@/lib/gamificationNotify";
 import {

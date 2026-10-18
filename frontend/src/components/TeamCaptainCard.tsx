@@ -19,7 +19,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { invalidateRolesCache } from "@/lib/rolesCache";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { addLiveTeamCaptain, removeLiveTeamCaptain, listLiveTeamCaptains } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 

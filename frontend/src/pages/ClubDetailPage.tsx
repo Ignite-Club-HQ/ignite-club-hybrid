@@ -106,7 +106,8 @@ import ClubCompetitionsSection from "@/components/competitions/ClubCompetitionsS
 import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, getLiveClubSettings, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
 import { markTeamDeleted, unmarkTeamDeleted } from "@/lib/deletedTeamTombstones";
 import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";

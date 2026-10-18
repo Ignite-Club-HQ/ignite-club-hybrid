@@ -13,7 +13,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserCheck } from "lucide-react";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { adminLinkLiveChildToParent, setLiveGuardianRelationship } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 

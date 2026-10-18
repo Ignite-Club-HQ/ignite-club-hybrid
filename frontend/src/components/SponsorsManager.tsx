@@ -30,7 +30,8 @@ import {
   Loader2
 } from "lucide-react";
 import { compressImage } from "@/lib/imageCompression";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { deleteLiveSponsor, listLiveSponsors, saveLiveSponsor, type LiveClubSponsor } from "@/live/features/club";
 
 interface Sponsor {

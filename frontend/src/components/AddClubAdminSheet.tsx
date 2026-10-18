@@ -21,7 +21,8 @@ import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
 // (ICP routing import removed: email sends now work in both modes — the
 // send-email edge function is anon-key callable.)
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveClubBranding, createLivePendingInvite } from "@/live/features/club";
 import {
   listLiveRoleGrants,

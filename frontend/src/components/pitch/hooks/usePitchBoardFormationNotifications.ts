@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { livePitchRecipients } from "./livePitchNotifications";
 import type { Player } from "../types";

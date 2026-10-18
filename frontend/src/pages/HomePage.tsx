@@ -36,7 +36,8 @@ import {
   fetchHomeUserRsvpsForClub,
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveClubProfile, getLiveTeam, listLiveClubs, listLiveTeams } from "@/live/features/club";
 import { requestLiveRole } from "@/live/features/membership";
 import { getLiveMyRoleGrants } from "@/live/features/membership";

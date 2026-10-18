@@ -19,7 +19,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
 import { PageLoading } from "@/components/ui/page-loading";

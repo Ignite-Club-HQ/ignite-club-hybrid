@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Canvas as FabricCanvas } from "fabric";
 import { useToast } from "@/hooks/use-toast";
 import { Player, TeamSize, getPositionFromCoords } from "@/components/pitch/types";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 
 // Minimal structural surface this hook needs from the Supabase client, so the
 // caller can pass its existing client instance without this module adding

@@ -32,7 +32,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { createMemberCheckout, listenForPaymentStatus } from "@/lib/memberCheckout";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   listLiveMemberPayments,
   markLiveMemberPaid,

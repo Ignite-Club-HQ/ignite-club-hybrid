@@ -25,7 +25,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { redeemLiveClubStoragePromoCode } from "@/live/features/promoCodes";
 import { toast } from "sonner";
 import { SubscriptionLegalLinks } from "@/components/SubscriptionLegalLinks";

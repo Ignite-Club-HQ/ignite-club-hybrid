@@ -27,7 +27,8 @@ import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubDetail } from "@/lab/fixtureDataLayer";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   getLiveClubProfile,
   getLiveClubGeneralSettings,

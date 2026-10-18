@@ -21,7 +21,8 @@ import TeamTrainingPausesCard from "@/components/team/TeamTrainingPausesCard";
 
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { saveLiveMembershipTeam } from "@/live/features/membership";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";

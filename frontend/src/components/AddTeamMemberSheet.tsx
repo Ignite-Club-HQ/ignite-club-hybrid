@@ -45,7 +45,8 @@ import { useAddTeamMemberSearch } from "@/hooks/useAddTeamMemberSearch";
 import { useAddExistingTeamMemberMutation } from "@/hooks/useAddExistingTeamMemberMutation";
 import { useAddPendingTeamMemberMutation } from "@/hooks/useAddPendingTeamMemberMutation";
 import { useAddBulkTeamMembersMutation } from "@/hooks/useAddBulkTeamMembersMutation";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { createLiveTeamInviteLink } from "@/live/features/club";
 
 interface BulkMember {

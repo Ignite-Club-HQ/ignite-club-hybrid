@@ -33,7 +33,8 @@ import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
 import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   getLiveClubProfile,
   getLiveClubSubscription,

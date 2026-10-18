@@ -11,7 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { createLiveChildForParentOnTeam } from "@/live/features/club";
 import { grantLiveClubChildNameRead, registerLiveChildNamePii } from "@/live/features/vault";
 

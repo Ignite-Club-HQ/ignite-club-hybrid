@@ -21,7 +21,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { SPORT_EMOJIS, getSportEmoji } from "@/lib/sportEmojis";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { createLiveClub, requestLiveClubJoin } from "@/live/features/club";
 import { addLiveRoleGrant } from "@/live/features/membership";
 
