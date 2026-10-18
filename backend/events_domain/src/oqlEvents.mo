@@ -1,6 +1,8 @@
 import Oql "../../shared/Oql";
 import Types "types";
 import Principal "mo:core/Principal";
+import Array "mo:core/Array";
+import Nat64 "mo:core/Nat64";
 
 module {
   public let entity : Oql.Entity = { name = "events"; fields = [
@@ -20,7 +22,7 @@ module {
     [Oql.text("id", event.id), Oql.text("club_id", event.club_id),
      Oql.optional("team_id", event.team_id), Oql.text("title", event.title),
      Oql.text("event_type", event.event_type), Oql.optional("location", event.location),
-     Oql.integer("starts_at_ms", event.starts_at_ms), Oql.integer("ends_at_ms", event.ends_at_ms),
+     Oql.integer("starts_at_ms", Nat64.toNat(event.starts_at_ms)), Oql.integer("ends_at_ms", Nat64.toNat(event.ends_at_ms)),
      Oql.boolean("cancelled", event.cancelled), Oql.optional("opponent", event.opponent)]
   };
 }
