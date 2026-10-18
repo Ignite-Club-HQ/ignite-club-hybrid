@@ -8,6 +8,16 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
 
 ### Implemented
 
+- Cross-group reads: `shard_router.read_hosted_club_assignment` returns only a
+  club's group (authenticated, deployment-bound, revision-checked) so a reader
+  can open a competition hosted in another group; destinations keep their own
+  access rules and hosted lookups never widen write membership. Team entries in
+  any group are found with a bounded every-group read. Competitions stay with
+  the hosting club by design; sponsor counters are club-owned and move.
+- Membership discovery uses the indexed club pager, falling back to the scan
+  pager only for app-wide accounts.
+- The move tool refuses any canister without move endpoints (fail closed) and
+  folds older sponsor-only counts into the club when it locks.
 - Deployment-bound preparation (`frontend/src/live/groupDeployment.ts`) validates
   approved identity/revision/HTTPS origin/network against every domain's subnet
   placement. Secondary approved subnets remain gated; cache scopes isolate account
