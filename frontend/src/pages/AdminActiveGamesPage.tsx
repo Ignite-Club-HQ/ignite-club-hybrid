@@ -158,7 +158,7 @@ function SupabaseAdminActiveGamesPage() {
           const rows = await listLiveActiveGames(ctx, 0);
           return rows.filter((r) => r.is_active).map(toActiveGameRow);
         },
-      }),
+      }, { everyGroup: true, merge: (parts: ActiveGameRow[][]) => parts.flat() }),
   });
 
   const { data: recentRows, isLoading: recentLoading } = useQuery({
@@ -187,7 +187,7 @@ function SupabaseAdminActiveGamesPage() {
           const rows = await listLiveActiveGames(ctx, sinceMs);
           return rows.filter((r) => !r.is_active).map(toActiveGameRow);
         },
-      });
+      }, { everyGroup: true, merge: (parts: ActiveGameRow[][]) => parts.flat() });
     },
   });
 
@@ -246,7 +246,7 @@ function SupabaseAdminActiveGamesPage() {
           counts.delete("");
           return counts;
         },
-      }),
+      }, { everyGroup: true, merge: (parts: Map<string, number>[]) => new Map(parts.flatMap((m) => [...m])) }),
   });
 
   // Realtime: re-pull on any active_games change.

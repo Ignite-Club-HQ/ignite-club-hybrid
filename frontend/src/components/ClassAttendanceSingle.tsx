@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveAttendance, markLiveAttendance } from "@/live/features/events";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -117,7 +118,7 @@ export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleP
             status: r.status,
           }));
         },
-      });
+      }, { teamId });
     },
     enabled: !!termId && !!sessionDate,
   });
@@ -155,7 +156,7 @@ export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleP
             },
           ]);
         },
-      });
+      }, writeOnce({ teamId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["class-attendance", termId, teamId, sessionDate] });

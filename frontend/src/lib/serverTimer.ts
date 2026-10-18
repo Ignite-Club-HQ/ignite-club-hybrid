@@ -392,7 +392,7 @@ async function resolveIcpTimerEventId(teamId: string | null): Promise<string | n
       }
       return best?.id ?? null;
     },
-  }).catch(() => null);
+  }, { teamId }).catch(() => null);
   icpEventCache.set(teamId, { eventId, at: Date.now() });
   return eventId;
 }

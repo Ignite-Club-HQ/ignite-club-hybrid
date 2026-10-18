@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, X } from "lucide-react";
+import { currentChatScope } from "@/live/chatScope";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLivePollResults } from "@/live/features/messaging";
@@ -40,7 +41,7 @@ export function PollAttachmentPreview({ pollId, onRemove, disabled }: PollAttach
             optionCount: results.poll.options?.length ?? 0,
           };
         },
-      });
+      }, currentChatScope());
     },
     staleTime: 60_000,
   });

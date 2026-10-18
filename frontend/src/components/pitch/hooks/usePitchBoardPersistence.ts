@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { savePitchState } from "../pitchStateUtils";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { buildEventLineupSnapshot, lineupSignature, saveEventLineup } from "../eventLineupRepository";
 import type { Player, TeamSize, SubstitutionEvent, Goal } from "../types";
 
@@ -154,7 +155,7 @@ export function usePitchBoardPersistence({
             boardSessionId: `pitch-${teamId}`,
           });
         },
-      }).catch((error) => console.warn("[PitchBoard] auto-sub plan sync failed", error));
+      }, writeOnce({ teamId })).catch((error) => console.warn("[PitchBoard] auto-sub plan sync failed", error));
     }, 800);
     return () => clearTimeout(t);
   }, [hasInitialized, userId, teamId, isEventGroup, autoSubActive, autoSubPlan, players, linkedEventId]);

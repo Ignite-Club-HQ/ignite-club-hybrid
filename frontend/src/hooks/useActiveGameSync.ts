@@ -5,6 +5,7 @@ import { recordSyncWrite } from "@/lib/syncWriteRateMonitor";
 import { hasAnchoredTimerMarker, mayWriteLegacyTimerState } from "@/lib/serverTimer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { syncLiveActiveGame, deactivateLiveActiveGame } from "@/live/features/events";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -38,6 +39,8 @@ interface PitchState {
 export function useActiveGameSync() {
   const { user } = useAuth();
   const activeGameIdRef = useRef<string | null>(null);
+  // Team of the game being synced: lets stop-sync reach the club's own canisters.
+  const activeTeamIdRef = useRef<string | null>(null);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Stable board session id for the lifetime of this hook mount. Stamped on
   // every active_games write so spectators can lock onto this session even if
@@ -177,7 +180,7 @@ export function useActiveGameSync() {
             icp: async (ctx) => {
               await deactivateLiveActiveGame(ctx, timerState?.teamId || null);
             },
-          });
+          }, timerState?.teamId ? writeOnce({ teamId: timerState.teamId }) : { shared: "person" });
         } catch (e) {
           console.warn('[SYNC] ICP deactivate failed', e);
         }
@@ -304,8 +307,9 @@ export function useActiveGameSync() {
               boardSessionId: boardSessionIdRef.current,
             });
             activeGameIdRef.current = (result as { id: string }).id;
+            activeTeamIdRef.current = teamId;
           },
-        });
+        }, teamId ? writeOnce({ teamId }) : { shared: "person" });
         return;
       }
 
@@ -418,7 +422,7 @@ export function useActiveGameSync() {
             icp: async (ctx) => {
               await deactivateLiveActiveGame(ctx, null);
             },
-          });
+          }, activeTeamIdRef.current ? writeOnce({ teamId: activeTeamIdRef.current }) : { shared: "person" });
         } catch (e) {
           console.warn('[SYNC] ICP stopSync deactivate failed', e);
         }

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { scopeForChat } from "@/live/chatScope";
 import type { ChatScopeType } from "@/hooks/useChatCatchUp";
 import { useChatRecapGloballyEnabled } from "@/hooks/useChatRecapGloballyEnabled";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -85,7 +86,7 @@ export function useAICatchUpAvailability(
           );
           return !isAdmin;
         },
-      });
+      }, scopeForChat(scope_type, scope_id));
     },
   });
 
@@ -109,7 +110,7 @@ export function useAICatchUpAvailability(
           const settings = await getLiveUserMessagingSettings(ctx);
           return settings.ai_catchup_enabled === false;
         },
-      });
+      }, { shared: "person" });
     },
   });
 

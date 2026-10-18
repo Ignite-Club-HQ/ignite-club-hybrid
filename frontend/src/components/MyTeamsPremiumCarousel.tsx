@@ -849,7 +849,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
             );
             return map;
           },
-        });
+        }, { everyGroup: true, merge: (parts: Record<string, unknown>[]) => Object.assign({}, ...parts) });
       }
 
       // PER-SCOPE FAN-OUT: one `.in(...)` query with a global limit lets a

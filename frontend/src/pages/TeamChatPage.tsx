@@ -120,6 +120,7 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
@@ -1875,7 +1876,7 @@ export default function TeamChatPage() {
         icp: async (ctx) => {
           await updateLiveMessage(ctx, editingMessage.id, message.trim());
         },
-      });
+      }, writeOnce({ teamId: teamId! }));
     },
     onSuccess: () => {
       setMessage("");

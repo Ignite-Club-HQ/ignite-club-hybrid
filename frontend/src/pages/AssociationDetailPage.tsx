@@ -424,9 +424,10 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
         const body = message.trim();
         let teamCount = 0;
         let clubCount = 0;
-        await withFeatureBackend("messaging", {
-          icp: async (ctx) => {
-            for (const c of targetClubs) {
+        // One call per club so each reaches that club's own canisters.
+        for (const c of targetClubs) {
+          await withFeatureBackend("messaging", {
+            icp: async (ctx) => {
               const teams = await listLiveTeams(ctx, c.id);
               const teamIds = teams.map((t: any) => t.id);
               const result = await broadcastLiveAnnouncement(ctx, {
@@ -438,10 +439,10 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
               });
               teamCount += teamIds.length - (result.skipped?.length ?? 0);
               clubCount += 1;
-            }
-          },
-          supabase: async () => { throw new Error("unreachable"); },
-        });
+            },
+            supabase: async () => { throw new Error("unreachable"); },
+          }, { clubId: c.id, writeKey: "once", attempts: 1 });
+        }
         toast({ title: `Sent to ${teamCount} team${teamCount === 1 ? "" : "s"} across ${clubCount} club${clubCount === 1 ? "" : "s"}` });
         setMessage("");
         setSelectedClubIds(new Set());

@@ -61,7 +61,7 @@ export function useChatOnlineCount(
       withFeatureBackend("messaging", {
         supabase: async () => {},
         icp: (ctx) => livePresenceHeartbeat(ctx, Capacitor.isNativePlatform() ? Capacitor.getPlatform() : "web"),
-      }).catch(() => {});
+      }, { shared: "person" }).catch(() => {});
     };
     beat();
     const timer = setInterval(beat, 120 * 1000);
@@ -79,7 +79,7 @@ export function useChatOnlineCount(
       withFeatureBackend("messaging", {
         supabase: async () => 0,
         icp: (ctx) => liveOnlineCount(ctx, chatId!),
-      }),
+      }, { shared: "person" }),
     enabled: routedToIcp && enabled && !!chatId,
     staleTime: 60 * 1000,
     refetchInterval: 120 * 1000,

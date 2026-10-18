@@ -120,7 +120,7 @@ export default function OnlineUsersTab() {
             };
           });
         },
-      }),
+      }, { shared: "app" }),
     refetchInterval: 30_000,
   });
 

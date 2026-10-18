@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { saveLivePitchBoardSettings } from "@/live/features/events";
 import { TeamSize, FORMATIONS } from "@/components/pitch/types";
 
@@ -114,7 +115,7 @@ export function usePitchSettings({ teamId, readOnly, settingsRef }: UsePitchSett
               showLineupPicker: Boolean((overrides as Record<string, unknown> | undefined)?.show_lineup_picker ?? settingsRef.current.showLineupPickerSetting),
             });
           },
-        });
+        }, writeOnce({ teamId }));
 
         // Invalidate cached subscription queries so the next PitchBoard mount
         // (or parent re-read) sees the new value instead of reverting to a
@@ -237,7 +238,7 @@ export function usePitchSettings({ teamId, readOnly, settingsRef }: UsePitchSett
             showLineupPicker: payload.show_lineup_picker,
           });
         },
-      });
+      }, writeOnce({ teamId }));
 
       savedTeamDefaultsRef.current = {
         minutesPerHalf: settings.minutesPerHalf,

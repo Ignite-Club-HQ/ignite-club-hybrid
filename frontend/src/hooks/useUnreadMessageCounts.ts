@@ -3,6 +3,7 @@ import {
   fetchUnreadMessageCounts,
   createEmptyUnreadMessageCounts,
   type UnreadMessageCounts,
+  mergeUnreadMessageCounts,
 } from "@/lib/unreadMessageCounts";
 import { Capacitor } from "@capacitor/core";
 import { resolveAuthBackend } from "@/live/authBackendMode";
@@ -49,7 +50,7 @@ async function fetchIcpUnreadMessageCounts(): Promise<UnreadMessageCounts> {
       }
       return counts;
     },
-  });
+  }, { everyGroup: true, merge: mergeUnreadMessageCounts });
 }
 
 const isNative = () => Capacitor.isNativePlatform();

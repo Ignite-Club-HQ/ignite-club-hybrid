@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { MobileSelect } from "@/components/ui/mobile-select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveAttendance, markLiveAttendance } from "@/live/features/events";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -136,7 +137,7 @@ export function ClassAttendanceManager({ clubId }: ClassAttendanceManagerProps) 
             status: r.status,
           }));
         },
-      });
+      }, { clubId });
     },
     enabled: !!termId && !!classId && !!sessionDate,
   });
@@ -196,7 +197,7 @@ export function ClassAttendanceManager({ clubId }: ClassAttendanceManagerProps) 
             },
           ]);
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

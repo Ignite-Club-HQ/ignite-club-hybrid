@@ -217,7 +217,7 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
         const names = await withFeatureBackend("events", {
           supabase: async () => new Map<string, string>(),
           icp: (ctx) => resolveLivePiiTextBatch(ctx, childIds, "name", "child_rsvps", "Household RSVP child names"),
-        });
+        }, { shared: "app" });
         return (rows ?? []).map((r) => {
           const child = r.child[0];
           const childId = r.rsvp.child_id[0] ?? "";

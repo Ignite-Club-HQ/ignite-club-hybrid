@@ -362,7 +362,7 @@ export default function EventsPage() {
           const scope = await getLiveAccountRosterScope(ctx, user!.id);
           return scope.teamIds;
         },
-      });
+      }, { everyGroup: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
       childDerivedTeamIds.forEach((tid) => teamIds.add(tid));
       
       // Get clubs from teams
@@ -494,7 +494,7 @@ export default function EventsPage() {
           const scope = await getLiveAccountRosterScope(ctx, user!.id);
           return scope.teamIds;
         },
-      });
+      }, { everyGroup: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
       membershipDerivedTeamIds.forEach((tid) => {
         if (!teamIds.includes(tid)) teamIds.push(tid);
       });
@@ -910,7 +910,7 @@ export default function EventsPage() {
             cacheEventsList(eventsScopeKey, scheduleEvents, user?.id);
             diagLog("events:icp-end", { count: scheduleEvents.length });
             return scheduleEvents;},
-        });
+        }, { everyGroup: true, merge: (parts: unknown[][]) => parts.flat() });
       }
 
       const viewableCompetitionMatchIds = await fetchViewableCompetitionMatchIds(supabase).catch((error) => {

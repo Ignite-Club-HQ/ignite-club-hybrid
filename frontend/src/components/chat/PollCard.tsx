@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { currentChatScope, chatWrite } from "@/live/chatScope";
 import { BarChart3, Check, Clock, Lock, Loader2, MoreVertical, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,7 +59,7 @@ export function PollCard({ pollId }: PollCardProps) {
             throw new Error("unreachable");
           },
           icp: (ctx) => getLivePollResults(ctx, pollId),
-        });
+        }, currentChatScope());
         const poll: PollRow = {
           id: results.poll.id,
           question: results.poll.question,
@@ -163,7 +164,7 @@ export function PollCard({ pollId }: PollCardProps) {
             throw new Error("unreachable");
           },
           icp: (ctx) => voteLivePoll(ctx, pollId, optionIndex),
-        });
+        }, chatWrite(currentChatScope()));
         setIcpMyOptionIndex((prev) => (prev === optionIndex ? null : optionIndex));
         return;
       }
@@ -214,7 +215,7 @@ export function PollCard({ pollId }: PollCardProps) {
             throw new Error("unreachable");
           },
           icp: (ctx) => closeLivePoll(ctx, pollId),
-        });
+        }, chatWrite(currentChatScope()));
         return;
       }
       const { error } = await supabase
@@ -238,7 +239,7 @@ export function PollCard({ pollId }: PollCardProps) {
             throw new Error("unreachable");
           },
           icp: (ctx) => deleteLivePoll(ctx, pollId),
-        });
+        }, chatWrite(currentChatScope()));
         return;
       }
       const { error } = await supabase.from("polls").delete().eq("id", pollId);

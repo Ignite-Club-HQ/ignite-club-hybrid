@@ -173,6 +173,6 @@ export function useUserEventViews(userId: string | undefined, eventIds: string[]
           const viewedIds = await listLiveMyViewedEventIds(ctx, normalizedIds);
           return new Set<string>(viewedIds);
         },
-      }),
+      }, { everyGroup: true, merge: (parts: Set<string>[]) => new Set(parts.flatMap((p) => [...p])) }),
   });
 }

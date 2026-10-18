@@ -145,7 +145,7 @@ export async function resolveRsvpChildren({
         if (!event.club_id) return [];
         return intersectWithTeamsIcp(ctx, candidates, { clubId: event.club_id });
       },
-    });
+    }, { eventId: event.id });
   }
 
   // Step 2 — candidate children (own + guardian-linked), deduped.
@@ -207,7 +207,7 @@ export async function resolveEventChildRoster({
         if (!event.club_id) return [];
         return intersectWithTeamsIcp(ctx, candidates, { clubId: event.club_id });
       },
-    });
+    }, { eventId: event.id });
   }
 
   const eligible = getEventEligibleTeamIds(event);

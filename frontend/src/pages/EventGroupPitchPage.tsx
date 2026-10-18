@@ -17,6 +17,7 @@ import { AddDutySheet } from "@/components/AddDutySheet";
 import { AssignDutySheet } from "@/components/AssignDutySheet";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { setLiveGroupDuty, removeLiveGroupDuty } from "@/live/features/events";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
@@ -335,7 +336,7 @@ function SupabaseEventGroupPitchPage() {
           await setLiveGroupDuty(ctx, groupId!, name, null);
           return true;
         },
-      });
+      }, writeOnce({ eventId: eventId! }));
       if (addedOnIcp) return;
 
       const { error } = await supabase.from("event_group_duties").insert({
@@ -366,7 +367,7 @@ function SupabaseEventGroupPitchPage() {
           await setLiveGroupDuty(ctx, groupId!, duty.name, assignedTo);
           return true;
         },
-      });
+      }, writeOnce({ eventId: eventId! }));
       if (assignedOnIcp) return;
 
       const { error } = await supabase
@@ -395,7 +396,7 @@ function SupabaseEventGroupPitchPage() {
             await removeLiveGroupDuty(ctx, groupId!, duty.name);
             return true;
           },
-        });
+        }, writeOnce({ eventId: eventId! }));
         if (removedOnIcp) return;
       }
 

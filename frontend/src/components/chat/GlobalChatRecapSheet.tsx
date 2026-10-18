@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { scopeForChat } from "@/live/chatScope";
 import {
   Sheet,
   SheetContent,
@@ -141,7 +142,7 @@ async function fetchOne(ref: RecapScopeRef, lookbackHours: number): Promise<{ re
           throw new Error("messaging is routed to ICP");
         },
         icp: (ctx) => generateLiveChatRecap(ctx, ref.scope_id, sinceMs),
-      });
+      }, scopeForChat(ref.scope_type, ref.scope_id));
       return { result: parseIcpRecapMarkdown(markdown), error: null };
     } catch (e: any) {
       return { result: null, error: e?.message || "unknown" };

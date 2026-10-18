@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { saveLiveGameResult } from "@/live/features/events";
 import { useToast } from "@/hooks/use-toast";
 import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
@@ -80,7 +81,7 @@ export function useSaveGameResult() {
                   mvpPlayerName: mvp?.name ?? null,
                 });
               },
-            });
+            }, writeOnce({ teamId: input.teamId }));
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             if (!opts?.silent) {

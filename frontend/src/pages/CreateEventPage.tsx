@@ -856,7 +856,7 @@ function SupabaseCreateEventPage() {
           return { code: "23505" } as any;
         }
       },
-    });
+    }, { shared: "person" });
 
     if (error) {
       if (error.code === "23505") {
@@ -884,7 +884,7 @@ function SupabaseCreateEventPage() {
         await removeLiveFavouriteEventTitle(ctx, id);
         return null;
       },
-    });
+    }, { shared: "person" });
 
     if (!error) {
       queryClient.invalidateQueries({ queryKey: ["favorite-event-titles"] });
@@ -1049,7 +1049,7 @@ function SupabaseCreateEventPage() {
     // system message — would land in a dead chat thread.
     // ICP mode has no Supabase team rows; the club/team scope guard below
     // checks the team against the canister-loaded team list instead.
-    if (teamId && !(await withFeatureBackend("events", { supabase: async () => false, icp: async () => true }))) {
+    if (teamId && !(await withFeatureBackend("events", { supabase: async () => false, icp: async () => true }, { shared: "app" }))) {
       const { data: teamRow, error: teamCheckError } = await supabase
         .from("teams")
         .select("id, deleted_at")

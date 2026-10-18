@@ -281,7 +281,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
             const sub = await getLiveClubSubscription(ctx, team!.club_id);
             return sub ? mapLiveClubSubscriptionToRow(sub) : null;
           },
-        });
+        }, { clubId: team!.club_id });
       }
       const { data } = await supabase
         .from("club_subscriptions")
@@ -450,7 +450,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
                 is_cancelled: ev.cancelled,
               }));
           },
-        });
+        }, { teamId: teamId! });
       }
       // Only game and training events count toward attendance stats
       const allowedTypes: ("game" | "training")[] = eventTypeFilter === "all"
@@ -498,7 +498,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
               })),
             );
           },
-        });
+        }, { teamId: teamId! });
       }
 
       

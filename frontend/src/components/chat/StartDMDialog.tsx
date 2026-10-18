@@ -317,7 +317,7 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
             }));
             return { users, clubs: [] as ClubInfo[], teams: [] as TeamInfo[] };
           },
-        });
+        }, { clubId: activeClubFilter ?? "" });
       }
       // Get Pro clubs user is a member of
       const { data: userRoles } = await supabase
@@ -524,7 +524,7 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
             const conversation = await getOrCreateLiveDm(ctx, Principal.fromText(otherUserId));
             return conversation.id;
           },
-        });
+        }, { shared: "person" });
       }
 
       const { data, error } = await supabase.rpc("get_or_create_dm_conversation", {

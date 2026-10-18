@@ -41,7 +41,7 @@ export function EventPickerSheet({ open, onOpenChange, onSelectEvent, teamId, cl
       return withFeatureBackend("events", {
         supabase: querySupabaseEvents,
         icp: (ctx) => queryLiveEvents(ctx),
-      });
+      }, teamId ? { teamId } : { clubId: clubId! });
     },
     enabled: open && !!(teamId || clubId) && !!user?.id,
     staleTime: 60 * 1000,

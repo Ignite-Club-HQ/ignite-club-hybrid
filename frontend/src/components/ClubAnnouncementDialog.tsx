@@ -16,6 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { refreshSessionOnce } from "@/lib/refreshSessionOnce";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { broadcastLiveAnnouncement } from "@/live/features/messaging";
 
 
@@ -186,7 +187,7 @@ export function ClubAnnouncementDialog({
           });
           return { skipped: result.skipped ?? [] };
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: (result) => {
       const parts: string[] = [];

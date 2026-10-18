@@ -84,6 +84,7 @@ import { CLUB_ADMIN_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdap
 import { Capacitor } from "@capacitor/core";
 
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { sendLiveMessage, updateLiveMessage, ensureLiveClubAdminThread, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 import { getLiveClubProfile } from "@/live/features/club";
 import { recordLiveMessageSent } from "@/live/features/insights";
@@ -1163,7 +1164,7 @@ function SupabaseClubAdminChatPage() {
         icp: async (ctx) => {
           await updateLiveMessage(ctx, editingMessage.id, message.trim());
         },
-      });
+      }, writeOnce({ conversationId: conversationId! }));
     },
     onSuccess: () => {
       setMessage("");

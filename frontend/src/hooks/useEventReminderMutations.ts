@@ -7,6 +7,7 @@ import { eventKeys } from "@/lab/eventQueryKeys";
 import { resolveEventRecipients, eventRecipientContext } from "@/features/events/eventRecipientPolicy";
 import { resolveReminderRecipients, applyReminderCooldown, normalizeRecipientIds } from "@/features/events/reminderRecipients";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { sendLiveEventReminders } from "@/live/features/events";
 
@@ -87,7 +88,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
           const count = await sendLiveEventReminders(ctx, id);
           return Number(count);
         },
-      });
+      }, writeOnce({ eventId: id ?? "" }));
       if (icpCount !== null) return icpCount;
 
       // Get all RSVPs for this event

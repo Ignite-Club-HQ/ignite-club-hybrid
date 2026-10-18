@@ -1,5 +1,6 @@
 import { canisterDescription, canisterTitle, optText } from "./createEventWorkflow";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   createLiveOpenDuty,
   createLiveRecurringEventSeries,
@@ -162,7 +163,7 @@ export async function updateEventTransaction(
         await setLiveEventAutoReminder(ctx, input.eventId, hours ?? null);
       }
     },
-  });
+  }, writeOnce({ eventId: input.eventId }));
 }
 
 /** Apply all duty additions, edits and removals using the existing atomic RPC. */
@@ -272,5 +273,5 @@ export async function convertEventToRecurringSeries(
       });
       return events.length;
     },
-  });
+  }, writeOnce({ eventId: input.eventId }));
 }

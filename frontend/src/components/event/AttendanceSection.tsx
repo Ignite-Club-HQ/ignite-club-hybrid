@@ -207,7 +207,7 @@ export function AttendanceSection({
             );
             return map;
           },
-        });
+        }, { shared: "person" });
       }
       const { data, error } = await supabase.rpc("get_members_push_reachable", {
         member_ids: notViewedIds,

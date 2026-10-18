@@ -39,6 +39,7 @@ import { getEventDisplay } from "@/lib/eventDisplay";
 import { TeamChip, getTeamRailColor } from "@/components/events/TeamChip";
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps, getLiveGameResult, listLiveMyRsvps, getLiveEventRosterDetailed, listLiveDuties, sendLiveEventReminders } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
@@ -217,7 +218,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
         return withFeatureBackend("events", {
           supabase: async () => false, // unreachable — guarded above
           icp: (ctx) => resolveLiveProAccess(ctx, { teamId: event.team_id, clubId: event.club_id }),
-        });
+        }, event.club_id ? { clubId: event.club_id } : { eventId: event.id });
       }
       if (event.team_id) {
         const { data: teamSub } = await supabase
@@ -252,7 +253,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
             // only used by the Supabase update branch below, never on ICP.
             return rsvp ? { id: rsvp.event_id, status: rsvp.state } : null;
           },
-        });
+        }, { eventId: event.id });
       }
       const { data, error } = await supabase
         .from("rsvps")
@@ -670,7 +671,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
             }
             return result.notifiedCount;
           },
-        });
+        }, writeOnce({ eventId: event.id }));
       }
 
       if (cancelType === "series" && event.parent_event_id) {

@@ -219,7 +219,7 @@ async function fetchLiveClubAdminConversations(clubFilter?: string | null): Prom
       rows.sort((a, b) => new Date(b.last_created_at).getTime() - new Date(a.last_created_at).getTime());
       return rows;
     },
-  });
+  }, clubFilter ? { clubId: clubFilter } : { everyGroup: true, merge: (parts: ClubAdminConversationRow[][]) => parts.flat() });
 }
 
 /**

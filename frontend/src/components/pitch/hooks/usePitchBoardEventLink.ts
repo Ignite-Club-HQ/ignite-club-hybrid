@@ -168,7 +168,7 @@ export function usePitchBoardEventLink({
             return event ? { id: event.id, opponent: event.opponent[0] ?? null, title: event.title,
               start_time: new Date(Number(event.starts_at_ms)).toISOString() } : null;
           },
-        });
+        }, { teamId });
       }
       const { data, error } = await supabase
         .from("events")

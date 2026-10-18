@@ -24,6 +24,7 @@ import { Plus, Crown, Check, Users, Shield, Sparkles, ChevronLeft, ChevronRight,
 import { toast } from "sonner";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { createLiveGroupWithRoles } from "@/live/features/messaging";
 import { fetchLiveMessagingCandidates } from "@/live/messagingCandidates";
 import { Principal } from "@icp-sdk/core/principal";
@@ -478,7 +479,7 @@ export default function CreateGroupDialog({
               roleEntries,
             );
           },
-        });
+        }, writeOnce({ clubId: icpClubId }));
         return;
       }
 
