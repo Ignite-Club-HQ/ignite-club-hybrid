@@ -44,6 +44,7 @@ persistent actor class Main(governorInit : Principal) {
   var competitionInvites : [Types.CompetitionInvite];
   var competitionJoinLinks : [Types.CompetitionJoinLink];
   var competitionOfficialEmailInvites : [Types.CompetitionOfficialEmailInvite];
+  var competitionWelcomeJobs : [Types.CompetitionWelcomeJob];
   var eoiSubmissions : [Types.EoiSubmission];
 
   func eoiHex(b : Blob) : Text {
