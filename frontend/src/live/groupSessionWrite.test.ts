@@ -82,3 +82,20 @@ describe('routed group writes', () => {
     expect(isTransientWriteError(new Error('permission denied: timeout'))).toBe(false);
   });
 });
+
+describe('remaining feature saves (roadmap 51)', () => {
+  it('points, mini-league, competition and news saves pin the club group and only retry safe writes', async () => {
+    const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
+    const seen: string[] = []; const orig = s.writeClub;
+    (s as { writeClub: typeof orig }).writeClub = (async (club, domain, key, fn, attempts) => { seen.push(`${club}:${domain}:${attempts ?? 'd'}`); return 'ok'; }) as typeof orig;
+    const w = groupWriteFeatures(s);
+    await w.awardPoints('club-b', 'k', {} as never, 'a', 's', 1, 'd');
+    await w.createMiniLeague('club-b', 'k', {} as never);
+    await w.updateMiniLeague('club-b', 'ml', {} as never);
+    await w.setMatchResult('club-a', 'm1', 2, 1, 0);
+    await w.createNewsPost('club-b', 'k', 't', 'b', 'draft', {} as never);
+    await w.saveAnnouncement('club-b', 'hi');
+    expect(seen).toEqual(['club-b:club_points_domain:1', 'club-b:mini_league_domain:1', 'club-b:mini_league_domain:d',
+      'club-a:competition_domain:d', 'club-b:club_domain:1', 'club-b:club_domain:d']);
+  });
+});
