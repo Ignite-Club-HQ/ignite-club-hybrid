@@ -1161,15 +1161,6 @@ type Main =
              next: opt nat;
            };
      });
-   read_my_club_memberships_indexed: (after: opt text, limit: nat16) ->
-    (variant {
-       Err: text;
-       Ok: record {
-             acl_revision: nat64;
-             clubs: vec text;
-             next: opt text;
-           };
-     });
    record_presence_heartbeat: () -> (variant {
                                        Err: text;
                                        Ok;
