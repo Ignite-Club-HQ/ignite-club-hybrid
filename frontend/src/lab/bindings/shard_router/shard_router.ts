@@ -226,6 +226,13 @@ export interface AssignDomainRequest {
     expected_revision: bigint;
     club_id: string;
 }
+export type Result_15 = {
+    __kind__: "Ok";
+    Ok: GroupAssignment;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export type Result_3 = {
     __kind__: "Ok";
     Ok: GroupAssignment;
@@ -277,13 +284,14 @@ export interface shard_routerInterface {
     list_routes(arg0: string | null, arg1: number): Promise<Result_12>;
     memory_stats(): Promise<MemoryStats>;
     read_group_registry(arg0: string): Promise<Result_13>;
+    read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_15>;
     read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_14>;
     record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result>;
     register_group(arg0: ShardGroup, arg1: bigint): Promise<Result>;
     register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result>;
     version(): Promise<bigint>;
 }
-import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, GroupRegistrySnapshot as _GroupRegistrySnapshot, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
+import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, GroupRegistrySnapshot as _GroupRegistrySnapshot, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
 export class Shard_router implements shard_routerInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result> {
@@ -362,9 +370,13 @@ export class Shard_router implements shard_routerInterface {
         const result = await this.actor.read_group_registry(arg0);
         return from_candid_Result_13_n36(result);
     }
+    async read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_15> {
+        const result = await this.actor.read_hosted_club_assignment(arg0, arg1, arg2);
+        return from_candid_Result_15_n38(result);
+    }
     async read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_14> {
         const result = await this.actor.read_my_group_assignments(arg0, arg1, arg2);
-        return from_candid_Result_14_n38(result);
+        return from_candid_Result_14_n39(result);
     }
     async record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result> {
         const result = await this.actor.record_group_health(arg0, arg1, arg2, arg3);
@@ -398,8 +410,11 @@ function from_candid_Result_12_n31(value: _Result_12): Result_12 {
 function from_candid_Result_13_n36(value: _Result_13): Result_13 {
     return from_candid_variant_n37(value);
 }
-function from_candid_Result_14_n38(value: _Result_14): Result_14 {
-    return from_candid_variant_n39(value);
+function from_candid_Result_14_n39(value: _Result_14): Result_14 {
+    return from_candid_variant_n40(value);
+}
+function from_candid_Result_15_n38(value: _Result_15): Result_15 {
+    return from_candid_variant_n8(value);
 }
 function from_candid_Result_1_n3(value: _Result_1): Result_1 {
     return from_candid_variant_n4(value);
@@ -673,13 +688,13 @@ function from_candid_variant_n37(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n39(value: {
-    Ok: Array<_GroupAssignment>;
+function from_candid_variant_n4(value: {
+    Ok: _AssignResult;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: Array<GroupAssignment>;
+    Ok: AssignResult;
 } | {
     __kind__: "Err";
     Err: string;
@@ -692,13 +707,13 @@ function from_candid_variant_n39(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n4(value: {
-    Ok: _AssignResult;
+function from_candid_variant_n40(value: {
+    Ok: Array<_GroupAssignment>;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: AssignResult;
+    Ok: Array<GroupAssignment>;
 } | {
     __kind__: "Err";
     Err: string;

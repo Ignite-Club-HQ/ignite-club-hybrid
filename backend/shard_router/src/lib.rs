@@ -591,6 +591,26 @@ async fn read_my_group_assignments(club_ids: Vec<String>, target_alias: String, 
     Ok(checked.into_iter().map(|(a, _)| a).collect())
 }
 
+// Where a club lives, for reading something that club hosts (for example a
+// competition other clubs have entered). Any signed-in caller may ask; only
+// the group id is returned and every destination canister keeps its own
+// access rules, so this never grants access to the club's data.
+#[ic_cdk::update]
+fn read_hosted_club_assignment(club_id: String, target_alias: String, expected_revision: u64) -> Outcome<GroupAssignment> {
+    if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
+    hosted_assignment(&club_id, &target_alias, expected_revision, current_revision())
+}
+
+fn hosted_assignment(club_id: &str, target_alias: &str, expected_revision: u64, revision: u64) -> Outcome<GroupAssignment> {
+    discovery::validate_clubs(&[club_id.to_string()])?;
+    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
+    if revision != expected_revision { return Err("Revision conflict".into()); }
+    let assignment = group_assignment_for(club_id).ok_or("Missing club assignment")?;
+    let group = group_for(&assignment.group_id).ok_or("Missing assigned group")?;
+    if group.target_alias != target_alias { return Err("Assignment belongs to another deployment".into()); }
+    Ok(assignment)
+}
+
 #[ic_cdk::update]
 fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
     require_governor()?;
@@ -721,6 +741,23 @@ mod tests {
         assert_eq!(group_assignment_for("club-one"), Some(first));
         assert!(assign_group_record("club-two".into(), "mainnet".into(), current_revision(), 1).is_err());
         assert!(assign_group_record("club-one".into(), "other-engine".into(), current_revision(), 1).is_err());
+    }
+
+    #[test]
+    fn hosted_lookup_returns_only_assigned_group_for_matching_deployment() {
+        let group = ShardGroup {
+            id: "host-group".into(), target_alias: "mainnet".into(), domains: vec![],
+            accepting: true, max_clubs: 5, assigned_clubs: 0,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+        };
+        GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+        let assigned = assign_group_record("host-club".into(), "mainnet".into(), current_revision(), 1).unwrap();
+        let rev = current_revision();
+        assert_eq!(hosted_assignment("host-club", "mainnet", rev, rev).unwrap(), assigned);
+        assert!(hosted_assignment("host-club", "other-engine", rev, rev).is_err());
+        assert!(hosted_assignment("host-club", "mainnet", rev - 1, rev).is_err());
+        assert!(hosted_assignment("unknown-club", "mainnet", rev, rev).is_err());
+        assert!(hosted_assignment("", "mainnet", rev, rev).is_err());
     }
 
     #[test]

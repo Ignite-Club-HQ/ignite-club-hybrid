@@ -99,6 +99,8 @@ export type Result_13 = { 'Ok' : GroupRegistrySnapshot } |
   { 'Err' : string };
 export type Result_14 = { 'Ok' : Array<GroupAssignment> } |
   { 'Err' : string };
+export type Result_15 = { 'Ok' : GroupAssignment } |
+  { 'Err' : string };
 export type Result_2 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : GroupAssignment } |
@@ -162,6 +164,10 @@ export interface _SERVICE {
    */
   'memory_stats' : ActorMethod<[], MemoryStats>,
   'read_group_registry' : ActorMethod<[string], Result_13>,
+  'read_hosted_club_assignment' : ActorMethod<
+    [string, string, bigint],
+    Result_15
+  >,
   'read_my_group_assignments' : ActorMethod<
     [Array<string>, string, bigint],
     Result_14

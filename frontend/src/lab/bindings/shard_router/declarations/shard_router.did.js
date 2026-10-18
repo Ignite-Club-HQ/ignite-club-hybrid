@@ -134,6 +134,7 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : GroupRegistrySnapshot,
     'Err' : IDL.Text,
   });
+  const Result_15 = IDL.Variant({ 'Ok' : GroupAssignment, 'Err' : IDL.Text });
   const Result_14 = IDL.Variant({
     'Ok' : IDL.Vec(GroupAssignment),
     'Err' : IDL.Text,
@@ -187,6 +188,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
     'read_group_registry' : IDL.Func([IDL.Text], [Result_13], []),
+    'read_hosted_club_assignment' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat64],
+        [Result_15],
+        [],
+      ),
     'read_my_group_assignments' : IDL.Func(
         [IDL.Vec(IDL.Text), IDL.Text, IDL.Nat64],
         [Result_14],

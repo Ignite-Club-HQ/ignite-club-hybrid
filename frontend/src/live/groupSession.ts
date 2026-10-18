@@ -11,7 +11,12 @@ export type GroupSessionTransport = {
   readRegistry(): Promise<GroupRegistry>;
   readMemberships(ctx: FeatureBackendContext, offset: bigint, limit: number): Promise<{ clubs: string[]; next: bigint | null; aclRevision: bigint }>;
   readAssignments(clubs: string[], revision: bigint): Promise<ClubAssignment[]>;
+  /** Faster cursor pager (cost scales with the caller's own clubs). Throws APP_WIDE_INDEX_ERROR for app-wide accounts, which use the scan pager. */
+  readMembershipsIndexed?(ctx: FeatureBackendContext, after: string | null, limit: number): Promise<{ clubs: string[]; next: string | null; aclRevision: bigint }>;
+  /** Group of a club the caller may not belong to (e.g. a competition host). Returns location only; destinations keep their own access rules. */
+  readHostedAssignment?(clubId: string, revision: bigint): Promise<ClubAssignment>;
 };
+export const APP_WIDE_INDEX_ERROR = /app-wide accounts/i;
 const MAX_CLUBS = 1000;
 const MAX_PAGES = 500;
 
@@ -43,7 +48,15 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     } } };
   };
   const clubs = new Set<string>();
-  for (const group of registry.groups) {
+  const claim = (club: string, groupId: string) => {
+    if (!club || club.length > 64) throw new Error('Invalid or changing membership page');
+    if (clubs.has(club)) throw new Error('Club claimed by multiple groups or repeated page');
+    clubs.add(club);
+    if (clubs.size > MAX_CLUBS) throw new Error('Membership discovery exceeds club budget');
+    // Group ownership validated after the registry confirms assignments.
+    routing.assignments.set(club, { clubId: club, groupId, revision: registry.revision });
+  };
+  const scanGroup = async (group: GroupDescriptor) => {
     let offset = 0n; let pages = 0; let acl: bigint | undefined;
     while (true) {
       if (++pages > MAX_PAGES) throw new Error('Membership discovery exceeds scan budget');
@@ -53,16 +66,33 @@ export async function openGroupSession(context: FeatureBackendContext, transport
           (acl !== undefined && acl !== page.aclRevision) ||
           (page.next !== null && (page.next <= offset || page.next - offset > 200n))) throw new Error('Invalid or changing membership page');
       acl = page.aclRevision;
-      for (const club of page.clubs) {
-        if (clubs.has(club)) throw new Error('Club claimed by multiple groups or repeated page');
-        clubs.add(club);
-        if (clubs.size > MAX_CLUBS) throw new Error('Membership discovery exceeds club budget');
-        // Group ownership validated after the registry confirms assignments.
-        routing.assignments.set(club, { clubId: club, groupId: group.id, revision: registry.revision });
-      }
-      if (page.next === null) break;
+      for (const club of page.clubs) claim(club, group.id);
+      if (page.next === null) return;
       offset = page.next;
     }
+  };
+  // Indexed pages must be strictly ascending, start after the cursor and
+  // end exactly at the returned cursor, so a page can never repeat or skip.
+  const indexedGroup = async (group: GroupDescriptor, read: NonNullable<GroupSessionTransport['readMembershipsIndexed']>) => {
+    let after: string | null = null; let pages = 0; let acl: bigint | undefined;
+    while (true) {
+      if (++pages > MAX_PAGES) throw new Error('Membership discovery exceeds scan budget');
+      let page: Awaited<ReturnType<typeof read>>;
+      try { page = await read(targetFor(group.id), after, 100); }
+      catch (e) { if (pages === 1 && APP_WIDE_INDEX_ERROR.test((e as Error).message)) { sameIdentity(); return scanGroup(group); } throw e; }
+      sameIdentity();
+      const ascending = page.clubs.every((c, i) => (i === 0 ? after === null || c > after : c > page.clubs[i - 1]));
+      if (page.clubs.length > 100 || !ascending || (acl !== undefined && acl !== page.aclRevision) ||
+          (page.next !== null && (page.clubs.length === 0 || page.next !== page.clubs[page.clubs.length - 1]))) throw new Error('Invalid or changing membership page');
+      acl = page.aclRevision;
+      for (const club of page.clubs) claim(club, group.id);
+      if (page.next === null) return;
+      after = page.next;
+    }
+  };
+  for (const group of registry.groups) {
+    if (transport.readMembershipsIndexed) await indexedGroup(group, transport.readMembershipsIndexed.bind(transport));
+    else await scanGroup(group);
   }
   const validateAssignments = async (requested: readonly string[]) => {
     for (let offset = 0; offset < requested.length; offset += 20) {
@@ -88,7 +118,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     await validateAssignments([...new Set(requested)]); live();
   };
   const inflight = new Map<string, Promise<unknown>>();
-  return {
+  const api = {
     clubIds: [...clubs].sort(),
     dispose() { disposed = true; },
     async readClub<T>(clubId: string, domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
@@ -129,6 +159,40 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       inflight.set(scoped, run);
       try { return await run; } finally { inflight.delete(scoped); }
     },
+    /** Read something hosted by another club (e.g. a competition this club entered).
+     * Location comes from the router; the destination canister decides access.
+     * Read-only: writes stay limited to the caller's own discovered clubs. */
+    async readHosted<T>(hostClubId: string, domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
+      if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
+      live();
+      if (!hostClubId || hostClubId.length > 64) throw new Error('Invalid host club');
+      if (clubs.has(hostClubId)) return api.readClub(hostClubId, domain, read);
+      if (!transport.readHostedAssignment) throw new Error('Hosted club lookup unavailable');
+      const current = await transport.readRegistry();
+      if (current.revision !== registry.revision) throw new Error('Group registry changed; reopen session');
+      const row = await transport.readHostedAssignment(hostClubId, registry.revision); live();
+      if (row.clubId !== hostClubId || !routing.groups.has(row.groupId) || row.revision < 1n || row.revision > registry.revision) throw new Error('Foreign or stale club assignment');
+      routing.assignments.set(hostClubId, row);
+      try {
+        const route = resolveDeploymentClubDomain(table, registry.deployment, hostClubId, domain);
+        groupRouteScope(route, principal);
+        const result = await read(targetFor(route.groupId)); live(); return result;
+      } finally { routing.assignments.delete(hostClubId); }
+    },
+    /** Bounded read across every group, for discovery that is not keyed by one
+     * club (e.g. competitions a team entered, wherever they are hosted).
+     * Every group must answer; results keep registry order. */
+    async readEveryGroup<T>(domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows = 1000): Promise<T[]> {
+      if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
+      live();
+      const current = await transport.readRegistry();
+      if (current.revision !== registry.revision) throw new Error('Group registry changed; reopen session');
+      const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
+      live();
+      const rows = parts.flat();
+      if (rows.length > maxRows) throw new Error('Cross-group read exceeds row budget');
+      return rows;
+    },
     async readClubs<T>(requested: readonly string[], domain: GroupDomain,
       read: (ctx: FeatureBackendContext, clubIds: readonly string[]) => Promise<readonly T[]>): Promise<T[]> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
@@ -147,6 +211,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       live(); return rows.flat().sort((a, b) => a.index - b.index).map(r => r.value);
     },
   };
+  return api;
 }
 /** Only transport-level loss may be retried; canister rejections (permission,
  * validation, quota) are final so a retry can never widen access. */
