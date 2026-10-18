@@ -12,8 +12,8 @@
 - Preview runs frontend/ via lovable.toml and scripts/*-preview.mjs; maps SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Root stays dependency-free.
 - Install frontend via scripts/ensure-frontend-deps.mjs only; bare npm ci wipes the running preview's dependencies.
 - build-preview.mjs must copy live-index.html to dist/index.html for static hosting and SPA fallback.
-- Keep retired URLs alive as redirects in App.tsx (ParamRedirect) instead of letting them hit the 404 page.
-- Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
+- Retired URLs redirect via App.tsx ParamRedirect, never 404.
+- Read frontend/AGENTS.md for frontend rules; backend/AGENTS.md for canister, Motoko and mainnet deploy rules.
 - notification_queue verifies schedule scopes and update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principal IDs; admin pages gate reads and report queued counts. Why: browsers cannot authorize writes or prove delivery.
 - Schedule updates: omitted options keep; empty image/zero end-date clear. Monthly recurrence clamps in UTC. Why: retain Candid compatibility.
 - Account erasure revokes club roles first; gallery publication copies decrypted photos under club encryption. Why: prevent residual access and broken shared photos.
@@ -31,7 +31,6 @@
 - Club setup progress reads the active membership backend and determines saved branding from stored palettes/logo, independently of entitlement; sponsor/theme saves invalidate its query. Why: free clubs must not lose acknowledgement of saved setup, and ICP has no Supabase rows.
 - IcpSignInScreen owns login presentation; AuthPage retains provider invocation and redirects to preserve identity, invite and session semantics.
 - Sign-in footers and profile policy links share legalLinks destinations; open separately to preserve drafts and invite URLs, and reuse destinations for internal legal pages.
-- Mainnet deploy rules live in backend/AGENTS.md.
 
 <!-- ic-skills:managed:start -->
 <!-- state: configured (on-demand) -->
