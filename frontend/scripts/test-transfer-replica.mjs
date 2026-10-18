@@ -21,6 +21,8 @@ import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarati
 import { planTransfer } from '../src/live/groupTransfer.ts';
 import { runTransfer } from '../src/live/groupTransferRunner.ts';
 import { approveProvision, runProvision, PER_GROUP_DOMAINS } from '../src/live/groupProvisioner.ts';
+import { routerProvisionSteps } from '../src/live/groupProvisionRouter.ts';
+import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import { liveTransferAdapter } from '../src/live/groupTransferLiveAdapter.ts';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -42,7 +44,14 @@ try {
   }
   // Group B is built by the production provisioner on real canisters, with a crash mid-build.
   const appSubnet = (await pic.getApplicationSubnets())[0].id.toText();
-  const ids = {}; let creates = 0; const registry = []; let regRev = 2n; let provSaved = null;
+  const routerF = await pic.setupCanister({ idlFactory: routerIdl, wasm: process.env.SHARD_ROUTER_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/shard_router.wasm'), sender: governor, controllers: [governor],
+    arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
+  const router = routerF.actor; router.setPrincipal(governor);
+  const globalWid = (await pic.createCanister({ sender: governor, controllers: [governor], targetSubnetId: Principal.fromText(appSubnet) })).toText();
+  const routerSteps = routerProvisionSteps(router, { secret_workload_identity: globalWid },
+    { targetAlias: 'local', deploymentId: 'local', deploymentRevision: 1n, host: 'https://icp-api.io', networkKind: 'public_mainnet', primarySubnet: appSubnet, approvedSubnets: [appSubnet], additionalSubnetsEnabled: false },
+    { maxClubs: 500, heapBudgetBytes: 3n * 1024n ** 3n, minCycles: 1_000_000_000n });
+  let creates = 0; let provSaved = null;
   const provAdapter = {
     createCanister: async (_p, d) => {
       if (++creates === 3) throw new Error('Request timed out (injected)');
@@ -51,21 +60,21 @@ try {
     },
     install: async (_p, d, id) => { if (!idls[d]) return; await pic.installCode({ canisterId: Principal.fromText(id), wasm: wasm(d), arg: argFor(d), sender: governor }); },
     healthy: async (_p, d, id) => (await pic.getControllers(Principal.fromText(id))).some(c => c.toText() === governor.toText()),
-    readRegistryRevision: async () => regRev,
-    registerGroup: async p => { registry.push(p.groupId); regRev++; },
-    enableGroup: async () => {}, save: async p => { provSaved = structuredClone(p); },
+    ...routerSteps, save: async p => { provSaved = structuredClone(p); },
   };
-  const approval = approveProvision({ kind: 'provision', deploymentId: 'local', subnetId: appSubnet, reason: 'full' }, { operator: governor.toText(), proposalId: 'p1', deploymentId: 'local', subnetId: appSubnet }, 'b', 2n);
+  const approval = approveProvision({ kind: 'provision', deploymentId: 'local', subnetId: appSubnet, reason: 'full' }, { operator: governor.toText(), proposalId: 'p1', deploymentId: 'local', subnetId: appSubnet }, 'b', await router.version());
   const failed = await runProvision(approval, provAdapter);
-  assert.equal(failed.phase, 'failed'); assert.deepEqual(registry, [], 'incomplete group never registered');
+  assert.equal(failed.phase, 'failed'); assert.deepEqual(ok(await router.list_groups()), [], 'incomplete group never registered');
   const provDone = await runProvision({ ...provSaved, phase: 'approved', error: undefined }, provAdapter);
-  assert.equal(provDone.phase, 'enabled'); assert.deepEqual(registry, ['b']);
+  assert.equal(provDone.phase, 'enabled', provDone.error);
+  const listed = ok(await router.list_groups()); assert.equal(listed.length, 1); assert.equal(listed[0].id, 'b'); assert.equal(listed[0].accepting, true);
+  const snap = ok(await router.read_group_registry('local')); assert.ok(JSON.stringify(snap, (_k, v) => typeof v === 'bigint' ? String(v) : v).includes('"b"'), 'placement recorded');
   assert.equal(new Set(Object.values(provDone.canisters)).size, PER_GROUP_DOMAINS.length, 'no duplicate canisters after resume');
   for (const c of Object.keys(idls)) {
     const actor = pic.createActor(idls[c], Principal.fromText(provDone.canisters[c])); actor.setPrincipal(governor); groups.b[c] = actor;
     if (c === 'timer_jobs') ok(await actor.initialize());
   }
-  console.log('PASS provisioning: new group built on real canisters, resumed after crash, registered once');
+  console.log('PASS provisioning: new group built on real canisters, resumed after crash, registered once in the real directory canister');
   const A = groups.a, B = groups.b;
   const refused = p => p.catch(e => ({ Err: String(e.message) }));
   const as = (actor, p, fn) => { actor.setPrincipal(p); return fn().finally(() => actor.setPrincipal(governor)); };
