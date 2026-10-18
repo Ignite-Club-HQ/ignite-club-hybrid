@@ -162,6 +162,22 @@ export function CompetitionOfficialJoinLinksCard({
         });
         inviteCreated = true;
 
+        // Best-effort: register the pending welcome email on-chain so the
+        // delivery service can send it after the official accepts. Never
+        // fails the invite itself.
+        await withFeatureBackend("competitions", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            try {
+              const { getLiveCompetitionWelcomeEmail, registerLiveCompetitionWelcomeJob } = await import("@/live/features/competitions");
+              const settings = await getLiveCompetitionWelcomeEmail(ctx, competitionId);
+              if (settings.enabled) await registerLiveCompetitionWelcomeJob(ctx, secrets.token, recipient);
+            } catch (welcomeError) {
+              console.error("[welcome-email] competition job registration failed", welcomeError);
+            }
+          },
+        });
+
         const { error } = await supabase.functions.invoke("send-email", {
           body: {
             to: recipient,
