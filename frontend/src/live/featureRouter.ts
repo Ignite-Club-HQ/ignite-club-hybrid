@@ -42,7 +42,7 @@ export const FEATURE_GROUP_DOMAIN: Record<FeatureArea, GroupDomain | null> = {
 };
 /** Club scope for a call. writeKey marks a write (idempotency key); attempts
  * 1 = never auto-retry (creates without a canister idempotency key). */
-export type ClubScope = { clubId: string; writeKey?: string; attempts?: number };
+export type ClubScope = { clubId: string; writeKey?: string; attempts?: number; /** internal: club not moved, use shared canisters */ legacy?: true };
 
 export async function withFeatureBackend<T>(
   feature: FeatureArea,
@@ -80,7 +80,7 @@ export async function withFeatureBackend<T>(
   // Group routing switch-on lock: shipped off, so every club uses the shared
   // canisters. If ever switched on without the club-scoped dispatcher, fail
   // closed instead of silently sending a moved club to the old group.
-  if (activationStatus(SHIPPED_GATES).active) {
+  if (activationStatus(SHIPPED_GATES).active && !scope?.legacy) {
     const domain = FEATURE_GROUP_DOMAIN[feature];
     if (scope && domain) {
       return scope.writeKey
