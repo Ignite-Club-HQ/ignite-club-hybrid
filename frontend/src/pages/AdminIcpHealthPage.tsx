@@ -187,38 +187,6 @@ async function fetchHealth(): Promise<Row[]> {
       }
     }
   }
-  // Web-app canister via the club_domain proxy (never in the mainnet ID table).
-  const clubDomainId = ids["club_domain"];
-  if (clubDomainId) {
-    try {
-      const proxy = Actor.createActor<{ canister_cycles: (id: Principal) => Promise<bigint> }>(proxyIdl, {
-        agent,
-        canisterId: Principal.fromText(clubDomainId),
-      });
-      const balance = await proxy.canister_cycles(Principal.fromText(FRONTEND_CANISTER_ID));
-      balances["frontend"] = balance;
-      rows.push({
-        key: "frontend (web app)",
-        canisterId: FRONTEND_CANISTER_ID,
-        cyclesT: Number(balance) / 1e12,
-        burnTPerDay: null,
-        daysLeft: null,
-        error: null,
-        memoryMb: null,
-      });
-    } catch (e) {
-      rows.push({
-        key: "frontend (web app)",
-        canisterId: FRONTEND_CANISTER_ID,
-        cyclesT: null,
-        burnTPerDay: null,
-        daysLeft: null,
-        error: e instanceof Error ? e.message : String(e),
-        memoryMb: null,
-      });
-    }
-  }
-
   saveSnapshot(balances);
   return rows;
 }
