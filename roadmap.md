@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] 29. Continue recovery verification: inject lost client acknowledgement after real commit, preserve committed/uncertain journals across EOP upgrade, and exercise governor-only paginated reconciliation with exact two-store allowance accounting. No production changes; run isolated replica tests before marking complete.
+
 - [x] 28. Isolated multi-group batch execution validates assignments before reads, preserves order/duplicates and rejects incomplete/denied results: 10 tests pass per mode. Real local coordinated two-store plus quota snapshot rollback restores bytes, outcomes, permissions and exact remaining allowance. Live actors unchanged; no production activation.
 
 - [x] 27. Recovery verification stage: real local management snapshot restore (noncontroller denied) preserves Region bytes, allocator, totals and owner permissions; unavailable quota begin/finalize, concurrent same-path retries and exact allowance accounting verified. No production activation or club moves. Coordinated quota/storage rollback and loss-after-commit injection remain in item 24.
