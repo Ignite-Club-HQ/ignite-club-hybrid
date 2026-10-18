@@ -386,6 +386,7 @@ type Main =
           teamTrainingPauses: vec TeamTrainingPause;
         };
      }) query;
+   getApiDoc: () -> (text) query;
    get_active_game: (team_id: opt text) ->
     (variant {
        Err: text;
