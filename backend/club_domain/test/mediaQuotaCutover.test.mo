@@ -26,3 +26,16 @@ switch (Quota.reserve(state.ledger, a, "late", "club", "chat_photo", 1, 1, false
 assert Quota.getUsage(state.ledger, "club", "chat_photo", 1).pending_count == 0;
 ignore Quota.retirePage(state.ledger, 3, "", "");
 assert Quota.status(state.ledger, a, "late") == null;
+// Duplicate snapshot keys never inflate the baseline, including across pages.
+let duplicate = Cutover.empty();
+duplicate.started := true;
+assert Cutover.applyPage(duplicate, a, { page with total = 2; rows = [page.rows[0], page.rows[0]] }) == #Err("Duplicate snapshot row");
+assert Quota.getUsage(duplicate.ledger, "club", "gallery_photo", 1).count == 0;
+assert Cutover.applyPage(duplicate, a, { page with total = 2 }) == #Ok;
+assert Cutover.applyPage(duplicate, a, { page with total = 2; offset = 1 }) == #Err("Duplicate snapshot row");
+assert Cutover.progress(duplicate, a).offset == 1;
+// Adding a new store after activation does not authorize it until imported.
+let c = Principal.fromText("mzzzv-taaaa-aaaal-qxlrq-cai");
+assert not Cutover.ready(state, c, [a, b, c]);
+assert Cutover.applyPage(state, c, { page with total = 0; rows = [] }) == #Ok;
+assert Cutover.ready(state, c, [a, b, c]);

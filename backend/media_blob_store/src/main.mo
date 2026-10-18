@@ -228,10 +228,9 @@ persistent actor MediaBlobStore {
           #Ok(upload.id)
         };
         case (#Err(message)) {
-          // A definite rejection allocated nothing. Retain the terminal token
-          // so retries cannot recreate this operation with different terms.
-          quota_operations.add(upload.id, { latest with status = #aborted });
-          pending_uploads := pending_uploads.filter(func(u) = u.id != upload.id);
+          // Another identical request can still be in flight. Create a
+          // cancellation tombstone before discarding any local reservation.
+          ignore await abortShared(upload.id);
           #Err(message)
         }
       }
@@ -450,6 +449,7 @@ persistent actor MediaBlobStore {
       switch (pending_uploads.find(func(u) = u.path == path)) {
         case (?upload) {
           if (not upload.owner.equal(caller) or upload.mime != mime or upload.total_size != total_size or upload.chunk_count != chunk_count) return #Err("Upload already in progress for path");
+          if (quota_operations.get(upload.id) == null) return #Ok(upload.id);
           return await reserveShared(upload)
         };
         case null {}

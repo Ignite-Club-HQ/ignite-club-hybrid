@@ -1,0 +1,21 @@
+import Quota "../src/mediaQuota";
+import Principal "mo:core/Principal";
+import Nat "mo:core/Nat";
+import Map "mo:core/Map";
+import Text "mo:core/Text";
+let ledger = Quota.empty();
+let store = Principal.fromText("jxeuj-uyaaa-aaaal-qxlna-cai");
+var n = 0;
+while (n < 250) {
+  switch (Quota.cancel(ledger, store, Nat.toText(n), "club", "chat_photo", 1, 1)) { case (#Ok(_)) {}; case _ assert false };
+  n += 1;
+};
+ignore Quota.reserve(ledger, store, "unresolved", "club", "gallery_photo", 1, 1, false);
+let first = Quota.retirePage(ledger, 3, "", "");
+assert first.removed == 200;
+assert first.reservation_cursor != "";
+let second = Quota.retirePage(ledger, 3, first.reservation_cursor, first.usage_cursor);
+assert second.removed == 50;
+assert ledger.reservations.size() == 1;
+switch (Quota.status(ledger, store, "unresolved")) { case (?r) assert r.status == #reserved; case null assert false };
+assert Quota.getUsage(ledger, "club", "gallery_photo", 1).pending_count == 1;
