@@ -2,6 +2,7 @@ import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
+import Text "mo:core/Text";
 import Int "mo:core/Int";
 import Int32 "mo:core/Int32";
 import Nat "mo:core/Nat";
