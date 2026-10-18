@@ -25,8 +25,10 @@ export type ChatActor = FenceActor & {
   import_club_snapshot_page(club: string, page: Uint8Array): Promise<R<bigint>>;
   purge_club_snapshot(club: string): Promise<R<bigint>>;
 };
-export type GroupActors = { club_domain: ClubActor; events_domain: SnapshotActor & FenceActor; messaging_domain: ChatActor; vault_domain: SnapshotActor & FenceActor };
-export const LIVE_DOMAINS = ['club_domain', 'events_domain', 'messaging_domain', 'vault_domain'] as const;
+type Fenced = SnapshotActor & FenceActor;
+export type GroupActors = { club_domain: ClubActor; events_domain: Fenced; messaging_domain: ChatActor; vault_domain: Fenced; club_points_domain: Fenced; mini_league_domain: Fenced };
+export const LIVE_DOMAINS = ['club_domain', 'events_domain', 'messaging_domain', 'vault_domain', 'club_points_domain', 'mini_league_domain'] as const;
+const FENCE_DOMAINS = ['events_domain', 'messaging_domain', 'vault_domain', 'club_points_domain', 'mini_league_domain'] as const;
 const CHAT_PAGE = 500n;
 
 export async function sha256Hex(data: Uint8Array): Promise<string> {
@@ -43,18 +45,17 @@ export type LiveAdapterDeps = {
   swapAssignment: TransferAdapter['swapAssignment'];
   save: TransferAdapter['save'];
   fenceRevision: bigint;
+  /** Destination group of the club's persisted in-flight transfer — durable, so a restarted operator still unlocks it. */
+  targetFor(clubId: string): Promise<string | null>;
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
-  const targets = new Map<string, string>(); // club -> target group fenced for import
   const live = (domain: string) => (LIVE_DOMAINS as readonly string[]).includes(domain);
   // Both sides are fenced: source blocks writes, target accepts imports only.
   const fenceAll = async (group: string, club: string, on: boolean) => {
     const a = d.actors(group);
     if (on) ok(await a.club_domain.freeze_club(club, d.fenceRevision)); else ok(await a.club_domain.unfreeze_club(club, d.fenceRevision));
-    ok(await a.events_domain.set_transfer_fence(club, on));
-    ok(await a.messaging_domain.set_transfer_fence(club, on));
-    ok(await a.vault_domain.set_transfer_fence(club, on));
+    for (const dom of FENCE_DOMAINS) ok(await a[dom].set_transfer_fence(club, on));
   };
   const chatPages = async (group: string, club: string) => {
     const out: Uint8Array[] = []; let offset = 0n;
@@ -75,10 +76,11 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     sameDeployment: d.sameDeployment,
     async setFence(group, club, on) {
       await fenceAll(group, club, on);
-      const target = targets.get(club);
-      if (!on && target) { // abort before cutover: discard the partial target copy
+      const target = on ? null : await d.targetFor(club);
+      if (target && target !== group) { // abort before cutover: discard the partial target copy
+        await fenceAll(target, club, true); // purge requires the lock; idempotent
         for (const dom of LIVE_DOMAINS) ok(await d.actors(target)[dom].purge_club_snapshot(club));
-        await fenceAll(target, club, false); targets.delete(club);
+        await fenceAll(target, club, false);
       }
     },
     async exportPage(group, club, domain, cursor) {
@@ -92,9 +94,9 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       }
       return { rows: [bytes(ok(await a[domain as 'club_domain'].export_club_snapshot(club)))], next: null };
     },
-    async importPage(group, club, domain, rows) {
+    async importPage(group, club, domain, rows, pageIndex) {
       if (!live(domain)) { if (rows.length) throw new Error(`${domain} has no move endpoints`); return; }
-      if (targets.get(club) !== group) { await fenceAll(group, club, true); targets.set(club, group); }
+      if (pageIndex === 0) await fenceAll(group, club, true); // lock target for import (idempotent on resume)
       const a = d.actors(group);
       for (const row of rows) {
         if (domain === 'messaging_domain') ok(await a.messaging_domain.import_club_snapshot_page(club, row));
@@ -115,8 +117,8 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       const a = d.actors(group);
       for (const dom of LIVE_DOMAINS) ok(await a[dom].purge_club_snapshot(club));
       await fenceAll(group, club, false);
-      const target = targets.get(club);
-      if (target) { await fenceAll(target, club, false); targets.delete(club); }
+      const target = await d.targetFor(club);
+      if (target && target !== group) await fenceAll(target, club, false);
     },
     save: d.save,
   };
