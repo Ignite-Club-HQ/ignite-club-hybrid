@@ -8,6 +8,7 @@ import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
+import { checkpointMedia, restoreMedia, resumeMedia } from '../../scripts/media-recovery-coordinator.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const wasm = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
@@ -181,12 +182,34 @@ try {
   const checkpointResult = ok(await actor.finalize_upload(checkpointId));
   const participants = [fixture, second, club];
   const before = await Promise.all([actor.health(), second.actor.health(), actor.stable_storage_status(), actor.get_club_media_usage('c1'), second.actor.get_club_media_usage('c1')]);
-  for (const participant of participants) await pic.stopCanister({ canisterId: participant.canisterId, sender: governor });
-  const checkpoints = [];
-  for (const participant of participants) {
-    const [saved] = await management('take_canister_snapshot', snapshotInput, { canister_id: participant.canisterId, replace_snapshot: [] }, [snapshotType]);
-    checkpoints.push({ canisterId: participant.canisterId, snapshotId: saved.id });
-  }
+  const recoveryInventory = { deploymentId: 'isolated-pocketic', authority: club.canisterId.toText(), stores: [fixture.canisterId.toText(), second.canisterId.toText()] };
+  const loadedSnapshots = new Map();
+  const recoveryAdapter = {
+    // This inventory is the complete fixture, not a production registry adapter.
+    readInventory: async () => recoveryInventory,
+    stop: id => pic.stopCanister({ canisterId: Principal.fromText(id), sender: governor }),
+    start: id => pic.startCanister({ canisterId: Principal.fromText(id), sender: governor }),
+    status: async id => {
+      const status = (await pic.canisterStatus({ canisterId: Principal.fromText(id), sender: governor })).status;
+      return typeof status === 'string' ? status.toLowerCase() : Object.keys(status)[0];
+    },
+    takeSnapshot: async id => {
+      const [saved] = await management('take_canister_snapshot', snapshotInput, { canister_id: Principal.fromText(id), replace_snapshot: [] }, [snapshotType]);
+      return Buffer.from(saved.id).toString('hex');
+    },
+    loadSnapshot: async (id, saved) => {
+      await management('load_canister_snapshot', IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8), sender_canister_version: IDL.Opt(IDL.Nat64) }), { canister_id: Principal.fromText(id), snapshot_id: Buffer.from(saved, 'hex'), sender_canister_version: [] });
+      loadedSnapshots.set(id, saved);
+    },
+    // Require actual management-call success for every checkpoint participant.
+    // Byte/owner/exact-quota semantic checks below follow the coordinated resume.
+    verifyConsistency: async checkpoint => checkpoint.snapshots.every(entry => loadedSnapshots.get(entry.canisterId) === entry.snapshotId),
+  };
+  const coordinatedCheckpoint = await checkpointMedia(recoveryInventory, recoveryAdapter);
+  const checkpoints = coordinatedCheckpoint.snapshots.map(entry => ({ canisterId: Principal.fromText(entry.canisterId), snapshotId: Buffer.from(entry.snapshotId, 'hex') }));
+  assert.equal(coordinatedCheckpoint.snapshots.length, 3);
+  for (const participant of participants) assert.equal(await recoveryAdapter.status(participant.canisterId.toText()), 'stopped');
+  // Explicit test-only restart to write changes AFTER the checkpoint.
   for (const participant of [...participants].reverse()) await pic.startCanister({ canisterId: participant.canisterId, sender: governor });
   await upload(checkpointPath, Buffer.from([52]));
   const afterPath = 'clubs/c1/photos/rollback-second.jpg';
@@ -195,12 +218,13 @@ try {
   ok(await second.actor.finalize_upload(afterId));
   assert.deepEqual(await download(checkpointPath), Buffer.from([52]));
   assert.equal((await second.actor.get_content_hash(afterPath)).length, 1);
-  for (const participant of participants) await pic.stopCanister({ canisterId: participant.canisterId, sender: governor });
-  for (const saved of checkpoints) {
-    await management('load_canister_snapshot', IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8), sender_canister_version: IDL.Opt(IDL.Nat64) }), { canister_id: saved.canisterId, snapshot_id: saved.snapshotId, sender_canister_version: [] });
-  }
+  await assert.rejects(restoreMedia(recoveryInventory, { ...coordinatedCheckpoint, snapshots: coordinatedCheckpoint.snapshots.slice(0, 2) }, recoveryAdapter), /coordinated snapshots/);
+  assert.equal(await recoveryAdapter.status(club.canisterId.toText()), 'running', 'partial manifest rejected before mutation');
+  await restoreMedia(recoveryInventory, coordinatedCheckpoint, recoveryAdapter);
+  for (const participant of participants) assert.equal(await recoveryAdapter.status(participant.canisterId.toText()), 'stopped');
+  await assert.rejects(resumeMedia(recoveryInventory, coordinatedCheckpoint, recoveryAdapter, false), /approval/);
   // All restores complete before any writer resumes; authority starts first.
-  for (const participant of [...participants].reverse()) await pic.startCanister({ canisterId: participant.canisterId, sender: governor });
+  await resumeMedia(recoveryInventory, coordinatedCheckpoint, recoveryAdapter, true);
   assert.deepEqual(await download(checkpointPath), Buffer.from([51]));
   assert.deepEqual(ok(await actor.get_upload_outcome(checkpointId)), [checkpointResult]);
   assert.deepEqual(await second.actor.get_content_hash(afterPath), []);
@@ -303,6 +327,7 @@ try {
   console.log('PASS: real two-store freeze/import/activation, denied spoofed reservation, 10 shared slots including pending writes, idempotent begin/finalize, release/refund and 30-day boundary.');
   console.log('PASS: controller-only snapshot restore preserves Region bytes/allocator/owner; unavailable quota commit retries publish once without refund.');
   console.log('PASS: coordinated two-store and quota-authority snapshot rollback restores bytes, owner-only outcomes and exactly nine remaining shared allowances.');
+  console.log('PASS: recovery coordinator uses real controller stop/status/snapshot/load/start calls; rejects partial manifests before mutation and requires explicit resume approval.');
   console.log('PASS: real commit followed by injected client acknowledgement loss survives EOP upgrade, denies other owners, retries without duplicate bytes and consumes exactly one shared slot.');
   console.log('PASS: uncertain commit survives EOP upgrade; governor-only bounded journal recovery settles it with exactly one shared allowance charge.');
 } finally {

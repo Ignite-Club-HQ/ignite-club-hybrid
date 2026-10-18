@@ -8,6 +8,28 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
 
 ### Implemented
 
+- Deployment-bound preparation (`frontend/src/live/groupDeployment.ts`) validates
+  approved identity/revision/HTTPS origin/network against every domain's subnet
+  placement. Secondary approved subnets remain gated; cache scopes isolate account
+  and deployment. No actor wiring or authoritative registry ingestion yet; never
+  accept browser-authored approvals. No Cloud Engine selected or created.
+- Coordinated recovery core (`scripts/media-recovery-coordinator.mjs`) requires
+  exact inventory, stops stores before authority, checks all stopped before
+  snapshots/restores, rejects partial manifests and leaves failures stopped.
+  Explicit verified resume starts authority first and refences on start failures.
+  Unit and real local stop/status/snapshot/load/start tests preserve ciphertext,
+  permissions and exact quota. Not a production command: authenticated inventory
+  adapters, durable receipts and content/ledger consistency verification remain.
+  Replica inventory and load receipts are fixture/in-process only. A stopped
+  authority cannot answer ordinary queries; production needs independently
+  readable verified registry metadata. Stopping shared authority pauses other
+  features too and needs a maintenance window. Admission-only drain/seal is not
+  implemented. No changes deployed.
+- Unbounded-wait responses are delivered; bounded-wait calls can report unknown
+  outcomes after remote commit. PocketIC 0.23.0 exposes no response-drop API.
+  Client loss and unavailable-authority tests are not substitutes; genuine
+  post-commit unknown-outcome injection remains an activation gate.
+
 - Heap-backed media capacity is capped effectively at 2 GiB, with admission
   stopping at 80% and additional 3 GiB heap headroom checks. These are
   conservative application budgets, not platform storage guarantees.
