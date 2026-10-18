@@ -818,6 +818,13 @@ export interface MainInterface {
         context: Uint8Array;
         response: HttpRequestResult;
     }): Promise<HttpRequestResult>;
+    purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     record_event_view(event_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2564,6 +2571,16 @@ export class Events_domain implements events_domainInterface {
     }): Promise<HttpRequestResult> {
         const result = await this.actor.playhqTransform(arg0);
         return result;
+    }
+    async purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_my_data();
+        return from_candid_variant_n43(result);
     }
     async record_event_view(arg0: string): Promise<{
         __kind__: "Ok";

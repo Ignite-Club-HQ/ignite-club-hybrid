@@ -3071,6 +3071,29 @@ persistent actor class Main(governorInit : Principal) {
 
   transient let _reminderTimer = Timer.recurringTimer<system>(#seconds(3_600), func() : async () { await sweepAutoReminders(); await sweepPhotoPrompts() });
 
+  // Permanently removes the caller's own personal event records during
+  // account erasure: their RSVPs (including mini-league RSVPs), attendance
+  // marks, coach notes, event views and push-reachability rows. Shared club
+  // records (events, lineups, duties, rosters) are deliberately retained.
+  public shared ({ caller }) func purge_my_data() : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    let me = caller.toText();
+    var removed : Nat = 0;
+    let keepRsvps = rsvps.filter(func(r) = r.account_id != me);
+    removed += rsvps.size() - keepRsvps.size(); rsvps := keepRsvps;
+    let keepAttendance = attendance.filter(func(a) = a.account_id != me);
+    removed += attendance.size() - keepAttendance.size(); attendance := keepAttendance;
+    let keepNotes = coachNotes.filter(func(n) = not n.updated_by.equal(caller));
+    removed += coachNotes.size() - keepNotes.size(); coachNotes := keepNotes;
+    let keepViews = eventViews.filter(func(v) = not v.viewer.equal(caller));
+    removed += eventViews.size() - keepViews.size(); eventViews := keepViews;
+    let keepReach = pushReachability.filter(func(p) = not p.user.equal(caller));
+    removed += pushReachability.size() - keepReach.size(); pushReachability := keepReach;
+    let keepMini = miniLeagueRsvps.filter(func(r) = switch (r.subject) { case (#account(id)) id != me; case (#mini_league_player(_)) true });
+    removed += miniLeagueRsvps.size() - keepMini.size(); miniLeagueRsvps := keepMini;
+    #Ok(Nat32.fromNat(removed))
+  };
+
   public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp]; childTeamAssignments : [Types.ChildTeamAssignment]; eventDutyTeams : [Types.EventDutyTeam]; dutyTeamReminderSent : [Text]; pointsReminderSent : [Text]; individualDutyReminderSent : [Text]; competitionEventOperations : [Types.CompetitionEventOperation] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
     #Ok({ schema = 8; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps; childTeamAssignments; eventDutyTeams; dutyTeamReminderSent; pointsReminderSent; individualDutyReminderSent; competitionEventOperations })

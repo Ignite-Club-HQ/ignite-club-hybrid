@@ -1497,6 +1497,30 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(bulkAccessPrincipals)
   };
 
+  // Permanently removes the caller's own personal chat records during
+  // account erasure: every message they sent (including in direct chats),
+  // their read receipts, unread counters, mute preferences and poll votes,
+  // and their membership in conversations. Conversations themselves are
+  // retained for the remaining participants.
+  public shared ({ caller }) func purge_my_data() : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    var removed : Nat = 0;
+    let keepMessages = messages.filter(func(m) = not m.sender.equal(caller));
+    removed += messages.size() - keepMessages.size(); messages := keepMessages;
+    let keepReceipts = receipts.filter(func(r) = not r.user.equal(caller));
+    removed += receipts.size() - keepReceipts.size(); receipts := keepReceipts;
+    let keepUnread = unread.filter(func(u) = not u.user.equal(caller));
+    removed += unread.size() - keepUnread.size(); unread := keepUnread;
+    let keepMutes = mutePreferences.filter(func(p) = not p.user.equal(caller));
+    removed += mutePreferences.size() - keepMutes.size(); mutePreferences := keepMutes;
+    let keepVotes = pollVotes.filter(func(v) = not v.user.equal(caller));
+    removed += pollVotes.size() - keepVotes.size(); pollVotes := keepVotes;
+    let keepConversations = conversations.filter(func(c) = c.participants.size() > 0 and (c.participants.size() > 1 or not c.participants[0].equal(caller)));
+    removed += conversations.size() - keepConversations.size();
+    conversations := keepConversations.map(func(c) = { c with participants = c.participants.filter(func(p) = not p.equal(caller)) });
+    #Ok(Nat32.fromNat(removed))
+  };
+
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
     #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings; typingPings; pinnedMessages; contentReports })

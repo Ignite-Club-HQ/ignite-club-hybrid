@@ -538,6 +538,10 @@ type Main =
                                               Err: text;
                                               Ok;
                                             });
+   purge_my_data: () -> (variant {
+                           Err: text;
+                           Ok: nat32;
+                         });
    recapTransform: (record {
                       context: blob;
                       response: HttpRequestResult;

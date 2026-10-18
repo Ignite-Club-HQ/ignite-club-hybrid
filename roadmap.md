@@ -1,7 +1,7 @@
 ## Codespaces ICP coverage — first tranche
 - [x] Test closure pass: repaired roster error propagation, vault pending uploads, ICP season carry-over and stale provider mocks; final complete suites pass in both modes (Supabase 5415, ICP 4875).
 - [x] Batch 11 implemented: automatic photo reminders, on-chain settings, minimum-version controls, platform/version/test-send targeting, guarded admin membership removal, privileged multi-domain exports, push-worker response repair; focused checks pass.
-- [ ] Feature closure remains incomplete: complete restorable backups/media bytes, competition welcome email job/recipient path and per-user content purge require new authorized cross-domain contracts; not credential-only blockers.
+- [x] Feature closure: vault restore repairs media access + reports lost bytes; competition welcome emails deliver via on-chain jobs; per-user purge built on three domains. Remaining honest limitation: no cross-domain import_state, so full club configuration can be exported but not restored.
 - [x] Batch 10: update-reminder admin/club audience verification in fan_out AND enqueue; canonical recipient IDs; executable authorization and dual-mode frontend tests pass; contracts unchanged.
 - [x] Batch 9: admin gates and failed-read feedback repaired; AI rollout, vault metadata backup CRUD/downloads, reminder queue counts and guide downloads tested (32 tests pass in each mode).
 - [x] Competition welcome settings on-chain; photo reminder Run now enabled and behavior-tested; canister reachability tests verified.
@@ -22,7 +22,7 @@
 - [x] Schedule completion code: validate every recipient on-canister; poll actual caller-scoped refresh signals rather than blindly invalidating. Focused tests pass; deployed timer/read-back still blocked below.
 - [x] Requested batch code: self-service identity deletion revokes club roles first; ICP vault reads enabled; gallery publication decrypts and copies under its own club lock. Focused dual-mode tests pass.
 - [x] Administrator identity deletion now revokes authoritative club access first; refusal blocks identity deletion; tests pass.
-- [ ] Per-user content purge remains incomplete — vault/events/messaging records remain; shared club and parent-owned child records deliberately retained.
+- [x] Per-user content purge: self-service purge_my_data on vault_domain (own files/backups/empty folders), messaging_domain (own messages, receipts, unread, mutes, poll votes, conversation membership) and events_domain (own RSVPs, attendance, coach notes, views, reachability); eraseMyIcpAccount calls all three after membership revocation and discloses any failed domain. Shared club records and parent-owned children deliberately retained. Requires events/messaging/vault canister redeploys.
 - [ ] Deploy updated canisters and verify signed-in scheduled delivery/read-back — requires deployer access and an Internet Identity session.
 - [x] Ran both complete suites: Supabase 80 failures / 24 files, ICP 78 failures / 31 files (mixed revision run, not final parity).
 - [x] Complete-suite closure: final same-revision runs on 2026-10-18 pass with zero failures: Supabase 5415, ICP 4875. Provider-specific skips and two ICP TODOs remain; green suites do not prove live deployment or feature completeness.
