@@ -77,6 +77,11 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
   Sampled statuses cannot establish continuous exclusion of another controller:
   production still requires an exclusive controller fence, authenticated transport
   and decoded quota/content verification. No live adapter or activation is added.
+  All 45 local recovery tests pass. The three-canister rehearsal in
+  `frontend/scripts/test-recovery-receipts-replica.mjs` uses real management calls
+  and disk receipts to deny changed stable bytes, restore the entire inventory,
+  and resume authority-first. Its minimal fixtures have no application quota
+  ledger, and its logical HTTPS placement is fixture-only, not production proof.
 - Unbounded-wait responses are delivered; bounded-wait calls can report unknown
   outcomes after remote commit. PocketIC 0.23.0 exposes no response-drop API.
   Client loss and unavailable-authority tests are not substitutes; genuine
