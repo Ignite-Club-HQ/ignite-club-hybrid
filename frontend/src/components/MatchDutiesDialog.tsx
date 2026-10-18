@@ -33,6 +33,8 @@ interface MatchDutiesDialogProps {
   groupId: string;
   groupName: string;
   miniLeagueId: string;
+  /** Event the group belongs to: lets duty reads/writes reach the club's own canisters. */
+  eventId: string;
   /** Pre-select a duty for assignment (quick-assign from badge) */
   initialDutyId?: string | null;
 }
@@ -45,6 +47,7 @@ export function MatchDutiesDialog({
   groupId,
   groupName,
   miniLeagueId,
+  eventId,
   initialDutyId,
 }: MatchDutiesDialogProps) {
   const queryClient = useQueryClient();

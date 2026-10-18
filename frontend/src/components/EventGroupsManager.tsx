@@ -1506,6 +1506,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
       <Suspense fallback={null}>
       {resolveAuthBackend() !== "icp" && (
       <MatchDutiesDialog
+        eventId={eventId}
         open={!!activeDutiesGroup}
         onOpenChange={(open) => {
           if (!open) {
