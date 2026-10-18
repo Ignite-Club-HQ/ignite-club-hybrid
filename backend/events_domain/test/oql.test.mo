@@ -15,15 +15,15 @@ let event : Types.Event = {
   rsvp_audience = null; adults_only = false; restricted_to_roles = null; target_team_ids = null;
 };
 let source = [event, { event with id = "hidden"; club_id = "club-b" }, { event with id = "deleted"; deleted = true }];
-let query = Oql.parse("{\"entity\":\"events\"}", [Events.entity]);
+let request = Oql.parse("{\"entity\":\"events\"}", [Events.entity]);
 func run(caller : Principal, q : Oql.Query) : Oql.Result {
   Oql.run<Types.Event>(q, source, func(e) = not e.deleted and Events.canView(caller, governor, roles, e), Events.row)
 };
-assert run(Principal.anonymous(), query).rows.size() == 0;
-assert run(stranger, query).rows.size() == 0;
-assert run(member, query).rows.size() == 1;
-assert run(owner, query).rows.size() == 2;
-assert run(governor, query).rows.size() == 2;
+assert run(Principal.anonymous(), request).rows.size() == 0;
+assert run(stranger, request).rows.size() == 0;
+assert run(member, request).rows.size() == 1;
+assert run(owner, request).rows.size() == 2;
+assert run(governor, request).rows.size() == 2;
 let count = Oql.parse("{\"entity\":\"events\",\"aggregate\":\"count\"}", [Events.entity]);
 assert run(member, count).rows == [[Oql.integer("count", 1)]];
 assert run(stranger, count).rows == [[Oql.integer("count", 0)]];

@@ -49,8 +49,8 @@ persistent actor class Main(governorInit : Principal) {
   };
   public query ({ caller }) func execute(input : Text) : async Oql.Result {
     auth(caller);
-    let query = Oql.parse(input, [OqlEvents.entity]);
-    Oql.run<Types.Event>(query, events, func(event) = not event.deleted and canView(caller, event), OqlEvents.row)
+    let request = Oql.parse(input, [OqlEvents.entity]);
+    Oql.run<Types.Event>(request, events, func(event) = not event.deleted and canView(caller, event), OqlEvents.row)
   };
   // Live memory reading for the admin health page (public, like cycles_balance).
   public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {

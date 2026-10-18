@@ -148,24 +148,24 @@ module {
     let cmp = compare(v, filter.value);
     switch (filter.op) { case "gt" cmp == #greater; case "gte" cmp != #less; case "lt" cmp == #less; case "lte" cmp != #greater; case (_) false }
   };
-  public func run<T>(query : Query, source : [T], authorized : T -> Bool, serialize : T -> Row) : Result {
+  public func run<T>(request : Query, source : [T], authorized : T -> Bool, serialize : T -> Row) : Result {
     if (source.size() > 50000) fail("Dataset exceeds scan budget; use the domain-specific API");
     var rows : [Row] = [];
     var total : Int = 0;
     for (item in source.values()) {
       if (authorized(item)) {
         let row = serialize(item);
-        if (query.filters.all(func(f) = matches(row, f))) {
+        if (request.filters.all(func(f) = matches(row, f))) {
           total += 1;
-          if (not query.count or query.groupBy != null) {
+          if (not request.count or request.groupBy != null) {
             if (rows.size() >= 10000) fail("Too many matches; narrow filters");
             rows := rows.concat([row]);
           }
         }
       }
     };
-    if (query.count) {
-      switch (query.groupBy) {
+    if (request.count) {
+      switch (request.groupBy) {
         case null rows := [[integer("count", total)]];
         case (?name) {
           var groups : [(Value, Int)] = [];
@@ -180,15 +180,15 @@ module {
         }
       }
     } else {
-      switch (query.orderBy) {
+      switch (request.orderBy) {
         case null {};
-        case (?name) rows := Array.sort<Row>(rows, func(a, b) { if (query.descending) compare(cell(b, name), cell(a, name)) else compare(cell(a, name), cell(b, name)) });
+        case (?name) rows := Array.sort<Row>(rows, func(a, b) { if (request.descending) compare(cell(b, name), cell(a, name)) else compare(cell(a, name), cell(b, name)) });
       };
-      rows := rows.map(func(row) : Row { query.select.map(func(name) : Cell { { name; value = cell(row, name) } }) });
+      rows := rows.map(func(row) : Row { request.select.map(func(name) : Cell { { name; value = cell(row, name) } }) });
     };
     let size = rows.size();
-    let start = if (query.offset < size) query.offset else size;
-    let length = if (size - start < query.limit) size - start else query.limit;
+    let start = if (request.offset < size) request.offset else size;
+    let length = if (size - start < request.limit) size - start else request.limit;
     { hasMore = start + length < size; rows = Array.tabulate<Row>(length, func(i) = rows[start + i]) }
   };
   public func schema(entities : [Entity], example : Text) : Text {
@@ -198,7 +198,7 @@ module {
       ("entities", Json.arr(entities.map(func(e) { Json.obj([
         ("name", Json.str(e.name)), ("fields", Json.arr(e.fields.map(func(f) { Json.obj([("name", Json.str(f.name)), ("type", Json.str(f.kind)), ("role", Json.str("caller-authorized")), ("nullable", Json.bool(true))]) })))
       ]) }))), ("edges", Json.arr([])),
-      ("query", Json.obj([
+      ("request", Json.obj([
         ("keys", Json.arr(["entity", "select", "filters", "orderBy", "limit", "offset", "aggregate", "groupBy"].map(Json.str))),
         ("filters", Json.str("AND array of {field,op,value}; op=eq|ne|gt|gte|lt|lte|contains; types must match; null/bool use eq/ne")),
         ("orderBy", Json.str("{field,direction:asc|desc}; omitted preserves source order")),

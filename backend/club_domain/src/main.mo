@@ -1989,11 +1989,11 @@ persistent actor class Main(governorInit : Principal) {
   };
   public query ({ caller }) func execute(input : Text) : async Oql.Result {
     auth(caller);
-    let query = Oql.parse(input, OqlClubs.entities);
-    if (query.entity == "clubs") {
-      Oql.run<Types.ClubProfile>(query, profiles, func(club) = club.deleted_at_ms == null and (isMember(caller, club.id) or isAdmin(caller, club.id)), OqlClubs.clubRow)
+    let request = Oql.parse(input, OqlClubs.entities);
+    if (request.entity == "clubs") {
+      Oql.run<Types.ClubProfile>(request, profiles, func(club) = club.deleted_at_ms == null and (isMember(caller, club.id) or isAdmin(caller, club.id)), OqlClubs.clubRow)
     } else {
-      Oql.run<Types.ClubTeam>(query, teams, func(team) = team.deleted_at_ms == null and (isMember(caller, team.club_id) or isAdmin(caller, team.club_id)), OqlClubs.teamRow)
+      Oql.run<Types.ClubTeam>(request, teams, func(team) = team.deleted_at_ms == null and (isMember(caller, team.club_id) or isAdmin(caller, team.club_id)), OqlClubs.teamRow)
     }
   };
 
