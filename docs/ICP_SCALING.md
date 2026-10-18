@@ -52,6 +52,21 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
   encoding. Existing canister methods do not supply these exports. Never supply
   operator-authored digests or merely successful load receipts. All 29 recovery
   tests pass locally; no production commands, routing or canister contracts change.
+- Snapshot-byte reader (`scripts/media-snapshot-reader.mjs`) uses the official
+  `read_canister_snapshot_metadata/data` management interfaces for existing
+  snapshots. Module, heap and stable memory stream in exact-size bounded reads;
+  globals, certified data, timers and uploaded module chunks are also compared.
+  Snapshot timestamps/versions differ after a new observation and are excluded
+  from state equality, but must remain unchanged during an individual read.
+  Decoded floating NaN payloads may normalize; no bitwise NaN claim is made.
+  Local PocketIC verification (`frontend/scripts/test-snapshot-reader-replica.mjs`)
+  proves controller-only metadata reads, changed stable-byte detection and
+  restored module/heap/stable equality while stopped. This is raw captured-state
+  comparison, not a decoder for the named application sections above. Production
+  needs authenticated management transport, independently verified destination
+  placement, full-set continuous fencing, durable receipts and coordinated
+  observation snapshots after every restore. The local transport is fixture-only;
+  this increment does not supply or activate a production recovery command.
 - Unbounded-wait responses are delivered; bounded-wait calls can report unknown
   outcomes after remote commit. PocketIC 0.23.0 exposes no response-drop API.
   Client loss and unavailable-authority tests are not substitutes; genuine

@@ -45,3 +45,10 @@ test('metadata mutation during read is rejected', async () => {
   f.transport.readMetadata = async () => { const m = await read(); if (++reads > 1) m.stable_memory_size = 3n; return m; };
   await assert.rejects(readSnapshotBytes(request, f.transport), /evidence/);
 });
+test('missing destination bindings and malformed matching evidence fail closed', async () => {
+  for (const k of ['canisterId', 'deploymentId', 'host', 'subnetId', 'registryRevision']) {
+    const bad = { ...request }; delete bad[k];
+    await assert.rejects(readSnapshotBytes(bad, fixture().transport), /evidence/);
+  }
+  assert.equal(equalSnapshotBytes({ version: 1, request }, { version: 1, request }), false);
+});

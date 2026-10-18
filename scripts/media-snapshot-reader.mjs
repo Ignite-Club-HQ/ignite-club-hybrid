@@ -7,6 +7,10 @@ import { createHash } from 'node:crypto';
 const hex = x => Buffer.from(x).toString('hex');
 const bytes = x => x instanceof Uint8Array || (Array.isArray(x) && x.every(n => Number.isInteger(n) && n >= 0 && n <= 255));
 const fail = () => { throw new Error('Invalid snapshot state evidence'); };
+function validateRequest(r) {
+  if (!r || ['canisterId', 'deploymentId', 'host', 'subnetId', 'registryRevision'].some(k => typeof r[k] !== 'string' || !r[k] || r[k].length > 512) ||
+      typeof r.snapshotId !== 'string' || !/^(?:[a-f0-9]{2})+$/.test(r.snapshotId)) fail();
+}
 
 /** Exact Candid from official ic.did; SDK injected to keep root dependency-free. */
 export function snapshotReadTypes(IDL) {
@@ -28,7 +32,8 @@ export function snapshotReadTypes(IDL) {
 function metadataState(m) {
   if (!m || !('taken_from_canister' in m.source) || !Array.isArray(m.globals) || !Array.isArray(m.wasm_chunk_store) ||
       m.wasm_chunk_store.length > 100000 || !bytes(m.certified_data)) fail();
-  // Encode scalar values with their binary IEEE representation (NaN/-0 retained).
+  // Encode decoded scalar values with IEEE representation (-0 retained).
+  // Candid decoding may normalize NaN payloads: this is not a bitwise NaN proof.
   const globals = m.globals.map(g => {
     const keys = Object.keys(g); if (keys.length !== 1) fail();
     const k = keys[0]; const v = g[k];
@@ -54,9 +59,8 @@ function metadataState(m) {
  * and after EVERY read; no capability fallback to ordinary query or raw URL.
  */
 export async function readSnapshotBytes(request, transport, { maxBytes = 8n * 1024n ** 3n } = {}) {
-  if (!request || typeof request.canisterId !== 'string' || !request.canisterId ||
-      typeof request.snapshotId !== 'string' || !/^(?:[a-f0-9]{2})+$/.test(request.snapshotId) ||
-      typeof maxBytes !== 'bigint' || maxBytes < 0n) fail();
+  validateRequest(request);
+  if (typeof maxBytes !== 'bigint' || maxBytes < 0n) fail();
   const pinned = structuredClone(request);
   const check = () => transport.verifyStoppedPlacement(pinned);
   if (await check() !== true) fail();
@@ -96,6 +100,7 @@ export async function readSnapshotBytes(request, transport, { maxBytes = 8n * 10
   if (await check() !== true) fail();
   const reread = await transport.readMetadata(pinned);
   if (state !== metadataState(reread) || ['wasm_module_size', 'wasm_memory_size', 'stable_memory_size', 'taken_at_timestamp', 'canister_version'].some(k => m[k] !== reread[k])) fail();
+  if (await check() !== true) fail();
   return { version: 1, request: pinned, components, metadataState: state, chunks: chunks.sort((a, b) => a[0].localeCompare(b[0])) };
 }
 /** Compare raw captured state only, not provenance or ledger semantics. Observation
@@ -104,8 +109,16 @@ export async function readSnapshotBytes(request, transport, { maxBytes = 8n * 10
 export function equalSnapshotBytes(a, b) {
   if (a?.version !== 1 || b?.version !== 1) return false;
   const canonical = e => {
+    validateRequest(e.request);
+    if (!e.components || Object.keys(e.components).length !== 3 || typeof e.metadataState !== 'string' || !Array.isArray(e.chunks)) fail();
+    const components = ['wasm_module', 'wasm_memory', 'stable_memory'].map(k => {
+      const c = e.components[k];
+      if (!c || typeof c.bytes !== 'string' || !/^(0|[1-9][0-9]*)$/.test(c.bytes) ||
+          typeof c.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(c.sha256)) fail();
+      return [k, c.bytes, c.sha256];
+    });
     const { snapshotId, ...identity } = e.request;
-    return JSON.stringify([Object.entries(identity).sort(([a], [b]) => a.localeCompare(b)), e.components, e.metadataState, e.chunks]);
+    return JSON.stringify([Object.entries(identity).sort(([a], [b]) => a.localeCompare(b)), components, e.metadataState, e.chunks]);
   };
   try { return canonical(a) === canonical(b); } catch { return false; }
 }
