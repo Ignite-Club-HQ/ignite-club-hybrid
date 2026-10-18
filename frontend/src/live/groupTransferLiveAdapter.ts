@@ -46,6 +46,7 @@ export type LiveAdapterDeps = {
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
+  const targets = new Map<string, string>(); // club -> target group fenced for import
   const live = (domain: string) => (LIVE_DOMAINS as readonly string[]).includes(domain);
   // Both sides are fenced: source blocks writes, target accepts imports only.
   const fenceAll = async (group: string, club: string, on: boolean) => {
@@ -72,7 +73,14 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
   };
   return {
     sameDeployment: d.sameDeployment,
-    async setFence(group, club, on) { await fenceAll(group, club, on); },
+    async setFence(group, club, on) {
+      await fenceAll(group, club, on);
+      const target = targets.get(club);
+      if (!on && target) { // abort before cutover: discard the partial target copy
+        for (const dom of LIVE_DOMAINS) ok(await d.actors(target)[dom].purge_club_snapshot(club));
+        await fenceAll(target, club, false); targets.delete(club);
+      }
+    },
     async exportPage(group, club, domain, cursor) {
       if (!live(domain)) { await d.assertDomainEmpty(group, club, domain); return { rows: [], next: null }; }
       const a = d.actors(group);
@@ -86,6 +94,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     },
     async importPage(group, club, domain, rows) {
       if (!live(domain)) { if (rows.length) throw new Error(`${domain} has no move endpoints`); return; }
+      if (targets.get(club) !== group) { await fenceAll(group, club, true); targets.set(club, group); }
       const a = d.actors(group);
       for (const row of rows) {
         if (domain === 'messaging_domain') ok(await a.messaging_domain.import_club_snapshot_page(club, row));
@@ -106,6 +115,8 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       const a = d.actors(group);
       for (const dom of LIVE_DOMAINS) ok(await a[dom].purge_club_snapshot(club));
       await fenceAll(group, club, false);
+      const target = targets.get(club);
+      if (target) { await fenceAll(target, club, false); targets.delete(club); }
     },
     save: d.save,
   };
