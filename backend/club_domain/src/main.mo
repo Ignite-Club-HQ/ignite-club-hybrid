@@ -1985,15 +1985,67 @@ persistent actor class Main(governorInit : Principal) {
   type ClubSnapshot = {
     profiles : [Types.ClubProfile]; settings : [Types.ClubSettings]; teams : [Types.ClubTeam];
     sponsors : [Types.ClubSponsor]; listing : Types.Listing; roles : [Types.RoleGrant];
+    acl_teams : [Types.Team]; member : Bool; exclusions : [Types.Exclusion]; children : [Types.Child]; guardians : [Types.Guardian];
+    account_roles : [Types.AccountRole]; team_folders : [Types.TeamFolder]; news : [Types.NewsPost];
+    news_audience : [Types.NewsAudienceRecipient]; parent_invites : [Types.ParentInvite]; role_requests : [Types.RoleRequest];
+    team_invites : [Types.TeamInvite]; team_invite_links : [Types.TeamInviteLink];
   };
 
-  func clubSnapshot(club : Text) : ClubSnapshot = {
-    profiles = profiles.filter(func(p) = p.id == club);
-    settings = settings.filter(func(x) = x.club_id == club);
-    teams = teams.filter(func(t) = t.club_id == club);
-    sponsors = sponsors.filter(func(x) = x.club_id == club);
-    listing = getListing(club);
-    roles = acl.roles.filter(func(g) = g.club == ?club);
+  func clubTeamIds(club : Text) : [Text] = teams.filter(func(t) = t.club_id == club).map(func(t) = t.id);
+  func inTeams(ids : [Text], team : ?Text) : Bool = switch (team) { case (?t) ids.any(func(i) = i == t); case null false };
+  func clubChild(club : Text, ids : [Text], c : Types.Child) : Bool = c.club_id == ?club or c.teams.any(func(t) = ids.any(func(i) = i == t));
+
+  func clubSnapshot(club : Text) : ClubSnapshot {
+    let ids = clubTeamIds(club);
+    let kids = acl.children.filter(func(c) = clubChild(club, ids, c));
+    let news = newsPosts.filter(func(n) = n.club_id == club);
+    {
+      profiles = profiles.filter(func(p) = p.id == club);
+      settings = settings.filter(func(x) = x.club_id == club);
+      teams = teams.filter(func(t) = t.club_id == club);
+      sponsors = sponsors.filter(func(x) = x.club_id == club);
+      listing = getListing(club);
+      roles = acl.roles.filter(func(g) = g.club == ?club or (g.club == null and inTeams(ids, g.team)));
+      acl_teams = acl.teams.filter(func(t) = t.club == club);
+      member = acl.clubs.any(func(c) = c == club);
+      exclusions = acl.exclusions.filter(func(e) = e.club == club);
+      children = kids;
+      guardians = acl.guardians.filter(func(g) = kids.any(func(k) = k.id == g.child));
+      account_roles = accountRoles.filter(func(r) = r.club == ?club or (r.club == null and inTeams(ids, r.team)));
+      team_folders = teamFolders.filter(func(f) = f.club_id == club);
+      news;
+      news_audience = newsAudienceRecipients.filter(func(r) = news.any(func(n) = n.id == r.news_id));
+      parent_invites = parentInvites.filter(func(i) = i.club_id == club);
+      role_requests = roleRequests.filter(func(r) = r.club == club);
+      team_invites = teamInvites.filter(func(i) = i.club_id == club);
+      team_invite_links = teamInviteLinks.filter(func(l) = l.club_id == club);
+    }
+  };
+
+  // Removes the club-owned scope. Children/guardians are family records kept
+  // on the source, matching permanent club deletion.
+  func dropClubScope(club : Text) {
+    let ids = clubTeamIds(club);
+    let newsIds = newsPosts.filter(func(n) = n.club_id == club).map(func(n) = n.id);
+    membershipEpoch += 1;
+    profiles := profiles.filter(func(p) = p.id != club);
+    settings := settings.filter(func(x) = x.club_id != club);
+    teams := teams.filter(func(t) = t.club_id != club);
+    sponsors := sponsors.filter(func(x) = x.club_id != club);
+    clubListings := clubListings.filter(func(e) = e.0 != club);
+    acl := { acl with
+      roles = acl.roles.filter(func(g) = not (g.club == ?club or (g.club == null and inTeams(ids, g.team))));
+      teams = acl.teams.filter(func(t) = t.club != club);
+      clubs = acl.clubs.filter(func(c) = c != club);
+      exclusions = acl.exclusions.filter(func(e) = e.club != club) };
+    accountRoles := accountRoles.filter(func(r) = not (r.club == ?club or (r.club == null and inTeams(ids, r.team))));
+    teamFolders := teamFolders.filter(func(f) = f.club_id != club);
+    newsAudienceRecipients := newsAudienceRecipients.filter(func(r) = not newsIds.any(func(i) = i == r.news_id));
+    newsPosts := newsPosts.filter(func(n) = n.club_id != club);
+    parentInvites := parentInvites.filter(func(i) = i.club_id != club);
+    roleRequests := roleRequests.filter(func(r) = r.club != club);
+    teamInvites := teamInvites.filter(func(i) = i.club_id != club);
+    teamInviteLinks := teamInviteLinks.filter(func(l) = l.club_id != club);
   };
 
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
@@ -2008,16 +2060,42 @@ persistent actor class Main(governorInit : Principal) {
     let decoded : ?ClubSnapshot = from_candid (snapshot);
     let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
     if (snap.profiles.size() != 1 or snap.profiles[0].id != club) return #Err("Snapshot club mismatch");
+    let ids = snap.teams.map(func(t) = t.id);
+    let newsIds = snap.news.map(func(n) = n.id);
     if (snap.teams.any(func(t) = t.club_id != club) or snap.settings.any(func(x) = x.club_id != club)
-        or snap.sponsors.any(func(x) = x.club_id != club) or snap.roles.any(func(g) = g.club != ?club)) return #Err("Snapshot contains foreign records");
+        or snap.sponsors.any(func(x) = x.club_id != club)
+        or snap.roles.any(func(g) = not (g.club == ?club or (g.club == null and inTeams(ids, g.team))))
+        or snap.account_roles.any(func(r) = not (r.club == ?club or (r.club == null and inTeams(ids, r.team))))
+        or snap.acl_teams.any(func(t) = t.club != club) or snap.exclusions.any(func(e) = e.club != club)
+        or snap.children.any(func(c) = not clubChild(club, ids, c)) or snap.guardians.any(func(g) = not snap.children.any(func(k) = k.id == g.child))
+        or snap.team_folders.any(func(x) = x.club_id != club) or snap.news.any(func(x) = x.club_id != club)
+        or snap.news_audience.any(func(r) = not newsIds.any(func(i) = i == r.news_id))
+        or snap.parent_invites.any(func(x) = x.club_id != club) or snap.role_requests.any(func(x) = x.club != club)
+        or snap.team_invites.any(func(x) = x.club_id != club) or snap.team_invite_links.any(func(x) = x.club_id != club)) return #Err("Snapshot contains foreign records");
+    if (snap.teams.any(func(t) = teams.any(func(x) = x.id == t.id and x.club_id != club))
+        or snap.news.any(func(n) = newsPosts.any(func(x) = x.id == n.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     // Idempotent replace: re-running an import converges to the same state.
-    membershipEpoch += 1;
-    profiles := profiles.filter(func(p) = p.id != club).concat(snap.profiles);
-    settings := settings.filter(func(x) = x.club_id != club).concat(snap.settings);
-    teams := teams.filter(func(t) = t.club_id != club).concat(snap.teams);
-    sponsors := sponsors.filter(func(x) = x.club_id != club).concat(snap.sponsors);
+    dropClubScope(club);
+    profiles := profiles.concat(snap.profiles);
+    settings := settings.concat(snap.settings);
+    teams := teams.concat(snap.teams);
+    sponsors := sponsors.concat(snap.sponsors);
     updateListing(club, snap.listing);
-    acl := { acl with roles = acl.roles.filter(func(g) = g.club != ?club).concat(snap.roles) };
+    acl := { acl with
+      roles = acl.roles.concat(snap.roles);
+      teams = acl.teams.concat(snap.acl_teams);
+      clubs = if (snap.member) acl.clubs.concat([club]) else acl.clubs;
+      exclusions = acl.exclusions.concat(snap.exclusions);
+      children = acl.children.filter(func(c) = not snap.children.any(func(k) = k.id == c.id)).concat(snap.children);
+      guardians = acl.guardians.filter(func(g) = not snap.guardians.any(func(y) = y.child == g.child and y.user.equal(g.user))).concat(snap.guardians) };
+    accountRoles := accountRoles.concat(snap.account_roles);
+    teamFolders := teamFolders.concat(snap.team_folders);
+    newsPosts := newsPosts.concat(snap.news);
+    newsAudienceRecipients := newsAudienceRecipients.concat(snap.news_audience);
+    parentInvites := parentInvites.concat(snap.parent_invites);
+    roleRequests := roleRequests.concat(snap.role_requests);
+    teamInvites := teamInvites.concat(snap.team_invites);
+    teamInviteLinks := teamInviteLinks.concat(snap.team_invite_links);
     #Ok
   };
 
@@ -2025,15 +2103,9 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isTransferFenced(club)) return #Err("Club must be fenced before purge");
-    let before = profiles.size() + settings.size() + teams.size() + sponsors.size() + acl.roles.size();
-    membershipEpoch += 1;
-    profiles := profiles.filter(func(p) = p.id != club);
-    settings := settings.filter(func(x) = x.club_id != club);
-    teams := teams.filter(func(t) = t.club_id != club);
-    sponsors := sponsors.filter(func(x) = x.club_id != club);
-    clubListings := clubListings.filter(func(e) = e.0 != club);
-    acl := { acl with roles = acl.roles.filter(func(g) = g.club != ?club) };
-    #Ok(before - (profiles.size() + settings.size() + teams.size() + sponsors.size() + acl.roles.size()))
+    let before = profiles.size() + teams.size() + newsPosts.size();
+    dropClubScope(club);
+    #Ok(before - (profiles.size() + teams.size() + newsPosts.size()))
   };
 
   func blobContains(hay : Blob, needle : Blob) : Bool {
