@@ -419,7 +419,7 @@ export function useActiveGameSync() {
           await withFeatureBackend("events", {
             supabase: async () => {},
             icp: async (ctx) => {
-              await deactivateLiveActiveGame(ctx, activeTeamIdRef.current);
+              await deactivateLiveActiveGame(ctx, null);
             },
           });
         } catch (e) {
