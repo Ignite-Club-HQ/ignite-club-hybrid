@@ -1,4 +1,5 @@
 import Nat "mo:core/Nat";
+import Array "mo:core/Array";
 module {
   // Cursor advances even when all sampled clubs are Pro or lookup fails.
   public func indices(size : Nat, cursor : Nat, limit : Nat) : [Nat] {
