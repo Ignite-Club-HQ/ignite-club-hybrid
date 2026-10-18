@@ -248,6 +248,7 @@ persistent actor class Main(governorInit : Principal) {
     season_id : ?Text,
     daily_cap : ?Nat32,
   ) : async { #Ok : Types.PointsHistoryEntry; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(action_type) or not valid(scope_id) or not validDesc(description) or amount == 0) return #Err("Invalid award");
     if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
@@ -307,6 +308,7 @@ persistent actor class Main(governorInit : Principal) {
     source_id : ?Text,
     season_id : ?Text,
   ) : async { #Ok : Types.PointsHistoryEntry; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(action_type) or not valid(scope_id) or not validDesc(description) or amount == 0) return #Err("Invalid award");
     if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
@@ -369,6 +371,7 @@ persistent actor class Main(governorInit : Principal) {
     points_icon_url : ?Text,
     disable_team_pom_rewards : Bool,
   ) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
     switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
@@ -503,6 +506,7 @@ persistent actor class Main(governorInit : Principal) {
     is_default : Bool, reward_type : Text, logo_url : ?Text, show_qr_code : Bool,
     sponsor_id : ?Text, team_id : ?Text,
   ) : async { #Ok : Types.ClubReward; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not valid(reward_type)) return #Err("Invalid reward");
     switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
