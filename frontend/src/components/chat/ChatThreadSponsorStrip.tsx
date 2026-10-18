@@ -249,7 +249,7 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
   // Track impressions
   useEffect(() => {
     if (activeSponsor && user?.id) {
-      trackSponsorView(activeSponsor.id, "messages_page");
+      trackSponsorView(activeSponsor.id, "messages_page", clubId);
     }
   }, [activeSponsor?.id, user?.id, trackSponsorView]);
 
@@ -278,7 +278,7 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
           logoUrl: activeSponsor.logo_url,
           websiteUrl: activeSponsor.website_url,
           onActivate: () => {
-            trackSponsorClick(activeSponsor.id, "messages_page");
+            trackSponsorClick(activeSponsor.id, "messages_page", clubId);
             safeOpenUrl(activeSponsor.website_url!);
           },
           onDismiss: handleDismiss,

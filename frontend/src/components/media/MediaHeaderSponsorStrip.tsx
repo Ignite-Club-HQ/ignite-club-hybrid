@@ -233,7 +233,7 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
 
   // Impression tracking
   useEffect(() => {
-    if (activeSponsor && user?.id) trackSponsorView(activeSponsor.id, "messages_page");
+    if (activeSponsor && user?.id) trackSponsorView(activeSponsor.id, "messages_page", clubId);
   }, [activeSponsor?.id, user?.id, trackSponsorView]);
   useEffect(() => {
     if (activeAd && user?.id) trackAdView(activeAd.id, "messages_page");
@@ -281,7 +281,7 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
           logoUrl: activeSponsor.logo_url,
           websiteUrl: activeSponsor.website_url,
           onActivate: () => {
-            trackSponsorClick(activeSponsor.id, "messages_page");
+            trackSponsorClick(activeSponsor.id, "messages_page", clubId);
             safeOpenUrl(activeSponsor.website_url!);
           },
           onDismiss: handleDismiss,

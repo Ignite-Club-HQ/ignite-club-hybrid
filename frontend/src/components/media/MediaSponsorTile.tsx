@@ -166,16 +166,16 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
   useEffect(() => {
     if (!sponsor || !user?.id) return;
     if (viewed === sponsor.id) return;
-    trackView(sponsor.id, "messages_page");
+    trackView(sponsor.id, "messages_page", resolvedClubId);
     setViewed(sponsor.id);
-  }, [sponsor, user?.id, viewed, trackView]);
+  }, [sponsor, user?.id, viewed, trackView, resolvedClubId]);
 
   if (!enabled || !sponsor) return null;
 
   const clickable = !!sponsor.website_url;
   const handleClick = () => {
     if (!clickable) return;
-    trackClick(sponsor.id, "messages_page");
+    trackClick(sponsor.id, "messages_page", resolvedClubId);
     safeOpenUrl(sponsor.website_url!);
   };
 

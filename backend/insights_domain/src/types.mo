@@ -65,6 +65,13 @@ module {
   // impressions/clicks over the requested period range, the distinct
   // unique_reach count, and the derived click-through rate (0 when there
   // were no impressions).
+  // Club-owned sponsor counters: same shape as the legacy sponsor-only rows
+  // but keyed by (club, sponsor) so each club's numbers move with the club
+  // during a group transfer. A sponsor shown by several clubs gets one row
+  // set per club; sponsor-wide totals are the sum across clubs.
+  public type ClubSponsorMetricCounter = { club_id : Text; sponsor_id : Text; metric : Text; period : Text; value : Float };
+  public type ClubSponsorReachCounter = { club_id : Text; sponsor_id : Text; period : Text; accountIds : [Text] };
+
   public type SponsorBenchmarkRow = { sponsor_id : Text; impressions : Nat32; clicks : Nat32; unique_reach : Nat32; ctr : Float };
 
   // ---- House ads (app_ad_settings / app_ads / app_ad_analytics) ----

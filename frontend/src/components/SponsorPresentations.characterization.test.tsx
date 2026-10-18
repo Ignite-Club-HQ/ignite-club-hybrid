@@ -129,19 +129,19 @@ describe("sponsor presentation characterization", () => {
 
     const { unmount: unmountEvents } = render(<EventsHeaderSponsorStrip activeClubFilter="club-1" />);
     fireEvent.click(screen.getByRole("button", { name: /acme sports/i }));
-    expect(mocks.sponsorTrackClick).toHaveBeenLastCalledWith("sponsor-1", "event_page");
+    expect(mocks.sponsorTrackClick).toHaveBeenLastCalledWith("sponsor-1", "event_page", "club-1");
     fireEvent.click(screen.getByRole("button", { name: "Dismiss club sponsor" }));
     expect(screen.queryByText("Acme Sports")).not.toBeInTheDocument();
     unmountEvents();
 
     render(<MediaHeaderSponsorStrip clubId="club-1" />);
     fireEvent.click(screen.getByRole("button", { name: /acme sports/i }));
-    expect(mocks.sponsorTrackClick).toHaveBeenLastCalledWith("sponsor-1", "messages_page");
+    expect(mocks.sponsorTrackClick).toHaveBeenLastCalledWith("sponsor-1", "messages_page", "club-1");
     cleanup();
 
     const { container } = render(<ChatThreadSponsorStrip clubId="club-1" />);
     fireEvent.click(screen.getByRole("button", { name: /acme sports/i }));
-    expect(mocks.sponsorTrackClick).toHaveBeenLastCalledWith("sponsor-1", "messages_page");
+    expect(mocks.sponsorTrackClick).toHaveBeenLastCalledWith("sponsor-1", "messages_page", "club-1");
     expect(container.querySelector(".border-b")).toBeInTheDocument();
     expect(queryKeys()).toEqual(expect.arrayContaining([
       ["events-header-strip-resolve", "club-1", "user-1"],
