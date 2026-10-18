@@ -24,5 +24,5 @@ switch (Quota.reserve(state.ledger, a, "overflow", "club", "gallery_photo", 1, 1
 switch (Quota.cancel(state.ledger, a, "late", "club", "chat_photo", 1, 1)) { case (#Ok(r)) assert r.status == #released; case _ assert false };
 switch (Quota.reserve(state.ledger, a, "late", "club", "chat_photo", 1, 1, false)) { case (#Ok(r)) assert r.status == #released; case _ assert false };
 assert Quota.getUsage(state.ledger, "club", "chat_photo", 1).pending_count == 0;
-ignore Quota.retire(state.ledger, 3);
+ignore Quota.retirePage(state.ledger, 3, "", "");
 assert Quota.status(state.ledger, a, "late") == null;

@@ -61,22 +61,34 @@ module {
   };
   // Retire only old terminal records. Live APIs reject NEW old-cycle tokens;
   // unresolved reservations are never expired or refunded automatically.
-  public func retire(ledger : Ledger, cycle : Nat) : Nat {
+  public func retirePage(ledger : Ledger, cycle : Nat, reservationCursor : Text, usageCursor : Text) : { removed : Nat; reservation_cursor : Text; usage_cursor : Text } {
     var removed = 0;
-    for ((key, row) in ledger.reservations.entries()) {
-      if (removed < 200 and row.cycle + 1 < cycle and row.status != #reserved) { ignore ledger.reservations.remove(key); removed += 1 };
+    var scanned = 0;
+    var nextReservation = "";
+    for ((key, row) in ledger.reservations.entriesFrom(reservationCursor)) {
+      if (key == reservationCursor and reservationCursor != "") continue;
+      if (scanned >= 200) break;
+      scanned += 1; nextReservation := key;
+      if (row.cycle + 1 < cycle and row.status != #reserved) { ledger.reservations.remove(key); removed += 1 };
     };
+    if (scanned < 200) nextReservation := "";
     var usageRemoved = 0;
-    for ((key, row) in ledger.usage.entries()) {
+    scanned := 0;
+    var nextUsage = "";
+    for ((key, row) in ledger.usage.entriesFrom(usageCursor)) {
+      if (key == usageCursor and usageCursor != "") continue;
+      if (scanned >= 200) break;
+      scanned += 1; nextUsage := key;
       // The suffix is the cycle in debug_show format. Bound scans by ledger cap;
       // delete only zero-pending rows with an old terminal reservation-free key.
       if (usageRemoved < 200 and row.pending_count == 0) {
         let parts = Text.split(key, #char '\u{1f}');
         ignore parts.next(); ignore parts.next();
-        switch (parts.next()) { case (?value) { switch (Nat.fromText(value)) { case (?old) { if (old + 1 < cycle) { ignore ledger.usage.remove(key); usageRemoved += 1 } }; case null {} } }; case null {} };
+        switch (parts.next()) { case (?value) { switch (Nat.fromText(value)) { case (?old) { if (old + 1 < cycle) { ledger.usage.remove(key); usageRemoved += 1 } }; case null {} } }; case null {} };
       };
     };
-    removed + usageRemoved
+    if (scanned < 200) nextUsage := "";
+    { removed = removed + usageRemoved; reservation_cursor = nextReservation; usage_cursor = nextUsage }
   };
   public func status(ledger : Ledger, store : Principal, token : Text) : ?Reservation { Map.get(ledger.reservations, Text.compare, reservationKey(store, token)) };
   public func reserve(ledger : Ledger, store : Principal, token : Text, club : Text, category : Text, bytes : Nat, cycle : Nat, pro : Bool) : Result {

@@ -4343,9 +4343,9 @@ persistent actor class Main(governorInit : Principal) {
     if (MediaQuota.status(mediaQuotaCutover.ledger, caller, token) == null and cycle + 1 < Int.abs(Time.now()) / MediaQuota.cycleNs) return #Err("Expired operation");
     MediaQuota.cancel(mediaQuotaCutover.ledger, caller, token, club_id, category, bytes, cycle)
   };
-  public shared ({ caller }) func retire_media_quota_records() : async { #Ok : Nat; #Err : Text } {
+  public shared ({ caller }) func retire_media_quota_records(reservation_cursor : Text, usage_cursor : Text) : async { #Ok : { removed : Nat; reservation_cursor : Text; usage_cursor : Text }; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
-    #Ok(MediaQuota.retire(mediaQuotaCutover.ledger, Int.abs(Time.now()) / MediaQuota.cycleNs))
+    #Ok(MediaQuota.retirePage(mediaQuotaCutover.ledger, Int.abs(Time.now()) / MediaQuota.cycleNs, reservation_cursor, usage_cursor))
   };
 
   public shared ({ caller }) func save_club_subscription(item : Types.ClubSubscription) : async { #Ok : Types.ClubSubscription; #Err : Text } {
