@@ -98,7 +98,7 @@ try {
       blocked.notify = await refused(A.notification_queue.enqueue('n2', 'u1', CLUB, 'news', 'Sneaky', 'nk2'));
       blocked.pii = await refused(A.pii_access_control.grant_pii_read_club('child-2', 'name', CLUB));
       blocked.timer = await refused(A.timer_jobs.schedule('job-2', CLUB, 99_999_999_999n, 'tk3'));
-      blocked.claim = { Err: (ok(await A.timer_jobs.claim(100_000_000_000n, 10)).length === 0) ? 'claim skipped locked club' : undefined };
+      blocked.claim = ok(await A.timer_jobs.claim(100_000_000_000n, 10)).length === 0 ? { Err: 'claim skipped locked club' } : { Ok: 'claimed a locked job' };
       blocked.club = await refused(as(A.club_domain, staff, () => A.club_domain.add_role_grant(governor, CLUB, 'coach', [])));
     }
   } };
