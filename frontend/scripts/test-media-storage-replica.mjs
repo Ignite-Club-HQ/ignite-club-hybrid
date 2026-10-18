@@ -220,6 +220,81 @@ try {
   }
   assert.ok('Err' in await second.actor.begin_upload('clubs/c1/photos/restored-over.jpg', 'image/jpeg', 1n, 1));
   for (const saved of checkpoints) await management('delete_canister_snapshot', IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8) }), { canister_id: saved.canisterId, snapshot_id: saved.snapshotId });
+  // Lose the CLIENT acknowledgement only AFTER real canister finalization.
+  // No authority mock: the replica commits ciphertext and the shared ledger.
+  // This does not simulate a lost inter-canister callback.
+  await pic.advanceTime(31 * 86_400_000); await pic.tick();
+  const lostAckPath = 'clubs/c1/photos/lost-finalize-ack.jpg';
+  const lostAckId = ok(await actor.begin_upload(lostAckPath, 'image/jpeg', 1n, 1));
+  ok(await actor.put_chunk(lostAckId, 0, [61]));
+  const beforeLostAck = (await actor.health()).total_bytes;
+  await assert.rejects(async () => {
+    ok(await actor.finalize_upload(lostAckId));
+    throw new Error('Injected client transport loss after real commit');
+  }, /Injected client transport loss after real commit/);
+  const lostAckOutcome = ok(await actor.get_upload_outcome(lostAckId));
+  assert.equal(lostAckOutcome.length, 1, 'lost client response must leave an owner-readable committed outcome');
+  const [lostAckResult] = lostAckOutcome;
+  assert.deepEqual(lostAckResult, { path: lostAckPath, content_hash: createHash('sha256').update(Buffer.from([61])).digest('hex'), content_length: 1n });
+  assert.deepEqual(await download(lostAckPath), Buffer.from([61]));
+  assert.equal((await actor.health()).total_bytes, beforeLostAck + 1n);
+  actor.setPrincipal(other);
+  assert.ok('Err' in await actor.get_upload_outcome(lostAckId));
+  assert.ok('Err' in await actor.finalize_upload(lostAckId));
+  assert.ok('Err' in await actor.abort_upload(lostAckId));
+  actor.setPrincipal(owner);
+  // A restart/upgrade between lost response and retry cannot lose the journal.
+  await pic.upgradeCanister({ canisterId: fixture.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  const acknowledgedRetries = await Promise.all([actor.finalize_upload(lostAckId), actor.finalize_upload(lostAckId)]);
+  for (const result of acknowledgedRetries) assert.deepEqual(ok(result), lostAckResult);
+  assert.deepEqual(ok(await actor.get_upload_outcome(lostAckId)), [lostAckResult]);
+  assert.equal((await actor.health()).total_bytes, beforeLostAck + 1n, 'retry must not publish bytes twice');
+  assert.ok('Err' in await actor.abort_upload(lostAckId), 'lost acknowledgement never permits a refund');
+  for (let i = 0; i < 9; i++) {
+    const store = i % 2 ? second.actor : actor;
+    const id = ok(await store.begin_upload(`clubs/c1/photos/lost-ack-cap-${i}.jpg`, 'image/jpeg', 1n, 1));
+    ok(await store.put_chunk(id, 0, [62])); ok(await store.finalize_upload(id));
+  }
+  assert.ok('Err' in await second.actor.begin_upload('clubs/c1/photos/lost-ack-over.jpg', 'image/jpeg', 1n, 1), 'lost response and repeated finalization consume exactly one of ten slots');
+  // Preserve an UNCERTAIN commit across EOP upgrade and recover via the actual
+  // governor reconciler instead of requiring the original client to return.
+  await pic.advanceTime(31 * 86_400_000); await pic.tick();
+  const upgradeRecoveryPath = 'clubs/c1/photos/upgrade-uncertain.jpg';
+  const upgradeRecoveryId = ok(await actor.begin_upload(upgradeRecoveryPath, 'image/jpeg', 1n, 1));
+  ok(await actor.put_chunk(upgradeRecoveryId, 0, [63]));
+  await pic.stopCanister({ canisterId: club.canisterId, sender: governor });
+  assert.ok('Err' in await actor.finalize_upload(upgradeRecoveryId));
+  assert.deepEqual(await download(upgradeRecoveryPath), Buffer.from([63]), 'uncertain finalization has already stored ciphertext');
+  assert.ok('Err' in await actor.get_upload_outcome(upgradeRecoveryId));
+  await pic.upgradeCanister({ canisterId: fixture.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  assert.ok('Err' in await actor.abort_upload(upgradeRecoveryId), 'upgrade must preserve the uncertain-commit refund fence');
+  assert.ok('Err' in await actor.reconcile_upload_operations(''), 'ordinary upload owner cannot run governor recovery');
+  await pic.startCanister({ canisterId: club.canisterId, sender: governor });
+  actor.setPrincipal(governor);
+  // Earlier cycles leave terminal rows in the bounded journal; follow every
+  // returned cursor rather than assuming the target is on the first page.
+  let reconcileCursor = '';
+  let reconcilePages = 0;
+  let attempted = 0n;
+  do {
+    const page = ok(await actor.reconcile_upload_operations(reconcileCursor));
+    attempted += page.attempted;
+    reconcileCursor = page.cursor;
+    assert.ok(++reconcilePages <= 20, 'bounded fixture recovery must finish');
+  } while (reconcileCursor);
+  assert.equal(attempted, 1n, 'governor recovery must settle the one uncertain upload');
+  actor.setPrincipal(owner);
+  const recoveredOutcome = ok(await actor.get_upload_outcome(upgradeRecoveryId));
+  assert.equal(recoveredOutcome.length, 1);
+  assert.deepEqual(ok(await actor.finalize_upload(upgradeRecoveryId)), recoveredOutcome[0]);
+  assert.deepEqual(await download(upgradeRecoveryPath), Buffer.from([63]));
+  assert.ok('Err' in await actor.abort_upload(upgradeRecoveryId));
+  for (let i = 0; i < 9; i++) {
+    const store = i % 2 ? second.actor : actor;
+    const id = ok(await store.begin_upload(`clubs/c1/photos/upgrade-recovery-cap-${i}.jpg`, 'image/jpeg', 1n, 1));
+    ok(await store.put_chunk(id, 0, [64])); ok(await store.finalize_upload(id));
+  }
+  assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/upgrade-recovery-over.jpg', 'image/jpeg', 1n, 1), 'upgrade and governor recovery preserve exactly one allowance charge');
   await pic.advanceTime(181 * 86_400_000); await pic.tick(10);
   const expired = await actor.http_request({ url: '/clubs/c1/photos/0.jpg', method: 'GET', headers: [], body: [] });
   assert.equal(expired.status_code, 404, 'known-free club ciphertext must expire after six months');
@@ -228,6 +303,8 @@ try {
   console.log('PASS: real two-store freeze/import/activation, denied spoofed reservation, 10 shared slots including pending writes, idempotent begin/finalize, release/refund and 30-day boundary.');
   console.log('PASS: controller-only snapshot restore preserves Region bytes/allocator/owner; unavailable quota commit retries publish once without refund.');
   console.log('PASS: coordinated two-store and quota-authority snapshot rollback restores bytes, owner-only outcomes and exactly nine remaining shared allowances.');
+  console.log('PASS: real commit followed by injected client acknowledgement loss survives EOP upgrade, denies other owners, retries without duplicate bytes and consumes exactly one shared slot.');
+  console.log('PASS: uncertain commit survives EOP upgrade; governor-only bounded journal recovery settles it with exactly one shared allowance charge.');
 } finally {
   if (pic) await pic.tearDown();
   await server.stop();
