@@ -128,8 +128,8 @@ export const clubDispatch = createClubDispatcher({
   },
 });
 
-/** Sign-out: forget this device's entity→club answers for the principal. */
-export function wipeGroupOwnerCache(principal: string) {
+/** Sign-out: forget every entity→club answer kept on this device. */
+export function wipeGroupOwnerCache() {
   clearGroupDispatchCache();
-  try { localStorage.removeItem(`ignite.groupOwners.${principal}`); } catch { /* no storage */ }
+  try { for (const k of Object.keys(localStorage)) if (k.startsWith('ignite.groupOwners.')) localStorage.removeItem(k); } catch { /* no storage */ }
 }

@@ -63,4 +63,29 @@ describe('entity scopes', () => {
     const { d } = world({ g1: ['m-ev'], g2: ['m-ev'] }); (d.lookup as ReturnType<typeof vi.fn>).mockImplementation(async (g: unknown) => g === 'g1' ? 'moved' : 'other');
     await expect(createClubDispatcher(d as never).readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1)).rejects.toThrow('more than one group');
   });
+  it('two screens asking about the same event at once share one lookup', async () => {
+    const { d, s } = world({ g1: ['m-ev'] }); const x = createClubDispatcher(d as never);
+    await Promise.all([1, 2, 3].map(() => x.readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1)));
+    expect(s.readEveryGroup).toHaveBeenCalledTimes(1);
+  });
+  it('a remembered answer survives an app restart, so no lookup is needed', async () => {
+    const saved: Record<string, Record<string, string>> = {};
+    const store = { load: (p: string) => saved[p] ?? {}, save: (p: string, o: Record<string, string>) => { saved[p] = o; } };
+    const a = world({ g1: ['m-ev'] }); await createClubDispatcher({ ...a.d, store } as never).readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1);
+    clearGroupDispatchCache();
+    const b = world({ g1: ['m-ev'] }); await createClubDispatcher({ ...b.d, store } as never).readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1);
+    expect(b.s.readEveryGroup).not.toHaveBeenCalled(); expect(b.s.readClub).toHaveBeenCalledWith('moved', 'events_domain', expect.any(Function));
+  });
+  it('"not in any group" is never kept on the device (the club may move later)', async () => {
+    const saved: Record<string, Record<string, string>> = {};
+    const store = { load: (p: string) => saved[p] ?? {}, save: (p: string, o: Record<string, string>) => { saved[p] = o; } };
+    const a = world({ g1: [] }); await createClubDispatcher({ ...a.d, store } as never).readFor('events', { eventId: 'x' }, 'events_domain', async () => 1);
+    expect(saved.p1?.['event:x']).toBeUndefined();
+  });
+  it('items a list already loaded open without a lookup', async () => {
+    const { d, s } = world({ g1: [] }); const x = createClubDispatcher(d as never);
+    await x.remember('event', [['m-ev', 'moved']]);
+    expect(await x.readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1)).toBe('group');
+    expect(s.readEveryGroup).not.toHaveBeenCalled();
+  });
 });
