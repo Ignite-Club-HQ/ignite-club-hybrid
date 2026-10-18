@@ -1,3 +1,4 @@
+import Blob "mo:core/Blob";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -2013,7 +2014,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func blobContains(hay : Blob, needle : Blob) : Bool {
-    let h = hay.toArray(); let n = needle.toArray();
+    let h = Blob.toArray(hay); let n = Blob.toArray(needle);
     if (n.size() == 0 or n.size() > h.size()) return false;
     var i = 0;
     while (i + n.size() <= h.size()) {
