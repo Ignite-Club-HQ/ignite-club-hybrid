@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] 28. Continue implementation: add fail-closed multi-group batch execution/read-back tests and coordinated two-store plus quota-authority snapshot rollback in the local replica. Keep live actors unchanged; no production activation.
+
 - [x] 27. Recovery verification stage: real local management snapshot restore (noncontroller denied) preserves Region bytes, allocator, totals and owner permissions; unavailable quota begin/finalize, concurrent same-path retries and exact allowance accounting verified. No production activation or club moves. Coordinated quota/storage rollback and loss-after-commit injection remain in item 24.
 
 - [x] 25. Stable media code: indexed Region-backed ciphertext, bounded hash-pinned HTTP streaming, governor one-file read-back-verified migration, explicit stable-write activation, slot reuse, dual-format ownership/delete/rekey/retention and rotating legacy retention. Migration 20261027_000000. Five media Motoko suites pass; maximum-wire-size local actor tests pass with hash/owner/EOP preservation, six-month free retention and two-store quota behavior. Nothing deployed or activated; capacity remains conservatively capped.

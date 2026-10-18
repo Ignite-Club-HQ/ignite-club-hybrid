@@ -45,3 +45,25 @@ export function partitionClubRequests<T extends { clubId: string }>(table: Group
   });
   return batches;
 }
+
+/** All-or-nothing batch execution groundwork; destinations still authorize callers.
+ * One result per request is required, including duplicates. Never return partial
+ * rows after a shard failure or silently substitute a different canister.
+ */
+export async function executeClubBatches<T extends { clubId: string }, R>(
+  table: GroupRoutingTable,
+  target: string,
+  domain: GroupDomain,
+  requests: readonly T[],
+  read: (route: ReturnType<typeof resolveClubDomain>, requests: readonly T[]) => Promise<readonly R[]>,
+): Promise<R[]> {
+  // Resolve every request before starting any reads, so invalid assignments
+  // cannot trigger a partially routed operation.
+  const batches = partitionClubRequests(table, target, domain, requests);
+  const completed = await Promise.all([...batches.values()].map(async batch => {
+    const rows = await read(batch.route, batch.requests.map(request => request.value));
+    if (rows.length !== batch.requests.length) throw new Error('Club group returned an incomplete batch');
+    return batch.requests.map((request, offset) => ({ index: request.index, row: rows[offset] }));
+  }));
+  return completed.flat().sort((a, b) => a.index - b.index).map(item => item.row);
+}
