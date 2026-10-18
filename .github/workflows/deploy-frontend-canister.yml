@@ -120,7 +120,9 @@ jobs:
           fi
           ID="$(jq -r '.frontend' .icp/data/mappings/ic.ids.json)"
           # Let club_domain read this canister's cycle balance (admin settings panel).
-          icp canister update-settings frontend --add-controller mzzzv-taaaa-aaaal-qxlrq-cai -e ic || echo "::warning::Could not add club_domain as controller (already added?)"
+          # Hard fail: without this grant the admin balances card cannot read the
+          # web-app canister's cycles (it silently showed "—" once before).
+          icp canister update-settings frontend --add-controller mzzzv-taaaa-aaaal-qxlrq-cai -e ic
           echo "::notice::Web app live at https://$ID.icp.net"
           echo "### Web app deployed: https://$ID.icp.net" >> "$GITHUB_STEP_SUMMARY"
 
