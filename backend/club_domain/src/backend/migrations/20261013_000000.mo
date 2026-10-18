@@ -1,12 +1,12 @@
-// Per-team welcome-email settings.
+// Adds competition / mini-league targeting for news posts, mirroring the
+// Supabase club_news.target_competition_id / target_mini_league_id columns.
+// Stored as a separate (post_id, kind, target_id) list so the NewsPost
+// record — and every migration mentioning it — stays untouched.
 module {
-  type TeamWelcomeEmail = { team_id : Text; club_id : Text; enabled : Bool; subject : Text; message : Text };
   public func migration(_ : {}) : {
-    var teamWelcomeEmails : [TeamWelcomeEmail];
     var newsTargets : [(Text, Text, Text)];
   } {
     {
-      var teamWelcomeEmails = [];
       var newsTargets = [];
     }
   };
