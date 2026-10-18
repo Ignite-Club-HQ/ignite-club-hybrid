@@ -160,10 +160,16 @@ async function uploadToStore(
   const canister = canisterId.toText();
   const expectedHash = await sha256Hex(bytes);
 
-  const uploadId = await unwrapCandid(
-    actor.begin_upload(path, mime, BigInt(bytes.length), chunkCountFor(bytes.length)),
-    "Begin blob upload",
-  );
+  // A reservation response may be lost after success. Retry identical terms
+  // against the same store/path; never fail over an unknown operation.
+  let uploadId: string;
+  try {
+    uploadId = await unwrapCandid(actor.begin_upload(path, mime, BigInt(bytes.length), chunkCountFor(bytes.length)), "Begin blob upload");
+  } catch (error) {
+    if (freeLimitMessage(error) || isStoreFullError(error)) throw error;
+    uploadId = await unwrapCandid(actor.begin_upload(path, mime, BigInt(bytes.length), chunkCountFor(bytes.length)), "Resume blob upload");
+  }
+  let finalizeStarted = false;
   try {
     // Chunks are independent, index-addressed writes, so send several at once
     // instead of waiting ~2s per chunk round trip.
@@ -176,7 +182,15 @@ async function uploadToStore(
       }
     };
     await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, worker));
-    const finalized = await unwrapCandid(actor.finalize_upload(uploadId), "Finalize blob upload");
+    finalizeStarted = true;
+    let finalized;
+    try {
+      finalized = await unwrapCandid(actor.finalize_upload(uploadId), "Finalize blob upload");
+    } catch {
+      // The server's journal makes the same finalize retry safe even after
+      // committing bytes or the quota. Do not release uncertain commits.
+      finalized = await unwrapCandid(actor.finalize_upload(uploadId), "Confirm blob upload");
+    }
     if (finalized.content_hash !== expectedHash) {
       throw new Error(
         `Blob store hash mismatch for ${path}: canister reported ${finalized.content_hash}, local ${expectedHash}.`,
@@ -185,10 +199,12 @@ async function uploadToStore(
     const blobRef: LiveBlobRef = { canister, path: finalized.path, content_hash: finalized.content_hash };
     return { blobRef, url: blobAssetUrl(canister, finalized.path) };
   } catch (error) {
-    try {
-      await actor.abort_upload(uploadId);
-    } catch {
-      // Best-effort cleanup; the original error is the one that matters.
+    if (!finalizeStarted) {
+      try {
+        await actor.abort_upload(uploadId);
+      } catch {
+        // The durable journal retains unresolved releases for recovery.
+      }
     }
     throw error;
   }

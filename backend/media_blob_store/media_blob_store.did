@@ -51,6 +51,14 @@ type HeaderField =
    text;
    text;
  };
+type FreeUsageRow = 
+ record {
+   bytes: nat64;
+   category: text;
+   club_id: text;
+   count: nat;
+   cycle: nat;
+ };
 type FinalizedBlob = 
  record {
    content_hash: text;
@@ -64,9 +72,16 @@ service : {
   /// Public: remaining cycles (shown in admin settings).
   cycles_balance: () -> (nat) query;
   delete_blob: (path: text) -> (Result);
+  enable_shared_media_quota: () -> (Result);
   finalize_upload: (upload_id: text) -> (ResultFinalized);
+  freeze_media_quota: () -> (Result);
   get_club_media_usage: (club_id: text) -> (vec MediaUsage) query;
   get_content_hash: (path: text) -> (opt text) query;
+  get_upload_outcome: (upload_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt FinalizedBlob;
+    }) query;
   get_usage: () -> (Usage) query;
   health: () -> (Health) query;
   http_request: (request: HttpRequest) -> (HttpResponse) query;
@@ -82,10 +97,34 @@ service : {
       ok: nat;
     });
   put_chunk: (upload_id: text, index: nat32, data: blob) -> (Result);
+  quota_snapshot_page: (offset: nat) ->
+   (record {
+      frozen: bool;
+      offset: nat;
+      pending: nat;
+      rows: vec FreeUsageRow;
+      total: nat;
+    });
+  reconcile_upload_operations: (cursor: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            attempted: nat;
+            cursor: text;
+          };
+    });
   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
    (variant {
       err: text;
       ok: nat;
+    });
+  retire_upload_outcomes: (cursor: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            cursor: text;
+            removed: nat;
+          };
     });
   set_capacity_limit: (limit_bytes: nat64) -> (Result);
   set_club_domain_canister: (canister_id: principal) -> (Result);

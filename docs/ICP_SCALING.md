@@ -34,10 +34,11 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
   logic. Reservations include outstanding writes across stores; free caps
   remain 10 per category and 25 MiB for vault/chat files. Pro/trial allowance
   is derived from authoritative subscription flags, never a browser flag.
-- These quota APIs are **governor-only preparation**, not live store APIs.
-  Existing uploads still use the existing local quota checks. There is no
-  activation switch, automatic deployment wiring or claim of live global
-  enforcement. No additional free-club stores should be activated yet.
+- Shared quota activation and recoverable upload APIs are implemented, but
+  not deployed or live-verified. Direct frozen-store snapshots are imported
+  in bounded pages; duplicate keys are rejected. Persistent reserve/commit/
+  release journals retry unchanged operations; unknown outcomes never refund
+  published bytes. Do not activate extra stores before live verification.
 
 ## Deployment of this foundation
 
@@ -54,7 +55,10 @@ reset existing per-store counters. The quota maps are hard bounded at 100,000
 entries each, store registry at 64 and outstanding club/category reservations
 at 64; exceeding a bound rejects new work rather than growing indefinitely.
 No reservations expire automatically: unknown finalization outcomes must not
-silently refund capacity. Bounded reconciliation/retirement remains required.
+silently refund capacity. Migration `20261026_000000` adds isolated cutover
+state and media journals without resetting legacy data. Recovery scans 20
+outcomes; retirement scans 200 keys per map with cursors, deleting collected
+keys after iteration. Only old terminal outcomes are retired.
 
 Before upgrading: capture module hashes, usage and memory readings. Afterward:
 verify old ciphertext URLs/hash values, ordinary-member uploads, staff deletes,
@@ -75,19 +79,40 @@ manifests, funds canisters nor modifies mappings. Add the path and environment
 entry to the appropriate target manifest only after the following gates pass.
 The existing deployment script wires `media_blob_store_N` to `club_domain`.
 
-**Do not activate extra stores for free clubs yet:** existing quotas are
-per-store, whereas the product allowance is per club. Summed browser reads
-are not enforcement. An authoritative on-chain quota reservation/commit
-service is required before distributing free-club writes across stores.
+### Shared-quota cutover — explicit operator action
 
-The new preparation ledger is only the first part of that service. Next:
-freeze all participating stores, reconcile pending writes, import and verify
-each current-cycle usage snapshot with retry-safe per-store imports, then
-activate caller-store-gated operations and recoverable store-side finalization.
-Keep operation links until commit/abort outcomes are confirmed. An uncertain
-finalize must not cause an abort to refund an already-published file. Test
-every interrupted call and cycle-boundary transition before cutover; no
-fallback to independent local counters after global enforcement is enabled.
+Upgrade club_domain and EVERY media store first. Ordinary deployments do not
+activate quotas. Inventory every store, including inactive stores; the target
+mappings must include them all or usage is undercounted. Use ICP CLI 1.7.0 and
+set GOVERNOR to the deployed governor principal.
+
+```sh
+node scripts/media-quota-cutover.mjs register
+node scripts/media-quota-cutover.mjs register --apply
+node scripts/media-quota-cutover.mjs freeze --apply --ack-all-stores
+node scripts/media-quota-cutover.mjs import --apply
+# Repeat import until every returned store status has done = true.
+node scripts/media-quota-cutover.mjs activate --apply --ack-all-stores
+node scripts/media-quota-cutover.mjs recover
+```
+
+Without --apply this prints commands only. It never deploys, reinstalls or
+moves files. Freeze rejects pending uploads; finalize/abort them first.
+Plan a maintenance window: reads stay available but writes pause until
+activation. No return to local quota is allowed after freeze. Fix errors and
+resume the same phase. Imports are retry-safe; activation rejects incomplete
+registered baselines. After activation, register/freeze/import/enable new
+stores without pausing already active stores; a new store cannot use shared
+quota before its own import finishes.
+
+Recover with --apply reconciles unknown reserve/commit/release outcomes.
+Follow returned cursors using QUOTA_CURSOR and QUOTA_USAGE_CURSOR; select one
+store with MEDIA_QUOTA_STORE. Each store's cursor is independent. Writable
+unfinished uploads are not auto-aborted: owner/governor explicitly aborts
+abandoned work. Owner-only outcome lookup lasts until terminal retirement.
+Usage display sums successful per-store uploads; pending reservations can
+temporarily enforce stricter allowance. No fallback to local counters after
+activation. Actor-level interruption and cycle-boundary tests remain required.
 
 ## Required before production multi-group activation
 
@@ -124,7 +149,8 @@ fallback to independent local counters after global enforcement is enabled.
 
 ## Validation in this change
 
-Rust placement/group tests, Motoko media policy tests, encrypted-upload tests
-in both backend modes, offline media-recipe tests and Candid drift checks.
+Rust placement/group tests, Motoko media policy/cutover/retirement tests,
+encrypted-upload and lost-acknowledgement tests in both backend modes, offline
+media-recipe/cutover safety tests and Candid drift checks.
 These do not establish deployed capacity, live migration compatibility or
 authenticated mainnet behavior.

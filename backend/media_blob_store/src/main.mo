@@ -17,6 +17,7 @@ import Map "mo:core/Map";
 import Timer "mo:core/Timer";
 import UploadPolicy "uploadPolicy";
 import AssembleChunks "assembleChunks";
+import QuotaOperation "quotaOperation";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -115,6 +116,165 @@ persistent actor MediaBlobStore {
   // Retention (migration 20261015): upload time per blob path. Blobs without
   // a stamp are stamped on the next retention sweep (clock starts then).
   var blob_uploaded_at : [(Text, Int)];
+  var quota_mode : { #local; #frozen; #sharedQuota };
+  var quota_snapshot : [FreeUsageRow];
+  var quota_operations : Map.Map<Text, QuotaOperation.Operation>;
+
+  type QuotaReservation = { store : Principal; token : Text; club_id : Text; category : Text; cycle : Nat; bytes : Nat; status : { #reserved; #committed; #released } };
+  type QuotaResult = { #Ok : QuotaReservation; #Err : Text };
+  type QuotaService = actor {
+    media_quota_ready : shared query () -> async Bool;
+    reserve_media_quota : shared (Text, Text, Text, Nat, Nat) -> async QuotaResult;
+    commit_media_quota : shared Text -> async QuotaResult;
+    cancel_media_quota : shared (Text, Text, Text, Nat, Nat) -> async QuotaResult;
+  };
+  func quotaService() : ?QuotaService {
+    switch (club_domain_canister) { case (?id) { ?(actor(id.toText()) : QuotaService) }; case null null }
+  };
+
+  // Freeze is irreversible to local enforcement. Reads remain available.
+  // No upload can slip past a subscription await: begin rechecks this mode.
+  public shared ({ caller }) func freeze_media_quota() : async Result {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (quota_mode == #sharedQuota) return #Err("Shared quota already active");
+    if (quota_mode == #frozen) return #Ok;
+    if (pending_uploads.size() != 0) return #Err("Finalize or abort pending uploads first");
+    quota_snapshot := free_media_usage;
+    quota_mode := #frozen;
+    #Ok
+  };
+  public shared ({ caller }) func quota_snapshot_page(offset : Nat) : async { frozen : Bool; pending : Nat; total : Nat; offset : Nat; rows : [FreeUsageRow] } {
+    if (?caller != club_domain_canister and not isGovernor<system>(caller)) Runtime.trap("Quota authority required");
+    let count = if (offset >= quota_snapshot.size()) 0 else Nat.min(200, quota_snapshot.size() - offset);
+    { frozen = quota_mode == #frozen; pending = pending_uploads.size(); total = quota_snapshot.size(); offset; rows = Array.tabulate<FreeUsageRow>(count, func(i) = quota_snapshot[offset + i]) }
+  };
+  public shared ({ caller }) func enable_shared_media_quota() : async Result {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (quota_mode == #sharedQuota) return #Ok;
+    if (quota_mode != #frozen) return #Err("Freeze and import this store first");
+    let ?service = quotaService() else return #Err("Quota authority unset");
+    try {
+      if (not (await service.media_quota_ready())) return #Err("All-store quota import not activated");
+      quota_mode := #sharedQuota;
+      #Ok
+    } catch (_) { #Err("Quota authority unavailable") }
+  };
+  public query ({ caller }) func get_upload_outcome(upload_id : Text) : async { #Ok : ?FinalizedBlob; #Err : Text } {
+    switch (quota_operations.get(upload_id)) {
+      case (?op) {
+        if (not op.owner.equal(caller)) return #Err("Not the upload owner");
+        if (op.status == #committed) #Ok(op.result) else #Err("Upload not committed; retry finalize or abort")
+      };
+      case null #Err("Unknown upload")
+    }
+  };
+  public shared ({ caller }) func retire_upload_outcomes(cursor : Text) : async { #Ok : { removed : Nat; cursor : Text }; #Err : Text } {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    var removed = 0;
+    var scanned = 0;
+    var next = "";
+    var deletes : [Text] = [];
+    for ((id, op) in quota_operations.entriesFrom(cursor)) {
+      if (id == cursor and cursor != "") continue;
+      if (scanned >= 200) break;
+      scanned += 1; next := id;
+      if (op.cycle + 1 < currentCycle() and (op.status == #committed or op.status == #aborted)) {
+        deletes := deletes.concat([id]); removed += 1
+      }
+    };
+    for (id in deletes.values()) quota_operations.remove(id);
+    if (scanned < 200) next := "";
+    #Ok({ removed; cursor = next })
+  };
+  public shared ({ caller }) func reconcile_upload_operations(cursor : Text) : async { #Ok : { cursor : Text; attempted : Nat }; #Err : Text } {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    // Materialize at most 20 IDs before yielding; never retain a mutable-map
+    // iterator across awaits. Unknown commits/releases retry the same token.
+    var ids : [Text] = [];
+    for ((id, _) in quota_operations.entriesFrom(cursor)) {
+      if (id == cursor and cursor != "") continue;
+      if (ids.size() >= 20) break;
+      ids := ids.concat([id])
+    };
+    var attempted = 0;
+    for (id in ids.values()) {
+      switch (quota_operations.get(id)) {
+        case (?op) {
+          if (op.status == #committing) { ignore await commitShared(id); attempted += 1 };
+          if (op.status == #aborting) { ignore await abortShared(id); attempted += 1 };
+          if (op.status == #reserving) {
+            switch (findUpload(id)) { case (?upload) { ignore await reserveShared(upload); attempted += 1 }; case null {} }
+          }
+        };
+        case null {}
+      }
+    };
+    #Ok({ cursor = if (ids.size() == 20) ids[19] else ""; attempted })
+  };
+
+  func reserveShared(upload : PendingUpload) : async ResultUploadId {
+    let ?op = quota_operations.get(upload.id) else return #Err("Missing quota journal");
+    if (op.status == #uploading) return #Ok(upload.id);
+    if (op.status != #reserving) return #Err("Upload cannot be resumed");
+    let ?service = quotaService() else return #Err("Quota authority unset; retry begin");
+    try {
+      let result = await service.reserve_media_quota(upload.id, op.club_id, op.category, op.bytes, op.cycle);
+      // Concurrent abort/finalize must never be overwritten by a callback.
+      let ?latest = quota_operations.get(upload.id) else return #Err("Missing quota journal");
+      if (latest.status == #uploading) return #Ok(upload.id);
+      if (latest.status != #reserving) return #Err("Upload cancelled or settled");
+      switch (result) {
+        case (#Ok(r)) {
+          if (r.status != #reserved) return #Err("Reservation already settled");
+          quota_operations.add(upload.id, { latest with status = #uploading });
+          #Ok(upload.id)
+        };
+        case (#Err(message)) {
+          // Another identical request can still be in flight. Create a
+          // cancellation tombstone before discarding any local reservation.
+          ignore await abortShared(upload.id);
+          #Err(message)
+        }
+      }
+    } catch (_) { #Err("Quota reservation outcome unknown; retry same upload path") }
+  };
+  func commitShared(id : Text) : async ResultFinalized {
+    let ?op = quota_operations.get(id) else return #Err("Unknown upload");
+    if (op.status == #committed) { let ?result = op.result else return #Err("Missing result"); return #Ok(result) };
+    if (op.status != #committing) return #Err("Upload not ready to commit");
+    let ?service = quotaService() else return #Err("Quota authority unset; retry finalize");
+    try {
+      switch (await service.commit_media_quota(id)) {
+        case (#Ok(r)) {
+          if (r.status != #committed) return #Err("Quota not committed");
+          let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
+          let ?result = latest.result else return #Err("Missing result");
+          quota_operations.add(id, { latest with status = #committed });
+          #Ok(result)
+        };
+        case (#Err(message)) #Err(message)
+      }
+    } catch (_) { #Err("Quota commit outcome unknown; retry finalize, do not abort") }
+  };
+  func abortShared(id : Text) : async Result {
+    let ?op = quota_operations.get(id) else return #Err("Unknown upload");
+    if (op.status == #aborted) return #Ok;
+    if (not QuotaOperation.canAbort(op)) return #Err("Already finalized; retry finalize");
+    quota_operations.add(id, { op with status = #aborting });
+    let ?service = quotaService() else return #Err("Quota authority unset; retry abort");
+    try {
+      switch (await service.cancel_media_quota(id, op.club_id, op.category, op.bytes, op.cycle)) {
+        case (#Ok(r)) {
+          if (r.status != #released) return #Err("Reservation not released");
+          let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
+          quota_operations.add(id, { latest with status = #aborted });
+          pending_uploads := pending_uploads.filter(func(u) = u.id != id);
+          #Ok
+        };
+        case (#Err(message)) #Err(message)
+      }
+    } catch (_) { #Err("Quota release outcome unknown; retry abort") }
+  };
 
   type FreeUsageRow = { club_id : Text; cycle : Nat; category : Text; count : Nat; bytes : Nat64 };
   type MediaUsage = { category : Text; count : Nat; bytes : Nat64; count_limit : Nat; bytes_limit : ?Nat64 };
@@ -283,13 +443,24 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func begin_upload(path : Text, mime : Text, total_size : Nat64, chunk_count : Nat32) : async ResultUploadId {
     auth(caller);
+    if (quota_mode == #frozen) return #Err("Uploads temporarily frozen for quota cutover");
     if (path == "" or path.size() > 1_024 or mime.size() > 256) return #Err("Invalid path or MIME");
     if (total_size > UploadPolicy.maxWireBytes) return #Err("FileTooLarge");
     if (not UploadPolicy.validDeclaration(total_size, chunk_count.toNat())) return #Err("Invalid chunk declaration");
+    if (quota_mode == #sharedQuota) {
+      switch (pending_uploads.find(func(u) = u.path == path)) {
+        case (?upload) {
+          if (not upload.owner.equal(caller) or upload.mime != mime or upload.total_size != total_size or upload.chunk_count != chunk_count) return #Err("Upload already in progress for path");
+          if (quota_operations.get(upload.id) == null) return #Ok(upload.id);
+          return await reserveShared(upload)
+        };
+        case null {}
+      }
+    };
     // Sharding: refuse new bytes past the threshold so the app moves on to
     // the next photo store. Existing blobs stay readable forever.
     if (not canReserve(total_size)) return #Err("StoreFull");
-    if (not isGovernor<system>(caller)) {
+    if (quota_mode == #local and not isGovernor<system>(caller)) {
       let isPro = switch (clubIdFromPath(path), categoryForPath(path)) {
         case (?clubId, ?_) { await clubIsPro(clubId) };
         case _ { false };
@@ -301,6 +472,7 @@ persistent actor MediaBlobStore {
         case null {};
       };
     };
+    if (quota_mode == #frozen) return #Err("Uploads temporarily frozen for quota cutover");
     switch (findBlob(path)) {
       case (?existing) {
         if (not existing.owner.equal(caller) and not isGovernor<system>(caller)) {
@@ -316,7 +488,7 @@ persistent actor MediaBlobStore {
     if (pending_uploads.filter(func(item) { item.owner.equal(caller) }).size() >= UploadPolicy.maxPendingPerOwner) return #Err("Too many pending uploads");
     if (pending_uploads.any(func(item) { item.path == path })) return #Err("Upload already in progress for path");
     next_upload_seq += 1;
-    let id = "upload-" # Nat64.toText(next_upload_seq) # "-" # Principal.toText(caller);
+    let id = "upload-" # Nat64.toText(next_upload_seq);
     let upload : PendingUpload = {
       id;
       path;
@@ -327,6 +499,17 @@ persistent actor MediaBlobStore {
       chunks = Array.repeat<?Blob>(null, Nat32.toNat(chunk_count));
     };
     pending_uploads := pending_uploads.concat([upload]);
+    if (quota_mode == #sharedQuota) {
+      switch (categoryForPath(path), clubIdFromPath(path)) {
+        case (?category, ?club_id) {
+          if (quota_operations.size() >= 100_000) { pending_uploads := pending_uploads.filter(func(u) = u.id != id); return #Err("Upload outcome ledger full; retire terminal outcomes") };
+          let op : QuotaOperation.Operation = { owner = caller; path; club_id; category; bytes = total_size.toNat(); cycle = currentCycle(); created_at = Time.now(); status = #reserving; result = null };
+          quota_operations.add(id, op);
+          return await reserveShared(upload)
+        };
+        case _ {}
+      }
+    };
     #Ok(id)
   };
 
@@ -336,6 +519,7 @@ persistent actor MediaBlobStore {
       case null { #Err("Unknown upload") };
       case (?upload) {
         if (not upload.owner.equal(caller)) return #Err("Not the upload owner");
+        switch (quota_operations.get(upload_id)) { case (?op) { if (not QuotaOperation.canWrite(op)) return #Err("Upload is not writable") }; case null {} };
         if (index >= upload.chunk_count) return #Err("Chunk index out of range");
         let position = Nat32.toNat(index);
         let replaced = switch (upload.chunks[position]) { case (?bytes) bytes.size(); case null 0 };
@@ -353,6 +537,14 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func finalize_upload(upload_id : Text) : async ResultFinalized {
     auth(caller);
+    switch (quota_operations.get(upload_id)) {
+      case (?op) {
+        if (not op.owner.equal(caller)) return #Err("Not the upload owner");
+        if (op.status == #committed or op.status == #committing) return await commitShared(upload_id);
+        if (op.status != #uploading) return #Err("Upload not ready to finalize")
+      };
+      case null {}
+    };
     switch (findUpload(upload_id)) {
       case null { #Err("Unknown upload") };
       case (?upload) {
@@ -387,6 +579,15 @@ persistent actor MediaBlobStore {
           case _ {};
         };
         pending_uploads := pending_uploads.filter(func(item) { item.id != upload_id });
+        switch (quota_operations.get(upload_id)) {
+          case (?op) {
+            // Blob + result + intent commit atomically BEFORE the await.
+            // Aborting can no longer release this upload's allowance.
+            quota_operations.add(upload_id, { op with status = #committing; result = ?{ path = upload.path; content_hash; content_length = upload.total_size } });
+            return await commitShared(upload_id)
+          };
+          case null {}
+        };
         #Ok({
           path = upload.path;
           content_hash;
@@ -398,6 +599,13 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func abort_upload(upload_id : Text) : async Result {
     auth(caller);
+    switch (quota_operations.get(upload_id)) {
+      case (?op) {
+        if (not op.owner.equal(caller) and not isGovernor<system>(caller)) return #Err("Not the upload owner");
+        return await abortShared(upload_id)
+      };
+      case null {}
+    };
     switch (findUpload(upload_id)) {
       case null { #Err("Unknown upload") };
       case (?upload) {
@@ -424,6 +632,7 @@ persistent actor MediaBlobStore {
   public shared ({ caller }) func set_club_domain_canister(canister_id : Principal) : async Result {
     auth(caller);
     if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (quota_mode != #local and club_domain_canister != ?canister_id) return #Err("Quota authority immutable after freeze");
     club_domain_canister := ?canister_id;
     #Ok
   };
@@ -513,7 +722,7 @@ persistent actor MediaBlobStore {
   // Sharding: the app reads this to skip full stores and to show fullness in
   // Placement Settings. Public query — reveals only byte totals.
   public query func get_usage() : async Usage {
-    { total_bytes; capacity_limit_bytes = UploadPolicy.effectiveCapacity(capacity_limit_bytes); accepting_uploads = canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
+    { total_bytes; capacity_limit_bytes = UploadPolicy.effectiveCapacity(capacity_limit_bytes); accepting_uploads = quota_mode != #frozen and canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
   };
 
   // Governor-only. Setting a limit at or below the current total closes the
@@ -572,6 +781,9 @@ persistent actor MediaBlobStore {
     if (not dry_run) {
       blobs := newBlobs;
       pending_uploads := newPendingUploads;
+      var rekeys : [(Text, QuotaOperation.Operation)] = [];
+      for ((id, op) in quota_operations.entries()) { if (op.owner.equal(old)) rekeys := rekeys.concat([(id, { op with owner = new })]) };
+      for ((id, op) in rekeys.values()) quota_operations.add(id, op);
     };
 
     #ok(changed)

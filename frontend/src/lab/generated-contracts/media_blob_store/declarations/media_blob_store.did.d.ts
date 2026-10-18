@@ -15,6 +15,13 @@ export interface FinalizedBlob {
   'content_hash' : string,
   'content_length' : bigint,
 }
+export interface FreeUsageRow {
+  'count' : bigint,
+  'cycle' : bigint,
+  'category' : string,
+  'bytes' : bigint,
+  'club_id' : string,
+}
 export type HeaderField = [string, string];
 export interface Health {
   'total_bytes' : bigint,
@@ -61,9 +68,16 @@ export interface _SERVICE {
    */
   'cycles_balance' : ActorMethod<[], bigint>,
   'delete_blob' : ActorMethod<[string], Result>,
+  'enable_shared_media_quota' : ActorMethod<[], Result>,
   'finalize_upload' : ActorMethod<[string], ResultFinalized>,
+  'freeze_media_quota' : ActorMethod<[], Result>,
   'get_club_media_usage' : ActorMethod<[string], Array<MediaUsage>>,
   'get_content_hash' : ActorMethod<[string], [] | [string]>,
+  'get_upload_outcome' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [FinalizedBlob] } |
+      { 'Err' : string }
+  >,
   'get_usage' : ActorMethod<[], Usage>,
   'health' : ActorMethod<[], Health>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
@@ -77,10 +91,30 @@ export interface _SERVICE {
       { 'err' : string }
   >,
   'put_chunk' : ActorMethod<[string, number, Uint8Array], Result>,
+  'quota_snapshot_page' : ActorMethod<
+    [bigint],
+    {
+      'total' : bigint,
+      'pending' : bigint,
+      'rows' : Array<FreeUsageRow>,
+      'offset' : bigint,
+      'frozen' : boolean,
+    }
+  >,
+  'reconcile_upload_operations' : ActorMethod<
+    [string],
+    { 'Ok' : { 'attempted' : bigint, 'cursor' : string } } |
+      { 'Err' : string }
+  >,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
       { 'err' : string }
+  >,
+  'retire_upload_outcomes' : ActorMethod<
+    [string],
+    { 'Ok' : { 'cursor' : string, 'removed' : bigint } } |
+      { 'Err' : string }
   >,
   'set_capacity_limit' : ActorMethod<[bigint], Result>,
   'set_club_domain_canister' : ActorMethod<[Principal], Result>,

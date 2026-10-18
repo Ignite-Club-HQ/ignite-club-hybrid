@@ -68,31 +68,37 @@ describe("media_blob_store contract", () => {
       "begin_upload",
       "cycles_balance",
       "delete_blob",
+      "enable_shared_media_quota",
       "finalize_upload",
+      "freeze_media_quota",
       "get_club_media_usage",
       "get_content_hash",
+      "get_upload_outcome",
       "get_usage",
       "health",
       "http_request",
       "memory_stats",
       "merge_principal",
       "put_chunk",
+      "quota_snapshot_page",
+      "reconcile_upload_operations",
       "rekey_principal",
+      "retire_upload_outcomes",
       "set_capacity_limit",
       "set_club_domain_canister",
     ]);
   });
 
   it("keeps the upload protocol signatures stable", () => {
-    expect(fields.get("begin_upload")!.argTypes).toHaveLength(4); // path, mime, total_size, chunk_count
-    expect(fields.get("put_chunk")!.argTypes).toHaveLength(3); // upload_id, index, data
-    expect(fields.get("finalize_upload")!.argTypes).toHaveLength(1);
-    expect(fields.get("abort_upload")!.argTypes).toHaveLength(1);
+    expect(fields.get("begin_upload")?.argTypes).toHaveLength(4); // path, mime, total_size, chunk_count
+    expect(fields.get("put_chunk")?.argTypes).toHaveLength(3); // upload_id, index, data
+    expect(fields.get("finalize_upload")?.argTypes).toHaveLength(1);
+    expect(fields.get("abort_upload")?.argTypes).toHaveLength(1);
   });
 
   it("serves reads as queries so media delivery skips consensus", () => {
-    expect(fields.get("http_request")!.annotations).toContain("query");
-    expect(fields.get("get_content_hash")!.annotations).toContain("query");
-    expect(fields.get("health")!.annotations).toContain("query");
+    expect(fields.get("http_request")?.annotations).toContain("query");
+    expect(fields.get("get_content_hash")?.annotations).toContain("query");
+    expect(fields.get("health")?.annotations).toContain("query");
   });
 });
