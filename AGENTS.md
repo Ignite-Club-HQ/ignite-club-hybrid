@@ -42,6 +42,8 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 (https://skills.internetcomputer.org/.well-known/skills/{name}/SKILL.md) and follow
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
-- Web hosting: the static live build is served from an ICP certified-assets canister (deploy/frontend/icp.yaml, its own project so it never enters the backend ID table), built by frontend/scripts/prepare-canister-dist.mjs (_redirects SPA fallback + _headers CSP/cache) and deployed by .github/workflows/deploy-frontend-canister.yml. Why: removes runtime dependence on Netlify; Codemagic native builds stay bundled and unaffected.
+- Web hosting: separate ICP assets project deploy/frontend/icp.yaml, prepared by prepare-canister-dist.mjs and deployed by deploy-frontend-canister.yml. Why: no Netlify dependency; native bundles unchanged.
 - Memory uses deterministic warnings, not AI: static clients cannot hold secrets.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
+
+- ICP MCP OQL shares a bounded read-only interpreter; domain fields are allowlisted and caller authorization precedes filters, counts and paging. No self-calls. Why: preserve identity and prevent private-row/count leakage.
