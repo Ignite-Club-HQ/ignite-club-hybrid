@@ -1157,6 +1157,10 @@ type Main =
                                            Err: text;
                                            Ok: Season;
                                          });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    purge_expired_deletions: () -> (variant {
                                      Err: text;
                                      Ok: nat32;
