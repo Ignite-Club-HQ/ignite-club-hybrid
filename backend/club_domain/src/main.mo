@@ -20,6 +20,7 @@ import AccountErasure "accountErasure";
 import Oql "../../shared/Oql";
 import OqlClubs "oqlClubs";
 import MediaQuota "mediaQuota";
+import MediaQuotaCutover "mediaQuotaCutover";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -71,6 +72,7 @@ persistent actor class Main(governorInit : Principal) {
   // import and recoverable store-side sagas exist; existing stores unchanged.
   var mediaQuotaLedger : MediaQuota.Ledger;
   var mediaQuotaStores : [Principal];
+  var mediaQuotaCutover : MediaQuotaCutover.State;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -4265,6 +4267,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (store.equal(Principal.anonymous()) or store.equal(Principal.fromText("aaaaa-aa"))) return #Err("Invalid store");
     if (mediaQuotaStores.any(func(p) { p.equal(store) })) return #Ok;
+    if (mediaQuotaCutover.started) return #Err("Store registry sealed for cutover");
     if (mediaQuotaStores.size() >= 64) return #Err("Store registry full");
     mediaQuotaStores := mediaQuotaStores.concat([store]);
     #Ok
@@ -4289,6 +4292,60 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func get_prepared_media_quota(store : Principal, token : Text) : async { #Ok : ?MediaQuota.Reservation; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     #Ok(MediaQuota.status(mediaQuotaLedger, store, token))
+  };
+
+  // Registry sealing precedes store freezing. The ledger imports responses
+  // directly from each registered store, not governor-supplied row payloads.
+  public shared ({ caller }) func start_media_quota_cutover() : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (mediaQuotaStores.size() == 0) return #Err("Register every media store first");
+    mediaQuotaCutover.started := true;
+    #Ok
+  };
+  public shared ({ caller }) func import_media_quota_store(store : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not mediaQuotaCutover.started or mediaQuotaCutover.active or not mediaQuotaStores.any(func(p) = p.equal(store))) return #Err("Sealed registered store required");
+    let progress = MediaQuotaCutover.progress(mediaQuotaCutover, store);
+    if (progress.done) return #Ok;
+    let source : actor { quota_snapshot_page : shared Nat -> async MediaQuotaCutover.Page } = actor(store.toText());
+    try {
+      let page = await source.quota_snapshot_page(progress.offset);
+      if (mediaQuotaCutover.active) return #Err("Cutover already activated");
+      MediaQuotaCutover.applyPage(mediaQuotaCutover, store, page)
+    } catch (_) { #Err("Snapshot read failed; retry same cursor") }
+  };
+  public shared ({ caller }) func activate_media_quota() : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    MediaQuotaCutover.activate(mediaQuotaCutover, mediaQuotaStores)
+  };
+  public query ({ caller }) func media_quota_ready() : async Bool {
+    MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)
+  };
+  public query ({ caller }) func media_quota_cutover_status() : async { active : Bool; started : Bool; stores : [(Principal, MediaQuotaCutover.Progress)] } {
+    if (not isGovernor(caller)) Runtime.trap("Governor required");
+    { active = mediaQuotaCutover.active; started = mediaQuotaCutover.started; stores = mediaQuotaStores.map(func(p) = (p, MediaQuotaCutover.progress(mediaQuotaCutover, p))) }
+  };
+  public shared ({ caller }) func reserve_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
+    if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
+    // Old-cycle retries are allowed only for an existing immutable token.
+    // After terminal retirement, delayed old requests cannot allocate again.
+    if (MediaQuota.status(mediaQuotaCutover.ledger, caller, token) == null and cycle != Int.abs(Time.now()) / MediaQuota.cycleNs) return #Err("Stale reservation cycle");
+    if (not profiles.any(func(p) = p.id == club_id)) return #Err("Unknown club");
+    let pro = clubSubscriptions.any(func(s) = s.club_id == club_id and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial));
+    MediaQuota.reserve(mediaQuotaCutover.ledger, caller, token, club_id, category, bytes, cycle, pro)
+  };
+  public shared ({ caller }) func commit_media_quota(token : Text) : async MediaQuota.Result {
+    if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
+    MediaQuota.settle(mediaQuotaCutover.ledger, caller, token, true)
+  };
+  public shared ({ caller }) func cancel_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
+    if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
+    if (MediaQuota.status(mediaQuotaCutover.ledger, caller, token) == null and cycle + 1 < Int.abs(Time.now()) / MediaQuota.cycleNs) return #Err("Expired operation");
+    MediaQuota.cancel(mediaQuotaCutover.ledger, caller, token, club_id, category, bytes, cycle)
+  };
+  public shared ({ caller }) func retire_media_quota_records() : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(MediaQuota.retire(mediaQuotaCutover.ledger, Int.abs(Time.now()) / MediaQuota.cycleNs))
   };
 
   public shared ({ caller }) func save_club_subscription(item : Types.ClubSubscription) : async { #Ok : Types.ClubSubscription; #Err : Text } {
