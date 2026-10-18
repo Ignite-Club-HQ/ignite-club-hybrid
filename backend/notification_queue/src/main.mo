@@ -49,6 +49,11 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-set club_domain canister id, used to verify app_admin grants
   // for admin-only endpoints (push health, stale token cleanup).
   var clubDomainCanister : ?Principal;
+  // Governor-set identity_access canister id, used to bind the caller's
+  // principal to their app account id so inbox reads/mutations can verify
+  // ownership instead of trusting the browser-supplied `user` argument.
+  // Fail-closed while unset.
+  var identityAccessCanister : ?Principal;
   // Device push tokens owned by principal text (see Types.DeviceToken).
   // Caller-scoped writes; the delivery worker reads/prunes via worker-gated
   // methods below.
@@ -67,6 +72,33 @@ persistent actor class Main(governorInit : Principal) {
     if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
     clubDomainCanister := ?id;
     #Ok
+  };
+
+  public shared ({ caller }) func set_identity_access_canister(id : Principal) : async { #Ok; #Err : Text } {
+    governorOnly(caller);
+    if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
+    identityAccessCanister := ?id;
+    #Ok
+  };
+
+  // Resolve the caller's app account id via identity_access.whoami().
+  // Returns null while unconfigured or on any error — callers treat null as
+  // "ownership unproven" and refuse, so inbox data fails closed.
+  func callerAccountId(caller : Principal) : async ?Text {
+    switch (identityAccessCanister) {
+      case null { null };
+      case (?id) {
+        let identityAccess = actor (Principal.toText(id)) : actor {
+          whoami : shared query () -> async { #Ok : { id : Text }; #Err : Text };
+        };
+        try {
+          switch (await identityAccess.whoami()) {
+            case (#Ok(account)) { ?account.id };
+            case (#Err(_)) { null };
+          };
+        } catch (_) { null };
+      };
+    };
   };
 
   // Governor or club_domain app_admin grant. Fail-closed while
@@ -420,13 +452,18 @@ persistent actor class Main(governorInit : Principal) {
     };
     signals
   };
-  // NOTE: the `user` field carries the app's account id (a Text), not the
-  // caller's II principal, so the canister cannot verify inbox ownership.
-  // Provisional until account ids are bound to principals (identity_access).
+  // Inbox ownership is verified against the caller's account id resolved
+  // from identity_access — the browser-supplied `user` argument is never
+  // trusted on its own. These are update calls (not queries) because the
+  // ownership check awaits an inter-canister lookup.
 
-  public query ({ caller }) func list_inbox(user : Text, club : ?Text, limit : Nat16) : async Types.Results {
+  public shared ({ caller }) func list_inbox(user : Text, club : ?Text, limit : Nat16) : async Types.Results {
     authenticated(caller);
     if (limit == 0 or limit > 500) { return #Err("Invalid page size") };
+    switch (await callerAccountId(caller)) {
+      case null { return #Err("Account lookup unavailable") };
+      case (?accountId) { if (accountId != user) { return #Err("Not your inbox") } };
+    };
     var res : [Types.Notification] = [];
     for (item in items.values()) {
       let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
@@ -442,6 +479,10 @@ persistent actor class Main(governorInit : Principal) {
     switch (findIndex(id)) {
       case null { #Err("Unknown notification") };
       case (?index) {
+        switch (await callerAccountId(caller)) {
+          case null { return #Err("Account lookup unavailable") };
+          case (?accountId) { if (items[index].user != accountId) { return #Err("Not your notification") } };
+        };
         let updated : Types.Notification = { items[index] with read = true };
         replace(index, updated);
         #Ok(updated)
@@ -451,6 +492,10 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func mark_all_read(user : Text, club : ?Text) : async Types.ResultNat16 {
     authenticated(caller);
+    switch (await callerAccountId(caller)) {
+      case null { return #Err("Account lookup unavailable") };
+      case (?accountId) { if (accountId != user) { return #Err("Not your inbox") } };
+    };
     var marked : Nat16 = 0;
     var index = 0;
     for (item in items.values()) {
@@ -469,6 +514,10 @@ persistent actor class Main(governorInit : Principal) {
     switch (findIndex(id)) {
       case null { #Err("Unknown notification") };
       case (?index) {
+        switch (await callerAccountId(caller)) {
+          case null { return #Err("Account lookup unavailable") };
+          case (?accountId) { if (items[index].user != accountId) { return #Err("Not your notification") } };
+        };
         items := Array.tabulate<Types.Notification>(items.size() - 1, func(position) {
           if (position < index) { items[position] } else { items[position + 1] }
         });
@@ -552,9 +601,17 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func get_notification(id : Text) : async ?Types.Notification {
+  public shared ({ caller }) func get_notification(id : Text) : async ?Types.Notification {
     if (caller.equal(Principal.anonymous())) { return null };
-    get(id)
+    switch (get(id)) {
+      case null { null };
+      case (?item) {
+        switch (await callerAccountId(caller)) {
+          case null { null };
+          case (?accountId) { if (item.user == accountId) { ?item } else { null } };
+        };
+      };
+    };
   };
 
   public shared ({ caller }) func recover() : async Types.ResultNat16 {

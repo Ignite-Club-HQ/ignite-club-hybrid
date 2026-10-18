@@ -606,6 +606,7 @@ type Main =
                                                Err: text;
                                                Ok: nat64;
                                              });
+   getApiDoc: () -> (text) query;
    get_app_config: (key: text) -> (opt text) query;
    get_club_branding: (club_id: text) ->
     (variant {

@@ -408,6 +408,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    getApiDoc(): Promise<string>;
     get_active_game(team_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: ActiveGame | null;
@@ -1963,6 +1964,10 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.export_state();
         return from_candid_variant_n51(result);
+    }
+    async getApiDoc(): Promise<string> {
+        const result = await this.actor.getApiDoc();
+        return result;
     }
     async get_active_game(arg0: string | null): Promise<{
         __kind__: "Ok";

@@ -55,6 +55,7 @@ COMPETITION_DOMAIN="$(cid competition_domain)"
 MINI_LEAGUE_DOMAIN="$(cid mini_league_domain)"
 VAULT_DOMAIN="$(cid vault_domain)"
 PII_ACCESS_CONTROL="$(cid pii_access_control)"
+IDENTITY_ACCESS="$(cid identity_access)"
 
 echo "==> Wiring: timer_jobs.initialize() (first-caller-wins governor)"
 icp canister call timer_jobs initialize '()' -e "$ICP_ENV"
@@ -75,6 +76,9 @@ icp canister call events_domain set_notification_queue_canister "(principal \"$N
 
 echo "==> Wiring: notification_queue -> club_domain (app-admin gated push health/cleanup)"
 icp canister call notification_queue set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
+
+echo "==> Wiring: notification_queue -> identity_access (inbox ownership checks)"
+icp canister call notification_queue set_identity_access_canister "(principal \"$IDENTITY_ACCESS\")" -e "$ICP_ENV"
 
 # Push delivery worker grant — principal derived from ICP_PUSH_WORKER_SEED
 # (64 hex chars). Skip silently when the secret is not configured; the

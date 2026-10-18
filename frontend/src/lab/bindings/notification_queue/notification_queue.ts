@@ -239,6 +239,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_identity_access_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_messaging_domain_canister(id: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -646,6 +653,16 @@ export class Notification_queue implements notification_queueInterface {
         Err: string;
     }> {
         const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n26(result);
+    }
+    async set_identity_access_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_identity_access_canister(arg0);
         return from_candid_variant_n26(result);
     }
     async set_messaging_domain_canister(arg0: Principal): Promise<{

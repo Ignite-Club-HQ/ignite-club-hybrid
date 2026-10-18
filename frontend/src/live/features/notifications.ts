@@ -78,10 +78,11 @@ export async function getLiveNotification(ctx: FeatureBackendContext, notificati
 }
 
 /**
- * Browser inbox surface. The canister stores the app account id as plain
- * text and cannot verify it against the caller's principal — inbox reads and
- * mutations are provisional until account ids are bound to principals
- * (identity_access), matching the rest of the live feature layer.
+ * Browser inbox surface. The canister verifies ownership itself: it resolves
+ * the caller's account id via identity_access.whoami() and refuses reads or
+ * mutations for any other account, so the browser-supplied user id is never
+ * trusted on its own. Inbox reads are update calls (not queries) because the
+ * ownership check awaits that inter-canister lookup.
  */
 export async function listLiveInbox(
   ctx: FeatureBackendContext,

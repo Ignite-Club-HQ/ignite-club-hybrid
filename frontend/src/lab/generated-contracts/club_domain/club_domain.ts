@@ -594,6 +594,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    getApiDoc(): Promise<string>;
     get_app_config(key: string): Promise<string | null>;
     get_club_branding(club_id: string): Promise<{
         __kind__: "Ok";
@@ -2810,6 +2811,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.freeze_club(arg0, arg1);
         return from_candid_variant_n98(result);
+    }
+    async getApiDoc(): Promise<string> {
+        const result = await this.actor.getApiDoc();
+        return result;
     }
     async get_app_config(arg0: string): Promise<string | null> {
         const result = await this.actor.get_app_config(arg0);

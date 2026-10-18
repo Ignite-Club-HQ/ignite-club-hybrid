@@ -262,11 +262,7 @@ export const idlFactory = ({ IDL }) => {
         [DigestResults],
         ['query'],
       ),
-    'get_notification' : IDL.Func(
-        [IDL.Text],
-        [IDL.Opt(Notification)],
-        ['query'],
-      ),
+    'get_notification' : IDL.Func([IDL.Text], [IDL.Opt(Notification)], []),
     'get_preferences' : IDL.Func([IDL.Text], [Preferences], ['query']),
     'get_push_alert_settings' : IDL.Func([], [PushAlertSettings], ['query']),
     'get_push_delivery_health' : IDL.Func(
@@ -317,7 +313,7 @@ export const idlFactory = ({ IDL }) => {
     'list_inbox' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat16],
         [Results],
-        ['query'],
+        [],
       ),
     'list_preferences_by_club' : IDL.Func(
         [IDL.Text, IDL.Nat32, IDL.Nat32],
@@ -422,6 +418,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_identity_access_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

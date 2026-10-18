@@ -729,6 +729,7 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'getApiDoc' : IDL.Func([], [IDL.Text], ['query']),
     'get_active_game' : IDL.Func(
         [IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Opt(ActiveGame), 'Err' : IDL.Text })],
