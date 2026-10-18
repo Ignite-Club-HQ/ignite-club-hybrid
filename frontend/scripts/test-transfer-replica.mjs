@@ -49,7 +49,7 @@ try {
   const router = routerF.actor; router.setPrincipal(governor);
   const globalWid = (await pic.createCanister({ sender: governor, controllers: [governor], targetSubnetId: Principal.fromText(appSubnet) })).toText();
   const routerSteps = routerProvisionSteps(router, { secret_workload_identity: globalWid },
-    { targetAlias: 'local', deploymentId: 'local', deploymentRevision: 1n, host: 'http://localhost', networkKind: 'local_replica', primarySubnet: appSubnet, approvedSubnets: [appSubnet], additionalSubnetsEnabled: false },
+    { targetAlias: 'local', deploymentId: 'local', deploymentRevision: 1n, host: 'https://icp-api.io', networkKind: 'public_mainnet', primarySubnet: appSubnet, approvedSubnets: [appSubnet], additionalSubnetsEnabled: false },
     { maxClubs: 500, heapBudgetBytes: 3n * 1024n ** 3n, minCycles: 1_000_000_000n });
   let creates = 0; let provSaved = null;
   const provAdapter = {
