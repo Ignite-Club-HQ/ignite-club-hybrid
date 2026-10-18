@@ -60,7 +60,7 @@ describe("per-surface vault lifecycle wiring", () => {
       });
 
       it("marks the online insert path as confirmed delivery", () => {
-        expect(src).toMatch(/deliveredSend\(\)/);
+        expect(src).toMatch(/deliveredSend\((?:confirmedMessage \?\? undefined)?\)/);
       });
 
       it("retains the Vault destination context on the queued row", () => {
