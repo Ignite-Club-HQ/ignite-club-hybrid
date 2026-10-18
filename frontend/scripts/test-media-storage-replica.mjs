@@ -164,10 +164,11 @@ try {
   assert.ok('Err' in await actor.abort_upload(recoveryId));
   // Exactly three slots were consumed this cycle despite repeated operations.
   // Fill the seven remaining slots, then prove a retry never double-charged.
-  const remaining = await Promise.all(Array.from({ length: 7 }, (_, i) => actor.begin_upload(`clubs/c1/photos/recovery-cap-${i}.jpg`, 'image/jpeg', 1n, 1)));
-  for (const result of remaining) ok(result);
+  for (let i = 0; i < 7; i++) {
+    const id = ok(await actor.begin_upload(`clubs/c1/photos/recovery-cap-${i}.jpg`, 'image/jpeg', 1n, 1));
+    ok(await actor.put_chunk(id, 0, [46])); ok(await actor.finalize_upload(id));
+  }
   assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/recovery-over.jpg', 'image/jpeg', 1n, 1));
-  for (const result of remaining) ok(await actor.abort_upload(ok(result)));
   await pic.advanceTime(181 * 86_400_000); await pic.tick(10);
   const expired = await actor.http_request({ url: '/clubs/c1/photos/0.jpg', method: 'GET', headers: [], body: [] });
   assert.equal(expired.status_code, 404, 'known-free club ciphertext must expire after six months');
