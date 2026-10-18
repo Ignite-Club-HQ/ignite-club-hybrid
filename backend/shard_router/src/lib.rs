@@ -595,7 +595,7 @@ async fn read_my_group_assignments(club_ids: Vec<String>, target_alias: String, 
 // competition other clubs have entered). Any signed-in caller may ask; only
 // the group id is returned and every destination canister keeps its own
 // access rules, so this never grants access to the club's data.
-#[ic_cdk::query]
+#[ic_cdk::update]
 fn read_hosted_club_assignment(club_id: String, target_alias: String, expected_revision: u64) -> Outcome<GroupAssignment> {
     if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
     hosted_assignment(&club_id, &target_alias, expected_revision, current_revision())

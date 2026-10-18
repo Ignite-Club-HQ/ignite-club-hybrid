@@ -118,7 +118,7 @@ service : (Init) -> {
   // Public: live memory reading for the admin health page.
   memory_stats : () -> (MemoryStats) query;
   read_group_registry : (text) -> (Result_13);
-  read_hosted_club_assignment : (text, text, nat64) -> (Result_15) query;
+  read_hosted_club_assignment : (text, text, nat64) -> (Result_15);
   read_my_group_assignments : (vec text, text, nat64) -> (Result_14);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   register_group : (ShardGroup, nat64) -> (Result);
