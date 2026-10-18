@@ -45,7 +45,7 @@ export const useGroupLocalMessagesSync = ({
     });
 
     setLocalMessages((prev) => {
-      const incomingIds = new Set(messages.map((message) => message.id));
+      const incomingIds = new Set(messages.flatMap((message) => [message.id, (message as { optimistic_id?: string }).optimistic_id].filter(Boolean)));
       const realByAuthorText = new Set(
         messages
           .filter((m: any) => !m.id.startsWith("temp-") && !m.id.startsWith("queued-"))

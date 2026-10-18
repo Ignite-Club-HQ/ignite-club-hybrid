@@ -1,4 +1,5 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
+import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import React, { Suspense, useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";
@@ -858,7 +859,7 @@ export default function ClubChatPage() {
     if (!messages || !clubId || (messages.length === 0 && localMessages && localMessages.length > 0)) return;
 
     setLocalMessages((prev) => {
-      const incomingIds = new Set(messages.map((message) => message.id));
+      const incomingIds = new Set(messages.flatMap((message) => [message.id, (message as { optimistic_id?: string }).optimistic_id].filter(Boolean)));
       const realByAuthorText = new Set(
         messages
           .filter((m: any) => !m.id.startsWith("temp-") && !m.id.startsWith("queued-"))
@@ -1493,16 +1494,17 @@ export default function ClubChatPage() {
         return queuedSend();
       }
       
-      await withFeatureBackend("messaging", {
+      const confirmedMessage = await withFeatureBackend("messaging", {
         supabase: async () => {
-          const { error } = await supabase.from("club_messages").insert({
+          const { data, error } = await supabase.from("club_messages").insert({
             text,
             club_id: clubId!,
             author_id: user!.id,
             image_url,
             reply_to_id,
-          });
+          }).select("id, text, image_url, created_at").single();
           if (error) throw error;
+          return data;
         },
         icp: async (ctx) => {
           // Club id doubles as the conversation id (deterministic on the
@@ -1517,11 +1519,12 @@ export default function ClubChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
+          const saved = await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, clubId!, user!.id).catch(() => { /* best-effort engagement counter */ });
+          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };
         },
       });
-      return deliveredSend();
+      return deliveredSend(confirmedMessage ?? undefined);
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
       const currentProfile = profileRef.current;
@@ -1623,7 +1626,11 @@ export default function ClubChatPage() {
       });
     },
 
-    onSuccess: (result, variables) => {
+    onSuccess: (result, variables, context) => {
+      if (result?.confirmedMessage && context?.tempId) {
+        confirmPendingSend(queryClient, ["club-messages", clubId], context.tempId, result.confirmedMessage);
+        setLocalMessages((prev) => prev?.filter((row) => row.id !== context.tempId));
+      }
       if (isConfirmedDelivery(result)) syncSendToVault(variables);
       // ICP has no realtime push: refetch now so the optimistic row is
       // swapped for the canister row (real id) before the user reacts to it.

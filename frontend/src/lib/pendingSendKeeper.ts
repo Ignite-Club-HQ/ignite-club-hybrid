@@ -8,13 +8,35 @@ import type { QueryClient } from "@tanstack/react-query";
  * and put them back when a fetched snapshot lacks them and no real matching
  * message has arrived yet.
  */
-type Row = { id: string; author_id?: string; text?: string | null; image_url?: string | null };
+type Row = { id: string; author_id?: string; text?: string | null; image_url?: string | null; optimistic_id?: string };
 type Tracked = { row: Row; at: number };
 
 const MAX_AGE_MS = 3 * 60_000;
 
 const isTemp = (id: unknown) => typeof id === "string" && id.startsWith("temp-");
-const sig = (m: Row) => `${m.author_id}::${m.text ?? ""}::${m.image_url ? "img" : ""}`;
+const sig = (m: Row) => `${m.author_id}::${(m.text ?? "").trim()}::${m.image_url ?? ""}`;
+
+const keepers = new WeakMap<QueryClient, Map<string, Map<string, Tracked>>>();
+
+/** Settle exactly this send from the server acknowledgement, even after unmount. */
+export function confirmPendingSend(
+  queryClient: QueryClient,
+  queryKey: readonly unknown[],
+  tempId: string,
+  saved: { id: string; text: string; image_url: string | null; created_at: string },
+): void {
+  const query = queryClient.getQueryCache().find({ queryKey, exact: true });
+  if (query) keepers.get(queryClient)?.get(query.queryHash)?.delete(tempId);
+  queryClient.setQueryData(queryKey, (old: { messages: Row[] } | undefined) => {
+    if (!old) return old;
+    const preview = old.messages.find((row) => row.id === tempId);
+    const messages = old.messages.filter((row) => row.id !== tempId);
+    const existing = messages.findIndex((row) => row.id === saved.id);
+    if (existing >= 0) messages[existing] = { ...messages[existing], optimistic_id: tempId };
+    else if (preview) messages.push({ ...preview, ...saved, optimistic_id: tempId });
+    return { ...old, messages };
+  });
+}
 
 /** Pure merge used by the keeper; exported for tests. */
 export function mergePendingRows(messages: Row[], pending: Row[]): Row[] | null {
@@ -30,7 +52,9 @@ export function mergePendingRows(messages: Row[], pending: Row[]): Row[] | null 
 }
 
 export function installPendingSendKeeper(queryClient: QueryClient): void {
+  if (keepers.has(queryClient)) return;
   const tracked = new Map<string, Map<string, Tracked>>();
+  keepers.set(queryClient, tracked);
   queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated") return;
     const query = event.query;

@@ -1,5 +1,8 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [x] 15. Chat photo sends settle from server acknowledgements in Team/Club/Group chats; pending recovery uses trimmed text and attachment identity. Navigation/concurrent-send and local rendering regressions pass: 128 tests in each backend mode; preview build OK.
+- [ ] 16. USER ACTION: deploy the updated frontend and rebuild/install Android; verify an Internet Identity photo send and reopening on the device. No signed-in ICP session is available here for live verification.
+
 - [x] 14. Recover stopped frontend before syncing existing assets; remove destructive reinstall fallback. Offline regression tests pass. Live recovery and funding require the deployer workflow/account.
 
 - [x] 13. Correct frontend balance grant: verified and pinned ICP CLI 1.7.0, use `canister settings update --add-controller --force`, test failure propagation. Live grant requires rerunning the frontend workflow with this change.
