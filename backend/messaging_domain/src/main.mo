@@ -42,6 +42,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  var transferFences : [Text];
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -252,6 +253,55 @@ persistent actor class Main(governorInit : Principal) {
   func validAttachment(attachment : Types.Attachment) : Bool {
     valid(attachment.kind) and valid(attachment.ref_id) and
     (switch (attachment.url) { case null { true }; case (?url) { url.size() <= 2048 } })
+  };
+
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Hard checks on the main write paths; the ingress inspect gate is advisory.
+  // The transfer runner re-digests before cutover to catch anything else.
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func blobContainsText(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(needle.encodeUtf8());
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or isGovernor(caller)) return true;
+    not transferFences.any(func(c) = blobContainsText(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  type ChatPage = { conversations : [Types.Conversation]; messages : [Types.Message]; next : ?Nat };
+  // Paged: conversations are returned on the first page; messages in order.
+  public query ({ caller }) func export_club_snapshot_page(club : Text, offset : Nat, limit : Nat) : async { #Ok : Blob; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    let convs = conversations.filter(func(c) = c.club_id == club);
+    let msgs = messages.filter(func(m) = convs.any(func(c) = c.id == m.conversation_id));
+    let cap = Nat.min(limit, 500); let end = Nat.min(offset + cap, msgs.size());
+    let page : ChatPage = { conversations = if (offset == 0) convs else []; messages = if (offset >= msgs.size()) [] else msgs.sliceToArray(offset, end);
+      next = if (end < msgs.size()) ?end else null };
+    #Ok(to_candid (page))
+  };
+  public shared ({ caller }) func import_club_snapshot_page(club : Text, page_blob : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?ChatPage = from_candid (page_blob);
+    let page = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot page") };
+    if (page.conversations.any(func(c) = c.club_id != club)) return #Err("Snapshot contains foreign records");
+    if (page.conversations.any(func(c) = conversations.any(func(x) = x.id == c.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    conversations := conversations.filter(func(c) = not page.conversations.any(func(y) = y.id == c.id)).concat(page.conversations);
+    let known = func(id : Text) : Bool = conversations.any(func(c) = c.id == id and c.club_id == club);
+    if (page.messages.any(func(m) = not known(m.conversation_id))) return #Err("Message for unknown conversation");
+    // Idempotent per message id: re-importing a page never duplicates.
+    messages := messages.filter(func(m) = not page.messages.any(func(y) = y.id == m.id)).concat(page.messages);
+    #Ok(page.messages.size())
   };
 
   func isGovernor(caller : Principal) : Bool {
@@ -1093,6 +1143,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
+    switch (conversations.find(func(c) = c.id == conversation_id)) { case (?c) { if (isFenced(c.club_id)) return #Err("Club is temporarily locked for a transfer"); }; case null {} };
     await* sendAs(caller, conversation_id, body, idempotency_key, attachment, reply_to_id)
   };
 

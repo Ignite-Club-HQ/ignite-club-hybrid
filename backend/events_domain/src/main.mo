@@ -68,6 +68,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  var transferFences : [Text];
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -213,6 +214,51 @@ persistent actor class Main(governorInit : Principal) {
       last_event_at_ms = nowMs(); updated_by = caller;
     }
   };
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Hard checks on the main write paths; the ingress inspect gate is advisory.
+  // The transfer runner re-digests before cutover to catch anything else.
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func blobContainsText(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(needle.encodeUtf8());
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or isGovernor(caller)) return true;
+    not transferFences.any(func(c) = blobContainsText(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries] };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    let evs = events.filter(func(e) = e.club_id == club);
+    let snap : EventsSnapshot = { events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
+      series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)) };
+    #Ok(to_candid (snap))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?EventsSnapshot = from_candid (snapshot);
+    let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (snap.events.any(func(e) = e.club_id != club) or snap.rsvps.any(func(r) = not snap.events.any(func(e) = e.id == r.event_id))) return #Err("Snapshot contains foreign records");
+    if (snap.events.any(func(e) = events.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    let ids = events.filter(func(e) = e.club_id == club).map(func(e) = e.id);
+    rsvps := rsvps.filter(func(r) = not ids.any(func(i) = i == r.event_id)).concat(snap.rsvps);
+    series := series.filter(func(x) = not snap.series.any(func(y) = y.id == x.id)).concat(snap.series);
+    events := events.filter(func(e) = e.club_id != club).concat(snap.events);
+    #Ok(snap.events.size() + snap.rsvps.size())
+  };
+
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
   };
@@ -344,7 +390,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : Types.Event; #Err : Text } {
-    auth(caller); await syncRolesFromClubDomain(caller, club_id); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or not validRsvpAudience(rsvp_audience) or not validRsvpPolicyLists(restricted_to_roles, target_team_ids) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
+    auth(caller); if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer"); await syncRolesFromClubDomain(caller, club_id); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or not validRsvpAudience(rsvp_audience) or not validRsvpPolicyLists(restricted_to_roles, target_team_ids) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
@@ -630,6 +676,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : Types.Event; #Err : Text } {
     auth(caller);
+    switch (events.find(func(e) = e.id == id)) { case (?e) { if (isFenced(e.club_id)) return #Err("Club is temporarily locked for a transfer"); }; case null {} };
     switch (events.find(func(e) = e.id == id)) { case (?e) { await syncRolesFromClubDomain(caller, e.club_id) }; case null {} };
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);

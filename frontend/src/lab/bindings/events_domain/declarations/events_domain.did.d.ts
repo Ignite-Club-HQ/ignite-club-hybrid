@@ -510,6 +510,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'execute' : ActorMethod<[string], Result>,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<
     [],
     {
@@ -665,6 +670,11 @@ export interface Main {
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   /**
@@ -1144,6 +1154,11 @@ export interface Main {
   >,
   'set_training_default' : ActorMethod<
     [string, string, [] | [string], string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
