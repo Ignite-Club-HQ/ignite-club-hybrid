@@ -21,7 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { SPORT_EMOJIS, getSportEmoji } from "@/lib/sportEmojis";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { createLiveClub, requestLiveClubJoin } from "@/live/features/club";
 import { addLiveRoleGrant } from "@/live/features/membership";
 
@@ -266,7 +266,7 @@ export default function FindOrCreateClubWizard({
             throw new Error("Failed to send join request. Please try again.");
           }
         },
-      });
+      }, writeOnce({ clubId: club.id! }));
     } catch (e) {
       setSendingRequest(false);
       toast({

@@ -113,7 +113,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
               display_order: Number(r.sort_order),
             }) as unknown as Sponsor);
         },
-      });
+      }, { clubId: clubId! });
     },
   });
 
@@ -211,7 +211,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
           };
           await saveLiveSponsor(ctx, sponsor);
         },
-      });
+      }, { clubId: clubId! });
     },
     onSuccess: () => {
       invalidateSponsorQueries();
@@ -290,7 +290,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
               };
           await saveLiveSponsor(ctx, sponsor);
         },
-      });
+      }, { clubId: clubId! });
     },
     onSuccess: () => {
       invalidateSponsorQueries();
@@ -349,7 +349,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
         if (!existing) throw new Error("Sponsor not found");
         await saveLiveSponsor(ctx, { ...existing, [field]: value });
       },
-    });
+    }, { clubId: clubId! });
 
   const toggleOptimistic = {
     onMutate: async ({ id, value, field }: { id: string; value: boolean; field: "is_active" | "is_team_only" }) => {

@@ -81,7 +81,7 @@ function SupabaseSeasonDetailPage() {
           const s = seasons.find((x) => x.id === seasonId);
           return s ? mapLiveSeason(s as any) : null;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!seasonId,
   });
@@ -99,7 +99,7 @@ function SupabaseSeasonDetailPage() {
           const rows = await getLiveClubProfile(ctx, clubId);
           return rows.length ? { id: rows[0].id, name: rows[0].name } : null;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -129,7 +129,7 @@ function SupabaseSeasonDetailPage() {
               lifecycle_status: t.lifecycle_status ?? (t.archived ? "archived" : "active"),
             }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!seasonId,
   });

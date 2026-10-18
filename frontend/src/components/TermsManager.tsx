@@ -93,7 +93,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
             })
             .sort((a, b) => b.start_date.localeCompare(a.start_date));
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   const saveMutation = useMutation({

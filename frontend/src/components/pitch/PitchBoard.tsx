@@ -1298,7 +1298,7 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
               relatedId: teamId,
             });
           },
-        });
+        }, { teamId: teamId! });
       } catch (error) {
         console.error("Failed to send ICP formation change notification:", error);
       }

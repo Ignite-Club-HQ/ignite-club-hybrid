@@ -171,7 +171,7 @@ export default function TeamJoinLinkCard({
         }
         return map;
       },
-    }),
+    }, { teamId: teamId! }),
     staleTime: 30_000,
   });
 

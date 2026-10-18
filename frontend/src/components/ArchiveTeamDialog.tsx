@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { archiveLiveTeam, unarchiveLiveTeam } from "@/live/features/club";
 
 interface ArchiveTeamDialogProps {
@@ -63,7 +63,7 @@ export function ArchiveTeamDialog({
         icp: async (ctx) => {
           await archiveLiveTeam(ctx, teamId);
         },
-      });
+      }, writeOnce({ teamId: teamId! }));
     } catch (error) {
       setLoading(false);
       toast({ title: "Failed to archive team", description: (error as Error).message, variant: "destructive" });
@@ -94,7 +94,7 @@ export function ArchiveTeamDialog({
         icp: async (ctx) => {
           await unarchiveLiveTeam(ctx, teamId);
         },
-      });
+      }, writeOnce({ teamId: teamId! }));
     } catch (error) {
       setLoading(false);
       toast({ title: "Failed to reinstate team", description: (error as Error).message, variant: "destructive" });

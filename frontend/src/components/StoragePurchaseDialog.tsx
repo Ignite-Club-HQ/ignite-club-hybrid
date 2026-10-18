@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { redeemLiveClubStoragePromoCode } from "@/live/features/promoCodes";
 import { toast } from "sonner";
 import { SubscriptionLegalLinks } from "@/components/SubscriptionLegalLinks";
@@ -142,7 +142,7 @@ export function StoragePurchaseDialog({
             throw new Error("Promo codes are unavailable right now. Please try again.");
           },
           icp: (ctx) => redeemLiveClubStoragePromoCode(ctx, { code, clubId }),
-        });
+        }, writeOnce({ clubId: clubId! }));
         return { storageGb: newTotal - (purchasedStorageGb || 0), newTotal };
       }
       // Validate promo code

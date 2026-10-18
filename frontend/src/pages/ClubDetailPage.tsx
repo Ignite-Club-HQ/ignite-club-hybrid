@@ -106,7 +106,7 @@ import ClubCompetitionsSection from "@/components/competitions/ClubCompetitionsS
 import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, getLiveClubSettings, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
 import { markTeamDeleted, unmarkTeamDeleted } from "@/lib/deletedTeamTombstones";
 import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";
@@ -650,7 +650,7 @@ export default function ClubDetailPage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => { await setLiveTeamFolder(ctx, teamId, folderId); },
-        });
+        }, writeOnce({ teamId: teamId! }));
         return;
       }
       const { error } = await supabase
@@ -686,7 +686,7 @@ export default function ClubDetailPage() {
               created_at_ms: BigInt(Date.now()),
             });
           },
-        });
+        }, writeOnce({ clubId: id! }));
         return;
       }
       const { error } = await supabase.from("team_folders").insert({
@@ -729,7 +729,7 @@ export default function ClubDetailPage() {
                 : BigInt(Date.now()),
             });
           },
-        });
+        }, writeOnce({ clubId: id! }));
         return;
       }
       const { error } = await supabase

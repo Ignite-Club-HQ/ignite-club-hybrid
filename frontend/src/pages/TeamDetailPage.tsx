@@ -85,7 +85,7 @@ import { friendlyQueryError, friendlyQueryErrorMessage } from "@/lib/friendlyQue
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import {
   softDeleteLiveTeam,
   restoreLiveTeam,
@@ -583,7 +583,7 @@ export default function TeamDetailPage() {
               disable_team_pom_rewards: false,
             };
           },
-        });
+        }, { clubId: team?.club_id as string });
       }
 
       const { data, error } = await supabase
@@ -1156,7 +1156,7 @@ export default function TeamDetailPage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => { await requestLiveRole(ctx, team!.club_id, selectedRole, id!); },
-        });
+        }, writeOnce({ clubId: team?.club_id as string }));
         return;
       }
       const metadata: Record<string, any> = {};
@@ -2147,7 +2147,7 @@ export default function TeamDetailPage() {
                   console.error("Failed to send ICP notification:", e);
                 }
               },
-            });
+            }, writeOnce({ clubId: team?.club_id as string }));
             refreshRemovedTeamMember(queryClient, id);
             toast({ title: "Member removed" });
           } catch (error: any) {

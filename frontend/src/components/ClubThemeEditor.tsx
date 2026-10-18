@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import {
   setLiveClubThemePalette,
   setLiveClubHeaderToggles,
@@ -311,7 +311,7 @@ export function ClubThemeEditor({
           await setLiveClubLogoOnlyMode(ctx, clubId, logoOnlyMode);
           await setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, showNameInHeader);
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
       await await onSave?.();
     } catch (e: any) {
       toast({
@@ -377,7 +377,7 @@ export function ClubThemeEditor({
         icp: async (ctx) => {
           await clearLiveClubTheme(ctx, clubId);
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
       await await onSave?.();
     } catch (e: any) {
       setSaving(false);
@@ -447,7 +447,7 @@ export function ClubThemeEditor({
                   icp: async (ctx) => {
                     await setLiveClubThemeEnabled(ctx, clubId, checked);
                   },
-                });
+                }, writeOnce({ clubId: clubId! }));
                 await await onSave?.();
               } catch {
                 setSaving(false);
@@ -602,7 +602,7 @@ export function ClubThemeEditor({
                       await setLiveClubHeaderToggles(ctx, clubId, true, showNameInHeader);
                     }
                   },
-                });
+                }, writeOnce({ clubId: clubId! }));
                 await await onSave?.();
               } catch {
                 setSaving(false);
@@ -655,7 +655,7 @@ export function ClubThemeEditor({
                     if (error) throw error;
                   },
                   icp: async (ctx) => { await setLiveClubHeaderToggles(ctx, clubId, checked, showNameInHeader); },
-                });
+                }, writeOnce({ clubId: clubId! }));
                 await await onSave?.();
               } catch {
                 setSaving(false);
@@ -707,7 +707,7 @@ export function ClubThemeEditor({
                     if (error) throw error;
                   },
                   icp: async (ctx) => { await setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, checked); },
-                });
+                }, writeOnce({ clubId: clubId! }));
                 await await onSave?.();
               } catch {
                 setSaving(false);

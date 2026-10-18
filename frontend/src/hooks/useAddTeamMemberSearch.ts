@@ -177,7 +177,7 @@ export function useAddTeamMemberSearch({
               childName: null as string | null,
             }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: debouncedNameInput.length >= 2,
   });
@@ -228,7 +228,7 @@ export function useAddTeamMemberSearch({
           }
           return identities;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: identityLookupIds.length > 0 && !!clubId,
     staleTime: 60 * 1000,

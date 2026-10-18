@@ -127,7 +127,7 @@ export async function lookupInvitableUserByEmail(opts: {
         already_in_mini_league: false,
       };
     },
-  });
+  }, { clubId: opts.clubId! });
 }
 
 /**

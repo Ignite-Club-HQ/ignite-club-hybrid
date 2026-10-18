@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 
 interface Props {
   teamId: string;
@@ -62,7 +62,7 @@ export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
               const { getLiveTeamPitchNotify } = await import("@/live/features/club");
               return getLiveTeamPitchNotify(ctx, teamId);
             },
-          });
+          }, { teamId: teamId! });
           if (cancelled) return;
           if (f) setValues({ coach: f.coach, team_admin: f.team_admin, subs_manager: f.subs_manager });
         } catch (e) {
@@ -102,7 +102,7 @@ export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
             const { setLiveTeamPitchNotify } = await import("@/live/features/club");
             await setLiveTeamPitchNotify(ctx, teamId, nextValues);
           },
-        });
+        }, writeOnce({ teamId: teamId! }));
         return;
       }
       const { error } = await supabase

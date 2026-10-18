@@ -121,7 +121,7 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
           const settingsOpt = await getLiveClubSettings(ctx, clubId!);
           return !!settingsOpt[0]?.chat_thread_ads_enabled;
         },
-      });
+      }, { clubId: clubId! });
       return { chat_thread_ads_enabled: enabled };
     },
   });
@@ -172,7 +172,7 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
           return !!data?.is_pro;
         },
         icp: async (ctx) => isLiveClubPro(ctx, clubId!),
-      }),
+      }, { clubId: clubId! }),
   });
 
   // 4a. Pro path — fetch this club's active sponsors (with tier for weighted rotation)
@@ -203,7 +203,7 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
               website_url: r.website_url[0] ?? null,
               tier: r.tier as SponsorTier,
             })),
-      }),
+      }, { clubId: clubId! }),
   });
 
   // 4b. Free path — fetch active app ads

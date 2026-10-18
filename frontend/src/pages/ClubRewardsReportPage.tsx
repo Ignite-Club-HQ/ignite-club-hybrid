@@ -150,7 +150,7 @@ export default function ClubRewardsReportPage() {
           const teams = await listLiveTeams(ctx, clubId!);
           return teams.map(t => ({ id: t.id, name: t.name }));
         }
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId && hasPro,
   });
@@ -179,7 +179,7 @@ export default function ClubRewardsReportPage() {
           const profile = profileOpt[0];
           return profile ? { name: profile.name } : null;
         }
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });

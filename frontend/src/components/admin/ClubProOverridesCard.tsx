@@ -84,7 +84,7 @@ export function ClubProOverridesCard() {
             activated_at_ms: pro && base.activated_at_ms.length === 0 ? [BigInt(Date.now())] : base.activated_at_ms,
           });
         },
-      });
+      }, { clubId: club.id! });
       qc.invalidateQueries();
       toast.success(`${club.name}: Pro ${pro ? "on" : "off"} — desktop unlocked`);
     } catch (e) {

@@ -49,7 +49,7 @@ export function useClubProAccess(
             hasProFootball: Boolean(sub?.is_pro_football || sub?.admin_pro_football_override),
           };
         },
-      });
+      }, { clubId: clubId! });
     },
   });
   const { data, isLoading, isFetched } = useQuery({

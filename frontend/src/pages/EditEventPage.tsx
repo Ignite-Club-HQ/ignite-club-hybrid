@@ -696,7 +696,7 @@ function SupabaseEditEventPage() {
         return withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await listLiveTeams(ctx, selectedClubId)).filter((t) => !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name, club_id: t.club_id, default_match_arrival_minutes: null })),
-        });
+        }, { clubId: selectedClubId! });
       }
       const { data } = await supabase
         .from("teams")

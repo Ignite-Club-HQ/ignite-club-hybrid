@@ -296,7 +296,7 @@ export function useClubTeamsForNews(clubId?: string | null) {
           const teams = await listLiveTeams(ctx, clubId!);
           return teams.map(t => ({ id: t.id, name: t.name }));
         }
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
     staleTime: 5 * 60 * 1000,

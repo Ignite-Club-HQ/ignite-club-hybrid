@@ -18,7 +18,7 @@ export async function listIcpTeamMemberRoles(teamId: string, memberId: string) {
         .filter((g) => String(g.user?.toText?.() ?? g.user) === target && opt(g.team) === teamId)
         .map((g) => ({ id: `${teamId}:${g.role}`, role: String(g.role) }));
     },
-  });
+  }, { teamId: teamId! });
 }
 
 export async function removeIcpTeamRoles(clubId: string, teamId: string, memberId: string, roles: string[]) {

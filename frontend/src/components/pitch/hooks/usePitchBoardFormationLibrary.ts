@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Canvas as FabricCanvas } from "fabric";
 import { useToast } from "@/hooks/use-toast";
 import { Player, TeamSize, getPositionFromCoords } from "@/components/pitch/types";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 
 // Minimal structural surface this hook needs from the Supabase client, so the
 // caller can pass its existing client instance without this module adding
@@ -87,7 +87,7 @@ export function usePitchBoardFormationLibrary({
             }))
             .sort((a, b) => b.created_at.localeCompare(a.created_at));
         },
-      }),
+      }, { teamId: teamId! }),
     enabled: saveDialogOpen || loadDialogOpen, // Only fetch when dialogs are open
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
@@ -125,7 +125,7 @@ export function usePitchBoardFormationLibrary({
           const { saveLivePitchFormation } = await import("@/live/features/club");
           await saveLivePitchFormation(ctx, teamId, name, parseInt(teamSize), JSON.stringify(formationData), drawingData);
         },
-      });
+      }, writeOnce({ teamId: teamId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pitch-formations", teamId] });

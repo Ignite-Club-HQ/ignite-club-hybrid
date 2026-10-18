@@ -385,7 +385,7 @@ export default function ClubChatPage() {
               is_pro: false,
             };
           },
-        });
+        }, { clubId: clubId! });
       }
 
       const { data, error } = await supabase
@@ -462,7 +462,7 @@ export default function ClubChatPage() {
               expires_at: row.expires_at_ms.length ? new Date(Number(row.expires_at_ms[0])).toISOString() : null,
             };
           },
-        });
+        }, { clubId: clubId! });
       }
 
       const { data } = await supabase

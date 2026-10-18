@@ -561,7 +561,7 @@ function SupabaseCreateEventPage() {
         // Canister Pro flags: team grant -> club grant -> caller IAP, same as
         // the event detail and attendance pages.
         icp: async (ctx) => resolveLiveProFootballAccess(ctx, { teamId: null, clubId }),
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
     placeholderData: false, // Prevent undefined state causing delayed render
   });
@@ -659,7 +659,7 @@ function SupabaseCreateEventPage() {
           }
           return [];
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId && userTeamIds !== undefined,
   });
@@ -686,7 +686,7 @@ function SupabaseCreateEventPage() {
             .map((t) => ({ id: t.id, name: t.name }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
   });
 

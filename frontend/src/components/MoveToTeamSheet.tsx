@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { moveLiveMemberToTeam, moveLiveChildToTeam } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 
@@ -94,7 +94,7 @@ export function MoveToTeamSheet({
             if (error) throw error;
           }
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       const targetTeam = teams.find((t) => t.id === selectedTeamId);

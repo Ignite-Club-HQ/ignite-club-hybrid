@@ -21,7 +21,7 @@ import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
 // (ICP routing import removed: email sends now work in both modes — the
 // send-email edge function is anon-key callable.)
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { getLiveClubBranding, createLivePendingInvite } from "@/live/features/club";
 import {
   listLiveRoleGrants,
@@ -104,7 +104,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
             .filter((g) => g.team.length === 0)
             .map((g) => g.account_id);
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
   });
 
@@ -129,7 +129,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
             contact_email: branding.contact_email[0] ?? null,
           };
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
   });
 
@@ -287,7 +287,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
           const link = `${window.location.origin}/join/p/${invite.id}`;
           return { link, email: customEmail.trim(), inviteToken: invite.id };
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: async ({ link, email, inviteToken }) => {
       setInviteLink(link);

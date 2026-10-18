@@ -60,7 +60,7 @@ export function ClubTeamSponsorAllocator({ clubId }: ClubTeamSponsorAllocatorPro
             .filter((s) => s.is_active)
             .map((s): Sponsor => ({ id: s.id, name: s.name, logo_url: s.logo_url[0] ?? null }));
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   // Fetch all teams for the club
@@ -86,7 +86,7 @@ export function ClubTeamSponsorAllocator({ clubId }: ClubTeamSponsorAllocatorPro
             .map((t): Team => ({ id: t.id, name: t.name }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   // Fetch all allocations for teams in this club
@@ -109,7 +109,7 @@ export function ClubTeamSponsorAllocator({ clubId }: ClubTeamSponsorAllocatorPro
         icp: async (ctx) => {
           return listLiveTeamSponsorAllocations(ctx, clubId);
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: teams.length > 0,
   });
 

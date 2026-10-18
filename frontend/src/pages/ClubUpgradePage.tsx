@@ -218,7 +218,7 @@ export default function ClubUpgradePage() {
               class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, p.id))?.classModeEnabled ?? false,
             };
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data, error } = await supabase
         .from("clubs")
@@ -242,7 +242,7 @@ export default function ClubUpgradePage() {
             const teams = (await listLiveTeams(ctx, clubId!)) as unknown as { deleted_at_ms?: unknown[] }[];
             return teams.filter((team) => !(team.deleted_at_ms ?? []).length).length;
           },
-        });
+        }, { clubId: clubId! });
       }
       const { count, error } = await supabase
         .from("teams")
@@ -276,7 +276,7 @@ export default function ClubUpgradePage() {
               .filter((team) => !(team.deleted_at_ms ?? []).length)
               .map((team) => ({ id: team.id, name: team.name, logo_url: null, level_age: null }));
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data, error } = await supabase
         .from("teams")
@@ -311,7 +311,7 @@ export default function ClubUpgradePage() {
               trial_ends_at: row.trial_ends_at_ms.length ? new Date(Number(row.trial_ends_at_ms[0])).toISOString() : null,
             };
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data } = await supabase
         .from("club_subscriptions")

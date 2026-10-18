@@ -162,7 +162,7 @@ export function ClubSponsorSection({ clubId }: ClubSponsorSectionProps) {
 
           return result;
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId && !!user?.id,
   });
 

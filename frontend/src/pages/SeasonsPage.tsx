@@ -56,7 +56,7 @@ function SupabaseSeasonsPage() {
           const rows = await getLiveClubProfile(ctx, clubId);
           return rows.length ? { id: rows[0].id, name: rows[0].name, current_season_id: null } : null;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -78,7 +78,7 @@ function SupabaseSeasonsPage() {
           const me = ctx.identity.getPrincipal().toText();
           return grants.some((g: { account_id: string; role: string }) => g.account_id === me && (g.role === "club_admin" || g.role === "app_admin"));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!user?.id && !!clubId,
   });
@@ -116,7 +116,7 @@ function SupabaseSeasonsPage() {
           });
           return counts;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: seasonIds.length > 0,
   });

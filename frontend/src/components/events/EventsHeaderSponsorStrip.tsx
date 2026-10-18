@@ -171,7 +171,7 @@ export function EventsHeaderSponsorStrip({
           const sub = await getLiveClubSubscription(ctx, clubId!);
           return !!sub?.is_pro;
         },
-      });
+      }, { clubId: clubId! });
     },
   });
 
@@ -203,7 +203,7 @@ export function EventsHeaderSponsorStrip({
             }))
             .sort((a, b) => a.name.localeCompare(b.name)) as SponsorLite[];
         },
-      });
+      }, { clubId: clubId! });
     },
   });
 

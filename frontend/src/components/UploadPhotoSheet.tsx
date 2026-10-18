@@ -289,7 +289,7 @@ export function UploadPhotoSheet({
               .filter((t) => !t.deleted_at_ms.length && (canManageClub || ids.has(t.id)))
               .map((t) => ({ id: t.id, name: t.name, is_pro: true }));
           },
-        });
+        }, { clubId: selectedClubId! });
       }
       
       // Get user's team IDs from their roles

@@ -349,7 +349,7 @@ function SupabaseClubEngagementAnalyticsPage({
             const profile = opt[0];
             return profile ? { id: profile.id, name: profile.name } : null;
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data, error } = await supabase
         .from("clubs")

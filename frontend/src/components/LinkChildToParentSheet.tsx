@@ -13,7 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserCheck } from "lucide-react";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { adminLinkLiveChildToParent, setLiveGuardianRelationship } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 
@@ -101,7 +101,7 @@ export default function LinkChildToParentSheet({
           });
           if (error) throw error;
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       toast({

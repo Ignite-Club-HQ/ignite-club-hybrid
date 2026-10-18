@@ -73,7 +73,7 @@ export function OrphanEventsCard({ clubId }: Props) {
           });
           return out.sort((a, b) => a.event_date.localeCompare(b.event_date));
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   if (isLoading || events.length === 0) return null;

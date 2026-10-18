@@ -57,7 +57,7 @@ export function TeamSponsorSelector({
               .filter((s) => allocatedIds.has(s.id))
               .map((s) => ({ id: s.id, name: s.name, logo_url: s.logo_url[0] ?? null }));
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("team_sponsor_allocations")
@@ -93,7 +93,7 @@ export function TeamSponsorSelector({
               await setLiveTeamSponsorAllocation(ctx, sponsorId, teamId, true);
             }
           },
-        });
+        }, { teamId: teamId! });
         return;
       }
       const { error } = await supabase

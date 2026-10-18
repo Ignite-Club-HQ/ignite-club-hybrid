@@ -206,7 +206,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
               .filter((t: any) => !t.archived && t.id !== teamId)
               .map((t: any) => ({ id: t.id, name: t.name, is_archived: Boolean(t.archived) }));
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data, error } = await supabase
         .from("teams")
