@@ -54,7 +54,7 @@ export const EventLinkCard = memo(function EventLinkCard({ eventId }: EventLinkC
             is_cancelled: !!e.cancelled,
           };
         },
-      });
+      }, { eventId });
     },
     enabled: !!eventId,
     staleTime: 5 * 60 * 1000,

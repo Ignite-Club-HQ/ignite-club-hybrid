@@ -252,7 +252,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
             // only used by the Supabase update branch below, never on ICP.
             return rsvp ? { id: rsvp.event_id, status: rsvp.state } : null;
           },
-        });
+        }, { eventId: event.id });
       }
       const { data, error } = await supabase
         .from("rsvps")

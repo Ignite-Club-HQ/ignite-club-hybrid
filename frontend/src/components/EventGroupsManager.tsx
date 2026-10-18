@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Wand2, Loader2, X, Copy, Shirt, RefreshCw, Flame, MoreHorizontal, ChevronDown, ArrowRightLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { getLiveMiniLeague, listLivePlayers } from "@/live/features/miniLeagues";
 import {
   createLiveEventGroup,
@@ -352,7 +352,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         }));
         return map;
       },
-    }),
+    }, { eventId }),
   });
 
   // State for quick-assign (clicking a duty badge)
@@ -977,7 +977,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         icp: async (ctx) => {
           await deleteLiveEventGroup(ctx, groupId);
         },
-      });
+      }, writeOnce({ eventId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -1003,7 +1003,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             await deleteLiveEventGroup(ctx, groupId);
           }
         },
-      });
+      }, writeOnce({ eventId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -1038,7 +1038,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         icp: async (ctx) => {
           await moveLiveGroupPlayer(ctx, fromGroupId, toGroupId, playerId, toTeam);
         },
-      });
+      }, writeOnce({ eventId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -1077,7 +1077,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         icp: async (ctx) => {
           await swapLiveGroupPlayers(ctx, player1GroupId, player1Id, player1Team, player2GroupId, player2Id, player2Team);
         },
-      });
+      }, writeOnce({ eventId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Loader2, Check, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { setLiveGroupDuty, removeLiveGroupDuty, listLiveGroupDuties } from "@/live/features/events";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -88,7 +88,7 @@ export function MatchDutiesDialog({
             } satisfies GroupDuty;
           });
         },
-      }),
+      }, { eventId }),
     enabled: open && !!groupId,
   });
 
@@ -168,7 +168,7 @@ export function MatchDutiesDialog({
           await setLiveGroupDuty(ctx, groupId, name, null);
           return true;
         },
-      });
+      }, writeOnce({ eventId }));
       if (addedOnIcp) return;
 
       const { error } = await supabase.from("event_group_duties").insert({
@@ -199,7 +199,7 @@ export function MatchDutiesDialog({
           await setLiveGroupDuty(ctx, groupId, duty.name, assignedTo);
           return true;
         },
-      });
+      }, writeOnce({ eventId }));
       if (assignedOnIcp) {
         queryClient.invalidateQueries({ queryKey: ["event-group-duties", groupId] });
         setView("list");
@@ -236,7 +236,7 @@ export function MatchDutiesDialog({
             await removeLiveGroupDuty(ctx, groupId, duty.name);
             return true;
           },
-        });
+        }, writeOnce({ eventId }));
         if (removedOnIcp) return;
       }
 

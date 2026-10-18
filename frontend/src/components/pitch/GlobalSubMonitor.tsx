@@ -211,7 +211,7 @@ export default function GlobalSubMonitor() {
                     if (d.account_id && d.duty.trim().toLowerCase() === "subs manager") recipients.add(d.account_id);
                   }
                 },
-              }).catch((e) => console.warn("[SYNC] ICP subs manager lookup failed:", e));
+              }, { eventId: linkedEventId }).catch((e) => console.warn("[SYNC] ICP subs manager lookup failed:", e));
             }
             await withFeatureBackend("notifications", {
               supabase: async () => 0,

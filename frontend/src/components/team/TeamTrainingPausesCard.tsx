@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Trash2, Loader2, CalendarOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   createLiveTeamTrainingPause,
@@ -109,7 +109,7 @@ export default function TeamTrainingPausesCard({ teamId, clubId }: { teamId: str
           await deleteLiveTeamTrainingPause(ctx, id);
           return true;
         },
-      });
+      }, writeOnce({ teamId }));
       if (removedOnIcp) return;
 
       const { error } = await supabase.from("team_training_pauses").delete().eq("id", id);
