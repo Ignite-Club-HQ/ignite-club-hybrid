@@ -51,9 +51,9 @@ describe('transfer runner', () => {
   });
   it('a write slipping past the fence after verification blocks cutover', async () => {
     let calls = 0;
-    const base = adapter();
-    const { a, fences } = adapter({ digest: async (g, c, d) => { const r = await base.a.digest(g, c, d);
-      if (g === 'a' && d === 'vault_domain' && ++calls > 1) return { ...r, digest: 'changed' }; return r; } });
+    const { a, fences } = adapter(); const real = a.digest;
+    a.digest = async (g, c, d) => { const r = await real(g, c, d);
+      if (g === 'a' && d === 'vault_domain' && ++calls > 1) return { ...r, digest: 'changed' }; return r; };
     await expect(runTransfer(planTransfer('club', 'a', 'b', 7n), a)).rejects.toThrow('Source changed');
     expect(a.swapAssignment).not.toHaveBeenCalled(); expect(fences.at(-1)).toBe(false);
   });

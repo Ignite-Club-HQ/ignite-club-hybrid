@@ -479,6 +479,11 @@ export interface Main {
   'erase_my_membership' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'execute' : ActorMethod<[string], Result__1>,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_frozen_club' : ActorMethod<
     [string],
     { 'Ok' : Listing } |
@@ -705,6 +710,11 @@ export interface Main {
   >,
   'has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'import_frozen_club' : ActorMethod<
     [string, Listing],
     { 'Ok' : null } |
@@ -1010,6 +1020,17 @@ export interface Main {
         'Ok' : {
           'clubs' : Array<string>,
           'next' : [] | [bigint],
+          'acl_revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'read_my_club_memberships_indexed' : ActorMethod<
+    [[] | [string], number],
+    {
+        'Ok' : {
+          'clubs' : Array<string>,
+          'next' : [] | [string],
           'acl_revision' : bigint,
         }
       } |
