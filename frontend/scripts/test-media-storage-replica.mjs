@@ -63,7 +63,7 @@ try {
   ok(await actor.delete_blob(path));
   await upload(path, replacement);
   assert.equal((await actor.stable_storage_status()).allocated_bytes, allocated, 'deleted slots must be reused');
-  await pic.upgradeCanister({ canisterId: fixture.canisterId, wasm, sender: governor, upgradeModeOptions: { wasm_memory_persistence: [{ keep: null }] } });
+  await pic.upgradeCanister({ canisterId: fixture.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   assert.deepEqual(await download(path), replacement);
   assert.equal((await actor.stable_storage_status()).enabled, true);
   assert.equal((await actor.health()).total_bytes, BigInt(replacement.length));
