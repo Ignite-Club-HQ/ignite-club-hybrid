@@ -3,6 +3,7 @@ import {
   fetchUnreadMessageCounts,
   createEmptyUnreadMessageCounts,
   type UnreadMessageCounts,
+  mergeUnreadMessageCounts,
 } from "@/lib/unreadMessageCounts";
 import { Capacitor } from "@capacitor/core";
 import { resolveAuthBackend } from "@/live/authBackendMode";

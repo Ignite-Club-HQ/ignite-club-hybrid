@@ -95,7 +95,7 @@ export function ReportContentDialog({
           handleClose();
           return;
         }
-        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const { withFeatureBackend, writeOnce } = await import("@/live/featureRouter");
         await withFeatureBackend("messaging", {
           supabase: async () => undefined,
           icp: async (ctx) => {
