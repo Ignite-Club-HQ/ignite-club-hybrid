@@ -166,6 +166,22 @@ The pure frontend `groupRouting` resolver/batch partitioner is tested but
 incomplete groups and wrong deployments. It is not authorization or membership
 discovery; the group activation gates below remain unfinished.
 
+### Recovery verification — local replica only
+
+The same integration script now uses actual management-canister snapshot
+calls: a noncontroller snapshot is denied; a controller snapshot restores
+Region ciphertext, allocation index, metadata, byte totals and owner checks
+after overwrite/new-file writes. The test deletes its local snapshot afterward.
+Restoration intentionally discards changes made after the snapshot, so production
+recovery still requires a maintenance fence and a consistent quota-authority
+snapshot; do not restore one media store against an advanced quota ledger.
+
+Stopping the quota canister before begin/finalize injects a real inter-canister
+rejection. Restart/retry keeps one same-path reservation, one final result and
+exactly one allowance charge; abort cannot refund a committing file. These tests
+are not transport-loss-after-commit simulation, coordinated group rollback or
+mainnet/native verification. Those gates remain open.
+
 1. **Membership/account discovery:** authoritative account-to-club-group index;
    page through the caller's clubs across groups, with no public membership leak.
 2. **Complete scoped routing:** club/team/event/conversation/vault IDs resolve

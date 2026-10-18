@@ -137,6 +137,18 @@ try {
   assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/still-over.jpg', 'image/jpeg', 1n, 1));
   // Advance across an exact 30-day quota boundary; fresh allowance must open.
   await pic.advanceTime(31 * 86_400_000); await pic.tick();
+  const reserveRetryPath = 'clubs/c1/photos/reserve-retry.jpg';
+  await pic.stopCanister({ canisterId: club.canisterId, sender: governor });
+  const unavailableBegins = await Promise.all([actor.begin_upload(reserveRetryPath, 'image/jpeg', 1n, 1), actor.begin_upload(reserveRetryPath, 'image/jpeg', 1n, 1)]);
+  assert.ok(unavailableBegins.every(result => 'Err' in result));
+  await pic.startCanister({ canisterId: club.canisterId, sender: governor });
+  const resumedBegins = await Promise.all([actor.begin_upload(reserveRetryPath, 'image/jpeg', 1n, 1), actor.begin_upload(reserveRetryPath, 'image/jpeg', 1n, 1)]);
+  const reserveRetryId = ok(resumedBegins[0]);
+  assert.equal(ok(resumedBegins[1]), reserveRetryId, 'concurrent same-path retries must share one reservation');
+  ok(await actor.put_chunk(reserveRetryId, 0, [45]));
+  const concurrentFinals = await Promise.all([actor.finalize_upload(reserveRetryId), actor.finalize_upload(reserveRetryId)]);
+  assert.deepEqual(ok(concurrentFinals[0]), ok(concurrentFinals[1]));
+  assert.deepEqual(await download(reserveRetryPath), Buffer.from([45]));
   const nextCycle = ok(await actor.begin_upload('clubs/c1/photos/next-cycle.jpg', 'image/jpeg', 1n, 1));
   ok(await actor.put_chunk(nextCycle, 0, [43])); ok(await actor.finalize_upload(nextCycle));
   const recoveryPath = 'clubs/c1/photos/interrupted.jpg';
@@ -150,6 +162,12 @@ try {
   assert.deepEqual(ok(await actor.finalize_upload(recoveryId)), recovered);
   assert.deepEqual(await download(recoveryPath), Buffer.from([44]));
   assert.ok('Err' in await actor.abort_upload(recoveryId));
+  // Exactly three slots were consumed this cycle despite repeated operations.
+  // Fill the seven remaining slots, then prove a retry never double-charged.
+  const remaining = await Promise.all(Array.from({ length: 7 }, (_, i) => actor.begin_upload(`clubs/c1/photos/recovery-cap-${i}.jpg`, 'image/jpeg', 1n, 1)));
+  for (const result of remaining) ok(result);
+  assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/recovery-over.jpg', 'image/jpeg', 1n, 1));
+  for (const result of remaining) ok(await actor.abort_upload(ok(result)));
   await pic.advanceTime(181 * 86_400_000); await pic.tick(10);
   const expired = await actor.http_request({ url: '/clubs/c1/photos/0.jpg', method: 'GET', headers: [], body: [] });
   assert.equal(expired.status_code, 404, 'known-free club ciphertext must expire after six months');

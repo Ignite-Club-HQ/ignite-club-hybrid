@@ -1,6 +1,6 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
-- [ ] 27. Next stage: local controller-authorized snapshot restore and unavailable quota-service upload recovery tests; no production activation or club moves.
+- [x] 27. Recovery verification stage: real local management snapshot restore (noncontroller denied) preserves Region bytes, allocator, totals and owner permissions; unavailable quota begin/finalize, concurrent same-path retries and exact allowance accounting verified. No production activation or club moves. Coordinated quota/storage rollback and loss-after-commit injection remain in item 24.
 
 - [x] 25. Stable media code: indexed Region-backed ciphertext, bounded hash-pinned HTTP streaming, governor one-file read-back-verified migration, explicit stable-write activation, slot reuse, dual-format ownership/delete/rekey/retention and rotating legacy retention. Migration 20261027_000000. Five media Motoko suites pass; maximum-wire-size local actor tests pass with hash/owner/EOP preservation, six-month free retention and two-store quota behavior. Nothing deployed or activated; capacity remains conservatively capped.
 - [x] 26. Pure fail-closed group resolver and multi-club batch partitioning prerequisite: all 13 domains validated, immutable assignments and same-target enforcement, retained duplicate/order indices. Five tests pass in both modes. Not connected to production traffic; no membership-discovery or cross-group authority claim.
