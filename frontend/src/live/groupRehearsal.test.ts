@@ -62,10 +62,10 @@ describe('integrated scaling rehearsal', () => {
   it('moves a club to the new group, survives a crash and keeps other clubs intact', async () => {
     const store: Record<string, Record<string, string[]>> = { a: Object.fromEntries(TRANSFER_DOMAINS.map(d => [d, ['x:' + d]])), c: {} };
     const other = 'other-club-row'; store.c.club_domain = [other];
-    let fenced = false; let crashed = false; let rev = 3n; const saved: unknown[] = [];
+    const fenced = new Set<string>(); let crashed = false; let rev = 3n; const saved: unknown[] = [];
     const key = (g: string, club: string, d: string) => (store[g][d] ?? []).filter(r => club === 'k1' ? r !== other : r === other);
     const a: TransferAdapter = {
-      sameDeployment: async () => true, setFence: async (_g, _c, on) => { fenced = on; },
+      sameDeployment: async () => true, setFence: async (g, _c, on) => { if (on) fenced.add(g); else fenced.delete(g); },
       exportPage: async (g, c, d) => ({ rows: key(g, c, d).map(r => new TextEncoder().encode(r)), next: null }),
       importPage: async (g, _c, d, rows) => {
         if (d === 'events_domain' && !crashed) { crashed = true; throw new Error('Request timed out'); }
@@ -80,7 +80,7 @@ describe('integrated scaling rehearsal', () => {
     await expect(runTransfer(t, a)).rejects.toThrow();
     const last = (saved.at(-1) ?? t) as typeof t;
     const done = await runTransfer(last.phase === 'aborted' ? planTransfer('k1', 'a', 'c', 3n) : last, a);
-    expect(done.phase).toBe('released'); expect(fenced).toBe(false);
+    expect(done.phase).toBe('released'); expect(fenced.has('c')).toBe(false); // the new group is writable; the purged source stays locked
     expect(Object.values(store.a).flat()).toEqual([]);
     expect(store.c.club_domain).toContain(other);
   });
