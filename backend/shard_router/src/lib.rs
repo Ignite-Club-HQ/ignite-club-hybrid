@@ -9,6 +9,8 @@ use ic_stable_structures::{
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 mod groups;
+mod discovery;
+use discovery::GroupPlacement;
 use groups::{GroupAssignment, ShardGroup};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -113,6 +115,8 @@ thread_local! {
     );
     static GROUPS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(6)));
     static GROUP_ASSIGNMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(7)));
+    // Additive partition; never reuse IDs belonging to existing deployments.
+    static GROUP_PLACEMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(8)));
 }
 
 fn memory(id: u8) -> Memory {
@@ -528,6 +532,63 @@ fn group_for(id: &str) -> Option<ShardGroup> {
 }
 fn group_assignment_for(id: &str) -> Option<GroupAssignment> {
     GROUP_ASSIGNMENTS.with(|items| items.borrow().get(&id.as_bytes().to_vec()).map(|bytes| decode(&bytes)))
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct GroupRegistrySnapshot { pub revision: u64, pub groups: Vec<ShardGroup>, pub placements: Vec<GroupPlacement> }
+
+#[ic_cdk::update]
+fn register_group_placement(placement: GroupPlacement, expected_revision: u64) -> Outcome<u64> {
+    require_governor()?;
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    let group = group_for(&placement.group_id).ok_or("Unknown group")?;
+    discovery::validate(&placement, &group)?;
+    let key = placement.group_id.as_bytes().to_vec();
+    if let Some(bytes) = GROUP_PLACEMENTS.with(|m| m.borrow().get(&key)) {
+        let prior: GroupPlacement = decode(&bytes);
+        if prior != placement { return Err("Placement is immutable; register a new group for changes".into()); }
+        return Ok(current_revision());
+    }
+    let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
+    GROUP_PLACEMENTS.with(|m| m.borrow_mut().insert(key, encode(&placement)));
+    REVISION.with(|m| m.borrow_mut().set(revision));
+    Ok(revision)
+}
+
+// Consensus-authenticated infrastructure metadata only: no assignment list,
+// account IDs, memberships or health receipts. This does not activate routing.
+#[ic_cdk::update]
+fn read_group_registry(target_alias: String) -> Outcome<GroupRegistrySnapshot> {
+    if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
+    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
+    let groups: Vec<ShardGroup> = GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).filter(|g| g.target_alias == target_alias).collect());
+    let placements = groups.iter().map(|g| GROUP_PLACEMENTS.with(|m| m.borrow().get(&g.id.as_bytes().to_vec()).map(|b| decode(&b))).ok_or_else(|| "Incomplete group placement registry".to_string())).collect::<Outcome<Vec<_>>>()?;
+    Ok(GroupRegistrySnapshot { revision: current_revision(), groups, placements })
+}
+
+#[ic_cdk::update]
+async fn read_my_group_assignments(club_ids: Vec<String>, target_alias: String, expected_revision: u64) -> Outcome<Vec<GroupAssignment>> {
+    let user = caller();
+    if user == Principal::anonymous() { return Err("Authentication required".into()); }
+    discovery::validate_clubs(&club_ids)?;
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    let mut checked = Vec::new();
+    // Resolve all destinations before any call; do not return partial results.
+    for club in &club_ids {
+        let assignment = group_assignment_for(club).ok_or("Missing club assignment")?;
+        let group = group_for(&assignment.group_id).ok_or("Missing assigned group")?;
+        if group.target_alias != target_alias { return Err("Assignment belongs to another deployment".into()); }
+        let source = group.domains.iter().find(|d| d.domain == "club_domain").ok_or("Missing membership authority")?.canister;
+        checked.push((assignment, source));
+    }
+    for (assignment, source) in &checked {
+        let reply = ic_cdk::call::Call::bounded_wait(*source, "is_club_member")
+            .with_args(&(user, assignment.club_id.clone())).await.map_err(|_| "Membership authority unavailable")?;
+        let member: bool = reply.candid().map_err(|_| "Invalid membership authority reply")?;
+        if !member { return Err("Club membership required".into()); }
+        if current_revision() != expected_revision { return Err("Registry changed during membership checks".into()); }
+    }
+    Ok(checked.into_iter().map(|(a, _)| a).collect())
 }
 
 #[ic_cdk::update]
