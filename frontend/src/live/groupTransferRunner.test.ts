@@ -9,7 +9,7 @@ function adapter(o: Partial<TransferAdapter> = {}) {
     sameDeployment: async () => true,
     setFence: async (_g, _c, f) => { fences.push(f); },
     exportPage: async (_g, _c, _d, cursor) => cursor === null ? { rows: [new Uint8Array([1])], next: 'p2' } : { rows: [new Uint8Array([2])], next: null },
-    importPage: async (g, _c, d, rows) => { store[g][d] = (store[g][d] ?? 0) + rows.length + (rows[0][0] === 2 ? 1 : 0); },
+    importPage: async (g, _c, d, rows) => { store[g][d] = (store[g][d] ?? 0) + rows.length + (rows[0]?.[0] === 2 ? 1 : 0); },
     digest: async (g, _c, domain) => ({ domain, records: store[g][domain] ?? 0, digest: `h${store[g][domain] ?? 0}` }),
     readRegistryRevision: async () => 7n,
     swapAssignment: vi.fn(async () => {}),
