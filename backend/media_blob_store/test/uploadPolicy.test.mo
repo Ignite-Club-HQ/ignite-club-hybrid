@@ -20,3 +20,8 @@ assert not Policy.canWriteChunk(2_000_000, 0, 0, 1_000_001, 0);
 assert not Policy.canWriteChunk(100, 0, 1, 1, 0);
 assert Policy.maxPending == 64;
 assert Policy.maxPendingPerOwner == 4;
+// Free allowance includes in-flight sends, not only finalized files.
+assert Policy.withinFreeQuota(8, 0, 1, 0, 1, 10, null);
+assert not Policy.withinFreeQuota(9, 0, 1, 0, 1, 10, null);
+assert Policy.withinFreeQuota(0, 25_165_824, 0, 0, 1_048_576, 10, ?26_214_400);
+assert not Policy.withinFreeQuota(0, 25_165_824, 1, 1, 1_048_576, 10, ?26_214_400);

@@ -203,9 +203,7 @@ persistent actor MediaBlobStore {
         pendingBytes += upload.total_size.toNat();
       };
     };
-    let overCount = count + pendingCount + 1 > countLimit;
-    let overBytes = switch (bytesLimit) { case (?l) { bytes.toNat() + pendingBytes + size.toNat() > l.toNat() }; case null { false } };
-    if (not overCount and not overBytes) return null;
+    if (UploadPolicy.withinFreeQuota(count, bytes.toNat(), pendingCount, pendingBytes, size.toNat(), countLimit, bytesLimit)) return null;
     if (isPro) return null;
     ?("FreeLimitReached:" # category)
   };

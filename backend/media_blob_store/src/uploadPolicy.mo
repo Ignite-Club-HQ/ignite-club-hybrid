@@ -38,4 +38,9 @@ module {
     stored - replaced + incoming <= declared.toNat() and
     heap + incoming * 16 <= heapBudget
   };
+
+  public func withinFreeQuota(count : Nat, bytes : Nat, pendingCount : Nat, pendingBytes : Nat, requested : Nat, countLimit : Nat, bytesLimit : ?Nat64) : Bool {
+    count + pendingCount + 1 <= countLimit and
+    (switch (bytesLimit) { case (?limit) bytes + pendingBytes + requested <= limit.toNat(); case null true })
+  };
 }
