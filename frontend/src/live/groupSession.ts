@@ -118,7 +118,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     await validateAssignments([...new Set(requested)]); live();
   };
   const inflight = new Map<string, Promise<unknown>>();
-  return {
+  const api = {
     clubIds: [...clubs].sort(),
     dispose() { disposed = true; },
     async readClub<T>(clubId: string, domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
@@ -166,7 +166,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       live();
       if (!hostClubId || hostClubId.length > 64) throw new Error('Invalid host club');
-      if (clubs.has(hostClubId)) return this.readClub(hostClubId, domain, read);
+      if (clubs.has(hostClubId)) return api.readClub(hostClubId, domain, read);
       if (!transport.readHostedAssignment) throw new Error('Hosted club lookup unavailable');
       const current = await transport.readRegistry();
       if (current.revision !== registry.revision) throw new Error('Group registry changed; reopen session');
@@ -211,6 +211,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       live(); return rows.flat().sort((a, b) => a.index - b.index).map(r => r.value);
     },
   };
+  return api;
 }
 /** Only transport-level loss may be retried; canister rejections (permission,
  * validation, quota) are final so a retry can never widen access. */
