@@ -1,6 +1,8 @@
 import Map "mo:core/Map";
 import Text "mo:core/Text";
 import Principal "mo:core/Principal";
+import Nat64 "mo:core/Nat64";
+import Array "mo:core/Array";
 import Quota "mediaQuota";
 
 module {
@@ -10,7 +12,7 @@ module {
   public type State = { var active : Bool; var started : Bool; imports : Map.Map<Text, Progress>; ledger : Quota.Ledger };
   public func empty() : State { { var active = false; var started = false; imports = Map.empty(); ledger = Quota.empty() } };
   public func progress(state : State, store : Principal) : Progress {
-    state.imports.get(store.toText()) ?? { offset = 0; total = null; done = false }
+    state.imports.get(store.toText()) ?? ({ offset = 0; total = null; done = false })
   };
   public func ready(state : State, store : Principal, stores : [Principal]) : Bool {
     state.active and stores.any(func(p) = p.equal(store)) and progress(state, store).done

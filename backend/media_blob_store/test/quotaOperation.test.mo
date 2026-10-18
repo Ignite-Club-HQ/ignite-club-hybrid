@@ -1,0 +1,18 @@
+import Operation "../src/quotaOperation";
+import Migration "../src/backend/migrations/20261026_000000";
+import Map "mo:core/Map";
+import Text "mo:core/Text";
+import Principal "mo:core/Principal";
+let state = Migration.migration({});
+assert state.quota_mode == #local;
+assert state.quota_snapshot.size() == 0;
+let ops : Map.Map<Text, Operation.Operation> = state.quota_operations;
+let op : Operation.Operation = { owner = Principal.fromText("jxeuj-uyaaa-aaaal-qxlna-cai"); path = "clubs/c/a"; club_id = "c"; category = "gallery_photo"; bytes = 1; cycle = 1; created_at = 0; status = #uploading; result = null };
+assert Operation.canWrite(op);
+assert Operation.canAbort(op);
+assert not Operation.canWrite({ op with status = #reserving });
+assert not Operation.canAbort({ op with status = #committing });
+assert not Operation.canAbort({ op with status = #committed });
+assert Operation.canAbort({ op with status = #aborting });
+ops.add("u1", op);
+assert ops.size() == 1;
