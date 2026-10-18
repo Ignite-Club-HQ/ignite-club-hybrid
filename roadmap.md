@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] 25. Requested remaining implementation: indexed Region-backed ciphertext storage with dual-format reads, bounded verified legacy migration and HTTP streaming; complete club-group routing/authorization and operator/live verification without moving production clubs prematurely.
+
 - [x] 17. ICP scaling foundation: conservative heap-backed media capacity, pending-byte reservations, bounded chunks, linear assembly and same-store concurrent quota checks; policy/assembly tests pass. No files moved or deleted. Local actor read-back unsupported by this test runner; mainnet verification remains required.
 - [x] 18. ICP scaling foundation: stable, immutable governor-managed club-group planning records, capacity selection and retry/conflict tests; existing placement/residency moves rejected. 22 Rust tests pass. This is NOT active production group routing.
 - [x] 19. ICP scaling foundation: dry-run-first additional media-store recipe generator with shared source/migrations; 3 offline setup tests and 3 deploy safety tests pass. Guide: docs/ICP_SCALING.md. Existing deploy wiring retained; no extra canister deployed or registered.
