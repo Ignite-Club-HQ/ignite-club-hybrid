@@ -87,6 +87,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     if (current.revision !== registry.revision) throw new Error('Group registry changed; reopen session');
     await validateAssignments([...new Set(requested)]); live();
   };
+  const inflight = new Map<string, Promise<unknown>>();
   return {
     clubIds: [...clubs].sort(),
     dispose() { disposed = true; },
@@ -96,6 +97,37 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       const route = resolveDeploymentClubDomain(table, registry.deployment, clubId, domain);
       groupRouteScope(route, principal);
       const result = await read(targetFor(route.groupId)); live(); return result;
+    },
+    /** Routed write: revalidated before every attempt, pinned to one group,
+     * retried only on transient transport errors with the SAME idempotency key,
+     * coalesced per key, never redirected or falling back. */
+    async writeClub<T>(clubId: string, domain: GroupDomain, idempotencyKey: string,
+      write: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts = 3): Promise<T> {
+      if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
+      if (!idempotencyKey || idempotencyKey.length > 128) throw new Error('Write idempotency key required');
+      const scoped = `${clubId}|${domain}|${idempotencyKey}`;
+      const existing = inflight.get(scoped);
+      if (existing) return existing as Promise<T>;
+      const run = (async () => {
+        let pinned: string | undefined; let uncertain = false;
+        for (let attempt = 1; ; attempt++) {
+          try { await revalidate([clubId]); }
+          catch (e) { if (uncertain) throw new Error(`Write outcome uncertain; ${(e as Error).message}`); throw e; }
+          const route = resolveDeploymentClubDomain(table, registry.deployment, clubId, domain);
+          if (pinned && pinned !== route.groupId) throw new Error('Write group changed during retry');
+          pinned = route.groupId; groupRouteScope(route, principal);
+          try { const result = await write(targetFor(route.groupId), idempotencyKey); live(); return result; }
+          catch (e) {
+            if (!isTransientWriteError(e) || attempt >= attempts) {
+              if (uncertain || isTransientWriteError(e)) throw new Error(`Write outcome uncertain after ${attempt} attempt(s): ${(e as Error).message}`);
+              throw e;
+            }
+            uncertain = true;
+          }
+        }
+      })();
+      inflight.set(scoped, run);
+      try { return await run; } finally { inflight.delete(scoped); }
     },
     async readClubs<T>(requested: readonly string[], domain: GroupDomain,
       read: (ctx: FeatureBackendContext, clubIds: readonly string[]) => Promise<readonly T[]>): Promise<T[]> {
@@ -115,4 +147,11 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       live(); return rows.flat().sort((a, b) => a.index - b.index).map(r => r.value);
     },
   };
+}
+/** Only transport-level loss may be retried; canister rejections (permission,
+ * validation, quota) are final so a retry can never widen access. */
+export function isTransientWriteError(e: unknown): boolean {
+  const m = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  if (/(not authori|permission|denied|forbidden|membership|quota|invalid|not found)/.test(m)) return false;
+  return /(timeout|timed out|network|fetch failed|unavailable|sys_transient|reject_code: 2|ingress_expiry|connection)/.test(m);
 }
