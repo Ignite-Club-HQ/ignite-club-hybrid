@@ -8,7 +8,7 @@ let club : Types.ClubProfile = {
   playhq_tenant = ?"private-tenant"; playhq_org_id = ?"private-link";
 };
 let request = Oql.parse("{\"entity\":\"clubs\"}", Clubs.entities);
-let source = [club, { club with id = "club-b" }, { club with id = "deleted"; deleted_at_ms = ?1 }];
+let source : [Types.ClubProfile] = [club, { club with id = "club-b" }, { club with id = "deleted"; deleted_at_ms = ?1 }];
 let result = Oql.run<Types.ClubProfile>(request, source,
   func(c) = c.id == "club-a" and c.deleted_at_ms == null, Clubs.clubRow);
 assert result.rows == [[Oql.text("id", "club-a"), Oql.text("name", "Alpha"), Oql.text("slug", "alpha"), Oql.text("sport", "football"), Oql.boolean("is_active", true)]];
