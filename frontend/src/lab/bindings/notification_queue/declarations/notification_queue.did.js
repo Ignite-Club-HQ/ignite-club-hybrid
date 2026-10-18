@@ -287,6 +287,23 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'get_update_reminder_audience' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'user' : IDL.Text,
+                'build_number' : IDL.Opt(IDL.Text),
+                'platform' : IDL.Text,
+                'app_version' : IDL.Opt(IDL.Text),
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'grant_worker' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -367,6 +384,11 @@ export const idlFactory = ({ IDL }) => {
     'recover' : IDL.Func([], [ResultNat16], []),
     'register_device_token' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_device_version' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

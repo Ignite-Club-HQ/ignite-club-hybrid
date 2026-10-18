@@ -217,6 +217,12 @@ export const idlFactory = ({ IDL }) => {
     'site_name' : IDL.Opt(IDL.Text),
     'image' : IDL.Opt(IDL.Text),
   });
+  const Settings = IDL.Record({
+    'enabled' : IDL.Bool,
+    'window_end_hours' : IDL.Nat32,
+    'window_start_hours' : IDL.Nat32,
+    'cooldown_days' : IDL.Nat32,
+  });
   const PollResults = IDL.Record({
     'poll' : Poll,
     'total_votes' : IDL.Nat32,
@@ -474,6 +480,11 @@ export const idlFactory = ({ IDL }) => {
     'generate_chat_recap' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64)],
         [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_chat_photo_reminder_settings' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Settings, 'Err' : IDL.Text })],
         [],
       ),
     'get_club_dm_settings' : IDL.Func([IDL.Text], [ClubDmSettings], ['query']),
@@ -829,6 +840,11 @@ export const idlFactory = ({ IDL }) => {
     'send_welcome_message' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_chat_photo_reminder_settings' : IDL.Func(
+        [Settings],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_ai_catch_up' : IDL.Func(

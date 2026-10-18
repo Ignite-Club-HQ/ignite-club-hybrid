@@ -270,6 +270,11 @@ export interface Main {
     { 'Ok' : string } |
       { 'Err' : string }
   >,
+  'get_chat_photo_reminder_settings' : ActorMethod<
+    [],
+    { 'Ok' : Settings } |
+      { 'Err' : string }
+  >,
   'get_club_dm_settings' : ActorMethod<[string], ClubDmSettings>,
   'get_group_join_policy' : ActorMethod<
     [string],
@@ -559,6 +564,11 @@ export interface Main {
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
+  'set_chat_photo_reminder_settings' : ActorMethod<
+    [Settings],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_club_ai_catch_up' : ActorMethod<
     [string, boolean],
     { 'Ok' : null } |
@@ -817,6 +827,12 @@ export interface ScheduledMessage {
   'sender' : Principal,
   'scheduled_at_ms' : bigint,
   'replayed_at_ms' : [] | [bigint],
+}
+export interface Settings {
+  'enabled' : boolean,
+  'window_end_hours' : number,
+  'window_start_hours' : number,
+  'cooldown_days' : number,
 }
 export interface State {
   'contentReports' : Array<ContentReport>,

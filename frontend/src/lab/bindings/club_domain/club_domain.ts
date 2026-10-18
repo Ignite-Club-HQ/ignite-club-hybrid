@@ -526,6 +526,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    erase_account_membership(account_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     erase_my_membership(): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2708,6 +2715,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.ensure_club_conversations(arg0);
         return from_candid_variant_n66(result);
+    }
+    async erase_account_membership(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.erase_account_membership(arg0);
+        return from_candid_variant_n18(result);
     }
     async erase_my_membership(): Promise<{
         __kind__: "Ok";

@@ -95,6 +95,20 @@ export interface Main {
     [Array<string>],
     Array<{ 'key' : string, 'club' : string, 'team' : [] | [string] }>
   >,
+  'get_update_reminder_audience' : ActorMethod<
+    [Array<string>, string],
+    {
+        'Ok' : Array<
+          {
+            'user' : string,
+            'build_number' : [] | [string],
+            'platform' : string,
+            'app_version' : [] | [string],
+          }
+        >
+      } |
+      { 'Err' : string }
+  >,
   'grant_worker' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -142,6 +156,11 @@ export interface Main {
   'recover' : ActorMethod<[], ResultNat16>,
   'register_device_token' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'register_device_version' : ActorMethod<
+    [string, [] | [string], [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
