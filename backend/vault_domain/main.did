@@ -86,6 +86,11 @@ type Main =
                                    Err: text;
                                    Ok: VaultFolder;
                                  });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    get_backup: (id: text) -> (variant {
                                 Err: text;
                                 Ok: Backup;
@@ -113,6 +118,11 @@ type Main =
                     Err: text;
                     Ok;
                   });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    list_backups: () -> (variant {
                           Err: text;
                           Ok: vec BackupSummary;
@@ -173,6 +183,10 @@ type Main =
        Err: text;
        Ok: VaultFile;
      });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    purge_my_data: () -> (variant {
                            Err: text;
                            Ok: nat32;
@@ -218,6 +232,11 @@ type Main =
     (variant {
        Err: text;
        Ok: PinnedVault;
+     });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    transfer_governorship: (new_governor: principal) ->
     (variant {
