@@ -198,6 +198,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'claim_legacy_sponsor_metrics' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'client_perf_aggregate' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
         [IDL.Variant({ 'Ok' : ClientPerfAggregate, 'Err' : IDL.Text })],
@@ -431,6 +436,11 @@ export const idlFactory = ({ IDL }) => {
     'record_client_perf' : IDL.Func(
         [IDL.Vec(ClientPerfEntry)],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'record_club_sponsor_metric' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Float64, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'record_message_sent' : IDL.Func(

@@ -146,6 +146,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'claim_legacy_sponsor_metrics' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'client_perf_aggregate' : ActorMethod<
     [string, [] | [string], bigint, bigint],
     { 'Ok' : ClientPerfAggregate } |
@@ -329,6 +334,11 @@ export interface Main {
   'record_client_perf' : ActorMethod<
     [Array<ClientPerfEntry>],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'record_club_sponsor_metric' : ActorMethod<
+    [string, string, string, number, [] | [string]],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'record_message_sent' : ActorMethod<

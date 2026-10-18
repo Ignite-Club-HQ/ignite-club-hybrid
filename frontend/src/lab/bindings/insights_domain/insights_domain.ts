@@ -73,6 +73,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    claim_legacy_sponsor_metrics(club_id: string, sponsor_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     client_perf_aggregate(path: string, metric: string | null, since_ms: bigint, until_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: ClientPerfAggregate;
@@ -328,6 +335,13 @@ export interface MainInterface {
     record_client_perf(entries: Array<ClientPerfEntry>): Promise<{
         __kind__: "Ok";
         Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    record_club_sponsor_metric(club_id: string, sponsor_id: string, metric: string, delta: number, account_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -697,6 +711,16 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.append_audit_log(arg0, arg1, to_candid_opt_n3(arg2), to_candid_opt_n3(arg3), arg4);
+        return from_candid_variant_n2(result);
+    }
+    async claim_legacy_sponsor_metrics(arg0: string, arg1: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.claim_legacy_sponsor_metrics(arg0, arg1);
         return from_candid_variant_n2(result);
     }
     async client_perf_aggregate(arg0: string, arg1: string | null, arg2: bigint, arg3: bigint): Promise<{
@@ -1074,6 +1098,16 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.record_client_perf(arg0);
         return from_candid_variant_n8(result);
+    }
+    async record_club_sponsor_metric(arg0: string, arg1: string, arg2: string, arg3: number, arg4: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.record_club_sponsor_metric(arg0, arg1, arg2, arg3, to_candid_opt_n3(arg4));
+        return from_candid_variant_n2(result);
     }
     async record_message_sent(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
