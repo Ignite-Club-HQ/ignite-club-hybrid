@@ -1,6 +1,6 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
-- [ ] 33. Continue recovery safety: durable local checkpoint/restore/resume receipts, exclusive operator lock and interrupted-restore restart denial; test disk reload and failure paths. No production adapter or activation.
+- [x] 33. Durable local checkpoint/restore/resume receipts: synced intent/acknowledgement records, exclusive locks, interrupted restore restart denial, full replay and refencing on resume/storage failures. Disk reload, actual process exit and failure-path tests pass. No production adapter, content/ledger verification or real inter-canister callback-loss injection; these remain in item 30.
 - [x] 32. Cross-group membership discovery groundwork (groupDiscovery.ts): linked accounts, bounded registry, per-group paging, fail-closed on foreign-club claims or any group failure; not wired to production.
 - [ ] 30. Continue the approved scaling plan, including optional subnet and Cloud Engine readiness: implement deployment-isolated group routing and recovery safety increments; finish discovery/authority, complete feature routing, indexed storage, verified club transfers, provisioning and integration tests before activation. Production and real-engine verification require authorized deployment access, complete inventory, an agreed maintenance window and authenticated sessions; engine vetKD also requires the owner's verified console proxy.
 

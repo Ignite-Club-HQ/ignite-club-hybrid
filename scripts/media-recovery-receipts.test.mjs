@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { runRecoveryAction } from './media-recovery-receipts.mjs';
 
 const expected = { deploymentId: 'engine-one', authority: 'authority', stores: ['store-one', 'store-two'] };
@@ -56,6 +57,27 @@ test('crash-phase receipt cannot be treated as a complete restore', async t => {
 test('exclusive lock blocks concurrent or crashed operators before mutation', async t => {
   const f = await fixture(t); await writeFile(join(f.directory, 'operator.lock'), '');
   await assert.rejects(f.run('checkpoint'), /Recovery locked/); assert.deepEqual(f.calls, []);
+});
+test('actual process exit preserves restore intent and blocks resume until manual investigation', async t => {
+  const f = await fixture(t); await f.run('checkpoint');
+  const script = `
+    import { runRecoveryAction } from ${JSON.stringify(new URL('./media-recovery-receipts.mjs', import.meta.url).href)};
+    const expected = ${JSON.stringify(expected)};
+    const adapter = { readInventory: async () => expected, stop: async () => {},
+      status: async () => 'stopped', loadSnapshot: async () => process.exit(42) };
+    await runRecoveryAction(${JSON.stringify(f.directory)}, expected, adapter, 'restore');
+  `;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], { timeout: 10000 });
+  assert.equal(child.status, 42);
+  const saved = await f.disk();
+  assert.equal(saved.phase, 'restoring');
+  assert.equal(saved.steps.at(-1).method, 'loadSnapshot');
+  assert.equal(saved.steps.at(-1).state, 'attempted');
+  await assert.rejects(f.run('resume', true), /Recovery locked/);
+  // Test-only manual unlock after confirming the child is dead.
+  await rm(join(f.directory, 'operator.lock'));
+  await assert.rejects(f.run('resume', true), /Resume requires/);
+  await f.run('restore'); assert.equal((await f.disk()).phase, 'restored');
 });
 test('corrupt and cross-deployment receipts fail before mutation', async t => {
   const f = await fixture(t); await f.run('checkpoint'); const saved = await f.disk(); f.calls.length = 0;
