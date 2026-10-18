@@ -661,6 +661,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_invite_message_default(club_id : Text, message : Text) : async { #Ok : Types.InviteMessageDefault; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (club_id == "" or club_id.size() > 128 or message.size() > 2000) return #Err("Invalid invite message");
@@ -757,6 +758,7 @@ persistent actor class Main(governorInit : Principal) {
   // Link (parent = ?assoc) or unlink (parent = null) a club and an
   // association. Only an admin of the association involved may do either.
   public shared ({ caller }) func set_club_parent_org(club_id : Text, parent_id : ?Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (profiles.find(func(p) = p.id == club_id) == null) return #Err("Club not found");
     switch (parent_id) {
@@ -1114,6 +1116,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_news_post(club_id : Text, title : Text, body : Text, status : Text, target_team_ids : ?[Text], target_mini_league_id : ?Text, target_competition_id : ?Text, send_push : Bool, is_important : Bool, image_url : ?Text, attachments : [Types.NewsAttachment]) : async { #Ok : Types.NewsPost; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (target_competition_id == null and not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (club_id == "" or club_id.size() > 128) return #Err("Invalid club");
@@ -1330,6 +1333,7 @@ persistent actor class Main(governorInit : Principal) {
   // a verified guardian-relationship check is a post-deploy roadmap item,
   // matching the PII reader-grant stance.
   public shared ({ caller }) func create_parent_invite(club_id : Text, team_id : ?Text, child_id : Text) : async { #Ok : Types.ParentInvite; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, team_id)) return #Err("Team or club admin required");
     if (child_id == "" or child_id.size() > 128) return #Err("Invalid child");
@@ -1687,6 +1691,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_kind(club_id : Text, kind : Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (kind.size() == 0 or kind.size() > 64) return #Err("Invalid kind");
@@ -1704,6 +1709,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func enrol_in_class(club_id : Text, term_id : Text, class_id : Text, member_id : Text) : async { #Ok : Types.ClassEnrolment; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     if (not isSelfOrAdmin(caller, club_id, member_id)) return #Err("Club admin required to enrol another member");
@@ -1756,6 +1762,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_theme_json(club_id : Text, theme_json : Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (theme_json.size() > 65_536) return #Err("Theme JSON too large");
@@ -1789,6 +1796,7 @@ persistent actor class Main(governorInit : Principal) {
     max_guests_per_member_default : Nat,
     events_sponsor_strip_enabled : Bool,
   ) : async { #Ok : Types.ClubGeneralSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not acl.roles.any(func(grant) = grant.user.equal(caller) and grant.club == ?club_id)) return #Err("Club staff required");
     let updated : Types.ClubGeneralSettings = { club_id; class_mode_enabled; allow_guests_default; max_guests_per_member_default; events_sponsor_strip_enabled };
@@ -2465,6 +2473,7 @@ persistent actor class Main(governorInit : Principal) {
   // records untouched). Idempotent: removing an already-removed member is
   // a no-op #Ok.
   public shared ({ caller }) func remove_member(club : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     membershipEpoch += 1;
@@ -2481,6 +2490,7 @@ persistent actor class Main(governorInit : Principal) {
   // role grants -- the admin must re-grant roles explicitly via
   // add_role_grant.
   public shared ({ caller }) func restore_member(club : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     removedMembers := removedMembers.filter(func(m) = not (m.club == club and m.user.equal(user)));
@@ -2497,6 +2507,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func request_role(club : Text, role : Text, team : ?Text) : async { #Ok : Types.RoleRequest; #Err : Text } {
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (role == "") return #Err("Invalid role");
     if (isExcluded(caller, club)) return #Err("Forbidden");
@@ -2677,6 +2688,7 @@ persistent actor class Main(governorInit : Principal) {
   // invite record and its accept/revoke state) ----
 
   public shared ({ caller }) func create_team_invite(club_id : Text, team_id : Text, email : Text, role : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canCreateTeamRosterInvite(caller, club_id, team_id, role))) return #Err("Team or competition admin required for player/parent invites");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
@@ -2749,6 +2761,7 @@ persistent actor class Main(governorInit : Principal) {
   // the Supabase `teams.shell_*` columns and `claim_shell_team` RPC. ----
 
   public shared ({ caller }) func create_shell_team_invite(club_id : Text, name : Text, contact_email : ?Text, contact_name : ?Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (name == "" or name.size() > 160) return #Err("Invalid team name");
@@ -2839,6 +2852,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_team_invite_link(club_id : Text, team_id : Text, role : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canCreateTeamRosterInvite(caller, club_id, team_id, role))) return #Err("Team or competition admin required for player/parent invites");
     if (role == "") return #Err("Invalid role");
@@ -3224,6 +3238,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_child_for_parent_on_team(club_id : Text, team_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
     if (not teamInClub(team_id, club_id)) return #Err("Team not found in club");
@@ -3244,6 +3259,7 @@ persistent actor class Main(governorInit : Principal) {
   // only to the club (no team assignment yet), mirroring
   // create_child_for_parent_on_team but without requiring a team id.
   public shared ({ caller }) func create_child_for_parent_in_club(club_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (isAdmin(caller, club_id) or isGovernor(caller))) return #Err("Club admin required");
     if (not acl.clubs.any(func(c) = c == club_id)) return #Err("Club not found");
@@ -3373,6 +3389,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Move member / child between teams ----
 
   public shared ({ caller }) func move_member_to_team(club_id : Text, user : Principal, from_team : ?Text, to_team : Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (not teamInClub(to_team, club_id)) return #Err("Target team not found in club");
@@ -3409,6 +3426,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Bulk team-member add ----
 
   public shared ({ caller }) func bulk_add_team_members(club_id : Text, team_id : Text, role : Text, users : [Principal]) : async { #Ok : Nat; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
     if (role == "") return #Err("Invalid role");
@@ -3456,6 +3474,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Team-creation requests ----
 
   public shared ({ caller }) func request_team_creation(club_id : Text, name : Text, division : ?Text, age_group : ?Text) : async { #Ok : Types.TeamCreationRequest; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Forbidden");
     if (name == "" or name.size() > 160) return #Err("Invalid team name");
@@ -3579,6 +3598,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Team captains ----
 
   public shared ({ caller }) func add_team_captain(club_id : Text, team_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
     if (not teamCaptains.any(func(c) = c.team_id == team_id and c.user.equal(user))) {
@@ -3588,6 +3608,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_team_captain(club_id : Text, team_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
     teamCaptains := teamCaptains.filter(func(c) = not (c.team_id == team_id and c.user.equal(user)));
@@ -3644,6 +3665,7 @@ persistent actor class Main(governorInit : Principal) {
   // after creation); afterwards only the governor can change it, since a
   // country move is a deliberate data migration, never a toggle.
   public shared ({ caller }) func set_club_home_country(club_id : Text, country : Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (country.size() != 2) return #Err("Invalid country code");
@@ -3668,6 +3690,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func request_club_join(club_id : Text) : async { #Ok : Types.ClubJoinRequest; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (isExcluded(caller, club_id)) return #Err("Forbidden");
     if (isMember(caller, club_id)) return #Err("Already a member");
@@ -3750,6 +3773,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_theme_palette(club_id : Text, primary : ?Text, secondary : ?Text, accent : ?Text, dark_primary : ?Text, dark_secondary : ?Text, dark_accent : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = {
@@ -3762,6 +3786,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_theme_enabled(club_id : Text, enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with theme_enabled = enabled };
@@ -3770,6 +3795,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_logo_only_mode(club_id : Text, enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with logo_only_mode = enabled };
@@ -3778,6 +3804,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func clear_club_theme(club_id : Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = {
@@ -3790,6 +3817,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_header_toggles(club_id : Text, header_logo_enabled : Bool, header_club_name_enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with header_logo_enabled; header_club_name_enabled };
@@ -3798,6 +3826,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_invite_email_style(club_id : Text, style : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with invite_email_style = style };
@@ -3806,6 +3835,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_switcher_hint(club_id : Text, hint : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with club_switcher_hint = hint };
@@ -4119,6 +4149,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func mark_member_paid(club_id : Text, user_id : Text, child_id : ?Text, payment_period : Text, payment_type : Text, amount : Float, notes : ?Text) : async { #Ok : Types.MemberPayment; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (user_id == "" or payment_period == "" or payment_type == "" or amount < 0) return #Err("Invalid payment");
@@ -4346,6 +4377,7 @@ persistent actor class Main(governorInit : Principal) {
   // and teams created before this wiring existed. The chat pages call this
   // before first read/send so a missing conversation self-heals.
   public shared ({ caller }) func ensure_club_conversations(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     if (messagingDomainCanister == null) return #Err("Messaging domain not configured");
@@ -4433,6 +4465,7 @@ persistent actor class Main(governorInit : Principal) {
   // closed with a clear error while no notification_queue canister is
   // configured, mirroring messaging_domain's fan-out hook.
   public shared ({ caller }) func send_fee_reminders(club_id : Text, payment_period : Text, payment_type : Text, message : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (payment_period == "" or payment_type == "" or message == "") return #Err("Invalid reminder fields");

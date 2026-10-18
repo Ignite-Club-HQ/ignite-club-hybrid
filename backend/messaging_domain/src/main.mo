@@ -260,6 +260,9 @@ persistent actor class Main(governorInit : Principal) {
   // Hard checks on the main write paths; the ingress inspect gate is advisory.
   // The transfer runner re-digests before cutover to catch anything else.
   func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func convFenced(id : Text) : Bool = transferFences.size() > 0 and conversations.any(func(c) = c.id == id and isFenced(c.club_id));
+  func msgFenced(id : Text) : Bool = transferFences.size() > 0 and messages.any(func(m) = m.id == id and convFenced(m.conversation_id));
+  func teamFenced(id : Text) : Bool = transferFences.size() > 0 and conversations.any(func(c) = c.team_id == ?id and isFenced(c.club_id));
   func blobContainsText(hay : Blob, needle : Text) : Bool {
     let h = Blob.toArray(hay); let n = Blob.toArray(needle.encodeUtf8());
     if (n.size() == 0 or n.size() > h.size()) return false;
@@ -454,6 +457,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_conversation(club_id : Text, team_id : ?Text, participants : [Principal]) : async { #Ok : Types.Conversation; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or participants.size() == 0) return #Err("Invalid conversation participants");
     if (not participants.any(func(p) = p.equal(caller))) return #Err("Invalid conversation participants");
@@ -477,6 +481,7 @@ persistent actor class Main(governorInit : Principal) {
   // before fanning out, so an end user can never self-join a chat here.
   // Existing conversations merge any missing participants (new members).
   public shared ({ caller }) func ensure_conversation(club_id : Text, team_id : ?Text, participants : [Principal]) : async { #Ok : Types.Conversation; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isGovernor(caller)) {
       switch (clubDomainCanister) {
@@ -568,6 +573,7 @@ persistent actor class Main(governorInit : Principal) {
   // The caller must be that member or one of the club's admins, so nobody can
   // open a thread they belong to.
   public shared ({ caller }) func ensure_club_admin_thread(club_id : Text, member : Principal) : async { #Ok : Types.Conversation; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
     let clubDomain = await clubDomainRef();
@@ -1142,6 +1148,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (conversations.find(func(c) = c.id == conversation_id)) { case (?c) { if (isFenced(c.club_id)) return #Err("Club is temporarily locked for a transfer"); }; case null {} };
     await* sendAs(caller, conversation_id, body, idempotency_key, attachment, reply_to_id)
@@ -1232,6 +1239,7 @@ persistent actor class Main(governorInit : Principal) {
   // derived per conversation, so a retried broadcast is safe. Announcements
   // allow a longer body than chat messages (valid() caps at 128 chars).
   public shared ({ caller }) func broadcast_announcement(club_id : Text, team_ids : [Text], include_club_chat : Bool, body : Text, idempotency_key : Text) : async { #Ok : Types.BroadcastResult; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(idempotency_key)) return #Err("Invalid announcement");
     if (body == "" or body.size() > 4000) return #Err("Invalid announcement body");
@@ -1275,6 +1283,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok({ delivered; skipped })
   };
   public shared ({ caller }) func update_message(message_id : Text, body : Text) : async { #Ok : Types.Message; #Err : Text } {
+    if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validBody(body)) return #Err("Invalid message");
     var found_idx : ?Nat = null;
@@ -1306,6 +1315,7 @@ persistent actor class Main(governorInit : Principal) {
 
 
   public shared ({ caller }) func mark_read(conversation_id : Text, message_id : Text) : async { #Ok : Types.Receipt; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     var target_msg : ?Types.Message = null;
@@ -1508,6 +1518,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_message(message_id : Text) : async { #Ok : Types.Message; #Err : Text } {
+    if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var found_idx : ?Nat = null;
     var idx = 0;
@@ -1602,6 +1613,7 @@ persistent actor class Main(governorInit : Principal) {
     team_id : ?Text,
     members : [Principal],
   ) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (findConversationIndex(conversation_id) == null) return #Err("Conversation not found");
     if (not valid(conversation_id) or not valid(name) or not validKind(kind)) return #Err("Invalid group metadata");
@@ -1671,6 +1683,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func grant_competition_admin(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("App admin required");
     if (user.equal(Principal.anonymous()) or not valid(conversation_id)) return #Err("Invalid competition admin");
@@ -1789,6 +1802,7 @@ persistent actor class Main(governorInit : Principal) {
     kind : Text,
     role_entries : [(Principal, Text)],
   ) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not validKind(kind)) return #Err("Invalid group");
     if (role_entries.size() == 0) return #Err("At least one member required");
@@ -1812,6 +1826,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_group(conversation_id : Text, name : ?Text, avatar : ?Text, description : ?Text, admin_only_posting : ?Bool) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (getGroupMetadataFor(conversation_id)) {
       case null { #Err("Group metadata not found") };
@@ -1834,6 +1849,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func add_group_members(conversation_id : Text, members : [Principal]) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (members.size() == 0 or members.any(func(p) = p.equal(Principal.anonymous()))) return #Err("Invalid members");
     switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
@@ -1883,6 +1899,7 @@ persistent actor class Main(governorInit : Principal) {
   // Same permission rule as add_group_members: group/metadata manager
   // (owner/admin role, scoped admin, governor/app_admin) only.
   public shared ({ caller }) func remove_group_member(conversation_id : Text, member : Principal) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (member.equal(Principal.anonymous())) return #Err("Invalid member");
     switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
@@ -1900,6 +1917,7 @@ persistent actor class Main(governorInit : Principal) {
   // A member removing themselves: requires current membership, no admin
   // gate (mirrors remove_group_member's effect targeted at the caller).
   public shared ({ caller }) func leave_group(conversation_id : Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
       case (null, _) { #Err("Group metadata not found") };
@@ -1913,6 +1931,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func soft_delete_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (getGroupMetadataFor(conversation_id)) {
       case null { #Err("Group metadata not found") };
@@ -1944,6 +1963,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func restore_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (getGroupMetadataFor(conversation_id)) {
       case null { #Err("Group metadata not found") };
@@ -2003,6 +2023,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func request_join_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (findGroupMetadataIndex(conversation_id) == null) return #Err("Group metadata not found");
     if (isGroupDeleted(conversation_id)) return #Err("Group deleted");
@@ -2013,6 +2034,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func approve_join_request(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
     if (not joinRequests.any(func(r) = r.conversation_id == conversation_id and r.user.equal(user) and r.status == "pending")) return #Err("Join request not found");
@@ -2052,6 +2074,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_group_join_policy(conversation_id : Text, join_policy : Text, category : ?Text) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (join_policy != "invite_only" and join_policy != "request_to_join" and join_policy != "open_to_club") return #Err("Invalid join policy");
     switch (category) { case (?c) { if (not valid(c)) return #Err("Invalid category") }; case null {} };
@@ -2085,6 +2108,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func join_open_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (joinPolicyOf(conversation_id).join_policy != "open_to_club") return #Err("Group is not open");
     switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
@@ -2110,6 +2134,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func reject_join_request(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
     joinRequests := Array.map<Types.JoinRequest, Types.JoinRequest>(joinRequests, func(r) = if (r.conversation_id == conversation_id and r.user.equal(user)) { { r with status = "rejected" } } else { r });
@@ -2130,6 +2155,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_poll(conversation_id : Text, message_id : ?Text, question : Text, options : [Text]) : async { #Ok : Types.Poll; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (not valid(question) or options.size() < 2 or options.size() > 10) return #Err("Invalid poll");
@@ -2213,6 +2239,7 @@ persistent actor class Main(governorInit : Principal) {
   // ===================== Mute preferences (storage only) =====================
 
   public shared ({ caller }) func set_mute_preference(conversation_id : Text, muted : Bool) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     mutePreferences := mutePreferences.filter(func(m) = not (m.user.equal(caller) and m.conversation_id == conversation_id));
     mutePreferences := mutePreferences.concat([{ user = caller; conversation_id; muted }]);
@@ -2287,6 +2314,7 @@ persistent actor class Main(governorInit : Principal) {
   // ===================== Forward message =====================
 
   public shared ({ caller }) func forward_message(message_id : Text, to_conversation_id : Text) : async { #Ok : Types.Message; #Err : Text } {
+    if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var original : ?Types.Message = null;
     for (m in messages.values()) { if (m.id == message_id) { original := ?m } };
@@ -2318,6 +2346,7 @@ persistent actor class Main(governorInit : Principal) {
   transient let SCHEDULED_MESSAGE_LIMIT_PER_CONVERSATION = 200;
 
   public shared ({ caller }) func register_scheduled_message(conversation_id : Text, body : Text, scheduled_at_ms : Nat64) : async { #Ok : Types.ScheduledMessage; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (not validBody(body)) return #Err("Invalid message body");
@@ -2333,6 +2362,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func replay_scheduled_message(id : Text) : async { #Ok : Types.ScheduledMessage; #Err : Text } {
+    if (msgFenced(id) or convFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var found_idx : ?Nat = null;
     var idx = 0;
@@ -2361,6 +2391,7 @@ persistent actor class Main(governorInit : Principal) {
   transient let ATTACHMENT_METADATA_LIMIT_PER_CONVERSATION = 1000;
 
   public shared ({ caller }) func register_attachment_metadata(conversation_id : Text, message_id : ?Text, kind : Text, ref_id : Text, url : ?Text, size_bytes : ?Nat64) : async { #Ok : Types.AttachmentMetadata; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (not validAttachment({ kind; ref_id; url })) return #Err("Invalid attachment metadata");
@@ -2378,6 +2409,7 @@ persistent actor class Main(governorInit : Principal) {
   // ===================== Reactions & chat catch-up / recap =====================
 
   public shared ({ caller }) func toggle_reaction(message_id : Text, emoji : Text) : async { #Ok; #Err : Text } {
+    if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(emoji)) return #Err("Invalid reaction");
     switch (messages.find(func(m) = m.id == message_id)) {
@@ -2473,6 +2505,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_dm_settings(club_id : Text, dm_disabled : Bool, attachments_disabled : Bool) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     let existing = defaultClubDmSettings(club_id);
@@ -2483,6 +2516,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_dm_allowed_roles(club_id : Text, allowed_roles : [Text]) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
@@ -2492,6 +2526,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_message_privacy(club_id : Text, force_disable_previews : Bool) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
@@ -2501,6 +2536,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_ai_catch_up(club_id : Text, ai_catch_up_enabled : Bool) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
@@ -2510,6 +2546,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func enable_ai_catch_up_for_all_members(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     var count : Nat32 = 0;
@@ -3097,6 +3134,7 @@ persistent actor class Main(governorInit : Principal) {
   transient let TYPING_TTL_MS : Nat64 = 6_000;
 
   public shared ({ caller }) func set_typing(conversation_id : Text, is_typing : Bool, name : Text) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     typingPings := typingPings.filter(func(p) = not (p.user.equal(caller) and p.conversation_id == conversation_id));
@@ -3125,6 +3163,7 @@ persistent actor class Main(governorInit : Principal) {
   transient let PIN_LIMIT = 3;
 
   public shared ({ caller }) func pin_message(conversation_id : Text, message_id : Text) : async { #Ok : Types.PinnedMessage; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (not messages.any(func(m) = m.id == message_id and m.conversation_id == conversation_id)) return #Err("Message not found");
@@ -3146,6 +3185,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func unpin_message(conversation_id : Text, message_id : Text) : async { #Ok; #Err : Text } {
+    if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     pinnedMessages := pinnedMessages.filter(func(p) = not (p.conversation_id == conversation_id and p.message_id == message_id));
@@ -3203,6 +3243,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func resolve_content_report(id : Text, status : Text) : async { #Ok : Types.ContentReport; #Err : Text } {
+    if (msgFenced(id) or convFenced(id)) return #Err("Club is temporarily locked for a transfer");
     if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
     if (status != "open" and status != "reviewed" and status != "dismissed") return #Err("Invalid status");
     var found : ?Types.ContentReport = null;
