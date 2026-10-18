@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] 15. Fix chat photo sends staying pending and duplicating after reopening; test acknowledgement and concurrent-send recovery.
+
 - [x] 14. Recover stopped frontend before syncing existing assets; remove destructive reinstall fallback. Offline regression tests pass. Live recovery and funding require the deployer workflow/account.
 
 - [x] 13. Correct frontend balance grant: verified and pinned ICP CLI 1.7.0, use `canister settings update --add-controller --force`, test failure propagation. Live grant requires rerunning the frontend workflow with this change.
