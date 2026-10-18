@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] 8. Implement optional Layer 4 OQL read-only discovery and queries, preserving caller-scoped permissions; verify protocol, contracts, and denial tests.
+
 - [x] 1. Fix notification_queue inbox ownership (list_inbox, get_notification, mark_read, mark_all_read, delete_notification now verify caller's account via identity_access.whoami; fail-closed; migration 20261018_010000)
 - [x] 2. Generate /.well-known/ic-architecture manifest in prepare-canister-dist.mjs (JSON content-type, real file wins over SPA fallback)
 - [x] 3. Add /.well-known/ii-derivation-origin (canonical icp0.io origin)
