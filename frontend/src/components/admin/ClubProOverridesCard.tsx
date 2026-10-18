@@ -68,7 +68,7 @@ export function ClubProOverridesCard() {
   const setPro = async (club: ClubRow, pro: boolean) => {
     setBusyId(club.id);
     try {
-      const [{ withFeatureBackend }, { getLiveClubSubscription, saveLiveClubSubscription }] =
+      const [{ withFeatureBackend, writeOnce }, { getLiveClubSubscription, saveLiveClubSubscription }] =
         await Promise.all([import("@/live/featureRouter"), import("@/live/features/club")]);
       await withFeatureBackend("membership", {
         supabase: async () => {
