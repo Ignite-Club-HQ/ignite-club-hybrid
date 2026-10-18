@@ -3,7 +3,7 @@ import { useMutation, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ensureFreshSession } from "@/lib/ensureFreshSession";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { toggleLiveReaction } from "@/live/features/messaging";
 import {
   normalizeGroupReactionType,
@@ -58,7 +58,7 @@ export const useGroupReactionToggle = ({
         await withFeatureBackend("messaging", {
           supabase: async () => {},
           icp: async (ctx) => { await toggleLiveReaction(ctx, messageId, normalizedReactionType); },
-        });
+        }, writeOnce({ conversationId: groupId }));
         void queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
         return { action: 'none' as const };
       }

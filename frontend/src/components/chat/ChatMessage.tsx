@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
+import { currentChatScope, chatWrite } from "@/live/chatScope";
 import { useNavigate } from "react-router-dom";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
@@ -411,7 +412,7 @@ function ChatMessageInner({
         await withFeatureBackend("messaging", {
           supabase: async () => {},
           icp: async (ctx) => { await toggleLiveReaction(ctx, id, reactionType); },
-        });
+        }, chatWrite(currentChatScope()));
         void queryClient.invalidateQueries({ queryKey });
         return;
       }
@@ -527,7 +528,7 @@ function ChatMessageInner({
           await withFeatureBackend("messaging", {
             supabase: async () => {},
             icp: async (ctx) => { await toggleLiveReaction(ctx, id, existing.reaction_type); },
-          });
+          }, chatWrite(currentChatScope()));
         }
         void queryClient.invalidateQueries({ queryKey });
         return;
@@ -595,7 +596,7 @@ function ChatMessageInner({
           if (error) throw error;
         },
         icp: async (ctx) => { await deleteLiveMessage(ctx, id); },
-      });
+      }, chatWrite(currentChatScope()));
     },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey });

@@ -315,7 +315,7 @@ export default function BroadcastChatPage() {
               }) as unknown as Message[];
             return { messages, hasOlderMessages: icpOlderCursorRef.current !== null };
           },
-        });
+        }, { shared: "app" });
       }
 
       // If offline, return cached messages using the shared online manager
@@ -666,7 +666,7 @@ export default function BroadcastChatPage() {
               hasOlder: icpOlderCursorRef.current !== null,
             };
           },
-        });
+        }, { shared: "app" });
         if (!older.rows.length) {
           setHasOlderMessages(false);
         } else {
@@ -998,7 +998,7 @@ export default function BroadcastChatPage() {
           await sendLiveMessage(ctx, "broadcast", text, `bc:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, "broadcast", user!.id).catch(() => { /* best-effort engagement counter */ });
         },
-      });
+      }, { shared: "app" });
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
       await queryClient.cancelQueries({ queryKey: ["broadcast-messages"] });
@@ -1107,7 +1107,7 @@ export default function BroadcastChatPage() {
         icp: async (ctx) => {
           await updateLiveMessage(ctx, editingMessage.id, message.trim());
         },
-      });
+      }, { shared: "app" });
     },
     onSuccess: () => {
       setMessage("");

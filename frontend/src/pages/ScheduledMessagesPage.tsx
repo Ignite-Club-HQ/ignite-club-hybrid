@@ -131,7 +131,7 @@ function useThreadLabels(rows: ScheduledMessageRow[]) {
       return withFeatureBackend("messaging", {
         supabase: () => fetchSupabaseThreadLabels(rows, teamIds, clubIds, groupIds, dmConvIds, adminConvIds),
         icp: (ctx) => fetchIcpThreadLabels(ctx, rows, teamIds, clubIds, groupIds, dmConvIds, adminConvIds),
-      });
+      }, { everyGroup: true, merge: (parts: Record<string, unknown>[]) => Object.assign({}, ...parts) });
     },
     enabled: rows.length > 0,
     staleTime: 60 * 1000,

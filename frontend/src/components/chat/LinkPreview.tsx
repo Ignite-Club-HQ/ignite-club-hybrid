@@ -93,7 +93,7 @@ async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
             siteName: p.site_name[0] ?? undefined,
           };
         },
-      });
+      }, { shared: "app" });
       const hasContent = data && (data.title || data.description || data.image);
       // In chat history we reserve a fixed h-20 slot for URL previews before
       // metadata returns. If the edge function succeeds but finds no title / image,

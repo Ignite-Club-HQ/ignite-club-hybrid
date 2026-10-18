@@ -53,7 +53,7 @@ export async function fetchUnreadMessageCounts(userId: string): Promise<UnreadMe
       }
       return counts;
     },
-  });
+  }, { everyGroup: true, merge: mergeUnreadMessageCounts });
 }
 
 async function fetchUnreadMessageCountsSupabase(userId: string): Promise<UnreadMessageCounts> {

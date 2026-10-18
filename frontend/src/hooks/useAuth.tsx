@@ -388,7 +388,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           return counts;
         },
-      }),
+      }, { everyGroup: true, merge: (parts: number[]) => parts.reduce((a, b) => a + b, 0) }),
     ]);
 
     setUnreadCount(allCount);

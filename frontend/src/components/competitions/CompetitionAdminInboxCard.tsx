@@ -85,7 +85,7 @@ export function CompetitionAdminInboxCard({ competitionId, hostClubId }: { compe
         }))).filter((row): row is ThreadRow => row !== null)
           .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
       },
-    }),
+    }, hostClubId ? { clubId: hostClubId } : undefined),
   });
 
   return (

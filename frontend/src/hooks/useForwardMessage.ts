@@ -105,7 +105,7 @@ export function useForwardDestinations(userId: string | undefined, enabled: bool
             .map((group) => ({ ...group, club_name: clubNames.get(group.club_id!) ?? null }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      });
+      }, { everyGroup: true, merge: (parts: ForwardDestinationGroup[][]) => parts.flat() });
     },
   });
 }

@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { registerLiveCompetitionTeam, isLiveCompetitionAdmin, assignLiveDivision } from "@/live/features/competitions";
 import { ensureLiveCompetitionAdminThread } from "@/live/features/messaging";
 import { createLiveShellTeamInvite } from "@/live/features/membership";
@@ -338,7 +338,7 @@ function SupabaseCompetitionDetailPage() {
           return data;
         },
         icp: async (ctx) => ensureLiveCompetitionAdminThread(ctx, id, user.id),
-      });
+      }, organizerClubId ? writeOnce({ clubId: organizerClubId }) : undefined);
     },
     onSuccess: (conversationId) => navigate(`/groups/${encodeURIComponent(conversationId)}`),
     onError: (error: Error) => toast({ title: "Could not open competition inbox", description: error.message, variant: "destructive" }),

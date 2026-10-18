@@ -24,7 +24,7 @@ export function useBlockedUsers() {
         return withFeatureBackend("messaging", {
           supabase: async () => [] as string[],
           icp: (ctx) => liveListBlockedUsers(ctx),
-        });
+        }, { shared: "person" });
       }
       const { data, error } = await supabase
         .from("blocked_users")
@@ -43,7 +43,7 @@ export function useBlockedUsers() {
         await withFeatureBackend("messaging", {
           supabase: async () => {},
           icp: (ctx) => liveBlockUser(ctx, Principal.fromText(blockedId)),
-        });
+        }, { shared: "person" });
         return;
       }
       const { error } = await supabase
@@ -62,7 +62,7 @@ export function useBlockedUsers() {
         await withFeatureBackend("messaging", {
           supabase: async () => {},
           icp: (ctx) => liveUnblockUser(ctx, Principal.fromText(blockedId)),
-        });
+        }, { shared: "person" });
         return;
       }
       const { error } = await supabase

@@ -51,7 +51,7 @@ async function hasAnyLiveAICatchUpClub(scopedClubId?: string | null): Promise<bo
       }
       return false;
     },
-  });
+  }, scopedClubId ? { clubId: scopedClubId } : { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) });
 }
 
 /**
@@ -139,7 +139,7 @@ export function useUserHasAnyAICatchUpClub(scopedClubId?: string | null) {
             const settings = await getLiveUserMessagingSettings(ctx);
             return settings.ai_catchup_enabled === false;
           },
-        });
+        }, { shared: "person" });
       }
       const { data } = await supabase
         .from("profiles")

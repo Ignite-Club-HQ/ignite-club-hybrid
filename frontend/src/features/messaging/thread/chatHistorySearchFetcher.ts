@@ -3,6 +3,7 @@ import {
   type ChatScopeAdapter,
 } from "@/features/messaging/scopes/chatScopeAdapters";
 import { searchChatHistory } from "@/lib/searchChatHistory";
+import { scopeForChat } from "@/live/chatScope";
 
 interface ChatHistorySearchFetcherOptions<TMessage> {
   scope: ChatScopeAdapter;
@@ -44,6 +45,6 @@ export function createChatHistorySearchFetcher<TMessage>({
         const { searchLiveMessages } = await import("@/live/features/messaging");
         return (await searchLiveMessages(ctx, scopeId, query, 100)) as unknown as TMessage[];
       },
-    });
+    }, scopeForChat(scope.kind, scopeId));
   };
 }

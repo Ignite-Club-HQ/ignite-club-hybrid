@@ -5,6 +5,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { currentChatScope } from "@/live/chatScope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Check, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,7 +77,7 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
             const { listLiveReadReceipts } = await import("@/live/features/messaging");
             return listLiveReadReceipts(ctx, contextId || messageId);
           },
-        });
+        }, contextId ? { conversationId: contextId } : currentChatScope());
         if (cancelled) return;
 
         const readerIds = [
@@ -97,7 +98,7 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
                 const { getLiveGroupMetadata } = await import("@/live/features/messaging");
                 return getLiveGroupMetadata(ctx, contextId);
               },
-            });
+            }, contextId ? { conversationId: contextId } : currentChatScope());
             memberIds = (meta?.members ?? [])
               .map((p) => p.toText())
               .filter((id) => id !== currentUserId);
@@ -115,7 +116,7 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
               const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
               return listLiveProfilesByIds(ctx, allIds);
             },
-          });
+          }, { shared: "app" });
           for (const p of profiles as any[]) {
             profileMap.set(p.account_id, { display_name: p.display_name ?? null, avatar_url: p.avatar_url ?? null });
           }

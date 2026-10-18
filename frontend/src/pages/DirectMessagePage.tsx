@@ -84,7 +84,7 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";
@@ -483,7 +483,7 @@ export default function DirectMessagePage() {
             return false;
           }
         },
-      });
+      }, { shared: "person" });
     },
     enabled: !!user?.id && !isIgniteSupportConversation,
     staleTime: 5 * 60 * 1000,
@@ -514,7 +514,7 @@ export default function DirectMessagePage() {
             return true;
           }
         },
-      });
+      }, { shared: "person" });
     },
     enabled: !!otherUserId && authReady,
     staleTime: 30 * 1000, // Shorter stale time - 30 seconds
@@ -1341,7 +1341,7 @@ export default function DirectMessagePage() {
           // Provisional: message id is shared across both backends.
           await updateLiveMessage(ctx, editingMessage.id, message.trim());
         },
-      });
+      }, writeOnce({ conversationId: conversationId! }));
     },
     onSuccess: () => {
       setMessage("");

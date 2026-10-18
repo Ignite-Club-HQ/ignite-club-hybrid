@@ -22,7 +22,7 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { PageLoading } from "@/components/ui/page-loading";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { isLiveAppAdmin } from "@/live/features/insights";
 import { listLiveClubs, myLiveRoleGrants } from "@/live/features/club";
 import {
@@ -86,7 +86,7 @@ export default function AdminDeletedChatsPage() {
               .map((g) => g.club[0]!),
           };
         },
-      }),
+      }, { shared: "app" }),
     enabled: !!user?.id,
   });
 
@@ -167,7 +167,7 @@ export default function AdminDeletedChatsPage() {
             club_name: g.clubId ? clubMap.get(g.clubId) ?? null : null,
           }));
         },
-      }),
+      }, { everyGroup: true, merge: (parts: DeletedGroup[][]) => parts.flat() }),
     enabled: hasAccess,
   });
 
@@ -184,7 +184,7 @@ export default function AdminDeletedChatsPage() {
         icp: async (ctx) => {
           await restoreLiveGroup(ctx, id);
         },
-      }),
+      }, writeOnce({ conversationId: id })),
     onSuccess: () => {
       toast.success("Chat restored");
       queryClient.invalidateQueries({ queryKey: ["admin-deleted-chats"] });
@@ -204,7 +204,7 @@ export default function AdminDeletedChatsPage() {
         icp: async (ctx) => {
           await purgeLiveGroup(ctx, id);
         },
-      }),
+      }, writeOnce({ conversationId: id })),
     onSuccess: () => {
       toast.success("Chat permanently deleted");
       setPurgeTarget(null);

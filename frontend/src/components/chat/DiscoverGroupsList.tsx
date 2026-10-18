@@ -134,7 +134,7 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
               last_text: null,
               last_at: null,
             })),
-        });
+        }, { clubId: activeClubFilter ?? "" });
       }
       let q = supabase
         .from("chat_groups")
@@ -225,7 +225,7 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
                 (g.role === "club_admin" || g.role === "committee_member"),
             );
           },
-        });
+        }, { clubId: activeClubFilter ?? "" });
       }
       const { data } = await supabase
         .from("user_roles")

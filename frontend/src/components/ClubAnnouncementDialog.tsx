@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { refreshSessionOnce } from "@/lib/refreshSessionOnce";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { broadcastLiveAnnouncement } from "@/live/features/messaging";
 
 
@@ -186,7 +186,7 @@ export function ClubAnnouncementDialog({
           });
           return { skipped: result.skipped ?? [] };
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: (result) => {
       const parts: string[] = [];

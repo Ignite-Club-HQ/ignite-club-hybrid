@@ -212,7 +212,7 @@ export default function MessagesPage() {
             });
             if (!cancelled) navigate(route, { replace: true });
           },
-        });
+        }, { conversationId });
       } catch {
         // Resolution failed (offline, canister error) — stay on the inbox.
       }

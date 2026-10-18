@@ -49,7 +49,7 @@ async function fetchIcpUnreadMessageCounts(): Promise<UnreadMessageCounts> {
       }
       return counts;
     },
-  });
+  }, { everyGroup: true, merge: mergeUnreadMessageCounts });
 }
 
 const isNative = () => Capacitor.isNativePlatform();

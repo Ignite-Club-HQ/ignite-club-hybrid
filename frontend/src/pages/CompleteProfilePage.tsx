@@ -591,7 +591,7 @@ function SupabaseCompleteProfilePage() {
           sendLiveWelcomeMessage(ctx, welcomeMessage).then(() => {
             console.log("[CompleteProfile] Welcome DM sent successfully");
           }),
-      }).catch(err => {
+      }, { shared: "person" }).catch(err => {
         console.warn("[CompleteProfile] Error calling welcome DM function:", err);
       });
 
