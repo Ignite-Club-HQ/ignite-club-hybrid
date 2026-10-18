@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { savePitchState } from "../pitchStateUtils";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { buildEventLineupSnapshot, lineupSignature, saveEventLineup } from "../eventLineupRepository";
 import type { Player, TeamSize, SubstitutionEvent, Goal } from "../types";
 

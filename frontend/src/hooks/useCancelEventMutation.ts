@@ -3,7 +3,8 @@ import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { refreshEventCaches } from "@/lib/eventCacheRefresh";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { cancelEventOnIcp } from "@/features/events/icpEventCancellation";
 
 // Thrown when a recurring-series cancellation committed only one of its two

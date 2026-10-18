@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { refreshSessionOnce } from "@/lib/refreshSessionOnce";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { broadcastLiveAnnouncement } from "@/live/features/messaging";
 
 

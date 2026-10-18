@@ -4,7 +4,8 @@ import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { getMatchArrivalDate } from "@/lib/matchArrivalTime";
 import { setLocalEventDuty } from "@/lab/localEventsService";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   completeLiveEventDuty,

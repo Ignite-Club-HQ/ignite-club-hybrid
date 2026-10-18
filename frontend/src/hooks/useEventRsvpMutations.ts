@@ -5,7 +5,8 @@ import { queueRsvp } from "@/lib/rsvpQueue";
 import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { setLocalEventRsvp } from "@/lab/localEventsService";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { setLiveEventRsvp, setLiveChildRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus, setLiveRsvpNote } from "@/live/features/events";
 import { recordLiveRsvpCompleted } from "@/live/features/insights";
 

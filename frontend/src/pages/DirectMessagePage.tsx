@@ -84,7 +84,8 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";

@@ -19,7 +19,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { listLiveSeriesOccurrences, addLiveSeriesOccurrence, deleteLiveEvent } from "@/live/features/events";
 
 interface Props {

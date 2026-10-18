@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Trash2, Loader2, CalendarOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   createLiveTeamTrainingPause,

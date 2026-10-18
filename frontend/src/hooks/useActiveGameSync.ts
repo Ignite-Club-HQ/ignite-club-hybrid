@@ -4,7 +4,8 @@ import { useAuth } from "./useAuth";
 import { recordSyncWrite } from "@/lib/syncWriteRateMonitor";
 import { hasAnchoredTimerMarker, mayWriteLegacyTimerState } from "@/lib/serverTimer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { syncLiveActiveGame, deactivateLiveActiveGame } from "@/live/features/events";
 import type { Json } from "@/integrations/supabase/types";
 

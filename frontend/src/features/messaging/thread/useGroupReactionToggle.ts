@@ -3,7 +3,8 @@ import { useMutation, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ensureFreshSession } from "@/lib/ensureFreshSession";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { toggleLiveReaction } from "@/live/features/messaging";
 import {
   normalizeGroupReactionType,

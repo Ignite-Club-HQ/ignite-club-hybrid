@@ -3,7 +3,8 @@ import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { markLiveConversationRead, listLiveReadReceipts } from "@/live/features/messaging";
 import { selectCachedProfilesByIds, selectCachedProfileById } from "@/lib/profileCache";
 

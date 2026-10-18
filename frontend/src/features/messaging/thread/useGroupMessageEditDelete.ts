@@ -3,7 +3,8 @@ import { useMutation, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { removeMessageFromCache } from "@/lib/messageCache";
 import type { GroupChatSupabaseClient, GroupMessage } from "@/features/messaging/thread/groupChatData";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { deleteLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 
 interface UseGroupMessageEditDeleteOptions {

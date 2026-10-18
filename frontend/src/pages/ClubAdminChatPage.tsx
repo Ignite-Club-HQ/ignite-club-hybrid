@@ -83,7 +83,8 @@ import { createChatHistorySearchFetcher } from "@/features/messaging/thread/chat
 import { CLUB_ADMIN_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdapters";
 import { Capacitor } from "@capacitor/core";
 
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { sendLiveMessage, updateLiveMessage, ensureLiveClubAdminThread, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 import { getLiveClubProfile } from "@/live/features/club";
 import { recordLiveMessageSent } from "@/live/features/insights";

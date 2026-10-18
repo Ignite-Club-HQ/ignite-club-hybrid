@@ -10,7 +10,8 @@ import { useState, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { saveLivePitchBoardSettings } from "@/live/features/events";
 import { TeamSize, FORMATIONS } from "@/components/pitch/types";
 

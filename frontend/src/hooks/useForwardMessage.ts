@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { forwardLiveMessage, listLiveGroupsByClub, listLiveGroupsByTeam } from "@/live/features/messaging";
 import { recordLiveChatNotifyBatch } from "@/live/features/notifications";
 import { getLiveClubProfile } from "@/live/features/club";

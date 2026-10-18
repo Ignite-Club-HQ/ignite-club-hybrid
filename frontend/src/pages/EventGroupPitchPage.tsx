@@ -16,7 +16,8 @@ import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { AddDutySheet } from "@/components/AddDutySheet";
 import { AssignDutySheet } from "@/components/AssignDutySheet";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { setLiveGroupDuty, removeLiveGroupDuty } from "@/live/features/events";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 

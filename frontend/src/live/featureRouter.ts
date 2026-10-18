@@ -118,8 +118,4 @@ function hasSupabaseSession(): boolean {
   return false;
 }
 
-/** Mark a club-scoped call as a write that is never retried automatically
- * (most canister writes have no idempotency key). */
-export function writeOnce<S extends object>(scope: S): S & { writeKey: string; attempts: 1 } {
-  return { ...scope, writeKey: 'once', attempts: 1 };
-}
+export { writeOnce } from "./clubScope";

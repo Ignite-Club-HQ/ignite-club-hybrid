@@ -22,7 +22,8 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { PageLoading } from "@/components/ui/page-loading";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { isLiveAppAdmin } from "@/live/features/insights";
 import { listLiveClubs, myLiveRoleGrants } from "@/live/features/club";
 import {

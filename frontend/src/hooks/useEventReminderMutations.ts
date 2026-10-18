@@ -6,7 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { resolveEventRecipients, eventRecipientContext } from "@/features/events/eventRecipientPolicy";
 import { resolveReminderRecipients, applyReminderCooldown, normalizeRecipientIds } from "@/features/events/reminderRecipients";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { sendLiveEventReminders } from "@/live/features/events";
 

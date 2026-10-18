@@ -8,7 +8,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Trophy, Loader2, Unlink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveClubProfile, getLiveTeam, saveLiveTeam } from "@/live/features/club";
 import { listLivePlayHQCompetitions, listLivePlayHQFixtures, importLivePlayHQTeamFixtures, setLivePlayHQTeamSync } from "@/live/features/events";
 

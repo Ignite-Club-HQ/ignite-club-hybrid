@@ -23,7 +23,8 @@ import {
 import { Plus, Crown, Check, Users, Shield, Sparkles, ChevronLeft, ChevronRight, Search, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { createLiveGroupWithRoles } from "@/live/features/messaging";
 import { fetchLiveMessagingCandidates } from "@/live/messagingCandidates";
 import { Principal } from "@icp-sdk/core/principal";

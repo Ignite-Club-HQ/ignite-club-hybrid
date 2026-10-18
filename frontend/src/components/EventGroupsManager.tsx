@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Wand2, Loader2, X, Copy, Shirt, RefreshCw, Flame, MoreHorizontal, ChevronDown, ArrowRightLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
-import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveMiniLeague, listLivePlayers } from "@/live/features/miniLeagues";
 import {
   createLiveEventGroup,
