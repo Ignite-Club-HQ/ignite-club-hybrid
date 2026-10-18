@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
+import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
+import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const wasm = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
@@ -69,7 +71,47 @@ try {
   assert.equal((await actor.health()).total_bytes, BigInt(replacement.length));
   const response = await actor.http_request({ url: '/missing', method: 'GET', headers: [], body: [] });
   assert.equal(response.status_code, 404);
+  // Real actor calls across two stores, including concurrent quota admission.
+  const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
+  club.actor.setPrincipal(governor);
+  ok(await club.actor.create_club('c1', 'Test club', 'test-club', [], []));
+  const second = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
+  for (const store of [fixture, second]) {
+    store.actor.setPrincipal(governor);
+    ok(await store.actor.set_club_domain_canister(club.canisterId));
+    ok(await club.actor.register_media_quota_store(store.canisterId));
+  }
+  ok(await club.actor.start_media_quota_cutover());
+  assert.ok('Err' in await club.actor.activate_media_quota());
+  for (const store of [fixture, second]) {
+    ok(await store.actor.freeze_media_quota());
+    assert.ok('Err' in await store.actor.begin_upload('clubs/c1/new', 'image/jpeg', 1n, 1));
+    ok(await club.actor.import_media_quota_store(store.canisterId));
+  }
+  ok(await club.actor.activate_media_quota());
+  for (const store of [fixture, second]) { ok(await store.actor.enable_shared_media_quota()); store.actor.setPrincipal(owner); }
+  club.actor.setPrincipal(other);
+  assert.ok('Err' in await club.actor.reserve_media_quota('spoof', 'c1', 'gallery_photo', 1n, 0n));
+  const reservations = await Promise.all(Array.from({ length: 8 }, (_, i) => {
+    const store = i % 2 ? second.actor : actor;
+    return store.begin_upload(`clubs/c1/photos/${i}.jpg`, 'image/jpeg', 1n, 1).then(result => ({ store, id: ok(result) }));
+  }));
+  for (const { store, id } of reservations) { ok(await store.put_chunk(id, 0, [42])); const finalized = ok(await store.finalize_upload(id)); assert.deepEqual(ok(await store.finalize_upload(id)), finalized); assert.ok('Err' in await store.abort_upload(id)); }
+  const tail = await Promise.all([actor.begin_upload('clubs/c1/photos/8.jpg', 'image/jpeg', 1n, 1), second.actor.begin_upload('clubs/c1/photos/9.jpg', 'image/jpeg', 1n, 1)]);
+  const ninth = ok(tail[0]); const tenth = ok(tail[1]);
+  assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/over.jpg', 'image/jpeg', 1n, 1));
+  ok(await second.actor.abort_upload(tenth));
+  const replacementId = ok(await second.actor.begin_upload('clubs/c1/photos/released.jpg', 'image/jpeg', 1n, 1));
+  const sameId = ok(await second.actor.begin_upload('clubs/c1/photos/released.jpg', 'image/jpeg', 1n, 1));
+  assert.equal(replacementId, sameId);
+  for (const [store, id] of [[actor, ninth], [second.actor, replacementId]]) { ok(await store.put_chunk(id, 0, [42])); ok(await store.finalize_upload(id)); }
+  assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/still-over.jpg', 'image/jpeg', 1n, 1));
+  // Advance across an exact 30-day quota boundary; fresh allowance must open.
+  await pic.advanceTime(31 * 86_400_000); await pic.tick();
+  const nextCycle = ok(await actor.begin_upload('clubs/c1/photos/next-cycle.jpg', 'image/jpeg', 1n, 1));
+  ok(await actor.put_chunk(nextCycle, 0, [43])); ok(await actor.finalize_upload(nextCycle));
   console.log('PASS: authenticated upload, streaming read-back, migration integrity/idempotency, owner denial, replacement/delete/reuse and EOP upgrade preservation.');
+  console.log('PASS: real two-store freeze/import/activation, denied spoofed reservation, 10 shared slots including pending writes, idempotent begin/finalize, release/refund and 30-day boundary.');
 } finally {
   if (pic) await pic.tearDown();
   await server.stop();
