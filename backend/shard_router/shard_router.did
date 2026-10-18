@@ -73,6 +73,7 @@ type Result_11 = variant { Ok : vec ShardGroup; Err : text };
 type Result_12 = variant { Ok : Page; Err : text };
 type Result_13 = variant { Ok : GroupRegistrySnapshot; Err : text };
 type Result_14 = variant { Ok : vec GroupAssignment; Err : text };
+type Result_15 = variant { Ok : GroupAssignment; Err : text };
 type Result_2 = variant { Ok : AssignDomainResult; Err : text };
 type Result_3 = variant { Ok : GroupAssignment; Err : text };
 type Result_4 = variant { Ok : DomainMigration; Err : text };
@@ -117,6 +118,7 @@ service : (Init) -> {
   // Public: live memory reading for the admin health page.
   memory_stats : () -> (MemoryStats) query;
   read_group_registry : (text) -> (Result_13);
+  read_hosted_club_assignment : (text, text, nat64) -> (Result_15) query;
   read_my_group_assignments : (vec text, text, nat64) -> (Result_14);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   register_group : (ShardGroup, nat64) -> (Result);

@@ -591,6 +591,26 @@ async fn read_my_group_assignments(club_ids: Vec<String>, target_alias: String, 
     Ok(checked.into_iter().map(|(a, _)| a).collect())
 }
 
+// Where a club lives, for reading something that club hosts (for example a
+// competition other clubs have entered). Any signed-in caller may ask; only
+// the group id is returned and every destination canister keeps its own
+// access rules, so this never grants access to the club's data.
+#[ic_cdk::query]
+fn read_hosted_club_assignment(club_id: String, target_alias: String, expected_revision: u64) -> Outcome<GroupAssignment> {
+    if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
+    hosted_assignment(&club_id, &target_alias, expected_revision, current_revision())
+}
+
+fn hosted_assignment(club_id: &str, target_alias: &str, expected_revision: u64, revision: u64) -> Outcome<GroupAssignment> {
+    discovery::validate_clubs(&[club_id.to_string()])?;
+    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
+    if revision != expected_revision { return Err("Revision conflict".into()); }
+    let assignment = group_assignment_for(club_id).ok_or("Missing club assignment")?;
+    let group = group_for(&assignment.group_id).ok_or("Missing assigned group")?;
+    if group.target_alias != target_alias { return Err("Assignment belongs to another deployment".into()); }
+    Ok(assignment)
+}
+
 #[ic_cdk::update]
 fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
     require_governor()?;
