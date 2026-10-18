@@ -671,6 +671,25 @@ export async function getLiveMinimumAppVersions(
   return result.Ok;
 }
 
+export async function setLiveMinimumAppVersions(ctx: FeatureBackendContext, versions: [string, string][]) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_minimum_app_versions(versions), "Save minimum app versions");
+}
+
+export type LivePhotoReminderSettings = {
+  enabled: boolean; window_start_hours: number; window_end_hours: number; cooldown_days: number;
+};
+
+export async function getLiveChatPhotoReminderSettings(ctx: FeatureBackendContext): Promise<LivePhotoReminderSettings> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_chat_photo_reminder_settings(), "Load photo reminder settings");
+}
+
+export async function setLiveChatPhotoReminderSettings(ctx: FeatureBackendContext, settings: LivePhotoReminderSettings) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_chat_photo_reminder_settings(settings), "Save photo reminder settings");
+}
+
 /**
  * Server-side link preview via the canister's HTTPS outcall (replicated
  * read, no API key needed). Replaces the Supabase fetch-link-preview edge
