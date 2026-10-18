@@ -23,6 +23,7 @@
 //                                @icp-sdk/core from (CI installs it there).
 
 import { createRequire } from "node:module";
+import { unwrapQueueResult } from "./icp-push-results.mjs";
 
 function requireIc() {
   const candidates = [];
@@ -88,7 +89,7 @@ const idlFactory = ({ IDL }) =>
     claim: IDL.Func([IDL.Nat64, IDL.Nat16], [IDL.Variant({ Ok: IDL.Vec(Notification), Err: IDL.Text })], []),
     acknowledge: IDL.Func([IDL.Text, IDL.Text], [Result], []),
     fail: IDL.Func([IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64)], [Result], []),
-    list_device_tokens: IDL.Func([IDL.Vec(IDL.Text)], [IDL.Vec(DeviceToken)], ["query"]),
+    list_device_tokens: IDL.Func([IDL.Vec(IDL.Text)], [IDL.Variant({ Ok: IDL.Vec(DeviceToken), Err: IDL.Text })], ["query"]),
     remove_device_tokens: IDL.Func([IDL.Text, IDL.Vec(IDL.Text)], [ResultNat16], []),
   });
 
@@ -281,8 +282,8 @@ async function main() {
   const agent = new HttpAgent({ identity, host: HOST });
   const queue = Actor.createActor(idlFactory, { agent, canisterId: CANISTER_ID });
 
-  const recovered = await queue.recover();
-  if (recovered.Ok !== undefined && recovered.Ok > 0) console.log(`Recovered ${recovered.Ok} stranded notifications`);
+  const recovered = unwrapQueueResult(await queue.recover(), "recover");
+  if (recovered > 0) console.log(`Recovered ${recovered} stranded notifications`);
 
   const claimed = await queue.claim(nowMs(), BATCH_SIZE);
   if (claimed.Err) throw new Error(`claim failed: ${claimed.Err}`);
@@ -294,7 +295,7 @@ async function main() {
   console.log(`Claimed ${items.length} notifications`);
 
   const users = [...new Set(items.map((n) => n.user))];
-  const tokenRows = await queue.list_device_tokens(users);
+  const tokenRows = unwrapQueueResult(await queue.list_device_tokens(users), "device tokens");
   const tokensByUser = new Map();
   for (const t of tokenRows) {
     if (t.platform !== "android" && t.platform !== "ios") continue; // web tokens need a VAPID path — skipped for now
@@ -333,14 +334,14 @@ async function main() {
     const key = o.n.idempotency_key?.length ? o.n.idempotency_key[0] : "";
     try {
       if (o.status === "delivered") {
-        await queue.acknowledge(o.n.id, key);
+        unwrapQueueResult(await queue.acknowledge(o.n.id, key), "acknowledge");
         acked++;
       } else if (o.status === "no_tokens") {
         // No device registered — treat as delivered so it doesn't retry forever.
-        await queue.acknowledge(o.n.id, key);
+        unwrapQueueResult(await queue.acknowledge(o.n.id, key), "acknowledge");
         noTokens++;
       } else {
-        await queue.fail(o.n.id, o.error ?? "delivery failed", [nowMs() + BigInt(RETRY_DELAY_MS)]);
+        unwrapQueueResult(await queue.fail(o.n.id, o.error ?? "delivery failed", [nowMs() + BigInt(RETRY_DELAY_MS)]), "retry");
         failed++;
       }
     } catch (e) {
