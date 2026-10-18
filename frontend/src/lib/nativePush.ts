@@ -206,7 +206,7 @@ async function saveFCMToken(userId: string, token: string): Promise<boolean> {
       }
       await registerLiveDeviceToken(
         { identity, target: getActiveIcpTarget() },
-        { platform, token },
+        { platform, token, appVersion: (await getAppVersion())?.version, buildNumber: (await getAppVersion())?.build },
       );
       console.log('[NativePush] Token registered on notification canister');
       return true;

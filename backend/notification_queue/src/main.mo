@@ -53,6 +53,7 @@ persistent actor class Main(governorInit : Principal) {
   // Caller-scoped writes; the delivery worker reads/prunes via worker-gated
   // methods below.
   var device_tokens : [Types.DeviceToken];
+  var deviceVersions : [{ user : Text; platform : Text; app_version : ?Text; build_number : ?Text }];
 
   public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
     governorOnly(caller);
@@ -1138,6 +1139,27 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(removed)
   };
 
+  public shared ({ caller }) func register_device_version(platform : Text, app_version : ?Text, build_number : ?Text) : async { #Ok; #Err : Text } {
+    authenticated(caller);
+    if (platform != "ios" and platform != "android" and platform != "web") return #Err("Invalid platform");
+    for (value in [app_version, build_number].values()) {
+      switch (value) { case (?v) { if (v.size() == 0 or v.size() > 64) return #Err("Invalid version") }; case null {} };
+    };
+    let user = Principal.toText(caller);
+    if (not device_tokens.any(func(t) = t.user == user and t.platform == platform)) return #Err("Register a device first");
+    deviceVersions := deviceVersions.filter(func(v) = v.user != user or v.platform != platform);
+    deviceVersions := deviceVersions.concat([{ user; platform; app_version; build_number }]);
+    #Ok
+  };
+
+  // Version metadata is device-reported, not attestation. Never return push tokens.
+  public shared ({ caller }) func get_update_reminder_audience(users : [Text], club : Text) : async { #Ok : [{ user : Text; platform : Text; app_version : ?Text; build_number : ?Text }]; #Err : Text } {
+    if (users.size() > 500) return #Err("Too many recipients");
+    switch (await authorizeUpdateReminder(caller, users, club)) { case (#Err(e)) { return #Err(e) }; case (#Ok) {} };
+    #Ok(deviceVersions.filter(func(v) = users.any(func(u) = u == v.user) and
+      device_tokens.any(func(t) = t.user == v.user and t.platform == v.platform)))
+  };
+
   public query ({ caller }) func list_device_tokens(users : [Text]) : async Types.DeviceTokensResult {
     worker(caller);
     if (users.size() > 100) { return #Err("Too many users") };
@@ -1240,6 +1262,10 @@ persistent actor class Main(governorInit : Principal) {
 
     let oldText = Principal.toText(old);
     let newText = Principal.toText(new);
+    let newDeviceVersions = deviceVersions.filter(func(v) = v.user != oldText).concat(
+      deviceVersions.filter(func(v) = v.user == oldText and not deviceVersions.any(func(n) = n.user == newText and n.platform == v.platform))
+        .map(func(v) = { v with user = newText })
+    );
 
     // Conflict guard: non-ephemeral records already referencing `new`.
     // (device_tokens and preferences are excluded — they are the
@@ -1320,6 +1346,7 @@ persistent actor class Main(governorInit : Principal) {
       push_settings := newPushSettings;
       device_tokens := dedupedDeviceTokens;
       preferences := newPreferences;
+      deviceVersions := newDeviceVersions;
     };
 
     #ok(changed)

@@ -739,6 +739,8 @@ export interface LiveDeviceTokenInput {
   token: string;
   p256dh?: string | null;
   auth?: string | null;
+  appVersion?: string | null;
+  buildNumber?: string | null;
 }
 
 export async function registerLiveDeviceToken(
@@ -746,7 +748,7 @@ export async function registerLiveDeviceToken(
   input: LiveDeviceTokenInput,
 ) {
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
-  return unwrapCandid(
+  await unwrapCandid(
     actor.register_device_token(
       input.platform,
       input.token,
@@ -755,6 +757,15 @@ export async function registerLiveDeviceToken(
     ),
     "Register device token",
   );
+  if (input.appVersion || input.buildNumber) {
+    await unwrapCandid(actor.register_device_version(input.platform,
+      input.appVersion ? [input.appVersion] : [], input.buildNumber ? [input.buildNumber] : []), "Register device version");
+  }
+}
+
+export async function getLiveUpdateReminderAudience(ctx: FeatureBackendContext, users: string[], club: string) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_update_reminder_audience(users, club), "Load update reminder audience");
 }
 
 export async function unregisterLiveDeviceToken(ctx: FeatureBackendContext, token: string) {
