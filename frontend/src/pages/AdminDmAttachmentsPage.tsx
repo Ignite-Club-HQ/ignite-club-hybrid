@@ -189,7 +189,7 @@ export default function AdminDmAttachmentsPage() {
             await setLiveDmAttachmentsDisabled(ctx, Principal.fromText(restriction.user_id!), false);
           }
         },
-      }),
+      }, { clubId: restriction.club_id! }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dm-attachment-restrictions"] });
       toast.success("Restriction removed");

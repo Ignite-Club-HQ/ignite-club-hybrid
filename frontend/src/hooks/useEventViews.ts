@@ -175,4 +175,4 @@ export function useUserEventViews(userId: string | undefined, eventIds: string[]
         },
       }),
   });
-}, { eventId: eventId! }
+}, { eventId: eventId! }, { eventId: eventId! }

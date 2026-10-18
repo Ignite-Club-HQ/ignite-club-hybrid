@@ -281,7 +281,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
             const sub = await getLiveClubSubscription(ctx, team!.club_id);
             return sub ? mapLiveClubSubscriptionToRow(sub) : null;
           },
-        });
+        }, { clubId: team!.club_id });
       }
       const { data } = await supabase
         .from("club_subscriptions")

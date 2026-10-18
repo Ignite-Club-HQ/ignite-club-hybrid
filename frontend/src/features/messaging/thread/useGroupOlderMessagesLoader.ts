@@ -72,7 +72,7 @@ export const useGroupOlderMessagesLoader = ({
                 : null;
             return { older, nextCursor };
           },
-        });
+        }, { conversationId: groupId! });
         if (icpOlderCursorRef) icpOlderCursorRef.current = result.nextCursor;
         setHasOlderMessages(result.nextCursor !== null);
         queueAnchoredPrepend(() => {

@@ -151,4 +151,4 @@ export function useTrainingDefault({ teamId, childId, userId, clubId }: Args) {
     clearDefault: clear.mutate,
     isSaving: upsert.isPending || clear.isPending,
   };
-}, { clubId: clubId }
+}, { clubId: clubId }, { clubId: clubId }

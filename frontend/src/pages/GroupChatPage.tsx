@@ -405,7 +405,7 @@ export default function GroupChatPage() {
               return null;
             }
           },
-        });
+        }, { conversationId: groupId! });
       }
 
       const { data, error } = await supabase
@@ -1102,8 +1102,7 @@ export default function GroupChatPage() {
               })();
           const saved = await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, groupId, user.id).catch(() => { /* best-effort engagement counter */ });
-          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };
-        },
+          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };, { conversationId: groupId }},
       });
       return deliveredSend(confirmedMessage ?? undefined);
     },
@@ -1498,7 +1497,7 @@ export default function GroupChatPage() {
               .maybeSingle();
             return { adminsOnly: !!comp?.member_chat_admins_only, isCompetitionAdmin };
           },
-        });
+        }, { conversationId: groupId! });
       }
       const [{ data: comp }, { data: isAdmin }] = await Promise.all([
         supabase

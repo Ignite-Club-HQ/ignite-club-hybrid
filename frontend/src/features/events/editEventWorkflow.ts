@@ -273,4 +273,4 @@ export async function convertEventToRecurringSeries(
       return events.length;
     },
   });
-}, { eventId: eventId }
+}, { eventId: eventId }, { eventId: eventId }

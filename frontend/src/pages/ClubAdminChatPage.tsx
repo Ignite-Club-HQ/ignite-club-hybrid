@@ -1634,4 +1634,4 @@ function SupabaseClubAdminChatPage() {
       )}
     </div>
   );
-}, { conversationId: conversationId! }
+}, { conversationId: conversationId! }, { conversationId: conversationId! }
