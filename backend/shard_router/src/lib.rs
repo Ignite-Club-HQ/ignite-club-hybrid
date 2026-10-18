@@ -582,7 +582,7 @@ async fn read_my_group_assignments(club_ids: Vec<String>, target_alias: String, 
         checked.push((assignment, source));
     }
     for (assignment, source) in &checked {
-        let reply = ic_cdk::call::Call::bounded_wait(*source, "is_club_member")
+        let reply = ic_cdk::call::Call::bounded_wait(*source, "read_has_club_membership")
             .with_args(&(user, assignment.club_id.clone())).await.map_err(|_| "Membership authority unavailable")?;
         let member: bool = reply.candid().map_err(|_| "Invalid membership authority reply")?;
         if !member { return Err("Club membership required".into()); }

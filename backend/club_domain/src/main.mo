@@ -2130,6 +2130,14 @@ persistent actor class Main(governorInit : Principal) {
     isMember(user, club_id)
   };
 
+  // Same public boolean scope as is_club_member, through consensus and with
+  // locally verified linked identities. No roster, names or account IDs.
+  public shared func read_has_club_membership(user : Principal, club_id : Text) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    let principals = switch (accountFor(user)) { case (?a) a.principals; case null [user] };
+    principals.any(func(p) = isMember(p, club_id))
+  };
+
   // The user's role grants in one club as (role, team) pairs. events_domain
   // mirrors these on create/update so club and team admins set up here can
   // schedule events without a separate grant there. Public query, same
