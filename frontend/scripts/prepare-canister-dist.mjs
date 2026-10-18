@@ -57,6 +57,64 @@ writeFileSync(
   JSON.stringify({ callbacks: callbackHosts.flatMap((h) => ["/auth", "/native-sign-in.html", "/native-sign-in"].map((p) => `https://${frontendCanisterId}.${h}${p}`)) }, null, 2) + "\n",
 );
 
+// ICP MCP Layer 1 (required): the canister manifest AI agents use to
+// discover this app (docs.internetcomputer.org/guides/frontends/
+// service-discoverability). Served as real JSON at the extensionless path;
+// real files win over the /* SPA rewrite on the static-site recipe.
+// Canister IDs come from the same sources the app itself uses: the
+// IGNITE_LIVE_ICP_CANISTER_IDS_JSON build env, falling back to the deployed
+// mainnet ID table committed at deploy/mainnet/.icp/data/mappings/ic.ids.json.
+import { readFileSync } from "node:fs";
+
+const CANISTER_ROLES = {
+  club_domain: ["clubs", "Clubs, teams, memberships and role grants. Call getApiDoc() first."],
+  events_domain: ["events", "Club/team events, RSVPs, attendance and fixtures. Call getApiDoc() first."],
+  messaging_domain: ["messaging", "Club/team conversations and messages; participant-scoped."],
+  vault_domain: ["vault", "Club file vault: folders, files and backups; role-scoped."],
+  competition_domain: ["competitions", "Competitions, seasons, matches and public competition pages."],
+  notification_queue: ["notifications", "Per-account notification inbox; reads are owner-only."],
+  insights_domain: ["insights", "Club engagement analytics; club-admin scoped."],
+  mini_league_domain: ["mini-leagues", "Mini leagues, sessions, players and duties."],
+  club_points_domain: ["rewards", "Club points, leaderboards and rewards."],
+  media_metadata: ["media", "Media asset metadata, galleries, reactions and comments."],
+  media_blob_store: ["media-blobs", "Encrypted media blob storage; serves ciphertext only."],
+  pii_access_control: ["pii-access", "Encrypted PII access control and vetKey derivation grants."],
+  identity_access: ["identity", "Account/principal binding, profiles and entitlements."],
+  secret_workload_identity: ["workload-identity", "Internal workload secrets; governor-only."],
+  migration_coordinator: ["migration", "Backend migration coordination; public status only."],
+  shard_router: ["shard-router", "Internal shard routing."],
+  timer_jobs: ["timer-jobs", "Internal scheduled jobs."],
+  placement_registry: ["placement", "Internal placement registry."],
+};
+
+function loadCanisterIds() {
+  if (process.env.IGNITE_LIVE_ICP_CANISTER_IDS_JSON) {
+    return JSON.parse(process.env.IGNITE_LIVE_ICP_CANISTER_IDS_JSON);
+  }
+  const tablePath = `${root}../deploy/mainnet/.icp/data/mappings/ic.ids.json`;
+  if (existsSync(tablePath)) return JSON.parse(readFileSync(tablePath, "utf8"));
+  return {};
+}
+
+const canisterIds = loadCanisterIds();
+const manifest = {
+  version: "1.0.0",
+  canisters: [
+    { id: frontendCanisterId, name: "frontend", role: "the frontend" },
+    ...Object.entries(canisterIds).map(([key, id]) => {
+      const [name, description] = CANISTER_ROLES[key] ?? [key, undefined];
+      return description ? { id, name, role: "backend", description } : { id, name, role: "backend" };
+    }),
+  ],
+};
+writeFileSync(`${out}/.well-known/ic-architecture`, JSON.stringify(manifest, null, 2) + "\n");
+
+// ICP MCP Layer 5: every address of this canister derives Internet Identity
+// principals against the canonical icp0.io origin (see
+// resolveDerivationOriginFor in src/live/internetIdentityAuth.ts), so agents
+// must request derivations for that origin to get the user's real principal.
+writeFileSync(`${out}/.well-known/ii-derivation-origin`, `https://${frontendCanisterId}.icp0.io\n`);
+
 const csp = [
   "default-src 'none'",
   "script-src 'self'",
@@ -88,6 +146,14 @@ writeFileSync(
 /.well-known/ii-auth-callbacks
   Access-Control-Allow-Origin: *
   Content-Type: application/json
+
+/.well-known/ic-architecture
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json
+
+/.well-known/ii-derivation-origin
+  Access-Control-Allow-Origin: *
+  Content-Type: text/plain
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
