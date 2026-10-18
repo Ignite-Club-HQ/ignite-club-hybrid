@@ -52,7 +52,7 @@ export function useEventMembership(event: {
         return withFeatureBackend("events", {
           supabase: async () => true,
           icp: async (ctx) => checkLiveEventMembership(ctx, user.id, event.id!),
-        });
+        }, { eventId: event.id! });
       }
       if (isFeatureRoutedToIcp("events")) return true;
 

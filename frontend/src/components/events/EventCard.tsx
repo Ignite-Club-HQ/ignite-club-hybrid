@@ -38,7 +38,7 @@ import { formatEventTitle } from "@/lib/eventTitle";
 import { getEventDisplay } from "@/lib/eventDisplay";
 import { TeamChip, getTeamRailColor } from "@/components/events/TeamChip";
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps, getLiveGameResult, listLiveMyRsvps, getLiveEventRosterDetailed, listLiveDuties, sendLiveEventReminders } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
@@ -217,7 +217,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
         return withFeatureBackend("events", {
           supabase: async () => false, // unreachable — guarded above
           icp: (ctx) => resolveLiveProAccess(ctx, { teamId: event.team_id, clubId: event.club_id }),
-        });
+        }, event.club_id ? { clubId: event.club_id } : { eventId: event.id });
       }
       if (event.team_id) {
         const { data: teamSub } = await supabase
@@ -670,7 +670,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
             }
             return result.notifiedCount;
           },
-        });
+        }, writeOnce({ eventId: event.id }));
       }
 
       if (cancelType === "series" && event.parent_event_id) {

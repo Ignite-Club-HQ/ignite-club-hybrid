@@ -97,5 +97,5 @@ export async function fetchEventRsvps(
         }));
       return enrichRsvpRows(client, rows, loadProfiles);
     },
-  });
+  }, { eventId });
 }

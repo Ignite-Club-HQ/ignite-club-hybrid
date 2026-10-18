@@ -1,4 +1,4 @@
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import {
   addLiveSeriesOccurrence,
   createLiveEvent,
@@ -155,7 +155,7 @@ export async function createEventTransaction(
 
       return created.id;
     },
-  });
+  }, writeOnce({ clubId: String((input.event as Record<string, unknown>).club_id ?? "") }));
 }
 
 /** Runs follow-up canister writes 6 at a time without blocking the caller. */

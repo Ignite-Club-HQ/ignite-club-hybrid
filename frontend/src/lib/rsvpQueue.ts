@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 // features/events is imported lazily at the call site so the ICP SDK stays
 // out of the entry chunk (the offline RSVP queue installs at app start).
@@ -102,7 +102,7 @@ async function sendQueuedRsvp(r: QueuedRsvp): Promise<boolean> {
           }
           return true;
         },
-      });
+      }, writeOnce({ eventId: r.eventId }));
     }
 
     if (r.existingRsvpId) {
