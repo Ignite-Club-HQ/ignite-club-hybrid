@@ -1,6 +1,7 @@
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
+import Blob "mo:core/Blob";
 import Char "mo:core/Char";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
@@ -38,6 +39,7 @@ persistent actor class Main(governorInit : Principal) {
   var roles : [Types.RoleGrant];
   var bulkAccessPrincipals : [Principal];
   var galleryChatCards : [Types.GalleryChatCard];
+  var transferFences : [Text];
 
   transient let MAX_ASSETS = 20_000;
   transient let MAX_CAPABILITIES = 20_000;
@@ -54,6 +56,85 @@ persistent actor class Main(governorInit : Principal) {
     if (new_governor.equal(Principal.anonymous())) return #Err("New governor cannot be anonymous");
     governor := new_governor;
     #Ok
+  };
+
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Inspect is advisory only; the runner re-digests the source before cutover.
+  func fenceGov(caller : Principal) : Bool = not caller.equal(Principal.anonymous()) and governor.equal(caller);
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func fenceBlobHas(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(Text.encodeUtf8(needle));
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or fenceGov(caller)) return true;
+    not transferFences.any(func(c) = fenceBlobHas(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  func assetFenced(id : Text) : Bool = transferFences.size() > 0 and assets.any(func(x) = x.id == id and isFenced(x.club_id));
+  type FenceSnapshot = { assets : [Types.Asset]; capabilities : [Types.Capability]; reactions : [Types.Reaction]; comments : [Types.Comment]; roles : [Types.RoleGrant]; cards : [Types.GalleryChatCard] };
+  func fenceSnapshot(c : Text) : FenceSnapshot {
+    let rootA = assets.filter(func(x) = x.club_id == c);
+    let inA = func(k : Text) : Bool = rootA.any(func(x) = x.id == k);
+    { assets = assets.filter(func(x) = x.club_id == c);
+      capabilities = capabilities.filter(func(x) = inA(x.asset_id));
+      reactions = reactions.filter(func(x) = inA(x.asset_id));
+      comments = comments.filter(func(x) = inA(x.asset_id));
+      roles = roles.filter(func(x) = x.club_id == ?c);
+      cards = galleryChatCards.filter(func(x) = x.club_id == c) }
+  };
+  func fenceDrop(c : Text) {
+    let rootA = assets.filter(func(x) = x.club_id == c);
+    let inA = func(k : Text) : Bool = rootA.any(func(x) = x.id == k);
+    assets := assets.filter(func(x) = not (x.club_id == c));
+    capabilities := capabilities.filter(func(x) = not (inA(x.asset_id)));
+    reactions := reactions.filter(func(x) = not (inA(x.asset_id)));
+    comments := comments.filter(func(x) = not (inA(x.asset_id)));
+    roles := roles.filter(func(x) = not (x.club_id == ?c));
+    galleryChatCards := galleryChatCards.filter(func(x) = not (x.club_id == c));
+  };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    #Ok(to_candid (fenceSnapshot(club)))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?FenceSnapshot = from_candid (snapshot);
+    let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    let c = club;
+    let rootA = s.assets;
+    let inA = func(k : Text) : Bool = rootA.any(func(x) = x.id == k);
+    if (s.assets.any(func(x) = not (x.club_id == c))
+        or s.capabilities.any(func(x) = not (inA(x.asset_id)))
+        or s.reactions.any(func(x) = not (inA(x.asset_id)))
+        or s.comments.any(func(x) = not (inA(x.asset_id)))
+        or s.roles.any(func(x) = not (x.club_id == ?c))
+        or s.cards.any(func(x) = not (x.club_id == c))) return #Err("Snapshot contains foreign records");
+    if (s.assets.any(func(e) = assets.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    fenceDrop(club); // idempotent replace
+    assets := assets.concat(s.assets);
+    capabilities := capabilities.concat(s.capabilities);
+    reactions := reactions.concat(s.reactions);
+    comments := comments.concat(s.comments);
+    roles := roles.concat(s.roles);
+    galleryChatCards := galleryChatCards.concat(s.cards);
+    #Ok(s.assets.size())
+  };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let n = fenceSnapshot(club).assets.size(); fenceDrop(club); #Ok(n)
   };
 
   func auth(caller : Principal) {
@@ -135,6 +216,7 @@ persistent actor class Main(governorInit : Principal) {
     visibility : Text,
     expires_at_ms : Nat64,
   ) : async { #Ok : Types.Asset; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(kind) or not validMime(mime) or not valid(checksum) or not validLong(storage_path, 512) or not valid(visibility)) return #Err("Invalid asset");
     if (assets.size() >= MAX_ASSETS) return #Err("Asset limit reached");
@@ -182,6 +264,7 @@ persistent actor class Main(governorInit : Principal) {
     caption : ?Text,
     album_id : ?Text,
   ) : async { #Ok : Types.Asset; #Err : Text } {
+    if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     func validOptLength(value : ?Text, max : Nat) : Bool {
       switch (value) { case null { true }; case (?v) { v.size() <= max } };
@@ -212,6 +295,7 @@ persistent actor class Main(governorInit : Principal) {
   // canister only records where the bytes live. Passing null clears the
   // pointer and returns the asset to off-chain storage resolution.
   public shared ({ caller }) func set_blob_ref(asset_id : Text, blob_ref : ?Types.BlobRef) : async { #Ok : Types.Asset; #Err : Text } {
+    if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var found_idx : ?Nat = null;
     var idx = 0;
@@ -240,6 +324,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func issue_capability(asset_id : Text, action : Text, purpose : Text, expires_at_ms : Nat64) : async { #Ok : Types.Capability; #Err : Text } {
+    if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validCapabilityAction(action) or not validPurpose(purpose) or expires_at_ms <= nowMs()) return #Err("Invalid or expired capability");
     if (capabilities.size() >= MAX_CAPABILITIES) return #Err("Capability limit reached");
@@ -266,6 +351,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_asset(asset_id : Text) : async { #Ok : Types.Asset; #Err : Text } {
+    if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var found_idx : ?Nat = null;
     var idx = 0;
@@ -309,6 +395,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func add_reaction(asset_id : Text, kind : Text, created_at_ms : Nat64) : async { #Ok : Types.Reaction; #Err : Text } {
+    if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validReactionKind(kind)) return #Err("Invalid reaction kind");
     var found : ?Types.Asset = null;
@@ -329,6 +416,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_reaction(asset_id : Text) : async { #Ok; #Err : Text } {
+    if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     reactions := reactions.filter(func(r) = not (r.asset_id == asset_id and r.user.equal(caller)));
     #Ok
@@ -347,6 +435,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func add_comment(asset_id : Text, body : Text, created_at_ms : Nat64) : async { #Ok : Types.Comment; #Err : Text } {
+    if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validCommentBody(body)) return #Err("Invalid comment");
     if (comments.size() >= MAX_COMMENTS) return #Err("Comment limit reached");
@@ -438,6 +527,7 @@ persistent actor class Main(governorInit : Principal) {
     is_prompt : Bool,
     push_sent : Bool,
   ) : async { #Ok : Types.GalleryChatCard; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(team_id) or not valid(message_id)) return #Err("Invalid gallery chat card");
     if (not validGalleryPhotoIds(photo_ids)) return #Err("Too many photo ids");

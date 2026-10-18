@@ -58,6 +58,11 @@ export interface _SERVICE {
   'claim_with_lease' : ActorMethod<[bigint, number, bigint], result_jobs>,
   'complete' : ActorMethod<[string, string], result_job>,
   'cycles_balance' : ActorMethod<[], bigint>,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<[], result_snapshot>,
   'fail' : ActorMethod<[string, string, [] | [bigint]], result_job>,
   'get_job' : ActorMethod<[string], [] | [job]>,
@@ -65,12 +70,22 @@ export interface _SERVICE {
   'grant_callback_scope' : ActorMethod<[Principal, string], result_unit>,
   'grant_worker' : ActorMethod<[Principal], result_unit>,
   'grant_worker_scope' : ActorMethod<[Principal, string], result_unit>,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'import_state' : ActorMethod<[snapshot], result_unit>,
   'initialize' : ActorMethod<[], result_unit>,
   'list_jobs' : ActorMethod<[[] | [string], number], result_page>,
   'memory_stats' : ActorMethod<
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
   >,
   'reconcile' : ActorMethod<[snapshot], result_reconciliation>,
   'recover_expired' : ActorMethod<[bigint], result_nat16>,
@@ -80,6 +95,7 @@ export interface _SERVICE {
     [string, string, [] | [Principal], bigint, string],
     result_job
   >,
+  'set_transfer_fence' : ActorMethod<[string, boolean], result_unit>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

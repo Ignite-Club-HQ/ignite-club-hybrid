@@ -78,6 +78,11 @@ export interface Main {
     [string, string, string, string, string, string],
     Result
   >,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'fail' : ActorMethod<[string, string, [] | [bigint]], Result>,
   'fan_out' : ActorMethod<
     [Array<string>, string, string, string, string, [] | [string]],
@@ -114,6 +119,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'list_device_tokens' : ActorMethod<[Array<string>], DeviceTokensResult>,
   'list_inbox' : ActorMethod<[string, [] | [string], number], Results>,
   'list_preferences_by_club' : ActorMethod<
@@ -133,6 +143,11 @@ export interface Main {
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
       { 'err' : string }
+  >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
   >,
   'record_chat_notify_batch' : ActorMethod<
     [string, string, string, string, Array<string>, Array<string>],
@@ -203,6 +218,11 @@ export interface Main {
   >,
   'set_messaging_domain_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

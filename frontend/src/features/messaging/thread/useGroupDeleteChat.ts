@@ -45,7 +45,7 @@ export const useGroupDeleteChat = ({
         icp: async (ctx) => {
           await softDeleteLiveGroup(ctx, groupId!);
         },
-      });
+      }, { conversationId: groupId! });
     },
     onSuccess: () => {
       if (useIcpLab) {

@@ -2,6 +2,9 @@ import type { Identity } from "@icp-sdk/core/agent";
 import { isFeatureCanisterConfigured, type FeatureArea } from "./featureBackend";
 import { getCurrentInternetIdentity, getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getEffectiveBackendForFeature, isSignedInWithEmail, tryGetActiveIcpTarget } from "./loadBackendRouting";
+import { activationStatus, SHIPPED_GATES } from "./groupActivation";
+import { clubDispatch } from "./groupDispatch";
+import type { GroupDomain } from "./groupRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 
 /**
@@ -29,9 +32,22 @@ export interface FeatureBackendProviders<T> {
   icp: (context: FeatureBackendContext) => T | Promise<T>;
 }
 
+/** Which per-group canister serves each feature once group routing is on.
+ * null = app-wide (served by global services, never club-scoped). */
+export const FEATURE_GROUP_DOMAIN: Record<FeatureArea, GroupDomain | null> = {
+  events: "events_domain", attendance: "events_domain", messaging: "messaging_domain", media: "media_metadata",
+  news: "club_domain", home: "club_domain", membership: "club_domain", competitions: "competition_domain",
+  notifications: "notification_queue", vault: "vault_domain", mini_leagues: "mini_league_domain",
+  points: "club_points_domain", analytics: "insights_domain", admin: null,
+};
+/** Club scope for a call. writeKey marks a write (idempotency key); attempts
+ * 1 = never auto-retry (creates without a canister idempotency key). */
+export type ClubScope = ({ clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string }) & { writeKey?: string; attempts?: number; /** internal: club not moved, use shared canisters */ legacy?: true };
+
 export async function withFeatureBackend<T>(
   feature: FeatureArea,
   providers: FeatureBackendProviders<T>,
+  scope?: ClubScope,
 ): Promise<T> {
   if (isSignedInWithEmail()) return providers.supabase();
   if (getEffectiveBackendForFeature(feature) !== "icp") {
@@ -60,6 +76,19 @@ export async function withFeatureBackend<T>(
       `The "${feature}" feature is routed to the Internet Computer backend, ` +
         "but there is no active Internet Identity session. Sign in again to continue.",
     );
+  }
+  // Group routing switch-on lock: shipped off, so every club uses the shared
+  // canisters. If ever switched on without the club-scoped dispatcher, fail
+  // closed instead of silently sending a moved club to the old group.
+  if (activationStatus(SHIPPED_GATES).active && !scope?.legacy) {
+    const domain = FEATURE_GROUP_DOMAIN[feature];
+    if (scope && domain) {
+      return scope.writeKey
+        ? clubDispatch.writeFor(feature, scope, domain, scope.writeKey, async ctx => providers.icp(ctx), scope.attempts)
+        : clubDispatch.readFor(feature, scope, domain, async ctx => providers.icp(ctx));
+    }
+    // Unscoped club data would reach the shared canisters even for a moved club.
+    if (domain) throw new Error(`"${feature}" call has no club scope; group routing cannot place it.`);
   }
   return providers.icp({ identity, target: getActiveIcpTarget() });
 }

@@ -186,7 +186,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
             if (team && grants.some((g) => g.role === "club_admin" && clubIdOf(g) === team.club_id)) return true;
             return false;
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data } = await supabase
         .from("user_roles")
@@ -233,7 +233,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
               clubs: club ? { id: live.club_id, name: club.name } : null,
             };
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("teams")
@@ -258,7 +258,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
             const sub = await getLiveTeamSubscription(ctx, teamId!);
             return sub ? mapLiveTeamSubscriptionToRow(sub) : null;
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data } = await supabase
         .from("team_subscriptions")
@@ -343,7 +343,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
               };
             });
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("user_roles")
@@ -386,7 +386,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
               },
             }));
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data: rpcChildren, error: rpcError } = await supabase.rpc(
         "get_team_children_for_pitch_board",

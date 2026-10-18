@@ -1,6 +1,7 @@
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
+import Blob "mo:core/Blob";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
 import Int "mo:core/Int";
@@ -110,8 +111,141 @@ persistent actor class Main(governorInit : Principal) {
   var personalCompetitionOwners : [(Text, Principal)];
   var roleLinks : [Types.RoleLink];
   var officialChats : [Types.OfficialChat];
+  var transferFences : [Text];
 
   // ---------------- Referee / committee officials ----------------
+
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Inspect is advisory only; the runner re-digests the source before cutover.
+  func fenceGov(caller : Principal) : Bool = not caller.equal(Principal.anonymous()) and governor.equal(caller);
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func fenceBlobHas(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(Text.encodeUtf8(needle));
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or fenceGov(caller)) return true;
+    not transferFences.any(func(c) = fenceBlobHas(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  func compFenced(id : Text) : Bool = transferFences.size() > 0 and competitions.any(func(x) = x.id == id and isFenced(x.club_id));
+  func matchFenced(id : Text) : Bool = transferFences.size() > 0 and matches.any(func(x) = x.id == id and compFenced(x.competition_id));
+  type FenceSnapshot = { competitions : [Types.Competition]; roles : [Types.RoleGrant]; entries : [Types.TeamEntry]; tokens : [Types.JoinToken]; seasons : [Types.Season]; matches : [Types.Match]; chat_settings : [Types.ChatSettings]; welcome : [Welcome.Settings]; invites : [Types.CompetitionInvite]; join_links : [Types.CompetitionJoinLink]; official_invites : [Types.CompetitionOfficialEmailInvite]; welcome_jobs : [Types.CompetitionWelcomeJob]; eoi : [Types.EoiSubmission]; divisions : [Types.DivisionSetting]; ladders : [Types.CompetitionLadderSetting]; broadcasts : [Types.Broadcast]; owners : [(Text, Principal)]; role_links : [Types.RoleLink]; official_chats : [Types.OfficialChat] };
+  func fenceSnapshot(c : Text) : FenceSnapshot {
+    let rootC = competitions.filter(func(x) = x.club_id == c);
+    let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    { competitions = competitions.filter(func(x) = x.club_id == c);
+      roles = roles.filter(func(x) = inC(x.competition_id));
+      entries = entries.filter(func(x) = inC(x.competition_id));
+      tokens = tokens.filter(func(x) = inC(x.competition_id));
+      seasons = seasons.filter(func(x) = inC(x.competition_id));
+      matches = matches.filter(func(x) = inC(x.competition_id));
+      chat_settings = chatSettings.filter(func(x) = inC(x.competition_id));
+      welcome = competitionWelcomeSettings.filter(func(x) = inC(x.competition_id));
+      invites = competitionInvites.filter(func(x) = inC(x.competition_id));
+      join_links = competitionJoinLinks.filter(func(x) = inC(x.competition_id));
+      official_invites = competitionOfficialEmailInvites.filter(func(x) = inC(x.competition_id));
+      welcome_jobs = competitionWelcomeJobs.filter(func(x) = inC(x.competition_id));
+      eoi = eoiSubmissions.filter(func(x) = x.club_id == c);
+      divisions = divisionSettings.filter(func(x) = inC(x.competition_id));
+      ladders = competitionLadderSettings.filter(func(x) = inC(x.competition_id));
+      broadcasts = broadcasts.filter(func(x) = inC(x.competition_id));
+      owners = personalCompetitionOwners.filter(func(x) = inC(x.0));
+      role_links = roleLinks.filter(func(x) = inC(x.competition_id));
+      official_chats = officialChats.filter(func(x) = inC(x.competition_id)) }
+  };
+  func fenceDrop(c : Text) {
+    let rootC = competitions.filter(func(x) = x.club_id == c);
+    let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    competitions := competitions.filter(func(x) = not (x.club_id == c));
+    roles := roles.filter(func(x) = not (inC(x.competition_id)));
+    entries := entries.filter(func(x) = not (inC(x.competition_id)));
+    tokens := tokens.filter(func(x) = not (inC(x.competition_id)));
+    seasons := seasons.filter(func(x) = not (inC(x.competition_id)));
+    matches := matches.filter(func(x) = not (inC(x.competition_id)));
+    chatSettings := chatSettings.filter(func(x) = not (inC(x.competition_id)));
+    competitionWelcomeSettings := competitionWelcomeSettings.filter(func(x) = not (inC(x.competition_id)));
+    competitionInvites := competitionInvites.filter(func(x) = not (inC(x.competition_id)));
+    competitionJoinLinks := competitionJoinLinks.filter(func(x) = not (inC(x.competition_id)));
+    competitionOfficialEmailInvites := competitionOfficialEmailInvites.filter(func(x) = not (inC(x.competition_id)));
+    competitionWelcomeJobs := competitionWelcomeJobs.filter(func(x) = not (inC(x.competition_id)));
+    eoiSubmissions := eoiSubmissions.filter(func(x) = not (x.club_id == c));
+    divisionSettings := divisionSettings.filter(func(x) = not (inC(x.competition_id)));
+    competitionLadderSettings := competitionLadderSettings.filter(func(x) = not (inC(x.competition_id)));
+    broadcasts := broadcasts.filter(func(x) = not (inC(x.competition_id)));
+    personalCompetitionOwners := personalCompetitionOwners.filter(func(x) = not (inC(x.0)));
+    roleLinks := roleLinks.filter(func(x) = not (inC(x.competition_id)));
+    officialChats := officialChats.filter(func(x) = not (inC(x.competition_id)));
+  };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    #Ok(to_candid (fenceSnapshot(club)))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?FenceSnapshot = from_candid (snapshot);
+    let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    let c = club;
+    let rootC = s.competitions;
+    let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    if (s.competitions.any(func(x) = not (x.club_id == c))
+        or s.roles.any(func(x) = not (inC(x.competition_id)))
+        or s.entries.any(func(x) = not (inC(x.competition_id)))
+        or s.tokens.any(func(x) = not (inC(x.competition_id)))
+        or s.seasons.any(func(x) = not (inC(x.competition_id)))
+        or s.matches.any(func(x) = not (inC(x.competition_id)))
+        or s.chat_settings.any(func(x) = not (inC(x.competition_id)))
+        or s.welcome.any(func(x) = not (inC(x.competition_id)))
+        or s.invites.any(func(x) = not (inC(x.competition_id)))
+        or s.join_links.any(func(x) = not (inC(x.competition_id)))
+        or s.official_invites.any(func(x) = not (inC(x.competition_id)))
+        or s.welcome_jobs.any(func(x) = not (inC(x.competition_id)))
+        or s.eoi.any(func(x) = not (x.club_id == c))
+        or s.divisions.any(func(x) = not (inC(x.competition_id)))
+        or s.ladders.any(func(x) = not (inC(x.competition_id)))
+        or s.broadcasts.any(func(x) = not (inC(x.competition_id)))
+        or s.owners.any(func(x) = not (inC(x.0)))
+        or s.role_links.any(func(x) = not (inC(x.competition_id)))
+        or s.official_chats.any(func(x) = not (inC(x.competition_id)))) return #Err("Snapshot contains foreign records");
+    if (s.competitions.any(func(e) = competitions.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    fenceDrop(club); // idempotent replace
+    competitions := competitions.concat(s.competitions);
+    roles := roles.concat(s.roles);
+    entries := entries.concat(s.entries);
+    tokens := tokens.concat(s.tokens);
+    seasons := seasons.concat(s.seasons);
+    matches := matches.concat(s.matches);
+    chatSettings := chatSettings.concat(s.chat_settings);
+    competitionWelcomeSettings := competitionWelcomeSettings.concat(s.welcome);
+    competitionInvites := competitionInvites.concat(s.invites);
+    competitionJoinLinks := competitionJoinLinks.concat(s.join_links);
+    competitionOfficialEmailInvites := competitionOfficialEmailInvites.concat(s.official_invites);
+    competitionWelcomeJobs := competitionWelcomeJobs.concat(s.welcome_jobs);
+    eoiSubmissions := eoiSubmissions.concat(s.eoi);
+    divisionSettings := divisionSettings.concat(s.divisions);
+    competitionLadderSettings := competitionLadderSettings.concat(s.ladders);
+    broadcasts := broadcasts.concat(s.broadcasts);
+    personalCompetitionOwners := personalCompetitionOwners.concat(s.owners);
+    roleLinks := roleLinks.concat(s.role_links);
+    officialChats := officialChats.concat(s.official_chats);
+    #Ok(s.competitions.size())
+  };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let n = fenceSnapshot(club).competitions.size(); fenceDrop(club); #Ok(n)
+  };
 
   func isOfficialRole(role : Text) : Bool { role == "referee" or role == "committee" };
   func isChatScope(scope : Text) : Bool { scope == "referees" or scope == "committee" or scope == "coordinators" or scope == "all_members" };
@@ -123,6 +257,7 @@ persistent actor class Main(governorInit : Principal) {
   // Replaces any active link for (competition, role) with a fresh
   // unguessable token; the old link stops working immediately.
   public shared ({ caller }) func create_role_link(competition_id : Text, role : Text) : async { #Ok : Types.RoleLink; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not isOfficialRole(role)) return #Err("Invalid role");
@@ -134,6 +269,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func revoke_role_link(competition_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     roleLinks := roleLinks.filter(func(l) = not (l.competition_id == competition_id and l.role == role));
@@ -172,6 +308,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_official_chat(competition_id : Text, scope : Text, conversation_id : Text) : async { #Ok; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not isChatScope(scope) or not valid(conversation_id)) return #Err("Invalid chat");
@@ -238,6 +375,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_competition(club_id : Text, name : Text, season : Text) : async { #Ok : Types.Competition; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncClubAdmin(caller, club_id);
     if (not valid(club_id) or not valid(name) or not valid(season)) return #Err("Invalid competition");
     let club_ok = isGovernor(caller) or roles.any(func(role) = role.user.equal(caller) and role.role == "club_admin" and role.competition_id == club_id);
@@ -314,6 +452,7 @@ persistent actor class Main(governorInit : Principal) {
   // scoring). Season stays create-only. Mirrors the Supabase
   // CompetitionSettingsPage update.
   public shared ({ caller }) func update_competition_settings(competition_id : Text, name : Text, description : ?Text, status : Text, visibility : Text, points_win : Nat16, points_draw : Nat16, points_loss : Nat16) : async { #Ok : Types.Competition; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not valid(name)) return #Err("Invalid name");
@@ -336,6 +475,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func register_team(competition_id : Text, team_id : Text, club_id : Text) : async { #Ok : Types.TeamEntry; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     let competition_club = switch (competitions.find(func(item) = item.id == competition_id)) {
@@ -364,6 +504,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func invite_team(competition_id : Text, team_id : Text) : async { #Ok : Types.TeamEntry; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     let competition_club = switch (competitions.find(func(item) = item.id == competition_id)) {
@@ -378,6 +519,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func respond_to_entry_invite(competition_id : Text, team_id : Text, accept : Bool) : async { #Ok : Types.TeamEntry; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (entries.find(func(item) = item.competition_id == competition_id and item.team_id == team_id)) {
       case null { #Err("Entry invite not found") };
@@ -426,6 +568,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Assigns a registered team to a division (null clears the assignment).
   public shared ({ caller }) func assign_division(competition_id : Text, team_id : Text, division_id : ?Text) : async { #Ok : Types.TeamEntry; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     switch (division_id) { case (?d) { if (d.size() > 128) return #Err("Invalid division") }; case null {} };
@@ -440,6 +583,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func issue_join_token(competition_id : Text, team_id : Text, expires_at_ms : Nat64) : async { #Ok : Types.JoinToken; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (expires_at_ms <= Nat64.fromIntWrap(Time.now() / 1_000_000)) return #Err("Join token must expire in the future");
@@ -482,6 +626,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_season(competition_id : Text, name : Text) : async { #Ok : Types.Season; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not valid(name)) return #Err("Invalid season");
@@ -496,6 +641,7 @@ persistent actor class Main(governorInit : Principal) {
   // matches are competition-scoped, so they carry over unchanged; the new
   // season starts as a draft.
   public shared ({ caller }) func duplicate_season(competition_id : Text, source_name : Text, new_name : Text) : async { #Ok : Types.Season; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not valid(new_name)) return #Err("Invalid season");
@@ -512,6 +658,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Replaces a season's division structure.
   public shared ({ caller }) func set_season_divisions(competition_id : Text, name : Text, divisions : [Text]) : async { #Ok : Types.Season; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (divisions.size() > 64 or divisions.any(func(d) = not valid(d))) return #Err("Invalid divisions");
@@ -526,6 +673,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_season_status(competition_id : Text, status : Text, expected_revision : Nat64) : async { #Ok : Types.Season; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     var found_idx : ?Nat = null;
@@ -551,6 +699,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_match(competition_id : Text, home_team : Text, away_team : Text) : async { #Ok : Types.Match; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (home_team == away_team or not valid(home_team) or not valid(away_team)) return #Err("Invalid match teams");
@@ -580,6 +729,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_match_result(match_id : Text, home_score : Nat16, away_score : Nat16, expected_revision : Nat64) : async { #Ok : Types.Match; #Err : Text } {
+    if (matchFenced(match_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var found_idx : ?Nat = null;
     var idx = 0;
@@ -607,6 +757,7 @@ persistent actor class Main(governorInit : Principal) {
   // recording keeps its own optimistic lock. Mirrors the Supabase
   // competition_matches columns the edit-match dialog writes.
   public shared ({ caller }) func update_match_details(match_id : Text, home_team : Text, away_team : Text, division_id : ?Text, scheduled_at_ms : ?Nat64, venue : ?Text, pitch_number : ?Text, round_number : ?Nat16, duration_minutes : ?Nat16, arrival_minutes_before : ?Nat16, notes : ?Text, expected_revision : Nat64) : async { #Ok : Types.Match; #Err : Text } {
+    if (matchFenced(match_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     func optValid(value : ?Text, max : Nat) : Bool {
       switch (value) { case null true; case (?text) text.size() <= max }
@@ -722,6 +873,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Competition roles (admin-managed, not governor-only) ----------------
 
   public shared ({ caller }) func add_competition_role(competition_id : Text, principal : Principal, role : Text, team_id : ?Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (principal.equal(Principal.anonymous()) or not valid(role)) return #Err("Invalid role assignment");
@@ -733,6 +885,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_competition_role(competition_id : Text, principal : Principal, role : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     roles := roles.filter(func(item) = not (item.user.equal(principal) and item.role == role and item.competition_id == competition_id and item.team_id == team_id));
@@ -774,6 +927,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_chat_settings(competition_id : Text, chat_enabled : Bool, admins_only : Bool, expected_revision : Nat64) : async { #Ok : Types.ChatSettings; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     let current_revision : Nat64 = switch (findChatSettings(competition_id)) { case (?s) s.revision; case null 0 };
@@ -787,6 +941,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Competition invites (accept/decline) ----------------
 
   public shared ({ caller }) func create_competition_invite(competition_id : Text, invitee : Principal, role : Text, team_id : ?Text) : async { #Ok : Types.CompetitionInvite; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (invitee.equal(Principal.anonymous()) or not valid(role)) return #Err("Invalid invite");
@@ -851,6 +1006,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Competition-wide join links ----------------
 
   public shared ({ caller }) func create_competition_join_link(competition_id : Text, role : Text, team_id : ?Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not valid(role)) return #Err("Invalid role");
@@ -870,6 +1026,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_competition_official_link(competition_id : Text, role : Text, token : Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (role != "referee" and role != "committee_member") return #Err("Invalid official role");
@@ -894,6 +1051,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func revoke_competition_official_link(competition_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (role != "referee" and role != "committee_member") return #Err("Invalid official role");
@@ -911,6 +1069,7 @@ persistent actor class Main(governorInit : Principal) {
     email_hash : Text,
     verification_code_hash : Text,
   ) : async { #Ok : Types.CompetitionOfficialEmailInvite; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (role != "referee" and role != "committee_member") return #Err("Invalid official role");
@@ -1039,6 +1198,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func rotate_competition_join_link(competition_id : Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     switch (competitionJoinLinks.find(func(item) = item.competition_id == competition_id and not item.revoked)) {
@@ -1055,6 +1215,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func revoke_competition_join_link(competition_id : Text) : async { #Ok; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     competitionJoinLinks := competitionJoinLinks.map(func(item) = if (item.competition_id == competition_id and not item.revoked) { { item with revoked = true } } else item);
@@ -1151,6 +1312,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Match deletion / round trimming ----------------
 
   public shared ({ caller }) func delete_match(match_id : Text) : async { #Ok; #Err : Text } {
+    if (matchFenced(match_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (matches.find(func(item) = item.id == match_id)) {
       case null #Err("Match not found");
@@ -1166,6 +1328,7 @@ persistent actor class Main(governorInit : Principal) {
   // matches without a round number are left untouched. Returns the count of
   // matches removed.
   public shared ({ caller }) func trim_rounds(competition_id : Text, max_round : Nat16) : async { #Ok : Nat; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     let before = matches.size();
@@ -1483,12 +1646,14 @@ persistent actor class Main(governorInit : Principal) {
   /// Refreshes the caller's mirrored club-admin role for a competition's
   /// organiser club so later management queries see it.
   public shared ({ caller }) func sync_my_competition_access(competition_id : Text) : async { #Ok : Bool; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     await syncForCompetition(caller, competition_id);
     #Ok(canManageCompetition(caller, competition_id))
   };
 
   public shared ({ caller }) func get_news_audience(competition_id : Text, requester : Principal) : async { #Ok : Types.CompetitionNewsAudience; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     switch (clubDomainCanister) {
       case null { return #Err("club_domain canister not configured") };
       case (?clubDomain) { if (not caller.equal(clubDomain)) return #Err("club_domain only") };
@@ -1515,6 +1680,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     let isTrustedCaller = (switch (vaultDomainCanister) {
       case (?vaultDomain) caller.equal(vaultDomain);
       case null false;
@@ -1558,6 +1724,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_division_hide_ladder(competition_id : Text, division : Text, hide_ladder : Bool) : async { #Ok : Types.DivisionSetting; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not valid(division)) return #Err("Invalid division");
@@ -1572,6 +1739,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_competition_hide_ladder(competition_id : Text, hide_ladder : Bool) : async { #Ok; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not competitions.any(func(item) = item.id == competition_id)) return #Err("Competition not found");
@@ -1586,6 +1754,7 @@ persistent actor class Main(governorInit : Principal) {
   // Stored log only; push delivery is fanned out by the sender's client
   // through notification_queue (same path as announcement broadcasts).
   public shared ({ caller }) func send_competition_broadcast(competition_id : Text, title : Text, body : Text) : async { #Ok : Types.Broadcast; #Err : Text } {
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (title.size() == 0 or title.size() > 200 or body.size() == 0 or body.size() > 4000) return #Err("Invalid broadcast");

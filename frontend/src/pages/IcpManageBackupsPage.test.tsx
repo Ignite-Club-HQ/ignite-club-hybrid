@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ admin: true, list: vi.fn(), create: vi.fn(), get: vi.fn(), restore: vi.fn(), remove: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("@/hooks/useIsAppAdmin", () => ({ useIsAppAdmin: () => ({ isAppAdmin: m.admin, isLoading: false }) }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { icp: (ctx: unknown) => unknown }) => h.icp({}) }));
-vi.mock("@/live/features/vault", () => ({ listLiveVaultBackups: m.list, createLiveVaultBackup: m.create, getLiveVaultBackup: m.get, restoreLiveVaultBackup: m.restore, deleteLiveVaultBackup: m.remove }));
-vi.mock("sonner", () => ({ toast: { success: m.success, error: m.error } }));
+vi.mock("@/live/features/vault", () => ({ listLiveVaultBackups: m.list, createLiveVaultBackup: m.create, getLiveVaultBackup: m.get, restoreLiveVaultBackup: m.restore, restoreLiveVaultBackupWithMedia: m.restore, deleteLiveVaultBackup: m.remove }));
+vi.mock("sonner", () => ({ toast: { success: m.success, error: m.error, warning: m.error } }));
 import Page from "./IcpManageBackupsPage";
 function open() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -15,7 +15,7 @@ function open() {
 beforeEach(() => {
   vi.clearAllMocks(); m.admin = true;
   m.list.mockResolvedValue([{ id: "backup-1", backup_label: "Snapshot", created_at_ms: 1792195200000n, file_count: 3n, folder_count: 2n }]);
-  m.create.mockResolvedValue(undefined); m.restore.mockResolvedValue(2); m.remove.mockResolvedValue(undefined);
+  m.create.mockResolvedValue(undefined); m.restore.mockResolvedValue({ restoredRows: 2, missingBytes: [], grantsRepaired: 0 }); m.remove.mockResolvedValue(undefined);
   m.get.mockResolvedValue({ files: [{ size: 3n }], created_by: { toText: () => "admin-principal" } }); vi.stubGlobal("confirm", vi.fn(() => true));
 });
 describe("ICP vault metadata backup administration", () => {

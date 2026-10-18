@@ -1,5 +1,6 @@
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
+import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
@@ -404,7 +405,7 @@ export default function GroupChatPage() {
               return null;
             }
           },
-        });
+        }, { conversationId: groupId! });
       }
 
       const { data, error } = await supabase
@@ -1074,16 +1075,17 @@ export default function GroupChatPage() {
         return queuedSend();
       }
       
-      await withFeatureBackend("messaging", {
+      const confirmedMessage = await withFeatureBackend("messaging", {
         supabase: async () => {
-          const { error } = await supabase.from("group_messages").insert({
+          const { data, error } = await supabase.from("group_messages").insert({
             group_id: groupId,
             author_id: user.id,
             text,
             image_url,
             reply_to_id,
-          });
+          }).select("id, text, image_url, created_at").single();
           if (error) throw error;
+          return data;
         },
         icp: async (ctx) => {
           // Group id doubles as the conversation id (same convention as the
@@ -1098,11 +1100,11 @@ export default function GroupChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment, reply_to_id);
+          const saved = await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, groupId, user.id).catch(() => { /* best-effort engagement counter */ });
-        },
-      });
-      return deliveredSend();
+          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
+      }, { conversationId: groupId });
+      return deliveredSend(confirmedMessage ?? undefined);
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
       const currentProfile = profileRef.current;
@@ -1200,8 +1202,15 @@ export default function GroupChatPage() {
       toast.error("Failed to send message");
     },
 
-    onSuccess: (result, variables) => {
-      if (isConfirmedDelivery(result)) syncSendToVault(variables);
+    onSuccess: (result, variables, context) => {
+      if (result?.confirmedMessage && context?.tempId) {
+        confirmPendingSend(queryClient, ["group-messages", groupId], context.tempId, result.confirmedMessage);
+        setLocalMessages((prev) => prev?.filter((row) => row.id !== context.tempId));
+      }
+      if (isConfirmedDelivery(result)) {
+        syncSendToVault(variables);
+        void queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
+      }
     },
 
     onSettled: (_, __, variables) => {
@@ -1488,7 +1497,7 @@ export default function GroupChatPage() {
               .maybeSingle();
             return { adminsOnly: !!comp?.member_chat_admins_only, isCompetitionAdmin };
           },
-        });
+        }, { conversationId: groupId! });
       }
       const [{ data: comp }, { data: isAdmin }] = await Promise.all([
         supabase

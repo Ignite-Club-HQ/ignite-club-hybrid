@@ -204,7 +204,7 @@ export async function syncEventDuties(
       }
       return [];
     },
-  });
+  }, { eventId: eventId });
 }
 
 /**

@@ -68,6 +68,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  var transferFences : [Text];
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -213,6 +214,64 @@ persistent actor class Main(governorInit : Principal) {
       last_event_at_ms = nowMs(); updated_by = caller;
     }
   };
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Hard checks on the main write paths; the ingress inspect gate is advisory.
+  // The transfer runner re-digests before cutover to catch anything else.
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func eventFenced(id : Text) : Bool = transferFences.size() > 0 and events.any(func(e) = e.id == id and isFenced(e.club_id));
+  func groupFenced(id : Text) : Bool = transferFences.size() > 0 and eventGroups.any(func(g) = g.id == id and eventFenced(g.event_id));
+  func teamFenced(id : Text) : Bool = transferFences.size() > 0 and events.any(func(e) = e.team_id == ?id and isFenced(e.club_id));
+  func seriesFenced(id : Text) : Bool = transferFences.size() > 0 and events.any(func(e) = e.series_id == ?id and isFenced(e.club_id));
+  func blobContainsText(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(needle.encodeUtf8());
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or isGovernor(caller)) return true;
+    not transferFences.any(func(c) = blobContainsText(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let evs = events.filter(func(e) = e.club_id == club);
+    rsvps := rsvps.filter(func(r) = not evs.any(func(e) = e.id == r.event_id));
+    series := series.filter(func(x) = not evs.any(func(e) = e.series_id == ?x.id));
+    events := events.filter(func(e) = e.club_id != club);
+    #Ok(evs.size())
+  };
+  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries] };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    let evs = events.filter(func(e) = e.club_id == club);
+    let snap : EventsSnapshot = { events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
+      series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)) };
+    #Ok(to_candid (snap))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?EventsSnapshot = from_candid (snapshot);
+    let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (snap.events.any(func(e) = e.club_id != club) or snap.rsvps.any(func(r) = not snap.events.any(func(e) = e.id == r.event_id))) return #Err("Snapshot contains foreign records");
+    if (snap.events.any(func(e) = events.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    let ids = events.filter(func(e) = e.club_id == club).map(func(e) = e.id);
+    rsvps := rsvps.filter(func(r) = not ids.any(func(i) = i == r.event_id)).concat(snap.rsvps);
+    series := series.filter(func(x) = not snap.series.any(func(y) = y.id == x.id)).concat(snap.series);
+    events := events.filter(func(e) = e.club_id != club).concat(snap.events);
+    #Ok(snap.events.size() + snap.rsvps.size())
+  };
+
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
   };
@@ -344,7 +403,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : Types.Event; #Err : Text } {
-    auth(caller); await syncRolesFromClubDomain(caller, club_id); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or not validRsvpAudience(rsvp_audience) or not validRsvpPolicyLists(restricted_to_roles, target_team_ids) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
+    auth(caller); if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer"); await syncRolesFromClubDomain(caller, club_id); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or not validRsvpAudience(rsvp_audience) or not validRsvpPolicyLists(restricted_to_roles, target_team_ids) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
@@ -510,6 +569,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncRolesFromClubDomain(caller, club_id);
     createSeriesInternal(caller, club_id, team_id, title, description, event_type, location, frequency, first_starts_at_ms, first_ends_at_ms, until_ms, rsvp_audience, adults_only, restricted_to_roles, target_team_ids)
   };
@@ -520,6 +580,7 @@ persistent actor class Main(governorInit : Principal) {
   // points per the roadmap; daily/monthly remain accepted since
   // createSeriesInternal already validates them.
   public shared ({ caller }) func create_recurring_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, occurrences : ?Nat32, until_ms : ?Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncRolesFromClubDomain(caller, club_id);
     if (not validFrequency(frequency)) return #Err("Invalid series");
     let step = frequencyStepMs(frequency);
@@ -539,6 +600,7 @@ persistent actor class Main(governorInit : Principal) {
   // touching sibling occurrences or the series record itself — the
   // one-off-edit counterpart to delete_series's future-occurrences cascade.
   public shared ({ caller }) func detach_occurrence(event_id : Text) : async { #Ok : Types.Event; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) {
       case (#Err(e)) return #Err(e);
@@ -555,6 +617,7 @@ persistent actor class Main(governorInit : Principal) {
   // Updates series fields and every future (>= from_ms) child event's
   // details. Times of individual occurrences are preserved.
   public shared ({ caller }) func update_series(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, from_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : Types.EventSeries; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageSeries(caller, id)) {
       case (#Err(e)) return #Err(e);
@@ -576,6 +639,7 @@ persistent actor class Main(governorInit : Principal) {
   // rows. When no occurrences remain, the series record itself is removed;
   // otherwise its recurrence end is truncated to from_ms.
   public shared ({ caller }) func delete_series(id : Text, from_ms : Nat64) : async { #Ok : Nat32; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageSeries(caller, id)) {
       case (#Err(e)) return #Err(e);
@@ -629,7 +693,9 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64, rsvp_audience : ?Text, adults_only : Bool, restricted_to_roles : ?[Text], target_team_ids : ?[Text]) : async { #Ok : Types.Event; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    switch (events.find(func(e) = e.id == id)) { case (?e) { if (isFenced(e.club_id)) return #Err("Club is temporarily locked for a transfer"); }; case null {} };
     switch (events.find(func(e) = e.id == id)) { case (?e) { await syncRolesFromClubDomain(caller, e.club_id) }; case null {} };
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);
@@ -646,6 +712,7 @@ persistent actor class Main(governorInit : Principal) {
   // Cancellation is separate from update_event so cancelling cannot
   // accidentally clobber other fields with stale browser state.
   public shared ({ caller }) func set_event_cancelled(id : Text, cancelled : Bool) : async { #Ok : Types.Event; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);
@@ -659,6 +726,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_rsvp(event_id : Text, account_id : Text, state : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (events.find(func(item) = item.id == event_id)) {
       case null return #Err("Event not found");
@@ -677,6 +745,7 @@ persistent actor class Main(governorInit : Principal) {
   // gate as set_rsvp, but keyed by (event, account, child) so a child's
   // answer never overwrites the parent's own RSVP.
   public shared ({ caller }) func set_child_rsvp(event_id : Text, account_id : Text, child_id : Text, state : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) {
       case (#Err(e)) return #Err(e);
@@ -691,6 +760,7 @@ persistent actor class Main(governorInit : Principal) {
   // Note-only update on an existing RSVP (self-service), mirroring the
   // Supabase per-RSVP notes field — keeps the current state, only changes notes.
   public shared ({ caller }) func set_rsvp_note(event_id : Text, account_id : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (notes.size() > 2000) return #Err("Invalid note");
@@ -705,6 +775,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_attendance(event_id : Text, account_id : Text, present : Bool, note : Text) : async { #Ok : Types.Attendance; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) {
       case (#Err(e)) return #Err(e);
@@ -716,6 +787,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func add_lineup(event_id : Text, member : Text, slot : Text, team_id : ?Text) : async { #Ok : Types.LineupEntry; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     let value : Types.LineupEntry = { event_id; member; slot; team_id }; lineups := lineups.concat([value]); #Ok(value)
@@ -726,6 +798,7 @@ persistent actor class Main(governorInit : Principal) {
   // per-player add_lineup mirroring which silently dropped formation, ball
   // position and bench players. Supersedes add_lineup for pitch-board saves.
   public shared ({ caller }) func save_lineup_snapshot(event_id : Text, team_id : ?Text, formation : ?Text, team_size : Nat16, ball_x : ?Float, ball_y : ?Float, players : [Types.LineupPlayer]) : async { #Ok : Types.LineupSnapshot; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (players.size() > 100) return #Err("Too many lineup players");
@@ -751,6 +824,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_duty(event_id : Text, account_id : Text, duty : Text) : async { #Ok : Types.Duty; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     // Re-setting the same duty keeps its completion state; renaming the duty
@@ -778,6 +852,7 @@ persistent actor class Main(governorInit : Principal) {
   // Event sponsor links (event_sponsors parity): which club sponsors are
   // attached to a specific event. Manager-gated like set_duty.
   public shared ({ caller }) func set_event_sponsors(event_id : Text, sponsor_ids : [Text]) : async { #Ok; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     eventSponsors := eventSponsors.filter(func((id, _)) = id != event_id).concat([(event_id, sponsor_ids)]);
@@ -788,14 +863,17 @@ persistent actor class Main(governorInit : Principal) {
     switch (eventSponsors.find(func((id, _)) = id == event_id)) { case (?(_, ids)) #Ok(ids); case null #Ok([]) };
   };
   public shared ({ caller }) func complete_duty(event_id : Text, account_id : Text) : async { #Ok : Types.Duty; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     setDutyCompleted(event_id, account_id, true)
   };
   public shared ({ caller }) func uncomplete_duty(event_id : Text, account_id : Text) : async { #Ok : Types.Duty; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     setDutyCompleted(event_id, account_id, false)
   };
   public shared ({ caller }) func remove_duty(event_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not duties.any(func(item) = item.event_id == event_id and item.account_id == account_id)) return #Err("Duty not found");
@@ -803,6 +881,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
   public shared ({ caller }) func set_roster(event_id : Text, account_id : Text, child_id : ?Text) : async { #Ok : Types.RosterEntry; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     let value : Types.RosterEntry = { event_id; account_id; child_id }; roster := roster.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); roster := roster.concat([value]); #Ok(value)
@@ -816,6 +895,7 @@ persistent actor class Main(governorInit : Principal) {
   // for "adjust" and ignored otherwise. Reads are open to anyone who can
   // view the event (canView), same visibility as get_lineup_snapshot.
   public shared ({ caller }) func set_event_timer(event_id : Text, action : Text, minutes_per_half : ?Nat16, adjust_ms : ?Int64) : async { #Ok : Types.EventTimer; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not validTimerAction(action)) return #Err("Invalid timer action");
@@ -883,6 +963,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_recurrence(event_id : Text, frequency : Text, until_ms : Nat64) : async { #Ok : Types.Recurrence; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not validFrequency(frequency)) return #Err("Invalid recurrence");
@@ -992,6 +1073,7 @@ persistent actor class Main(governorInit : Principal) {
   // Coach/admin marks attendance for an event's subjects (members or
   // children). Replaces any prior record for the same (event, subject).
   public shared ({ caller }) func mark_attendance(event_id : Text, records : [Types.AttendanceInput]) : async { #Ok : [Types.EventAttendance]; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (records.size() > 200) return #Err("Too many attendance records");
@@ -1033,6 +1115,7 @@ persistent actor class Main(governorInit : Principal) {
   // names are PII: they never enter this canister — clients resolve them
   // via pii_access_control's get_decrypted_pii_batch.
   public shared ({ caller }) func admin_upsert_child(id : Text, parent_id : ?Text) : async { #Ok : Types.Child; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
     if (not valid(id)) return #Err("Invalid child");
     let value : Types.Child = { id; parent_id };
@@ -1048,6 +1131,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func add_event_guest(event_id : Text, guest_name : Text) : async { #Ok : Types.EventGuest; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(guest_name)) return #Err("Invalid guest");
@@ -1056,6 +1140,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_event_guest(id : Text) : async { #Ok; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (eventGuests.find(func(item) = item.id == id)) {
       case null { #Err("Guest not found") };
@@ -1127,6 +1212,7 @@ persistent actor class Main(governorInit : Principal) {
   // Coach/admin sets (creates or replaces) an RSVP on behalf of a member or
   // child — the canister equivalent of the admin_upsert_rsvp RPC.
   public shared ({ caller }) func admin_upsert_rsvp(event_id : Text, account_id : Text, child_id : ?Text, status : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (events.find(func(event) = event.id == event_id)) {
       case null return #Err("Event not found");
@@ -1152,6 +1238,7 @@ persistent actor class Main(governorInit : Principal) {
   // equivalent of the admin_update_rsvp_status RPC. Errors if no matching
   // RSVP exists yet (use admin_upsert_rsvp to create one).
   public shared ({ caller }) func admin_update_rsvp_status(event_id : Text, account_id : Text, child_id : ?Text, status : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not validRsvpStatus(status)) return #Err("Invalid RSVP status");
@@ -1220,6 +1307,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_saved_location(id : Text) : async { #Ok; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     let me = callerAccountId(caller);
     switch (savedLocations.find(func(item) = item.id == id and item.account_id == me)) {
@@ -1242,6 +1330,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_training_default(club_id : Text, team_id : Text, child_id : ?Text, default_rsvp : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(team_id) or not validRsvpStatus(default_rsvp)) return #Err("Invalid training default");
     let me = callerAccountId(caller);
@@ -1255,6 +1344,7 @@ persistent actor class Main(governorInit : Principal) {
   // Soft-deletes a single event in place — distinct from any hard-delete
   // path; the row stays, deleted=true just hides it from list_events.
   public shared ({ caller }) func delete_event(id : Text) : async { #Ok : Types.Event; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);
@@ -1271,6 +1361,7 @@ persistent actor class Main(governorInit : Principal) {
   // occurrence, without removing any rows — the soft counterpart to
   // delete_series's hard cascade/truncate.
   public shared ({ caller }) func soft_delete_series(id : Text) : async { #Ok : Types.EventSeries; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageSeries(caller, id)) {
       case (#Err(e)) return #Err(e);
@@ -1285,6 +1376,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // ---- (2) Coach notes (per event, coach/admin authorized) ----
   public shared ({ caller }) func set_coach_note(event_id : Text, note : Text) : async { #Ok : Types.CoachNote; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (note.size() > 4000) return #Err("Note too long");
@@ -1304,6 +1396,7 @@ persistent actor class Main(governorInit : Principal) {
   // series. This is the inverse: append a brand-new occurrence to an
   // existing series (e.g. "add one more training date").
   public shared ({ caller }) func add_series_occurrence(series_id : Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
+    if (seriesFenced(series_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageSeries(caller, series_id)) {
       case (#Err(e)) return #Err(e);
@@ -1326,6 +1419,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // ---- (4) Event views, reminder log, push reachability ----
   public shared ({ caller }) func record_event_view(event_id : Text) : async { #Ok; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (events.find(func(item) = item.id == event_id)) {
       case null { #Err("Event not found") };
@@ -1335,6 +1429,16 @@ persistent actor class Main(governorInit : Principal) {
         eventViews := eventViews.concat([{ event_id; viewer = caller; viewed_at_ms = nowMs() }]);
         #Ok
       };
+    }
+  };
+
+  /// Location-only lookup for group routing: which club owns this event, if
+  /// it lives in this canister. Viewers only; returns null when not held here.
+  public query ({ caller }) func read_event_club(event_id : Text) : async { #Ok : ?Text; #Err : Text } {
+    if (Principal.isAnonymous(caller)) return #Err("Sign in required");
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Ok(null) };
+      case (?event) { if (not canView(caller, event)) #Err("Forbidden") else #Ok(?event.club_id) };
     }
   };
 
@@ -1351,6 +1455,7 @@ persistent actor class Main(governorInit : Principal) {
   // record_reminder_sent/list_reminders: the canister only logs that a
   // reminder was sent — actual delivery (push/email/SMS) stays off-chain.
   public shared ({ caller }) func record_reminder_sent(event_id : Text, channel : Text, recipient : Text) : async { #Ok : Types.ReminderLog; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(channel) or not valid(recipient)) return #Err("Invalid reminder");
@@ -1409,6 +1514,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // ---- (5) Event groups + players + duties ----
   public shared ({ caller }) func create_event_group(event_id : Text, name : Text, team_letter : ?Text, colour : ?Text, ability_band : ?Text, pitch_name : ?Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(name)) return #Err("Invalid group name");
@@ -1425,6 +1531,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func rename_event_group(group_id : Text, name : Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) {
       case (#Err(e)) return #Err(e);
@@ -1441,6 +1548,7 @@ persistent actor class Main(governorInit : Principal) {
   // UI support — sets the optional display fields independently of the
   // group's name so a rename doesn't clobber them (and vice versa).
   public shared ({ caller }) func set_event_group_appearance(group_id : Text, team_letter : ?Text, colour : ?Text, ability_band : ?Text, pitch_name : ?Text, team_b_colour : ?Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) {
       case (#Err(e)) return #Err(e);
@@ -1453,6 +1561,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_event_group(group_id : Text) : async { #Ok; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) {
       case (#Err(e)) return #Err(e);
@@ -1473,6 +1582,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func add_group_player(group_id : Text, account_id : Text, team_letter : ?Text) : async { #Ok : Types.EventGroupPlayer; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(account_id)) return #Err("Invalid player");
@@ -1483,6 +1593,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_group_player(group_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_id and item.account_id == account_id));
@@ -1527,6 +1638,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_group_duty(group_id : Text, duty : Text, account_id : ?Text) : async { #Ok : Types.EventGroupDuty; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(duty)) return #Err("Invalid duty");
@@ -1537,6 +1649,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_group_duty(group_id : Text, duty : Text) : async { #Ok; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     eventGroupDuties := eventGroupDuties.filter(func(item) = not (item.group_id == group_id and item.duty == duty));
@@ -1580,6 +1693,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_team_training_pause(club_id : Text, team_id : Text, starts_at_ms : Nat64, ends_at_ms : Nat64, reason : Text) : async { #Ok : Types.TeamTrainingPause; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); await syncRolesFromClubDomain(caller, club_id);
     if (not valid(club_id) or not valid(team_id) or starts_at_ms >= ends_at_ms or reason.size() > 2000) return #Err("Invalid pause");
     if (not managesTeam(caller, club_id, team_id)) return #Err("Club or team admin required");
@@ -1594,6 +1708,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_team_training_pause(id : Text) : async { #Ok; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (teamTrainingPauses.find(func(item) = item.id == id)) {
       case null { #Err("Pause not found") };
@@ -1627,6 +1742,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // ---- (8) Open-duty creation / claiming ----
   public shared ({ caller }) func create_open_duty(event_id : Text, duty : Text) : async { #Ok : Types.OpenDuty; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     if (openDuties.filter(func(item) = item.event_id == event_id).size() >= 200) return #Err("Too many open duties for this event");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
@@ -1637,6 +1753,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func claim_open_duty(id : Text, account_id : Text) : async { #Ok : Types.OpenDuty; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(account_id)) return #Err("Invalid account");
     switch (openDuties.find(func(item) = item.id == id)) {
@@ -1651,6 +1768,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func unclaim_open_duty(id : Text) : async { #Ok : Types.OpenDuty; #Err : Text } {
+    if (eventFenced(id) or groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (openDuties.find(func(item) = item.id == id)) {
       case null { #Err("Open duty not found") };
@@ -1676,6 +1794,7 @@ persistent actor class Main(governorInit : Principal) {
   // delete_existing is true, all current groups/players/duties for the event
   // are dropped first (mirrors the Supabase replace_event_groups RPC).
   public shared ({ caller }) func replace_event_groups(event_id : Text, groups : [Types.GroupSpecInput], delete_existing : Bool) : async { #Ok : [Text]; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (groups.any(func(g) = not valid(g.name))) return #Err("Invalid group name");
@@ -1769,6 +1888,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_mini_league_rsvp(event_id : Text, subject : Types.RsvpSubject, state : Text) : async { #Ok : Types.MiniLeagueRsvp; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not validSubject(subject) or not valid(state)) return #Err("Invalid RSVP");
@@ -1810,6 +1930,7 @@ persistent actor class Main(governorInit : Principal) {
     show_match_header : Bool,
     show_lineup_picker : Bool,
   ) : async { #Ok : Types.PitchBoardSettings; #Err : Text } {
+    if (teamFenced(team_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeamBoard(caller, team_id)) return #Err("Pitch settings management forbidden");
     if (not valid(team_id)) return #Err("Invalid team");
@@ -1831,6 +1952,7 @@ persistent actor class Main(governorInit : Principal) {
     formation_used : ?Text,
     total_substitutions : Nat16,
   ) : async { #Ok : Types.GameSummary; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(event_id) or not valid(team_id)) return #Err("Invalid game summary");
     if (not canManageTeamBoard(caller, team_id)) return #Err("Game summary management forbidden");
@@ -1849,6 +1971,7 @@ persistent actor class Main(governorInit : Principal) {
     team_id : Text,
     stats : [Types.GamePlayerStatInput],
   ) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(event_id) or not valid(team_id)) return #Err("Invalid game player stats");
     if (not canManageTeamBoard(caller, team_id)) return #Err("Game stats management forbidden");
@@ -1888,6 +2011,7 @@ persistent actor class Main(governorInit : Principal) {
     mvp_player_id : ?Text,
     mvp_player_name : ?Text,
   ) : async { #Ok : Types.GameResult; #Err : Text } {
+    if (teamFenced(team_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(team_id) or not valid(sport)) return #Err("Invalid game result");
     if (not canManageTeamBoard(caller, team_id)) return #Err("Game result management forbidden");
@@ -1917,6 +2041,7 @@ persistent actor class Main(governorInit : Principal) {
   func validRefKind(value : Text) : Bool { value == "account" or value == "child" };
 
   public shared ({ caller }) func set_match_captain(event_id : Text, ref_kind : Text, ref_id : Text, role : Text) : async { #Ok : Types.MatchCaptainAssignment; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(event_id) or not validRefKind(ref_kind) or not valid(ref_id) or (role != "captain" and role != "vice")) return #Err("Invalid captain assignment");
     switch (requireManage(caller, event_id)) {
@@ -1930,6 +2055,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_match_captain(event_id : Text, ref_kind : Text, ref_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) {
       case (#Err(e)) #Err(e);
@@ -1946,6 +2072,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_match_goalkeeper(event_id : Text, ref_kind : Text, ref_id : Text, period : Text) : async { #Ok : Types.MatchGoalkeeperAssignment; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(event_id) or not validRefKind(ref_kind) or not valid(ref_id) or not valid(period)) return #Err("Invalid goalkeeper assignment");
     switch (requireManage(caller, event_id)) {
@@ -1959,6 +2086,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_match_goalkeeper(event_id : Text, period : Text) : async { #Ok; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) {
       case (#Err(e)) #Err(e);
@@ -2604,6 +2732,7 @@ persistent actor class Main(governorInit : Principal) {
   /// Records (or clears, when either id is null) the team's PlayHQ link and
   /// auto-sync flag so the 6-hourly sweep can keep its fixtures current.
   public shared ({ caller }) func set_playhq_team_sync(club_id : Text, team_id : Text, competition_id : ?Text, playhq_team_id : ?Text, auto : Bool) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(team_id) or not validOptId(competition_id) or not validOptId(playhq_team_id)) return #Err("Invalid PlayHQ link");
     await syncRolesFromClubDomain(caller, club_id);
@@ -2769,6 +2898,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func send_event_reminders(event_id : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) {
       case (#Err(e)) return #Err(e);
@@ -2793,6 +2923,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_event_duty_team(event_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     let event = switch (requireManage(caller, event_id)) {
       case (#Err(error)) return #Err(error);
@@ -2866,6 +2997,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // ---- Scheduled (auto) RSVP reminders ----
   public shared ({ caller }) func set_event_auto_reminder(event_id : Text, hours_before : ?Nat16) : async { #Ok; #Err : Text } {
+    if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManage(caller, event_id)) {
       case (#Err(e)) return #Err(e);
@@ -2900,6 +3032,7 @@ persistent actor class Main(governorInit : Principal) {
   // Cancels (or reinstates) every non-deleted occurrence in a series that
   // starts at or after from_ms, in one atomic canister call.
   public shared ({ caller }) func set_series_cancelled(series_id : Text, cancelled : Bool, from_ms : Nat64) : async { #Ok : Nat32; #Err : Text } {
+    if (seriesFenced(series_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageSeries(caller, series_id)) {
       case (#Err(e)) return #Err(e);

@@ -198,6 +198,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'claim_legacy_sponsor_metrics' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'client_perf_aggregate' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
         [IDL.Variant({ 'Ok' : ClientPerfAggregate, 'Err' : IDL.Text })],
@@ -272,6 +277,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'export_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_ad_setting' : IDL.Func([IDL.Text], [IDL.Opt(AppAdSetting)], ['query']),
     'get_benchmarks' : IDL.Func(
         [IDL.Vec(IDL.Text)],
@@ -301,6 +311,11 @@ export const idlFactory = ({ IDL }) => {
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_club_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'is_app_admin' : IDL.Func([], [IDL.Bool], ['query']),
@@ -403,6 +418,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'record_active_user' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -416,6 +436,11 @@ export const idlFactory = ({ IDL }) => {
     'record_client_perf' : IDL.Func(
         [IDL.Vec(ClientPerfEntry)],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'record_club_sponsor_metric' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Float64, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'record_message_sent' : IDL.Func(
@@ -505,6 +530,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Nat32),
           IDL.Opt(IDL.Float64),
         ],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_transfer_fence' : IDL.Func(
+        [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

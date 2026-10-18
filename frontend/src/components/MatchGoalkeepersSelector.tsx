@@ -107,7 +107,7 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
         }
         return result;
       },
-    }),
+    }, { eventId: eventId }),
   });
 
   const { data: playerUserIds = [] } = useQuery({
@@ -149,7 +149,7 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
           const refId = (userId || childId)!;
           await setLiveMatchGoalkeeper(ctx, eventId, refKind, refId, nextFreePeriod());
         },
-      });
+      }, { eventId: eventId });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["match-goalkeepers", eventId] });
@@ -172,7 +172,7 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
         icp: async (ctx) => {
           await removeLiveMatchGoalkeeper(ctx, eventId, row.period);
         },
-      });
+      }, { eventId: eventId });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["match-goalkeepers", eventId] });

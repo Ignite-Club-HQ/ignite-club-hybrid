@@ -63,7 +63,7 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
             };
           });
         },
-      });
+      }, { conversationId: groupId });
     },
   });
 
@@ -93,7 +93,7 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
           // Push delivery is Supabase-only — no notify call under ICP.
           await approveLiveJoinRequest(ctx, groupId, Principal.fromText(requestId));
         },
-      });
+      }, { conversationId: groupId });
     },
     onSuccess: () => {
       toast.success("Request approved");
@@ -121,7 +121,7 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
           // Push delivery is Supabase-only — no notify call under ICP.
           await rejectLiveJoinRequest(ctx, groupId, Principal.fromText(requestId));
         },
-      });
+      }, { conversationId: groupId });
     },
     onSuccess: () => {
       toast.success("Request rejected");

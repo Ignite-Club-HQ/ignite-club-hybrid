@@ -1,79 +1,127 @@
-type assign_request = record {
-  club_id : text;
-  shard : principal;
-  expected_revision : nat64;
-};
-type assign_result = record {
-  revision : nat64;
-  route : route;
-};
-type assign_domain_request = record {
-  club_id : text;
+type AssignDomainRequest = record {
   domain : text;
   shard : principal;
   expected_revision : nat64;
-};
-type assign_domain_result = record {
-  revision : nat64;
-  route : domain_route;
-};
-type init = record { governor : principal };
-type migration = record {
   club_id : text;
-  destination : principal;
-  migration_revision : nat64;
-  route_revision : nat64;
-  source : principal;
 };
-type domain_migration = record {
-  club_id : text;
-  domain : text;
-  destination : principal;
-  migration_revision : nat64;
-  route_revision : nat64;
-  source : principal;
-};
-type page = record {
-  next : opt text;
-  revision : nat64;
-  routes : vec route;
-};
-type route = record {
-  club_id : text;
-  revision : nat64;
+type AssignDomainResult = record { revision : nat64; route : DomainRoute };
+type AssignRequest = record {
   shard : principal;
-};
-type domain_route = record {
+  expected_revision : nat64;
   club_id : text;
-  domain : text;
-  revision : nat64;
-  shard : principal;
 };
-type result_assign = variant { Ok : assign_result; Err : text };
-type result_assign_domain = variant { Ok : assign_domain_result; Err : text };
-type result_migration = variant { Ok : migration; Err : text };
-type result_domain_migration = variant { Ok : domain_migration; Err : text };
-type result_opt_migration = variant { Ok : opt migration; Err : text };
-type result_opt_domain_migration = variant { Ok : opt domain_migration; Err : text };
-type result_opt_route = variant { Ok : opt route; Err : text };
-type result_opt_domain_route = variant { Ok : opt domain_route; Err : text };
-type result_page = variant { Ok : page; Err : text };
-type result_nat64 = variant { Ok : nat64; Err : text };
-service : (init) -> {
+type AssignResult = record { revision : nat64; route : Route };
+type DomainCanister = record { domain : text; canister : principal };
+type DomainMigration = record {
+  destination : principal;
+  domain : text;
+  source : principal;
+  route_revision : nat64;
+  club_id : text;
+  migration_revision : nat64;
+};
+type DomainPlacement = record {
+  domain : text;
+  subnet : principal;
+  canister : principal;
+};
+type DomainRoute = record {
+  domain : text;
+  shard : principal;
+  revision : nat64;
+  club_id : text;
+};
+type GroupAssignment = record {
+  group_id : text;
+  revision : nat64;
+  club_id : text;
+};
+type GroupPlacement = record {
+  host : text;
+  network_kind : text;
+  deployment_revision : nat64;
+  approved_subnets : vec principal;
+  additional_subnets_enabled : bool;
+  group_id : text;
+  domains : vec DomainPlacement;
+  deployment_id : text;
+  primary_subnet : principal;
+};
+type GroupRegistrySnapshot = record {
+  groups : vec ShardGroup;
+  placements : vec GroupPlacement;
+  revision : nat64;
+};
+type Init = record { governor : principal };
+type MemoryStats = record {
+  memory_bytes : nat;
+  stable_bytes : nat;
+  heap_bytes : nat;
+};
+type Migration = record {
+  destination : principal;
+  source : principal;
+  route_revision : nat64;
+  club_id : text;
+  migration_revision : nat64;
+};
+type Page = record { next : opt text; routes : vec Route; revision : nat64 };
+type Result = variant { Ok : nat64; Err : text };
+type Result_1 = variant { Ok : AssignResult; Err : text };
+type Result_10 = variant { Ok : opt Route; Err : text };
+type Result_11 = variant { Ok : vec ShardGroup; Err : text };
+type Result_12 = variant { Ok : Page; Err : text };
+type Result_13 = variant { Ok : GroupRegistrySnapshot; Err : text };
+type Result_14 = variant { Ok : vec GroupAssignment; Err : text };
+type Result_15 = variant { Ok : GroupAssignment; Err : text };
+type Result_2 = variant { Ok : AssignDomainResult; Err : text };
+type Result_3 = variant { Ok : GroupAssignment; Err : text };
+type Result_4 = variant { Ok : DomainMigration; Err : text };
+type Result_5 = variant { Ok : Migration; Err : text };
+type Result_6 = variant { Ok : opt DomainMigration; Err : text };
+type Result_7 = variant { Ok : opt DomainRoute; Err : text };
+type Result_8 = variant { Ok : opt GroupAssignment; Err : text };
+type Result_9 = variant { Ok : opt Migration; Err : text };
+type Route = record { shard : principal; revision : nat64; club_id : text };
+type ShardGroup = record {
+  id : text;
+  max_clubs : nat32;
+  observed_at_ns : nat64;
+  accepting : bool;
+  heap_budget_bytes : nat64;
+  cycles : nat64;
+  assigned_clubs : nat32;
+  domains : vec DomainCanister;
+  target_alias : text;
+  min_cycles : nat64;
+  heap_bytes : nat64;
+};
+service : (Init) -> {
+  abort_domain_migration : (text, text, nat64) -> (Result);
+  abort_migration : (text, nat64) -> (Result);
+  assign : (AssignRequest) -> (Result_1);
+  assign_domain : (AssignDomainRequest) -> (Result_2);
+  assign_new_club_group : (text, text, nat64) -> (Result_3);
+  begin_domain_migration : (text, text, principal, nat64) -> (Result_4);
+  begin_migration : (text, principal, nat64) -> (Result_5);
+  commit_domain_migration : (text, text, nat64) -> (Result_2);
+  commit_migration : (text, nat64) -> (Result_1);
+  // Public: remaining cycles (shown in admin settings).
   cycles_balance : () -> (nat) query;
-   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
-  abort_migration : (text, nat64) -> (result_nat64);
-  abort_domain_migration : (text, text, nat64) -> (result_nat64);
-  assign : (assign_request) -> (result_assign);
-  assign_domain : (assign_domain_request) -> (result_assign_domain);
-  begin_migration : (text, principal, nat64) -> (result_migration);
-  begin_domain_migration : (text, text, principal, nat64) -> (result_domain_migration);
-  commit_migration : (text, nat64) -> (result_assign);
-  commit_domain_migration : (text, text, nat64) -> (result_assign_domain);
-  get_migration : (text) -> (result_opt_migration) query;
-  get_domain_migration : (text, text) -> (result_opt_domain_migration) query;
-  get_route : (text) -> (result_opt_route) query;
-  get_domain_route : (text, text) -> (result_opt_domain_route) query;
-  list_routes : (opt text, nat16) -> (result_page) query;
+  get_domain_migration : (text, text) -> (Result_6) query;
+  get_domain_route : (text, text) -> (Result_7) query;
+  get_group_assignment : (text) -> (Result_8) query;
+  get_migration : (text) -> (Result_9) query;
+  get_route : (text) -> (Result_10) query;
+  list_groups : () -> (Result_11) query;
+  list_routes : (opt text, nat16) -> (Result_12) query;
+  // Public: live memory reading for the admin health page.
+  memory_stats : () -> (MemoryStats) query;
+  read_group_registry : (text) -> (Result_13);
+  read_hosted_club_assignment : (text, text, nat64) -> (Result_15);
+  read_my_group_assignments : (vec text, text, nat64) -> (Result_14);
+  record_group_health : (text, nat64, nat64, nat64) -> (Result);
+  register_group : (ShardGroup, nat64) -> (Result);
+  register_group_placement : (GroupPlacement, nat64) -> (Result);
   version : () -> (nat64) query;
-};
+}

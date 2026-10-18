@@ -258,6 +258,11 @@ export interface Main {
     { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
+  'activate_media_quota' : ActorMethod<
+    [],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'add_role_grant' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -313,6 +318,10 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'cancel_media_quota' : ActorMethod<
+    [string, string, string, bigint, bigint],
+    Result
+  >,
   /**
    * / Public: remaining cycles of any canister this canister controls
    * / (the frontend asset canister adds club_domain as a controller at deploy
@@ -334,6 +343,7 @@ export interface Main {
     { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,
+  'commit_media_quota' : ActorMethod<[string], Result>,
   'create_child_for_parent_in_club' : ActorMethod<
     [string, Principal],
     { 'Ok' : Child } |
@@ -467,8 +477,13 @@ export interface Main {
       { 'Err' : string }
   >,
   'erase_my_membership' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'execute' : ActorMethod<[string], Result>,
+  'execute' : ActorMethod<[string], Result__1>,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_frozen_club' : ActorMethod<
     [string],
     { 'Ok' : Listing } |
@@ -602,6 +617,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_pending_invite_label' : ActorMethod<[string], [] | [string]>,
+  'get_prepared_media_quota' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : [] | [Reservation] } |
+      { 'Err' : string }
+  >,
   'get_public_eoi_config' : ActorMethod<
     [string, string],
     {
@@ -690,6 +710,11 @@ export interface Main {
   >,
   'has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'import_frozen_club' : ActorMethod<
     [string, Listing],
     { 'Ok' : null } |
@@ -697,6 +722,11 @@ export interface Main {
   >,
   'import_links' : ActorMethod<
     [Snapshot],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_media_quota_store' : ActorMethod<
+    [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -925,6 +955,15 @@ export interface Main {
     { 'Ok' : MemberPayment } |
       { 'Err' : string }
   >,
+  'media_quota_cutover_status' : ActorMethod<
+    [],
+    {
+      'stores' : Array<[Principal, Progress]>,
+      'active' : boolean,
+      'started' : boolean,
+    }
+  >,
+  'media_quota_ready' : ActorMethod<[], boolean>,
   'memory_stats' : ActorMethod<
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
@@ -956,6 +995,10 @@ export interface Main {
   >,
   'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
   'my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
+  'prepare_media_quota_reservation' : ActorMethod<
+    [Principal, string, string, string, bigint],
+    Result
+  >,
   'profile_team_history' : ActorMethod<
     [string],
     Array<ProfileTeamHistoryEntry>
@@ -965,9 +1008,37 @@ export interface Main {
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'purge_expired_deletions' : ActorMethod<
     [],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'read_has_club_membership' : ActorMethod<[Principal, string], boolean>,
+  'read_my_club_memberships' : ActorMethod<
+    [bigint, number],
+    {
+        'Ok' : {
+          'clubs' : Array<string>,
+          'next' : [] | [bigint],
+          'acl_revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'read_my_club_memberships_indexed' : ActorMethod<
+    [[] | [string], number],
+    {
+        'Ok' : {
+          'clubs' : Array<string>,
+          'next' : [] | [string],
+          'acl_revision' : bigint,
+        }
+      } |
       { 'Err' : string }
   >,
   'record_presence_heartbeat' : ActorMethod<
@@ -990,6 +1061,11 @@ export interface Main {
   'redeem_team_promo_code' : ActorMethod<
     [string, string, string, boolean],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'register_media_quota_store' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'reject_club_join_request' : ActorMethod<
@@ -1061,6 +1137,10 @@ export interface Main {
     { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
       { 'Err' : string }
   >,
+  'reserve_media_quota' : ActorMethod<
+    [string, string, string, bigint, bigint],
+    Result
+  >,
   'resolve_invite_short_code' : ActorMethod<
     [string],
     { 'Ok' : string } |
@@ -1079,6 +1159,17 @@ export interface Main {
   'restore_team' : ActorMethod<
     [string],
     { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'retire_media_quota_records' : ActorMethod<
+    [string, string],
+    {
+        'Ok' : {
+          'reservation_cursor' : string,
+          'usage_cursor' : string,
+          'removed' : bigint,
+        }
+      } |
       { 'Err' : string }
   >,
   'revoke_identity' : ActorMethod<
@@ -1384,6 +1475,10 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'settle_prepared_media_quota' : ActorMethod<
+    [Principal, string, boolean],
+    Result
+  >,
   'soft_delete_club' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubProfile } |
@@ -1392,6 +1487,11 @@ export interface Main {
   'soft_delete_team' : ActorMethod<
     [string],
     { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'start_media_quota_cutover' : ActorMethod<
+    [],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<
@@ -1567,6 +1667,11 @@ export interface ProfileTeamHistoryEntry {
   'club_id' : string,
   'season_status' : string,
 }
+export interface Progress {
+  'total' : [] | [bigint],
+  'done' : boolean,
+  'offset' : bigint,
+}
 export interface PromoCode {
   'id' : string,
   'access_level' : string,
@@ -1592,7 +1697,20 @@ export interface Request {
   'operation' : Operation,
   'expected_revision' : bigint,
 }
-export interface Result { 'hasMore' : boolean, 'rows' : Array<Row> }
+export interface Reservation {
+  'status' : { 'reserved' : null } |
+    { 'committed' : null } |
+    { 'released' : null },
+  'token' : string,
+  'cycle' : bigint,
+  'store' : Principal,
+  'category' : string,
+  'bytes' : bigint,
+  'club_id' : string,
+}
+export type Result = { 'Ok' : Reservation } |
+  { 'Err' : string };
+export interface Result__1 { 'hasMore' : boolean, 'rows' : Array<Row> }
 export interface RoleGrant {
   'club' : [] | [string],
   'role' : string,

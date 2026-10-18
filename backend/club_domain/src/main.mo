@@ -1,3 +1,4 @@
+import Blob "mo:core/Blob";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -19,6 +20,10 @@ import Types "types";
 import AccountErasure "accountErasure";
 import Oql "../../shared/Oql";
 import OqlClubs "oqlClubs";
+import MediaQuota "mediaQuota";
+import MediaQuotaCutover "mediaQuotaCutover";
+import MembershipPage "membershipPage";
+import MembershipIndex "membershipIndex";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -66,6 +71,11 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  // Preparation-only ledger. No upload activation API until legacy usage
+  // import and recoverable store-side sagas exist; existing stores unchanged.
+  var mediaQuotaLedger : MediaQuota.Ledger;
+  var mediaQuotaStores : [Principal];
+  var mediaQuotaCutover : MediaQuotaCutover.State;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -359,13 +369,18 @@ persistent actor class Main(governorInit : Principal) {
     if (themeChanged) { changed += 1 };
 
     if (not dry_run) {
+      membershipEpoch += 1;
       acl := { acl with roles = newRoles; guardians = newGuardians; exclusions = newExclusions; children = newChildren };
+      membershipEpoch += 1;
       accounts := newAccounts;
+      membershipEpoch += 1;
       accountExclusions := newAccountExclusions;
       accountRoles := newAccountRoles;
+      membershipEpoch += 1;
       accountFamilies := newAccountFamilies;
       accountChallenges := newAccountChallenges;
       teamFolders := newTeamFolders;
+      membershipEpoch += 1;
       teams := newTeams;
       newsPosts := newNewsPosts;
       parentInvites := newParentInvites;
@@ -405,6 +420,32 @@ persistent actor class Main(governorInit : Principal) {
       let isGuardian = acl.guardians.any(func(g) = g.child == c.id and g.user.equal(caller));
       (isParent or isGuardian) and c.teams.any(func(teamId) = teamInClub(teamId, club))
     })
+  };
+
+  // Transient candidate index (account principal -> clubs). Every write to
+  // membership-bearing state bumps membershipEpoch; a stale index is rebuilt
+  // on the next read. Candidates are always re-verified with isMember, so the
+  // index can only accelerate, never grant. Rebuilt after upgrade (transient).
+  transient var membershipEpoch : Nat = 0;
+  transient var memberIndexEpoch : Nat = 1;
+  transient var memberIndex : MembershipIndex.Index = MembershipIndex.empty();
+  transient let APP_WIDE = "\u{1F}*";
+
+  func currentMemberIndex() : MembershipIndex.Index {
+    if (memberIndexEpoch == membershipEpoch) return memberIndex;
+    let ix = MembershipIndex.empty();
+    for (g in acl.roles.values()) {
+      MembershipIndex.add(ix, g.user.toText(), switch (g.club) { case (?c) c; case null APP_WIDE });
+    };
+    for (c in acl.children.values()) {
+      let parents = switch (c.parent) { case (?p) [p]; case null [] };
+      let guardians = acl.guardians.filter(func(g) = g.child == c.id).map(func(g) = g.user);
+      for (teamId in c.teams.values()) {
+        for (t in acl.teams.values()) if (t.id == teamId) for (u in parents.concat(guardians).values()) MembershipIndex.add(ix, u.toText(), t.club);
+        for (t in teams.values()) if (t.id == teamId and t.deleted_at_ms == null) for (u in parents.concat(guardians).values()) MembershipIndex.add(ix, u.toText(), t.club_id);
+      };
+    };
+    memberIndex := ix; memberIndexEpoch := membershipEpoch; ix
   };
 
   func isMember(caller : Principal, club : Text) : Bool {
@@ -511,7 +552,9 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func save_club_profile(profile : Types.ClubProfile) : async { #Ok : Types.ClubProfile; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, profile.id)) return #Err("Club admin required");
+    membershipEpoch += 1;
     profiles := profiles.filter(func(p) = p.id != profile.id);
+    membershipEpoch += 1;
     profiles := profiles.concat([profile]);
     #Ok(profile)
   };
@@ -618,6 +661,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_invite_message_default(club_id : Text, message : Text) : async { #Ok : Types.InviteMessageDefault; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (club_id == "" or club_id.size() > 128 or message.size() > 2000) return #Err("Invalid invite message");
@@ -640,7 +684,9 @@ persistent actor class Main(governorInit : Principal) {
     } else if (not isAdmin(caller, team.club_id)) {
       return #Err("Club admin required");
     };
+    membershipEpoch += 1;
     teams := teams.filter(func(t) = t.id != team.id);
+    membershipEpoch += 1;
     teams := teams.concat([team]);
     if (team.club_id == "") {
       if (isNew and not isPersonalTeamOwner(caller, team.id)) {
@@ -712,6 +758,7 @@ persistent actor class Main(governorInit : Principal) {
   // Link (parent = ?assoc) or unlink (parent = null) a club and an
   // association. Only an admin of the association involved may do either.
   public shared ({ caller }) func set_club_parent_org(club_id : Text, parent_id : ?Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (profiles.find(func(p) = p.id == club_id) == null) return #Err("Club not found");
     switch (parent_id) {
@@ -772,6 +819,7 @@ persistent actor class Main(governorInit : Principal) {
         if (not isAdmin(caller, folder.club_id)) return #Err("Club admin required");
         teamFolders := teamFolders.filter(func(f) = f.id != folder_id);
         // Teams in the deleted folder fall back to the unfiled group.
+        membershipEpoch += 1;
         teams := teams.map(func(t) = if (t.folder_id == ?folder_id) ({ t with folder_id = null }) else t);
         #Ok
       };
@@ -802,6 +850,7 @@ persistent actor class Main(governorInit : Principal) {
           case null {};
         };
         let updated = { team with folder_id = folder_id };
+        membershipEpoch += 1;
         teams := teams.map(func(t) = if (t.id == team_id) updated else t);
         #Ok(updated)
       };
@@ -1067,6 +1116,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_news_post(club_id : Text, title : Text, body : Text, status : Text, target_team_ids : ?[Text], target_mini_league_id : ?Text, target_competition_id : ?Text, send_push : Bool, is_important : Bool, image_url : ?Text, attachments : [Types.NewsAttachment]) : async { #Ok : Types.NewsPost; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (target_competition_id == null and not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (club_id == "" or club_id.size() > 128) return #Err("Invalid club");
@@ -1283,6 +1333,7 @@ persistent actor class Main(governorInit : Principal) {
   // a verified guardian-relationship check is a post-deploy roadmap item,
   // matching the PII reader-grant stance.
   public shared ({ caller }) func create_parent_invite(club_id : Text, team_id : ?Text, child_id : Text) : async { #Ok : Types.ParentInvite; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, team_id)) return #Err("Team or club admin required");
     if (child_id == "" or child_id.size() > 128) return #Err("Invalid child");
@@ -1330,11 +1381,13 @@ persistent actor class Main(governorInit : Principal) {
             switch (acl.children.find(func(c) = c.id == invite.child_id)) {
               case null {
                 let child : Types.Child = { id = invite.child_id; teams = [team]; parent = null; club_id = ?invite.club_id };
+                membershipEpoch += 1;
                 acl := { acl with children = acl.children.concat([child]) };
               };
               case (?child) {
                 if (not child.teams.any(func(t) = t == team)) {
                   let updated : Types.Child = { child with teams = child.teams.concat([team]) };
+                  membershipEpoch += 1;
                   acl := { acl with children = acl.children.map(func(c) = if (c.id == invite.child_id) updated else c) };
                 };
               };
@@ -1343,11 +1396,13 @@ persistent actor class Main(governorInit : Principal) {
           case null {};
         };
         if (not acl.guardians.any(func(g) = g.child == invite.child_id and g.user.equal(caller))) {
+          membershipEpoch += 1;
           acl := { acl with guardians = acl.guardians.concat([{ child = invite.child_id; user = caller }]) };
         };
         switch (accountFor(caller)) {
           case (?account) {
             if (not accountFamilies.any(func(f) = f.account_id == account.id and f.child_id == invite.child_id)) {
+              membershipEpoch += 1;
               accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = invite.child_id }]);
             };
           };
@@ -1636,6 +1691,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_kind(club_id : Text, kind : Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (kind.size() == 0 or kind.size() > 64) return #Err("Invalid kind");
@@ -1653,6 +1709,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func enrol_in_class(club_id : Text, term_id : Text, class_id : Text, member_id : Text) : async { #Ok : Types.ClassEnrolment; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     if (not isSelfOrAdmin(caller, club_id, member_id)) return #Err("Club admin required to enrol another member");
@@ -1705,6 +1762,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_theme_json(club_id : Text, theme_json : Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (theme_json.size() > 65_536) return #Err("Theme JSON too large");
@@ -1738,6 +1796,7 @@ persistent actor class Main(governorInit : Principal) {
     max_guests_per_member_default : Nat,
     events_sponsor_strip_enabled : Bool,
   ) : async { #Ok : Types.ClubGeneralSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not acl.roles.any(func(grant) = grant.user.equal(caller) and grant.club == ?club_id)) return #Err("Club staff required");
     let updated : Types.ClubGeneralSettings = { club_id; class_mode_enabled; allow_guests_default; max_guests_per_member_default; events_sponsor_strip_enabled };
@@ -1803,6 +1862,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func mutate(req : Types.Request) : async { #Ok : Types.Mutation; #Err : Text } {
+    if (isTransferFenced(req.club)) return #Err("Club is temporarily locked for a transfer");
     if (not isAdmin(caller, req.club)) return #Err("Club admin required");
     let fingerprint = requestFingerprint(req);
     switch (findLoggedMutation(req.request_id)) {
@@ -1914,6 +1974,158 @@ persistent actor class Main(governorInit : Principal) {
     result
   };
 
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // A frozen club is fenced for transfer: `mutate` refuses it and the ingress
+  // inspect hook drops update calls naming it. Inspect is advisory only (not a
+  // security boundary), so the transfer runner re-digests the source snapshot
+  // right before cutover; any write that slipped through aborts the move.
+  func isTransferFenced(club : Text) : Bool = frozenClubs.any(func(e) = e.0 == club);
+
+  type ClubSnapshot = {
+    profiles : [Types.ClubProfile]; settings : [Types.ClubSettings]; teams : [Types.ClubTeam];
+    sponsors : [Types.ClubSponsor]; listing : Types.Listing; roles : [Types.RoleGrant];
+    acl_teams : [Types.Team]; member : Bool; exclusions : [Types.Exclusion]; children : [Types.Child]; guardians : [Types.Guardian];
+    account_roles : [Types.AccountRole]; team_folders : [Types.TeamFolder]; news : [Types.NewsPost];
+    news_audience : [Types.NewsAudienceRecipient]; parent_invites : [Types.ParentInvite]; role_requests : [Types.RoleRequest];
+    team_invites : [Types.TeamInvite]; team_invite_links : [Types.TeamInviteLink];
+  };
+
+  func clubTeamIds(club : Text) : [Text] = teams.filter(func(t) = t.club_id == club).map(func(t) = t.id);
+  func inTeams(ids : [Text], team : ?Text) : Bool = switch (team) { case (?t) ids.any(func(i) = i == t); case null false };
+  func clubChild(club : Text, ids : [Text], c : Types.Child) : Bool = c.club_id == ?club or c.teams.any(func(t) = ids.any(func(i) = i == t));
+
+  func clubSnapshot(club : Text) : ClubSnapshot {
+    let ids = clubTeamIds(club);
+    let kids = acl.children.filter(func(c) = clubChild(club, ids, c));
+    let news = newsPosts.filter(func(n) = n.club_id == club);
+    {
+      profiles = profiles.filter(func(p) = p.id == club);
+      settings = settings.filter(func(x) = x.club_id == club);
+      teams = teams.filter(func(t) = t.club_id == club);
+      sponsors = sponsors.filter(func(x) = x.club_id == club);
+      listing = getListing(club);
+      roles = acl.roles.filter(func(g) = g.club == ?club or (g.club == null and inTeams(ids, g.team)));
+      acl_teams = acl.teams.filter(func(t) = t.club == club);
+      member = acl.clubs.any(func(c) = c == club);
+      exclusions = acl.exclusions.filter(func(e) = e.club == club);
+      children = kids;
+      guardians = acl.guardians.filter(func(g) = kids.any(func(k) = k.id == g.child));
+      account_roles = accountRoles.filter(func(r) = r.club == ?club or (r.club == null and inTeams(ids, r.team)));
+      team_folders = teamFolders.filter(func(f) = f.club_id == club);
+      news;
+      news_audience = newsAudienceRecipients.filter(func(r) = news.any(func(n) = n.id == r.news_id));
+      parent_invites = parentInvites.filter(func(i) = i.club_id == club);
+      role_requests = roleRequests.filter(func(r) = r.club == club);
+      team_invites = teamInvites.filter(func(i) = i.club_id == club);
+      team_invite_links = teamInviteLinks.filter(func(l) = l.club_id == club);
+    }
+  };
+
+  // Removes the club-owned scope. Children/guardians are family records kept
+  // on the source, matching permanent club deletion.
+  func dropClubScope(club : Text) {
+    let ids = clubTeamIds(club);
+    let newsIds = newsPosts.filter(func(n) = n.club_id == club).map(func(n) = n.id);
+    membershipEpoch += 1;
+    profiles := profiles.filter(func(p) = p.id != club);
+    settings := settings.filter(func(x) = x.club_id != club);
+    teams := teams.filter(func(t) = t.club_id != club);
+    sponsors := sponsors.filter(func(x) = x.club_id != club);
+    clubListings := clubListings.filter(func(e) = e.0 != club);
+    acl := { acl with
+      roles = acl.roles.filter(func(g) = not (g.club == ?club or (g.club == null and inTeams(ids, g.team))));
+      teams = acl.teams.filter(func(t) = t.club != club);
+      clubs = acl.clubs.filter(func(c) = c != club);
+      exclusions = acl.exclusions.filter(func(e) = e.club != club) };
+    accountRoles := accountRoles.filter(func(r) = not (r.club == ?club or (r.club == null and inTeams(ids, r.team))));
+    teamFolders := teamFolders.filter(func(f) = f.club_id != club);
+    newsAudienceRecipients := newsAudienceRecipients.filter(func(r) = not newsIds.any(func(i) = i == r.news_id));
+    newsPosts := newsPosts.filter(func(n) = n.club_id != club);
+    parentInvites := parentInvites.filter(func(i) = i.club_id != club);
+    roleRequests := roleRequests.filter(func(r) = r.club != club);
+    teamInvites := teamInvites.filter(func(i) = i.club_id != club);
+    teamInviteLinks := teamInviteLinks.filter(func(l) = l.club_id != club);
+  };
+
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isTransferFenced(club)) return #Err("Club must be fenced before export");
+    #Ok(to_candid (clubSnapshot(club)))
+  };
+
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isTransferFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?ClubSnapshot = from_candid (snapshot);
+    let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (snap.profiles.size() > 1 or snap.profiles.any(func(p) = p.id != club)) return #Err("Snapshot club mismatch");
+    let ids = snap.teams.map(func(t) = t.id);
+    let newsIds = snap.news.map(func(n) = n.id);
+    if (snap.teams.any(func(t) = t.club_id != club) or snap.settings.any(func(x) = x.club_id != club)
+        or snap.sponsors.any(func(x) = x.club_id != club)
+        or snap.roles.any(func(g) = not (g.club == ?club or (g.club == null and inTeams(ids, g.team))))
+        or snap.account_roles.any(func(r) = not (r.club == ?club or (r.club == null and inTeams(ids, r.team))))
+        or snap.acl_teams.any(func(t) = t.club != club) or snap.exclusions.any(func(e) = e.club != club)
+        or snap.children.any(func(c) = not clubChild(club, ids, c)) or snap.guardians.any(func(g) = not snap.children.any(func(k) = k.id == g.child))
+        or snap.team_folders.any(func(x) = x.club_id != club) or snap.news.any(func(x) = x.club_id != club)
+        or snap.news_audience.any(func(r) = not newsIds.any(func(i) = i == r.news_id))
+        or snap.parent_invites.any(func(x) = x.club_id != club) or snap.role_requests.any(func(x) = x.club != club)
+        or snap.team_invites.any(func(x) = x.club_id != club) or snap.team_invite_links.any(func(x) = x.club_id != club)) return #Err("Snapshot contains foreign records");
+    if (snap.teams.any(func(t) = teams.any(func(x) = x.id == t.id and x.club_id != club))
+        or snap.news.any(func(n) = newsPosts.any(func(x) = x.id == n.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    // Idempotent replace: re-running an import converges to the same state.
+    dropClubScope(club);
+    profiles := profiles.concat(snap.profiles);
+    settings := settings.concat(snap.settings);
+    teams := teams.concat(snap.teams);
+    sponsors := sponsors.concat(snap.sponsors);
+    updateListing(club, snap.listing);
+    acl := { acl with
+      roles = acl.roles.concat(snap.roles);
+      teams = acl.teams.concat(snap.acl_teams);
+      clubs = if (snap.member) acl.clubs.concat([club]) else acl.clubs;
+      exclusions = acl.exclusions.concat(snap.exclusions);
+      children = acl.children.filter(func(c) = not snap.children.any(func(k) = k.id == c.id)).concat(snap.children);
+      guardians = acl.guardians.filter(func(g) = not snap.guardians.any(func(y) = y.child == g.child and y.user.equal(g.user))).concat(snap.guardians) };
+    accountRoles := accountRoles.concat(snap.account_roles);
+    teamFolders := teamFolders.concat(snap.team_folders);
+    newsPosts := newsPosts.concat(snap.news);
+    newsAudienceRecipients := newsAudienceRecipients.concat(snap.news_audience);
+    parentInvites := parentInvites.concat(snap.parent_invites);
+    roleRequests := roleRequests.concat(snap.role_requests);
+    teamInvites := teamInvites.concat(snap.team_invites);
+    teamInviteLinks := teamInviteLinks.concat(snap.team_invite_links);
+    #Ok
+  };
+
+  // Removes exactly the snapshot scope from the source after a verified cutover.
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isTransferFenced(club)) return #Err("Club must be fenced before purge");
+    let before = profiles.size() + teams.size() + newsPosts.size();
+    dropClubScope(club);
+    #Ok(before - (profiles.size() + teams.size() + newsPosts.size()))
+  };
+
+  func blobContains(hay : Blob, needle : Blob) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(needle);
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) {
+      var j = 0;
+      while (j < n.size() and h[i + j] == n[j]) j += 1;
+      if (j == n.size()) return true;
+      i += 1;
+    };
+    false
+  };
+
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (frozenClubs.size() == 0 or isGovernor(caller)) return true;
+    not frozenClubs.any(func(e) = blobContains(arg, e.0.encodeUtf8()))
+  };
+
   public shared ({ caller }) func freeze_club(club : Text, rev : Nat64) : async { #Ok : Nat64; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor required");
@@ -1961,6 +2173,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func replace_acl(rev : Nat64, new_acl : Types.Acl) : async { #Ok : Nat64; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor required");
+    membershipEpoch += 1;
     acl := new_acl;
     aclVersion := rev;
     #Ok(rev)
@@ -2042,6 +2255,7 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
+    membershipEpoch += 1;
     acl := { acl with roles = acl.roles.filter(func(g) = AccountErasure.keepRole(g, principals)); exclusions };
     accountRoles := accountRoles.filter(func(g) = g.account_id != accountId);
     #Ok
@@ -2087,6 +2301,58 @@ persistent actor class Main(governorInit : Principal) {
     acl.roles.filter(func(grant) = grant.user.equal(caller))
   };
 
+  // Caller-only consensus read; linked principals come from this canister's
+  // verified account, never a browser-supplied account/principal list.
+  // At most 200 profile slots scanned per call. Cursor is not a snapshot:
+  // consumers revalidate discovered memberships against current authority.
+  public shared ({ caller }) func read_my_club_memberships(offset : Nat, limit : Nat16) : async {
+    #Ok : { clubs : [Text]; next : ?Nat; acl_revision : Nat64 }; #Err : Text
+  } {
+    if (caller.equal(Principal.anonymous())) return #Err("Authentication required");
+    if (limit == 0 or limit > 100 or offset > profiles.size()) return #Err("Invalid membership page");
+    let principals = switch (accountFor(caller)) { case (?a) a.principals; case null [caller] };
+    let page = MembershipPage.read<Types.ClubProfile>(profiles, offset, Nat16.toNat(limit), func(club) {
+      club.deleted_at_ms == null and principals.any(func(p) = isMember(p, club.id))
+    });
+    #Ok({ clubs = page.rows.map(func(club) = club.id); next = page.next; acl_revision = aclVersion })
+  };
+
+  // Indexed, cursor-paged successor of read_my_club_memberships: cost scales
+  // with the caller's own memberships, not the number of clubs on the canister.
+  public shared ({ caller }) func read_my_club_memberships_indexed(after : ?Text, limit : Nat16) : async {
+    #Ok : { clubs : [Text]; next : ?Text; acl_revision : Nat64 }; #Err : Text
+  } {
+    if (caller.equal(Principal.anonymous())) return #Err("Authentication required");
+    if (limit == 0 or limit > 100) return #Err("Invalid membership page");
+    let principals = switch (accountFor(caller)) { case (?a) a.principals; case null [caller] };
+    let ix = currentMemberIndex();
+    if (principals.any(func(p) = MembershipIndex.has(ix, p.toText(), APP_WIDE))) {
+      // App-wide roles cover every club: fall back to the bounded scan pager.
+      return #Err("Use read_my_club_memberships for app-wide accounts");
+    };
+    let candidates = MembershipIndex.empty();
+    for (p in principals.values()) {
+      var cursor : ?Text = null;
+      label pages loop {
+        let page = MembershipIndex.page(ix, p.toText(), cursor, 100);
+        for (club in page.clubs.values()) MembershipIndex.add(candidates, "c", club);
+        switch (page.next) { case null break pages; case (?n) cursor := ?n };
+      };
+    };
+    var out : [Text] = []; var cursor = after; var more = false;
+    label scan loop {
+      let page = MembershipIndex.page(candidates, "c", cursor, 100);
+      for (club in page.clubs.values()) {
+        if (out.size() == Nat16.toNat(limit)) { more := true; break scan };
+        let live = profiles.any(func(pr) = pr.id == club and pr.deleted_at_ms == null);
+        if (live and principals.any(func(p) = isMember(p, club))) out := out.concat([club]);
+        cursor := ?club;
+      };
+      switch (page.next) { case null break scan; case (?_) {} };
+    };
+    #Ok({ clubs = out; next = if (more and out.size() > 0) ?out[out.size() - 1] else null; acl_revision = aclVersion })
+  };
+
   // Cross-canister membership check used by pii_access_control's
   // club-scoped read grants: true when `user` holds any role grant in
   // `club_id`. Public query — club membership is already visible to club
@@ -2104,6 +2370,14 @@ persistent actor class Main(governorInit : Principal) {
   public query func is_club_member(user : Principal, club_id : Text) : async Bool {
     if (user.equal(Principal.anonymous())) return false;
     isMember(user, club_id)
+  };
+
+  // Same public boolean scope as is_club_member, through consensus and with
+  // locally verified linked identities. No roster, names or account IDs.
+  public shared func read_has_club_membership(user : Principal, club_id : Text) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    let principals = switch (accountFor(user)) { case (?a) a.principals; case null [user] };
+    principals.any(func(p) = isMember(p, club_id))
   };
 
   // The user's role grants in one club as (role, team) pairs. events_domain
@@ -2204,6 +2478,7 @@ persistent actor class Main(governorInit : Principal) {
             let account = accounts[accountIndex];
             if (account.version != challenge.expected_version or not account.principals.any(func(item) = item.equal(challenge.issuer))) return #Err("Link authorization changed");
             let updated : Types.Account = { account with version = account.version + 1; principals = account.principals.concat([caller]) };
+            membershipEpoch += 1;
             accounts := Array.tabulate<Types.Account>(accounts.size(), func(position) { if (position == accountIndex) updated else accounts[position] });
             let accepted : Types.Challenge = { challenge with accepted = true };
             accountChallenges := Array.tabulate<Types.Challenge>(accountChallenges.size(), func(position) { if (position == index) accepted else accountChallenges[position] });
@@ -2229,6 +2504,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (Array.findIndex(accounts, func(account) = account.id == current.id)) {
           case null { #Err("Account unavailable") };
           case (?index) {
+            membershipEpoch += 1;
             accounts := Array.tabulate<Types.Account>(accounts.size(), func(position) { if (position == index) updated else accounts[position] });
             #Ok(updated)
           };
@@ -2254,6 +2530,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     if (role == "") return #Err("Invalid role");
+    membershipEpoch += 1;
     acl := { acl with roles = acl.roles.concat([{ user; role; club = ?club; team }]) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.concat([{ account_id = accountId; club = ?club; role; team }]);
@@ -2269,6 +2546,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func remove_role_grant(user : Principal, club : Text, role : Text, team : ?Text) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
+    membershipEpoch += 1;
     acl := { acl with roles = acl.roles.filter(func(g) = not (g.user.equal(user) and g.role == role and g.club == ?club and g.team == team)) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.filter(func(g) = not (g.account_id == accountId and g.role == role and g.club == ?club and g.team == team));
@@ -2282,8 +2560,10 @@ persistent actor class Main(governorInit : Principal) {
   // records untouched). Idempotent: removing an already-removed member is
   // a no-op #Ok.
   public shared ({ caller }) func remove_member(club : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
+    membershipEpoch += 1;
     acl := { acl with roles = acl.roles.filter(func(g) = not (g.user.equal(user) and g.club == ?club)) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.filter(func(g) = not (g.account_id == accountId and g.club == ?club));
@@ -2297,6 +2577,7 @@ persistent actor class Main(governorInit : Principal) {
   // role grants -- the admin must re-grant roles explicitly via
   // add_role_grant.
   public shared ({ caller }) func restore_member(club : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     removedMembers := removedMembers.filter(func(m) = not (m.club == club and m.user.equal(user)));
@@ -2313,6 +2594,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func request_role(club : Text, role : Text, team : ?Text) : async { #Ok : Types.RoleRequest; #Err : Text } {
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (role == "") return #Err("Invalid role");
     if (isExcluded(caller, club)) return #Err("Forbidden");
@@ -2343,6 +2625,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?req) {
         if (not isAdmin(caller, req.club)) return #Err("Club admin required");
         if (req.status != "pending") return #Err("Request already processed");
+        membershipEpoch += 1;
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = req.role; club = ?req.club; team = req.team }]) };
         accountRoles := accountRoles.concat([{ account_id = req.account_id; club = ?req.club; role = req.role; team = req.team }]);
         ignore fanOutEnsureConversation(req.club, null, clubChatParticipants(req.club));
@@ -2380,6 +2663,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         let updated : Types.ClubTeam = { team with deleted_at_ms = ?nowMs() };
+        membershipEpoch += 1;
         teams := teams.map(func(t) = if (t.id == id) updated else t);
         #Ok(updated)
       };
@@ -2393,6 +2677,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         let updated : Types.ClubTeam = { team with deleted_at_ms = null };
+        membershipEpoch += 1;
         teams := teams.map(func(t) = if (t.id == id) updated else t);
         #Ok(updated)
       };
@@ -2433,8 +2718,10 @@ persistent actor class Main(governorInit : Principal) {
       case (?club) {
         let now = nowMs();
         let updated : Types.ClubProfile = { club with deleted_at_ms = ?now };
+        membershipEpoch += 1;
         profiles := profiles.map(func(p) = if (p.id == id) updated else p);
         if (cascade_teams) {
+          membershipEpoch += 1;
           teams := teams.map(func(t) = if (t.club_id == id and t.deleted_at_ms == null) ({ t with deleted_at_ms = ?now }) else t);
         };
         #Ok(updated)
@@ -2454,10 +2741,12 @@ persistent actor class Main(governorInit : Principal) {
       case (?club) {
         let deletedAt = club.deleted_at_ms;
         let updated : Types.ClubProfile = { club with deleted_at_ms = null };
+        membershipEpoch += 1;
         profiles := profiles.map(func(p) = if (p.id == id) updated else p);
         if (cascade_teams) {
           switch (deletedAt) {
             case (?ts) {
+              membershipEpoch += 1;
               teams := teams.map(func(t) = if (t.club_id == id and t.deleted_at_ms == ?ts) ({ t with deleted_at_ms = null }) else t);
             };
             case null {};
@@ -2486,6 +2775,7 @@ persistent actor class Main(governorInit : Principal) {
   // invite record and its accept/revoke state) ----
 
   public shared ({ caller }) func create_team_invite(club_id : Text, team_id : Text, email : Text, role : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canCreateTeamRosterInvite(caller, club_id, team_id, role))) return #Err("Team or competition admin required for player/parent invites");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
@@ -2529,6 +2819,7 @@ persistent actor class Main(governorInit : Principal) {
         if (invite.accepted_by != null) return #Err("Invite already accepted");
         if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
+        membershipEpoch += 1;
         acl := { acl with roles = acl.roles.concat([{ user = caller; role = invite.role; club = ?invite.club_id; team = ?invite.team_id }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?invite.club_id; role = invite.role; team = ?invite.team_id }]);
         let accepted : Types.TeamInvite = { invite with accepted_by = ?caller };
@@ -2557,6 +2848,7 @@ persistent actor class Main(governorInit : Principal) {
   // the Supabase `teams.shell_*` columns and `claim_shell_team` RPC. ----
 
   public shared ({ caller }) func create_shell_team_invite(club_id : Text, name : Text, contact_email : ?Text, contact_name : ?Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (name == "" or name.size() > 160) return #Err("Invalid team name");
@@ -2578,6 +2870,7 @@ persistent actor class Main(governorInit : Principal) {
       playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
       folder_id = null;
     };
+    membershipEpoch += 1;
     teams := teams.concat([team]);
     #Ok(team)
   };
@@ -2604,7 +2897,9 @@ persistent actor class Main(governorInit : Principal) {
         if (team.shell_claimed_by != null) return #Err("Shell team already claimed");
         if (team.deleted_at_ms != null) return #Err("Team no longer available");
         let updated : Types.ClubTeam = { team with shell_claimed_at_ms = ?nowMs(); shell_claimed_by = ?caller };
+        membershipEpoch += 1;
         teams := teams.map(func(t) = if (t.id == team.id) updated else t);
+        membershipEpoch += 1;
         acl := { acl with roles = acl.roles.concat([{ user = caller; role = "team_admin"; club = ?team.club_id; team = ?team.id }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?team.club_id; role = "team_admin"; team = ?team.id }]);
         #Ok(updated)
@@ -2644,6 +2939,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_team_invite_link(club_id : Text, team_id : Text, role : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canCreateTeamRosterInvite(caller, club_id, team_id, role))) return #Err("Team or competition admin required for player/parent invites");
     if (role == "") return #Err("Invalid role");
@@ -2726,6 +3022,7 @@ persistent actor class Main(governorInit : Principal) {
         if (isExcluded(caller, link.club_id)) return #Err("Forbidden");
         if (not acl.roles.any(func(g) = g.user.equal(caller) and g.role == link.role and g.club == ?link.club_id and g.team == ?link.team_id)) {
           let grant : Types.RoleGrant = { user = caller; role = link.role; club = ?link.club_id; team = ?link.team_id };
+          membershipEpoch += 1;
           acl := { acl with roles = acl.roles.concat([grant]) };
         };
         #Ok(link)
@@ -2895,11 +3192,13 @@ persistent actor class Main(governorInit : Principal) {
                   switch (acl.children.find(func(c) = c.id == childId)) {
                     case null {
                       let child : Types.Child = { id = childId; teams = [team]; parent = null; club_id = ?invite.club_id };
+                      membershipEpoch += 1;
                       acl := { acl with children = acl.children.concat([child]) };
                     };
                     case (?child) {
                       if (not child.teams.any(func(t) = t == team)) {
                         let updatedChild : Types.Child = { child with teams = child.teams.concat([team]) };
+                        membershipEpoch += 1;
                         acl := { acl with children = acl.children.map(func(c) = if (c.id == childId) updatedChild else c) };
                       };
                     };
@@ -2908,11 +3207,13 @@ persistent actor class Main(governorInit : Principal) {
                 case null {};
               };
               if (not acl.guardians.any(func(g) = g.child == childId and g.user.equal(caller))) {
+                membershipEpoch += 1;
                 acl := { acl with guardians = acl.guardians.concat([{ child = childId; user = caller }]) };
               };
               switch (accountFor(caller)) {
                 case (?account) {
                   if (not accountFamilies.any(func(fam) = fam.account_id == account.id and fam.child_id == childId)) {
+                    membershipEpoch += 1;
                     accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = childId }]);
                   };
                 };
@@ -2928,6 +3229,7 @@ persistent actor class Main(governorInit : Principal) {
             case (?role) {
               if (not acl.roles.any(func(g) = g.user.equal(caller) and g.role == role and g.club == ?invite.club_id and g.team == invite.team_id)) {
                 let grant : Types.RoleGrant = { user = caller; role; club = ?invite.club_id; team = invite.team_id };
+                membershipEpoch += 1;
                 acl := { acl with roles = acl.roles.concat([grant]) };
               };
             };
@@ -2971,6 +3273,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not canManageChild(caller, child_id)) return #Err("Club admin required");
     if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))) {
+      membershipEpoch += 1;
       acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user }]) };
     };
     #Ok
@@ -2979,6 +3282,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func unlink_guardian(child_id : Text, user : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not (canManageChild(caller, child_id) or caller.equal(user))) return #Err("Forbidden");
+    membershipEpoch += 1;
     acl := { acl with guardians = acl.guardians.filter(func(g) = not (g.child == child_id and g.user.equal(user))) };
     guardianMeta := guardianMeta.filter(func(m) = not (m.child_id == child_id and m.user.equal(user)));
     #Ok
@@ -3009,8 +3313,10 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Child not found") };
       case (?child) {
         let updated : Types.Child = { child with parent = ?parent };
+        membershipEpoch += 1;
         acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
         if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(parent))) {
+          membershipEpoch += 1;
           acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user = parent }]) };
         };
         #Ok(updated)
@@ -3019,6 +3325,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_child_for_parent_on_team(club_id : Text, team_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
     if (not teamInClub(team_id, club_id)) return #Err("Team not found in club");
@@ -3028,7 +3335,9 @@ persistent actor class Main(governorInit : Principal) {
       parent = ?parent;
       club_id = ?club_id;
     };
+    membershipEpoch += 1;
     acl := { acl with children = acl.children.concat([child]) };
+    membershipEpoch += 1;
     acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = parent }]) };
     #Ok(child)
   };
@@ -3037,6 +3346,7 @@ persistent actor class Main(governorInit : Principal) {
   // only to the club (no team assignment yet), mirroring
   // create_child_for_parent_on_team but without requiring a team id.
   public shared ({ caller }) func create_child_for_parent_in_club(club_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (isAdmin(caller, club_id) or isGovernor(caller))) return #Err("Club admin required");
     if (not acl.clubs.any(func(c) = c == club_id)) return #Err("Club not found");
@@ -3046,7 +3356,9 @@ persistent actor class Main(governorInit : Principal) {
       parent = ?parent;
       club_id = ?club_id;
     };
+    membershipEpoch += 1;
     acl := { acl with children = acl.children.concat([child]) };
+    membershipEpoch += 1;
     acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = parent }]) };
     #Ok(child)
   };
@@ -3089,10 +3401,12 @@ persistent actor class Main(governorInit : Principal) {
       parent = ?caller;
       club_id = null;
     };
+    membershipEpoch += 1;
     acl := { acl with children = acl.children.concat([child]) };
+    membershipEpoch += 1;
     acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = caller }]) };
     switch (accountFor(caller)) {
-      case (?account) { accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = child.id }]) };
+      case (?account) { membershipEpoch += 1; accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = child.id }]) };
       case null {};
     };
     #Ok(child)
@@ -3104,10 +3418,12 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Child not found") };
       case (?child) {
         if (not isChildPrimary(caller, child)) return #Err("Only the primary parent can remove this child");
+        membershipEpoch += 1;
         acl := { acl with
           children = acl.children.filter(func(c) = c.id != child_id);
           guardians = acl.guardians.filter(func(g) = g.child != child_id);
         };
+        membershipEpoch += 1;
         accountFamilies := accountFamilies.filter(func(f) = f.child_id != child_id);
         #Ok
       };
@@ -3127,6 +3443,7 @@ persistent actor class Main(governorInit : Principal) {
           if (child.teams.any(func(t) = t == team_id)) child.teams else child.teams.concat([team_id])
         } else child.teams.filter(func(t) = t != team_id);
         let updated : Types.Child = { child with teams };
+        membershipEpoch += 1;
         acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
         #Ok(updated)
       };
@@ -3144,9 +3461,11 @@ persistent actor class Main(governorInit : Principal) {
         if (isChildPrimary(user, child) and not linked) return #Err("Cannot remove the primary parent");
         if (linked) {
           if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))) {
+            membershipEpoch += 1;
             acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user }]) };
           };
         } else {
+          membershipEpoch += 1;
           acl := { acl with guardians = acl.guardians.filter(func(g) = not (g.child == child_id and g.user.equal(user))) };
         };
         #Ok
@@ -3157,9 +3476,11 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Move member / child between teams ----
 
   public shared ({ caller }) func move_member_to_team(club_id : Text, user : Principal, from_team : ?Text, to_team : Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (not teamInClub(to_team, club_id)) return #Err("Target team not found in club");
+    membershipEpoch += 1;
     acl := { acl with roles = acl.roles.map(func(g) = if (g.user.equal(user) and g.club == ?club_id and g.team == from_team) ({ g with team = ?to_team }) else g) };
     accountRoles := accountRoles.map(func(g) = if (g.account_id == accountIdFor(user) and g.club == ?club_id and g.team == from_team) ({ g with team = ?to_team }) else g);
     #Ok
@@ -3180,6 +3501,7 @@ persistent actor class Main(governorInit : Principal) {
             };
             let newTeams = if (keptTeams.any(func(t) = t == to_team)) keptTeams else keptTeams.concat([to_team]);
             let updated : Types.Child = { child with teams = newTeams };
+            membershipEpoch += 1;
             acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
             #Ok(updated)
           };
@@ -3191,11 +3513,13 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Bulk team-member add ----
 
   public shared ({ caller }) func bulk_add_team_members(club_id : Text, team_id : Text, role : Text, users : [Principal]) : async { #Ok : Nat; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
     if (role == "") return #Err("Invalid role");
     if (users.size() > 200) return #Err("Too many members");
     for (user in users.values()) {
+      membershipEpoch += 1;
       acl := { acl with roles = acl.roles.concat([{ user; role; club = ?club_id; team = ?team_id }]) };
       accountRoles := accountRoles.concat([{ account_id = accountIdFor(user); club = ?club_id; role; team = ?team_id }]);
     };
@@ -3213,6 +3537,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         let updated : Types.ClubTeam = { team with archived = true };
+        membershipEpoch += 1;
         teams := teams.map(func(t) = if (t.id == id) updated else t);
         #Ok(updated)
       };
@@ -3226,6 +3551,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         let updated : Types.ClubTeam = { team with archived = false };
+        membershipEpoch += 1;
         teams := teams.map(func(t) = if (t.id == id) updated else t);
         #Ok(updated)
       };
@@ -3235,6 +3561,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Team-creation requests ----
 
   public shared ({ caller }) func request_team_creation(club_id : Text, name : Text, division : ?Text, age_group : ?Text) : async { #Ok : Types.TeamCreationRequest; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Forbidden");
     if (name == "" or name.size() > 160) return #Err("Invalid team name");
@@ -3282,6 +3609,7 @@ persistent actor class Main(governorInit : Principal) {
           playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
           folder_id = null;
         };
+        membershipEpoch += 1;
         teams := teams.concat([team]);
         let updated : Types.TeamCreationRequest = { req with status = "approved"; decided_at_ms = ?now; decided_by = ?caller; team_id = ?team.id };
         teamCreationRequests := teamCreationRequests.map(func(r) = if (r.id == id) updated else r);
@@ -3357,6 +3685,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Team captains ----
 
   public shared ({ caller }) func add_team_captain(club_id : Text, team_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
     if (not teamCaptains.any(func(c) = c.team_id == team_id and c.user.equal(user))) {
@@ -3366,6 +3695,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_team_captain(club_id : Text, team_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
     teamCaptains := teamCaptains.filter(func(c) = not (c.team_id == team_id and c.user.equal(user)));
@@ -3399,7 +3729,9 @@ persistent actor class Main(governorInit : Principal) {
       deleted_at_ms = null;
       playhq_tenant = null; playhq_org_id = null;
     };
+    membershipEpoch += 1;
     profiles := profiles.concat([profile]);
+    membershipEpoch += 1;
     acl := { acl with roles = acl.roles.concat([{ user = caller; role = "club_admin"; club = ?id; team = null }]) };
     accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?id; role = "club_admin"; team = null }]);
     // Provision the club chat on the messaging canister (best-effort).
@@ -3420,6 +3752,7 @@ persistent actor class Main(governorInit : Principal) {
   // after creation); afterwards only the governor can change it, since a
   // country move is a deliberate data migration, never a toggle.
   public shared ({ caller }) func set_club_home_country(club_id : Text, country : Text) : async { #Ok; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (country.size() != 2) return #Err("Invalid country code");
@@ -3444,6 +3777,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func request_club_join(club_id : Text) : async { #Ok : Types.ClubJoinRequest; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (isExcluded(caller, club_id)) return #Err("Forbidden");
     if (isMember(caller, club_id)) return #Err("Already a member");
@@ -3472,6 +3806,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?req) {
         if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
         if (req.status != "pending") return #Err("Request already processed");
+        membershipEpoch += 1;
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = "member"; club = ?req.club_id; team = null }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(req.user); club = ?req.club_id; role = "member"; team = null }]);
         ignore fanOutEnsureConversation(req.club_id, null, clubChatParticipants(req.club_id));
@@ -3525,6 +3860,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_theme_palette(club_id : Text, primary : ?Text, secondary : ?Text, accent : ?Text, dark_primary : ?Text, dark_secondary : ?Text, dark_accent : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = {
@@ -3537,6 +3873,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_theme_enabled(club_id : Text, enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with theme_enabled = enabled };
@@ -3545,6 +3882,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_logo_only_mode(club_id : Text, enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with logo_only_mode = enabled };
@@ -3553,6 +3891,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func clear_club_theme(club_id : Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = {
@@ -3565,6 +3904,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_header_toggles(club_id : Text, header_logo_enabled : Bool, header_club_name_enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with header_logo_enabled; header_club_name_enabled };
@@ -3573,6 +3913,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_invite_email_style(club_id : Text, style : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with invite_email_style = style };
@@ -3581,6 +3922,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_club_switcher_hint(club_id : Text, hint : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     let updated : Types.ClubSettings = { currentSettingsFor(club_id) with club_switcher_hint = hint };
@@ -3894,6 +4236,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func mark_member_paid(club_id : Text, user_id : Text, child_id : ?Text, payment_period : Text, payment_type : Text, amount : Float, notes : ?Text) : async { #Ok : Types.MemberPayment; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (user_id == "" or payment_period == "" or payment_type == "" or amount < 0) return #Err("Invalid payment");
@@ -3984,7 +4327,9 @@ persistent actor class Main(governorInit : Principal) {
   // Removes every club_domain record scoped to one team. Callers must have
   // already verified the team is soft-deleted and the caller may delete it.
   func purgeTeamLocal(teamId : Text) {
+    membershipEpoch += 1;
     teams := teams.filter(func(t) = t.id != teamId);
+    membershipEpoch += 1;
     acl := {
       teams = acl.teams.filter(func(t) = t.id != teamId);
       guardians = acl.guardians;
@@ -4015,13 +4360,16 @@ persistent actor class Main(governorInit : Principal) {
     let clubTeamIds = teams.filter(func(t) = t.club_id == id).map(func(t) = t.id);
     let clubNewsIds = newsPosts.filter(func(post) = post.club_id == id).map(func(post) = post.id);
     func isClubTeam(teamId : Text) : Bool { clubTeamIds.any(func(t) = t == teamId) };
+    membershipEpoch += 1;
     profiles := profiles.filter(func(p) = p.id != id);
     settings := settings.filter(func(s) = s.club_id != id);
+    membershipEpoch += 1;
     teams := teams.filter(func(t) = t.club_id != id);
     teamFolders := teamFolders.filter(func(f) = f.club_id != id);
     sponsors := sponsors.filter(func(s) = s.club_id != id);
     clubListings := clubListings.filter(func(e) = e.0 != id);
     frozenClubs := frozenClubs.filter(func(e) = e.0 != id);
+    membershipEpoch += 1;
     acl := {
       teams = acl.teams.filter(func(t) = t.club != id);
       guardians = acl.guardians;
@@ -4116,6 +4464,7 @@ persistent actor class Main(governorInit : Principal) {
   // and teams created before this wiring existed. The chat pages call this
   // before first read/send so a missing conversation self-heals.
   public shared ({ caller }) func ensure_club_conversations(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     if (messagingDomainCanister == null) return #Err("Messaging domain not configured");
@@ -4203,6 +4552,7 @@ persistent actor class Main(governorInit : Principal) {
   // closed with a clear error while no notification_queue canister is
   // configured, mirroring messaging_domain's fan-out hook.
   public shared ({ caller }) func send_fee_reminders(club_id : Text, payment_period : Text, payment_type : Text, message : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (payment_period == "" or payment_type == "" or message == "") return #Err("Invalid reminder fields");
@@ -4254,6 +4604,90 @@ persistent actor class Main(governorInit : Principal) {
       if (s.club_id == club_id) return #Ok(?s);
     };
     #Ok(null)
+  };
+
+  public shared ({ caller }) func register_media_quota_store(store : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (store.equal(Principal.anonymous()) or store.equal(Principal.fromText("aaaaa-aa"))) return #Err("Invalid store");
+    if (mediaQuotaStores.any(func(p) { p.equal(store) })) return #Ok;
+    if (mediaQuotaCutover.started and not mediaQuotaCutover.active) return #Err("Store registry sealed for initial cutover");
+    if (mediaQuotaStores.size() >= 64) return #Err("Store registry full");
+    mediaQuotaStores := mediaQuotaStores.concat([store]);
+    #Ok
+  };
+
+  // Deliberately governor-only preparation tests: registered stores cannot
+  // consume production quota until a later, verified baseline cutover.
+  public shared ({ caller }) func prepare_media_quota_reservation(store : Principal, token : Text, club_id : Text, category : Text, bytes : Nat) : async MediaQuota.Result {
+    if (not MediaQuota.authorizedPreparation(governor, caller, store, mediaQuotaStores)) return #Err("Governor and registered store required");
+    if (not profiles.any(func(p) { p.id == club_id })) return #Err("Unknown club");
+    let pro = clubSubscriptions.any(func(s) {
+      s.club_id == club_id and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial)
+    });
+    MediaQuota.reserve(mediaQuotaLedger, store, token, club_id, category, bytes, Int.abs(Time.now()) / MediaQuota.cycleNs, pro)
+  };
+
+  public shared ({ caller }) func settle_prepared_media_quota(store : Principal, token : Text, commit : Bool) : async MediaQuota.Result {
+    if (not MediaQuota.authorizedPreparation(governor, caller, store, mediaQuotaStores)) return #Err("Governor and registered store required");
+    MediaQuota.settle(mediaQuotaLedger, store, token, commit)
+  };
+
+  public query ({ caller }) func get_prepared_media_quota(store : Principal, token : Text) : async { #Ok : ?MediaQuota.Reservation; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(MediaQuota.status(mediaQuotaLedger, store, token))
+  };
+
+  // Registry sealing precedes store freezing. The ledger imports responses
+  // directly from each registered store, not governor-supplied row payloads.
+  public shared ({ caller }) func start_media_quota_cutover() : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (mediaQuotaStores.size() == 0) return #Err("Register every media store first");
+    mediaQuotaCutover.started := true;
+    #Ok
+  };
+  public shared ({ caller }) func import_media_quota_store(store : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not mediaQuotaCutover.started or not mediaQuotaStores.any(func(p) = p.equal(store))) return #Err("Sealed registered store required");
+    let progress = MediaQuotaCutover.progress(mediaQuotaCutover, store);
+    if (progress.done) return #Ok;
+    let source : actor { quota_snapshot_page : shared Nat -> async MediaQuotaCutover.Page } = actor(store.toText());
+    try {
+      let page = await source.quota_snapshot_page(progress.offset);
+      MediaQuotaCutover.applyPage(mediaQuotaCutover, store, page)
+    } catch (_) { #Err("Snapshot read failed; retry same cursor") }
+  };
+  public shared ({ caller }) func activate_media_quota() : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    MediaQuotaCutover.activate(mediaQuotaCutover, mediaQuotaStores)
+  };
+  public query ({ caller }) func media_quota_ready() : async Bool {
+    MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)
+  };
+  public query ({ caller }) func media_quota_cutover_status() : async { active : Bool; started : Bool; stores : [(Principal, MediaQuotaCutover.Progress)] } {
+    if (not isGovernor(caller)) Runtime.trap("Governor required");
+    { active = mediaQuotaCutover.active; started = mediaQuotaCutover.started; stores = mediaQuotaStores.map(func(p) = (p, MediaQuotaCutover.progress(mediaQuotaCutover, p))) }
+  };
+  public shared ({ caller }) func reserve_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
+    if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
+    // Old-cycle retries are allowed only for an existing immutable token.
+    // After terminal retirement, delayed old requests cannot allocate again.
+    if (MediaQuota.status(mediaQuotaCutover.ledger, caller, token) == null and cycle != Int.abs(Time.now()) / MediaQuota.cycleNs) return #Err("Stale reservation cycle");
+    if (not profiles.any(func(p) = p.id == club_id)) return #Err("Unknown club");
+    let pro = clubSubscriptions.any(func(s) = s.club_id == club_id and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial));
+    MediaQuota.reserve(mediaQuotaCutover.ledger, caller, token, club_id, category, bytes, cycle, pro)
+  };
+  public shared ({ caller }) func commit_media_quota(token : Text) : async MediaQuota.Result {
+    if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
+    MediaQuota.settle(mediaQuotaCutover.ledger, caller, token, true)
+  };
+  public shared ({ caller }) func cancel_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
+    if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
+    if (MediaQuota.status(mediaQuotaCutover.ledger, caller, token) == null and cycle + 1 < Int.abs(Time.now()) / MediaQuota.cycleNs) return #Err("Expired operation");
+    MediaQuota.cancel(mediaQuotaCutover.ledger, caller, token, club_id, category, bytes, cycle)
+  };
+  public shared ({ caller }) func retire_media_quota_records(reservation_cursor : Text, usage_cursor : Text) : async { #Ok : { removed : Nat; reservation_cursor : Text; usage_cursor : Text }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(MediaQuota.retirePage(mediaQuotaCutover.ledger, Int.abs(Time.now()) / MediaQuota.cycleNs, reservation_cursor, usage_cursor))
   };
 
   public shared ({ caller }) func save_club_subscription(item : Types.ClubSubscription) : async { #Ok : Types.ClubSubscription; #Err : Text } {

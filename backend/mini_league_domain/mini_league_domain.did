@@ -50,6 +50,11 @@ type MiniLeaguePlayer =
    parent_user_id: opt text;
    updated_at_ms: nat64;
  };
+type MiniLeagueNewsAudience = 
+ record {
+   club_id: text;
+   recipients: vec principal;
+ };
 type MiniLeagueJoinLink = 
  record {
    created_at_ms: nat64;
@@ -129,11 +134,6 @@ type MiniLeague =
    status: text;
    team_size: nat16;
    updated_at_ms: nat64;
- };
-type MiniLeagueNewsAudience =
- record {
-   club_id: text;
-   recipients: vec principal;
  };
 type Main = 
  service {
@@ -217,7 +217,6 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
-   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_mini_league: (mini_league_id: text) -> (variant {
                                                     Err: text;
                                                     Ok;
@@ -227,6 +226,11 @@ type Main =
        Err: text;
        Ok: MiniLeague;
      });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    get_availability: (session_id: text, player_id: text) ->
     (variant {
        Err: text;
@@ -246,21 +250,26 @@ type Main =
        Err: text;
        Ok: vec MiniLeague;
      }) query;
+   get_news_audience: (mini_league_id: text, requester: principal) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueNewsAudience;
+     }) query;
    get_player_guardian_status: (player_id: text) ->
     (variant {
        Err: text;
        Ok: PlayerGuardianStatus;
      }) query;
-    get_news_audience: (mini_league_id: text, requester: principal) ->
-     (variant {
-       Err: text;
-       Ok: MiniLeagueNewsAudience;
-      }) query;
    grant_role: ("principal": principal, role: text, club_id: text, team_id:
     opt text) -> (variant {
                     Err: text;
                     Ok;
                   });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    join_mini_league_by_token: (token: text, player_name: text) ->
     (variant {
        Err: text;
@@ -323,9 +332,19 @@ type Main =
        Err: text;
        Ok: vec MiniLeagueSession;
      }) query;
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
    my_availability: () -> (vec MiniLeagueSessionAvailability) query;
    my_leagues: () -> (vec MiniLeague) query;
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -354,19 +373,24 @@ type Main =
        Err: text;
        Ok: MiniLeagueSessionAvailability;
      });
+   set_club_domain_canister: (id: principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
    set_mini_league_status: (id: text, status: text) ->
     (variant {
        Err: text;
        Ok: MiniLeague;
      });
-   set_club_domain_canister: (id: principal) -> (variant {
-                                                   Err: text;
-                                                   Ok;
-                                                 });
    set_session_status: (id: text, status: text) ->
     (variant {
        Err: text;
        Ok: MiniLeagueSession;
+     });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    transfer_governorship: (new_governor: principal) ->
     (variant {

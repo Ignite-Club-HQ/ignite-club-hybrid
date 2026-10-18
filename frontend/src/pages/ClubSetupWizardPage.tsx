@@ -855,7 +855,7 @@ async function createOperationalGroup(clubId: string, userId: string, name: stri
         const meta = await createLiveGroupWithRoles(ctx, clubId, null, name, "group", roleEntries);
         return meta.conversation_id;
       },
-    });
+    }, { clubId: clubId });
   }
 
   const { data, error } = await supabase

@@ -60,7 +60,7 @@ export function EventNoteSection({
             updated_at: raw.updated_at_ms,
           };
         },
-      }),
+      }, { eventId: eventId }),
   });
 
   const effectiveNote = isIcpRouted ? icpNote?.note ?? null : note ?? null;
@@ -144,7 +144,7 @@ export function EventNoteSection({
           }
           return true;
         },
-      });
+      }, { eventId: eventId });
       if (savedOnIcp) {
         queryClient.invalidateQueries({ queryKey: ["live-coach-note", eventId] });
         return { isClear };

@@ -146,6 +146,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'claim_legacy_sponsor_metrics' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'client_perf_aggregate' : ActorMethod<
     [string, [] | [string], bigint, bigint],
     { 'Ok' : ClientPerfAggregate } |
@@ -216,6 +221,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'get_ad_setting' : ActorMethod<[string], [] | [AppAdSetting]>,
   'get_benchmarks' : ActorMethod<
     [Array<string>],
@@ -240,6 +250,11 @@ export interface Main {
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'is_app_admin' : ActorMethod<[], boolean>,
@@ -301,6 +316,11 @@ export interface Main {
     { 'Ok' : Array<PhotoEngagementTotal> } |
       { 'Err' : string }
   >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'record_active_user' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -314,6 +334,11 @@ export interface Main {
   'record_client_perf' : ActorMethod<
     [Array<ClientPerfEntry>],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'record_club_sponsor_metric' : ActorMethod<
+    [string, string, string, number, [] | [string]],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'record_message_sent' : ActorMethod<
@@ -403,6 +428,11 @@ export interface Main {
       [] | [number],
       [] | [number],
     ],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

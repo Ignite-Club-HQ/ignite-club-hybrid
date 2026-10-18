@@ -179,7 +179,7 @@ export function CreatePollDialog({ open, onOpenChange, chatType, chatId, onCreat
           },
           icp: (ctx) =>
             createLivePoll(ctx, chatId, null, currentValidation.cleanQuestion, currentValidation.cleanOptions),
-        });
+        }, { conversationId: chatId });
         return poll.id;
       }
 

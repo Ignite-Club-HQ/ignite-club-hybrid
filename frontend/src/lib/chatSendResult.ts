@@ -18,9 +18,10 @@ export const DELIVERY_FIELD = "__delivery" as const;
 
 export interface ChatSendDeliveryMarker {
   __delivery: ChatDeliveryState;
+  confirmedMessage?: { id: string; text: string; image_url: string | null; created_at: string };
 }
 
-export const deliveredSend = (): ChatSendDeliveryMarker => ({ __delivery: "delivered" });
+export const deliveredSend = (confirmedMessage?: ChatSendDeliveryMarker["confirmedMessage"]): ChatSendDeliveryMarker => ({ __delivery: "delivered", ...(confirmedMessage ? { confirmedMessage } : {}) });
 export const queuedSend = (): ChatSendDeliveryMarker => ({ __delivery: "queued" });
 
 /** True only when the send result is explicitly marked as confirmed delivery. */

@@ -35,7 +35,7 @@ export default function ClubRewardsPage() {
             .maybeSingle();
           return data;
         },
-        icp: async (ctx) => ({ is_pro: await resolveLiveProAccess(ctx, { clubId: clubId! }), is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false }),
+        icp: async (ctx) => ({ is_pro: await resolveLiveProAccess(ctx), is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false }),
       });
     },
     enabled: !!clubId,

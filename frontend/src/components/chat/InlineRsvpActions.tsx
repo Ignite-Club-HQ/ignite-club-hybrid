@@ -87,7 +87,7 @@ export function InlineRsvpActions({ eventId, messageId }: Props) {
           await setLiveEventRsvp(ctx, eventId, user.id, status);
           return 1;
         },
-      });
+      }, { eventId: eventId });
       writeAnswered(messageId, status);
       setAnswered(status);
       toast({
@@ -156,7 +156,7 @@ export function InlineRsvpActions({ eventId, messageId }: Props) {
                   if (!user?.id) throw new Error("Not signed in");
                   await setLiveRsvpNote(ctx, eventId, user.id, value);
                 },
-              });
+              }, { eventId: eventId });
               setNote(value);
               toast({ title: value ? "Note saved" : "Note removed" });
             } catch (error) {

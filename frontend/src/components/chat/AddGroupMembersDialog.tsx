@@ -216,7 +216,7 @@ export function AddGroupMembersDialog({
             throw new Error("unreachable");
           },
           icp: (ctx) => addLiveGroupMembers(ctx, groupId, selected.map((s) => Principal.fromText(s.id))),
-        });
+        }, { conversationId: groupId });
         return;
       }
 

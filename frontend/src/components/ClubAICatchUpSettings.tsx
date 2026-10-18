@@ -67,7 +67,7 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
         icp: async (ctx) => {
           await setLiveClubAiCatchUp(ctx, clubId, ai_catch_up_enabled);
         },
-      });
+      }, { clubId: clubId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-ai-catchup", clubId] });
@@ -90,7 +90,7 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
           return (data as number) ?? 0;
         },
         icp: async (ctx) => enableLiveAiCatchUpForAllMembers(ctx, clubId),
-      });
+      }, { clubId: clubId });
     },
     onSuccess: (count) => {
       toast.success(

@@ -254,6 +254,11 @@ export interface Main {
     { 'Ok' : Conversation } |
       { 'Err' : string }
   >,
+  'export_club_snapshot_page' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'fetch_link_preview' : ActorMethod<
     [string],
@@ -323,6 +328,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'has_blocked' : ActorMethod<[Principal], boolean>,
+  'import_club_snapshot_page' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'is_competition_admin' : ActorMethod<[string], boolean>,
   'join_open_group' : ActorMethod<
     [string],
@@ -484,8 +494,22 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'purge_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  /**
+   * / Location-only lookup for group routing: which club owns this chat, if
+   * / it lives in this canister. Participants only; null when not held here.
+   */
+  'read_conversation_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'recapTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
@@ -627,6 +651,11 @@ export interface Main {
   >,
   'set_recap_config' : ActorMethod<
     [[] | [RecapConfig]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

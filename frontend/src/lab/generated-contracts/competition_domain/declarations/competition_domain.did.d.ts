@@ -292,6 +292,11 @@ export interface Main {
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'get_chat_settings' : ActorMethod<
     [string],
@@ -385,6 +390,11 @@ export interface Main {
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'invite_team' : ActorMethod<
@@ -506,6 +516,11 @@ export interface Main {
   'memory_stats' : ActorMethod<
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
   >,
   'record_match' : ActorMethod<
     [string, string, string],
@@ -629,6 +644,11 @@ export interface Main {
   'set_season_status' : ActorMethod<
     [string, string, bigint],
     { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_vault_domain_canister' : ActorMethod<

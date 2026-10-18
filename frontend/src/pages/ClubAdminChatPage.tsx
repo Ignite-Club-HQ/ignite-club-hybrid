@@ -442,7 +442,7 @@ function SupabaseClubAdminChatPage() {
             }) as unknown as ClubAdminMessage[];
             return { messages, hasOlderMessages: icpOlderCursorRef.current !== null };
           },
-        });
+        }, { conversationId: conversationId });
       }
 
       // 15s wall budget (mirrors TeamChatPage) so a socket left half-dead by an
@@ -921,7 +921,7 @@ function SupabaseClubAdminChatPage() {
           inserted = await sendLiveMessage(ctx, conversationId!, text, `${conversationId}:${user!.id}:${Date.now()}`, attachment, replyToId ?? null);
           void recordLiveMessageSent(ctx, conversationId!, user!.id).catch(() => { /* best-effort engagement counter */ });
         },
-      });
+      }, { conversationId: conversationId! });
       return { ...inserted, ...deliveredSend() };
     },
     onMutate: async ({ text, imageUrl: optImageUrl, replyToId }) => {
@@ -1098,7 +1098,7 @@ function SupabaseClubAdminChatPage() {
           }) as unknown as ClubAdminMessage[];
           return { older, nextCursor };
         },
-      });
+      }, { conversationId: conversationId });
       icpOlderCursorRef.current = result.nextCursor;
       setHasOlderMessages(result.nextCursor !== null);
       // Merge by id (existing state wins on boundary duplicates) and keep

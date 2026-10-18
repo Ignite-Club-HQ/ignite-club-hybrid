@@ -295,6 +295,11 @@ type Main =
                          Err: text;
                          Ok: Conversation;
                        });
+   export_club_snapshot_page: (club: text, offset: nat, limit: nat) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    export_state: () -> (variant {
                           Err: text;
                           Ok: State;
@@ -373,6 +378,11 @@ type Main =
                              Ok;
                            });
    has_blocked: (user: principal) -> (bool) query;
+   import_club_snapshot_page: (club: text, page_blob: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    is_competition_admin: (conversation_id: text) -> (bool) query;
    join_open_group: (conversation_id: text) -> (variant {
                                                   Err: text;
@@ -534,6 +544,10 @@ type Main =
                                                   Err: text;
                                                   Ok;
                                                 });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    purge_group: (conversation_id: text) -> (variant {
                                               Err: text;
                                               Ok;
@@ -542,6 +556,13 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   /// Location-only lookup for group routing: which club owns this chat, if
+   /// it lives in this canister. Participants only; null when not held here.
+   read_conversation_club: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) query;
    recapTransform: (record {
                       context: blob;
                       response: HttpRequestResult;
@@ -688,6 +709,11 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_typing: (conversation_id: text, is_typing: bool, name: text) ->
     (variant {
        Err: text;

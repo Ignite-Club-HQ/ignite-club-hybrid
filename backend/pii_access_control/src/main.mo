@@ -179,6 +179,7 @@ persistent actor class Main(governorInit : Principal) {
   // the record. Lets club staff (e.g. a coach viewing an event roster) read
   // child/guest names without a per-principal grant.
   var club_read_grants : [ClubReadGrant];
+  var transferFences : [Text];
   var competition_read_grants : [CompetitionReadGrant];
 
   // Principal of the club_domain canister used to verify club membership
@@ -188,6 +189,77 @@ persistent actor class Main(governorInit : Principal) {
   var competition_domain_canister : ?Principal;
 
   // ==================== Helper Functions ====================
+
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Inspect is advisory only; the runner re-digests the source before cutover.
+  func fenceGov(caller : Principal) : Bool = isGovernor(caller);
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func fenceBlobHas(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(Text.encodeUtf8(needle));
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or fenceGov(caller)) return true;
+    not transferFences.any(func(c) = fenceBlobHas(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  type FenceSnapshot = { grants : [ClubReadGrant]; records : [PiiRecord]; guardians : [GuardianRelationship] };
+  func fenceSnapshot(c : Text) : FenceSnapshot {
+    let rootG = club_read_grants.filter(func(x) = x.club_id == c);
+    let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
+    { grants = club_read_grants.filter(func(x) = x.club_id == c);
+      records = pii_records.filter(func(x) = inG(x.pii_id));
+      guardians = guardian_relationships.filter(func(x) = x.children.any(inG)) }
+  };
+  func fenceDrop(c : Text) {
+    let rootG = club_read_grants.filter(func(x) = x.club_id == c);
+    let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
+    club_read_grants := club_read_grants.filter(func(x) = not (x.club_id == c));
+  };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    #Ok(to_candid (fenceSnapshot(club)))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?FenceSnapshot = from_candid (snapshot);
+    let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    let c = club;
+    let rootG = s.grants;
+    let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
+    if (s.grants.any(func(x) = not (x.club_id == c))
+        or s.records.any(func(x) = not (inG(x.pii_id)))
+        or s.guardians.any(func(x) = not (x.children.any(inG)))) return #Err("Snapshot contains foreign records");
+    if (s.records.any(func(e) = pii_records.any(func(x) = x.pii_id == e.pii_id and x.field_id == e.field_id and x.ciphertext != e.ciphertext))) return #Err("Snapshot id collides with another club");
+    fenceDrop(club); // idempotent replace
+    club_read_grants := club_read_grants.concat(s.grants);
+    pii_records := pii_records.filter(func(y) = not s.records.any(func(x) = y.pii_id == x.pii_id and y.field_id == x.field_id)).concat(s.records);
+    // Guardian links merge: add the moved children to each guardian's set.
+    for (g in s.guardians.values()) {
+      let kids = g.children.filter(inG);
+      guardian_relationships := switch (guardian_relationships.find(func(y) = y.guardian.equal(g.guardian))) {
+        case (?cur) guardian_relationships.map(func(y) = if (y.guardian.equal(g.guardian)) { { y with children = y.children.concat(kids.filter(func(k) = not y.children.any(func(z) = z == k))) } } else y);
+        case null guardian_relationships.concat([{ g with children = kids }]);
+      };
+    };
+    #Ok(s.grants.size())
+  };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let n = fenceSnapshot(club).grants.size(); fenceDrop(club); #Ok(n)
+  };
 
   func now_ns() : Nat64 {
     Nat.toNat64(Int.abs(Time.now()))
@@ -407,6 +479,7 @@ persistent actor class Main(governorInit : Principal) {
     club_id : Text,
     transport_public_key : Blob
   ) : async { #Ok : Blob; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (club_id.size() == 0 or club_id.size() > 64 or Text.contains(club_id, #char '\u{1F}')) return #Err("Invalid club");
     if (transport_public_key.size() == 0) return #Err("Invalid transport key");
@@ -692,6 +765,7 @@ persistent actor class Main(governorInit : Principal) {
   // time) read access to one record — e.g. a child's name so coaches can
   // render event rosters. Governor or the record's domain owner only.
   public shared ({ caller }) func grant_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (club_id == "") return #Err("Invalid club_id");
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
@@ -709,6 +783,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Removes a club-scoped read grant. Governor or domain owner only.
   public shared ({ caller }) func revoke_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case null { #Err("PII not found") };
@@ -728,6 +803,7 @@ persistent actor class Main(governorInit : Principal) {
   // event-creator-owned, not club-owned — but without a grant no club
   // member can ever derive a vetKey for them again.
   public shared ({ caller }) func purge_club_grants(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     switch (club_domain_canister) {
       case null { return #Err("club_domain canister not configured") };
       case (?c) { if (not c.equal(caller)) return #Err("club_domain only") };

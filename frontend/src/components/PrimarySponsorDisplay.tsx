@@ -17,6 +17,7 @@ interface Sponsor {
   website_url: string | null;
   description: string | null;
   tier: SponsorTier | null;
+  club_id?: string | null;
 }
 
 export type PrimarySponsorContext =
@@ -45,7 +46,7 @@ export function PrimarySponsorDisplay({ sponsorId, variant = "compact", context 
         supabase: async () => {
           const { data, error } = await supabase
             .from("sponsors")
-            .select("id, name, logo_url, website_url, description, tier")
+            .select("id, name, logo_url, website_url, description, tier, club_id")
             .eq("id", sponsorId!)
             .single();
           if (error) throw error;
@@ -59,6 +60,7 @@ export function PrimarySponsorDisplay({ sponsorId, variant = "compact", context 
           if (!row) throw new Error("Sponsor not found");
           return {
             id: row.id,
+            club_id: row.club_id,
             name: row.name,
             logo_url: row.logo_url[0] ?? null,
             website_url: row.website_url[0] ?? null,
@@ -79,16 +81,16 @@ export function PrimarySponsorDisplay({ sponsorId, variant = "compact", context 
   // Track view when sponsor is displayed
   useEffect(() => {
     if (sponsor?.id) {
-      trackView(sponsor.id, context);
+      trackView(sponsor.id, context, sponsor.club_id);
     }
-  }, [sponsor?.id, context, trackView]);
+  }, [sponsor?.id, sponsor?.club_id, context, trackView]);
 
   if (!sponsorId || isLoading || !sponsor) {
     return null;
   }
 
   const handleClick = () => {
-    trackClick(sponsor.id, context);
+    trackClick(sponsor.id, context, sponsor.club_id);
   };
 
   const handleBannerClick = () => {

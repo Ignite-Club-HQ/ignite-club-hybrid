@@ -58,7 +58,7 @@ export default function TeamTrainingPausesCard({ teamId, clubId }: { teamId: str
             }))
             .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
         },
-      }),
+      }, { clubId: clubId }),
     enabled: !!teamId,
   });
 
@@ -80,7 +80,7 @@ export default function TeamTrainingPausesCard({ teamId, clubId }: { teamId: str
           );
           return true;
         },
-      });
+      }, { clubId: clubId });
       if (createdOnIcp) return;
 
       const { data: { user } } = await supabase.auth.getUser();

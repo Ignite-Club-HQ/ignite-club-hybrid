@@ -491,6 +491,8 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
     static ROOT_CELL: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(0), Vec::new()));
     static JOBS: RefCell<StableBTreeMap<String, Job, Memory>> = RefCell::new(StableBTreeMap::init(memory(1)));
+    // Club scopes locked for a group transfer (new memory id; empty on upgrade).
+    static FENCES: RefCell<StableBTreeMap<String, u8, Memory>> = RefCell::new(StableBTreeMap::init(memory(2)));
     static METADATA: RefCell<Metadata> = RefCell::new(Metadata::empty());
     static QUEUE_STATE: RefCell<QueueState> = RefCell::new(QueueState { armed: false, next_run_at_ms: None });
 }
@@ -729,6 +731,9 @@ fn schedule_with_callback(
         return Err("Authenticated user required".into());
     }
     let _governor = governor()?;
+    if is_fenced(&scope) {
+        return Err("Club is temporarily locked for a transfer".into());
+    }
     if let Some(existing) = get_job_entry(&id) {
         return Ok(existing);
     }
@@ -801,6 +806,7 @@ fn claim_with_lease(now_ms: u64, limit: u16, lease_ms: u64) -> Outcome<Vec<Job>>
                     && (capability.scope == job.scope || capability.scope == "*")
             });
         if job.status == Status::Pending
+            && !is_fenced(&job.scope)
             && job.run_at_ms <= now_ms
             && job.attempts < 5
             && scope_allowed
@@ -945,7 +951,9 @@ fn get_state() -> QueueState {
 #[ic_cdk::query]
 fn export_state() -> Outcome<Snapshot> {
     authenticated()?;
-    let _governor = governor()?;
+    if caller() != governor()? {
+        return Err("Governor caller required".into());
+    }
     Ok(Snapshot {
         jobs: all_job_entries(),
         state: queue_state(),
@@ -955,7 +963,9 @@ fn export_state() -> Outcome<Snapshot> {
 #[ic_cdk::query]
 fn reconcile(snapshot: Snapshot) -> Outcome<Reconciliation> {
     authenticated()?;
-    let _governor = governor()?;
+    if caller() != governor()? {
+        return Err("Governor caller required".into());
+    }
     let local = all_job_entries();
     let matching = snapshot
         .jobs
@@ -972,7 +982,9 @@ fn reconcile(snapshot: Snapshot) -> Outcome<Reconciliation> {
 #[ic_cdk::query]
 fn list_jobs(start_after: Option<String>, limit: u16) -> Outcome<Page> {
     authenticated()?;
-    let _governor = governor()?;
+    if caller() != governor()? {
+        return Err("Governor caller required".into());
+    }
     if limit == 0 || limit > 100 {
         return Err("Invalid page size".into());
     }
@@ -992,7 +1004,9 @@ fn list_jobs(start_after: Option<String>, limit: u16) -> Outcome<Page> {
 #[ic_cdk::update]
 fn import_state(snapshot: Snapshot) -> Outcome<()> {
     authenticated()?;
-    let _governor = governor()?;
+    if caller() != governor()? {
+        return Err("Governor caller required".into());
+    }
     if !jobs_is_empty() {
         return Err("Destination is not empty".into());
     }
@@ -1029,6 +1043,82 @@ fn memory_stats() -> MemoryStats {
     let heap = 0u64;
     let stable = ic_cdk::stable::stable_size() * 65536;
     MemoryStats { heap_bytes: heap.into(), memory_bytes: (heap + stable).into(), stable_bytes: stable.into() }
+}
+
+
+// ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+fn is_fenced(scope: &str) -> bool {
+    FENCES.with(|f| f.borrow().contains_key(&scope.to_string()))
+}
+
+fn require_governor() -> Outcome<()> {
+    authenticated()?;
+    if governor()? != caller() {
+        return Err("Governor required".into());
+    }
+    Ok(())
+}
+
+fn club_jobs(club: &str) -> Vec<Job> {
+    all_job_entries().into_iter().filter(|j| j.scope == club).collect()
+}
+
+#[ic_cdk::update]
+fn set_transfer_fence(club: String, fenced: bool) -> Outcome<()> {
+    require_governor()?;
+    FENCES.with(|f| {
+        if fenced { f.borrow_mut().insert(club, 1); } else { f.borrow_mut().remove(&club); }
+    });
+    Ok(())
+}
+
+#[ic_cdk::query]
+fn export_club_snapshot(club: String) -> Outcome<Vec<u8>> {
+    require_governor()?;
+    if !is_fenced(&club) {
+        return Err("Club must be fenced before export".into());
+    }
+    let jobs = club_jobs(&club);
+    if jobs.iter().any(|j| j.status == Status::Processing) {
+        return Err("Club has jobs being processed; retry after the worker finishes".into());
+    }
+    candid::encode_one(jobs).map_err(|e| e.to_string())
+}
+
+#[ic_cdk::update]
+fn import_club_snapshot(club: String, snapshot: Vec<u8>) -> Outcome<u64> {
+    require_governor()?;
+    if !is_fenced(&club) {
+        return Err("Club must be fenced before import".into());
+    }
+    let jobs: Vec<Job> = candid::decode_one(&snapshot).map_err(|_| "Invalid snapshot".to_string())?;
+    if jobs.iter().any(|j| j.scope != club) {
+        return Err("Snapshot contains foreign records".into());
+    }
+    if jobs.iter().any(|j| get_job_entry(&j.id).map(|x| x.scope != club).unwrap_or(false)) {
+        return Err("Snapshot id collides with another club".into());
+    }
+    for old in club_jobs(&club) {
+        JOBS.with(|m| m.borrow_mut().remove(&old.id));
+    }
+    let n = jobs.len() as u64;
+    for job in jobs {
+        put_job_entry(job);
+    }
+    Ok(n)
+}
+
+#[ic_cdk::update]
+fn purge_club_snapshot(club: String) -> Outcome<u64> {
+    require_governor()?;
+    if !is_fenced(&club) {
+        return Err("Club must be fenced before purge".into());
+    }
+    let old = club_jobs(&club);
+    for job in &old {
+        JOBS.with(|m| m.borrow_mut().remove(&job.id));
+    }
+    Ok(old.len() as u64)
 }
 
 ic_cdk::export_candid!();

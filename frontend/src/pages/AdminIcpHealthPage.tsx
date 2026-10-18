@@ -47,6 +47,12 @@ const cyclesIdl: IDL.InterfaceFactory = ({ IDL }) =>
     cycles_balance: IDL.Func([], [IDL.Nat], ["query"]),
     memory_stats: IDL.Func([], [IDL.Record({ heap_bytes: IDL.Nat, memory_bytes: IDL.Nat, stable_bytes: IDL.Nat })], ["query"]),
   });
+// The web-app (asset) canister has no cycles_balance query of its own, so its
+// balance is read through club_domain's canister_cycles proxy (club_domain is
+// added as a controller by the frontend deploy workflow).
+const FRONTEND_CANISTER_ID = "proe7-kqaaa-aaaas-qg6gq-cai";
+const proxyIdl: IDL.InterfaceFactory = ({ IDL }) =>
+  IDL.Service({ canister_cycles: IDL.Func([IDL.Principal], [IDL.Nat], []) });
 type MemStats = { heap_bytes: bigint; memory_bytes: bigint; stable_bytes: bigint };
 const WARN_MEMORY_MB = 3000;
 
@@ -134,6 +140,38 @@ async function fetchHealth(): Promise<Row[]> {
       memoryMb: null,
     };
   });
+
+  // Web-app canister via the club_domain proxy (never in the mainnet ID table).
+  const clubDomainId = ids["club_domain"];
+  if (clubDomainId) {
+    try {
+      const proxy = Actor.createActor<{ canister_cycles: (id: Principal) => Promise<bigint> }>(proxyIdl, {
+        agent,
+        canisterId: Principal.fromText(clubDomainId),
+      });
+      const balance = await proxy.canister_cycles(Principal.fromText(FRONTEND_CANISTER_ID));
+      balances["frontend"] = balance;
+      rows.push({
+        key: "frontend (web app)",
+        canisterId: FRONTEND_CANISTER_ID,
+        cyclesT: Number(balance) / 1e12,
+        burnTPerDay: null,
+        daysLeft: null,
+        error: null,
+        memoryMb: null,
+      });
+    } catch (e) {
+      rows.push({
+        key: "frontend (web app)",
+        canisterId: FRONTEND_CANISTER_ID,
+        cyclesT: null,
+        burnTPerDay: null,
+        daysLeft: null,
+        error: e instanceof Error ? e.message : String(e),
+        memoryMb: null,
+      });
+    }
+  }
 
   // Burn estimate from the oldest snapshot at least 12h old.
   const baseline = baselineSnapshot();

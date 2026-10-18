@@ -112,6 +112,11 @@ export interface Main {
    */
   'cycles_balance' : ActorMethod<[], bigint>,
   'delete_reward' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<
     [],
     {
@@ -179,6 +184,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
@@ -202,6 +212,11 @@ export interface Main {
   'memory_stats' : ActorMethod<
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
   >,
   'redeem_reward' : ActorMethod<
     [string, Subject, string, [] | [string]],
@@ -230,6 +245,11 @@ export interface Main {
   >,
   'set_club_domain_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

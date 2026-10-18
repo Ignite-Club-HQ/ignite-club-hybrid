@@ -102,12 +102,22 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'get_asset' : ActorMethod<[string], [] | [Asset]>,
   'get_gallery_chat_card' : ActorMethod<[string], [] | [GalleryChatCard]>,
   'grant_role' : ActorMethod<
     [Principal, string, [] | [string], [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'issue_capability' : ActorMethod<
@@ -135,6 +145,11 @@ export interface Main {
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
       { 'err' : string }
+  >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
   >,
   'register_asset' : ActorMethod<
     [string, string, string, string, string, string, bigint],
@@ -189,6 +204,11 @@ export interface Main {
   'set_blob_ref' : ActorMethod<
     [string, [] | [BlobRef]],
     { 'Ok' : Asset } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<

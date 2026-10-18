@@ -32,6 +32,7 @@ persistent actor class Main(governorInit : Principal) {
   var competition_domain_canister : ?Principal;
   var pinned_vaults : [Types.PinnedVault];
   var backups : [Types.Backup];
+  var transferFences : [Text];
   var nextBackupSeq : Nat64;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
@@ -194,6 +195,50 @@ persistent actor class Main(governorInit : Principal) {
       folder.restricted_roles.any(func(role) = role == grant.role))
   };
 
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func folderFenced(id : Text) : Bool = folders.any(func(f) = f.id == id and isFenced(f.club));
+  func fileFenced(id : Text) : Bool = files.any(func(f) = f.id == id and isFenced(f.club));
+  type VaultSnapshot = { folders : [Types.VaultFolder]; files : [Types.VaultFile] };
+
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    let snap : VaultSnapshot = { folders = folders.filter(func(f) = f.club == club); files = files.filter(func(f) = f.club == club) };
+    #Ok(to_candid (snap))
+  };
+
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?VaultSnapshot = from_candid (snapshot);
+    let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (snap.folders.any(func(f) = f.club != club) or snap.files.any(func(f) = f.club != club)) return #Err("Snapshot contains foreign records");
+    // Ids must not collide with another club's records on this canister.
+    if (snap.folders.any(func(f) = folders.any(func(x) = x.id == f.id and x.club != club))
+        or snap.files.any(func(f) = files.any(func(x) = x.id == f.id and x.club != club))) return #Err("Snapshot id collides with another club");
+    folders := folders.filter(func(f) = f.club != club).concat(snap.folders);
+    files := files.filter(func(f) = f.club != club).concat(snap.files);
+    #Ok(snap.folders.size() + snap.files.size())
+  };
+
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let before = folders.size() + files.size();
+    folders := folders.filter(func(f) = f.club != club);
+    files := files.filter(func(f) = f.club != club);
+    #Ok(before - folders.size() - files.size())
+  };
+
   public shared ({ caller }) func grant_role(user : Principal, role : Text, club_id : ?Text, team_id : ?Text) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not valid(role)) return #Err("Invalid role");
@@ -214,6 +259,7 @@ persistent actor class Main(governorInit : Principal) {
     description : ?Text,
     color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canWrite(caller, club, team, competition_id))) return #Err("Club or competition admin required");
     if (not valid(id) or not valid(club) or not validLong(name, 160)) return #Err("Invalid folder fields");
@@ -271,6 +317,7 @@ persistent actor class Main(governorInit : Principal) {
     description : ?Text,
     color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    if (folderFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validLong(name, 160)) return #Err("Invalid folder name");
     if (not validRoles(restricted_roles)) return #Err("Invalid restricted roles");
@@ -290,6 +337,7 @@ persistent actor class Main(governorInit : Principal) {
   // Soft delete. Refuses while the folder still has live subfolders or files
   // so the tree never orphans live content.
   public shared ({ caller }) func delete_folder(id : Text) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    if (folderFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("Folder not found") };
@@ -383,6 +431,7 @@ persistent actor class Main(governorInit : Principal) {
     mini_league_id : ?Text,
     competition_id : ?Text,
   ) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canWrite(caller, club, team, competition_id))) return #Err("Club or competition admin required");
     // folder_id "" = vault root (same convention as move_file).
@@ -521,6 +570,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func trash_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("File not found") };
@@ -534,6 +584,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func restore_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms != null)) {
       case null { #Err("Trashed file not found") };
@@ -547,6 +598,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func rename_file(id : Text, name : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validLong(name, 160)) return #Err("Invalid file name");
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
@@ -565,6 +617,7 @@ persistent actor class Main(governorInit : Principal) {
   // root (no folder) and leaves its team scope unchanged — provisional
   // until the vault scope model is verified post-deploy.
   public shared ({ caller }) func move_file(id : Text, folder_id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (fileFenced(id) or folderFenced(folder_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("File not found") };
@@ -593,6 +646,7 @@ persistent actor class Main(governorInit : Principal) {
   // this canister (Supabase storage today, the blob store later), so byte
   // cleanup stays with the storage layer.
   public shared ({ caller }) func delete_file_permanent(id : Text) : async { #Ok; #Err : Text } {
+    if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id)) {
       case null { #Err("File not found") };
@@ -633,6 +687,7 @@ persistent actor class Main(governorInit : Principal) {
     root_id : ?Text,
     enabled : Bool,
   ) : async { #Ok : Types.PinnedVault; #Err : Text } {
+    if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validChatType(chat_type)) return #Err("Invalid chat type");
     if (not valid(chat_id) or not valid(club)) return #Err("Invalid pin fields");
@@ -748,6 +803,7 @@ persistent actor class Main(governorInit : Principal) {
   // can't clobber newer edits made after the snapshot was taken. Returns the
   // number of folders/files actually re-inserted.
   public shared ({ caller }) func restore_backup(id : Text) : async { #Ok : Nat; #Err : Text } {
+    if (transferFences.size() > 0) return #Err("Restore is blocked while a club transfer is in progress");
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     switch (backups.find(func(b : Types.Backup) : Bool = b.id == id)) {

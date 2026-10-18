@@ -510,6 +510,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'execute' : ActorMethod<[string], Result>,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<
     [],
     {
@@ -665,6 +670,11 @@ export interface Main {
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   /**
@@ -863,7 +873,21 @@ export interface Main {
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
   >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  /**
+   * / Location-only lookup for group routing: which club owns this event, if
+   * / it lives in this canister. Viewers only; returns null when not held here.
+   */
+  'read_event_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'record_event_view' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -1144,6 +1168,11 @@ export interface Main {
   >,
   'set_training_default' : ActorMethod<
     [string, string, [] | [string], string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

@@ -241,7 +241,7 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
     mutationFn: async (groupId: string) => {
       if (isFeatureRoutedToIcp("messaging")) {
         const { requestLiveJoinGroup } = await import("@/live/features/messaging");
-        await withFeatureBackend("messaging", { supabase: async () => {}, icp: (ctx) => requestLiveJoinGroup(ctx, groupId) });
+        await withFeatureBackend("messaging", { supabase: async () => {}, icp: (ctx) => requestLiveJoinGroup(ctx, groupId) }, { conversationId: groupId });
         return groupId;
       }
       const { data, error } = await (supabase as any).rpc("request_join_chat_group", {
@@ -273,7 +273,7 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
     mutationFn: async (groupId: string) => {
       if (isFeatureRoutedToIcp("messaging")) {
         const { joinLiveOpenGroup } = await import("@/live/features/messaging");
-        await withFeatureBackend("messaging", { supabase: async () => {}, icp: (ctx) => joinLiveOpenGroup(ctx, groupId) });
+        await withFeatureBackend("messaging", { supabase: async () => {}, icp: (ctx) => joinLiveOpenGroup(ctx, groupId) }, { conversationId: groupId });
         return groupId;
       }
       const { data, error } = await (supabase as any).rpc("join_open_chat_group", {

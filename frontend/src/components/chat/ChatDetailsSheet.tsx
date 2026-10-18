@@ -490,7 +490,7 @@ function NotificationsToggle({
           const muted = await getLiveMutePreference(ctx, chatId);
           return muted ? { id: chatId, muted_until: null } : null;
         },
-      });
+      }, { conversationId: chatId });
     },
     enabled: !!user && !disabled && chatType !== "broadcast",
   });
@@ -525,7 +525,7 @@ function NotificationsToggle({
           }
         },
         icp: (ctx) => setLiveMutePreference(ctx, chatId, !enable),
-      });
+      }, { conversationId: chatId });
     },
     onSuccess: (_, enable) => {
       queryClient.invalidateQueries({ queryKey: ["chat-mute", muteType, chatId, user?.id] });

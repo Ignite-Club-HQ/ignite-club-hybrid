@@ -173,7 +173,7 @@ export function ContactClubButton({ clubFilter, compact = false }: ContactClubBu
           // on the messaging canister.
           return ensureLiveClubAdminThread(ctx, clubId, user!.id);
         },
-      });
+      }, { clubId: clubId });
 
       navigate(`/messages/club-admin/${conversationId}`);
     } catch (err: any) {

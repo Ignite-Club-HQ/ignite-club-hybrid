@@ -86,6 +86,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    export_club_snapshot(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: Uint8Array;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_club_media_vetkey(club_id: string, transport_public_key: Uint8Array): Promise<{
         __kind__: "Ok";
         Ok: Uint8Array;
@@ -128,6 +135,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    import_club_snapshot(club: string, snapshot: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     memory_stats(): Promise<{
         memory_bytes: bigint;
         stable_bytes: bigint;
@@ -145,6 +159,13 @@ export interface MainInterface {
     purge_club_grants(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    purge_club_snapshot(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
     } | {
         __kind__: "Err";
         Err: string;
@@ -199,6 +220,13 @@ export interface MainInterface {
         Err: string;
     }>;
     set_competition_domain_canister(canister: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_transfer_fence(club: string, fenced: boolean): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -280,6 +308,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.emergency_shutdown();
         return from_candid_variant_n1(result);
     }
+    async export_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Uint8Array;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.export_club_snapshot(arg0);
+        return from_candid_variant_n5(result);
+    }
     async get_club_media_vetkey(arg0: string, arg1: Uint8Array): Promise<{
         __kind__: "Ok";
         Ok: Uint8Array;
@@ -340,6 +378,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.grant_pii_read_competition(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
+    async import_club_snapshot(arg0: string, arg1: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.import_club_snapshot(arg0, arg1);
+        return from_candid_variant_n10(result);
+    }
     async memory_stats(): Promise<{
         memory_bytes: bigint;
         stable_bytes: bigint;
@@ -356,7 +404,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         err: string;
     }> {
         const result = await this.actor.merge_principal(arg0, arg1, arg2);
-        return from_candid_variant_n10(result);
+        return from_candid_variant_n11(result);
     }
     async my_guardian_children(): Promise<Array<string>> {
         const result = await this.actor.my_guardian_children();
@@ -374,7 +422,17 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_grants(arg0);
-        return from_candid_variant_n11(result);
+        return from_candid_variant_n12(result);
+    }
+    async purge_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n10(result);
     }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
@@ -384,7 +442,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n12(result);
+        return from_candid_variant_n13(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -394,7 +452,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n10(result);
+        return from_candid_variant_n11(result);
     }
     async remove_guardian_relationship(arg0: Principal, arg1: string): Promise<{
         __kind__: "Ok";
@@ -456,6 +514,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.set_competition_domain_canister(arg0);
         return from_candid_variant_n1(result);
     }
+    async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_transfer_fence(arg0, arg1);
+        return from_candid_variant_n1(result);
+    }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -490,6 +558,25 @@ function from_candid_variant_n1(value: {
     } : value;
 }
 function from_candid_variant_n10(value: {
+    Ok: bigint;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: bigint;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n11(value: {
     ok: bigint;
 } | {
     err: string;
@@ -508,7 +595,7 @@ function from_candid_variant_n10(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n11(value: {
+function from_candid_variant_n12(value: {
     Ok: number;
 } | {
     Err: string;
@@ -527,7 +614,7 @@ function from_candid_variant_n11(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n12(value: {
+function from_candid_variant_n13(value: {
     Ok: _EncryptedPii;
 } | {
     Err: string;

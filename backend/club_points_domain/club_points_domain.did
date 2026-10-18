@@ -98,11 +98,15 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
-   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_reward: (id: text) -> (variant {
                                    Err: text;
                                    Ok;
                                  });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    export_state: () ->
     (variant {
        Err: text;
@@ -181,6 +185,11 @@ type Main =
                     Err: text;
                     Ok;
                   });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    listBulkAccessPrincipals: () ->
     (variant {
        Err: text;
@@ -201,6 +210,16 @@ type Main =
        Err: text;
        Ok: vec ClubReward;
      }) query;
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    redeem_reward: (club_id: text, subject: Subject, reward_id: text,
     idempotency_key: opt text) -> (variant {
                                      Err: text;
@@ -210,7 +229,7 @@ type Main =
                                              Err: text;
                                              Ok;
                                            });
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -230,6 +249,11 @@ type Main =
                                                    Err: text;
                                                    Ok;
                                                  });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;

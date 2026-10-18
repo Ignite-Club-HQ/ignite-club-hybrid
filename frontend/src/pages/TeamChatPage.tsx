@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, Suspense } from "react";
+import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { isSameDay } from "date-fns";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
@@ -608,7 +609,7 @@ export default function TeamChatPage() {
             };
 
           },
-        });
+        }, { teamId: teamId });
       }
 
       // If offline, return cached messages using the React Query online manager
@@ -994,7 +995,7 @@ export default function TeamChatPage() {
     if (!messages || !teamId || (messages.length === 0 && localMessages && localMessages.length > 0)) return;
 
     setLocalMessages((prev) => {
-      const incomingIds = new Set(messages.map((message) => message.id));
+      const incomingIds = new Set(messages.flatMap((message) => [message.id, (message as { optimistic_id?: string }).optimistic_id].filter(Boolean)));
       // Drop temp/queued optimistic messages once a real message with the same
       // author + text has arrived via realtime (prevents brief duplicate flash).
       const realByAuthorText = new Set(
@@ -1197,7 +1198,7 @@ export default function TeamChatPage() {
                 : null;
             return { older, nextCursor };
           },
-        });
+        }, { teamId: teamId! });
         icpOlderCursorRef.current = result.nextCursor;
         setHasOlderMessages(result.nextCursor !== null);
         const mergeOlder = (existing: Message[] | undefined): Message[] => {
@@ -1689,16 +1690,17 @@ export default function TeamChatPage() {
         return queuedSend();
       }
       
-      await withFeatureBackend("messaging", {
+      const confirmedMessage = await withFeatureBackend("messaging", {
         supabase: async () => {
-          const { error } = await supabase.from("team_messages").insert({
+          const { data, error } = await supabase.from("team_messages").insert({
             team_id: teamId!,
             author_id: user!.id,
             text,
             image_url,
             reply_to_id,
-          });
+          }).select("id, text, image_url, created_at").single();
           if (error) throw error;
+          return data;
         },
         icp: async (ctx) => {
           // Team id doubles as the conversation id (deterministic on the
@@ -1715,11 +1717,11 @@ export default function TeamChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
+          const saved = await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, teamId!, user!.id).catch(() => { /* best-effort engagement counter */ });
-        },
-      });
-      return deliveredSend();
+          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
+      }, { teamId: teamId! });
+      return deliveredSend(confirmedMessage ?? undefined);
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
       const currentProfile = profileRef.current;
@@ -1829,7 +1831,11 @@ export default function TeamChatPage() {
       toast.error("Failed to send message");
     },
 
-    onSuccess: (result, variables) => {
+    onSuccess: (result, variables, context) => {
+      if (result?.confirmedMessage && context?.tempId) {
+        confirmPendingSend(queryClient, ["team-messages", teamId], context.tempId, result.confirmedMessage);
+        setLocalMessages((prev) => prev?.filter((row) => row.id !== context.tempId));
+      }
       if (isConfirmedDelivery(result)) syncSendToVault(variables);
       if (isFeatureRoutedToIcp("messaging")) {
         void queryClient.invalidateQueries({ queryKey: ["team-messages", teamId] });
