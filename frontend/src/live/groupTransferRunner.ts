@@ -47,6 +47,16 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
     throw e;
   }
   if (t.phase === 'verified') {
+    // Re-digest the fenced source: a write that slipped past the fence after
+    // verification must abort the move rather than be lost at cutover.
+    const recheck = await Promise.all(TRANSFER_DOMAINS.map(d => a.digest(t.fromGroup, t.clubId, d)));
+    for (const r of recheck) {
+      const v = t.sourceDigests!.find(x => x.domain === r.domain)!;
+      if (v.records !== r.records || v.digest !== r.digest) {
+        await a.setFence(t.fromGroup, t.clubId, false);
+        throw new Error(`Source changed during fence in ${r.domain}; transfer must be re-planned`);
+      }
+    }
     const rev = await a.readRegistryRevision();
     const next = cutover(t, rev); // throws on concurrent change; club stays fenced for operator decision
     await a.swapAssignment(t.clubId, t.toGroup, rev);

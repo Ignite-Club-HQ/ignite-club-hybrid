@@ -619,6 +619,11 @@ type Main =
                         Err: text;
                         Ok: Config;
                       }) query;
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    export_frozen_club: (club: text) ->
     (variant {
        Err: text;
@@ -849,6 +854,11 @@ type Main =
      }) query;
    has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
    http_request: (request: HttpRequest) -> (HttpResponse) query;
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    import_frozen_club: (club: text, listing: Listing) ->
     (variant {
        Err: text;

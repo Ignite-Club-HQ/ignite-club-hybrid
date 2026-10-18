@@ -49,4 +49,12 @@ describe('transfer runner', () => {
     const x = { ...a, exportPage: async (_g: string, _c: string, _d: string, cur: string | null) => ({ rows: [], next: cur ?? 'same' }) };
     await expect(runTransfer(planTransfer('c', 'a', 'b', 1n), x)).rejects.toThrow('stalled'); expect(fences.at(-1)).toBe(false);
   });
+  it('a write slipping past the fence after verification blocks cutover', async () => {
+    let calls = 0;
+    const { a, fences } = adapter(); const real = a.digest;
+    a.digest = async (g, c, d) => { const r = await real(g, c, d);
+      if (g === 'a' && d === 'vault_domain' && ++calls > 1) return { ...r, digest: 'changed' }; return r; };
+    await expect(runTransfer(planTransfer('club', 'a', 'b', 7n), a)).rejects.toThrow('Source changed');
+    expect(a.swapAssignment).not.toHaveBeenCalled(); expect(fences.at(-1)).toBe(false);
+  });
 });

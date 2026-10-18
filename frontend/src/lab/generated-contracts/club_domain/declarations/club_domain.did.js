@@ -845,6 +845,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Config, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'export_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'export_frozen_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
@@ -1125,6 +1130,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
+    'import_club_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'import_frozen_club' : IDL.Func(
         [IDL.Text, Listing],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
