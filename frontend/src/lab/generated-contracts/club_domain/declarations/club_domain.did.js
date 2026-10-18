@@ -850,6 +850,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         [],
       ),
+    'getApiDoc' : IDL.Func([], [IDL.Text], ['query']),
     'get_app_config' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'get_club_branding' : IDL.Func(
         [IDL.Text],

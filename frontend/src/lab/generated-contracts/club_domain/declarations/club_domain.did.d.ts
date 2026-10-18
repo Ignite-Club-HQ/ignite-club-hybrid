@@ -500,6 +500,7 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'getApiDoc' : ActorMethod<[], string>,
   'get_app_config' : ActorMethod<[string], [] | [string]>,
   'get_club_branding' : ActorMethod<
     [string],

@@ -548,6 +548,7 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'getApiDoc' : ActorMethod<[], string>,
   'get_active_game' : ActorMethod<
     [[] | [string]],
     { 'Ok' : [] | [ActiveGame] } |

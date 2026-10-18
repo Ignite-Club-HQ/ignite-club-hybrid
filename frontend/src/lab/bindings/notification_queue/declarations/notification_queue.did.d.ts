@@ -196,6 +196,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_identity_access_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_messaging_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
