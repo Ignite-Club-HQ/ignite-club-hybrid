@@ -123,8 +123,9 @@ try {
   ok(await A.events_domain.create_event(t3, [], 'Resume', 'me', 'training', [], [], [], [], 1_000n, 2_000n, [], false, [], []));
   let lastSaved; let crashed = false;
   const crashing = { ...base, save: async t => { await base.save(t); lastSaved = t; },
-    importPage: async (g, c, dom, rows, i) => { if (dom === 'messaging_domain' && !crashed) { crashed = true; throw new Error('operator crashed'); } return base.importPage(g, c, dom, rows, i); } };
-  await assert.rejects(runTransfer(planTransfer(t3, 'a', 'b', registryRev), crashing));
+    importPage: async (g, c, dom, rows, i) => { if (dom === 'messaging_domain' && !crashed) { crashed = true; return new Promise(() => {}); } // process dies: never returns return base.importPage(g, c, dom, rows, i); } };
+  void runTransfer(planTransfer(t3, 'a', 'b', registryRev), crashing);
+  while (!crashed) await new Promise(r => setTimeout(r, 50));
   assert.equal(lastSaved.phase, 'fenced'); assert.equal(inflight.get(t3), 'b');
   assert.ok('Err' in await refused(B.events_domain.create_event(t3, [], 'x', 'y', 'training', [], [], [], [], 1_000n, 2_000n, [], false, [], [])), 'target stays locked while interrupted');
   const resumed = await runTransfer(lastSaved, base);
