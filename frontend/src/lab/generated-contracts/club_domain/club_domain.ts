@@ -1286,6 +1286,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    purge_club_snapshot(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     purge_expired_deletions(): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -3981,6 +3988,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.publish_season(arg0);
         return from_candid_variant_n32(result);
+    }
+    async purge_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n37(result);
     }
     async purge_expired_deletions(): Promise<{
         __kind__: "Ok";

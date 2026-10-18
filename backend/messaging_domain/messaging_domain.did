@@ -544,6 +544,10 @@ type Main =
                                                   Err: text;
                                                   Ok;
                                                 });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    purge_group: (conversation_id: text) -> (variant {
                                               Err: text;
                                               Ok;

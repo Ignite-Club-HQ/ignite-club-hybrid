@@ -494,6 +494,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'purge_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
   'recapTransform' : ActorMethod<

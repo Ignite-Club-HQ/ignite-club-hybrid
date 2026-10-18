@@ -307,6 +307,16 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(page.messages.size())
   };
 
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let convs = conversations.filter(func(c) = c.club_id == club);
+    let before = messages.size();
+    messages := messages.filter(func(m) = not convs.any(func(c) = c.id == m.conversation_id));
+    conversations := conversations.filter(func(c) = c.club_id != club);
+    #Ok(before - messages.size())
+  };
+
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
   };

@@ -656,6 +656,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    purge_club_snapshot(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     purge_group(conversation_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1911,6 +1918,16 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.presence_heartbeat(to_candid_opt_n12(arg0));
         return from_candid_variant_n1(result);
+    }
+    async purge_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n59(result);
     }
     async purge_group(arg0: string): Promise<{
         __kind__: "Ok";

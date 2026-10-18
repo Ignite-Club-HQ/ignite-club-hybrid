@@ -725,6 +725,10 @@ type Main =
                        context: blob;
                        response: HttpRequestResult;
                      }) -> (HttpRequestResult) query;
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    purge_my_data: () -> (variant {
                            Err: text;
                            Ok: nat32;
