@@ -145,13 +145,16 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
       const { source, destinationGroupIds } = args;
       if (destinationGroupIds.length === 0) return { forwarded: 0 };
 
-      const forwardedViaIcp = await withFeatureBackend("messaging", {
+      // One call per destination so each reaches its own club's canisters.
+      let forwardedViaIcp = false;
+      for (const dest of destinationGroupIds) {
+      forwardedViaIcp = await withFeatureBackend("messaging", {
         supabase: () => false,
         icp: async (ctx) => {
           if (!source.messageId) {
             throw new Error("Missing original message id — can't forward this message.");
           }
-          for (const toConversationId of destinationGroupIds) {
+          for (const toConversationId of [dest]) {
             const forwarded = await forwardLiveMessage(ctx, source.messageId!, toConversationId);
             // Best-effort notify of the original author only: that's the one
             // recipient this flow genuinely knows client-side (there's no
@@ -176,7 +179,8 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
           }
           return true;
         },
-      });
+      }, writeOnce({ conversationId: dest }));
+      }
       if (forwardedViaIcp) {
         return { forwarded: destinationGroupIds.length };
       }
