@@ -11,14 +11,20 @@ import { idlFactory as eventsIdl } from '../src/lab/bindings/events_domain/decla
 import { idlFactory as chatIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
 import { idlFactory as pointsIdl } from '../src/lab/bindings/club_points_domain/declarations/club_points_domain.did.js';
 import { idlFactory as leagueIdl } from '../src/lab/bindings/mini_league_domain/declarations/mini_league_domain.did.js';
+import { idlFactory as competitiondomainIdl } from '../src/lab/bindings/competition_domain/declarations/competition_domain.did.js';
+import { idlFactory as mediametadataIdl } from '../src/lab/bindings/media_metadata/declarations/media_metadata.did.js';
+import { idlFactory as insightsdomainIdl } from '../src/lab/bindings/insights_domain/declarations/insights_domain.did.js';
+import { idlFactory as notificationqueueIdl } from '../src/lab/bindings/notification_queue/declarations/notification_queue.did.js';
+import { idlFactory as piiaccesscontrolIdl } from '../src/lab/bindings/pii_access_control/declarations/pii_access_control.did.js';
+import { idlFactory as timerjobsIdl } from '../src/lab/bindings/timer_jobs/declarations/timer_jobs.did.js';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import { planTransfer } from '../src/live/groupTransfer.ts';
 import { runTransfer } from '../src/live/groupTransferRunner.ts';
 import { liveTransferAdapter } from '../src/live/groupTransferLiveAdapter.ts';
 
 const root = resolve(import.meta.dirname, '../..');
-const wasm = c => process.env[`${c.toUpperCase()}_WASM`] ?? resolve(root, `backend/${c}/.mops/.build/${c}.wasm`);
-const idls = { club_domain: clubIdl, events_domain: eventsIdl, messaging_domain: chatIdl, vault_domain: vaultIdl, club_points_domain: pointsIdl, mini_league_domain: leagueIdl };
+const wasm = c => process.env[`${c.toUpperCase()}_WASM`] ?? (c === 'timer_jobs' ? resolve(root, 'target/wasm32-unknown-unknown/release/timer_jobs.wasm') : resolve(root, `backend/${c}/.mops/.build/${c}.wasm`));
+const idls = { club_domain: clubIdl, events_domain: eventsIdl, messaging_domain: chatIdl, vault_domain: vaultIdl, club_points_domain: pointsIdl, mini_league_domain: leagueIdl, competition_domain: competitiondomainIdl, media_metadata: mediametadataIdl, insights_domain: insightsdomainIdl, notification_queue: notificationqueueIdl, pii_access_control: piiaccesscontrolIdl, timer_jobs: timerjobsIdl };
 const governor = Principal.fromUint8Array(Uint8Array.from([1, 1]));
 const staff = Principal.fromUint8Array(Uint8Array.from([2, 1]));
 const ok = r => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
@@ -30,8 +36,9 @@ try {
   for (const g of ['a', 'b']) {
     groups[g] = {};
     for (const c of Object.keys(idls)) {
-      const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
+      const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], arg: c === 'timer_jobs' ? IDL.encode([], []) : IDL.encode([IDL.Principal], [governor]) });
       f.actor.setPrincipal(governor); groups[g][c] = f.actor;
+      if (c === 'timer_jobs') ok(await f.actor.initialize());
     }
   }
   const A = groups.a, B = groups.b;
@@ -56,6 +63,15 @@ try {
   ok(await A.club_points_domain.award_points(CLUB, { User: 'u1' }, 'attendance', 'ev1', 10, 'Came to training', [], [], []));
   ok(await A.mini_league_domain.grant_role(staff, 'club_admin', CLUB, []));
   const league = ok(await A.mini_league_domain.create_mini_league(CLUB, 'Under 8s', [], [], 5, 3, 10, [], true));
+  // Remaining domains: competition, media records, insights, notifications, private-info grants, timers.
+  const comp = ok(await A.competition_domain.create_competition(CLUB, 'Winter Cup', '2026'));
+  const asset = ok(await A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum1', `clubs/${CLUB}/p1.jpg`, 'club', 0n));
+  ok(await A.insights_domain.record_photo_upload(CLUB, 'p1'));
+  ok(await A.notification_queue.enqueue('n1', 'u1', CLUB, 'news', 'Hello', 'nk1'));
+  ok(await A.pii_access_control.register_pii('child-1', 'name', [1, 2, 3], governor));
+  ok(await A.pii_access_control.grant_pii_read_club('child-1', 'name', CLUB));
+  ok(await A.timer_jobs.schedule('job-1', CLUB, 99_999_999_999n, 'tk1'));
+  ok(await B.timer_jobs.schedule('job-other', 'other-club', 99_999_999_999n, 'tk2'));
   // News post + team on club details (wider copy scope).
   const team = ok(await A.club_domain.create_shell_team_invite(CLUB, 'Under 8 Lions', [], [])).id;
   const link = ok(await A.club_domain.create_team_invite_link(CLUB, team, 'player'));
@@ -76,6 +92,13 @@ try {
       blocked.vault = await refused(as(A.vault_domain, staff, () => A.vault_domain.rename_file('file1', 'hacked.pdf')));
       blocked.points = await refused(A.club_points_domain.award_points(CLUB, { User: 'u1' }, 'attendance', 'ev2', 5, 'sneaky', [], [], []));
       blocked.league = await refused(A.mini_league_domain.update_mini_league(league.id, 'Hacked', [], [], 5, 3, 10, [], true));
+      blocked.comp = await refused(A.competition_domain.create_competition(CLUB, 'Sneaky Cup', '2026'));
+      blocked.media = await refused(A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum2', `clubs/${CLUB}/p2.jpg`, 'club', 0n));
+      blocked.insights = await refused(A.insights_domain.record_photo_upload(CLUB, 'p2'));
+      blocked.notify = await refused(A.notification_queue.enqueue('n2', 'u1', CLUB, 'news', 'Sneaky', 'nk2'));
+      blocked.pii = await refused(A.pii_access_control.grant_pii_read_club('child-2', 'name', CLUB));
+      blocked.timer = await refused(A.timer_jobs.schedule('job-2', CLUB, 99_999_999_999n, 'tk3'));
+      blocked.claim = { Err: (ok(await A.timer_jobs.claim(100_000_000_000n, 10)).length === 0) ? 'claim skipped locked club' : undefined };
       blocked.club = await refused(as(A.club_domain, staff, () => A.club_domain.add_role_grant(governor, CLUB, 'coach', [])));
     }
   } };
@@ -98,6 +121,12 @@ try {
   assert.ok(ok(await B.club_domain.list_teams(CLUB)).some(t => t.id === team), 'team moved');
   assert.ok(!ok(await A.club_domain.list_teams(CLUB)).some(t => t.id === team), 'team purged from source');
   assert.ok(link.id, 'invite link created');
+  assert.deepEqual(ok(await B.competition_domain.list_competitions(CLUB)).map(x => x.id), [comp.id]);
+  assert.deepEqual((await B.media_metadata.list_assets(CLUB)).map(x => x.id), [asset.id]);
+  assert.equal((await A.media_metadata.list_assets(CLUB)).length, 0);
+  assert.equal((await B.timer_jobs.get_job('job-1'))[0]?.scope, CLUB);
+  assert.equal((await A.timer_jobs.get_job('job-1')).length, 0);
+  assert.equal((await B.timer_jobs.get_job('job-other'))[0]?.scope, 'other-club');
   // Writable again on the target; source holds nothing.
   ok(await B.messaging_domain.send_message(conv.id, 'after move', 'k-after', [], []));
   ok(await as(B.vault_domain, staff, () => B.vault_domain.rename_file('file1', 'rules-v2.pdf')));
@@ -135,5 +164,5 @@ try {
   // Non-governors cannot lock or export.
   assert.ok('Err' in await as(B.events_domain, staff, () => B.events_domain.set_transfer_fence(CLUB, true)));
   assert.ok('Err' in await as(B.messaging_domain, staff, () => B.messaging_domain.export_club_snapshot_page(CLUB, 0n, 10n)));
-  console.log('practice move passed: club details, events, chat, vault, points and mini-leagues moved with locks, verification, cutover, purge, abort and resume after a crash');
+  console.log('practice move passed: all 12 club canisters moved with locks, verification, cutover, purge, abort and resume after a crash');
 } finally { await pic?.tearDown(); await server.stop(); }
