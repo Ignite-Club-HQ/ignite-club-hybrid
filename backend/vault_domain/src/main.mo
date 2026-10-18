@@ -774,6 +774,26 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  // Permanently removes the caller's own vault content during account
+  // erasure: every file they uploaded (any club/team scope), their backups,
+  // and folders they created that are left empty. Encrypted blob bytes in
+  // media_blob_store become unreferenced ciphertext; once the matching PII
+  // records are erased they are undecryptable by anyone.
+  public shared ({ caller }) func purge_my_data() : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    var removed : Nat = 0;
+    let keepFiles = files.filter(func(f : Types.VaultFile) : Bool = not f.uploaded_by.equal(caller));
+    removed += files.size() - keepFiles.size(); files := keepFiles;
+    let keepBackups = backups.filter(func(b : Types.Backup) : Bool = not b.created_by.equal(caller));
+    removed += backups.size() - keepBackups.size(); backups := keepBackups;
+    let keepFolders = folders.filter(func(folder : Types.VaultFolder) : Bool =
+      not folder.created_by.equal(caller)
+      or files.any(func(f : Types.VaultFile) : Bool = f.folder_id == folder.id)
+      or folders.any(func(other : Types.VaultFolder) : Bool = other.parent_id == ?folder.id and not other.created_by.equal(caller)));
+    removed += folders.size() - keepFolders.size(); folders := keepFolders;
+    #Ok(Nat32.fromNat(removed))
+  };
+
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
   //
