@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ admin: true, list: vi.fn(), create: vi.fn(), get: vi.fn(), restore: vi.fn(), remove: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("@/hooks/useIsAppAdmin", () => ({ useIsAppAdmin: () => ({ isAppAdmin: m.admin, isLoading: false }) }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { icp: (ctx: unknown) => unknown }) => h.icp({}) }));
-vi.mock("@/live/features/vault", () => ({ listLiveVaultBackups: m.list, createLiveVaultBackup: m.create, getLiveVaultBackup: m.get, restoreLiveVaultBackup: m.restore, deleteLiveVaultBackup: m.remove }));
+vi.mock("@/live/features/vault", () => ({ listLiveVaultBackups: m.list, createLiveVaultBackup: m.create, getLiveVaultBackup: m.get, restoreLiveVaultBackup: m.restore, restoreLiveVaultBackupWithMedia: m.restore, deleteLiveVaultBackup: m.remove }));
 vi.mock("sonner", () => ({ toast: { success: m.success, error: m.error } }));
 import Page from "./IcpManageBackupsPage";
 function open() {
