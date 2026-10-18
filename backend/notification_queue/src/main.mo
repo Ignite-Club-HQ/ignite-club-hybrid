@@ -385,6 +385,7 @@ persistent actor class Main(governorInit : Principal) {
     body : Text,
     key : Text,
   ) : async Types.Result {
+    if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
     if (not valid(id) or not valid(user) or not valid(club) or not valid(kind) or not valid(key)) {
       return #Err("Invalid notification fields");
@@ -434,6 +435,7 @@ persistent actor class Main(governorInit : Principal) {
   // preference row are fail-open (treated as allowed), matching the safe
   // defaults returned by get_preferences.
   public shared ({ caller }) func fan_out(users : [Text], club : Text, kind : Text, body : Text, key_prefix : Text, related_id : ?Text) : async Types.ResultNat16 {
+    if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
     if (users.size() == 0 or users.size() > 500) { return #Err("Invalid recipient count") };
     if (not valid(club) or not valid(kind) or not valid(key_prefix)) { return #Err("Invalid fan-out fields") };
@@ -614,7 +616,7 @@ persistent actor class Main(governorInit : Principal) {
     var claimed : [Types.Notification] = [];
     var index = 0;
     for (item in items.values()) {
-      if (claimed.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms) {
+      if (claimed.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) {
         let processing : Types.Notification = { item with status = #Processing; attempts = item.attempts + 1 };
         replace(index, processing);
         setLease(item.id, caller);
@@ -1274,6 +1276,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Version metadata is device-reported, not attestation. Never return push tokens.
   public shared ({ caller }) func get_update_reminder_audience(users : [Text], club : Text) : async { #Ok : [{ user : Text; platform : Text; app_version : ?Text; build_number : ?Text }]; #Err : Text } {
+    if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     if (users.size() > 500) return #Err("Too many recipients");
     switch (await authorizeUpdateReminder(caller, users, club)) { case (#Err(e)) { return #Err(e) }; case (#Ok) {} };
     #Ok(deviceVersions.filter(func(v) = users.any(func(u) = u == v.user) and
