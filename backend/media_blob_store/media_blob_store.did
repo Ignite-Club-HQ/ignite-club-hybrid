@@ -105,15 +105,27 @@ service : {
       rows: vec FreeUsageRow;
       total: nat;
     });
+  reconcile_upload_operations: (cursor: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            attempted: nat;
+            cursor: text;
+          };
+    });
   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
    (variant {
       err: text;
       ok: nat;
     });
-  retire_upload_outcomes: () -> (variant {
-                                   Err: text;
-                                   Ok: nat;
-                                 });
+  retire_upload_outcomes: (cursor: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            cursor: text;
+            removed: nat;
+          };
+    });
   set_capacity_limit: (limit_bytes: nat64) -> (Result);
   set_club_domain_canister: (canister_id: principal) -> (Result);
 }

@@ -1261,10 +1261,16 @@ type Main =
                                   Err: text;
                                   Ok: ClubTeam;
                                 });
-   retire_media_quota_records: () -> (variant {
-                                        Err: text;
-                                        Ok: nat;
-                                      });
+   retire_media_quota_records: (reservation_cursor: text, usage_cursor:
+    text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             removed: nat;
+             reservation_cursor: text;
+             usage_cursor: text;
+           };
+     });
    revoke_identity: (target: principal, expected_version: nat64) ->
     (variant {
        Err: text;
