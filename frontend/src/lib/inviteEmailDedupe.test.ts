@@ -6,6 +6,8 @@ const { rpcMock, backend, context } = vi.hoisted(() => ({
   context: { identity: {}, target: {} },
 }));
 const supabaseMode = backend === "supabase";
+const pendingLookup = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+vi.mock("@/live/features/club", () => ({ findLivePendingInviteByEmailHash: pendingLookup }));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: (...args: unknown[]) => rpcMock(...args) },
 }));
@@ -130,6 +132,7 @@ describe.runIf(!supabaseMode)("lookupInvitableUserByEmail — ICP privacy fallba
       clubId: "club-1",
       teamId: "team-1",
     })).resolves.toBeNull();
+    expect(pendingLookup).toHaveBeenCalledWith(context, "club-1", expect.stringMatching(/^[a-f0-9]{64}$/));
     expect(rpcMock).not.toHaveBeenCalled();
   });
 });

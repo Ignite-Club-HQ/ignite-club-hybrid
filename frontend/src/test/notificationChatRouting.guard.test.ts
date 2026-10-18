@@ -29,6 +29,8 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => backendMocks.mode }));
+vi.mock("@/lib/icpClubTeamLookup", () => ({ icpCtx: async () => ({}) }));
+vi.mock("@/live/features/messaging", () => ({ getLiveGroupMetadata: async () => { throw new Error("not found"); } }));
 
 const empty = (): Probe => ({ data: null, error: null });
 const netFail = (): Probe => ({ data: null, error: { message: "Failed to fetch" } });
