@@ -659,7 +659,7 @@ function SupabaseManageUsersPage() {
       } else {
         toast({ 
           title: "Account permanently deleted",
-          description: `${deletedName}'s account has been removed`
+          description: resolveAuthBackend() === "icp" ? `${deletedName}'s identity and club access were removed. Shared club records and existing content remain.` : `${deletedName}'s account has been removed`
         });
       }
       

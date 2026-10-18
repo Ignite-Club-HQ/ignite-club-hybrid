@@ -1988,9 +1988,11 @@ persistent actor class Main(governorInit : Principal) {
       case (?a) { eraseMembership(a.principals, a.id) };
       case null {
         // Unlinked accounts use the canonical principal:<text> key.
-        switch (Text.stripStart(account_id, #text "principal:")) {
+        let text = switch (Text.stripStart(account_id, #text "principal:")) { case (?t) { t }; case null { account_id } };
+        // Match authoritative stored principals; malformed user input must not trap.
+        switch (acl.roles.find(func(g) = Principal.toText(g.user) == text)) {
+          case (?g) { eraseMembership([g.user], "principal:" # text) };
           case null { #Err("Unknown club account; cannot safely revoke membership") };
-          case (?text) { eraseMembership([Principal.fromText(text)], account_id) };
         }
       };
     }
