@@ -646,7 +646,7 @@ persistent actor class Main(governorInit : Principal) {
   func addClubMetric(club_id : Text, sponsor_id : Text, metric : Text, period : Text, delta : Float) {
     let hit = func(i : Types.ClubSponsorMetricCounter) : Bool = i.club_id == club_id and i.sponsor_id == sponsor_id and i.metric == metric and i.period == period;
     if (clubSponsorMetrics.any(hit)) {
-      clubSponsorMetrics := clubSponsorMetrics.map(func(i) = if (hit(i)) { i with value = i.value + delta } else i);
+      clubSponsorMetrics := clubSponsorMetrics.map(func(i) = if (hit(i)) ({ i with value = i.value + delta }) else i);
     } else {
       clubSponsorMetrics := clubSponsorMetrics.concat([{ club_id; sponsor_id; metric; period; value = delta }]);
     };
@@ -657,7 +657,7 @@ persistent actor class Main(governorInit : Principal) {
   func addClubReach(club_id : Text, sponsor_id : Text, period : Text, ids : [Text]) {
     let hit = func(i : Types.ClubSponsorReachCounter) : Bool = i.club_id == club_id and i.sponsor_id == sponsor_id and i.period == period;
     if (clubSponsorReach.any(hit)) {
-      clubSponsorReach := clubSponsorReach.map(func(i) = if (hit(i)) { i with accountIds = mergeIds(i.accountIds, ids) } else i);
+      clubSponsorReach := clubSponsorReach.map(func(i) = if (hit(i)) ({ i with accountIds = mergeIds(i.accountIds, ids) }) else i);
     } else {
       clubSponsorReach := clubSponsorReach.concat([{ club_id; sponsor_id; period; accountIds = mergeIds([], ids) }]);
     };
