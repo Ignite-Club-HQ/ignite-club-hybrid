@@ -38,6 +38,8 @@ interface PitchState {
 export function useActiveGameSync() {
   const { user } = useAuth();
   const activeGameIdRef = useRef<string | null>(null);
+  // Team of the game being synced: lets stop-sync reach the club's own canisters.
+  const activeTeamIdRef = useRef<string | null>(null);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Stable board session id for the lifetime of this hook mount. Stamped on
   // every active_games write so spectators can lock onto this session even if
@@ -304,6 +306,7 @@ export function useActiveGameSync() {
               boardSessionId: boardSessionIdRef.current,
             });
             activeGameIdRef.current = (result as { id: string }).id;
+            activeTeamIdRef.current = teamId;
           },
         });
         return;
@@ -416,7 +419,7 @@ export function useActiveGameSync() {
           await withFeatureBackend("events", {
             supabase: async () => {},
             icp: async (ctx) => {
-              await deactivateLiveActiveGame(ctx, null);
+              await deactivateLiveActiveGame(ctx, activeTeamIdRef.current);
             },
           });
         } catch (e) {
