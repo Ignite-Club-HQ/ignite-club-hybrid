@@ -44,9 +44,26 @@ export const idlFactory = ({ IDL }) => {
     'body' : IDL.Vec(IDL.Nat8),
     'headers' : IDL.Vec(HeaderField),
   });
+  const StreamToken = IDL.Record({
+    'path' : IDL.Text,
+    'content_hash' : IDL.Text,
+    'offset' : IDL.Nat,
+  });
+  const StreamResponse = IDL.Record({
+    'token' : IDL.Opt(StreamToken),
+    'body' : IDL.Vec(IDL.Nat8),
+  });
   const HttpResponse = IDL.Record({
     'body' : IDL.Vec(IDL.Nat8),
     'headers' : IDL.Vec(HeaderField),
+    'streaming_strategy' : IDL.Opt(
+      IDL.Variant({
+        'Callback' : IDL.Record({
+          'token' : StreamToken,
+          'callback' : IDL.Func([StreamToken], [StreamResponse], ['query']),
+        }),
+      })
+    ),
     'status_code' : IDL.Nat16,
   });
   const FreeUsageRow = IDL.Record({
@@ -67,6 +84,7 @@ export const idlFactory = ({ IDL }) => {
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_blob' : IDL.Func([IDL.Text], [Result], []),
     'enable_shared_media_quota' : IDL.Func([], [Result], []),
+    'enable_stable_media_storage' : IDL.Func([], [Result], []),
     'finalize_upload' : IDL.Func([IDL.Text], [ResultFinalized], []),
     'freeze_media_quota' : IDL.Func([], [Result], []),
     'get_club_media_usage' : IDL.Func(
@@ -83,6 +101,11 @@ export const idlFactory = ({ IDL }) => {
     'get_usage' : IDL.Func([], [Usage], ['query']),
     'health' : IDL.Func([], [Health], ['query']),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
+    'http_request_streaming_callback' : IDL.Func(
+        [StreamToken],
+        [StreamResponse],
+        ['query'],
+      ),
     'memory_stats' : IDL.Func(
         [],
         [
@@ -97,6 +120,19 @@ export const idlFactory = ({ IDL }) => {
     'merge_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'migrate_legacy_blob' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'copied_bytes' : IDL.Nat,
+              'remaining' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'put_chunk' : IDL.Func(
@@ -144,6 +180,18 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),
     'set_club_domain_canister' : IDL.Func([IDL.Principal], [Result], []),
+    'stable_storage_status' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'indexed_count' : IDL.Nat,
+            'allocated_bytes' : IDL.Nat64,
+            'enabled' : IDL.Bool,
+            'legacy_count' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
   });
 };
 

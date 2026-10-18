@@ -18,6 +18,8 @@ import Timer "mo:core/Timer";
 import UploadPolicy "uploadPolicy";
 import AssembleChunks "assembleChunks";
 import QuotaOperation "quotaOperation";
+import StableBytes "stableBytes";
+import RetentionPage "retentionPage";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -65,7 +67,12 @@ persistent actor MediaBlobStore {
     status_code : Nat16;
     headers : [HeaderField];
     body : Blob;
+    streaming_strategy : ?{ #Callback : { token : StreamToken; callback : shared query StreamToken -> async StreamResponse } };
   };
+  type StreamToken = { path : Text; content_hash : Text; offset : Nat };
+  type StreamResponse = { body : Blob; token : ?StreamToken };
+  type StoredRecord = { path : Text; mime : Text; owner : Principal; content_hash : Text; slice : StableBytes.Slice; uploaded_at : Int };
+  type Metadata = { path : Text; mime : Text; owner : Principal; content_hash : Text; length : Nat };
   type FinalizedBlob = {
     path : Text;
     content_hash : Text;
@@ -119,6 +126,11 @@ persistent actor MediaBlobStore {
   var quota_mode : { #local; #frozen; #sharedQuota };
   var quota_snapshot : [FreeUsageRow];
   var quota_operations : Map.Map<Text, QuotaOperation.Operation>;
+  var stable_bytes : StableBytes.Store;
+  var stable_blobs : Map.Map<Text, StoredRecord>;
+  var stable_writes : Bool;
+  var retention_cursor : Text;
+  var legacy_retention_cursor : Nat;
 
   type QuotaReservation = { store : Principal; token : Text; club_id : Text; category : Text; cycle : Nat; bytes : Nat; status : { #reserved; #committed; #released } };
   type QuotaResult = { #Ok : QuotaReservation; #Err : Text };
@@ -386,7 +398,8 @@ persistent actor MediaBlobStore {
   };
 
   func canReserve(size : Nat64) : Bool {
-    UploadPolicy.canAdmit(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size())
+    UploadPolicy.canAdmit(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size()) and
+    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocate(stable_bytes, size.toNat())))
   };
 
   func storedChunkBytes(upload : PendingUpload) : Nat {
@@ -423,6 +436,64 @@ persistent actor MediaBlobStore {
 
   func findBlob(path : Text) : ?BlobRecord {
     Array.find<BlobRecord>(blobs, func(record) { record.path == path })
+  };
+  func metadata(path : Text) : ?Metadata {
+    switch (stable_blobs.get(path)) {
+      case (?r) ?{ path = r.path; mime = r.mime; owner = r.owner; content_hash = r.content_hash; length = r.slice.length };
+      case null { switch (findBlob(path)) { case (?r) ?{ path = r.path; mime = r.mime; owner = r.owner; content_hash = r.content_hash; length = r.bytes.size() }; case null null } }
+    }
+  };
+  func readRange(path : Text, offset : Nat) : Blob {
+    switch (stable_blobs.get(path)) {
+      case (?r) StableBytes.read(stable_bytes, r.slice, offset, StableBytes.responseChunk);
+      case null {
+        switch (findBlob(path)) {
+          case (?r) {
+            if (offset >= r.bytes.size()) return "";
+            let bytes = r.bytes.toArray();
+            Blob.fromArray(Array.tabulate<Nat8>(Nat.min(StableBytes.responseChunk, bytes.size() - offset), func(i) = bytes[offset + i]))
+          };
+          case null ""
+        }
+      }
+    }
+  };
+  func removeStored(path : Text) {
+    switch (metadata(path)) { case (?r) { total_bytes := subBytes(total_bytes, r.length) }; case null {} };
+    switch (stable_blobs.get(path)) { case (?r) { StableBytes.release(stable_bytes, r.slice); stable_blobs.remove(path) }; case null {} };
+    blobs := blobs.filter(func(r) = r.path != path);
+    blob_uploaded_at := blob_uploaded_at.filter(func((p, _)) = p != path)
+  };
+
+  /// Copy one legacy file per call, without awaits or an upgrade-time loop.
+  /// Publish only after exact SHA-256 read-back; preserve path/owner/timestamp.
+  public shared ({ caller }) func migrate_legacy_blob() : async { #Ok : { remaining : Nat; copied_bytes : Nat }; #Err : Text } {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (pending_uploads.size() != 0) return #Err("Drain uploads before migration");
+    if (blobs.size() == 0) return #Ok({ remaining = 0; copied_bytes = 0 });
+    let old = blobs[0];
+    if (stable_blobs.size() >= 100_000) return #Err("Stable metadata capacity reached");
+    if (old.bytes.size() > UploadPolicy.maxWireBytes.toNat()) return #Err("Legacy file exceeds bounded migration limit");
+    if (PrimMem.rts_heap_size() + old.bytes.size() * 16 > UploadPolicy.heapBudget) return #Err("Insufficient heap headroom for verified migration");
+    let ?slice = StableBytes.write(stable_bytes, old.bytes) else return #Err("Stable region capacity reached");
+    let copied = StableBytes.read(stable_bytes, slice, 0, slice.length);
+    if (copied.size() != old.bytes.size() or hexDigest(copied) != old.content_hash) {
+      StableBytes.release(stable_bytes, slice); return #Err("Ciphertext integrity check failed")
+    };
+    let stamp = switch (blob_uploaded_at.find(func((p, _)) = p == old.path)) { case (?(_, t)) t; case null Time.now() };
+    stable_blobs.add(old.path, { path = old.path; owner = old.owner; mime = old.mime; content_hash = old.content_hash; slice; uploaded_at = stamp });
+    blobs := blobs.filter(func(r) = r.path != old.path);
+    blob_uploaded_at := blob_uploaded_at.filter(func((p, _)) = p != old.path);
+    #Ok({ remaining = blobs.size(); copied_bytes = copied.size() })
+  };
+  public shared ({ caller }) func enable_stable_media_storage() : async Result {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (blobs.size() != 0 or pending_uploads.size() != 0) return #Err("Migrate legacy files and drain uploads first");
+    stable_writes := true;
+    #Ok
+  };
+  public query func stable_storage_status() : async { enabled : Bool; legacy_count : Nat; indexed_count : Nat; allocated_bytes : Nat64 } {
+    { enabled = stable_writes; legacy_count = blobs.size(); indexed_count = stable_blobs.size(); allocated_bytes = stable_bytes.end }
   };
 
   func findUpload(id : Text) : ?PendingUpload {
@@ -473,7 +544,7 @@ persistent actor MediaBlobStore {
       };
     };
     if (quota_mode == #frozen) return #Err("Uploads temporarily frozen for quota cutover");
-    switch (findBlob(path)) {
+    switch (metadata(path)) {
       case (?existing) {
         if (not existing.owner.equal(caller) and not isGovernor<system>(caller)) {
           return #Err("Path already has a finalized blob owned by someone else");
@@ -567,13 +638,17 @@ persistent actor MediaBlobStore {
           content_hash;
         };
         // Replace any prior blob at this path (re-upload by owner/governor).
-        switch (findBlob(upload.path)) {
-          case (?prior) { total_bytes := subBytes(total_bytes, prior.bytes.size()) };
-          case null {};
+        if (stable_writes) {
+          if (stable_blobs.size() >= 100_000 and stable_blobs.get(upload.path) == null) return #Err("Stable metadata capacity reached");
+          let ?slice = StableBytes.write(stable_bytes, assembled) else return #Err("StoreFull");
+          removeStored(upload.path);
+          stable_blobs.add(upload.path, { path = upload.path; mime = upload.mime; owner = upload.owner; content_hash; slice; uploaded_at = Time.now() });
+        } else {
+          removeStored(upload.path);
+          blobs := blobs.concat([record]);
         };
-        blobs := blobs.filter(func(item) { item.path != upload.path }).concat([record]);
         total_bytes += Nat.toNat64(assembled.size());
-        blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { p != upload.path }).concat([(upload.path, Time.now())]);
+        if (not stable_writes) blob_uploaded_at := blob_uploaded_at.concat([(upload.path, Time.now())]);
         switch (categoryForPath(upload.path), clubIdFromPath(upload.path)) {
           case (?category, ?clubId) { recordUsage(clubId, category, upload.total_size) };
           case _ {};
@@ -621,7 +696,7 @@ persistent actor MediaBlobStore {
   // ==================== Reads ====================
 
   public query func get_content_hash(path : Text) : async ?Text {
-    switch (findBlob(path)) {
+    switch (metadata(path)) {
       case (?record) { ?record.content_hash };
       case null { null };
     }
@@ -666,7 +741,7 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func delete_blob(path : Text) : async Result {
     auth(caller);
-    switch (findBlob(path)) {
+    switch (metadata(path)) {
       case null { #Err("Unknown blob") };
       case (?record) {
         if (not record.owner.equal(caller) and not isGovernor<system>(caller)) {
@@ -674,9 +749,9 @@ persistent actor MediaBlobStore {
             return #Err("Owner, club staff, or governor required");
           };
         };
-        blobs := blobs.filter(func(item) { item.path != path });
-        total_bytes := subBytes(total_bytes, record.bytes.size());
-        blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { p != path });
+        // Authorization may yield; never apply stale accounting to a replacement.
+        switch (metadata(path)) { case (?current) { if (current.content_hash != record.content_hash or current.owner != record.owner) return #Err("Blob changed; retry delete") }; case null return #Ok };
+        removeStored(path);
         #Ok
       };
     }
@@ -686,7 +761,7 @@ persistent actor MediaBlobStore {
   // read access is enforced at vetKey derivation time on pii_access_control.
   public query func http_request(request : HttpRequest) : async HttpResponse {
     if (request.method != "GET") {
-      return { status_code = 405; headers = []; body = "" };
+      return { status_code = 405; headers = []; body = ""; streaming_strategy = null };
     };
     let withoutQuery = switch (Text.split(request.url, #char '?').next()) {
       case (?head) { head };
@@ -698,8 +773,8 @@ persistent actor MediaBlobStore {
         case null { withoutQuery };
       };
     } else withoutQuery;
-    switch (findBlob(path)) {
-      case null { { status_code = 404; headers = []; body = "" } };
+    switch (metadata(path)) {
+      case null { { status_code = 404; headers = []; body = ""; streaming_strategy = null } };
       case (?record) {
         {
           status_code = 200;
@@ -707,10 +782,21 @@ persistent actor MediaBlobStore {
             ("content-type", record.mime),
             ("cache-control", "public, max-age=31536000, immutable"),
           ];
-          body = record.bytes;
+          body = readRange(path, 0);
+          streaming_strategy = if (record.length <= StableBytes.responseChunk) null else ?#Callback({
+            callback = MediaBlobStore.http_request_streaming_callback;
+            token = { path; content_hash = record.content_hash; offset = StableBytes.responseChunk }
+          });
         };
       };
     }
+  };
+  public query func http_request_streaming_callback(token : StreamToken) : async StreamResponse {
+    let ?record = metadata(token.path) else return { body = ""; token = null };
+    if (record.content_hash != token.content_hash or token.offset >= record.length) return { body = ""; token = null };
+    let body = readRange(token.path, token.offset);
+    let next = token.offset + body.size();
+    { body; token = if (next >= record.length) null else ?{ token with offset = next } }
   };
 
   type Usage = {
@@ -738,7 +824,7 @@ persistent actor MediaBlobStore {
   public query func health() : async Health {
     {
       version = "1";
-      blob_count = Nat.toNat64(blobs.size());
+      blob_count = Nat.toNat64(blobs.size() + stable_blobs.size());
       total_bytes;
     }
   };
@@ -765,6 +851,7 @@ persistent actor MediaBlobStore {
 
     var conflicts = 0;
     conflicts += blobs.filter(func(b : BlobRecord) : Bool = b.owner.equal(new)).size();
+    for ((_, r) in stable_blobs.entries()) { if (r.owner.equal(new)) conflicts += 1 };
     conflicts += pending_uploads.filter(func(u : PendingUpload) : Bool = u.owner.equal(new)).size();
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in media_blob_store");
 
@@ -777,10 +864,15 @@ persistent actor MediaBlobStore {
     let newPendingUploads = pending_uploads.map(func(u : PendingUpload) : PendingUpload {
       if (u.owner.equal(old)) { changed += 1; { u with owner = new } } else u
     });
+    var stableRekeys : [(Text, StoredRecord)] = [];
+    for ((p, r) in stable_blobs.entries()) {
+      if (r.owner.equal(old)) { changed += 1; stableRekeys := stableRekeys.concat([(p, { r with owner = new })]) }
+    };
 
     if (not dry_run) {
       blobs := newBlobs;
       pending_uploads := newPendingUploads;
+      for ((p, r) in stableRekeys.values()) stable_blobs.add(p, r);
       var rekeys : [(Text, QuotaOperation.Operation)] = [];
       for ((id, op) in quota_operations.entries()) { if (op.owner.equal(old)) rekeys := rekeys.concat([(id, { op with owner = new })]) };
       for ((id, op) in rekeys.values()) quota_operations.add(id, op);
@@ -809,6 +901,29 @@ persistent actor MediaBlobStore {
   };
 
   func sweepRetention() : async () {
+    // Indexed stable records: materialize one bounded page before any await.
+    var page : [(Text, StoredRecord)] = [];
+    for ((p, r) in stable_blobs.entriesFrom(retention_cursor)) {
+      if (p == retention_cursor and retention_cursor != "") continue;
+      if (page.size() >= 50) break;
+      page := page.concat([(p, r)])
+    };
+    retention_cursor := if (page.size() == 50) page[49].0 else "";
+    for ((p, r) in page.values()) {
+      if (Time.now() - r.uploaded_at > RETENTION_NS) {
+        switch (categoryForPath(p), clubIdFromPath(p)) {
+          case (?_, ?club) {
+            if ((await clubProStatus(club)) == ?false) {
+              switch (stable_blobs.get(p)) {
+                case (?current) { if (current.content_hash == r.content_hash and current.uploaded_at == r.uploaded_at and Time.now() - current.uploaded_at > RETENTION_NS) removeStored(p) };
+                case null {}
+              }
+            }
+          };
+          case _ {}
+        }
+      }
+    };
     let now = Time.now();
     let stamps = Map.empty<Text, Int>();
     for ((p, t) in blob_uploaded_at.values()) { Map.add(stamps, Text.compare, p, t) };
@@ -832,20 +947,28 @@ persistent actor MediaBlobStore {
     };
     if (fresh.size() > 0) { blob_uploaded_at := blob_uploaded_at.concat(fresh) };
     // Cap club lookups per sweep; the rest are handled on following days.
-    var checked = 0;
-    for ((clubId, paths) in Map.entries(expiredByClub)) {
-      if (checked < 50) {
-        checked += 1;
+    // Materialize bounded club IDs before awaits; rotate past Pro/unavailable
+    // clubs so the same first 50 never starve later free clubs.
+    let clubs = Iter.toArray(expiredByClub.entries());
+    let indices = RetentionPage.indices(clubs.size(), legacy_retention_cursor, 50);
+    legacy_retention_cursor := if (clubs.size() == 0) 0 else (legacy_retention_cursor + indices.size()) % clubs.size();
+    for (index in indices.values()) {
+        let (clubId, paths) = clubs[index];
         if ((await clubProStatus(clubId)) == ?false) {
           let doomed = Map.empty<Text, ()>();
-          for (p in paths.values()) { Map.add(doomed, Text.compare, p, ()) };
+          for (p in paths.values()) {
+            // A replacement during subscription lookup must not be deleted.
+            switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
+              case (?(_, stamp)) { if (Time.now() - stamp > RETENTION_NS) Map.add(doomed, Text.compare, p, ()) };
+              case null {}
+            }
+          };
           var freed : Nat = 0;
           for (b in blobs.values()) { if (Map.containsKey(doomed, Text.compare, b.path)) freed += b.bytes.size() };
           blobs := blobs.filter(func(b) { not Map.containsKey(doomed, Text.compare, b.path) });
           blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { not Map.containsKey(doomed, Text.compare, p) });
           total_bytes := subBytes(total_bytes, freed);
         };
-      };
     };
   };
   transient let _retentionTimer = Timer.recurringTimer<system>(#seconds(86_400), sweepRetention);

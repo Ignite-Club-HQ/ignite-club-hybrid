@@ -116,6 +116,56 @@ activation. Actor-level interruption and cycle-boundary tests remain required.
 
 ## Required before production multi-group activation
 
+### Stable media storage — implemented, not activated
+
+`media_blob_store` now supports indexed Region-backed ciphertext and bounded
+HTTP streaming for both legacy and stable files. Each response chunk is at
+most 1,000,000 bytes; tokens pin the content hash and stop after replacement
+or deletion. URLs, MIME, ownership and ciphertext hashes remain unchanged.
+Migration `20261027_000000` only initializes empty storage/index/cursors; it
+does not copy bytes during an upgrade. Existing files remain readable.
+
+Governor-only `migrate_legacy_blob` copies at most one file (10 MiB plus
+framing) per call and checks its read-back SHA-256 before removing the heap
+record. It requires drained uploads and sufficient heap headroom. This is
+**not** a rollback-to-old-code migration: once copied, old code cannot read
+the new representation. Keep a canister snapshot before running it; recovery
+uses a snapshot or forward-compatible code, never an older module alone.
+
+```sh
+node scripts/media-quota-cutover.mjs migrate-storage
+node scripts/media-quota-cutover.mjs migrate-storage --apply --ack-all-stores
+# Repeat until stable_storage_status reports legacy_count = 0 everywhere.
+node scripts/media-quota-cutover.mjs enable-storage --apply --ack-all-stores
+```
+
+Stable writes are deliberately opt-in and cannot enable with legacy files or
+pending uploads. Logical and allocated stable capacity stay conservatively
+capped at 2 GiB, not hundreds of GiB. Power-of-two slots reuse deleted space;
+Region pages do not shrink and fragmentation can cause a StoreFull rejection.
+Replacement needs space for both old and new ciphertext until atomic commit.
+Metadata is capped at 100,000 records. No automatic growth or provisioning
+claims are made. Upload chunks/hash assembly still use bounded transient heap.
+
+Retention covers both representations, skips unknown/Pro clubs, rechecks a
+record after subscription awaits and rotates past the first 50 legacy clubs.
+The local PocketIC script verifies maximum-size streaming and copy, permission
+denials, idempotent migration, slot reuse, EOP upgrade preservation, two-store
+quota activation, concurrent pending allowance, abort/finalize behavior,
+30-day allowance renewal and six-month known-free retention:
+
+```sh
+# Build club_domain and media_blob_store with mops in each canister folder.
+# From frontend/: install the pinned local replica binary once.
+node node_modules/@dfinity/pic/postinstall.mjs
+node scripts/test-media-storage-replica.mjs
+```
+
+The pure frontend `groupRouting` resolver/batch partitioner is tested but
+**not connected to production actors**. It rejects missing assignments,
+incomplete groups and wrong deployments. It is not authorization or membership
+discovery; the group activation gates below remain unfinished.
+
 1. **Membership/account discovery:** authoritative account-to-club-group index;
    page through the caller's clubs across groups, with no public membership leak.
 2. **Complete scoped routing:** club/team/event/conversation/vault IDs resolve
@@ -133,10 +183,9 @@ activation. Actor-level interruption and cycle-boundary tests remain required.
 5. **Indexed bounded storage:** replace whole-array scans/copies in hot club,
    chat and event paths with keyed indexes and capped cursor pagination;
    preserve each method's existing permissions and result semantics.
-6. **Stable-backed media and streaming:** introduce a new versioned storage
-   representation with dual-format reads and bounded copying. Preserve URLs,
-   encrypted bytes and hashes. Test HTTP streaming and large-file recovery
-   before dropping any legacy heap record.
+6. **Stable-backed media and streaming:** code and local actor verification
+   implemented above; deployed snapshot recovery, live compatibility and
+   measured capacity verification remain required before activation.
 7. **Verified migrations:** snapshot + write fence + bounded copy + manifests
    and hashes + ACL checks + cutover + rollback. Route commits alone do not
    migrate data; do not use them as a toggle.

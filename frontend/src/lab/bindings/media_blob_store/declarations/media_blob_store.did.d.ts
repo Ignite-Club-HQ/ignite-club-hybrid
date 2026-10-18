@@ -37,6 +37,9 @@ export interface HttpRequest {
 export interface HttpResponse {
   'body' : Uint8Array,
   'headers' : Array<HeaderField>,
+  'streaming_strategy' : [] | [
+    { 'Callback' : { 'token' : StreamToken, 'callback' : [Principal, string] } }
+  ],
   'status_code' : number,
 }
 export interface MediaUsage {
@@ -52,6 +55,15 @@ export type ResultFinalized = { 'Ok' : FinalizedBlob } |
   { 'Err' : string };
 export type ResultUploadId = { 'Ok' : string } |
   { 'Err' : string };
+export interface StreamResponse {
+  'token' : [] | [StreamToken],
+  'body' : Uint8Array,
+}
+export interface StreamToken {
+  'path' : string,
+  'content_hash' : string,
+  'offset' : bigint,
+}
 export interface Usage {
   'accepting_uploads' : boolean,
   'total_bytes' : bigint,
@@ -69,6 +81,7 @@ export interface _SERVICE {
   'cycles_balance' : ActorMethod<[], bigint>,
   'delete_blob' : ActorMethod<[string], Result>,
   'enable_shared_media_quota' : ActorMethod<[], Result>,
+  'enable_stable_media_storage' : ActorMethod<[], Result>,
   'finalize_upload' : ActorMethod<[string], ResultFinalized>,
   'freeze_media_quota' : ActorMethod<[], Result>,
   'get_club_media_usage' : ActorMethod<[string], Array<MediaUsage>>,
@@ -81,6 +94,10 @@ export interface _SERVICE {
   'get_usage' : ActorMethod<[], Usage>,
   'health' : ActorMethod<[], Health>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
+  'http_request_streaming_callback' : ActorMethod<
+    [StreamToken],
+    StreamResponse
+  >,
   'memory_stats' : ActorMethod<
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
@@ -89,6 +106,15 @@ export interface _SERVICE {
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
       { 'err' : string }
+  >,
+  /**
+   * / Copy one legacy file per call, without awaits or an upgrade-time loop.
+   * / Publish only after exact SHA-256 read-back; preserve path/owner/timestamp.
+   */
+  'migrate_legacy_blob' : ActorMethod<
+    [],
+    { 'Ok' : { 'copied_bytes' : bigint, 'remaining' : bigint } } |
+      { 'Err' : string }
   >,
   'put_chunk' : ActorMethod<[string, number, Uint8Array], Result>,
   'quota_snapshot_page' : ActorMethod<
@@ -118,6 +144,15 @@ export interface _SERVICE {
   >,
   'set_capacity_limit' : ActorMethod<[bigint], Result>,
   'set_club_domain_canister' : ActorMethod<[Principal], Result>,
+  'stable_storage_status' : ActorMethod<
+    [],
+    {
+      'indexed_count' : bigint,
+      'allocated_bytes' : bigint,
+      'enabled' : boolean,
+      'legacy_count' : bigint,
+    }
+  >,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];
