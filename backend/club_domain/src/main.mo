@@ -4273,8 +4273,7 @@ persistent actor class Main(governorInit : Principal) {
   // Deliberately governor-only preparation tests: registered stores cannot
   // consume production quota until a later, verified baseline cutover.
   public shared ({ caller }) func prepare_media_quota_reservation(store : Principal, token : Text, club_id : Text, category : Text, bytes : Nat) : async MediaQuota.Result {
-    if (not isGovernor(caller)) return #Err("Quota preparation requires governor");
-    if (not mediaQuotaStores.any(func(p) { p.equal(store) })) return #Err("Unknown store");
+    if (not MediaQuota.authorizedPreparation(governor, caller, store, mediaQuotaStores)) return #Err("Governor and registered store required");
     if (not profiles.any(func(p) { p.id == club_id })) return #Err("Unknown club");
     let pro = clubSubscriptions.any(func(s) {
       s.club_id == club_id and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial)
@@ -4283,8 +4282,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func settle_prepared_media_quota(store : Principal, token : Text, commit : Bool) : async MediaQuota.Result {
-    if (not isGovernor(caller)) return #Err("Quota preparation requires governor");
-    if (not mediaQuotaStores.any(func(p) { p.equal(store) })) return #Err("Unknown store");
+    if (not MediaQuota.authorizedPreparation(governor, caller, store, mediaQuotaStores)) return #Err("Governor and registered store required");
     MediaQuota.settle(mediaQuotaLedger, store, token, commit)
   };
 

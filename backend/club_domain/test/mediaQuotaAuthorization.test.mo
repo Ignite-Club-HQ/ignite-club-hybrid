@@ -1,0 +1,10 @@
+import Quota "../src/mediaQuota";
+import Principal "mo:core/Principal";
+let governor = Principal.fromText("mzzzv-taaaa-aaaal-qxlrq-cai");
+let store = Principal.fromText("jxeuj-uyaaa-aaaal-qxlna-cai");
+let stranger = Principal.fromText("m6y7b-6yaaa-aaaal-qxlra-cai");
+assert Quota.authorizedPreparation(governor, governor, store, [store]);
+assert not Quota.authorizedPreparation(governor, stranger, store, [store]);
+assert not Quota.authorizedPreparation(governor, store, store, [store]);
+assert not Quota.authorizedPreparation(governor, governor, stranger, [store]);
+assert not Quota.authorizedPreparation(Principal.anonymous(), Principal.anonymous(), store, [store]);

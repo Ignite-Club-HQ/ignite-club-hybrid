@@ -15,6 +15,11 @@ module {
   public type Result = { #Ok : Reservation; #Err : Text };
   public let cycleNs : Nat = 2_592_000_000_000_000;
   public let maxEntries : Nat = 100_000;
+  public func authorizedPreparation(governor : Principal, caller : Principal, store : Principal, stores : [Principal]) : Bool {
+    if (caller.equal(Principal.anonymous()) or not caller.equal(governor)) return false;
+    for (registered in stores.values()) { if (registered.equal(store)) return true };
+    false
+  };
   public func empty() : Ledger { { usage = Map.empty(); reservations = Map.empty() } };
   func usageKey(club : Text, category : Text, cycle : Nat) : Text {
     club # "\u{1f}" # category # "\u{1f}" # debug_show(cycle)
