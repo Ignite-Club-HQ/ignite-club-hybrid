@@ -49,6 +49,11 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-set club_domain canister id, used to verify app_admin grants
   // for admin-only endpoints (push health, stale token cleanup).
   var clubDomainCanister : ?Principal;
+  // Governor-set identity_access canister id, used to bind the caller's
+  // principal to their app account id so inbox reads/mutations can verify
+  // ownership instead of trusting the browser-supplied `user` argument.
+  // Fail-closed while unset.
+  var identityAccessCanister : ?Principal;
   // Device push tokens owned by principal text (see Types.DeviceToken).
   // Caller-scoped writes; the delivery worker reads/prunes via worker-gated
   // methods below.
@@ -67,6 +72,33 @@ persistent actor class Main(governorInit : Principal) {
     if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
     clubDomainCanister := ?id;
     #Ok
+  };
+
+  public shared ({ caller }) func set_identity_access_canister(id : Principal) : async { #Ok; #Err : Text } {
+    governorOnly(caller);
+    if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
+    identityAccessCanister := ?id;
+    #Ok
+  };
+
+  // Resolve the caller's app account id via identity_access.whoami().
+  // Returns null while unconfigured or on any error — callers treat null as
+  // "ownership unproven" and refuse, so inbox data fails closed.
+  func callerAccountId(caller : Principal) : async ?Text {
+    switch (identityAccessCanister) {
+      case null { null };
+      case (?id) {
+        let identityAccess = actor (Principal.toText(id)) : actor {
+          whoami : shared query () -> async { #Ok : { id : Text }; #Err : Text };
+        };
+        try {
+          switch (await identityAccess.whoami()) {
+            case (#Ok(account)) { ?account.id };
+            case (#Err(_)) { null };
+          };
+        } catch (_) { null };
+      };
+    };
   };
 
   // Governor or club_domain app_admin grant. Fail-closed while
