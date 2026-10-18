@@ -66,9 +66,9 @@ module {
       if (quoted) {
         if (escaped) escaped := false
         else if (c == '\\') escaped := true
-        else if (c == '"') quoted := false;
+        else if (c == '\"') quoted := false;
       } else {
-        if (c == '"') quoted := true
+        if (c == '\"') quoted := true
         else if (c == '{' or c == '[') { depth += 1; if (depth > 8) fail("Query nesting exceeds 8") }
         else if (c == '}' or c == ']') { if (depth == 0) fail("Invalid JSON nesting"); depth -= 1 };
       };
