@@ -73,8 +73,10 @@ export async function exportMyIcpAccountData(
  * bindings, privacy consents and terms acceptance on identity_access.
  *
  * club_domain revokes all linked principals' role access before identity
- * erasure. Shared club records and children remain; vault/events/messaging
- * content is not purged, and the returned note discloses that limitation.
+ * erasure. The caller's own vault files, chat messages and event records
+ * are then purged on their domains (purge_my_data); shared club records and
+ * parent-owned children remain. A domain that fails is disclosed in the
+ * returned note and is safe to retry.
  */
 export async function eraseMyIcpAccount(
   identity: Identity,
@@ -92,12 +94,33 @@ export async function eraseMyIcpAccount(
     const { actor } = await connectLiveClubDomain(target, identity);
     const revoked = await actor.erase_my_membership();
     if ("Err" in revoked) throw new Error(revoked.Err);
+    // Purge the caller's own content on each domain before erasing the
+    // identity. Failures are collected and disclosed, never silently dropped.
+    const purgeFailures: string[] = [];
+    for (const [label, connect] of [
+      ["vault", "connectLiveVaultDomain"],
+      ["events", "connectLiveEventsDomain"],
+      ["messaging", "connectLiveMessagingDomain"],
+    ] as const) {
+      try {
+        const domains = await import("./domains");
+        const domainActor = (await domains[connect](target, identity)).actor as { purge_my_data: () => Promise<{ Ok?: unknown; Err?: string }> };
+        const purged = await domainActor.purge_my_data();
+        if ("Err" in purged) throw new Error(purged.Err);
+      } catch (error) {
+        console.error(`[account-erase] ${label} purge failed`, error);
+        purgeFailures.push(label);
+      }
+    }
     await client.eraseAccount(account.id);
     return {
       note:
         "Your identity_access account has been erased and club/team role access revoked. " +
-        "Shared club records and parent-owned children are retained. Vault, events and messaging records are not yet covered by an automated " +
-        "per-user purge and may require a manual request to your club.",
+        "Your vault files, chat messages and event records have been permanently removed. " +
+        "Shared club records and parent-owned children are retained." +
+        (purgeFailures.length > 0
+          ? ` The ${purgeFailures.join(", ")} purge could not be completed — please contact support to finish removing that content.`
+          : ""),
     };
   } finally {
     client.dispose();
