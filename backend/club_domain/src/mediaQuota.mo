@@ -1,6 +1,7 @@
 import Map "mo:core/Map";
 import Text "mo:core/Text";
 import Principal "mo:core/Principal";
+import Nat "mo:core/Nat";
 
 module {
   public type Usage = { count : Nat; bytes : Nat; pending_count : Nat; pending_bytes : Nat };
@@ -36,6 +37,47 @@ module {
     }
   };
   public func getUsage(ledger : Ledger, club : Text, category : Text, cycle : Nat) : Usage { usage(ledger, usageKey(club, category, cycle)) };
+  public func importUsage(ledger : Ledger, club : Text, category : Text, cycle : Nat, count : Nat, bytes : Nat) {
+    let key = usageKey(club, category, cycle);
+    let row = usage(ledger, key);
+    ledger.usage.add(key, { row with count = row.count + count; bytes = row.bytes + bytes });
+  };
+  // Aborting an unknown request must create a tombstone: a delayed reserve
+  // may still arrive. It must see #released rather than allocate capacity.
+  public func cancel(ledger : Ledger, store : Principal, token : Text, club : Text, category : Text, bytes : Nat, cycle : Nat) : Result {
+    switch (status(ledger, store, token)) {
+      case (?saved) {
+        if (saved.club_id != club or saved.category != category or saved.bytes != bytes or saved.cycle != cycle) return #Err("Token conflict");
+        settle(ledger, store, token, false)
+      };
+      case null {
+        if (not validId(token) or not validId(club) or not validCategory(category) or bytes > 10_551_296) return #Err("Invalid reservation");
+        if (ledger.reservations.size() >= maxEntries) return #Err("Quota ledger full");
+        let saved : Reservation = { store; token; club_id = club; category; bytes; cycle; status = #released };
+        ledger.reservations.add(reservationKey(store, token), saved);
+        #Ok(saved)
+      };
+    }
+  };
+  // Retire only old terminal records. Live APIs reject NEW old-cycle tokens;
+  // unresolved reservations are never expired or refunded automatically.
+  public func retire(ledger : Ledger, cycle : Nat) : Nat {
+    var removed = 0;
+    for ((key, row) in ledger.reservations.entries()) {
+      if (removed < 200 and row.cycle + 1 < cycle and row.status != #reserved) { ignore ledger.reservations.remove(key); removed += 1 };
+    };
+    var usageRemoved = 0;
+    for ((key, row) in ledger.usage.entries()) {
+      // The suffix is the cycle in debug_show format. Bound scans by ledger cap;
+      // delete only zero-pending rows with an old terminal reservation-free key.
+      if (usageRemoved < 200 and row.pending_count == 0) {
+        let parts = Text.split(key, #char '\u{1f}');
+        ignore parts.next(); ignore parts.next();
+        switch (parts.next()) { case (?value) { switch (Nat.fromText(value)) { case (?old) { if (old + 1 < cycle) { ignore ledger.usage.remove(key); usageRemoved += 1 } }; case null {} } }; case null {} };
+      };
+    };
+    removed + usageRemoved
+  };
   public func status(ledger : Ledger, store : Principal, token : Text) : ?Reservation { Map.get(ledger.reservations, Text.compare, reservationKey(store, token)) };
   public func reserve(ledger : Ledger, store : Principal, token : Text, club : Text, category : Text, bytes : Nat, cycle : Nat, pro : Bool) : Result {
     if (not validId(token) or not validId(club) or not validCategory(category) or bytes > 10_551_296) return #Err("Invalid reservation");

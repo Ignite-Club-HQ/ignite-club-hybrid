@@ -1,0 +1,28 @@
+import Cutover "../src/mediaQuotaCutover";
+import Quota "../src/mediaQuota";
+import Principal "mo:core/Principal";
+import Migration "../src/backend/migrations/20261026_000000";
+let a = Principal.fromText("jxeuj-uyaaa-aaaal-qxlna-cai");
+let b = Principal.fromText("m6y7b-6yaaa-aaaal-qxlra-cai");
+let state : Cutover.State = Migration.migration({}).mediaQuotaCutover;
+let page : Cutover.Page = { frozen = true; pending = 0; total = 1; offset = 0; rows = [{ club_id = "club"; category = "gallery_photo"; cycle = 1; count = 6; bytes = 6 }] };
+assert Cutover.applyPage(state, a, page) == #Err("Store must be frozen and drained");
+state.started := true;
+assert Cutover.applyPage(state, a, { page with frozen = false }) == #Err("Store must be frozen and drained");
+assert Cutover.applyPage(state, a, { page with pending = 1 }) == #Err("Store must be frozen and drained");
+assert Cutover.applyPage(state, a, page) == #Ok;
+assert Cutover.applyPage(state, a, page) == #Ok;
+assert Quota.getUsage(state.ledger, "club", "gallery_photo", 1).count == 6;
+assert Cutover.activate(state, [a, b]) == #Err("Every registered store must be imported");
+assert Cutover.applyPage(state, b, { page with rows = [{ page.rows[0] with count = 4 }] }) == #Ok;
+assert Quota.getUsage(state.ledger, "club", "gallery_photo", 1).count == 10;
+assert Cutover.activate(state, [a, b]) == #Ok;
+assert Cutover.ready(state, a, [a, b]);
+assert not Cutover.ready(state, Principal.anonymous(), [a, b]);
+switch (Quota.reserve(state.ledger, a, "overflow", "club", "gallery_photo", 1, 1, false)) { case (#Err(_)) {}; case _ assert false };
+// Cancellation before a delayed reserve is safe, idempotent and uncharged.
+switch (Quota.cancel(state.ledger, a, "late", "club", "chat_photo", 1, 1)) { case (#Ok(r)) assert r.status == #released; case _ assert false };
+switch (Quota.reserve(state.ledger, a, "late", "club", "chat_photo", 1, 1, false)) { case (#Ok(r)) assert r.status == #released; case _ assert false };
+assert Quota.getUsage(state.ledger, "club", "chat_photo", 1).pending_count == 0;
+ignore Quota.retire(state.ledger, 3);
+assert Quota.status(state.ledger, a, "late") == null;
