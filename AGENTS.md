@@ -41,9 +41,9 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 (https://skills.internetcomputer.org/.well-known/skills/{name}/SKILL.md) and follow
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
-- Web hosting: separate ICP assets project deploy/frontend/icp.yaml, prepared by prepare-canister-dist.mjs and deployed by deploy-frontend-canister.yml. Why: no Netlify dependency; native bundles unchanged.
-- Memory uses deterministic warnings, not AI: static clients cannot hold secrets.
-- Deploy with EOP-aware ICP CLI; never reinstall. Why: keep canister data.
+- ICP web hosting: deploy/frontend/icp.yaml + prepare-canister-dist.mjs + deploy-frontend-canister.yml. Use pinned CLI `canister settings update --add-controller --force`; fail on error. Why: balance permission; native unchanged.
+- Memory warnings are deterministic: static clients cannot hold secrets.
+- EOP-aware ICP CLI; never reinstall. Why: preserve data.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
 
 - ICP MCP OQL shares a bounded read-only interpreter; domain fields are allowlisted and caller authorization precedes filters, counts and paging. No self-calls. Why: preserve identity and prevent private-row/count leakage.
