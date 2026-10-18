@@ -147,7 +147,7 @@ function SupabaseEoiCompletePage() {
           if (!profile) return null;
           return { id: profile.id, name: profile.name, logo_url: profile.logo_url ?? null };
         },
-      }, { clubId: eoi.club_id! });
+      }, { clubId: eoi?.club_id as string });
     },
     enabled: !!eoi?.club_id,
   });

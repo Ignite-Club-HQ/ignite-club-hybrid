@@ -584,7 +584,7 @@ export default function CreateTeamPage() {
                   await saveLiveTeam(ctx, { ...existing[0], logo_url: [blobUpload.url] });
                 }
               }
-            }, { teamId: team.id! });
+            }, { teamId: team?.id as string });
           } else {
             await supabase
               .from("teams")

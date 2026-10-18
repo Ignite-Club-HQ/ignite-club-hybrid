@@ -142,7 +142,7 @@ function SupabaseManageTeamRolesPage() {
                 requester: { id: r.account_id, display_name: r.account_id, avatar_url: null },
               }));
           },
-        }, { clubId: team.club_id! });
+        }, { clubId: team?.club_id as string });
       }
       if (!teamId) return [];
       return listSupabaseRoleRequests({ teamId });

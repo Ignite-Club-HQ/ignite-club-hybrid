@@ -706,7 +706,7 @@ export default function EventDetailPage() {
         icp: async (ctx) =>
           // Team grant → club grant → caller's IAP entitlement (proAccess).
           resolveLiveProFootballAccess(ctx, { teamId: event?.team_id ?? null, clubId: event?.club_id ?? null }),
-      }, { clubId: event?.club_id??null as string });
+      }, { clubId: event?.club_id as string });
     },
     enabled: !!event?.team_id,
   });
@@ -743,7 +743,7 @@ export default function EventDetailPage() {
       icp: async (ctx) =>
         // Team grant → club grant → caller's IAP entitlement (proAccess).
         resolveLiveProAccess(ctx, { teamId: event?.team_id ?? null, clubId: event?.club_id ?? null }),
-    }, { clubId: event?.club_id??null as string }),
+    }, { clubId: event?.club_id as string }),
     enabled: (!!event?.team_id || !!event?.club_id),
   });
 
@@ -1019,7 +1019,7 @@ export default function EventDetailPage() {
             const sub = await getLiveTeamSubscription(ctx, event.team_id!);
             return sub ? mapLiveTeamSubscriptionToRow(sub) : null;
           },
-        }, { teamId: event.team_id! });
+        }, { teamId: event?.team_id as string });
       }
       const { data, error } = await supabase
         .from("team_subscriptions")

@@ -266,7 +266,7 @@ export default function FindOrCreateClubWizard({
             throw new Error("Failed to send join request. Please try again.");
           }
         },
-      }, writeOnce({ clubId: club.id! }));
+      }, writeOnce({ clubId: club?.id as string }));
     } catch (e) {
       setSendingRequest(false);
       toast({
