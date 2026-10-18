@@ -17,50 +17,83 @@ type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendC
 export type EntityScope = { clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string };
 export type EntityLookup = (ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team', id: string) => Promise<string | null>;
 const ENTITY_DOMAIN = { event: 'events_domain', conversation: 'messaging_domain', team: 'club_domain' } as const;
+/** Device store for entity→club answers (an event/chat never changes club, so
+ * positive answers are safe to keep; "not in any group" stays memory-only
+ * because the club may move later). Scoped per principal. */
+export type OwnerStore = { load(principal: string): Record<string, string>; save(principal: string, owners: Record<string, string>): void };
 export type DispatchDeps = {
   gates: () => ActivationGates;
   legacy: <T>(feature: FeatureArea, clubId: string, icp: (ctx: FeatureBackendContext) => Promise<T>) => Promise<T>;
   context: () => Promise<FeatureBackendContext>;
   open: (ctx: FeatureBackendContext) => Promise<Session>;
   lookup?: EntityLookup;
+  store?: OwnerStore;
 };
+export const MAX_DEVICE_OWNERS = 2000;
 const owners = new Map<string, string | null>(); // kind:id -> club (null = shared canisters)
+const inflight = new Map<string, Promise<string | null>>();
+let loadedFor: string | null = null;
 let cached: { principal: string; session: Promise<Session> } | null = null;
-export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); }
+export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; }
 
-async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendContext; s: Session }> {
-  const ctx = await deps.context(); const principal = ctx.identity.getPrincipal().toText();
-  if (!cached || cached.principal !== principal) { clearGroupDispatchCache(); cached = { principal, session: deps.open(ctx) }; }
-  try { return { ctx, s: await cached.session }; } catch (e) { cached = null; throw e; }
+function hydrate(deps: DispatchDeps, principal: string) {
+  if (loadedFor === principal) return; loadedFor = principal;
+  try { for (const [k, v] of Object.entries(deps.store?.load(principal) ?? {})) if (!owners.has(k)) owners.set(k, v); } catch { /* unreadable store = cold cache */ }
+}
+function persist(deps: DispatchDeps, principal: string) {
+  if (!deps.store) return;
+  const known = [...owners].filter((e): e is [string, string] => e[1] !== null).slice(-MAX_DEVICE_OWNERS);
+  try { deps.store.save(principal, Object.fromEntries(known)); } catch { /* quota: keep memory copy */ }
 }
 
-/** Resolve an entity to its club by asking each of the member's groups.
- * Exactly one group may claim it; none = still on the shared canisters. */
-async function resolveClub(deps: DispatchDeps, s: Session, scope: EntityScope): Promise<string | null> {
+async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendContext; s: Session; principal: string }> {
+  const ctx = await deps.context(); const principal = ctx.identity.getPrincipal().toText();
+  if (!cached || cached.principal !== principal) { clearGroupDispatchCache(); cached = { principal, session: deps.open(ctx) }; }
+  hydrate(deps, principal);
+  try { return { ctx, s: await cached.session, principal }; } catch (e) { cached = null; throw e; }
+}
+
+/** Resolve an entity to its club by asking each of the member's groups at once.
+ * Exactly one group may claim it; none = still on the shared canisters.
+ * Answers are remembered (device + memory) and concurrent asks share one probe. */
+async function resolveClub(deps: DispatchDeps, s: Session, principal: string, scope: EntityScope): Promise<string | null> {
   if ('clubId' in scope) return scope.clubId;
   const [kind, id] = 'eventId' in scope ? ['event', scope.eventId] as const : 'conversationId' in scope ? ['conversation', scope.conversationId] as const : ['team', scope.teamId] as const;
   const key = `${kind}:${id}`;
   if (owners.has(key)) return owners.get(key)!;
+  const pending = inflight.get(key); if (pending) return pending;
   if (!deps.lookup) throw new Error('Entity lookup unavailable');
   const lookup = deps.lookup;
-  const found = [...new Set(await s.readEveryGroup(ENTITY_DOMAIN[kind], async ctx => { const c = await lookup(ctx, kind, id); return c ? [c] : []; }, 2))];
-  if (found.length > 1) throw new Error(`${kind} claimed by more than one group`);
-  const club = found[0] ?? null;
-  owners.set(key, club);
-  return club;
+  const probe = (async () => {
+    const found = [...new Set(await s.readEveryGroup(ENTITY_DOMAIN[kind], async ctx => { const c = await lookup(ctx, kind, id); return c ? [c] : []; }, 2))];
+    if (found.length > 1) throw new Error(`${kind} claimed by more than one group`);
+    const club = found[0] ?? null;
+    owners.set(key, club); if (club) persist(deps, principal);
+    return club;
+  })();
+  inflight.set(key, probe);
+  try { return await probe; } finally { inflight.delete(key); }
 }
 
 export function createClubDispatcher(deps: DispatchDeps) {
   return {
+    /** List reads already know each item's club: record it so opening the item
+     * later (e.g. from a notification) needs no group probe. Free when off. */
+    remember: async (kind: 'event' | 'conversation' | 'team', pairs: ReadonlyArray<readonly [string, string]>): Promise<void> => {
+      if (!activationStatus(deps.gates()).active || pairs.length === 0) return;
+      const { principal } = await sessionFor(deps);
+      for (const [id, club] of pairs) owners.set(`${kind}:${id}`, club);
+      persist(deps, principal);
+    },
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
-      const { s } = await sessionFor(deps); const club = await resolveClub(deps, s, scope);
+      const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
       return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.readClub(club, domain, fn) : deps.legacy(feature, club ?? '', fn);
     },
     writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
-      const { s } = await sessionFor(deps); const club = await resolveClub(deps, s, scope);
+      const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
       return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.writeClub(club, domain, key, fn, attempts) : deps.legacy(feature, club ?? '', ctx => fn(ctx, key));
     },
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
@@ -89,4 +122,14 @@ export const clubDispatch = createClubDispatcher({
   },
   open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx),
   lookup: async (ctx, kind, id) => (await import('./groupSessionLive')).lookupEntityClub(ctx, kind, id),
+  store: {
+    load: p => JSON.parse(localStorage.getItem(`ignite.groupOwners.${p}`) ?? '{}'),
+    save: (p, o) => localStorage.setItem(`ignite.groupOwners.${p}`, JSON.stringify(o)),
+  },
 });
+
+/** Sign-out: forget every entity→club answer kept on this device. */
+export function wipeGroupOwnerCache() {
+  clearGroupDispatchCache();
+  try { for (const k of Object.keys(localStorage)) if (k.startsWith('ignite.groupOwners.')) localStorage.removeItem(k); } catch { /* no storage */ }
+}

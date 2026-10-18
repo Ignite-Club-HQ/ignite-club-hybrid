@@ -524,12 +524,14 @@ export async function signOutInternetIdentity(): Promise<void> {
   // ready, and the first tap after sign-out loses its click ("The sign-in
   // window couldn't open in time").
   warmupPromise = undefined;
-  const [{ clearLiveAgentCache }, { clearPiiVetKeyCache }] = await Promise.all([
+  const [{ clearLiveAgentCache }, { clearPiiVetKeyCache }, { wipeGroupOwnerCache }] = await Promise.all([
     import("./icpAgent"),
     import("./piiVetKeys"),
+    import("./groupDispatch"),
   ]);
   clearLiveAgentCache();
   clearPiiVetKeyCache();
+  wipeGroupOwnerCache();
   try { localStorage.removeItem("ignite_query_cache_v1"); } catch { /* ignore */ }
   await client?.signOut();
   client?.dispose?.();
