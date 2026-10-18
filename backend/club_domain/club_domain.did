@@ -561,6 +561,10 @@ type Main =
        Err: text;
        Ok: nat32;
      });
+   erase_account_membership: (account_id: text) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
    erase_my_membership: () -> (variant {
                                  Err: text;
                                  Ok;
