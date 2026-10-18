@@ -443,12 +443,6 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
             supabase: async () => { throw new Error("unreachable"); },
           }, { clubId: c.id, writeKey: "once", attempts: 1 });
         }
-              teamCount += teamIds.length - (result.skipped?.length ?? 0);
-              clubCount += 1;
-            }
-          },
-          supabase: async () => { throw new Error("unreachable"); },
-        });
         toast({ title: `Sent to ${teamCount} team${teamCount === 1 ? "" : "s"} across ${clubCount} club${clubCount === 1 ? "" : "s"}` });
         setMessage("");
         setSelectedClubIds(new Set());
