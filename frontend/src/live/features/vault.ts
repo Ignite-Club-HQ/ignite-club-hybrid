@@ -709,3 +709,51 @@ export async function deleteLiveVaultBackup(ctx: FeatureBackendContext, id: stri
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.delete_backup(id), "Delete backup");
 }
+
+export type LiveVaultBackupRestoreReport = {
+  restoredRows: number;
+  grantsRepaired: number;
+  grantFailures: number;
+  /** Blob paths whose encrypted bytes no longer load from the blob store. */
+  missingBytes: string[];
+};
+
+/**
+ * Restores a vault metadata backup, then repairs media access: every
+ * restored file's blob keeps its immutable ciphertext in media_blob_store,
+ * so recovery means re-granting the club read access on the matching
+ * pii_access_control record and confirming the bytes still load. PII
+ * records are never re-registered here — re-registration would need the
+ * plaintext, which a backup deliberately does not hold. Grant and byte
+ * problems are reported, never thrown, so a partial restore still completes.
+ */
+export async function restoreLiveVaultBackupWithMedia(
+  ctx: FeatureBackendContext,
+  id: string,
+): Promise<LiveVaultBackupRestoreReport> {
+  const backup = await getLiveVaultBackup(ctx, id);
+  const restoredRows = Number(await restoreLiveVaultBackup(ctx, id));
+  const { blobAssetUrl } = await import("../mediaStorage");
+  const { clubIdFromMediaPath } = await import("../piiVetKeys");
+  const report: LiveVaultBackupRestoreReport = { restoredRows, grantsRepaired: 0, grantFailures: 0, missingBytes: [] };
+  for (const file of backup.files) {
+    const ref = file.blob_ref?.[0];
+    if (!ref) continue;
+    const clubId = clubIdFromMediaPath(ref.path);
+    if (clubId) {
+      try {
+        await grantLivePiiReadClub(ctx, ref.path, "blob", clubId);
+        report.grantsRepaired += 1;
+      } catch {
+        report.grantFailures += 1;
+      }
+    }
+    try {
+      const res = await fetch(blobAssetUrl(ref.canister, ref.path), { method: "HEAD" });
+      if (!res.ok) report.missingBytes.push(ref.path);
+    } catch {
+      report.missingBytes.push(ref.path);
+    }
+  }
+  return report;
+}
