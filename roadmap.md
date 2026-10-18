@@ -1,7 +1,7 @@
 ## Codespaces ICP coverage — first tranche
-- [ ] Current closure pass: establish a fresh dual-mode failure baseline, repair behavior/test regressions, and implement safe remaining recovery/deletion/delivery steps without claiming unsupported full closure.
+- [x] Test closure pass: repaired roster error propagation, vault pending uploads, ICP season carry-over and stale provider mocks; final complete suites pass in both modes (Supabase 5415, ICP 4875).
 - [x] Batch 11 implemented: automatic photo reminders, on-chain settings, minimum-version controls, platform/version/test-send targeting, guarded admin membership removal, privileged multi-domain exports, push-worker response repair; focused checks pass.
-- [ ] Closure remains incomplete: complete restorable backups/media bytes, competition welcome email job/recipient path, per-user content purge and complete-suite failures need implementation (not credential-only blockers).
+- [ ] Feature closure remains incomplete: complete restorable backups/media bytes, competition welcome email job/recipient path and per-user content purge require new authorized cross-domain contracts; not credential-only blockers.
 - [x] Batch 10: update-reminder admin/club audience verification in fan_out AND enqueue; canonical recipient IDs; executable authorization and dual-mode frontend tests pass; contracts unchanged.
 - [x] Batch 9: admin gates and failed-read feedback repaired; AI rollout, vault metadata backup CRUD/downloads, reminder queue counts and guide downloads tested (32 tests pass in each mode).
 - [x] Competition welcome settings on-chain; photo reminder Run now enabled and behavior-tested; canister reachability tests verified.
@@ -25,7 +25,7 @@
 - [ ] Per-user content purge remains incomplete — vault/events/messaging records remain; shared club and parent-owned child records deliberately retained.
 - [ ] Deploy updated canisters and verify signed-in scheduled delivery/read-back — requires deployer access and an Internet Identity session.
 - [x] Ran both complete suites: Supabase 80 failures / 24 files, ICP 78 failures / 31 files (mixed revision run, not final parity).
-- [ ] Complete-suite closure: fix remaining failures and rerun both against one final revision; inventory in docs/ICP_BATCH11_TEST_FAILURES.json. Selected stale mock/gallery expectations repaired and final focused run is green.
+- [x] Complete-suite closure: final same-revision runs on 2026-10-18 pass with zero failures: Supabase 5415, ICP 4875. Provider-specific skips and two ICP TODOs remain; green suites do not prove live deployment or feature completeness.
 
 ## Supabase role requests
 - [x] Fresh sorted reads and dates implemented; scoped profile policy installed with no new security warnings; 21 regression tests and preview checks pass. Genuine old requests retained.
