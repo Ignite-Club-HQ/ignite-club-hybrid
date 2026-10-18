@@ -77,15 +77,23 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
 
 export function createClubDispatcher(deps: DispatchDeps) {
   return {
+    /** List reads already know each item's club: record it so opening the item
+     * later (e.g. from a notification) needs no group probe. Free when off. */
+    remember: async (kind: 'event' | 'conversation' | 'team', pairs: ReadonlyArray<readonly [string, string]>): Promise<void> => {
+      if (!activationStatus(deps.gates()).active || pairs.length === 0) return;
+      const { principal } = await sessionFor(deps);
+      for (const [id, club] of pairs) owners.set(`${kind}:${id}`, club);
+      persist(deps, principal);
+    },
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
-      const { s } = await sessionFor(deps); const club = await resolveClub(deps, s, scope);
+      const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
       return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.readClub(club, domain, fn) : deps.legacy(feature, club ?? '', fn);
     },
     writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
-      const { s } = await sessionFor(deps); const club = await resolveClub(deps, s, scope);
+      const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
       return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.writeClub(club, domain, key, fn, attempts) : deps.legacy(feature, club ?? '', ctx => fn(ctx, key));
     },
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
@@ -114,4 +122,14 @@ export const clubDispatch = createClubDispatcher({
   },
   open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx),
   lookup: async (ctx, kind, id) => (await import('./groupSessionLive')).lookupEntityClub(ctx, kind, id),
+  store: {
+    load: p => JSON.parse(localStorage.getItem(`ignite.groupOwners.${p}`) ?? '{}'),
+    save: (p, o) => localStorage.setItem(`ignite.groupOwners.${p}`, JSON.stringify(o)),
+  },
 });
+
+/** Sign-out: forget this device's entity→club answers for the principal. */
+export function wipeGroupOwnerCache(principal: string) {
+  clearGroupDispatchCache();
+  try { localStorage.removeItem(`ignite.groupOwners.${principal}`); } catch { /* no storage */ }
+}
