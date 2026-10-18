@@ -65,11 +65,14 @@ if (phase === 'activate') {
 if (phase === 'recover') {
   const cursor = process.env.QUOTA_CURSOR ?? '';
   const usage = process.env.QUOTA_USAGE_CURSOR ?? '';
-  if ([cursor, usage].some(c => /["\\\x00-\x1f]/.test(c))) throw new Error('Invalid cursor');
-  for (const store of stores) {
-    call(store, 'reconcile_upload_operations', `("${cursor}")`);
-    call(store, 'retire_upload_outcomes', `("${cursor}")`);
+  if ([cursor, usage].some(c => c.length > 512)) throw new Error('Invalid cursor length');
+  const text = value => '"' + value.replace(/["\\\x00-\x1f]/g, c => c === '"' ? '\\"' : c === '\\' ? '\\\\' : '\\' + c.charCodeAt(0).toString(16).padStart(2, '0')) + '"';
+  const selected = process.env.MEDIA_QUOTA_STORE;
+  if (selected && !stores.includes(selected)) throw new Error('Unknown recovery store');
+  for (const store of selected ? [selected] : stores) {
+    call(store, 'reconcile_upload_operations', `(${text(cursor)})`);
+    call(store, 'retire_upload_outcomes', `(${text(cursor)})`);
   }
-  call('club_domain', 'retire_media_quota_records', `("${cursor}", "${usage}")`);
+  call('club_domain', 'retire_media_quota_records', `(${text(cursor)}, ${text(usage)})`);
 }
 console.log(`Authority: ${club}. Resume failed phases; never revert an activated store to local quota.`);
