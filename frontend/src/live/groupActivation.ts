@@ -26,3 +26,7 @@ export function activationStatus(g: ActivationGates): { active: boolean; missing
 export function chooseRoute(g: ActivationGates, assigned: boolean): 'legacy' | 'group' {
   return activationStatus(g).active && assigned ? 'group' : 'legacy';
 }
+
+/** The gates this build ships with. Changing these is the switch-on step and
+ * requires the club-scoped dispatcher plus every verification above. */
+export const SHIPPED_GATES: ActivationGates = Object.freeze({ ...OFF });
