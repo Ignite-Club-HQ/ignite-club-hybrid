@@ -25,7 +25,7 @@
 - Pending sends are QueryClient-scoped; settle temp IDs from server acknowledgements, not photo presence. Why: avoid duplicates after navigation.
 - ICP images wait for restored auth, share account-scoped unlocks and retry after cooldown/foreground recovery. Why: avoid false startup failures and duplicate unlocks.
 - Documents resolve authorized/decrypted URLs, preserve extension/MIME and write WebView blobs to native cache, not HTTP downloaders. Why: raw ICP URLs contain ciphertext.
-- ICP reward writes verify caller roles against governor-configured club_domain; catalog/settings reads refresh the caller's role mirror first. Why: creating a club must not require a separate manual points-service role grant.
+- ICP rewards verify roles via governor-configured club_domain; catalog/settings reads refresh caller role mirrors first. Why: club creation needs no manual points-service grant.
 - ICP profile batches use get_profile for missing callers. Why: linked accounts retain original IDs.
 - ICP media uses uploader avatars; inbox previews use scope IDs; DM settings read/write ICP. Chat files encrypt/register before token creation. Why: silent no-ops lost device attachments.
 - Club setup reads active membership backend; saved palettes/logo count independently of entitlement; sponsor/theme saves invalidate it. Why: acknowledge free-club setup without Supabase rows in ICP.
