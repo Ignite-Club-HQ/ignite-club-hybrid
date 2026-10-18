@@ -135,6 +135,7 @@ function urlFor(n) {
   // related_id is the game event for upload reminders, otherwise the photo.
   // MediaPage opens `?photo=` in the viewer and `&comments=1` opens comments.
   if (k === "photo_prompt_reminder") return related ? `/media?event=${encodeURIComponent(related)}&upload=1` : "/media?upload=1";
+  if (k === "media_chat_photo_reminder") return related ? `/media?team=${encodeURIComponent(related)}&upload=1` : "/media?upload=1";
   if (k.startsWith("photo") || k === "comment_reply") {
     if (!related) return "/media";
     const comments = k === "photo_comment" || k === "comment_reply";

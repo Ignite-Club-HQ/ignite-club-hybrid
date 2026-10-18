@@ -965,7 +965,7 @@ persistent actor class Main(governorInit : Principal) {
                       "media_chat_photo_reminder",
                       "You shared a photo in team chat — add it to the team gallery so everyone can see it.",
                       "chat-photo-reminder-" # msg.id,
-                      ?msg.conversation_id,
+                      ?team,
                     );
                     switch (result) {
                       case (#Ok(count)) {

@@ -88,6 +88,8 @@ export async function getIcpNotificationRoute(
   if (!relatedId) return FALLBACK;
 
   switch (kind) {
+    case "media_chat_photo_reminder":
+      return `/media?team=${encodeURIComponent(relatedId)}&upload=1`;
     case "event_invite":
     case "event_cancelled":
     case "event_updated":

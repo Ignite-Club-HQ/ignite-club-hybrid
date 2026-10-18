@@ -1984,7 +1984,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func erase_account_membership(account_id : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("App admin required");
-    switch (accounts.find(func(a) = a.id == account_id)) {
+    switch (accounts.find(func(a) = a.id == account_id or a.principals.any(func(p) = Principal.toText(p) == account_id or "principal:" # Principal.toText(p) == account_id))) {
       case (?a) { eraseMembership(a.principals, a.id) };
       case null {
         // Unlinked accounts use the canonical principal:<text> key.
