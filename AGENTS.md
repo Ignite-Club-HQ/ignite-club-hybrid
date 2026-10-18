@@ -41,7 +41,7 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 (https://skills.internetcomputer.org/.well-known/skills/{name}/SKILL.md) and follow
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
-- ICP web hosting: deploy/frontend/icp.yaml + prepare-canister-dist.mjs + deploy-frontend-canister.yml. Use pinned CLI `canister settings update --add-controller --force`; fail on error. Why: balance permission; native unchanged.
+- ICP frontend deploy: start mapped canisters before auto deploy; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets and balance access.
 - Memory warnings are deterministic: static clients cannot hold secrets.
 - EOP-aware ICP CLI; never reinstall. Why: preserve data.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
