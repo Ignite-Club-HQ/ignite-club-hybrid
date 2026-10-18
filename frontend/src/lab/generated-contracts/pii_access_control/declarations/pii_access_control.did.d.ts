@@ -51,6 +51,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'emergency_shutdown' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'get_club_media_vetkey' : ActorMethod<
     [string, Uint8Array],
     { 'Ok' : Uint8Array } |
@@ -81,6 +86,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'memory_stats' : ActorMethod<
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
@@ -95,6 +105,11 @@ export interface Main {
   'purge_club_grants' : ActorMethod<
     [string],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'register_pii' : ActorMethod<
@@ -134,6 +149,11 @@ export interface Main {
   >,
   'set_competition_domain_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

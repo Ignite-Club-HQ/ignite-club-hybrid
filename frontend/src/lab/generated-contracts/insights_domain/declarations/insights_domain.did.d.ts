@@ -216,6 +216,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'get_ad_setting' : ActorMethod<[string], [] | [AppAdSetting]>,
   'get_benchmarks' : ActorMethod<
     [Array<string>],
@@ -240,6 +245,11 @@ export interface Main {
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'is_app_admin' : ActorMethod<[], boolean>,
@@ -299,6 +309,11 @@ export interface Main {
   'photo_engagement_totals' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<PhotoEngagementTotal> } |
+      { 'Err' : string }
+  >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'record_active_user' : ActorMethod<
@@ -403,6 +418,11 @@ export interface Main {
       [] | [number],
       [] | [number],
     ],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

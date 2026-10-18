@@ -62,6 +62,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'complete' : IDL.Func([IDL.Text, IDL.Text], [result_job], []),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
+    'export_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'export_state' : IDL.Func([], [result_snapshot], ['query']),
     'fail' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64)],
@@ -79,6 +84,11 @@ export const idlFactory = ({ IDL }) => {
     'grant_worker_scope' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [result_unit],
+        [],
+      ),
+    'import_club_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         [],
       ),
     'import_state' : IDL.Func([snapshot], [result_unit], []),
@@ -99,6 +109,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        [],
+      ),
     'reconcile' : IDL.Func([snapshot], [result_reconciliation], ['query']),
     'recover_expired' : IDL.Func([IDL.Nat64], [result_nat16], []),
     'recover_interrupted' : IDL.Func([], [result_nat16], []),
@@ -112,6 +127,7 @@ export const idlFactory = ({ IDL }) => {
         [result_job],
         [],
       ),
+    'set_transfer_fence' : IDL.Func([IDL.Text, IDL.Bool], [result_unit], []),
   });
 };
 
