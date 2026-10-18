@@ -1,6 +1,7 @@
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
+import Blob "mo:core/Blob";
 import Float "mo:core/Float";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
@@ -47,11 +48,86 @@ persistent actor class Main(governorInit : Principal) {
   var photoUploads : [Types.PhotoUpload];
   var photoEngagementEvents : [Types.PhotoEngagementEvent];
   var userActivity : [Types.UserActivityEntry];
+  var transferFences : [Text];
 
   transient let MAX_BATCH = 50;
   // list_user_activity is capped at this many rows per call (most-recent-first)
   // to bound message size — callers needing more must narrow since_ms/until_ms.
   transient let MAX_ACTIVITY_LIST = 500;
+
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Inspect is advisory only; the runner re-digests the source before cutover.
+  func fenceGov(caller : Principal) : Bool = not caller.equal(Principal.anonymous()) and governor.equal(caller);
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func fenceBlobHas(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(Text.encodeUtf8(needle));
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or fenceGov(caller)) return true;
+    not transferFences.any(func(c) = fenceBlobHas(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  type FenceSnapshot = { roles : [Types.RoleGrant]; engagement : [Types.EngagementCounter]; photo_uploads : [Types.PhotoUpload]; photo_events : [Types.PhotoEngagementEvent]; activity : [Types.UserActivityEntry] };
+  func fenceSnapshot(c : Text) : FenceSnapshot {
+    let rootP = photoUploads.filter(func(x) = x.club_id == c);
+    let inP = func(k : Text) : Bool = rootP.any(func(x) = x.photo_id == k);
+    { roles = roles.filter(func(x) = x.club_id == c);
+      engagement = engagementCounters.filter(func(x) = x.club_id == c);
+      photo_uploads = photoUploads.filter(func(x) = x.club_id == c);
+      photo_events = photoEngagementEvents.filter(func(x) = inP(x.photo_id));
+      activity = userActivity.filter(func(x) = x.club_id == ?c) }
+  };
+  func fenceDrop(c : Text) {
+    let rootP = photoUploads.filter(func(x) = x.club_id == c);
+    let inP = func(k : Text) : Bool = rootP.any(func(x) = x.photo_id == k);
+    roles := roles.filter(func(x) = not (x.club_id == c));
+    engagementCounters := engagementCounters.filter(func(x) = not (x.club_id == c));
+    photoUploads := photoUploads.filter(func(x) = not (x.club_id == c));
+    photoEngagementEvents := photoEngagementEvents.filter(func(x) = not (inP(x.photo_id)));
+    userActivity := userActivity.filter(func(x) = not (x.club_id == ?c));
+  };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    #Ok(to_candid (fenceSnapshot(club)))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?FenceSnapshot = from_candid (snapshot);
+    let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    let c = club;
+    let rootP = s.photo_uploads;
+    let inP = func(k : Text) : Bool = rootP.any(func(x) = x.photo_id == k);
+    if (s.roles.any(func(x) = not (x.club_id == c))
+        or s.engagement.any(func(x) = not (x.club_id == c))
+        or s.photo_uploads.any(func(x) = not (x.club_id == c))
+        or s.photo_events.any(func(x) = not (inP(x.photo_id)))
+        or s.activity.any(func(x) = not (x.club_id == ?c))) return #Err("Snapshot contains foreign records");
+    if (false) return #Err("Snapshot id collides with another club");
+    fenceDrop(club); // idempotent replace
+    roles := roles.concat(s.roles);
+    engagementCounters := engagementCounters.concat(s.engagement);
+    photoUploads := photoUploads.concat(s.photo_uploads);
+    photoEngagementEvents := photoEngagementEvents.concat(s.photo_events);
+    userActivity := userActivity.concat(s.activity);
+    #Ok(s.engagement.size())
+  };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let n = fenceSnapshot(club).engagement.size(); fenceDrop(club); #Ok(n)
+  };
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
@@ -77,6 +153,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");
     if (not roles.any(func(item) = item.user.equal(principal) and item.role == role and item.club_id == club_id and item.team_id == team_id)) {
@@ -214,6 +291,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_message_sent(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     let day = dayKey(nowMs());
     bumpCounter(club_id, day, #Message, null);
@@ -222,6 +300,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_rsvp_completed(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     let day = dayKey(nowMs());
     bumpCounter(club_id, day, #Rsvp, null);
@@ -230,18 +309,21 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_active_user(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id) or not valid(account_id)) return #Err("Invalid input");
     bumpCounter(club_id, dayKey(nowMs()), #ActiveUser, ?account_id);
     #Ok
   };
 
   public shared ({ caller }) func record_sponsor_impression(club_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     bumpCounter(club_id, dayKey(nowMs()), #SponsorImpression, null);
     #Ok
   };
 
   public shared ({ caller }) func record_sponsor_click(club_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     bumpCounter(club_id, dayKey(nowMs()), #SponsorClick, null);
     #Ok
@@ -704,6 +786,7 @@ persistent actor class Main(governorInit : Principal) {
   // view/reaction/comment totals without this canister holding any media.
 
   public shared ({ caller }) func record_photo_upload(club_id : Text, photo_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(photo_id)) return #Err("Invalid photo upload");
     photoUploads := photoUploads.concat([{ photo_id; club_id; uploaded_at_ms = nowMs() }]);

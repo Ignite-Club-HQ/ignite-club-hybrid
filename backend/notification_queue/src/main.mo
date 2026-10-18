@@ -1,6 +1,7 @@
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
+import Blob "mo:core/Blob";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
 import Nat32 "mo:core/Nat32";
@@ -59,6 +60,7 @@ persistent actor class Main(governorInit : Principal) {
   // methods below.
   var device_tokens : [Types.DeviceToken];
   var deviceVersions : [{ user : Text; platform : Text; app_version : ?Text; build_number : ?Text }];
+  var transferFences : [Text];
 
   public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
     governorOnly(caller);
@@ -84,6 +86,67 @@ persistent actor class Main(governorInit : Principal) {
   // Resolve the caller's app account id via identity_access.whoami().
   // Returns null while unconfigured or on any error — callers treat null as
   // "ownership unproven" and refuse, so inbox data fails closed.
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Inspect is advisory only; the runner re-digests the source before cutover.
+  func fenceGov(caller : Principal) : Bool = not caller.equal(Principal.anonymous()) and (switch (governor) { case (?g) g.equal(caller); case null false });
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func fenceBlobHas(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(Text.encodeUtf8(needle));
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or fenceGov(caller)) return true;
+    not transferFences.any(func(c) = fenceBlobHas(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  func scheduledFenced(id : Text) : Bool = transferFences.size() > 0 and scheduled.any(func(x) = x.id == id and (switch (x.club_id) { case (?c) isFenced(c); case null false }));
+  type FenceSnapshot = { items : [Types.Notification]; scheduled : [Types.ScheduledMessage] };
+  func fenceSnapshot(c : Text) : FenceSnapshot {
+
+    { items = items.filter(func(x) = x.club == c);
+      scheduled = scheduled.filter(func(x) = x.club_id == ?c) }
+  };
+  func fenceDrop(c : Text) {
+
+    items := items.filter(func(x) = not (x.club == c));
+    scheduled := scheduled.filter(func(x) = not (x.club_id == ?c));
+  };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    if (items.any(func(x) = x.club == club and x.status == #Processing)) return #Err("Club has notifications being delivered; retry after the worker finishes");
+    #Ok(to_candid (fenceSnapshot(club)))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?FenceSnapshot = from_candid (snapshot);
+    let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    let c = club;
+
+    if (s.items.any(func(x) = not (x.club == c))
+        or s.scheduled.any(func(x) = not (x.club_id == ?c))) return #Err("Snapshot contains foreign records");
+    if (false) return #Err("Snapshot id collides with another club");
+    fenceDrop(club); // idempotent replace
+    items := items.concat(s.items);
+    scheduled := scheduled.concat(s.scheduled);
+    #Ok(s.items.size())
+  };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not fenceGov(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let n = fenceSnapshot(club).items.size(); fenceDrop(club); #Ok(n)
+  };
+
   func callerAccountId(caller : Principal) : async ?Text {
     switch (identityAccessCanister) {
       case null { null };
