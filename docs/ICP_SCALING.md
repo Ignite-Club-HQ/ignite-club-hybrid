@@ -192,8 +192,24 @@ all participants again and restores every snapshot before restarting authority
 then stores. Bytes, hashes, allocator totals, owner-only outcomes and usage match
 the checkpoint; exactly nine more uploads fit after its one retained charge.
 This tests the local procedure, not automatic production recovery fencing.
-Transport-loss-after-commit injection, production fencing, group migration and
-mainnet/native verification remain open.
+
+The replica also discards a **client acknowledgement after real finalization**:
+the real store and quota authority commit first, then the test adapter throws.
+Owner outcome lookup, ciphertext read-back, an EOP upgrade and concurrent
+same-ID finalization retries preserve the identical result without duplicating
+bytes. Other principals cannot inspect, finalize or abort the upload. Exactly
+nine more uploads fit across both stores, proving the lost acknowledgement
+consumed one slot rather than zero or two.
+
+A separate case upgrades the store while its commit is uncertain because the
+authority is stopped. The upgrade preserves ciphertext and the no-refund fence.
+After the authority restarts, only the governor can reconcile; the test follows
+bounded journal cursors through all pages and settles exactly one uncertain
+operation. Owner retry/read-back and nine remaining allowances then succeed.
+
+These tests do **not** drop an inter-canister callback after the authority has
+committed. That failure injection, production fencing, group migration and
+mainnet/native verification remain open. No production canisters were changed.
 
 1. **Membership/account discovery:** authoritative account-to-club-group index;
    page through the caller's clubs across groups, with no public membership leak.
