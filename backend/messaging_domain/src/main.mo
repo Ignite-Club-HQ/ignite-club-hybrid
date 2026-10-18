@@ -81,11 +81,6 @@ persistent actor class Main(governorInit : Principal) {
   var chatPhotoReminderLog : [Types.ChatPhotoReminderLog];
   var chatPhotoReminderSettings : PhotoReminderPolicy.Settings;
   transient var photoReminderSweepRunning = false;
-  transient let photoReminderTimer = Timer.recurringTimer<system>(#seconds(3600), func() : async () {
-    if (chatPhotoReminderSettings.enabled) {
-      ignore await sweepChatPhotoReminders(nowMs(), chatPhotoReminderSettings);
-    };
-  });
   // Governor-set notification_queue canister id for the chat notify fan-out
   // hook. Fail-closed while unset: messages send fine, no chat notifications
   // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
@@ -991,6 +986,12 @@ persistent actor class Main(governorInit : Principal) {
     #Ok({ scanned; posted; skipped });
     } finally { photoReminderSweepRunning := false };
   };
+
+  transient let _photoReminderTimer = Timer.recurringTimer<system>(#seconds(3600), func() : async () {
+    if (chatPhotoReminderSettings.enabled) {
+      ignore await sweepChatPhotoReminders(nowMs(), chatPhotoReminderSettings);
+    };
+  });
 
   func chatNotifyPreview(body : Text, attachment : ?Types.Attachment) : Text {
     if (body == "") {
