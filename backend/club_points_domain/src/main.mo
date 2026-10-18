@@ -1,6 +1,8 @@
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
+import Blob "mo:core/Blob";
+import Text "mo:core/Text";
 import Int "mo:core/Int";
 import Int32 "mo:core/Int32";
 import Nat "mo:core/Nat";
@@ -39,6 +41,7 @@ persistent actor class Main(governorInit : Principal) {
   var bulkAccessPrincipals : [Principal];
   var clubPointsSettings : [Types.ClubPointsSettings];
   var clubDomainCanister : ?Principal;
+  var transferFences : [Text];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -50,6 +53,70 @@ persistent actor class Main(governorInit : Principal) {
   func dayKey(ms : Nat64) : Text {
     let days = ms / 86_400_000;
     Nat64.toText(days)
+  };
+
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Inspect is advisory only; the runner re-digests the source before cutover.
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func blobContainsText(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(needle.encodeUtf8());
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or isGovernor(caller)) return true;
+    not transferFences.any(func(c) = blobContainsText(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  func rewardFenced(id : Text) : Bool = transferFences.size() > 0 and clubRewards.any(func(r) = r.id == id and isFenced(r.club_id));
+  func redemptionFenced(id : Text) : Bool = transferFences.size() > 0 and redemptions.any(func(r) = r.id == id and isFenced(r.club_id));
+  type PointsSnapshot = { roles : [Types.RoleGrant]; history : [Types.PointsHistoryEntry]; users : [Types.UserClubPoints]; children : [Types.ChildClubPoints];
+    rewards : [Types.ClubReward]; redemptions : [Types.RewardRedemption]; cooldowns : [Types.PointsCooldown]; settings : [Types.ClubPointsSettings] };
+  func pointsSnapshot(c : Text) : PointsSnapshot = {
+    roles = roles.filter(func(x) = x.club_id == c); history = pointsHistory.filter(func(x) = x.club_id == c);
+    users = userClubPoints.filter(func(x) = x.club_id == c); children = childClubPoints.filter(func(x) = x.club_id == c);
+    rewards = clubRewards.filter(func(x) = x.club_id == c); redemptions = redemptions.filter(func(x) = x.club_id == c);
+    cooldowns = cooldowns.filter(func(x) = x.club_id == c); settings = clubPointsSettings.filter(func(x) = x.club_id == c) };
+  func dropClub(c : Text) {
+    roles := roles.filter(func(x) = x.club_id != c); pointsHistory := pointsHistory.filter(func(x) = x.club_id != c);
+    userClubPoints := userClubPoints.filter(func(x) = x.club_id != c); childClubPoints := childClubPoints.filter(func(x) = x.club_id != c);
+    clubRewards := clubRewards.filter(func(x) = x.club_id != c); redemptions := redemptions.filter(func(x) = x.club_id != c);
+    cooldowns := cooldowns.filter(func(x) = x.club_id != c); clubPointsSettings := clubPointsSettings.filter(func(x) = x.club_id != c);
+  };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    #Ok(to_candid (pointsSnapshot(club)))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?PointsSnapshot = from_candid (snapshot);
+    let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (s.roles.any(func(x) = x.club_id != club) or s.history.any(func(x) = x.club_id != club) or s.users.any(func(x) = x.club_id != club)
+        or s.children.any(func(x) = x.club_id != club) or s.rewards.any(func(x) = x.club_id != club) or s.redemptions.any(func(x) = x.club_id != club)
+        or s.cooldowns.any(func(x) = x.club_id != club) or s.settings.any(func(x) = x.club_id != club)) return #Err("Snapshot contains foreign records");
+    if (s.history.any(func(e) = pointsHistory.any(func(x) = x.id == e.id and x.club_id != club))
+        or s.rewards.any(func(e) = clubRewards.any(func(x) = x.id == e.id and x.club_id != club))
+        or s.redemptions.any(func(e) = redemptions.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    dropClub(club); // idempotent replace
+    roles := roles.concat(s.roles); pointsHistory := pointsHistory.concat(s.history); userClubPoints := userClubPoints.concat(s.users);
+    childClubPoints := childClubPoints.concat(s.children); clubRewards := clubRewards.concat(s.rewards); redemptions := redemptions.concat(s.redemptions);
+    cooldowns := cooldowns.concat(s.cooldowns); clubPointsSettings := clubPointsSettings.concat(s.settings);
+    #Ok(s.history.size())
+  };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let n = pointsHistory.size(); dropClub(club); #Ok(n - pointsHistory.size())
   };
 
   func isGovernor(caller : Principal) : Bool {
@@ -86,6 +153,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func refresh_club_roles(club_id : Text) : async { #Ok; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
     await syncClubRoles(caller, club_id)
@@ -180,6 +248,7 @@ persistent actor class Main(governorInit : Principal) {
     season_id : ?Text,
     daily_cap : ?Nat32,
   ) : async { #Ok : Types.PointsHistoryEntry; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(action_type) or not valid(scope_id) or not validDesc(description) or amount == 0) return #Err("Invalid award");
     if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
@@ -239,6 +308,7 @@ persistent actor class Main(governorInit : Principal) {
     source_id : ?Text,
     season_id : ?Text,
   ) : async { #Ok : Types.PointsHistoryEntry; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(action_type) or not valid(scope_id) or not validDesc(description) or amount == 0) return #Err("Invalid award");
     if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
@@ -301,6 +371,7 @@ persistent actor class Main(governorInit : Principal) {
     points_icon_url : ?Text,
     disable_team_pom_rewards : Bool,
   ) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
     switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
@@ -435,6 +506,7 @@ persistent actor class Main(governorInit : Principal) {
     is_default : Bool, reward_type : Text, logo_url : ?Text, show_qr_code : Bool,
     sponsor_id : ?Text, team_id : ?Text,
   ) : async { #Ok : Types.ClubReward; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not valid(reward_type)) return #Err("Invalid reward");
     switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
@@ -470,6 +542,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_reward(id : Text) : async { #Ok; #Err : Text } {
+    if (rewardFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (clubRewards.find(func(item) = item.id == id)) {
       case null #Err("Reward not found");
@@ -502,6 +575,7 @@ persistent actor class Main(governorInit : Principal) {
   // "pending" pending admin verification (verified_by/verified_at/redeemed_at
   // mirror the Supabase columns).
   public shared ({ caller }) func redeem_reward(club_id : Text, subject : Types.Subject, reward_id : Text, idempotency_key : ?Text) : async { #Ok : Types.RewardRedemption; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     let selfOk = switch (subject) {
       case (#User(uid)) isSelfUser(caller, uid) or isClubAdminOrCoach(caller, club_id);
@@ -560,6 +634,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func approve_redemption(id : Text) : async { #Ok : Types.RewardRedemption; #Err : Text } {
+    if (redemptionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireRedemptionAdmin(caller, id)) {
       case (#Err(e)) #Err(e);
@@ -573,6 +648,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func fulfill_redemption(id : Text) : async { #Ok : Types.RewardRedemption; #Err : Text } {
+    if (redemptionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireRedemptionAdmin(caller, id)) {
       case (#Err(e)) #Err(e);
@@ -589,6 +665,7 @@ persistent actor class Main(governorInit : Principal) {
   // Cancelling refunds the spent points back to the subject's balance and
   // logs a compensating positive points_history entry.
   public shared ({ caller }) func cancel_redemption(id : Text) : async { #Ok : Types.RewardRedemption; #Err : Text } {
+    if (redemptionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireRedemptionAdmin(caller, id)) {
       case (#Err(e)) #Err(e);

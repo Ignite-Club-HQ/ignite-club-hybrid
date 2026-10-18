@@ -1,6 +1,8 @@
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
+import Blob "mo:core/Blob";
+import Text "mo:core/Text";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
@@ -42,6 +44,7 @@ persistent actor class Main(governorInit : Principal) {
   var children : [Types.MiniLeagueChild];
   var guardians : [Types.MiniLeagueGuardian];
   var clubDomainCanister : ?Principal;
+  var transferFences : [Text];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -53,6 +56,99 @@ persistent actor class Main(governorInit : Principal) {
   func validDutyStatus(value : Text) : Bool { value == "open" or value == "claimed" or value == "completed" };
   func validAvailabilityStatus(value : Text) : Bool { value == "available" or value == "unavailable" or value == "maybe" };
   func validInviteStatus(value : Text) : Bool { value == "pending" or value == "claimed" };
+
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // Inspect is advisory only; the runner re-digests the source before cutover.
+  func isFenced(club : Text) : Bool = transferFences.any(func(c) = c == club);
+  func blobContainsText(hay : Blob, needle : Text) : Bool {
+    let h = Blob.toArray(hay); let n = Blob.toArray(needle.encodeUtf8());
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) { var j = 0; while (j < n.size() and h[i + j] == n[j]) j += 1; if (j == n.size()) return true; i += 1 };
+    false
+  };
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (transferFences.size() == 0 or isGovernor(caller)) return true;
+    not transferFences.any(func(c) = blobContainsText(arg, c))
+  };
+  public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    transferFences := transferFences.filter(func(c) = c != club);
+    if (fenced) transferFences := transferFences.concat([club]);
+    #Ok
+  };
+  func leagueFenced(id : Text) : Bool = transferFences.size() > 0 and leagues.any(func(l) = l.id == id and isFenced(l.club_id));
+  func sessionFenced(id : Text) : Bool = transferFences.size() > 0 and sessions.any(func(s) = s.id == id and leagueFenced(s.mini_league_id));
+  func groupFenced(id : Text) : Bool = transferFences.size() > 0 and groups.any(func(g) = g.id == id and sessionFenced(g.session_id));
+  func playerFenced(id : Text) : Bool = transferFences.size() > 0 and players.any(func(p) = p.id == id and leagueFenced(p.mini_league_id));
+  func dutyFenced(id : Text) : Bool = transferFences.size() > 0 and duties.any(func(d) = d.id == id and groupFenced(d.group_id));
+  type LeagueSnapshot = { roles : [Types.RoleGrant]; leagues : [Types.MiniLeague]; sessions : [Types.MiniLeagueSession]; players : [Types.MiniLeaguePlayer];
+    invites : [Types.MiniLeagueInvite]; groups : [Types.MiniLeagueGroup]; group_players : [Types.MiniLeagueGroupPlayer]; duties : [Types.MiniLeagueGroupDuty];
+    availability : [Types.MiniLeagueSessionAvailability]; admins : [Types.MiniLeagueAdmin]; join_links : [Types.MiniLeagueJoinLink];
+    children : [Types.MiniLeagueChild]; guardians : [Types.MiniLeagueGuardian] };
+  func leagueSnapshot(c : Text) : LeagueSnapshot {
+    let ls = leagues.filter(func(x) = x.club_id == c);
+    let inL = func(id : Text) : Bool = ls.any(func(l) = l.id == id);
+    let ss = sessions.filter(func(x) = inL(x.mini_league_id));
+    let inS = func(id : Text) : Bool = ss.any(func(s) = s.id == id);
+    let gs = groups.filter(func(x) = inS(x.session_id));
+    let inG = func(id : Text) : Bool = gs.any(func(g) = g.id == id);
+    let ps = players.filter(func(x) = inL(x.mini_league_id));
+    let kids = children.filter(func(k) = ps.any(func(p) = p.child_id == ?k.id));
+    { roles = roles.filter(func(x) = x.club_id == c); leagues = ls; sessions = ss; players = ps;
+      invites = invites.filter(func(x) = inL(x.mini_league_id)); groups = gs; group_players = groupPlayers.filter(func(x) = inG(x.group_id));
+      duties = duties.filter(func(x) = inG(x.group_id)); availability = availability.filter(func(x) = inS(x.session_id));
+      admins = admins.filter(func(x) = inL(x.mini_league_id)); join_links = joinLinks.filter(func(x) = inL(x.mini_league_id));
+      children = kids; guardians = guardians.filter(func(g) = kids.any(func(k) = k.id == g.child_id)) }
+  };
+  // Children/guardians are person records shared across leagues: copied (upserted), never purged.
+  func dropLeagueClub(c : Text) {
+    let s = leagueSnapshot(c);
+    let inL = func(id : Text) : Bool = s.leagues.any(func(l) = l.id == id);
+    let inS = func(id : Text) : Bool = s.sessions.any(func(x) = x.id == id);
+    let inG = func(id : Text) : Bool = s.groups.any(func(x) = x.id == id);
+    roles := roles.filter(func(x) = x.club_id != c); leagues := leagues.filter(func(x) = x.club_id != c);
+    sessions := sessions.filter(func(x) = not inL(x.mini_league_id)); players := players.filter(func(x) = not inL(x.mini_league_id));
+    invites := invites.filter(func(x) = not inL(x.mini_league_id)); groups := groups.filter(func(x) = not inS(x.session_id));
+    groupPlayers := groupPlayers.filter(func(x) = not inG(x.group_id)); duties := duties.filter(func(x) = not inG(x.group_id));
+    availability := availability.filter(func(x) = not inS(x.session_id)); admins := admins.filter(func(x) = not inL(x.mini_league_id));
+    joinLinks := joinLinks.filter(func(x) = not inL(x.mini_league_id));
+  };
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before export");
+    #Ok(to_candid (leagueSnapshot(club)))
+  };
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?LeagueSnapshot = from_candid (snapshot);
+    let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    let inL = func(id : Text) : Bool = s.leagues.any(func(l) = l.id == id);
+    let inS = func(id : Text) : Bool = s.sessions.any(func(x) = x.id == id);
+    let inG = func(id : Text) : Bool = s.groups.any(func(x) = x.id == id);
+    if (s.roles.any(func(x) = x.club_id != club) or s.leagues.any(func(x) = x.club_id != club)
+        or s.sessions.any(func(x) = not inL(x.mini_league_id)) or s.players.any(func(x) = not inL(x.mini_league_id))
+        or s.invites.any(func(x) = not inL(x.mini_league_id)) or s.admins.any(func(x) = not inL(x.mini_league_id))
+        or s.join_links.any(func(x) = not inL(x.mini_league_id)) or s.groups.any(func(x) = not inS(x.session_id))
+        or s.availability.any(func(x) = not inS(x.session_id)) or s.group_players.any(func(x) = not inG(x.group_id))
+        or s.duties.any(func(x) = not inG(x.group_id))) return #Err("Snapshot contains foreign records");
+    if (s.leagues.any(func(e) = leagues.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    dropLeagueClub(club);
+    roles := roles.concat(s.roles); leagues := leagues.concat(s.leagues); sessions := sessions.concat(s.sessions); players := players.concat(s.players);
+    invites := invites.concat(s.invites); groups := groups.concat(s.groups); groupPlayers := groupPlayers.concat(s.group_players);
+    duties := duties.concat(s.duties); availability := availability.concat(s.availability); admins := admins.concat(s.admins);
+    joinLinks := joinLinks.concat(s.join_links);
+    children := children.filter(func(k) = not s.children.any(func(y) = y.id == k.id)).concat(s.children);
+    guardians := guardians.filter(func(g) = not s.guardians.any(func(y) = y.child_id == g.child_id and y.guardian_user_id.equal(g.guardian_user_id))).concat(s.guardians);
+    #Ok(s.leagues.size())
+  };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let n = leagues.size(); dropLeagueClub(club); #Ok(n - leagues.size())
+  };
 
   func isGovernor(caller : Principal) : Bool { not caller.equal(Principal.anonymous()) and governor.equal(caller) };
   func hasRole(caller : Principal, role : Text, club : Text, team : ?Text) : Bool {
@@ -173,6 +269,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Mini-leagues ----------------
 
   public shared ({ caller }) func create_mini_league(club_id : Text, name : Text, description : ?Text, logo_url : ?Text, team_size : Nat16, min_players_per_side : Nat16, minutes_per_half : Nat16, bib_colors : [Text], show_matches_to_members : Bool) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not validOpt(description, 2000) or not validOpt(logo_url, 512)) return #Err("Invalid mini-league");
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
@@ -187,6 +284,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_mini_league(id : Text, name : Text, description : ?Text, logo_url : ?Text, team_size : Nat16, min_players_per_side : Nat16, minutes_per_half : Nat16, bib_colors : [Text], show_matches_to_members : Bool) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    if (leagueFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, id)) {
       case (#Err(e)) #Err(e);
@@ -200,6 +298,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_mini_league_status(id : Text, status : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    if (leagueFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validLeagueStatus(status)) return #Err("Invalid status");
     switch (requireLeagueAdmin(caller, id)) {
@@ -305,6 +404,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Sessions ----------------
 
   public shared ({ caller }) func create_session(mini_league_id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -323,6 +423,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_session(id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, id)) {
       case (#Err(e)) #Err(e);
@@ -338,6 +439,7 @@ persistent actor class Main(governorInit : Principal) {
   // Cancellation kept separate from update_session, mirroring
   // set_event_cancelled, so cancelling cannot clobber other fields.
   public shared ({ caller }) func cancel_session(id : Text) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, id)) {
       case (#Err(e)) #Err(e);
@@ -350,6 +452,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_session_status(id : Text, status : Text) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validSessionStatus(status)) return #Err("Invalid status");
     switch (requireSessionAdmin(caller, id)) {
@@ -375,6 +478,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Players ----------------
 
   public shared ({ caller }) func add_player(mini_league_id : Text, name : Text, child_id : ?Text, parent_user_id : ?Text, ability_rating : ?Nat16, notes : ?Text) : async { #Ok : Types.MiniLeaguePlayer; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -402,6 +506,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_player(id : Text, name : Text, ability_rating : ?Nat16, notes : ?Text) : async { #Ok : Types.MiniLeaguePlayer; #Err : Text } {
+    if (playerFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (findPlayer(id)) {
       case null #Err("Player not found");
@@ -420,6 +525,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_player(id : Text) : async { #Ok; #Err : Text } {
+    if (playerFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (findPlayer(id)) {
       case null #Err("Player not found");
@@ -526,6 +632,7 @@ persistent actor class Main(governorInit : Principal) {
   // player row (second-parent invites); otherwise a new player is created on
   // claim (primary parent join-link flow).
   public shared ({ caller }) func create_invite(mini_league_id : Text, player_id : ?Text, label_text : ?Text) : async { #Ok : Types.MiniLeagueInvite; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -598,6 +705,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Groups ----------------
 
   public shared ({ caller }) func create_group(session_id : Text, name : Text, ability_band : ?Text, display_order : Nat16, target_size : Nat16, pitch_name : ?Text) : async { #Ok : Types.MiniLeagueGroup; #Err : Text } {
+    if (sessionFenced(session_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, session_id)) {
       case (#Err(e)) #Err(e);
@@ -615,6 +723,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_group(id : Text, name : Text, ability_band : ?Text, display_order : Nat16, target_size : Nat16, pitch_name : ?Text) : async { #Ok : Types.MiniLeagueGroup; #Err : Text } {
+    if (groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, id)) {
       case (#Err(e)) #Err(e);
@@ -628,6 +737,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func assign_player_to_group(group_id : Text, player_id : Text, jersey_number : ?Nat16) : async { #Ok : Types.MiniLeagueGroupPlayer; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
       case (#Err(e)) #Err(e);
@@ -642,6 +752,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func unassign_player_from_group(group_id : Text, player_id : Text) : async { #Ok; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
       case (#Err(e)) #Err(e);
@@ -690,6 +801,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Group duties ----------------
 
   public shared ({ caller }) func create_duty(group_id : Text, name : Text, points : ?Nat16) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
       case (#Err(e)) #Err(e);
@@ -710,6 +822,7 @@ persistent actor class Main(governorInit : Principal) {
   // claim an open duty for a player — mirrors the member-facing duty claim
   // flow in EventDutiesSection/MatchDutiesDialog.
   public shared ({ caller }) func claim_duty(id : Text, player_id : Text) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    if (dutyFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (duties.find(func(item) = item.id == id)) {
       case null #Err("Duty not found");
@@ -741,6 +854,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func complete_duty(id : Text, points_awarded : Bool) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    if (dutyFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (duties.find(func(item) = item.id == id)) {
       case null #Err("Duty not found");
@@ -783,6 +897,7 @@ persistent actor class Main(governorInit : Principal) {
   // a player) or the claimed parent of that player, mirroring the
   // events_domain set_rsvp guard shape.
   public shared ({ caller }) func set_availability(session_id : Text, player_id : Text, status : Text) : async { #Ok : Types.MiniLeagueSessionAvailability; #Err : Text } {
+    if (sessionFenced(session_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validAvailabilityStatus(status)) return #Err("Invalid availability status");
     switch (findSession(session_id)) {
@@ -851,6 +966,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Admins ----------------
 
   public shared ({ caller }) func add_admin(mini_league_id : Text, user_id : Principal) : async { #Ok : Types.MiniLeagueAdmin; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -865,6 +981,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_admin(mini_league_id : Text, user_id : Principal) : async { #Ok; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -889,6 +1006,7 @@ persistent actor class Main(governorInit : Principal) {
   func validJoinLinkRole(value : Text) : Bool { value == "player" or value == "admin" };
 
   public shared ({ caller }) func create_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -911,6 +1029,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func rotate_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -929,6 +1048,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func revoke_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -1018,6 +1138,7 @@ persistent actor class Main(governorInit : Principal) {
   // and their players/duties, availability, invites, admins, join links).
   // Mirrors the Supabase mini_leagues delete, which cascades via FK.
   public shared ({ caller }) func delete_mini_league(mini_league_id : Text) : async { #Ok; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
@@ -1050,6 +1171,7 @@ persistent actor class Main(governorInit : Principal) {
   // id. Sessions, groups, duties and availability are not copied — they are
   // per-session state, same as the Supabase duplicateLeagueMutation.
   public shared ({ caller }) func duplicate_mini_league(mini_league_id : Text, new_name : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
