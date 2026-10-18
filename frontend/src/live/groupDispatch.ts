@@ -47,6 +47,11 @@ export const clubDispatch = createClubDispatcher({
   gates: () => SHIPPED_GATES,
   legacy: async (feature, icp) => (await import('./featureRouter')).withFeatureBackend(feature, {
     supabase: () => { throw new Error('Club-scoped dispatch is ICP-only'); }, icp }),
-  context: async () => { throw new Error('Group routing is switched off'); },
-  open: async () => { throw new Error('Group routing is switched off'); },
+  context: async () => {
+    const [{ getCurrentInternetIdentityConfirmed }, { getActiveIcpTarget }] = await Promise.all([import('./internetIdentityAuth'), import('./targetRegistry')]);
+    const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
+    if (!identity) throw new Error('Sign in again to continue.');
+    return { identity, target: getActiveIcpTarget() };
+  },
+  open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx),
 });

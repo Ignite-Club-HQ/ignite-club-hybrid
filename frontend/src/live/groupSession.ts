@@ -120,6 +120,8 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const inflight = new Map<string, Promise<unknown>>();
   const api = {
     clubIds: [...clubs].sort(),
+    /** True when this member's club has a group assignment in the registry. */
+    isAssigned(clubId: string) { return clubs.has(clubId); },
     dispose() { disposed = true; },
     async readClub<T>(clubId: string, domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
