@@ -357,6 +357,21 @@ export async function setLiveCompetitionWelcomeEmail(
   );
 }
 
+/**
+ * Registers a pending welcome email for an official email invite. The
+ * canister only accepts it while the competition's welcome settings are
+ * enabled and the invite is still pending; the recipient address is stored
+ * on-chain so delivery never trusts the browser for it.
+ */
+export async function registerLiveCompetitionWelcomeJob(
+  ctx: FeatureBackendContext,
+  token: string,
+  to: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.register_competition_welcome_job(token, to), "Register competition welcome email");
+}
+
 export async function setLiveCompetitionChatSettings(
   ctx: FeatureBackendContext,
   competitionId: string,

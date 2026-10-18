@@ -160,6 +160,14 @@ export default function CompetitionOfficialJoinPage() {
           icp: async (ctx) => {
             const emailHash = await hashOfficialInviteEmail(token, inviteEmail.trim());
             const grant = await acceptLiveCompetitionOfficialEmailInvite(ctx, token, emailHash, codeHash);
+            // Best-effort: the delivery service re-reads the recipient and
+            // message from the canister, so a failed send never fails the join.
+            try {
+              const { error: welcomeError } = await supabase.functions.invoke("send-welcome-email-icp", { body: { competitionWelcomeToken: token } });
+              if (welcomeError) console.error("[welcome-email] competition delivery request failed", welcomeError);
+            } catch (welcomeError) {
+              console.error("[welcome-email] competition delivery request failed", welcomeError);
+            }
             return { status: "joined", competition_id: grant.competition_id, role: grant.role };
           },
         });

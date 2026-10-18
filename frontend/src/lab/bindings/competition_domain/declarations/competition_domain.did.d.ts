@@ -316,6 +316,19 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_competition_welcome_email' : ActorMethod<[string], Result>,
+  'get_competition_welcome_email_job' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'to' : string,
+          'subject' : string,
+          'competition_name' : string,
+          'message' : string,
+          'competition_id' : string,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'get_eoi_stats' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : EoiStats } |
@@ -497,6 +510,11 @@ export interface Main {
   'record_match' : ActorMethod<
     [string, string, string],
     { 'Ok' : Match } |
+      { 'Err' : string }
+  >,
+  'register_competition_welcome_job' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'register_team' : ActorMethod<

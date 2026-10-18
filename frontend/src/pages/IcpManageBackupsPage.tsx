@@ -80,8 +80,14 @@ export default function IcpManageBackupsPage() {
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 5000);
           } else if (kind === "restore") {
-            await v.restoreLiveVaultBackup(ctx, id);
-            toast.success("Backup restored");
+            const report = await v.restoreLiveVaultBackupWithMedia(ctx, id);
+            if (report.missingBytes.length > 0) {
+              toast.warning(
+                `Restored ${report.restoredRows} records, but ${report.missingBytes.length} media file${report.missingBytes.length === 1 ? "" : "s"} no longer have their encrypted bytes stored and cannot be recovered.`,
+              );
+            } else {
+              toast.success(`Backup restored: ${report.restoredRows} records, ${report.grantsRepaired} media access grants repaired`);
+            }
           } else {
             await v.deleteLiveVaultBackup(ctx, id);
             toast.success("Backup deleted");
