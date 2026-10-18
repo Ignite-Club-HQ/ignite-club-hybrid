@@ -52,7 +52,7 @@ describe("per-surface vault lifecycle wiring", () => {
       });
 
       it("mirrors only on confirmed delivery", () => {
-        expect(src).toMatch(/isConfirmedDelivery\([\s\S]{0,40}\)\s*\)?\s*syncSendToVault\(/);
+        expect(src).toMatch(/isConfirmedDelivery\([\s\S]{0,40}\)\s*\)?\s*(?:\{\s*)?syncSendToVault\(/);
       });
 
       it("marks the offline queue path as queued acceptance", () => {
