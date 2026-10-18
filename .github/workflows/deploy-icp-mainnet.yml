@@ -43,7 +43,10 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install deploy tools (icp CLI, ic-wasm for the recipes, mops for Motoko)
-        run: npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
+        # 1.7.0 sends wasm_memory_persistence=keep for detected Motoko EOP upgrades.
+        run: |
+          npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
+          icp --version
 
       - name: Restore or create deployer identity
         env:

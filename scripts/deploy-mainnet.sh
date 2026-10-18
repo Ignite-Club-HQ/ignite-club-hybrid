@@ -27,6 +27,15 @@ cd "$PROJECT_DIR"
 
 echo "==> Checking icp CLI"
 command -v icp >/dev/null || { echo "icp CLI not found. Install: npm i -g @icp-sdk/icp-cli @icp-sdk/ic-wasm ic-mops"; exit 1; }
+# Modern icp deploy auto-detects EOP and sends wasm_memory_persistence=keep.
+# Reject older tools before any deploy rather than risking IC0504 or data loss.
+INSTALL_HELP="$(icp canister install --help)"
+if ! grep -q -- '--wasm-memory-persistence' <<< "$INSTALL_HELP"; then
+  echo "ERROR: this icp CLI lacks EOP memory-preserving upgrade support."
+  echo "Install @icp-sdk/icp-cli@1.7.0 and re-run; do not reinstall canisters."
+  exit 1
+fi
+icp --version
 
 echo "==> Checking identity"
 CURRENT="$(icp identity principal)"
@@ -41,7 +50,9 @@ fi
 echo "==> Deploying all 18 canisters to $DEPLOY_TARGET (this funds them from your cycles balance)"
 # 1T cycles per canister (18T total) fits a ~8 ICP budget with headroom; top up later as needed.
 # -y skips interactive candid/confirmation prompts so this runs unattended in CI.
-icp deploy -e "$ICP_ENV" -y --cycles 1000000000000
+# Auto installs new canisters and upgrades existing ones, preserving EOP memory.
+# Never fall back to reinstall or wasm-memory-persistence=replace on failure.
+icp deploy -e "$ICP_ENV" -y --mode auto --cycles 1000000000000
 
 [ -f "$IDS_JSON" ] || { echo "ERROR: $IDS_JSON not found after deploy"; exit 1; }
 

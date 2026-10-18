@@ -43,6 +43,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - Web hosting: separate ICP assets project deploy/frontend/icp.yaml, prepared by prepare-canister-dist.mjs and deployed by deploy-frontend-canister.yml. Why: no Netlify dependency; native bundles unchanged.
 - Memory uses deterministic warnings, not AI: static clients cannot hold secrets.
+- Deploy with EOP-aware ICP CLI; never reinstall. Why: keep canister data.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
 
 - ICP MCP OQL shares a bounded read-only interpreter; domain fields are allowlisted and caller authorization precedes filters, counts and paging. No self-calls. Why: preserve identity and prevent private-row/count leakage.
