@@ -38,6 +38,7 @@ import { listLiveClubs } from "@/live/features/club";
 import { listLiveRoleGrants } from "@/live/features/membership";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { batchRecipientIds } from "@/live/features/notificationBatching";
+import { targetUpdateRecipients } from "@/lib/updateReminderTargeting";
 
 export default function SendUpdateReminderPage() {
   const useIcpLab = isFeatureRoutedToIcp("notifications");
@@ -55,6 +56,32 @@ function IcpSendUpdateReminderPage() {
     "A new version of the app is available. Please update to continue using all features.",
   );
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [platform, setPlatform] = useState("all");
+  const [version, setVersion] = useState("");
+  const [minIos, setMinIos] = useState("");
+  const [minAndroid, setMinAndroid] = useState("");
+  const [savingMinimum, setSavingMinimum] = useState(false);
+  const { data: minimums, error: minimumError } = useQuery({
+    queryKey: ["icp-minimum-app-versions"], enabled: isAppAdmin,
+    queryFn: () => withFeatureBackend("messaging", {
+      supabase: async () => { throw new Error("Internet Identity connection required"); },
+      icp: async ctx => (await import("@/live/features/messaging")).getLiveMinimumAppVersions(ctx),
+    }),
+  });
+  useEffect(() => {
+    if (minimums) { const values = Object.fromEntries(minimums); setMinIos(values.ios ?? ""); setMinAndroid(values.android ?? ""); }
+  }, [minimums]);
+  const saveMinimum = async () => {
+    if (!/^\d+(\.\d+){0,2}$/.test(minIos) || !/^\d+$/.test(minAndroid)) { toast.error("Enter an iOS version and Android build number"); return; }
+    setSavingMinimum(true);
+    try {
+      await withFeatureBackend("messaging", {
+        supabase: async () => { throw new Error("Internet Identity connection required"); },
+        icp: async ctx => (await import("@/live/features/messaging")).setLiveMinimumAppVersions(ctx, [["ios", minIos], ["android", minAndroid]]),
+      }); toast.success("Minimum versions saved");
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Save failed"); }
+    finally { setSavingMinimum(false); }
+  };
 
   const { data: clubs, isLoading: clubsLoading, error: clubsError } = useQuery({
     queryKey: ["icp-admin-clubs-list"],
@@ -81,7 +108,7 @@ function IcpSendUpdateReminderPage() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (testOnly: boolean = false) => {
       if (!isAppAdmin) throw new Error("App admin role required");
       if (!body.trim()) throw new Error("Enter a message");
       setLastResult(null);
@@ -98,9 +125,18 @@ function IcpSendUpdateReminderPage() {
             // dedupe to unique account ids before fanning out so a member
             // with several roles in the same club is notified once.
             const grants = await listLiveRoleGrants(ctx, clubId);
-            const recipientIds = Array.from(new Set(grants.map((g: { account_id: string }) =>
+            let recipientIds = Array.from(new Set(grants.map((g: { account_id: string }) =>
               g.account_id.startsWith("principal:") ? g.account_id.slice("principal:".length) : g.account_id,
             )));
+            if (testOnly) {
+              const ownId = ctx.identity.getPrincipal().toText();
+              recipientIds = recipientIds.filter(id => id === ownId);
+            } else if (platform !== "all" || version.trim()) {
+              const { getLiveUpdateReminderAudience } = await import("@/live/features/notifications");
+              const devices = [];
+              for (const ids of batchRecipientIds(recipientIds)) devices.push(...await getLiveUpdateReminderAudience(ctx, ids, clubId));
+              recipientIds = targetUpdateRecipients(recipientIds, devices, platform, version);
+            }
             const batches = batchRecipientIds(recipientIds);
             for (let i = 0; i < batches.length; i++) {
               const created = await fanOutLiveNotifications(ctx, {
@@ -169,6 +205,10 @@ function IcpSendUpdateReminderPage() {
             </Select>
           </div>
           {clubsError && <p role="alert" className="text-destructive">Could not load clubs: {clubsError.message}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Platform</Label><Select value={platform} onValueChange={setPlatform}><SelectTrigger aria-label="Platform"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All platforms</SelectItem><SelectItem value="ios">iOS</SelectItem><SelectItem value="android">Android</SelectItem><SelectItem value="web">Web</SelectItem></SelectContent></Select></div>
+            <div><Label htmlFor="icp-target-version">Version / Android build</Label><Input id="icp-target-version" value={version} onChange={e => setVersion(e.target.value)} /></div>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="icp-update-message" className="text-sm font-medium">Message</Label>
             <Input id="icp-update-message" value={body} onChange={(e) => setBody(e.target.value)} />
@@ -176,14 +216,21 @@ function IcpSendUpdateReminderPage() {
           <Button
             className="gap-1.5"
             disabled={sendMutation.isPending || clubsLoading || !!clubsError || !clubs?.length || !body.trim()}
-            onClick={() => sendMutation.mutate()}
+            onClick={() => sendMutation.mutate(false)}
           >
             <Send className="h-4 w-4" />
             {sendMutation.isPending ? "Sending..." : "Send Update Reminder"}
           </Button>
+          <Button variant="outline" disabled={sendMutation.isPending || clubsLoading || !!clubsError} onClick={() => sendMutation.mutate(true)}><TestTube className="h-4 w-4 mr-2" />Send test to me</Button>
           {lastResult && <p className="text-sm text-muted-foreground">{lastResult}</p>}
         </CardContent>
       </Card>
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Minimum app versions</h2>
+        {minimumError && <p role="alert" className="text-destructive">{minimumError.message}</p>}
+        <div className="grid grid-cols-2 gap-3"><div><Label htmlFor="icp-min-ios">iOS minimum version</Label><Input id="icp-min-ios" value={minIos} onChange={e => setMinIos(e.target.value)} /></div><div><Label htmlFor="icp-min-android">Android minimum build</Label><Input id="icp-min-android" value={minAndroid} onChange={e => setMinAndroid(e.target.value)} /></div></div>
+        <Button disabled={savingMinimum || !!minimumError} onClick={saveMinimum}><Save className="h-4 w-4 mr-2" />Save minimum versions</Button>
+      </section>
     </div>
   );
 }

@@ -17,14 +17,14 @@ describe("AdminChatPhotoRemindersPage ICP wiring", () => {
     expect(chatPhotoSource).not.toContain("isFeatureRoutedToIcp");
   });
 
-  it("reads settings via a dynamically-imported getLiveAppSetting inside withFeatureBackend", () => {
-    expect(chatPhotoSource).toContain('withFeatureBackend("admin"');
-    expect(chatPhotoSource).toContain('await import("@/live/features/appSettings")');
-    expect(chatPhotoSource).toContain("getLiveAppSetting(ctx, SETTING_KEY)");
+  it("reads the scheduler-owned settings instead of an unrelated settings store", () => {
+    expect(chatPhotoSource).toContain('withFeatureBackend("messaging"');
+    expect(chatPhotoSource).toContain('await import("@/live/features/messaging")');
+    expect(chatPhotoSource).toContain("getLiveChatPhotoReminderSettings(ctx)");
   });
 
-  it("writes settings via a dynamically-imported setLiveAppSetting inside withFeatureBackend", () => {
-    expect(chatPhotoSource).toContain("setLiveAppSetting(ctx, SETTING_KEY, form)");
+  it("writes the scheduler-owned settings", () => {
+    expect(chatPhotoSource).toContain("setLiveChatPhotoReminderSettings(ctx, form)");
   });
 });
 

@@ -1,0 +1,12 @@
+import Policy "../src/photoReminderPolicy";
+let settings : Policy.Settings = { enabled = true; window_start_hours = 24; window_end_hours = 48; cooldown_days = 7 };
+let now : Nat64 = 1_000_000_000;
+assert Policy.eligible(settings, now - 24 * 3_600_000, now, null);
+assert Policy.eligible(settings, now - 48 * 3_600_000, now, null);
+assert not Policy.eligible(settings, now - 23 * 3_600_000, now, null);
+assert not Policy.eligible(settings, now - 49 * 3_600_000, now, null);
+assert not Policy.eligible({ settings with enabled = false }, now - 24 * 3_600_000, now, null);
+assert not Policy.eligible(settings, now - 24 * 3_600_000, now, ?(now - 6 * 86_400_000));
+assert Policy.eligible(settings, now - 24 * 3_600_000, now, ?(now - 7 * 86_400_000));
+assert not Policy.valid({ settings with window_end_hours = 169 });
+assert not Policy.valid({ settings with cooldown_days = 0 });

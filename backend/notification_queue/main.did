@@ -206,6 +206,18 @@ type Main =
            key: text;
            team: opt text;
          }) query;
+   get_update_reminder_audience: (users: vec text, club: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           app_version: opt text;
+           build_number: opt text;
+           platform: text;
+           user: text;
+         };
+     });
    grant_worker: ("principal": principal) -> (variant {
                                                 Err: text;
                                                 Ok;
@@ -244,6 +256,11 @@ type Main =
                           Err: text;
                           Ok;
                         });
+   register_device_version: (platform: text, app_version: opt text,
+    build_number: opt text) -> (variant {
+                                  Err: text;
+                                  Ok;
+                                });
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;

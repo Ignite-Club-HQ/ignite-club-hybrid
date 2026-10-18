@@ -1,8 +1,13 @@
 ## Codespaces ICP coverage — first tranche
+- [x] Batch 11 implemented: automatic photo reminders, on-chain settings, minimum-version controls, platform/version/test-send targeting, guarded admin membership removal, privileged multi-domain exports, push-worker response repair; focused checks pass.
+- [ ] Closure remains incomplete: complete restorable backups/media bytes, competition welcome email job/recipient path, per-user content purge and complete-suite failures need implementation (not credential-only blockers).
 - [x] Batch 10: update-reminder admin/club audience verification in fan_out AND enqueue; canonical recipient IDs; executable authorization and dual-mode frontend tests pass; contracts unchanged.
 - [x] Batch 9: admin gates and failed-read feedback repaired; AI rollout, vault metadata backup CRUD/downloads, reminder queue counts and guide downloads tested (32 tests pass in each mode).
 - [x] Competition welcome settings on-chain; photo reminder Run now enabled and behavior-tested; canister reachability tests verified.
-- [ ] Remaining admin tools: comprehensive backup scope (ICP currently backs up vault metadata only), update-reminder platform/version metadata and audience API, minimum-version/test-send parity. Photo reminder automatic cadence and competition email delivery still need completion.
+- [x] Automatic photo reminders: persisted settings, hourly non-reentrant sweep, age/cooldown policy tests and gallery-upload tap route.
+- [x] Update reminder platform/version audience API, minimum-version controls and self-only test send; registered version data is device-reported, not attested.
+- [ ] Backups remain partial: seven privileged domain exports + restorable vault metadata; no complete club configuration/media-byte recovery. Existing governor restrictions preserved.
+- [ ] Competition welcome email delivery: authoritative acceptance recipient/job path still missing; settings alone do not deliver emails.
 - [x] Pitch-board alerts: real club scope, role flags, match Subs Manager/group duties; linked-event reads on-chain, formation alerts omit child names. Dual-mode tests pass.
 - [ ] Verify pitch-board delivery/tapping signed in — needs deployed app/canisters and a real Internet Identity session.
 - [x] Verify and repair ordinary-member public competition fixtures in both test modes (three real errors fixed).
@@ -15,9 +20,11 @@
 - [x] Batch 5: calendar-month recurrence and explicit attachment/end-date clearing implemented; focused tests pass in both modes and executable Motoko tests pass. Requires notification_queue upgrade; live delivery remains unverified.
 - [x] Schedule completion code: validate every recipient on-canister; poll actual caller-scoped refresh signals rather than blindly invalidating. Focused tests pass; deployed timer/read-back still blocked below.
 - [x] Requested batch code: self-service identity deletion revokes club roles first; ICP vault reads enabled; gallery publication decrypts and copies under its own club lock. Focused dual-mode tests pass.
-- [ ] Complete per-user data purge and admin account-deletion coverage beyond self-service — vault/events/messaging records retained; shared club and parent-owned child records intentionally retained.
+- [x] Administrator identity deletion now revokes authoritative club access first; refusal blocks identity deletion; tests pass.
+- [ ] Per-user content purge remains incomplete — vault/events/messaging records remain; shared club and parent-owned child records deliberately retained.
 - [ ] Deploy updated canisters and verify signed-in scheduled delivery/read-back — requires deployer access and an Internet Identity session.
-- [ ] Remaining coverage groups and full-suite parity: not completed; exact current failures recorded in docs/ICP_COVERAGE_STEP0_RESULTS.md.
+- [x] Ran both complete suites: Supabase 80 failures / 24 files, ICP 78 failures / 31 files (mixed revision run, not final parity).
+- [ ] Complete-suite closure: fix remaining failures and rerun both against one final revision; inventory in docs/ICP_BATCH11_TEST_FAILURES.json. Selected stale mock/gallery expectations repaired and final focused run is green.
 
 ## Supabase role requests
 - [x] Fresh sorted reads and dates implemented; scoped profile policy installed with no new security warnings; 21 regression tests and preview checks pass. Genuine old requests retained.

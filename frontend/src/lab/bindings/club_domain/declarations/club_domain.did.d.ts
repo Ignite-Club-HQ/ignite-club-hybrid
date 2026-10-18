@@ -460,6 +460,11 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'erase_account_membership' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'erase_my_membership' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
   'export_frozen_club' : ActorMethod<

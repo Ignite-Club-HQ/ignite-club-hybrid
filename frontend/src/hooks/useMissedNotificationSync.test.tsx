@@ -15,6 +15,9 @@ vi.mock("@/live/authBackendMode", () => ({
   resolveAuthBackend: () => (icpMode ? "icp" : "supabase"),
 }));
 
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => icpMode ? h.icp({}) : h.supabase() }));
+vi.mock("@/live/features/notifications", () => ({ listLiveInbox: async () => [] }));
+
 import { useMissedNotificationSync } from "./useMissedNotificationSync";
 
 function notificationQuery() {

@@ -72,6 +72,13 @@ type State =
    unread: vec Unread;
    userMessagingSettings: vec UserMessagingSettings;
  };
+type Settings = 
+ record {
+   cooldown_days: nat32;
+   enabled: bool;
+   window_end_hours: nat32;
+   window_start_hours: nat32;
+ };
 type ScheduledMessage = 
  record {
    body: text;
@@ -305,6 +312,11 @@ type Main =
     (variant {
        Err: text;
        Ok: text;
+     });
+   get_chat_photo_reminder_settings: () ->
+    (variant {
+       Err: text;
+       Ok: Settings;
      });
    get_club_dm_settings: (club_id: text) -> (ClubDmSettings) query;
    get_group_join_policy: (conversation_id: text) ->
@@ -607,6 +619,11 @@ type Main =
                                             Err: text;
                                             Ok: Message;
                                           });
+   set_chat_photo_reminder_settings: (settings: Settings) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_club_ai_catch_up: (club_id: text, ai_catch_up_enabled: bool) ->
     (variant {
        Err: text;

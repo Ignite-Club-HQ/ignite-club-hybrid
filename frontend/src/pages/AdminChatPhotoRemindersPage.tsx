@@ -49,16 +49,15 @@ export default function AdminChatPhotoRemindersPage() {
 
   const { isAppAdmin, isLoading: roleLoading } = useIsAppAdmin();
 
-  const { data: settingRow, isLoading: settingsLoading } = useQuery({
+  const { data: settingRow, isLoading: settingsLoading, error: settingsError } = useQuery({
     queryKey: ["app_setting", SETTING_KEY, isIcp],
     queryFn: async () => {
       if (isIcp) {
-        return withFeatureBackend("admin", {
-          supabase: async () => null,
+        return withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("Internet Identity connection required"); },
           icp: async (ctx) => {
-            const { getLiveAppSetting } = await import("@/live/features/appSettings");
-            const raw = await getLiveAppSetting(ctx, SETTING_KEY);
-            return raw ? { value: JSON.parse(raw) } : null;
+            const { getLiveChatPhotoReminderSettings } = await import("@/live/features/messaging");
+            return { value: await getLiveChatPhotoReminderSettings(ctx) };
           },
         });
       }
@@ -95,6 +94,7 @@ export default function AdminChatPhotoRemindersPage() {
   }
 
   const validate = (): string | null => {
+    if (![form.window_start_hours, form.window_end_hours, form.cooldown_days].every(Number.isSafeInteger)) return "Enter whole numbers.";
     if (form.window_start_hours < 1) return "Window start must be at least 1 hour.";
     if (form.window_end_hours <= form.window_start_hours)
       return "Window end must be greater than window start.";
@@ -113,11 +113,11 @@ export default function AdminChatPhotoRemindersPage() {
     setSaving(true);
     try {
       if (isIcp) {
-        await withFeatureBackend("admin", {
-          supabase: async () => {},
+        await withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("Internet Identity connection required"); },
           icp: async (ctx) => {
-            const { setLiveAppSetting } = await import("@/live/features/appSettings");
-            await setLiveAppSetting(ctx, SETTING_KEY, form);
+            const { setLiveChatPhotoReminderSettings } = await import("@/live/features/messaging");
+            await setLiveChatPhotoReminderSettings(ctx, form);
           },
         });
       } else {
@@ -137,6 +137,8 @@ export default function AdminChatPhotoRemindersPage() {
   };
 
   const handleRunNow = async () => {
+    const err = validate();
+    if (err) { toast.error(err); return; }
     setRunning(true);
     let data: { scanned?: number; posted?: number; skipped?: number } | null = null;
     try {
@@ -161,7 +163,7 @@ export default function AdminChatPhotoRemindersPage() {
     }
     setRunning(false);
     toast.success(
-      `Done — scanned ${data?.scanned ?? 0}, posted ${data?.posted ?? 0}, skipped ${data?.skipped ?? 0}`,
+      `Done — scanned ${data?.scanned ?? 0}, queued ${data?.posted ?? 0}, skipped ${data?.skipped ?? 0}`,
     );
   };
 
@@ -177,6 +179,7 @@ export default function AdminChatPhotoRemindersPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {settingsError && <p role="alert" className="text-destructive">Could not load settings: {settingsError.message}</p>}
           {settingsLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (

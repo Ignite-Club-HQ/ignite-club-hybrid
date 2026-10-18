@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { BACKUP_DOMAINS } from "@/live/adminBackupExport";
 
 type Summary = { id: string; label: string; createdAt: number; files: number; folders: number };
 
@@ -102,7 +103,7 @@ export default function IcpManageBackupsPage() {
     <div className="container max-w-3xl mx-auto p-4 space-y-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back"><ArrowLeft className="h-5 w-5" /></Button>
-        <h1 className="text-xl font-semibold">Vault backups</h1>
+        <h1 className="text-xl font-semibold">Backups</h1>
       </div>
       <Card>
         <CardHeader>
@@ -142,6 +143,26 @@ export default function IcpManageBackupsPage() {
           </Card>
         ))
       )}
+      <section className="space-y-3 border-t pt-4">
+        <h2 className="text-lg font-semibold">Domain exports</h2>
+        <p className="text-sm text-muted-foreground">Privileged exports. Vault snapshots remain separately restorable. Media bytes and full club configuration are not included.</p>
+        {BACKUP_DOMAINS.map(domain => <div key={domain} className="flex items-center justify-between gap-3 border-b py-2">
+          <span className="text-sm">{domain.replaceAll("_", " ")}</span>
+          <Button variant="outline" size="icon" aria-label={`Export ${domain}`} disabled={!!busy} onClick={async () => {
+            setBusy(domain);
+            try {
+              const payload = await withFeatureBackend("vault", {
+                supabase: async () => { throw new Error("Internet Identity connection required"); },
+                icp: async ctx => (await import("@/live/adminBackupExport")).exportAdminDomain(ctx, domain),
+              });
+              const url = URL.createObjectURL(new Blob([JSON.stringify(payload, jsonSafe, 2)], { type: "application/json" }));
+              const a = document.createElement("a"); a.href = url; a.download = `${domain}-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+              setTimeout(() => URL.revokeObjectURL(url), 5000); toast.success("Export downloaded");
+            } catch (e) { toast.error(e instanceof Error ? e.message : "Export failed"); }
+            finally { setBusy(null); }
+          }}><Download className="h-4 w-4" /></Button>
+        </div>)}
+      </section>
     </div>
   );
 }

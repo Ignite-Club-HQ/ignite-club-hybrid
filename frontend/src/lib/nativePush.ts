@@ -204,9 +204,10 @@ async function saveFCMToken(userId: string, token: string): Promise<boolean> {
         console.warn('[NativePush] No Internet Identity session — cannot register device token');
         return false;
       }
+      const versionInfo = await getAppVersion();
       await registerLiveDeviceToken(
         { identity, target: getActiveIcpTarget() },
-        { platform, token },
+        { platform, token, appVersion: versionInfo?.version, buildNumber: versionInfo?.build },
       );
       console.log('[NativePush] Token registered on notification canister');
       return true;

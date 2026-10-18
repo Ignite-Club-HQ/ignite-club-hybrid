@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   from: vi.fn(),
   savePitchState: vi.fn(),
+  deactivate: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -16,6 +17,9 @@ vi.mock("../pitchStateUtils", () => ({
   savePitchState: mocks.savePitchState,
 }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
+
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => mocks.mode === "icp" ? h.icp({}) : h.supabase() }));
+vi.mock("@/live/features/events", () => ({ deactivateLiveActiveGame: mocks.deactivate }));
 
 const player = (id: string, name: string, onPitch = false): Player => ({
   id,
@@ -157,11 +161,12 @@ describe("usePitchBoardUnlinkEvent", () => {
     expect(callbacks.notifyUnlinked).toHaveBeenCalledOnce();
   });
 
-  it.runIf(mocks.mode === "icp")("persists locally and skips the unsupported active-game deactivation", async () => {
+  it.runIf(mocks.mode === "icp")("persists locally and deactivates the on-chain active game", async () => {
     const { result, args, callbacks } = setup();
     await act(async () => result.current());
     expect(mocks.savePitchState).toHaveBeenCalledWith("team-1", expect.objectContaining({ linkedEventId: null }));
     expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.deactivate).toHaveBeenCalledWith({}, "team-1");
     expect(callbacks.invalidateTeamActiveGame).toHaveBeenCalledOnce();
     expect(callbacks.notifyUnlinked).toHaveBeenCalledOnce();
     expect(callbacks.setLinkedEventId).toHaveBeenCalledWith(null);

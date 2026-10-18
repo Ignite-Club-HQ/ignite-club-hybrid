@@ -145,7 +145,7 @@ describe("MessageActionSheet characterization — permissions and safety actions
     expect(onPublishToGallery).not.toHaveBeenCalled();
   });
 
-  it.runIf(!icpMode)("prevents repeat publication while an image is publishing or already published", async () => {
+  it("prevents repeat publication while an image is publishing or already published", async () => {
     const onPublish = vi.fn();
     const { rerender } = render(<MessageActionSheet {...props({
       hasImage: true,
@@ -168,14 +168,12 @@ describe("MessageActionSheet characterization — permissions and safety actions
     expect(onPublish).not.toHaveBeenCalled();
   });
 
-  it.runIf(icpMode)("hides gallery publication while the media feature is routed to ICP", async () => {
-    render(<MessageActionSheet {...props({
-      hasImage: true,
-      canPublishToGallery: true,
-      onPublishToGallery: vi.fn(),
-    })} />);
+  it("dispatches permitted gallery publication in either backend", async () => {
+    const publish = vi.fn();
+    render(<MessageActionSheet {...props({ hasImage: true, canPublishToGallery: true, onPublishToGallery: publish })} />);
     await openMore();
-    expect(screen.queryByRole("button", { name: /publish to gallery/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /publish to gallery/i }));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
   });
 
   it("normalizes a bare domain before opening it", async () => {
