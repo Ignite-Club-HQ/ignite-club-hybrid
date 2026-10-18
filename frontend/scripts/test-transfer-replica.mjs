@@ -57,7 +57,8 @@ try {
   ok(await A.mini_league_domain.grant_role(staff, 'club_admin', CLUB, []));
   const league = ok(await A.mini_league_domain.create_mini_league(CLUB, 'Under 8s', [], [], 5, 3, 10, [], true));
   // News post + team on club details (wider copy scope).
-  const team = ok(await A.club_domain.create_team(CLUB, 'Under 8 Lions', [], [])).id ?? null;
+  const team = ok(await A.club_domain.create_shell_team_invite(CLUB, 'Under 8 Lions', [], [])).id;
+  const link = ok(await A.club_domain.create_team_invite_link(CLUB, team, 'player'));
   const inflight = new Map(); let registryRev = 1n; let assignment = 'a'; const blocked = {}; const saved = [];
   const base = liveTransferAdapter({
     actors: g => groups[g], fenceRevision: 1n, targetFor: async club => inflight.get(club) ?? null,
@@ -94,7 +95,9 @@ try {
   assert.deepEqual(ok(await B.club_points_domain.list_rewards(CLUB, [], false)).map(r => r.id), [reward.id]);
   assert.deepEqual((await B.mini_league_domain.list_mini_leagues_by_club(CLUB)).map(l => l.name), ['Under 8s']);
   assert.equal((await A.mini_league_domain.list_mini_leagues_by_club(CLUB)).length, 0);
-  assert.ok(team === null || ok(await B.club_domain.list_teams(CLUB)).some(t => t.id === team));
+  assert.ok(ok(await B.club_domain.list_teams(CLUB)).some(t => t.id === team), 'team moved');
+  assert.ok(!ok(await A.club_domain.list_teams(CLUB)).some(t => t.id === team), 'team purged from source');
+  assert.ok(link.id, 'invite link created');
   // Writable again on the target; source holds nothing.
   ok(await B.messaging_domain.send_message(conv.id, 'after move', 'k-after', [], []));
   ok(await as(B.vault_domain, staff, () => B.vault_domain.rename_file('file1', 'rules-v2.pdf')));
