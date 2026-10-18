@@ -210,15 +210,15 @@ try {
   assert.ok('Err' in await actor.get_upload_outcome(checkpointId), 'restored journal remains owner-only');
   assert.ok('Err' in await actor.delete_blob(checkpointPath));
   actor.setPrincipal(owner);
-  // One checkpoint charge survives; exactly nine reservations remain across
+  // One checkpoint charge survives; exactly nine uploads remain across
   // both stores. If only media had rolled back the advanced ledger would fail.
-  const restoredReservations = [];
   for (let i = 0; i < 9; i++) {
     const store = i % 2 ? second.actor : actor;
-    restoredReservations.push({ store, id: ok(await store.begin_upload(`clubs/c1/photos/restored-${i}.jpg`, 'image/jpeg', 1n, 1)) });
+    const id = ok(await store.begin_upload(`clubs/c1/photos/restored-${i}.jpg`, 'image/jpeg', 1n, 1));
+    ok(await store.put_chunk(id, 0, [54]));
+    ok(await store.finalize_upload(id));
   }
   assert.ok('Err' in await second.actor.begin_upload('clubs/c1/photos/restored-over.jpg', 'image/jpeg', 1n, 1));
-  for (const { store, id } of restoredReservations) ok(await store.abort_upload(id));
   for (const saved of checkpoints) await management('delete_canister_snapshot', IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8) }), { canister_id: saved.canisterId, snapshot_id: saved.snapshotId });
   await pic.advanceTime(181 * 86_400_000); await pic.tick(10);
   const expired = await actor.http_request({ url: '/clubs/c1/photos/0.jpg', method: 'GET', headers: [], body: [] });
