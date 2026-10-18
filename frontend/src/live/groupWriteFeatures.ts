@@ -31,7 +31,7 @@ export function groupWriteFeatures(session: Session) {
       }),
     uploadClubMedia: (clubId: string, storagePath: string, file: Blob, mime: string, lock: 'club' | 'own' = 'club') => {
       if (!storagePath.startsWith(`clubs/${clubId}/`)) throw new Error('Media path outside routed club');
-      return session.writeClub(clubId, 'media_blob_store', storagePath, async ctx => {
+      return session.writeClub(clubId, 'media_metadata', storagePath, async ctx => {
         const [{ uploadBytesToBlobStore }, pii, vault, { MEDIA_BLOB_PII_FIELD }, { sha256Hex }] = await Promise.all([
           import('./blobStoreUpload'), import('./piiVetKeys'), import('./features/vault'), import('./mediaDecrypt'), import('./blobStoreProtocol')]);
         if (file.size > 10 * 1024 * 1024) throw new Error('This file is larger than 10 MB. Please choose a smaller file.');
