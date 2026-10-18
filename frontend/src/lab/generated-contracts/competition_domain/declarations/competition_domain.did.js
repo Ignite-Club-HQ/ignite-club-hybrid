@@ -437,6 +437,22 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_competition_welcome_email' : IDL.Func([IDL.Text], [Result], []),
+    'get_competition_welcome_email_job' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'to' : IDL.Text,
+              'subject' : IDL.Text,
+              'competition_name' : IDL.Text,
+              'message' : IDL.Text,
+              'competition_id' : IDL.Text,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_eoi_stats' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : EoiStats, 'Err' : IDL.Text })],
@@ -640,6 +656,11 @@ export const idlFactory = ({ IDL }) => {
     'record_match' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_competition_welcome_job' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'register_team' : IDL.Func(
