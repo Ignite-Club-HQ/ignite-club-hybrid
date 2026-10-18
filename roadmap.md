@@ -1,6 +1,6 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
-- [ ] 10. Fix insights_domain M0250: initialize memoryReports through a new immutable migration, verify compiler/build and migration regression.
+- [x] 10. Fix insights_domain M0250: removed actor initializer; added data-preserving partial migration 20261018_015713. Per-canister mops check, migration test and mops build pass. Root-wide check cannot verify all canisters because root dependencies omit events_domain's ic package; deploy uses per-canister dependency contexts. GitHub rerun still required.
 
 - [x] 9. Correct memory-preserving mainnet upgrades: pinned ICP CLI 1.7.0 (verified upstream EOP keep option), reject older tools, explicit auto mode. Three offline safety tests pass; shell syntax and workflow YAML valid. Actual GitHub rerun remains an operator action; the screenshot's ignite_payments command is not in this checkout.
 
