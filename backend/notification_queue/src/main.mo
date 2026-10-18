@@ -452,13 +452,18 @@ persistent actor class Main(governorInit : Principal) {
     };
     signals
   };
-  // NOTE: the `user` field carries the app's account id (a Text), not the
-  // caller's II principal, so the canister cannot verify inbox ownership.
-  // Provisional until account ids are bound to principals (identity_access).
+  // Inbox ownership is verified against the caller's account id resolved
+  // from identity_access — the browser-supplied `user` argument is never
+  // trusted on its own. These are update calls (not queries) because the
+  // ownership check awaits an inter-canister lookup.
 
-  public query ({ caller }) func list_inbox(user : Text, club : ?Text, limit : Nat16) : async Types.Results {
+  public shared ({ caller }) func list_inbox(user : Text, club : ?Text, limit : Nat16) : async Types.Results {
     authenticated(caller);
     if (limit == 0 or limit > 500) { return #Err("Invalid page size") };
+    switch (await callerAccountId(caller)) {
+      case null { return #Err("Account lookup unavailable") };
+      case (?accountId) { if (accountId != user) { return #Err("Not your inbox") } };
+    };
     var res : [Types.Notification] = [];
     for (item in items.values()) {
       let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
@@ -474,6 +479,10 @@ persistent actor class Main(governorInit : Principal) {
     switch (findIndex(id)) {
       case null { #Err("Unknown notification") };
       case (?index) {
+        switch (await callerAccountId(caller)) {
+          case null { return #Err("Account lookup unavailable") };
+          case (?accountId) { if (items[index].user != accountId) { return #Err("Not your notification") } };
+        };
         let updated : Types.Notification = { items[index] with read = true };
         replace(index, updated);
         #Ok(updated)
