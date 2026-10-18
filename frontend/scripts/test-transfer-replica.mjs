@@ -113,7 +113,7 @@ try {
     const d = await base.digest(g, club, dom); return g === 'b' && dom === 'events_domain' ? { ...d, digest: 'tampered' } : d;
   } };
   const aborted = await runTransfer(planTransfer(t2, 'a', 'b', registryRev), tamper).catch(e => e);
-  assert.ok(aborted instanceof Error || aborted.phase === 'aborted', 'mismatched copy must abort');
+  assert.ok(aborted instanceof Error && /mismatch|digest|verif/i.test(aborted.message), `mismatched copy must abort: ${aborted.message}`);
   assert.equal((await A.events_domain.list_events([t2], [])).length, 1);
   assert.equal((await B.events_domain.list_events([t2], [])).length, 0);
   ok(await A.events_domain.create_event(t2, [], 'Unlocked', 'yes', 'training', [], [], [], [], 1_000n, 2_000n, [], false, [], []));

@@ -2059,7 +2059,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isTransferFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?ClubSnapshot = from_candid (snapshot);
     let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
-    if (snap.profiles.size() != 1 or snap.profiles[0].id != club) return #Err("Snapshot club mismatch");
+    if (snap.profiles.size() > 1 or snap.profiles.any(func(p) = p.id != club)) return #Err("Snapshot club mismatch");
     let ids = snap.teams.map(func(t) = t.id);
     let newsIds = snap.news.map(func(n) = n.id);
     if (snap.teams.any(func(t) = t.club_id != club) or snap.settings.any(func(x) = x.club_id != club)
