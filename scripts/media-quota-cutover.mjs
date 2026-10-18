@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const phase = args[0];
-const phases = ['register', 'freeze', 'import', 'activate', 'recover'];
+const phases = ['register', 'freeze', 'import', 'activate', 'recover', 'migrate-storage', 'enable-storage'];
 if (!phases.includes(phase)) throw new Error(`Choose ${phases.join(', ')}.`);
 if (args.slice(1).some(a => !['--apply', '--ack-all-stores'].includes(a))) throw new Error('Unknown option');
 const apply = args.includes('--apply');
@@ -25,7 +25,7 @@ const stores = Object.keys(mappings).filter(k => /^media_blob_store(?:_[1-9]\d*)
 if (stores.length === 0 || stores.length > 64) throw new Error('Expected 1–64 mapped media stores');
 const club = principal('club_domain');
 for (const store of stores) principal(store);
-if (apply && ['freeze', 'activate'].includes(phase) && !args.includes('--ack-all-stores')) throw new Error('Acknowledge that mappings include EVERY store with --ack-all-stores');
+if (apply && ['freeze', 'activate', 'migrate-storage', 'enable-storage'].includes(phase) && !args.includes('--ack-all-stores')) throw new Error('Acknowledge that mappings include EVERY store with --ack-all-stores');
 function run(command) {
   if (!apply) { console.log(`icp ${command.join(' ')}`); return ''; }
   const result = spawnSync('icp', command, { cwd, encoding: 'utf8' });
@@ -61,6 +61,12 @@ if (phase === 'import') {
 if (phase === 'activate') {
   call('club_domain', 'activate_media_quota', '()');
   for (const store of stores) call(store, 'enable_shared_media_quota', '()');
+}
+if (phase === 'migrate-storage' || phase === 'enable-storage') {
+  for (const store of stores) {
+    call(store, phase === 'migrate-storage' ? 'migrate_legacy_blob' : 'enable_stable_media_storage', '()');
+    call(store, 'stable_storage_status', '()');
+  }
 }
 if (phase === 'recover') {
   const cursor = process.env.QUOTA_CURSOR ?? '';

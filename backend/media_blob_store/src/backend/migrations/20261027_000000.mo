@@ -10,12 +10,14 @@ module {
     var stable_blobs : Map.Map<Text, Record>;
     var stable_writes : Bool;
     var retention_cursor : Text;
+    var legacy_retention_cursor : Nat;
   } {
     {
       var stable_bytes = { region = Region.new(); var end : Nat64 = 0; free = Map.empty<Nat, Map.Map<Nat64, ()>>() };
       var stable_blobs = Map.empty<Text, Record>();
       var stable_writes = false;
       var retention_cursor = "";
+      var legacy_retention_cursor = 0;
     }
   }
 }

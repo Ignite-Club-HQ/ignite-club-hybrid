@@ -19,6 +19,7 @@ import UploadPolicy "uploadPolicy";
 import AssembleChunks "assembleChunks";
 import QuotaOperation "quotaOperation";
 import StableBytes "stableBytes";
+import RetentionPage "retentionPage";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -129,6 +130,7 @@ persistent actor MediaBlobStore {
   var stable_blobs : Map.Map<Text, StoredRecord>;
   var stable_writes : Bool;
   var retention_cursor : Text;
+  var legacy_retention_cursor : Nat;
 
   type QuotaReservation = { store : Principal; token : Text; club_id : Text; category : Text; cycle : Nat; bytes : Nat; status : { #reserved; #committed; #released } };
   type QuotaResult = { #Ok : QuotaReservation; #Err : Text };
@@ -472,6 +474,7 @@ persistent actor MediaBlobStore {
     let old = blobs[0];
     if (stable_blobs.size() >= 100_000) return #Err("Stable metadata capacity reached");
     if (old.bytes.size() > UploadPolicy.maxWireBytes.toNat()) return #Err("Legacy file exceeds bounded migration limit");
+    if (PrimMem.rts_heap_size() + old.bytes.size() * 16 > UploadPolicy.heapBudget) return #Err("Insufficient heap headroom for verified migration");
     let ?slice = StableBytes.write(stable_bytes, old.bytes) else return #Err("Stable region capacity reached");
     let copied = StableBytes.read(stable_bytes, slice, 0, slice.length);
     if (copied.size() != old.bytes.size() or hexDigest(copied) != old.content_hash) {
@@ -944,10 +947,13 @@ persistent actor MediaBlobStore {
     };
     if (fresh.size() > 0) { blob_uploaded_at := blob_uploaded_at.concat(fresh) };
     // Cap club lookups per sweep; the rest are handled on following days.
-    var checked = 0;
-    for ((clubId, paths) in Map.entries(expiredByClub)) {
-      if (checked < 50) {
-        checked += 1;
+    // Materialize bounded club IDs before awaits; rotate past Pro/unavailable
+    // clubs so the same first 50 never starve later free clubs.
+    let clubs = Iter.toArray(expiredByClub.entries());
+    let indices = RetentionPage.indices(clubs.size(), legacy_retention_cursor, 50);
+    legacy_retention_cursor := if (clubs.size() == 0) 0 else (legacy_retention_cursor + indices.size()) % clubs.size();
+    for (index in indices.values()) {
+        let (clubId, paths) = clubs[index];
         if ((await clubProStatus(clubId)) == ?false) {
           let doomed = Map.empty<Text, ()>();
           for (p in paths.values()) {
@@ -963,7 +969,6 @@ persistent actor MediaBlobStore {
           blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { not Map.containsKey(doomed, Text.compare, p) });
           total_bytes := subBytes(total_bytes, freed);
         };
-      };
     };
   };
   transient let _retentionTimer = Timer.recurringTimer<system>(#seconds(86_400), sweepRetention);
