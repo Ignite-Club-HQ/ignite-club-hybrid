@@ -240,6 +240,15 @@ persistent actor class Main(governorInit : Principal) {
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
   };
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let evs = events.filter(func(e) = e.club_id == club);
+    rsvps := rsvps.filter(func(r) = not evs.any(func(e) = e.id == r.event_id));
+    series := series.filter(func(x) = not evs.any(func(e) = e.series_id == ?x.id));
+    events := events.filter(func(e) = e.club_id != club);
+    #Ok(evs.size())
+  };
   type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries] };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");

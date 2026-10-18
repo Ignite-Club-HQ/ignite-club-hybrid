@@ -2021,6 +2021,21 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  // Removes exactly the snapshot scope from the source after a verified cutover.
+  public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isTransferFenced(club)) return #Err("Club must be fenced before purge");
+    let before = profiles.size() + settings.size() + teams.size() + sponsors.size() + acl.roles.size();
+    membershipEpoch += 1;
+    profiles := profiles.filter(func(p) = p.id != club);
+    settings := settings.filter(func(x) = x.club_id != club);
+    teams := teams.filter(func(t) = t.club_id != club);
+    sponsors := sponsors.filter(func(x) = x.club_id != club);
+    clubListings := clubListings.filter(func(e) = e.0 != club);
+    acl := { acl with roles = acl.roles.filter(func(g) = g.club != ?club) };
+    #Ok(before - (profiles.size() + settings.size() + teams.size() + sponsors.size() + acl.roles.size()))
+  };
+
   func blobContains(hay : Blob, needle : Blob) : Bool {
     let h = Blob.toArray(hay); let n = Blob.toArray(needle);
     if (n.size() == 0 or n.size() > h.size()) return false;
