@@ -20,6 +20,7 @@ import { idlFactory as timerjobsIdl } from '../src/lab/bindings/timer_jobs/decla
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import { planTransfer } from '../src/live/groupTransfer.ts';
 import { runTransfer } from '../src/live/groupTransferRunner.ts';
+import { approveProvision, runProvision, PER_GROUP_DOMAINS } from '../src/live/groupProvisioner.ts';
 import { liveTransferAdapter } from '../src/live/groupTransferLiveAdapter.ts';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -32,15 +33,39 @@ const CLUB = 'club-move';
 const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
-  const groups = {};
-  for (const g of ['a', 'b']) {
-    groups[g] = {};
-    for (const c of Object.keys(idls)) {
-      const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], arg: c === 'timer_jobs' ? IDL.encode([], []) : IDL.encode([IDL.Principal], [governor]) });
-      f.actor.setPrincipal(governor); groups[g][c] = f.actor;
-      if (c === 'timer_jobs') ok(await f.actor.initialize());
-    }
+  const groups = { a: {}, b: {} };
+  const argFor = c => c === 'timer_jobs' ? IDL.encode([], []) : IDL.encode([IDL.Principal], [governor]);
+  for (const c of Object.keys(idls)) {
+    const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], arg: argFor(c) });
+    f.actor.setPrincipal(governor); groups.a[c] = f.actor;
+    if (c === 'timer_jobs') ok(await f.actor.initialize());
   }
+  // Group B is built by the production provisioner on real canisters, with a crash mid-build.
+  const appSubnet = (await pic.getApplicationSubnets())[0].id.toText();
+  const ids = {}; let creates = 0; const registry = []; let regRev = 2n; let saved = null;
+  const provAdapter = {
+    createCanister: async (_p, d) => {
+      if (++creates === 3) throw new Error('Request timed out (injected)');
+      const id = await pic.createCanister({ sender: governor, controllers: [governor], targetSubnetId: Principal.fromText(appSubnet) });
+      return { canisterId: id.toText(), subnetId: (await pic.getCanisterSubnetId(id)).toText() };
+    },
+    install: async (_p, d, id) => { if (!idls[d]) return; await pic.installCode({ canisterId: Principal.fromText(id), wasm: wasm(d), arg: argFor(d), sender: governor }); },
+    healthy: async (_p, d, id) => (await pic.getControllers(Principal.fromText(id))).some(c => c.toText() === governor.toText()),
+    readRegistryRevision: async () => regRev,
+    registerGroup: async p => { registry.push(p.groupId); regRev++; },
+    enableGroup: async () => {}, save: async p => { saved = structuredClone(p); },
+  };
+  const approval = approveProvision({ kind: 'provision', deploymentId: 'local', subnetId: appSubnet, reason: 'full' }, { operator: governor.toText(), proposalId: 'p1', deploymentId: 'local', subnetId: appSubnet }, 'b', 2n);
+  const failed = await runProvision(approval, provAdapter);
+  assert.equal(failed.phase, 'failed'); assert.deepEqual(registry, [], 'incomplete group never registered');
+  const done = await runProvision({ ...saved, phase: 'approved', error: undefined }, provAdapter);
+  assert.equal(done.phase, 'enabled'); assert.deepEqual(registry, ['b']);
+  assert.equal(new Set(Object.values(done.canisters)).size, PER_GROUP_DOMAINS.length, 'no duplicate canisters after resume');
+  for (const c of Object.keys(idls)) {
+    const actor = pic.createActor(idls[c], Principal.fromText(done.canisters[c])); actor.setPrincipal(governor); groups.b[c] = actor;
+    if (c === 'timer_jobs') ok(await actor.initialize());
+  }
+  console.log('PASS provisioning: new group built on real canisters, resumed after crash, registered once');
   const A = groups.a, B = groups.b;
   const refused = p => p.catch(e => ({ Err: String(e.message) }));
   const as = (actor, p, fn) => { actor.setPrincipal(p); return fn().finally(() => actor.setPrincipal(governor)); };
