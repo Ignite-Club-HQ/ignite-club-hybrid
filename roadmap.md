@@ -7,7 +7,7 @@
 - [x] Competition welcome settings on-chain; photo reminder Run now enabled and behavior-tested; canister reachability tests verified.
 - [x] Automatic photo reminders: persisted settings, hourly non-reentrant sweep, age/cooldown policy tests and gallery-upload tap route.
 - [x] Update reminder platform/version audience API, minimum-version controls and self-only test send; registered version data is device-reported, not attested.
-- [ ] Backups remain partial: seven privileged domain exports + restorable vault metadata; no complete club configuration/media-byte recovery. Existing governor restrictions preserved.
+- [ ] Backups remain partial: seven privileged domain exports + restorable vault metadata; vault restore now re-grants club media access and reports blob paths whose encrypted bytes are gone (restoreLiveVaultBackupWithMedia, 5 tests). Still missing: cross-domain import_state (no canister has one) so club configuration cannot be restored, only exported. Existing governor restrictions preserved.
 - [ ] Competition welcome email delivery: authoritative acceptance recipient/job path still missing; settings alone do not deliver emails.
 - [x] Pitch-board alerts: real club scope, role flags, match Subs Manager/group duties; linked-event reads on-chain, formation alerts omit child names. Dual-mode tests pass.
 - [ ] Verify pitch-board delivery/tapping signed in — needs deployed app/canisters and a real Internet Identity session.
