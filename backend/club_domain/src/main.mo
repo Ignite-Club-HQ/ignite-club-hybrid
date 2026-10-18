@@ -1853,6 +1853,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func mutate(req : Types.Request) : async { #Ok : Types.Mutation; #Err : Text } {
+    if (isTransferFenced(req.club)) return #Err("Club is temporarily locked for a transfer");
     if (not isAdmin(caller, req.club)) return #Err("Club admin required");
     let fingerprint = requestFingerprint(req);
     switch (findLoggedMutation(req.request_id)) {
@@ -1962,6 +1963,71 @@ persistent actor class Main(governorInit : Principal) {
       case (#Err(_)) {};
     };
     result
+  };
+
+
+  // ---- Club transfer fence + snapshot (governor-only operator tooling) ----
+  // A frozen club is fenced for transfer: `mutate` refuses it and the ingress
+  // inspect hook drops update calls naming it. Inspect is advisory only (not a
+  // security boundary), so the transfer runner re-digests the source snapshot
+  // right before cutover; any write that slipped through aborts the move.
+  func isTransferFenced(club : Text) : Bool = frozenClubs.any(func(e) = e.0 == club);
+
+  type ClubSnapshot = {
+    profiles : [Types.ClubProfile]; settings : [Types.ClubSettings]; teams : [Types.ClubTeam];
+    sponsors : [Types.ClubSponsor]; listing : Types.Listing; roles : [Types.RoleGrant];
+  };
+
+  func clubSnapshot(club : Text) : ClubSnapshot = {
+    profiles = profiles.filter(func(p) = p.id == club);
+    settings = settings.filter(func(x) = x.club_id == club);
+    teams = teams.filter(func(t) = t.club_id == club);
+    sponsors = sponsors.filter(func(x) = x.club_id == club);
+    listing = getListing(club);
+    roles = acl.roles.filter(func(g) = g.club == ?club);
+  };
+
+  public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isTransferFenced(club)) return #Err("Club must be fenced before export");
+    #Ok(to_candid (clubSnapshot(club)))
+  };
+
+  public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isTransferFenced(club)) return #Err("Club must be fenced before import");
+    let decoded : ?ClubSnapshot = from_candid (snapshot);
+    let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (snap.profiles.size() != 1 or snap.profiles[0].id != club) return #Err("Snapshot club mismatch");
+    if (snap.teams.any(func(t) = t.club_id != club) or snap.settings.any(func(x) = x.club_id != club)
+        or snap.sponsors.any(func(x) = x.club_id != club) or snap.roles.any(func(g) = g.club != ?club)) return #Err("Snapshot contains foreign records");
+    // Idempotent replace: re-running an import converges to the same state.
+    membershipEpoch += 1;
+    profiles := profiles.filter(func(p) = p.id != club).concat(snap.profiles);
+    settings := settings.filter(func(x) = x.club_id != club).concat(snap.settings);
+    teams := teams.filter(func(t) = t.club_id != club).concat(snap.teams);
+    sponsors := sponsors.filter(func(x) = x.club_id != club).concat(snap.sponsors);
+    updateListing(club, snap.listing);
+    acl := { acl with roles = acl.roles.filter(func(g) = g.club != ?club).concat(snap.roles) };
+    #Ok
+  };
+
+  func blobContains(hay : Blob, needle : Blob) : Bool {
+    let h = hay.toArray(); let n = needle.toArray();
+    if (n.size() == 0 or n.size() > h.size()) return false;
+    var i = 0;
+    while (i + n.size() <= h.size()) {
+      var j = 0;
+      while (j < n.size() and h[i + j] == n[j]) j += 1;
+      if (j == n.size()) return true;
+      i += 1;
+    };
+    false
+  };
+
+  system func inspect({ caller : Principal; arg : Blob }) : Bool {
+    if (frozenClubs.size() == 0 or isGovernor(caller)) return true;
+    not frozenClubs.any(func(e) = blobContains(arg, e.0.encodeUtf8()))
   };
 
   public shared ({ caller }) func freeze_club(club : Text, rev : Nat64) : async { #Ok : Nat64; #Err : Text } {
