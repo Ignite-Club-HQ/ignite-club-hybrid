@@ -37,6 +37,21 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
   and explicit approval are still required. Disk reload and actual process-exit
   tests are local only, not production controller or ledger/content verification.
   Partial checkpoints need manual snapshot reconciliation, not guessed retries.
+- Recovery-evidence contract (`scripts/media-recovery-evidence.mjs`) defines
+  complete per-store ciphertext, file index, allocator, ownership and upload
+  journal hashes, plus authority quota ledger, journal and store registry hashes.
+  Streaming hashing checks exact sizes with chunks capped at 1,000,000 bytes.
+  Comparison binds every participant to its checkpoint snapshot, module, subnet,
+  deployment, registry revision, network and HTTPS host. Missing/duplicate evidence
+  or any changed section blocks resume before starts. Historical quota accounting
+  must be retained: counting current files cannot prove ledger consistency.
+  This is an offline contract and optional coordinator gate, NOT an implemented
+  production reader or proof of input provenance. A reviewed authenticated reader
+  must extract actual complete checkpoint/restored state while the entire set is
+  stopped, independently verify its origin and fencing, and use canonical section
+  encoding. Existing canister methods do not supply these exports. Never supply
+  operator-authored digests or merely successful load receipts. All 29 recovery
+  tests pass locally; no production commands, routing or canister contracts change.
 - Unbounded-wait responses are delivered; bounded-wait calls can report unknown
   outcomes after remote commit. PocketIC 0.23.0 exposes no response-drop API.
   Client loss and unavailable-authority tests are not substitutes; genuine

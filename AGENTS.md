@@ -43,7 +43,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters before auto deploy; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets and balance access.
 - Memory warnings are deterministic: static clients cannot hold secrets.
-- Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery needs exact inventory, stores stopped before authority, full restores and verified approved authority-first resume. Local receipts persist intent/acks under locks; interrupted restores require full replay, disk failures retain locks. Production adapters remain required. Why: prevent cross-engine routing and ledger/file mismatch.
+- Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery needs exact inventory, stores stopped before authority, full restore and verified approved authority-first resume. Locked receipts persist intent/acks; interruption requires replay, disk failure retains locks. Full content/ledger evidence needs trusted production readers. Why: prevent routing and ledger/file mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
