@@ -700,6 +700,10 @@ type Main =
                        context: blob;
                        response: HttpRequestResult;
                      }) -> (HttpRequestResult) query;
+   purge_my_data: () -> (variant {
+                           Err: text;
+                           Ok: nat32;
+                         });
    record_event_view: (event_id: text) -> (variant {
                                              Err: text;
                                              Ok;
