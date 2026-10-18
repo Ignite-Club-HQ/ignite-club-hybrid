@@ -4,7 +4,7 @@ import { useAuth } from "./useAuth";
 import { recordSyncWrite } from "@/lib/syncWriteRateMonitor";
 import { hasAnchoredTimerMarker, mayWriteLegacyTimerState } from "@/lib/serverTimer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { withFeatureBackend, writeOnce } from "@/live/featureRouter";
 import { syncLiveActiveGame, deactivateLiveActiveGame } from "@/live/features/events";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -179,7 +179,7 @@ export function useActiveGameSync() {
             icp: async (ctx) => {
               await deactivateLiveActiveGame(ctx, timerState?.teamId || null);
             },
-          });
+          }, timerState?.teamId ? writeOnce({ teamId: timerState.teamId }) : { shared: "person" });
         } catch (e) {
           console.warn('[SYNC] ICP deactivate failed', e);
         }
@@ -308,7 +308,7 @@ export function useActiveGameSync() {
             activeGameIdRef.current = (result as { id: string }).id;
             activeTeamIdRef.current = teamId;
           },
-        });
+        }, teamId ? writeOnce({ teamId }) : { shared: "person" });
         return;
       }
 
@@ -421,7 +421,7 @@ export function useActiveGameSync() {
             icp: async (ctx) => {
               await deactivateLiveActiveGame(ctx, null);
             },
-          });
+          }, activeTeamIdRef.current ? writeOnce({ teamId: activeTeamIdRef.current }) : { shared: "person" });
         } catch (e) {
           console.warn('[SYNC] ICP stopSync deactivate failed', e);
         }

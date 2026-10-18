@@ -184,7 +184,7 @@ export default function EventDetailPage() {
         const log = await withFeatureBackend("events", {
           supabase: async () => [] as any[],
           icp: async (ctx) => (await import("@/live/features/events")).listLiveReminders(ctx, id!) as unknown as Promise<any[]>,
-        }).catch(() => [] as any[]);
+        }, { eventId: id! }).catch(() => [] as any[]);
         const map = new Map<string, string>();
         for (const r of [...log].sort((a, b) => Number(b.sent_at_ms) - Number(a.sent_at_ms))) {
           const t = Number(r.sent_at_ms);
@@ -272,7 +272,7 @@ export default function EventDetailPage() {
             coach_note_updated_at: new Date(Number(raw.updated_at_ms)).toISOString(),
           };
         },
-      }),
+      }, { eventId: id! }),
   });
 
   // Watchdog: after an Android WebView background freeze the event fetch can
@@ -358,7 +358,7 @@ export default function EventDetailPage() {
           });
           return rows;
         },
-      });
+      }, { eventId: id! });
       if (icpRsvps) return icpRsvps;
 
       const provider: EventRsvpProvider = {
@@ -461,7 +461,7 @@ export default function EventDetailPage() {
             added_by_name: "A member",
           }));
         },
-      });
+      }, { eventId: id! });
       if (icpGuests) return icpGuests;
 
       const provider: EventSupportingReadsProvider = {
@@ -611,7 +611,7 @@ export default function EventDetailPage() {
               })),
           );
         },
-      });
+      }, { eventId: id! });
     },
     enabled: !!id,
     staleTime: 0,
@@ -835,7 +835,7 @@ export default function EventDetailPage() {
         return !!data;
       },
       icp: async (ctx) => isLiveTeamMember(ctx, ctx.identity.getPrincipal(), event!.club_id!, event!.team_id!),
-    }),
+    }, { eventId: id! }),
     enabled: !!user && !!event?.team_id && !!event?.club_id && !canAccessPitchBoard && !useIcpLab,
   });
 
@@ -870,7 +870,7 @@ export default function EventDetailPage() {
         } catch { /* timer-only view */ }
         return { id: id!, is_active: true, pitch_state: pitchState, timer_state: state as unknown as Json };
       },
-    }),
+    }, { eventId: id! }),
     enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
     refetchInterval: 30000, // Poll every 30s to detect game start
   });
@@ -1453,7 +1453,7 @@ export default function EventDetailPage() {
           }
           return roster;
         },
-      });
+      }, { eventId: id! });
     },
   });
   const scopedChildRoster = useMemo(
@@ -1628,7 +1628,7 @@ export default function EventDetailPage() {
         const rows = await withFeatureBackend("events", {
           supabase: async () => [] as any[],
           icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchCaptains(ctx, id!) as Promise<any[]>,
-        }).catch(() => [] as any[]);
+        }, { eventId: id! }).catch(() => [] as any[]);
         const c = rows.find((r) => r.role === "captain");
         return c ? { user_id: c.ref_kind === "child" ? null : c.ref_id, child_id: c.ref_kind === "child" ? c.ref_id : null } : null;
       }
@@ -1649,7 +1649,7 @@ export default function EventDetailPage() {
         const res = await withFeatureBackend("events", {
           supabase: async () => null as any,
           icp: async (ctx) => (await import("@/live/features/events")).getLiveGameResult(ctx, id!) as Promise<any>,
-        }).catch(() => null);
+        }, { eventId: id! }).catch(() => null);
         const r = Array.isArray(res) ? res[0] : res;
         const mvp = r ? (Array.isArray(r.mvp_player_id) ? r.mvp_player_id[0] : r.mvp_player_id) : null;
         return mvp ? { user_id: mvp as string, child_id: mvp as string } : null;
@@ -1671,7 +1671,7 @@ export default function EventDetailPage() {
         const rows = await withFeatureBackend("events", {
           supabase: async () => [] as any[],
           icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchGoalkeepers(ctx, id!) as Promise<any[]>,
-        }).catch(() => [] as any[]);
+        }, { eventId: id! }).catch(() => [] as any[]);
         return rows.map((g) => ({ user_id: g.ref_kind === "child" ? null : g.ref_id, child_id: g.ref_kind === "child" ? g.ref_id : null }));
       }
       const { data, error } = await supabase
