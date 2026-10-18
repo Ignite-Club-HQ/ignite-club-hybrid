@@ -4267,7 +4267,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (store.equal(Principal.anonymous()) or store.equal(Principal.fromText("aaaaa-aa"))) return #Err("Invalid store");
     if (mediaQuotaStores.any(func(p) { p.equal(store) })) return #Ok;
-    if (mediaQuotaCutover.started) return #Err("Store registry sealed for cutover");
+    if (mediaQuotaCutover.started and not mediaQuotaCutover.active) return #Err("Store registry sealed for initial cutover");
     if (mediaQuotaStores.size() >= 64) return #Err("Store registry full");
     mediaQuotaStores := mediaQuotaStores.concat([store]);
     #Ok
@@ -4304,13 +4304,12 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func import_media_quota_store(store : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
-    if (not mediaQuotaCutover.started or mediaQuotaCutover.active or not mediaQuotaStores.any(func(p) = p.equal(store))) return #Err("Sealed registered store required");
+    if (not mediaQuotaCutover.started or not mediaQuotaStores.any(func(p) = p.equal(store))) return #Err("Sealed registered store required");
     let progress = MediaQuotaCutover.progress(mediaQuotaCutover, store);
     if (progress.done) return #Ok;
     let source : actor { quota_snapshot_page : shared Nat -> async MediaQuotaCutover.Page } = actor(store.toText());
     try {
       let page = await source.quota_snapshot_page(progress.offset);
-      if (mediaQuotaCutover.active) return #Err("Cutover already activated");
       MediaQuotaCutover.applyPage(mediaQuotaCutover, store, page)
     } catch (_) { #Err("Snapshot read failed; retry same cursor") }
   };

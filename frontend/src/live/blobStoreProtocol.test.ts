@@ -81,6 +81,7 @@ describe("media_blob_store contract", () => {
       "merge_principal",
       "put_chunk",
       "quota_snapshot_page",
+      "reconcile_upload_operations",
       "rekey_principal",
       "retire_upload_outcomes",
       "set_capacity_limit",

@@ -9,8 +9,9 @@ module {
   public type Row = { club_id : Text; category : Text; cycle : Nat; count : Nat; bytes : Nat64 };
   public type Page = { frozen : Bool; pending : Nat; total : Nat; offset : Nat; rows : [Row] };
   public type Progress = { offset : Nat; total : ?Nat; done : Bool };
-  public type State = { var active : Bool; var started : Bool; imports : Map.Map<Text, Progress>; ledger : Quota.Ledger };
-  public func empty() : State { { var active = false; var started = false; imports = Map.empty(); ledger = Quota.empty() } };
+  public type State = { var active : Bool; var started : Bool; imports : Map.Map<Text, Progress>; imported_rows : Map.Map<Text, ()>; ledger : Quota.Ledger };
+  public func empty() : State { { var active = false; var started = false; imports = Map.empty(); imported_rows = Map.empty(); ledger = Quota.empty() } };
+  func rowKey(store : Principal, row : Row) : Text { store.toText() # "\u{1f}" # row.club_id # "\u{1f}" # row.category # "\u{1f}" # debug_show(row.cycle) };
   public func progress(state : State, store : Principal) : Progress {
     state.imports.get(store.toText()) ?? ({ offset = 0; total = null; done = false })
   };
@@ -28,10 +29,18 @@ module {
     switch (saved.total) { case (?total) { if (total != page.total) return #Err("Snapshot changed") }; case null {} };
     if (page.rows.size() == 0 and page.offset != page.total) return #Err("Incomplete snapshot");
     if (state.ledger.usage.size() + page.rows.size() > Quota.maxEntries) return #Err("Quota ledger full");
+    if (state.imported_rows.size() + page.rows.size() > Quota.maxEntries) return #Err("Snapshot row index full");
+    let seen = Map.empty<Text, ()>();
     for (row in page.rows.values()) {
       if (not Quota.validId(row.club_id) or not Quota.validCategory(row.category)) return #Err("Invalid snapshot row");
+      let key = rowKey(store, row);
+      if (seen.containsKey(key) or state.imported_rows.containsKey(key)) return #Err("Duplicate snapshot row");
+      seen.add(key, ());
     };
-    for (row in page.rows.values()) { Quota.importUsage(state.ledger, row.club_id, row.category, row.cycle, row.count, row.bytes.toNat()) };
+    for (row in page.rows.values()) {
+      Quota.importUsage(state.ledger, row.club_id, row.category, row.cycle, row.count, row.bytes.toNat());
+      state.imported_rows.add(rowKey(store, row), ())
+    };
     let offset = page.offset + page.rows.size();
     state.imports.add(store.toText(), { offset; total = ?page.total; done = offset == page.total });
     #Ok

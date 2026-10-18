@@ -168,15 +168,46 @@ persistent actor MediaBlobStore {
       case null #Err("Unknown upload")
     }
   };
-  public shared ({ caller }) func retire_upload_outcomes() : async { #Ok : Nat; #Err : Text } {
+  public shared ({ caller }) func retire_upload_outcomes(cursor : Text) : async { #Ok : { removed : Nat; cursor : Text }; #Err : Text } {
     if (not isGovernor<system>(caller)) return #Err("Governor required");
     var removed = 0;
-    for ((id, op) in quota_operations.entries()) {
-      if (removed < 200 and op.cycle + 1 < currentCycle() and (op.status == #committed or op.status == #aborted)) {
+    var scanned = 0;
+    var next = "";
+    for ((id, op) in quota_operations.entriesFrom(cursor)) {
+      if (id == cursor and cursor != "") continue;
+      if (scanned >= 200) break;
+      scanned += 1; next := id;
+      if (op.cycle + 1 < currentCycle() and (op.status == #committed or op.status == #aborted)) {
         quota_operations.remove(id); removed += 1
       }
     };
-    #Ok(removed)
+    if (scanned < 200) next := "";
+    #Ok({ removed; cursor = next })
+  };
+  public shared ({ caller }) func reconcile_upload_operations(cursor : Text) : async { #Ok : { cursor : Text; attempted : Nat }; #Err : Text } {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    // Materialize at most 20 IDs before yielding; never retain a mutable-map
+    // iterator across awaits. Unknown commits/releases retry the same token.
+    var ids : [Text] = [];
+    for ((id, _) in quota_operations.entriesFrom(cursor)) {
+      if (id == cursor and cursor != "") continue;
+      if (ids.size() >= 20) break;
+      ids := ids.concat([id])
+    };
+    var attempted = 0;
+    for (id in ids.values()) {
+      switch (quota_operations.get(id)) {
+        case (?op) {
+          if (op.status == #committing) { ignore await commitShared(id); attempted += 1 };
+          if (op.status == #aborting) { ignore await abortShared(id); attempted += 1 };
+          if (op.status == #reserving) {
+            switch (findUpload(id)) { case (?upload) { ignore await reserveShared(upload); attempted += 1 }; case null {} }
+          }
+        };
+        case null {}
+      }
+    };
+    #Ok({ cursor = if (ids.size() == 20) ids[19] else ""; attempted })
   };
 
   func reserveShared(upload : PendingUpload) : async ResultUploadId {
