@@ -1,5 +1,6 @@
 import Json "mo:json";
 import Array "mo:core/Array";
+import List "mo:core/List";
 import Text "mo:core/Text";
 import Int "mo:core/Int";
 import Order "mo:core/Order";
@@ -150,7 +151,7 @@ module {
   };
   public func run<T>(request : Query, source : [T], authorized : T -> Bool, serialize : T -> Row) : Result {
     if (source.size() > 50000) fail("Dataset exceeds scan budget; use the domain-specific API");
-    var rows : [Row] = [];
+    let collected = List.empty<Row>();
     var total : Int = 0;
     for (item in source.values()) {
       if (authorized(item)) {
@@ -158,12 +159,13 @@ module {
         if (request.filters.all(func(f) = matches(row, f))) {
           total += 1;
           if (not request.count or request.groupBy != null) {
-            if (rows.size() >= 10000) fail("Too many matches; narrow filters");
-            rows := rows.concat([row]);
+            if (List.size(collected) >= 10000) fail("Too many matches; narrow filters");
+            List.add(collected, row);
           }
         }
       }
     };
+    var rows = List.toArray(collected);
     if (request.count) {
       switch (request.groupBy) {
         case null rows := [[integer("count", total)]];
@@ -198,12 +200,13 @@ module {
       ("entities", Json.arr(entities.map(func(e) { Json.obj([
         ("name", Json.str(e.name)), ("fields", Json.arr(e.fields.map(func(f) { Json.obj([("name", Json.str(f.name)), ("type", Json.str(f.kind)), ("role", Json.str("caller-authorized")), ("nullable", Json.bool(true))]) })))
       ]) }))), ("edges", Json.arr([])),
-      ("request", Json.obj([
+      ("query", Json.obj([
         ("keys", Json.arr(["entity", "select", "filters", "orderBy", "limit", "offset", "aggregate", "groupBy"].map(Json.str))),
         ("filters", Json.str("AND array of {field,op,value}; op=eq|ne|gt|gte|lt|lte|contains; types must match; null/bool use eq/ne")),
         ("orderBy", Json.str("{field,direction:asc|desc}; omitted preserves source order")),
         ("aggregate", Json.str("count only; optional groupBy field; omit select/orderBy; output count plus group field")),
-        ("paging", Json.str("limit 1..100 (default 50), offset 0..10000; advance offset by returned rows while hasMore")),
+        ("paging", Json.str("limit 1..100 (default 50), offset 0..10000; advance offset by returned rows while hasMore; queries are live, not snapshot-isolated")),
+        ("timestamps", Json.str("Unix milliseconds; replace example starts_at_ms value with the actual current time")),
         ("bounds", Json.str("8192 characters, nesting 8, filters 12, scan 50000, matches 10000, groups 1000")),
         ("errors", Json.str("Invalid/unsupported queries trap with OQL error; unauthorized records are absent, never counted"))
       ])), ("example", Json.str(example))
