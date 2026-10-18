@@ -21,9 +21,9 @@ export function groupReadFeatures(session: Session) {
       const { listLiveEvents } = await import('./features/events');
       return Promise.all(ids.map(id => listLiveEvents(ctx, id)));
     }),
-    messages: (club: string, conversation: string, before: number | null, limit = 50) => session.readClub(club, 'messaging_domain', async ctx => {
+    messages: (club: string, conversation: string, after: number | null, limit = 50) => session.readClub(club, 'messaging_domain', async ctx => {
       const { listLiveMessagesPage } = await import('./features/messaging');
-      return listLiveMessagesPage(ctx, conversation, before, limit);
+      return listLiveMessagesPage(ctx, conversation, after, limit);
     }),
   };
 }

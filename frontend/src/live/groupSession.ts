@@ -18,7 +18,9 @@ const MAX_PAGES = 500;
 export async function openGroupSession(context: FeatureBackendContext, transport: GroupSessionTransport) {
   const principal = context.identity.getPrincipal().toText();
   if (!principal || principal === '2vxsx-fae') throw new Error('Authenticated group session required');
+  const sameIdentity = () => { if (context.identity.getPrincipal().toText() !== principal) throw new Error('Group session identity changed'); };
   const registry = await transport.readRegistry();
+  sameIdentity();
   if (registry.revision < 1n || registry.groups.length < 1 || registry.groups.length > 64 ||
       registry.deployment.alias !== context.target.alias || registry.deployment.networkKind !== context.target.networkKind ||
       new URL(registry.deployment.host).origin !== new URL(context.target.host).origin ||
@@ -46,6 +48,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     while (true) {
       if (++pages > MAX_PAGES) throw new Error('Membership discovery exceeds scan budget');
       const page = await transport.readMemberships(targetFor(group.id), offset, 100);
+      sameIdentity();
       if (page.clubs.length > 100 || page.clubs.some(c => !c || c.length > 64) ||
           (acl !== undefined && acl !== page.aclRevision) ||
           (page.next !== null && (page.next <= offset || page.next - offset > 200n))) throw new Error('Invalid or changing membership page');
@@ -65,6 +68,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     for (let offset = 0; offset < requested.length; offset += 20) {
       const chunk = requested.slice(offset, offset + 20);
       const rows = await transport.readAssignments([...chunk], registry.revision);
+      sameIdentity();
       if (rows.length !== chunk.length || new Set(rows.map(r => r.clubId)).size !== rows.length) throw new Error('Incomplete group assignments');
       for (const row of rows) {
         const previous = routing.assignments.get(row.clubId);

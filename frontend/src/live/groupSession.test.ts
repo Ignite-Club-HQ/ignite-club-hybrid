@@ -88,6 +88,15 @@ describe('integrated deployment-bound group read session', () => {
       })).rejects.toThrow(kind === 'deny' ? 'Denied' : 'incomplete');
     }
   });
+  it('identity changes during discovery discard the session', async () => {
+    const f = fixture(); const original = f.transport.readMemberships;
+    f.transport.readMemberships = async (ctx, offset, limit) => {
+      const page = await original(ctx, offset, limit);
+      f.ctx.identity = { getPrincipal: () => ({ toText: () => 'other-person' }) } as unknown as FeatureBackendContext['identity'];
+      return page;
+    };
+    await expect(openGroupSession(f.ctx, f.transport)).rejects.toThrow('identity changed');
+  });
   it('cross-engine host or network substitution rejects without fallback', async () => {
     for (const kind of ['host', 'network']) {
       const f = fixture(); if (kind === 'host') f.registry.deployment.host = 'https://other-engine.invalid';
