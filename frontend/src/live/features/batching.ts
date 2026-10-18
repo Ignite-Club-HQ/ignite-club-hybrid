@@ -31,13 +31,14 @@ export function batched<A, R>(
   runBatch: (actor: A, ids: string[]) => Promise<Map<string, R>>,
   runSingle: (actor: A, id: string) => Promise<R>,
 ): Promise<R> {
-  if (batchUnsupported.has(name)) return connect().then(({ actor }) => runSingle(actor, id));
+  const scope = JSON.stringify([ctx.target?.alias, ctx.target?.host, ctx.target?.networkKind, ctx.target?.canisterIds ?? {}]);
+  const key = `${name}|${scope}`;
+  if (batchUnsupported.has(key)) return connect().then(({ actor }) => runSingle(actor, id));
   let byName = queues.get(ctx.identity as object);
   if (!byName) {
     byName = new Map();
     queues.set(ctx.identity as object, byName);
   }
-  const key = `${name}|${JSON.stringify(ctx.target?.canisterIds ?? {})}`;
   let pending = byName.get(key) as Pending<R> | undefined;
   if (!pending) {
     const fresh: Pending<R> = { ids: new Set(), waiters: [] };
@@ -55,7 +56,7 @@ export function batched<A, R>(
             ids.length === 1 ? new Map([[ids[0], await runSingle(actor, ids[0])]]) : await runBatch(actor, ids);
         } catch (err) {
           if (!isMissingCanisterMethod(err)) throw err;
-          batchUnsupported.add(name);
+          batchUnsupported.add(key);
           const singles = await Promise.allSettled(ids.map((i) => runSingle(actor, i)));
           for (const w of fresh.waiters) {
             const r = singles[ids.indexOf(w.id)];
@@ -71,7 +72,8 @@ export function batched<A, R>(
     });
   }
   pending.ids.add(id);
-  return new Promise<R>((resolve, reject) => pending!.waiters.push({ id, resolve, reject }));
+  const queue = pending;
+  return new Promise<R>((resolve, reject) => queue.waiters.push({ id, resolve, reject }));
 }
 
 /** Groups rows into a Map keyed by every requested id (missing ids map to []). */
