@@ -42,7 +42,17 @@ export const FEATURE_GROUP_DOMAIN: Record<FeatureArea, GroupDomain | null> = {
 };
 /** Club scope for a call. writeKey marks a write (idempotency key); attempts
  * 1 = never auto-retry (creates without a canister idempotency key). */
-export type ClubScope = ({ clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string }) & { writeKey?: string; attempts?: number; /** internal: club not moved, use shared canisters */ legacy?: true };
+export type ClubScope = ({ clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string }
+  /** Not club data: person-to-person (DMs, blocks, presence) or app-wide
+   * settings. Always served by the shared canisters, never by a group. */
+  | { shared: 'person' | 'app' }
+  /** Spans the caller's clubs (inbox, unread counts, "my events"): asked of
+   * the shared canisters and every group the caller belongs to at the same
+   * time, then combined with merge. Reads only. */
+  | { everyGroup: true; merge: (parts: any[]) => any }
+) & { writeKey?: string; attempts?: number; /** internal: club not moved, use shared canisters */ legacy?: true };
+/** Combine list results from several groups (one array per group). */
+export const mergeLists = <T,>(parts: T[][]): T[] => parts.flat();
 
 export async function withFeatureBackend<T>(
   feature: FeatureArea,
@@ -82,7 +92,12 @@ export async function withFeatureBackend<T>(
   // closed instead of silently sending a moved club to the old group.
   if (activationStatus(SHIPPED_GATES).active && !scope?.legacy) {
     const domain = FEATURE_GROUP_DOMAIN[feature];
-    if (scope && domain) {
+    if (scope && 'shared' in scope) return providers.icp({ identity, target: getActiveIcpTarget() });
+    if (scope && domain && 'everyGroup' in scope) {
+      if (scope.writeKey) throw new Error(`"${feature}" writes must name one club; group routing cannot fan them out.`);
+      return clubDispatch.readAcross(feature, domain, async ctx => providers.icp(ctx), scope.merge) as Promise<T>;
+    }
+    if (scope && domain && !('shared' in scope) && !('everyGroup' in scope)) {
       return scope.writeKey
         ? clubDispatch.writeFor(feature, scope, domain, scope.writeKey, async ctx => providers.icp(ctx), scope.attempts)
         : clubDispatch.readFor(feature, scope, domain, async ctx => providers.icp(ctx));

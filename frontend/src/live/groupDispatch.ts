@@ -85,6 +85,14 @@ export function createClubDispatcher(deps: DispatchDeps) {
       for (const [id, club] of pairs) owners.set(`${kind}:${id}`, club);
       persist(deps, principal);
     },
+    /** Data spanning the caller's clubs: shared canisters + every group, asked
+     * at the same time (load time = slowest group, not the sum). */
+    readAcross: async <T, R>(feature: FeatureArea, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>, merge: (parts: T[]) => R): Promise<R> => {
+      if (!activationStatus(deps.gates()).active) return merge([await deps.legacy(feature, '', fn)]);
+      const { s } = await sessionFor(deps);
+      const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn), s.readEveryGroup(domain, async ctx => [await fn(ctx)], Number.MAX_SAFE_INTEGER)]);
+      return merge([shared, ...groups]);
+    },
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
