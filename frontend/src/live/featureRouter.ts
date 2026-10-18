@@ -2,6 +2,7 @@ import type { Identity } from "@icp-sdk/core/agent";
 import { isFeatureCanisterConfigured, type FeatureArea } from "./featureBackend";
 import { getCurrentInternetIdentity, getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getEffectiveBackendForFeature, isSignedInWithEmail, tryGetActiveIcpTarget } from "./loadBackendRouting";
+import { activationStatus, SHIPPED_GATES } from "./groupActivation";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 
 /**
@@ -60,6 +61,12 @@ export async function withFeatureBackend<T>(
       `The "${feature}" feature is routed to the Internet Computer backend, ` +
         "but there is no active Internet Identity session. Sign in again to continue.",
     );
+  }
+  // Group routing switch-on lock: shipped off, so every club uses the shared
+  // canisters. If ever switched on without the club-scoped dispatcher, fail
+  // closed instead of silently sending a moved club to the old group.
+  if (activationStatus(SHIPPED_GATES).active) {
+    throw new Error("Group routing is switched on but the club-scoped dispatcher is not installed.");
   }
   return providers.icp({ identity, target: getActiveIcpTarget() });
 }

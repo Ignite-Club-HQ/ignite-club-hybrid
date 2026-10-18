@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { placeNewClub, MAX_CLUBS_PER_GROUP, type GroupCapacity } from './groupPlacement';
 import { approveProvision, runProvision, PER_GROUP_DOMAINS, type Provision, type ProvisionAdapter } from './groupProvisioner';
-import { activationStatus, chooseRoute, OFF } from './groupActivation';
+import { activationStatus, chooseRoute, OFF, SHIPPED_GATES } from './groupActivation';
 import { planTransfer, TRANSFER_DOMAINS } from './groupTransfer';
 import { runTransfer, type TransferAdapter } from './groupTransferRunner';
 import { GROUP_DOMAINS } from './groupRouting';
@@ -92,5 +92,8 @@ describe('integrated scaling rehearsal', () => {
     expect(chooseRoute(almost, true)).toBe('legacy');
     expect(chooseRoute({ ...almost, mainnetVerified: true }, true)).toBe('group');
     expect(chooseRoute({ ...almost, mainnetVerified: true, approvedRevision: 3n }, true)).toBe('legacy');
+  });
+  it('this build ships with group routing switched off', () => {
+    expect(activationStatus(SHIPPED_GATES).active).toBe(false);
   });
 });
