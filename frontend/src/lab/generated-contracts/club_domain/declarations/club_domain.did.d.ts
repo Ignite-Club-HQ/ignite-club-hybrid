@@ -36,6 +36,7 @@ export interface Acl {
   'exclusions' : Array<Exclusion>,
   'roles' : Array<RoleGrant>,
 }
+export interface Cell { 'value' : Value, 'name' : string }
 export interface Challenge {
   'id' : bigint,
   'account_id' : string,
@@ -466,6 +467,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'erase_my_membership' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'execute' : ActorMethod<[string], Result>,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
   'export_frozen_club' : ActorMethod<
     [string],
@@ -1183,6 +1185,7 @@ export interface Main {
     { 'Ok' : TeamSubscription } |
       { 'Err' : string }
   >,
+  'schema' : ActorMethod<[], string>,
   'send_fee_reminders' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : number } |
@@ -1589,6 +1592,7 @@ export interface Request {
   'operation' : Operation,
   'expected_revision' : bigint,
 }
+export interface Result { 'hasMore' : boolean, 'rows' : Array<Row> }
 export interface RoleGrant {
   'club' : [] | [string],
   'role' : string,
@@ -1607,6 +1611,7 @@ export interface RoleRequest {
   'created_at_ms' : bigint,
   'decided_by' : [] | [Principal],
 }
+export type Row = Array<Cell>;
 export interface Season {
   'id' : string,
   'status' : string,
@@ -1749,6 +1754,10 @@ export interface TeamWelcomeEmail {
   'message' : string,
   'club_id' : string,
 }
+export type Value = { 'int' : bigint } |
+  { 'bool' : boolean } |
+  { 'null' : null } |
+  { 'text' : string };
 export interface WelcomeEmailJob {
   'to' : string,
   'subject' : string,

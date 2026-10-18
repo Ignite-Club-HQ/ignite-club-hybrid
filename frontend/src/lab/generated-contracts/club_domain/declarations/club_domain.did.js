@@ -244,6 +244,15 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'class_id' : IDL.Text,
   });
+  const Value = IDL.Variant({
+    'int' : IDL.Int,
+    'bool' : IDL.Bool,
+    'null' : IDL.Null,
+    'text' : IDL.Text,
+  });
+  const Cell = IDL.Record({ 'value' : Value, 'name' : IDL.Text });
+  const Row = IDL.Vec(Cell);
+  const Result = IDL.Record({ 'hasMore' : IDL.Bool, 'rows' : IDL.Vec(Row) });
   const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
   const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
   const Exclusion = IDL.Record({ 'club' : IDL.Text, 'user' : IDL.Principal });
@@ -800,6 +809,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'execute' : IDL.Func([IDL.Text], [Result], ['query']),
     'export_acl' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : Config, 'Err' : IDL.Text })],
@@ -1638,6 +1648,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamSubscription, 'Err' : IDL.Text })],
         [],
       ),
+    'schema' : IDL.Func([], [IDL.Text], ['query']),
     'send_fee_reminders' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
