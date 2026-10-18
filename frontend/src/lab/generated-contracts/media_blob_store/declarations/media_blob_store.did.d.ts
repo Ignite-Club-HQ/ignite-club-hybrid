@@ -67,6 +67,10 @@ export interface _SERVICE {
   'get_usage' : ActorMethod<[], Usage>,
   'health' : ActorMethod<[], Health>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
+  'memory_stats' : ActorMethod<
+    [],
+    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
+  >,
   'merge_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |

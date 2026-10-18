@@ -9,41 +9,44 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
-  const init = IDL.Record({ 'governor' : IDL.Principal });
-  const result_nat64 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
-  const assign_request = IDL.Record({
+  const Init = IDL.Record({ 'governor' : IDL.Principal });
+  const Result = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
+  const AssignRequest = IDL.Record({
     'shard' : IDL.Principal,
     'expected_revision' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
-  const route = IDL.Record({
+  const Route = IDL.Record({
     'shard' : IDL.Principal,
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
-  const assign_result = IDL.Record({ 'revision' : IDL.Nat64, 'route' : route });
-  const result_assign = IDL.Variant({ 'Ok' : assign_result, 'Err' : IDL.Text });
-  const assign_domain_request = IDL.Record({
+  const AssignResult = IDL.Record({ 'revision' : IDL.Nat64, 'route' : Route });
+  const Result_1 = IDL.Variant({ 'Ok' : AssignResult, 'Err' : IDL.Text });
+  const AssignDomainRequest = IDL.Record({
     'domain' : IDL.Text,
     'shard' : IDL.Principal,
     'expected_revision' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
-  const domain_route = IDL.Record({
+  const DomainRoute = IDL.Record({
     'domain' : IDL.Text,
     'shard' : IDL.Principal,
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
-  const assign_domain_result = IDL.Record({
+  const AssignDomainResult = IDL.Record({
     'revision' : IDL.Nat64,
-    'route' : domain_route,
+    'route' : DomainRoute,
   });
-  const result_assign_domain = IDL.Variant({
-    'Ok' : assign_domain_result,
-    'Err' : IDL.Text,
+  const Result_2 = IDL.Variant({ 'Ok' : AssignDomainResult, 'Err' : IDL.Text });
+  const GroupAssignment = IDL.Record({
+    'group_id' : IDL.Text,
+    'revision' : IDL.Nat64,
+    'club_id' : IDL.Text,
   });
-  const domain_migration = IDL.Record({
+  const Result_3 = IDL.Variant({ 'Ok' : GroupAssignment, 'Err' : IDL.Text });
+  const DomainMigration = IDL.Record({
     'destination' : IDL.Principal,
     'domain' : IDL.Text,
     'source' : IDL.Principal,
@@ -51,105 +54,121 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'migration_revision' : IDL.Nat64,
   });
-  const result_domain_migration = IDL.Variant({
-    'Ok' : domain_migration,
-    'Err' : IDL.Text,
-  });
-  const migration = IDL.Record({
+  const Result_4 = IDL.Variant({ 'Ok' : DomainMigration, 'Err' : IDL.Text });
+  const Migration = IDL.Record({
     'destination' : IDL.Principal,
     'source' : IDL.Principal,
     'route_revision' : IDL.Nat64,
     'club_id' : IDL.Text,
     'migration_revision' : IDL.Nat64,
   });
-  const result_migration = IDL.Variant({ 'Ok' : migration, 'Err' : IDL.Text });
-  const result_opt_domain_migration = IDL.Variant({
-    'Ok' : IDL.Opt(domain_migration),
+  const Result_5 = IDL.Variant({ 'Ok' : Migration, 'Err' : IDL.Text });
+  const Result_6 = IDL.Variant({
+    'Ok' : IDL.Opt(DomainMigration),
     'Err' : IDL.Text,
   });
-  const result_opt_domain_route = IDL.Variant({
-    'Ok' : IDL.Opt(domain_route),
+  const Result_7 = IDL.Variant({
+    'Ok' : IDL.Opt(DomainRoute),
     'Err' : IDL.Text,
   });
-  const result_opt_migration = IDL.Variant({
-    'Ok' : IDL.Opt(migration),
+  const Result_8 = IDL.Variant({
+    'Ok' : IDL.Opt(GroupAssignment),
     'Err' : IDL.Text,
   });
-  const result_opt_route = IDL.Variant({
-    'Ok' : IDL.Opt(route),
+  const Result_9 = IDL.Variant({ 'Ok' : IDL.Opt(Migration), 'Err' : IDL.Text });
+  const Result_10 = IDL.Variant({ 'Ok' : IDL.Opt(Route), 'Err' : IDL.Text });
+  const DomainCanister = IDL.Record({
+    'domain' : IDL.Text,
+    'canister' : IDL.Principal,
+  });
+  const ShardGroup = IDL.Record({
+    'id' : IDL.Text,
+    'max_clubs' : IDL.Nat32,
+    'observed_at_ns' : IDL.Nat64,
+    'accepting' : IDL.Bool,
+    'heap_budget_bytes' : IDL.Nat64,
+    'cycles' : IDL.Nat64,
+    'assigned_clubs' : IDL.Nat32,
+    'domains' : IDL.Vec(DomainCanister),
+    'target_alias' : IDL.Text,
+    'min_cycles' : IDL.Nat64,
+    'heap_bytes' : IDL.Nat64,
+  });
+  const Result_11 = IDL.Variant({
+    'Ok' : IDL.Vec(ShardGroup),
     'Err' : IDL.Text,
   });
-  const page = IDL.Record({
+  const Page = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
-    'routes' : IDL.Vec(route),
+    'routes' : IDL.Vec(Route),
     'revision' : IDL.Nat64,
   });
-  const result_page = IDL.Variant({ 'Ok' : page, 'Err' : IDL.Text });
+  const Result_12 = IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text });
+  const MemoryStats = IDL.Record({
+    'memory_bytes' : IDL.Nat,
+    'stable_bytes' : IDL.Nat,
+    'heap_bytes' : IDL.Nat,
+  });
   
   return IDL.Service({
     'abort_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
-        [result_nat64],
+        [Result],
         [],
       ),
-    'abort_migration' : IDL.Func([IDL.Text, IDL.Nat64], [result_nat64], []),
-    'assign' : IDL.Func([assign_request], [result_assign], []),
-    'assign_domain' : IDL.Func(
-        [assign_domain_request],
-        [result_assign_domain],
+    'abort_migration' : IDL.Func([IDL.Text, IDL.Nat64], [Result], []),
+    'assign' : IDL.Func([AssignRequest], [Result_1], []),
+    'assign_domain' : IDL.Func([AssignDomainRequest], [Result_2], []),
+    'assign_new_club_group' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat64],
+        [Result_3],
         [],
       ),
     'begin_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Principal, IDL.Nat64],
-        [result_domain_migration],
+        [Result_4],
         [],
       ),
     'begin_migration' : IDL.Func(
         [IDL.Text, IDL.Principal, IDL.Nat64],
-        [result_migration],
+        [Result_5],
         [],
       ),
     'commit_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
-        [result_assign_domain],
+        [Result_2],
         [],
       ),
-    'commit_migration' : IDL.Func([IDL.Text, IDL.Nat64], [result_assign], []),
+    'commit_migration' : IDL.Func([IDL.Text, IDL.Nat64], [Result_1], []),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'get_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text],
-        [result_opt_domain_migration],
+        [Result_6],
         ['query'],
       ),
-    'get_domain_route' : IDL.Func(
-        [IDL.Text, IDL.Text],
-        [result_opt_domain_route],
-        ['query'],
-      ),
-    'get_migration' : IDL.Func([IDL.Text], [result_opt_migration], ['query']),
-    'get_route' : IDL.Func([IDL.Text], [result_opt_route], ['query']),
+    'get_domain_route' : IDL.Func([IDL.Text, IDL.Text], [Result_7], ['query']),
+    'get_group_assignment' : IDL.Func([IDL.Text], [Result_8], ['query']),
+    'get_migration' : IDL.Func([IDL.Text], [Result_9], ['query']),
+    'get_route' : IDL.Func([IDL.Text], [Result_10], ['query']),
+    'list_groups' : IDL.Func([], [Result_11], ['query']),
     'list_routes' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Nat16],
-        [result_page],
+        [Result_12],
         ['query'],
       ),
-    'memory_stats' : IDL.Func(
+    'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
+    'record_group_health' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64, IDL.Nat64],
+        [Result],
         [],
-        [
-          IDL.Record({
-            'memory_bytes' : IDL.Nat,
-            'stable_bytes' : IDL.Nat,
-            'heap_bytes' : IDL.Nat,
-          }),
-        ],
-        ['query'],
       ),
+    'register_group' : IDL.Func([ShardGroup, IDL.Nat64], [Result], []),
     'version' : IDL.Func([], [IDL.Nat64], ['query']),
   });
 };
 
 export const init = ({ IDL }) => {
-  const init = IDL.Record({ 'governor' : IDL.Principal });
+  const Init = IDL.Record({ 'governor' : IDL.Principal });
   
-  return [init];
+  return [Init];
 };

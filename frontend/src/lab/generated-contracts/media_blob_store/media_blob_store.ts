@@ -120,6 +120,11 @@ export interface media_blob_storeInterface {
     get_usage(): Promise<Usage>;
     health(): Promise<Health>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
+    memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }>;
     merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -179,6 +184,14 @@ export class Media_blob_store implements media_blob_storeInterface {
     }
     async http_request(arg0: HttpRequest): Promise<HttpResponse> {
         const result = await this.actor.http_request(arg0);
+        return result;
+    }
+    async memory_stats(): Promise<{
+        memory_bytes: bigint;
+        stable_bytes: bigint;
+        heap_bytes: bigint;
+    }> {
+        const result = await this.actor.memory_stats();
         return result;
     }
     async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{

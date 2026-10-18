@@ -1,5 +1,11 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [x] 17. ICP scaling foundation: conservative heap-backed media capacity, pending-byte reservations, bounded chunks, linear assembly and same-store concurrent quota checks; policy/assembly tests pass. No files moved or deleted. Local actor read-back unsupported by this test runner; mainnet verification remains required.
+- [x] 18. ICP scaling foundation: stable, immutable governor-managed club-group planning records, capacity selection and retry/conflict tests; existing placement/residency moves rejected. 22 Rust tests pass. This is NOT active production group routing.
+- [x] 19. ICP scaling foundation: dry-run-first additional media-store recipe generator with shared source/migrations; 3 offline setup tests and 3 deploy safety tests pass. Guide: docs/ICP_SCALING.md. Existing deploy wiring retained; no extra canister deployed or registered.
+- [ ] 20. ICP scaling activation: multi-group membership discovery, cross-group authorization/notifications, every feature's scoped routing, indexed data storage and verified copy/restore tooling must pass before new club-data groups serve production traffic. Do not activate partial routing.
+- [ ] 21. USER ACTION: deploy tested scaling upgrades and verify authenticated uploads/permissions on mainnet; requires the governor deployment workflow and an Internet Identity session.
+
 - [x] 15. Chat photo sends settle from server acknowledgements in Team/Club/Group chats; pending recovery uses trimmed text and attachment identity. Navigation/concurrent-send and local rendering regressions pass: 128 tests in each backend mode; preview build OK.
 - [ ] 16. USER ACTION: deploy the updated frontend and rebuild/install Android; verify an Internet Identity photo send and reopening on the device. No signed-in ICP session is available here for live verification.
 

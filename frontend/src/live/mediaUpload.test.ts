@@ -97,4 +97,25 @@ describe("tryUploadMediaToBlobStore competition scope", () => {
     expect(mocks.encryptPiiValue).not.toHaveBeenCalled();
     expect(mocks.grantLivePiiReadCompetition).not.toHaveBeenCalled();
   });
+
+  it("rejects files above 10 MiB before encryption or upload", async () => {
+    await expect(tryUploadMediaToBlobStore({
+      storagePath: "clubs/club-1/vault/file.pdf",
+      file: new Blob([new Uint8Array(10 * 1024 * 1024 + 1)]),
+      mime: "application/pdf",
+      lock: "own",
+    })).rejects.toThrow("larger than 10 MB");
+    expect(mocks.encryptPiiValue).not.toHaveBeenCalled();
+    expect(mocks.uploadBytesToBlobStore).not.toHaveBeenCalled();
+  });
+
+  it("accepts a file exactly 10 MiB before encryption framing", async () => {
+    await tryUploadMediaToBlobStore({
+      storagePath: "clubs/club-1/vault/file.pdf",
+      file: new Blob([new Uint8Array(10 * 1024 * 1024)]),
+      mime: "application/pdf",
+      lock: "own",
+    });
+    expect(mocks.uploadBytesToBlobStore).toHaveBeenCalledOnce();
+  });
 });

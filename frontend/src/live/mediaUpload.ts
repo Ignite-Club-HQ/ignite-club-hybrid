@@ -64,6 +64,9 @@ export async function tryUploadMediaToBlobStore(args: {
   if (!isBlobStoreConfigured(target)) return null;
   const identity = await getCurrentInternetIdentity();
   if (!identity) return null;
+  if (args.file.size > 10 * 1024 * 1024) {
+    throw new Error("This file is larger than 10 MB. Please choose a smaller file.");
+  }
   const ctx = { target, identity };
   const bytes = new Uint8Array(await args.file.arrayBuffer());
   // Club photos (clubs/<clubId>/...) share one per-club lock when the

@@ -8,6 +8,8 @@ use ic_stable_structures::{
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+mod groups;
+use groups::{GroupAssignment, ShardGroup};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
@@ -109,6 +111,8 @@ thread_local! {
     static DOMAIN_MIGRATIONS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(
         StableBTreeMap::init(memory(5))
     );
+    static GROUPS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(6)));
+    static GROUP_ASSIGNMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(7)));
 }
 
 fn memory(id: u8) -> Memory {
@@ -149,7 +153,7 @@ fn require_governor() -> Outcome<()> {
 }
 
 fn validate_club_id(club_id: &str) -> Outcome<()> {
-    if club_id.trim().is_empty() || club_id.len() > MAX_CLUB_ID_BYTES {
+    if club_id.trim().is_empty() || club_id.len() > MAX_CLUB_ID_BYTES || club_id.contains(':') {
         return Err("Invalid club ID".into());
     }
     Ok(())
@@ -257,11 +261,13 @@ fn list_routes(start_after: Option<String>, limit: u16) -> Outcome<Page> {
 fn assign(request: AssignRequest) -> Outcome<AssignResult> {
     require_governor()?;
     validate_club_id(&request.club_id)?;
+    if group_assignment_for(&request.club_id).is_some() { return Err("Club has an immutable group assignment".into()); }
     validate_shard(request.shard)?;
     if migration_for(&request.club_id).is_some() {
         return Err("Club migration in progress".into());
     }
     let previous = route_for(&request.club_id);
+    groups::immutable_route(previous.as_ref().map(|r| r.shard), request.shard)?;
     let revision = current_revision();
     if request.expected_revision != revision {
         return Err(format!("Conflict: expected revision {revision}"));
@@ -293,6 +299,7 @@ fn begin_migration(
 ) -> Outcome<Migration> {
     require_governor()?;
     validate_club_id(&club_id)?;
+    if group_assignment_for(&club_id).is_some() { return Err("Group migration requires verified group-wide copy and cutover".into()); }
     validate_shard(destination)?;
     if migration_for(&club_id).is_some() {
         return Err("Club migration already in progress".into());
@@ -378,8 +385,10 @@ fn get_migration(club_id: String) -> Outcome<Option<Migration>> {
 fn assign_domain(request: AssignDomainRequest) -> Outcome<AssignDomainResult> {
     require_governor()?;
     validate_club_id(&request.club_id)?;
+    if group_assignment_for(&request.club_id).is_some() { return Err("Club has an immutable group assignment".into()); }
     validate_club_id(&request.domain)?;
     validate_shard(request.shard)?;
+    groups::immutable_route(domain_route_for(&request.club_id, &request.domain).map(|r| r.shard), request.shard)?;
     if domain_migration_for(&request.club_id, &request.domain).is_some()
         || migration_for(&request.club_id).is_some()
     {
@@ -414,6 +423,7 @@ fn begin_domain_migration(
 ) -> Outcome<DomainMigration> {
     require_governor()?;
     validate_club_id(&club_id)?;
+    if group_assignment_for(&club_id).is_some() { return Err("Group migration requires verified group-wide copy and cutover".into()); }
     validate_club_id(&domain)?;
     validate_shard(destination)?;
     if domain_migration_for(&club_id, &domain).is_some() || migration_for(&club_id).is_some() {
@@ -511,6 +521,103 @@ fn version() -> u64 {
     current_revision()
 }
 
+// Control-plane preparation only: these assignments do not activate live
+// frontend routing. Activation requires tested discovery/ACL/migration wiring.
+fn group_for(id: &str) -> Option<ShardGroup> {
+    GROUPS.with(|items| items.borrow().get(&id.as_bytes().to_vec()).map(|bytes| decode(&bytes)))
+}
+fn group_assignment_for(id: &str) -> Option<GroupAssignment> {
+    GROUP_ASSIGNMENTS.with(|items| items.borrow().get(&id.as_bytes().to_vec()).map(|bytes| decode(&bytes)))
+}
+
+#[ic_cdk::update]
+fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
+    require_governor()?;
+    let mut group = group;
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    let prior = group_for(&group.id);
+    if let Some(ref old) = prior {
+        if old.target_alias != group.target_alias || old.domains != group.domains {
+            return Err("Group endpoints are immutable; register a new group".into());
+        }
+        group.assigned_clubs = old.assigned_clubs;
+        group.heap_bytes = old.heap_bytes;
+        group.cycles = old.cycles;
+        group.observed_at_ns = old.observed_at_ns;
+    } else {
+        if GROUPS.with(|items| items.borrow().len()) >= groups::MAX_GROUPS as u64 {
+            return Err("Group registry full".into());
+        }
+        group.assigned_clubs = 0;
+        // Health is written through the separate governor-only reporting API.
+        group.heap_bytes = 0; group.cycles = 0; group.observed_at_ns = 0;
+    }
+    groups::validate(&group)?;
+    let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
+    GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+    REVISION.with(|stored| stored.borrow_mut().set(revision));
+    Ok(revision)
+}
+
+#[ic_cdk::update]
+fn record_group_health(group_id: String, heap_bytes: u64, cycles: u64, expected_revision: u64) -> Outcome<u64> {
+    require_governor()?;
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    let mut group = group_for(&group_id).ok_or("Unknown group")?;
+    // Report the largest heap and smallest cycle balance across ALL group
+    // canisters. This is an operator observation, never browser authorization.
+    group.heap_bytes = heap_bytes; group.cycles = cycles; group.observed_at_ns = ic_cdk::api::time();
+    let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
+    GROUPS.with(|items| items.borrow_mut().insert(group_id.into_bytes(), encode(&group)));
+    REVISION.with(|stored| stored.borrow_mut().set(revision));
+    Ok(revision)
+}
+
+#[ic_cdk::query]
+fn list_groups() -> Outcome<Vec<ShardGroup>> {
+    require_governor()?;
+    Ok(GROUPS.with(|items| items.borrow().iter().map(|entry| decode(&entry.value())).collect()))
+}
+
+#[ic_cdk::query]
+fn get_group_assignment(club_id: String) -> Outcome<Option<GroupAssignment>> {
+    require_governor()?;
+    validate_club_id(&club_id)?;
+    Ok(group_assignment_for(&club_id))
+}
+
+#[ic_cdk::update]
+fn assign_new_club_group(club_id: String, target_alias: String, expected_revision: u64) -> Outcome<GroupAssignment> {
+    require_governor()?;
+    assign_group_record(club_id, target_alias, expected_revision, ic_cdk::api::time())
+}
+
+fn assign_group_record(club_id: String, target_alias: String, expected_revision: u64, now: u64) -> Outcome<GroupAssignment> {
+    validate_club_id(&club_id)?;
+    // Retrying an acknowledged assignment never consumes a second slot.
+    if let Some(assignment) = group_assignment_for(&club_id) {
+        let group = group_for(&assignment.group_id).ok_or("Missing assigned group")?;
+        if group.target_alias != target_alias { return Err("Existing assignment belongs to another target".into()); }
+        return Ok(assignment);
+    }
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    if route_for(&club_id).is_some() || migration_for(&club_id).is_some() ||
+        DOMAIN_ROUTES.with(|items| items.borrow().range(domain_key(&club_id, "")..).next()
+            .is_some_and(|entry| entry.key().starts_with(&domain_key(&club_id, "")))) {
+        return Err("Existing club routes require a verified migration".into());
+    }
+    let rows: Vec<ShardGroup> = GROUPS.with(|items| items.borrow().iter().map(|entry| decode(&entry.value())).collect());
+    let mut group = groups::select(&rows, &target_alias, now).cloned().ok_or("No healthy group with capacity")?;
+    let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
+    group.assigned_clubs += 1;
+    let assignment = GroupAssignment { club_id: club_id.clone(), group_id: group.id.clone(), revision };
+    // Both maps update in one synchronous message; no await/reentrancy window.
+    GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+    GROUP_ASSIGNMENTS.with(|items| items.borrow_mut().insert(club_id.into_bytes(), encode(&assignment)));
+    REVISION.with(|stored| stored.borrow_mut().set(revision));
+    Ok(assignment)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -536,6 +643,32 @@ mod tests {
             b"club-1:messaging".to_vec()
         );
     }
+
+    #[test]
+    fn assignment_retry_is_persistent_and_does_not_consume_capacity_twice() {
+        let group = ShardGroup {
+            id: "test-group".into(), target_alias: "mainnet".into(), domains: vec![],
+            accepting: true, max_clubs: 1, assigned_clubs: 0,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+        };
+        GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+        let revision = current_revision();
+        let first = assign_group_record("club-one".into(), "mainnet".into(), revision, 1).unwrap();
+        let retry = assign_group_record("club-one".into(), "mainnet".into(), revision, 1).unwrap();
+        assert_eq!(first, retry);
+        assert_eq!(group_for("test-group").unwrap().assigned_clubs, 1);
+        assert_eq!(group_assignment_for("club-one"), Some(first));
+        assert!(assign_group_record("club-two".into(), "mainnet".into(), current_revision(), 1).is_err());
+        assert!(assign_group_record("club-one".into(), "other-engine".into(), current_revision(), 1).is_err());
+    }
+
+    #[test]
+    fn conflicting_revision_does_not_reserve_a_slot() {
+        let before = current_revision();
+        assert!(assign_group_record("conflict-club".into(), "mainnet".into(), before + 1, 1).is_err());
+        assert!(group_assignment_for("conflict-club").is_none());
+        assert_eq!(current_revision(), before);
+    }
 }
 
 /// Public: remaining cycles (shown in admin settings).
@@ -559,3 +692,5 @@ fn memory_stats() -> MemoryStats {
 }
 
 ic_cdk::export_candid!();
+
+pub fn candid_interface() -> String { __export_service() }
