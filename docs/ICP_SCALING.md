@@ -29,6 +29,15 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
   data. Existing migration methods remain route-only and are **not** proof
   of data copying. Group migration is deliberately blocked until verified
   group-wide migration exists.
+- Shared quota preparation now has indexed persistent maps in `club_domain`,
+  a governor-only trusted-store registry and idempotent reserve/commit/release
+  logic. Reservations include outstanding writes across stores; free caps
+  remain 10 per category and 25 MiB for vault/chat files. Pro/trial allowance
+  is derived from authoritative subscription flags, never a browser flag.
+- These quota APIs are **governor-only preparation**, not live store APIs.
+  Existing uploads still use the existing local quota checks. There is no
+  activation switch, automatic deployment wiring or claim of live global
+  enforcement. No additional free-club stores should be activated yet.
 
 ## Deployment of this foundation
 
@@ -37,6 +46,15 @@ Run the existing governor-controlled backend workflow to upgrade
 and rebuild native apps for the plaintext limit. Never reinstall or replace
 memory. No new Motoko stable fields are introduced; no migration file is
 required for the media admission change.
+
+The later shared-quota preparation requires a `club_domain` upgrade with
+additive migration `20261025_000000` (frozen inline map records). Do not edit
+earlier applied migrations. Its new state is empty and does not replace or
+reset existing per-store counters. The quota maps are hard bounded at 100,000
+entries each, store registry at 64 and outstanding club/category reservations
+at 64; exceeding a bound rejects new work rather than growing indefinitely.
+No reservations expire automatically: unknown finalization outcomes must not
+silently refund capacity. Bounded reconciliation/retirement remains required.
 
 Before upgrading: capture module hashes, usage and memory readings. Afterward:
 verify old ciphertext URLs/hash values, ordinary-member uploads, staff deletes,
@@ -61,6 +79,15 @@ The existing deployment script wires `media_blob_store_N` to `club_domain`.
 per-store, whereas the product allowance is per club. Summed browser reads
 are not enforcement. An authoritative on-chain quota reservation/commit
 service is required before distributing free-club writes across stores.
+
+The new preparation ledger is only the first part of that service. Next:
+freeze all participating stores, reconcile pending writes, import and verify
+each current-cycle usage snapshot with retry-safe per-store imports, then
+activate caller-store-gated operations and recoverable store-side finalization.
+Keep operation links until commit/abort outcomes are confirmed. An uncertain
+finalize must not cause an abort to refund an already-published file. Test
+every interrupted call and cycle-boundary transition before cutover; no
+fallback to independent local counters after global enforcement is enabled.
 
 ## Required before production multi-group activation
 

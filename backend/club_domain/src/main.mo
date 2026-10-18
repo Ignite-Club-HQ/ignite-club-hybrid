@@ -19,6 +19,7 @@ import Types "types";
 import AccountErasure "accountErasure";
 import Oql "../../shared/Oql";
 import OqlClubs "oqlClubs";
+import MediaQuota "mediaQuota";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -66,6 +67,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  // Preparation-only ledger. No upload activation API until legacy usage
+  // import and recoverable store-side sagas exist; existing stores unchanged.
+  var mediaQuotaLedger : MediaQuota.Ledger;
+  var mediaQuotaStores : [Principal];
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -4254,6 +4259,36 @@ persistent actor class Main(governorInit : Principal) {
       if (s.club_id == club_id) return #Ok(?s);
     };
     #Ok(null)
+  };
+
+  public shared ({ caller }) func register_media_quota_store(store : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (store.equal(Principal.anonymous()) or store.equal(Principal.fromText("aaaaa-aa"))) return #Err("Invalid store");
+    if (mediaQuotaStores.any(func(p) { p.equal(store) })) return #Ok;
+    if (mediaQuotaStores.size() >= 64) return #Err("Store registry full");
+    mediaQuotaStores := mediaQuotaStores.concat([store]);
+    #Ok
+  };
+
+  // Deliberately governor-only preparation tests: registered stores cannot
+  // consume production quota until a later, verified baseline cutover.
+  public shared ({ caller }) func prepare_media_quota_reservation(store : Principal, token : Text, club_id : Text, category : Text, bytes : Nat) : async MediaQuota.Result {
+    if (not MediaQuota.authorizedPreparation(governor, caller, store, mediaQuotaStores)) return #Err("Governor and registered store required");
+    if (not profiles.any(func(p) { p.id == club_id })) return #Err("Unknown club");
+    let pro = clubSubscriptions.any(func(s) {
+      s.club_id == club_id and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial)
+    });
+    MediaQuota.reserve(mediaQuotaLedger, store, token, club_id, category, bytes, Int.abs(Time.now()) / MediaQuota.cycleNs, pro)
+  };
+
+  public shared ({ caller }) func settle_prepared_media_quota(store : Principal, token : Text, commit : Bool) : async MediaQuota.Result {
+    if (not MediaQuota.authorizedPreparation(governor, caller, store, mediaQuotaStores)) return #Err("Governor and registered store required");
+    MediaQuota.settle(mediaQuotaLedger, store, token, commit)
+  };
+
+  public query ({ caller }) func get_prepared_media_quota(store : Principal, token : Text) : async { #Ok : ?MediaQuota.Reservation; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(MediaQuota.status(mediaQuotaLedger, store, token))
   };
 
   public shared ({ caller }) func save_club_subscription(item : Types.ClubSubscription) : async { #Ok : Types.ClubSubscription; #Err : Text } {
