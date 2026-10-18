@@ -68,6 +68,17 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
   observation snapshots after every restore. The local transport is fixture-only;
   this increment does not supply or activate a production recovery command.
 - Unbounded-wait responses are delivered; bounded-wait calls can report unknown
+- Snapshot/receipt integration (`scripts/media-recovery-snapshots.mjs`) is opt-in
+  for local adapters. Durable receipts bind complete raw baselines to placement
+  and checkpoint IDs, record read intents/results, then compare fresh stopped
+  observation snapshots after restore and again before resume. Evidence-required
+  receipts cannot silently omit the reader or adopt a legacy baseline. Every
+  management read checks the whole inventory and independently supplied placement;
+  failures refence the participants. Raw equality never replaces semantic checks.
+  Sampled statuses cannot establish continuous exclusion of another controller:
+  production still requires an exclusive controller fence, authenticated transport
+  and decoded quota/content verification. No live adapter or activation is added.
+- Unbounded-wait responses are delivered; bounded-wait calls can report unknown
   outcomes after remote commit. PocketIC 0.23.0 exposes no response-drop API.
   Client loss and unavailable-authority tests are not substitutes; genuine
   post-commit unknown-outcome injection remains an activation gate.
