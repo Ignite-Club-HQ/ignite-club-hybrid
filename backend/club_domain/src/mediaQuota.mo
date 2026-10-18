@@ -13,7 +13,7 @@ module {
     reservations : Map.Map<Text, Reservation>;
   };
   public type Result = { #Ok : Reservation; #Err : Text };
-  public let cycleNs : Nat = 30 * 86_400 * 1_000_000_000;
+  public let cycleNs : Nat = 2_592_000_000_000_000;
   public let maxEntries : Nat = 100_000;
   public func empty() : Ledger { { usage = Map.empty(); reservations = Map.empty() } };
   func usageKey(club : Text, category : Text, cycle : Nat) : Text {
