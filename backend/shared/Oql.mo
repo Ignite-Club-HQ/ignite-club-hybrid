@@ -27,7 +27,7 @@ module {
   };
   public func integer(name : Text, value : Int) : Cell { { name; value = #int(value) } };
   public func boolean(name : Text, value : Bool) : Cell { { name; value = #bool(value) } };
-  func object(value : Json.Json, allowed : [Text]) : [(Text, Json.Json)] {
+  func readObject(value : Json.Json, allowed : [Text]) : [(Text, Json.Json)] {
     let entries = switch (value) { case (#object_(e)) e; case (_) fail("Expected object") };
     var seen : [Text] = [];
     for ((key, _) in entries.values()) {
@@ -77,7 +77,7 @@ module {
   public func parse(input : Text, entities : [Entity]) : Query {
     bounded(input);
     let json = switch (Json.parse(input)) { case (#ok(v)) v; case (#err(_)) fail("Invalid JSON") };
-    let root = object(json, ["entity", "select", "filters", "limit", "offset", "orderBy", "aggregate", "groupBy"]);
+    let root = readObject(json, ["entity", "select", "filters", "limit", "offset", "orderBy", "aggregate", "groupBy"]);
     let entity = string(required(root, "entity"));
     let fields = switch (entities.find(func(e) = e.name == entity)) { case (?e) e.fields; case null fail("Unknown entity: " # entity) };
     let select = switch (get(root, "select")) {
@@ -95,7 +95,7 @@ module {
       case (?#array(values)) {
         if (values.size() > 12) fail("At most 12 filters");
         values.map(func(value) : Filter {
-          let obj = object(value, ["field", "op", "value"]);
+          let obj = readObject(value, ["field", "op", "value"]);
           let name = string(required(obj, "field")); let f = field(fields, name);
           let op = string(required(obj, "op")); let v = scalar(required(obj, "value"));
           if (not ["eq", "ne", "gt", "gte", "lt", "lte", "contains"].any(func(x) = x == op)) fail("Unknown filter operator");
@@ -116,7 +116,7 @@ module {
     let orderBy = switch (get(root, "orderBy")) {
       case null null;
       case (?v) {
-        let obj = object(v, ["field", "direction"]); let name = string(required(obj, "field")); ignore field(fields, name);
+        let obj = readObject(v, ["field", "direction"]); let name = string(required(obj, "field")); ignore field(fields, name);
         let direction = switch (get(obj, "direction")) { case (?d) string(d); case null "asc" };
         if (direction != "asc" and direction != "desc") fail("direction must be asc or desc");
         descending := direction == "desc"; ?name
