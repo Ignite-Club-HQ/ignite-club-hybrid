@@ -69,5 +69,43 @@ export function groupWriteFeatures(session: Session) {
         const { registerLiveVaultFile } = await import('./features/vault');
         return registerLiveVaultFile(ctx, f.id, f.folderId, clubId, f.teamId, f.name, f.url, f.size, f.mime, false, f.blobRef);
       }),
+    // ---- Remaining feature saves (roadmap 51). Overwrites/once-keyed writes may
+    // retry transport loss; creates, plain awards and deletes never auto-retry
+    // because the canister has no idempotency key for them.
+    awardPointsOnce: (clubId: string, ...a: Tail<typeof import('./features/points').awardLivePointsOnce>) =>
+      session.writeClub(clubId, 'club_points_domain', onceKey(a), async ctx => (await import('./features/points')).awardLivePointsOnce(ctx, clubId, ...a)),
+    awardPoints: (clubId: string, key: string, ...a: Tail<typeof import('./features/points').awardLivePoints>) =>
+      session.writeClub(clubId, 'club_points_domain', key, async ctx => (await import('./features/points')).awardLivePoints(ctx, clubId, ...a), 1),
+    savePointsSettings: (clubId: string, key: string, ...a: Rest<typeof import('./features/points').saveLiveClubPointsSettings>) =>
+      session.writeClub(clubId, 'club_points_domain', key, async ctx => (await import('./features/points')).saveLiveClubPointsSettings(ctx, ...a)),
+    createMiniLeague: (clubId: string, key: string, input: Parameters<typeof import('./features/miniLeagues').createLiveMiniLeague>[2]) =>
+      session.writeClub(clubId, 'mini_league_domain', key, async ctx => (await import('./features/miniLeagues')).createLiveMiniLeague(ctx, clubId, input), 1),
+    updateMiniLeague: (clubId: string, id: string, input: Parameters<typeof import('./features/miniLeagues').updateLiveMiniLeague>[2]) =>
+      session.writeClub(clubId, 'mini_league_domain', `ml-update:${id}`, async ctx => (await import('./features/miniLeagues')).updateLiveMiniLeague(ctx, id, input)),
+    setMiniLeagueStatus: (clubId: string, id: string, status: string) =>
+      session.writeClub(clubId, 'mini_league_domain', `ml-status:${id}`, async ctx => (await import('./features/miniLeagues')).setLiveMiniLeagueStatus(ctx, id, status)),
+    /** Results are written only in the competition's host club group; an
+     * entering club reads it cross-group but can never write there. */
+    setMatchResult: (hostClubId: string, matchId: string, home: number, away: number, at: number | Date) =>
+      session.writeClub(hostClubId, 'competition_domain', `result:${matchId}`, async ctx => (await import('./features/competitions')).setLiveMatchResult(ctx, matchId, home, away, at)),
+    updateCompetitionSettings: (hostClubId: string, key: string, ...a: Rest<typeof import('./features/competitions').updateLiveCompetitionSettings>) =>
+      session.writeClub(hostClubId, 'competition_domain', key, async ctx => (await import('./features/competitions')).updateLiveCompetitionSettings(ctx, ...a)),
+    createNewsPost: (clubId: string, key: string, ...a: Tail<typeof import('./features/club').createLiveNewsPost>) =>
+      session.writeClub(clubId, 'club_domain', key, async ctx => (await import('./features/club')).createLiveNewsPost(ctx, clubId, ...a), 1),
+    updateNewsPost: (clubId: string, postId: string, ...a: Tail<typeof import('./features/club').updateLiveNewsPost>) =>
+      session.writeClub(clubId, 'club_domain', `news-update:${postId}`, async ctx => (await import('./features/club')).updateLiveNewsPost(ctx, postId, ...a)),
+    deleteNewsPost: (clubId: string, postId: string) =>
+      session.writeClub(clubId, 'club_domain', `news-delete:${postId}`, async ctx => (await import('./features/club')).deleteLiveNewsPost(ctx, postId), 1),
+    saveAnnouncement: (clubId: string, text: string) =>
+      session.writeClub(clubId, 'club_domain', `announce:${clubId}`, async ctx => (await import('./features/news')).saveLiveClubAnnouncement(ctx, clubId, text)),
   };
+}
+type AnyFn = (...a: never[]) => unknown;
+/** Arguments after (ctx, firstId). */
+type Tail<F extends AnyFn> = Parameters<F> extends [unknown, unknown, ...infer R] ? R : never;
+/** Arguments after ctx. */
+type Rest<F extends AnyFn> = Parameters<F> extends [unknown, ...infer R] ? R : never;
+function onceKey(a: readonly unknown[]): string {
+  const k = JSON.stringify(a.slice(0, 3)).slice(0, 128);
+  return k.length ? k : 'points-once';
 }
