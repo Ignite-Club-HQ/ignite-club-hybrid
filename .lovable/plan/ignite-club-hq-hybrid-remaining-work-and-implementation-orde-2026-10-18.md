@@ -33,6 +33,7 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 - Define ownership and group lookup for club, team, event, conversation, vault, personal and competition data.
 - Replace single-canister trust assumptions with bounded, authorized group registries wherever necessary, including PII/vetKeys, rewards, competitions, deletion and notification services.
 - Verify invitations, joining, role changes and revoked access across groups.
+- Make group discovery and authorization deployment-aware for both mainnet and optional ICP Cloud Engines. A destination includes its approved engine/network, host and canister IDs; a canister ID alone is not a globally unique routing or trust key. Scope identity sessions, cached actors, media keys and persisted data to the deployment and account.
 
 **Completion gate:** members discover all their clubs; each destination independently enforces access; revoked members are denied. Browser-provided destinations are never authority.
 
@@ -52,6 +53,7 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 - Include dependent records, media access, timers and notifications; account for cross-club and personal references without blindly copying shared records.
 - Cut over the assignment only after verification. Ensure stale clients cannot keep writing to the old group.
 - Test interruption, retries, destination failure, rollback and deletion of the old copy only after successful verification.
+- Prepare an explicit Cloud Engine transfer path: verify supported export/import mechanisms, identity mapping and destination encryption/key access before moving data. Do not assume vetKeys keys or ciphertext are portable between deployments; where necessary, use authorized client-side decrypt/re-encrypt with verified destination read-back, never plaintext staging or canister-held decryption keys.
 
 **Completion gate:** a populated test club moves between groups with no lost records, unreadable files, duplicate notifications or residual unauthorized access.
 
@@ -64,6 +66,9 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 - Build optional subnet-aware provisioning now, but keep cross-subnet expansion disabled until deliberately enabled by an authorized operator. Record each group's actual subnet and verified deployment target; do not assume that creating more canisters places them on another subnet.
 - Keep frequently interacting services together where practical, while allowing additional groups or independently scaled domains on other eligible subnets. Routing and authorization must use verified canister identities, not assume every service shares a subnet.
 - Honor existing country/backend eligibility rules; subnet placement alone must never be represented as a country-residency guarantee.
+- Extend the existing approved Cloud Engine targets to support complete scaling groups and independent domain capacity within an engine. Keep provisioning, health, controller checks and funding/capacity management target-specific; validate the engine's actual supported APIs and operational model before implementing an adapter.
+- Treat mainnet subnets and separate Cloud Engines as distinct deployment cases. Verify native inter-canister connectivity and trust between intended destinations rather than assuming cross-engine calls work like cross-subnet mainnet calls. If connectivity is unsupported, keep tightly coupled authorities, services, quotas and media within the same engine; any required cross-engine coordination needs a separately reviewed authenticated design, not a silent off-chain fallback.
+- Preserve the rule that an engine-assigned country never silently falls back to public mainnet or Supabase. Global discovery must respect the engine's residency boundary and expose only permitted metadata; replicate or deploy engine-local discovery/identity authorities where needed rather than require private membership data to leave the engine.
 - Never mark an incomplete or unhealthy group eligible for clubs.
 
 **Completion gate:** load tests trigger one correctly configured expansion, place new clubs safely and demonstrate capacity protection when provisioning fails.
@@ -74,6 +79,7 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 - Exercise busy clubs, multiple memberships, maximum permitted uploads, simultaneous retries, scheduled delivery and interrupted transfers.
 - Validate upgrade compatibility against the identified live versions and rehearse the full operator procedure with snapshots and rollback.
 - Test cross-subnet behavior: delayed or lost confirmations, unavailable destinations, idempotent retries, permissions and revocation, notifications, encrypted media access and interrupted club transfers. Local simulations prepare the behavior; they do not prove actual cross-subnet performance.
+- Add Cloud Engine compatibility tests for target isolation, supported authentication and delegation, certified responses and trusted root-key configuration, missing capabilities, unavailable engines, no unauthorized fallback, local notifications/quota/PII authority and encrypted-media transfer. Verify vetKD availability, key configuration, timers, snapshots, HTTP serving and push-worker connectivity on the actual engine; source compatibility is not proof of engine support.
 
 **Completion gate:** all relevant regressions pass and every planned production action has a tested stop/rollback point.
 
@@ -97,6 +103,17 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 - If validation fails, keep the new group ineligible and retain existing assignments; use the tested recovery process for any transfer already underway.
 
 **Activation gate:** real cross-subnet checks pass, the group is healthy and fully authorized, and the operator explicitly enables placement. No cross-subnet production activation is requested by this plan update.
+
+#### Optional later activation: ICP Cloud Engines
+
+- Build engine-compatible routing and provisioning boundaries as part of the scaling foundation, but keep new engine scaling deployments disabled until needed and explicitly approved. Do not disable existing approved engine routing.
+- Before activation, document the selected engine's host, trust root, identity/delegation support, canister APIs, vetKD/key support, storage limits, recovery facilities, notification delivery and operating costs. Unsupported security-critical capabilities block activation; they must not be bypassed.
+- Provision a complete isolated test group on the selected engine and verify authenticated creation, discovery, permissions/revocation, messages, encrypted uploads/downloads, timers, notifications and recovery on web and native apps.
+- Verify cross-deployment interaction only where the engine actually supports it. Otherwise keep dependent services engine-local and explicitly constrain or separately design cross-engine club interactions and global discovery.
+- Start with new test clubs; migrate existing clubs only through the verified transfer/key-access procedure in step 5. Confirm residency requirements against the actual engine configuration rather than treating the Cloud Engine name as a guarantee.
+- Activate placement gradually after compatibility, security, performance and recovery checks pass; retain existing assignments on failure.
+
+**Activation gate:** the selected engine supports every required feature or an explicitly reviewed compatible design, live engine checks pass, and an authorized operator approves activation. This plan prepares Cloud Engine integration; it does not claim it is already implemented or verified, create an engine or authorize production migration.
 
 ### 9. Finish ChatGPT / MCP / OQL live verification
 
