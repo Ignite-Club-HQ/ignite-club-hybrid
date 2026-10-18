@@ -166,6 +166,12 @@ The pure frontend `groupRouting` resolver/batch partitioner is tested but
 incomplete groups and wrong deployments. It is not authorization or membership
 discovery; the group activation gates below remain unfinished.
 
+The isolated `executeClubBatches` helper resolves every request before any
+destination read, executes one batch per group and restores the original order
+including duplicates. It rejects incomplete/extra result slots and propagates
+permission or shard failures instead of returning partial data. Ten tests pass
+in each backend mode. Live actors and membership discovery are unchanged.
+
 ### Recovery verification — local replica only
 
 The same integration script now uses actual management-canister snapshot
@@ -178,9 +184,16 @@ snapshot; do not restore one media store against an advanced quota ledger.
 
 Stopping the quota canister before begin/finalize injects a real inter-canister
 rejection. Restart/retry keeps one same-path reservation, one final result and
-exactly one allowance charge; abort cannot refund a committing file. These tests
-are not transport-loss-after-commit simulation, coordinated group rollback or
-mainnet/native verification. Those gates remain open.
+exactly one allowance charge; abort cannot refund a committing file.
+
+The coordinated local test drains/stops both stores and the quota authority,
+snapshots all three, then commits an overwrite and second-store upload. It stops
+all participants again and restores every snapshot before restarting authority
+then stores. Bytes, hashes, allocator totals, owner-only outcomes and usage match
+the checkpoint; exactly nine more uploads fit after its one retained charge.
+This tests the local procedure, not automatic production recovery fencing.
+Transport-loss-after-commit injection, production fencing, group migration and
+mainnet/native verification remain open.
 
 1. **Membership/account discovery:** authoritative account-to-club-group index;
    page through the caller's clubs across groups, with no public membership leak.

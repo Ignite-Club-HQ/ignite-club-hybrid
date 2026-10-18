@@ -43,7 +43,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters before auto deploy; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets and balance access.
 - Memory warnings are deterministic: static clients cannot hold secrets.
-- Scaling uses governor cutover, separate from deploys; see backend rules. Why: preserve quotas.
+- Scaling: separate cutover; restore stores+quota together; batches reject partial results. Why: prevent loss.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
 
 - ICP MCP OQL is bounded and read-only: allowlisted fields, caller authorization before filters/counts/paging, no self-calls. Why: prevent private-row leakage.

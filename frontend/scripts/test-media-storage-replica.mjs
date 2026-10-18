@@ -121,6 +121,8 @@ try {
   for (const store of [fixture, second]) { ok(await store.actor.enable_shared_media_quota()); store.actor.setPrincipal(owner); }
   club.actor.setPrincipal(other);
   assert.ok('Err' in await club.actor.reserve_media_quota('spoof', 'c1', 'gallery_photo', 1n, 0n));
+  assert.ok('Err' in await club.actor.commit_media_quota('spoof'), 'unregistered principal cannot settle a reservation');
+  assert.ok('Err' in await club.actor.cancel_media_quota('spoof', 'c1', 'gallery_photo', 1n, 0n), 'unregistered principal cannot refund a reservation');
   const reservations = await Promise.all(Array.from({ length: 8 }, (_, i) => {
     const store = i % 2 ? second.actor : actor;
     return store.begin_upload(`clubs/c1/photos/${i}.jpg`, 'image/jpeg', 1n, 1).then(result => ({ store, id: ok(result) }));
@@ -169,6 +171,55 @@ try {
     ok(await actor.put_chunk(id, 0, [46])); ok(await actor.finalize_upload(id));
   }
   assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/recovery-over.jpg', 'image/jpeg', 1n, 1));
+  // Recovery checkpoint includes BOTH media stores and the shared authority.
+  // Drain and stop every participant before taking any snapshot. A restored
+  // store alone would leave the committed ledger ahead of the file index.
+  await pic.advanceTime(31 * 86_400_000); await pic.tick();
+  const checkpointPath = 'clubs/c1/photos/checkpoint.jpg';
+  const checkpointId = ok(await actor.begin_upload(checkpointPath, 'image/jpeg', 1n, 1));
+  ok(await actor.put_chunk(checkpointId, 0, [51]));
+  const checkpointResult = ok(await actor.finalize_upload(checkpointId));
+  const participants = [fixture, second, club];
+  const before = await Promise.all([actor.health(), second.actor.health(), actor.stable_storage_status(), actor.get_club_media_usage('c1'), second.actor.get_club_media_usage('c1')]);
+  for (const participant of participants) await pic.stopCanister({ canisterId: participant.canisterId, sender: governor });
+  const checkpoints = [];
+  for (const participant of participants) {
+    const [saved] = await management('take_canister_snapshot', snapshotInput, { canister_id: participant.canisterId, replace_snapshot: [] }, [snapshotType]);
+    checkpoints.push({ canisterId: participant.canisterId, snapshotId: saved.id });
+  }
+  for (const participant of [...participants].reverse()) await pic.startCanister({ canisterId: participant.canisterId, sender: governor });
+  await upload(checkpointPath, Buffer.from([52]));
+  const afterPath = 'clubs/c1/photos/rollback-second.jpg';
+  const afterId = ok(await second.actor.begin_upload(afterPath, 'image/jpeg', 1n, 1));
+  ok(await second.actor.put_chunk(afterId, 0, [53]));
+  ok(await second.actor.finalize_upload(afterId));
+  assert.deepEqual(await download(checkpointPath), Buffer.from([52]));
+  assert.equal((await second.actor.get_content_hash(afterPath)).length, 1);
+  for (const participant of participants) await pic.stopCanister({ canisterId: participant.canisterId, sender: governor });
+  for (const saved of checkpoints) {
+    await management('load_canister_snapshot', IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8), sender_canister_version: IDL.Opt(IDL.Nat64) }), { canister_id: saved.canisterId, snapshot_id: saved.snapshotId, sender_canister_version: [] });
+  }
+  // All restores complete before any writer resumes; authority starts first.
+  for (const participant of [...participants].reverse()) await pic.startCanister({ canisterId: participant.canisterId, sender: governor });
+  assert.deepEqual(await download(checkpointPath), Buffer.from([51]));
+  assert.deepEqual(ok(await actor.get_upload_outcome(checkpointId)), [checkpointResult]);
+  assert.deepEqual(await second.actor.get_content_hash(afterPath), []);
+  assert.ok('Err' in await second.actor.get_upload_outcome(afterId));
+  assert.deepEqual(await Promise.all([actor.health(), second.actor.health(), actor.stable_storage_status(), actor.get_club_media_usage('c1'), second.actor.get_club_media_usage('c1')]), before);
+  actor.setPrincipal(other);
+  assert.ok('Err' in await actor.get_upload_outcome(checkpointId), 'restored journal remains owner-only');
+  assert.ok('Err' in await actor.delete_blob(checkpointPath));
+  actor.setPrincipal(owner);
+  // One checkpoint charge survives; exactly nine uploads remain across
+  // both stores. If only media had rolled back the advanced ledger would fail.
+  for (let i = 0; i < 9; i++) {
+    const store = i % 2 ? second.actor : actor;
+    const id = ok(await store.begin_upload(`clubs/c1/photos/restored-${i}.jpg`, 'image/jpeg', 1n, 1));
+    ok(await store.put_chunk(id, 0, [54]));
+    ok(await store.finalize_upload(id));
+  }
+  assert.ok('Err' in await second.actor.begin_upload('clubs/c1/photos/restored-over.jpg', 'image/jpeg', 1n, 1));
+  for (const saved of checkpoints) await management('delete_canister_snapshot', IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8) }), { canister_id: saved.canisterId, snapshot_id: saved.snapshotId });
   await pic.advanceTime(181 * 86_400_000); await pic.tick(10);
   const expired = await actor.http_request({ url: '/clubs/c1/photos/0.jpg', method: 'GET', headers: [], body: [] });
   assert.equal(expired.status_code, 404, 'known-free club ciphertext must expire after six months');
@@ -176,6 +227,7 @@ try {
   console.log('PASS: authenticated upload, streaming read-back, migration integrity/idempotency, owner denial, replacement/delete/reuse and EOP upgrade preservation.');
   console.log('PASS: real two-store freeze/import/activation, denied spoofed reservation, 10 shared slots including pending writes, idempotent begin/finalize, release/refund and 30-day boundary.');
   console.log('PASS: controller-only snapshot restore preserves Region bytes/allocator/owner; unavailable quota commit retries publish once without refund.');
+  console.log('PASS: coordinated two-store and quota-authority snapshot rollback restores bytes, owner-only outcomes and exactly nine remaining shared allowances.');
 } finally {
   if (pic) await pic.tearDown();
   await server.stop();
