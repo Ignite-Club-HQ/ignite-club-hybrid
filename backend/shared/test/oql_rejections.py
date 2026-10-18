@@ -14,13 +14,13 @@ SOURCES = shlex.split(subprocess.check_output(['mops', 'sources'], cwd=DOMAIN, t
 class OqlRejections(unittest.TestCase):
     def check_rejected(self, query, message):
         import json
-        program = f'''import Oql "{ROOT}/backend/shared/Oql";
+        program = f'''import Oql "mo:ignite/Oql";
 let entities : [Oql.Entity] = [{{name="events";fields=[{{name="id";kind="text"}}]}}];
 ignore Oql.parse({json.dumps(query)}, entities);'''
         with tempfile.TemporaryDirectory(prefix='ignite-oql-') as tmp:
             path = Path(tmp) / 'reject.mo'
             path.write_text(program)
-            result = subprocess.run([str(MOC), *SOURCES, '-r', str(path)], cwd=DOMAIN, capture_output=True, text=True)
+            result = subprocess.run([str(MOC), *SOURCES, '--package', 'ignite', str(ROOT / 'backend/shared'), '-r', str(path)], cwd=DOMAIN, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('OQL: ' + message, result.stdout + result.stderr)
     def test_other_entity(self): self.check_rejected('{"entity":"secrets"}', 'Unknown entity')
