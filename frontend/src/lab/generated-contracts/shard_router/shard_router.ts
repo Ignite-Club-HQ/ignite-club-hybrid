@@ -51,16 +51,6 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface AssignRequest {
-    shard: Principal;
-    expected_revision: bigint;
-    club_id: string;
-}
-export interface Route {
-    shard: Principal;
-    revision: bigint;
-    club_id: string;
-}
 export interface MemoryStats {
     memory_bytes: bigint;
     stable_bytes: bigint;
@@ -73,27 +63,19 @@ export type Result_2 = {
     __kind__: "Err";
     Err: string;
 };
-export type Result_6 = {
+export type Result_13 = {
     __kind__: "Ok";
-    Ok: DomainMigration | null;
+    Ok: GroupRegistrySnapshot;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export interface DomainMigration {
-    destination: Principal;
-    domain: string;
-    source: Principal;
-    route_revision: bigint;
-    club_id: string;
-    migration_revision: bigint;
-}
 export interface Init {
     governor: Principal;
 }
-export type Result_12 = {
+export type Result_5 = {
     __kind__: "Ok";
-    Ok: Page;
+    Ok: Migration;
 } | {
     __kind__: "Err";
     Err: string;
@@ -109,9 +91,81 @@ export type Result_1 = {
     __kind__: "Err";
     Err: string;
 };
-export type Result_5 = {
+export type Result_11 = {
     __kind__: "Ok";
-    Ok: Migration;
+    Ok: Array<ShardGroup>;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface AssignResult {
+    revision: bigint;
+    route: Route;
+}
+export type Result_4 = {
+    __kind__: "Ok";
+    Ok: DomainMigration;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface Page {
+    next?: string;
+    routes: Array<Route>;
+    revision: bigint;
+}
+export type Result_7 = {
+    __kind__: "Ok";
+    Ok: DomainRoute | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_14 = {
+    __kind__: "Ok";
+    Ok: Array<GroupAssignment>;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface DomainCanister {
+    domain: string;
+    canister: Principal;
+}
+export interface Route {
+    shard: Principal;
+    revision: bigint;
+    club_id: string;
+}
+export interface GroupPlacement {
+    host: string;
+    network_kind: string;
+    deployment_revision: bigint;
+    approved_subnets: Array<Principal>;
+    additional_subnets_enabled: boolean;
+    group_id: string;
+    domains: Array<DomainPlacement>;
+    deployment_id: string;
+    primary_subnet: Principal;
+}
+export type Result_6 = {
+    __kind__: "Ok";
+    Ok: DomainMigration | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface DomainMigration {
+    destination: Principal;
+    domain: string;
+    source: Principal;
+    route_revision: bigint;
+    club_id: string;
+    migration_revision: bigint;
+}
+export type Result_12 = {
+    __kind__: "Ok";
+    Ok: Page;
 } | {
     __kind__: "Err";
     Err: string;
@@ -128,17 +182,24 @@ export interface GroupAssignment {
     revision: bigint;
     club_id: string;
 }
-export interface AssignResult {
-    revision: bigint;
-    route: Route;
+export interface ShardGroup {
+    id: string;
+    max_clubs: number;
+    observed_at_ns: bigint;
+    accepting: boolean;
+    heap_budget_bytes: bigint;
+    cycles: bigint;
+    assigned_clubs: number;
+    domains: Array<DomainCanister>;
+    target_alias: string;
+    min_cycles: bigint;
+    heap_bytes: bigint;
 }
-export type Result_11 = {
-    __kind__: "Ok";
-    Ok: Array<ShardGroup>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
+export interface GroupRegistrySnapshot {
+    groups: Array<ShardGroup>;
+    placements: Array<GroupPlacement>;
+    revision: bigint;
+}
 export type Result = {
     __kind__: "Ok";
     Ok: bigint;
@@ -146,11 +207,6 @@ export type Result = {
     __kind__: "Err";
     Err: string;
 };
-export interface Page {
-    next?: string;
-    routes: Array<Route>;
-    revision: bigint;
-}
 export type Result_10 = {
     __kind__: "Ok";
     Ok: Route | null;
@@ -177,20 +233,6 @@ export type Result_3 = {
     __kind__: "Err";
     Err: string;
 };
-export type Result_4 = {
-    __kind__: "Ok";
-    Ok: DomainMigration;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_7 = {
-    __kind__: "Ok";
-    Ok: DomainRoute | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export type Result_8 = {
     __kind__: "Ok";
     Ok: GroupAssignment | null;
@@ -198,22 +240,15 @@ export type Result_8 = {
     __kind__: "Err";
     Err: string;
 };
-export interface ShardGroup {
-    id: string;
-    max_clubs: number;
-    observed_at_ns: bigint;
-    accepting: boolean;
-    heap_budget_bytes: bigint;
-    cycles: bigint;
-    assigned_clubs: number;
-    domains: Array<DomainCanister>;
-    target_alias: string;
-    min_cycles: bigint;
-    heap_bytes: bigint;
-}
-export interface DomainCanister {
+export interface DomainPlacement {
     domain: string;
+    subnet: Principal;
     canister: Principal;
+}
+export interface AssignRequest {
+    shard: Principal;
+    expected_revision: bigint;
+    club_id: string;
 }
 export interface Migration {
     destination: Principal;
@@ -241,11 +276,14 @@ export interface shard_routerInterface {
     list_groups(): Promise<Result_11>;
     list_routes(arg0: string | null, arg1: number): Promise<Result_12>;
     memory_stats(): Promise<MemoryStats>;
+    read_group_registry(arg0: string): Promise<Result_13>;
+    read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_14>;
     record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result>;
     register_group(arg0: ShardGroup, arg1: bigint): Promise<Result>;
+    register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result>;
     version(): Promise<bigint>;
 }
-import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
+import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, GroupRegistrySnapshot as _GroupRegistrySnapshot, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
 export class Shard_router implements shard_routerInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result> {
@@ -320,12 +358,24 @@ export class Shard_router implements shard_routerInterface {
         const result = await this.actor.memory_stats();
         return result;
     }
+    async read_group_registry(arg0: string): Promise<Result_13> {
+        const result = await this.actor.read_group_registry(arg0);
+        return from_candid_Result_13_n36(result);
+    }
+    async read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_14> {
+        const result = await this.actor.read_my_group_assignments(arg0, arg1, arg2);
+        return from_candid_Result_14_n38(result);
+    }
     async record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result> {
         const result = await this.actor.record_group_health(arg0, arg1, arg2, arg3);
         return from_candid_Result_n1(result);
     }
     async register_group(arg0: ShardGroup, arg1: bigint): Promise<Result> {
         const result = await this.actor.register_group(arg0, arg1);
+        return from_candid_Result_n1(result);
+    }
+    async register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result> {
+        const result = await this.actor.register_group_placement(arg0, arg1);
         return from_candid_Result_n1(result);
     }
     async version(): Promise<bigint> {
@@ -344,6 +394,12 @@ function from_candid_Result_11_n28(value: _Result_11): Result_11 {
 }
 function from_candid_Result_12_n31(value: _Result_12): Result_12 {
     return from_candid_variant_n32(value);
+}
+function from_candid_Result_13_n36(value: _Result_13): Result_13 {
+    return from_candid_variant_n37(value);
+}
+function from_candid_Result_14_n38(value: _Result_14): Result_14 {
+    return from_candid_variant_n39(value);
 }
 function from_candid_Result_1_n3(value: _Result_1): Result_1 {
     return from_candid_variant_n4(value);
@@ -593,6 +649,44 @@ function from_candid_variant_n32(value: {
     return "Ok" in value ? {
         __kind__: "Ok",
         Ok: from_candid_Page_n33(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n37(value: {
+    Ok: _GroupRegistrySnapshot;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: GroupRegistrySnapshot;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n39(value: {
+    Ok: Array<_GroupAssignment>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<GroupAssignment>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err

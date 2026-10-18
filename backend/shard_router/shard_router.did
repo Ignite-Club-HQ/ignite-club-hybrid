@@ -20,6 +20,11 @@ type DomainMigration = record {
   club_id : text;
   migration_revision : nat64;
 };
+type DomainPlacement = record {
+  domain : text;
+  subnet : principal;
+  canister : principal;
+};
 type DomainRoute = record {
   domain : text;
   shard : principal;
@@ -30,6 +35,22 @@ type GroupAssignment = record {
   group_id : text;
   revision : nat64;
   club_id : text;
+};
+type GroupPlacement = record {
+  host : text;
+  network_kind : text;
+  deployment_revision : nat64;
+  approved_subnets : vec principal;
+  additional_subnets_enabled : bool;
+  group_id : text;
+  domains : vec DomainPlacement;
+  deployment_id : text;
+  primary_subnet : principal;
+};
+type GroupRegistrySnapshot = record {
+  groups : vec ShardGroup;
+  placements : vec GroupPlacement;
+  revision : nat64;
 };
 type Init = record { governor : principal };
 type MemoryStats = record {
@@ -50,6 +71,8 @@ type Result_1 = variant { Ok : AssignResult; Err : text };
 type Result_10 = variant { Ok : opt Route; Err : text };
 type Result_11 = variant { Ok : vec ShardGroup; Err : text };
 type Result_12 = variant { Ok : Page; Err : text };
+type Result_13 = variant { Ok : GroupRegistrySnapshot; Err : text };
+type Result_14 = variant { Ok : vec GroupAssignment; Err : text };
 type Result_2 = variant { Ok : AssignDomainResult; Err : text };
 type Result_3 = variant { Ok : GroupAssignment; Err : text };
 type Result_4 = variant { Ok : DomainMigration; Err : text };
@@ -93,7 +116,10 @@ service : (Init) -> {
   list_routes : (opt text, nat16) -> (Result_12) query;
   // Public: live memory reading for the admin health page.
   memory_stats : () -> (MemoryStats) query;
+  read_group_registry : (text) -> (Result_13);
+  read_my_group_assignments : (vec text, text, nat64) -> (Result_14);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   register_group : (ShardGroup, nat64) -> (Result);
+  register_group_placement : (GroupPlacement, nat64) -> (Result);
   version : () -> (nat64) query;
 }

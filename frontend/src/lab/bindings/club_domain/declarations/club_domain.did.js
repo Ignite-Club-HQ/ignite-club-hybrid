@@ -1489,6 +1489,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
+    'read_has_club_membership' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_my_club_memberships' : IDL.Func(
+        [IDL.Nat, IDL.Nat16],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'clubs' : IDL.Vec(IDL.Text),
+              'next' : IDL.Opt(IDL.Nat),
+              'acl_revision' : IDL.Nat64,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'record_presence_heartbeat' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
