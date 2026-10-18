@@ -873,6 +873,11 @@ export interface Main {
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
   >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
   'record_event_view' : ActorMethod<
     [string],

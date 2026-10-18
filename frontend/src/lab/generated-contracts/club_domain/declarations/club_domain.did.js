@@ -1494,6 +1494,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_expired_deletions' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],

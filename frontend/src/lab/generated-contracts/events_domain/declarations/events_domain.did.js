@@ -1142,6 +1142,11 @@ export const idlFactory = ({ IDL }) => {
         [HttpRequestResult],
         ['query'],
       ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_my_data' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],

@@ -838,6 +838,13 @@ export interface MainInterface {
         context: Uint8Array;
         response: HttpRequestResult;
     }): Promise<HttpRequestResult>;
+    purge_club_snapshot(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     purge_my_data(): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -2645,6 +2652,16 @@ export class Events_domain implements events_domainInterface {
     }): Promise<HttpRequestResult> {
         const result = await this.actor.playhqTransform(arg0);
         return result;
+    }
+    async purge_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n133(result);
     }
     async purge_my_data(): Promise<{
         __kind__: "Ok";

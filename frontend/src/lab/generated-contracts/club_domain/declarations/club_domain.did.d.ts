@@ -1008,6 +1008,11 @@ export interface Main {
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'purge_expired_deletions' : ActorMethod<
     [],
     { 'Ok' : number } |
