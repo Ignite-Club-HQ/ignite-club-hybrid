@@ -7,6 +7,13 @@ type WelcomeEmailJob =
    team_name: text;
    to: text;
  };
+type Value = 
+ variant {
+   "bool": bool;
+   "int": int;
+   "null";
+   "text": text;
+ };
 type TeamWelcomeEmail = 
  record {
    club_id: text;
@@ -175,6 +182,7 @@ type Season =
    status: text;
    updated_at_ms: nat64;
  };
+type Row = vec Cell;
 type RoleRequest = 
  record {
    account_id: text;
@@ -194,6 +202,11 @@ type RoleGrant =
    role: text;
    team: opt text;
    user: principal;
+ };
+type Result = 
+ record {
+   hasMore: bool;
+   rows: vec Row;
  };
 type Request = 
  record {
@@ -569,6 +582,7 @@ type Main =
                                  Err: text;
                                  Ok;
                                });
+   execute: (input: text) -> (Result) query;
    export_acl: () -> (variant {
                         Err: text;
                         Ok: Config;
@@ -1281,6 +1295,7 @@ type Main =
        Err: text;
        Ok: TeamSubscription;
      });
+   schema: () -> (text) query;
    send_fee_reminders: (club_id: text, payment_period: text, payment_type:
     text, message: text) -> (variant {
                                Err: text;
@@ -1775,6 +1790,11 @@ type Challenge =
    id: nat64;
    issuer: principal;
    target: principal;
+ };
+type Cell = 
+ record {
+   name: text;
+   value: Value;
  };
 type Acl = 
  record {
