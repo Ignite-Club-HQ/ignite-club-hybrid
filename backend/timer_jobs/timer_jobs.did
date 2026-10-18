@@ -33,5 +33,9 @@ service : () -> {
   import_state : (snapshot) -> (result_unit);
   reconcile : (snapshot) -> (result_reconciliation) query;
   schedule : (text, text, nat64, text) -> (result_job);
+  set_transfer_fence : (text, bool) -> (result_unit);
+  export_club_snapshot : (text) -> (variant { Ok : blob; Err : text }) query;
+  import_club_snapshot : (text, blob) -> (variant { Ok : nat64; Err : text });
+  purge_club_snapshot : (text) -> (variant { Ok : nat64; Err : text });
   schedule_with_callback : (text, text, opt principal, nat64, text) -> (result_job);
 };
