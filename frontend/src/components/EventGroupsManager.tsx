@@ -216,7 +216,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         );
         return groupsWithPlayers.sort((a, b) => a.display_order - b.display_order);
       },
-    }),
+    }, { eventId: eventId }),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -535,7 +535,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
           }
         }
       },
-    });
+    }, { eventId: eventId });
   }, [eventId, allPlayers]);
 
   // Auto-generate matches (core logic)
@@ -693,7 +693,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         );
         return created as string[];
       },
-    });
+    }, { eventId: eventId });
 
     // Auto-distribute event-level duties to matches
     await distributeEventDutiesToMatches(matchIds, matchPlayers.map(mp => mp.map(p => p.playerId)));
@@ -738,7 +738,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             ...data.teamBPlayerIds.map((pid) => addLiveGroupPlayer(ctx, newGroup.id, pid, "b")),
           ]);
         },
-      });
+      }, { eventId: eventId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -951,7 +951,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
 
           return { skippedCount };
         },
-      });
+      }, { eventId: eventId });
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });

@@ -632,7 +632,7 @@ export default function DirectMessagePage() {
             };
 
           },
-        });
+        }, { conversationId: conversationId });
       }
 
       const { data: rawMessages, error } = await supabase
@@ -960,7 +960,7 @@ export default function DirectMessagePage() {
                 : null;
             return { older, nextCursor };
           },
-        });
+        }, { conversationId: conversationId });
         icpOlderCursorRef.current = result.nextCursor;
         setHasOlderMessages(result.nextCursor !== null);
         queryClient.setQueryData(
@@ -1199,7 +1199,7 @@ export default function DirectMessagePage() {
             reply_to_id: replyToId || null,
             created_at: new Date().toISOString(),
           };},
-      });
+      }, { conversationId: conversationId! });
       return data;
     },
     onMutate: async ({ text, imageUrl, replyToId }) => {

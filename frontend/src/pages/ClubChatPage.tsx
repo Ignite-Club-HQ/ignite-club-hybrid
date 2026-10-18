@@ -596,7 +596,7 @@ export default function ClubChatPage() {
             };
 
           },
-        });
+        }, { clubId: clubId });
       }
 
       // If offline, return cached messages using the shared online manager
@@ -1034,7 +1034,7 @@ export default function ClubChatPage() {
                 : null;
             return { older, nextCursor };
           },
-        });
+        }, { clubId: clubId! });
         icpOlderCursorRef.current = result.nextCursor;
         setHasOlderMessages(result.nextCursor !== null);
         queryClient.setQueryData(["club-messages", clubId], (old: any) => {
@@ -1522,7 +1522,7 @@ export default function ClubChatPage() {
           const saved = await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, clubId!, user!.id).catch(() => { /* best-effort engagement counter */ });
           return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
-      });
+      }, { clubId: clubId! });
       return deliveredSend(confirmedMessage ?? undefined);
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {

@@ -136,7 +136,7 @@ export function useChatSharedMedia(
             }
             items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             return items.slice(0, limit);
-          }});
+          }}, { conversationId: chatId });
       }
 
       const { table, column } = TABLE_AND_FILTER[chatType];

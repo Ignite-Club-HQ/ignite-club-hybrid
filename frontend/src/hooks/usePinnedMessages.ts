@@ -58,7 +58,7 @@ export function usePinnedMessages(
         const pinned = await withFeatureBackend("messaging", {
           supabase: async () => [],
           icp: (ctx) => listLivePinnedMessages(ctx, chatId),
-        });
+        }, { conversationId: chatId });
         return pinned.map((p) => ({
           id: p.id,
           message_id: p.messageId,
@@ -167,7 +167,7 @@ export function usePinnedMessages(
             throw new Error("Pinning is not available");
           },
           icp: (ctx) => pinLiveMessage(ctx, chatId, messageId),
-        });
+        }, { conversationId: chatId });
         return;
       }
 
@@ -210,7 +210,7 @@ export function usePinnedMessages(
             throw new Error("Unpinning is not available");
           },
           icp: (ctx) => unpinLiveMessage(ctx, chatId, messageId),
-        });
+        }, { conversationId: chatId });
         return;
       }
 

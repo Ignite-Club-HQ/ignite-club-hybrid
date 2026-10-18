@@ -252,7 +252,7 @@ async function fetchReportExtrasIcp(
 
       return { matches, honours, scorersByPlayer, totals };
     },
-  });
+  }, { teamId: teamId });
 }
 
 export async function fetchReportExtras(

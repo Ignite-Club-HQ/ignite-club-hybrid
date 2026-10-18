@@ -57,7 +57,7 @@ export function useEventViewTracking(eventId: string | undefined, userId: string
           await recordLiveEventView(ctx, eventId!);
           return true;
         },
-      });
+      }, { eventId: eventId! });
       if (recordedOnIcp) return;
 
       const { error } = await supabase
@@ -128,7 +128,7 @@ export function useEventViewsAdmin(eventId: string | undefined, enabled: boolean
             viewed_at: new Date(Number(row.viewed_at_ms)).toISOString(),
           })) as { id: string; user_id: string | null; viewed_at: string | null }[];
         },
-      }),
+      }, { eventId: eventId! }),
   });
 }
 
