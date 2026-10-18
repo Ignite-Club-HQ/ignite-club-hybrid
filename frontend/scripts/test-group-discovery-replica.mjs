@@ -19,10 +19,12 @@ try {
   const routerWasm = resolve(root, 'target/wasm32-unknown-unknown/release/shard_router.wasm');
   const router = await pic.setupCanister({ idlFactory: routerIdl, wasm: routerWasm, sender: owner, controllers: [owner],
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor: owner }]) });
+  router.actor.setPrincipal(owner);
   const clubs = [];
   for (const id of ['a', 'b']) {
     const fixture = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'),
       sender: owner, controllers: [owner], arg: IDL.encode([IDL.Principal], [owner]) });
+    fixture.actor.setPrincipal(owner);
     ok(await fixture.actor.create_club(`club-${id}`, `Club ${id}`, `club-${id}`, [], []));
     ok(await fixture.actor.add_role_grant(member, `club-${id}`, 'player', []));
     clubs.push(fixture);
