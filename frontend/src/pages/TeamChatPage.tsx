@@ -1719,7 +1719,7 @@ export default function TeamChatPage() {
               })();
           const saved = await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, teamId!, user!.id).catch(() => { /* best-effort engagement counter */ });
-          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };, { teamId: teamId! }},
+          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
       });
       return deliveredSend(confirmedMessage ?? undefined);
     },

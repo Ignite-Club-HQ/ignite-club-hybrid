@@ -909,7 +909,7 @@ export default function EventsPage() {
             const scheduleEvents: Event[] = viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
             cacheEventsList(eventsScopeKey, scheduleEvents, user?.id);
             diagLog("events:icp-end", { count: scheduleEvents.length });
-            return scheduleEvents;, { clubId: clubId }},
+            return scheduleEvents;},
         });
       }
 

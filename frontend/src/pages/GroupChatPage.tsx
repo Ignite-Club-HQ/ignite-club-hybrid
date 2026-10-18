@@ -1102,7 +1102,7 @@ export default function GroupChatPage() {
               })();
           const saved = await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, groupId, user.id).catch(() => { /* best-effort engagement counter */ });
-          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };, { conversationId: groupId }},
+          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
       });
       return deliveredSend(confirmedMessage ?? undefined);
     },

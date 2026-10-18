@@ -1521,7 +1521,7 @@ export default function ClubChatPage() {
               })();
           const saved = await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, clubId!, user!.id).catch(() => { /* best-effort engagement counter */ });
-          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };, { clubId: clubId! }},
+          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
       });
       return deliveredSend(confirmedMessage ?? undefined);
     },
