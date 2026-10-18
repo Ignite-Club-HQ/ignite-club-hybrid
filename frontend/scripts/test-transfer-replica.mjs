@@ -42,7 +42,7 @@ try {
   }
   // Group B is built by the production provisioner on real canisters, with a crash mid-build.
   const appSubnet = (await pic.getApplicationSubnets())[0].id.toText();
-  const ids = {}; let creates = 0; const registry = []; let regRev = 2n; let saved = null;
+  const ids = {}; let creates = 0; const registry = []; let regRev = 2n; let provSaved = null;
   const provAdapter = {
     createCanister: async (_p, d) => {
       if (++creates === 3) throw new Error('Request timed out (injected)');
@@ -53,16 +53,16 @@ try {
     healthy: async (_p, d, id) => (await pic.getControllers(Principal.fromText(id))).some(c => c.toText() === governor.toText()),
     readRegistryRevision: async () => regRev,
     registerGroup: async p => { registry.push(p.groupId); regRev++; },
-    enableGroup: async () => {}, save: async p => { saved = structuredClone(p); },
+    enableGroup: async () => {}, save: async p => { provSaved = structuredClone(p); },
   };
   const approval = approveProvision({ kind: 'provision', deploymentId: 'local', subnetId: appSubnet, reason: 'full' }, { operator: governor.toText(), proposalId: 'p1', deploymentId: 'local', subnetId: appSubnet }, 'b', 2n);
   const failed = await runProvision(approval, provAdapter);
   assert.equal(failed.phase, 'failed'); assert.deepEqual(registry, [], 'incomplete group never registered');
-  const done = await runProvision({ ...saved, phase: 'approved', error: undefined }, provAdapter);
-  assert.equal(done.phase, 'enabled'); assert.deepEqual(registry, ['b']);
-  assert.equal(new Set(Object.values(done.canisters)).size, PER_GROUP_DOMAINS.length, 'no duplicate canisters after resume');
+  const provDone = await runProvision({ ...provSaved, phase: 'approved', error: undefined }, provAdapter);
+  assert.equal(provDone.phase, 'enabled'); assert.deepEqual(registry, ['b']);
+  assert.equal(new Set(Object.values(provDone.canisters)).size, PER_GROUP_DOMAINS.length, 'no duplicate canisters after resume');
   for (const c of Object.keys(idls)) {
-    const actor = pic.createActor(idls[c], Principal.fromText(done.canisters[c])); actor.setPrincipal(governor); groups.b[c] = actor;
+    const actor = pic.createActor(idls[c], Principal.fromText(provDone.canisters[c])); actor.setPrincipal(governor); groups.b[c] = actor;
     if (c === 'timer_jobs') ok(await actor.initialize());
   }
   console.log('PASS provisioning: new group built on real canisters, resumed after crash, registered once');
