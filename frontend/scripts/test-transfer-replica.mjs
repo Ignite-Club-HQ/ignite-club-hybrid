@@ -33,6 +33,7 @@ try {
     }
   }
   const A = groups.a, B = groups.b;
+  const refused = p => p.catch(e => ({ Err: String(e.message) }));
   const as = (actor, p, fn) => { actor.setPrincipal(p); return fn().finally(() => actor.setPrincipal(governor)); };
 
   // Seed the club on group A across all four domains, plus a bystander club on B.
@@ -60,10 +61,10 @@ try {
   const adapter = { ...base, setFence: async (g, club, on) => {
     await base.setFence(g, club, on);
     if (on && g === 'a') { // writes in every domain must be refused while moving
-      blocked.event = await A.events_domain.create_event(CLUB, [], 'Sneaky', 'x', 'training', [], [], [], [], 1_000n, 2_000n, [], false, [], []);
-      blocked.chat = await A.messaging_domain.send_message(conv.id, 'sneaky', 'k-sneak', [], []);
-      blocked.vault = await as(A.vault_domain, staff, () => A.vault_domain.rename_file('file1', 'hacked.pdf'));
-      blocked.club = await as(A.club_domain, staff, () => A.club_domain.add_role_grant(governor, CLUB, 'coach', []));
+      blocked.event = await refused(A.events_domain.create_event(CLUB, [], 'Sneaky', 'x', 'training', [], [], [], [], 1_000n, 2_000n, [], false, [], []));
+      blocked.chat = await refused(A.messaging_domain.send_message(conv.id, 'sneaky', 'k-sneak', [], []));
+      blocked.vault = await refused(as(A.vault_domain, staff, () => A.vault_domain.rename_file('file1', 'hacked.pdf')));
+      blocked.club = await refused(as(A.club_domain, staff, () => A.club_domain.add_role_grant(governor, CLUB, 'coach', [])));
     }
   } };
 
