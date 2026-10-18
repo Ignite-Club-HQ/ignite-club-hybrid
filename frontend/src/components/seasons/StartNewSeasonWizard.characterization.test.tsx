@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 const backendMocks = vi.hoisted(() => ({
   mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   saveLiveSeason: vi.fn(),
+  addLiveSeasonTeamAssignment: vi.fn().mockResolvedValue(undefined),
   context: { identity: {}, target: {} },
 }));
 
@@ -26,6 +27,7 @@ vi.mock("@/live/featureRouter", () => ({
 }));
 vi.mock("@/live/features/club", () => ({
   saveLiveSeason: (...args: unknown[]) => backendMocks.saveLiveSeason(...args),
+  addLiveSeasonTeamAssignment: (...args: unknown[]) => backendMocks.addLiveSeasonTeamAssignment(...args),
 }));
 vi.mock("./ReturningMembersStep", () => ({
   ReturningMembersStep: ({ targetSeasonId, onChange, onAssignmentsChange }: any) => (
@@ -205,8 +207,12 @@ describe.runIf(backendMocks.mode === "icp")("StartNewSeasonWizard ICP club-seaso
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await screen.findByText("Returning target season-new");
 
+    fireEvent.click(screen.getByRole("button", { name: "Choose returning players" }));
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await screen.findByText(/Invite into season-new/);
+    expect(backendMocks.addLiveSeasonTeamAssignment).toHaveBeenCalledExactlyOnceWith(
+      backendMocks.context, "season-new", "new-team-1", "player-1",
+    );
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await screen.findByText("Review");
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));

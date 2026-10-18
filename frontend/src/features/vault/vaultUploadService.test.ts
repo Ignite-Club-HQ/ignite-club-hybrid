@@ -7,6 +7,7 @@ import {
   uploadVaultItem,
   type VaultUploadDependencies,
 } from "./vaultUploadService";
+import { createVaultLinkFile as createVaultExternalLink } from "./vaultMutationRepository";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 const uploadMocks = vi.hoisted(() => ({

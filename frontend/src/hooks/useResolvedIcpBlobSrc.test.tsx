@@ -7,7 +7,8 @@ vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: () => ({}) }));
 vi.mock("@/live/mediaStorage", () => ({ listBlobStoreCanisterIds: () => ["photos-cai"] }));
 const decrypt = vi.hoisted(() => vi.fn());
 const auth = vi.hoisted(() => ({ user: { id: "member-1" }, sessionRestoration: "authenticated" }));
-vi.mock("@/hooks/useAuth", () => ({ useAuth: () => auth }));
+const authContext = vi.hoisted(() => ({ present: true }));
+vi.mock("@/hooks/useAuth", () => ({ useOptionalAuth: () => authContext.present ? auth : null }));
 vi.mock("@/live/mediaDecrypt", () => ({ resolveIcpBlobObjectUrl: decrypt }));
 
 afterEach(() => {
@@ -15,10 +16,24 @@ afterEach(() => {
   vi.clearAllMocks();
   auth.user = { id: "member-1" };
   auth.sessionRestoration = "authenticated";
+  authContext.present = true;
   vi.useRealTimers();
 });
 
 describe("newly uploaded profile photo resolution", () => {
+  it("renders public images without a sign-in provider", () => {
+    authContext.present = false;
+    const { result } = renderHook(() => useResolvedIcpBlobSrc("https://example.com/public.jpg"));
+    expect(result.current).toEqual({ src: "https://example.com/public.jpg", pending: false, failed: false });
+    expect(decrypt).not.toHaveBeenCalled();
+  });
+
+  it("never exposes ciphertext or unlocks a protected image without a sign-in provider", () => {
+    authContext.present = false;
+    const { result } = renderHook(() => useResolvedIcpBlobSrc("https://photos-cai.raw.icp0.io/private.jpg"));
+    expect(result.current).toEqual({ src: undefined, pending: false, failed: false });
+    expect(decrypt).not.toHaveBeenCalled();
+  });
   it("waits for sign-in restoration and loads immediately when it completes", async () => {
     auth.sessionRestoration = "restoring";
     decrypt.mockResolvedValueOnce("blob:ready-logo");

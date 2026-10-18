@@ -19,6 +19,10 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from,
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/lib/inviteEmailDedupe", () => ({ lookupInvitableUserByEmail: mocks.lookup }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: unknown, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    mocks.mode === "icp" ? providers.icp({}) : providers.supabase(),
+}));
 vi.mock("sonner", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError, message: mocks.toastMessage } }));
 vi.mock("@/components/ui/select", async () => {
   const React = await import("react");

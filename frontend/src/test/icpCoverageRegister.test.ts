@@ -28,7 +28,7 @@ const REGISTER: Record<string, { status: Status; reason?: string }> = {
   "Realtime health monitoring": { status: "onchain", reason: "IcpRealtimeHealthPanel.test.tsx verifies canister reachability and failure; ICP polling replaces Supabase websocket metrics" },
   "Password recovery and reset-code verification": { status: "offchain", reason: "Internet Identity has no passwords" },
   "Scheduled messages": { status: "onchain", reason: "ScheduledMessagesPage.icp tests plus schedulePatch/calendar/access executable tests; live timer read-back remains separate" },
-  "Update reminders": { status: "todo" },
+  "Update reminders": { status: "onchain", reason: "AdminUpdateRemindersPage and notification_queue tests cover version audiences, self-only send and denied fan-out" },
   "Short invite resolution": { status: "onchain", reason: "Anonymous club_domain resolution; ShortInviteRedirect.test.tsx verifies success, rejection and missing results without Supabase" },
   "Payment settings": { status: "offchain", reason: "payments stay off-chain" },
   "Administrative video guides": { status: "onchain", reason: "VideoGuideDownloadPage.test.tsx verifies sign-in/admin gates and local text/PDF downloads; static guide needs no external storage" },

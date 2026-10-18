@@ -43,6 +43,7 @@ vi.mock("@/live/authBackendMode", () => ({
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: { id: "principal-abc", email: "parent@example.com" }, loading: false }),
+  useOptionalAuth: () => ({ user: { id: "principal-abc" }, sessionRestoration: "authenticated" }),
 }));
 
 vi.mock("@/hooks/useClubTheme", () => ({

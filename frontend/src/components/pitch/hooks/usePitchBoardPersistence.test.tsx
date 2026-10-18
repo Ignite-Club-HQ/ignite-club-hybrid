@@ -1,19 +1,24 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { savePitchState, from, update, eq, then, dbResult } = vi.hoisted(() => {
+const { savePitchState, from, update, eq, then, dbResult, syncLiveActiveGame } = vi.hoisted(() => {
   const dbResult = { error: null as unknown };
   const eq = vi.fn();
   const then = vi.fn();
   const update = vi.fn();
   const from = vi.fn();
-  return { savePitchState: vi.fn(), from, update, eq, then, dbResult };
+  return { savePitchState: vi.fn(), from, update, eq, then, dbResult, syncLiveActiveGame: vi.fn().mockResolvedValue(undefined) };
 });
 const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 
 vi.mock("../pitchStateUtils", () => ({ savePitchState }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from } }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "icp" : "supabase" }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: unknown, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    icpMode ? providers.icp({}) : providers.supabase(),
+}));
+vi.mock("@/live/features/events", () => ({ syncLiveActiveGame }));
 
 import { usePitchBoardPersistence } from "./usePitchBoardPersistence";
 
@@ -149,10 +154,14 @@ describe("usePitchBoardPersistence", () => {
     expect(from).toHaveBeenCalledTimes(1);
   });
 
-  it.runIf(icpMode)("keeps local pitch persistence but skips unsupported active-game writes", async () => {
-    renderHook(() => usePitchBoardPersistence(props({ autoSubActive: true, autoSubPlan: [{ half: 1 }] })));
+  it.runIf(icpMode)("persists the active plan on-chain without Supabase writes", async () => {
+    const autoSubPlan = [{ half: 1, time: 300, playerOut: { id: "p1" }, playerIn: { id: "p2" }, executed: false }];
+    renderHook(() => usePitchBoardPersistence(props({ autoSubActive: true, autoSubPlan })));
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(savePitchState).toHaveBeenCalled();
     expect(from).not.toHaveBeenCalled();
+    expect(syncLiveActiveGame).toHaveBeenCalledWith({}, expect.objectContaining({ teamId: "team-1", boardSessionId: "pitch-team-1" }));
+    const saved = syncLiveActiveGame.mock.calls[0]?.[1];
+    expect(JSON.parse(saved.pitchStateJson)).toMatchObject({ autoSubActive: true, autoSubPlan });
   });
 });

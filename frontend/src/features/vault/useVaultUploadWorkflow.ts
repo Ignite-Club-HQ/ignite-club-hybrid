@@ -32,7 +32,6 @@ export function useVaultUploadWorkflow({
   queryClient,
 }: UseVaultUploadWorkflowOptions) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [uploadType, setUploadType] = useState<"photo" | "file">("photo");
   const [fileName, setFileName] = useState("");
 
@@ -74,11 +73,12 @@ export function useVaultUploadWorkflow({
   // This keeps vault photos separate from the media gallery.
   const uploadPhotoMutation = useMutation({
     mutationFn: async (file: File) => {
+      if (!userId) throw new Error("Sign in before uploading files");
       await uploadVaultItem({
         kind: "photo",
         file,
         name: file.name,
-        userId: userId!,
+        userId,
         folderId: getCurrentFolderId(),
         view: currentView,
       });
@@ -100,11 +100,12 @@ export function useVaultUploadWorkflow({
 
   const uploadFileMutation = useMutation({
     mutationFn: async ({ file, customFileName }: { file: File; customFileName?: string }) => {
+      if (!userId) throw new Error("Sign in before uploading files");
       await uploadVaultItem({
         kind: "file",
         file,
         name: customFileName || fileName || file.name,
-        userId: userId!,
+        userId,
         folderId: getCurrentFolderId(),
         view: currentView,
       });
@@ -151,7 +152,7 @@ export function useVaultUploadWorkflow({
   return {
     uploadDialogOpen,
     setUploadDialogOpen,
-    uploading,
+    uploading: uploadPhotoMutation.isPending || uploadFileMutation.isPending,
     uploadType,
     setUploadType,
     fileName,

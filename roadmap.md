@@ -1,4 +1,5 @@
 ## Codespaces ICP coverage — first tranche
+- [ ] Current closure pass: establish a fresh dual-mode failure baseline, repair behavior/test regressions, and implement safe remaining recovery/deletion/delivery steps without claiming unsupported full closure.
 - [x] Batch 11 implemented: automatic photo reminders, on-chain settings, minimum-version controls, platform/version/test-send targeting, guarded admin membership removal, privileged multi-domain exports, push-worker response repair; focused checks pass.
 - [ ] Closure remains incomplete: complete restorable backups/media bytes, competition welcome email job/recipient path, per-user content purge and complete-suite failures need implementation (not credential-only blockers).
 - [x] Batch 10: update-reminder admin/club audience verification in fan_out AND enqueue; canonical recipient IDs; executable authorization and dual-mode frontend tests pass; contracts unchanged.

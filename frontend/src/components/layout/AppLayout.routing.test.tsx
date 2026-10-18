@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   isThemeReady: true,
 }));
 
-vi.mock("@/hooks/useAuth", () => ({ useAuth: () => mocks.auth }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => mocks.auth, useOptionalAuth: () => mocks.auth }));
 vi.mock("@/hooks/useClubTheme", () => ({
   useClubTheme: () => ({ isThemeReady: mocks.isThemeReady }),
 }));

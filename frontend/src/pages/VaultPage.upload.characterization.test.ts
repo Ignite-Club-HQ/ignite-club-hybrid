@@ -113,9 +113,10 @@ describe("Vault upload/file-name/quota-reservation behavior contract", () => {
     expect(clusterSource).toContain('toast.error(error.message || "Failed to upload file");');
   });
 
-  it("tracks a single uploading flag around both the raw input and dialog upload paths, using try/finally for the dialog path", () => {
-    expect(clusterSource).toMatch(/setUploading\(true\);\s*if \(uploadType === "photo"\) \{\s*await uploadPhotoMutation\.mutateAsync\(file\);\s*\} else \{\s*await uploadFileMutation\.mutateAsync\(\{ file \}\);\s*\}\s*setUploading\(false\);/);
-    expect(clusterSource).toMatch(/setUploading\(true\);\s*try \{\s*if \(type === "photo"\) \{\s*await uploadPhotoMutation\.mutateAsync\(file\);\s*\} else \{\s*await uploadFileMutation\.mutateAsync\(\{ file, customFileName \}\);\s*\}\s*\} finally \{\s*setUploading\(false\);\s*\}/);
+  it("tracks pending uploads for both background mutation paths", () => {
+    expect(uploadHookSource).toContain("uploading: uploadPhotoMutation.isPending || uploadFileMutation.isPending");
+    expect(uploadHookSource).toContain("uploadPhotoMutation.mutate(file)");
+    expect(uploadHookSource).toContain("uploadFileMutation.mutate({ file, customFileName })");
   });
 
   it("keeps any extracted Vault upload boundary narrow when present", () => {

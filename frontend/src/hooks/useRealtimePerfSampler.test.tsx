@@ -40,6 +40,9 @@ vi.mock("@/lib/nativePush", () => ({
   getPlatform: () => "web",
 }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: unknown, providers: { supabase: () => unknown }) => providers.supabase(),
+}));
 
 import { useRealtimePerfSampler } from "./useRealtimePerfSampler";
 

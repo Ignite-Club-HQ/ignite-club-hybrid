@@ -67,6 +67,14 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/live/authBackendMode", () => ({
   resolveAuthBackend: () => backendMocks.mode,
 }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: unknown, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    backendMocks.mode === "icp" ? providers.icp({}) : providers.supabase(),
+}));
+vi.mock("@/live/features/club", () => ({
+  listLiveSeasonTeamAssignment: async () => [],
+  listLiveTeams: async () => [],
+}));
 
 function installSupabaseFixtures() {
   backendMocks.rpc.mockImplementation(async () => ({ data: rpcPlayers, error: null }));
@@ -84,10 +92,11 @@ function installSupabaseFixtures() {
 }
 
 function Harness({ initialSelected = new Set<string>() }: { initialSelected?: Set<string> }) {
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
   const [selected, setSelected] = useState<Set<string>>(initialSelected);
   const [assignments, setAssignments] = useState<Record<string, string | null>>({});
   return (
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={queryClient}>
       <div data-testid="selected">{Array.from(selected).sort().join(",")}</div>
       <div data-testid="assignments">{JSON.stringify(assignments)}</div>
       <ReturningMembersStep
