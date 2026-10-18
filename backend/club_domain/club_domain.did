@@ -203,10 +203,29 @@ type RoleGrant =
    team: opt text;
    user: principal;
  };
-type Result = 
+type Result__1 = 
  record {
    hasMore: bool;
    rows: vec Row;
+ };
+type Result = 
+ variant {
+   Err: text;
+   Ok: Reservation;
+ };
+type Reservation = 
+ record {
+   bytes: nat;
+   category: text;
+   club_id: text;
+   cycle: nat;
+   status: variant {
+             committed;
+             released;
+             "reserved";
+           };
+   store: principal;
+   token: text;
  };
 type Request = 
  record {
@@ -582,7 +601,7 @@ type Main =
                                  Err: text;
                                  Ok;
                                });
-   execute: (input: text) -> (Result) query;
+   execute: (input: text) -> (Result__1) query;
    export_acl: () -> (variant {
                         Err: text;
                         Ok: Config;
@@ -728,6 +747,11 @@ type Main =
        Ok: PendingInvite;
      }) query;
    get_pending_invite_label: (id: text) -> (opt text) query;
+   get_prepared_media_quota: (store: principal, token: text) ->
+    (variant {
+       Err: text;
+       Ok: opt Reservation;
+     }) query;
    get_public_eoi_config: (club_slug: text, season_slug: text) ->
     (variant {
        Err: text;
@@ -1058,7 +1082,7 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
-   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -1088,6 +1112,8 @@ type Main =
                                 Ok: Mutation;
                               });
    my_role_grants: () -> (vec RoleGrant) query;
+   prepare_media_quota_reservation: (store: principal, token: text, club_id:
+    text, category: text, bytes: nat) -> (Result);
    profile_team_history: (profile_id: text) ->
     (vec ProfileTeamHistoryEntry) query;
    publish_season: (season_id: text) -> (variant {
@@ -1115,6 +1141,11 @@ type Main =
                 Err: text;
                 Ok: nat64;
               });
+   register_media_quota_store: (store: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    reject_club_join_request: (id: text) ->
     (variant {
        Err: text;
@@ -1131,7 +1162,7 @@ type Main =
      });
    /// Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
    /// Any NEW stored principal / principal-text field added to this canister must be added here.
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -1485,6 +1516,8 @@ type Main =
                                                   Err: text;
                                                   Ok;
                                                 });
+   settle_prepared_media_quota: (store: principal, token: text, commit:
+    bool) -> (Result);
    soft_delete_club: (id: text, cascade_teams: bool) ->
     (variant {
        Err: text;
