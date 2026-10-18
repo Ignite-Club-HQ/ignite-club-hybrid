@@ -492,6 +492,10 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func mark_all_read(user : Text, club : ?Text) : async Types.ResultNat16 {
     authenticated(caller);
+    switch (await callerAccountId(caller)) {
+      case null { return #Err("Account lookup unavailable") };
+      case (?accountId) { if (accountId != user) { return #Err("Not your inbox") } };
+    };
     var marked : Nat16 = 0;
     var index = 0;
     for (item in items.values()) {
@@ -510,6 +514,10 @@ persistent actor class Main(governorInit : Principal) {
     switch (findIndex(id)) {
       case null { #Err("Unknown notification") };
       case (?index) {
+        switch (await callerAccountId(caller)) {
+          case null { return #Err("Account lookup unavailable") };
+          case (?accountId) { if (items[index].user != accountId) { return #Err("Not your notification") } };
+        };
         items := Array.tabulate<Types.Notification>(items.size() - 1, func(position) {
           if (position < index) { items[position] } else { items[position + 1] }
         });
