@@ -42,7 +42,7 @@ export const FEATURE_GROUP_DOMAIN: Record<FeatureArea, GroupDomain | null> = {
 };
 /** Club scope for a call. writeKey marks a write (idempotency key); attempts
  * 1 = never auto-retry (creates without a canister idempotency key). */
-export type ClubScope = { clubId: string; writeKey?: string; attempts?: number; /** internal: club not moved, use shared canisters */ legacy?: true };
+export type ClubScope = ({ clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string }) & { writeKey?: string; attempts?: number; /** internal: club not moved, use shared canisters */ legacy?: true };
 
 export async function withFeatureBackend<T>(
   feature: FeatureArea,
@@ -84,8 +84,8 @@ export async function withFeatureBackend<T>(
     const domain = FEATURE_GROUP_DOMAIN[feature];
     if (scope && domain) {
       return scope.writeKey
-        ? clubDispatch.write(feature, scope.clubId, domain, scope.writeKey, async ctx => providers.icp(ctx), scope.attempts)
-        : clubDispatch.read(feature, scope.clubId, domain, async ctx => providers.icp(ctx));
+        ? clubDispatch.writeFor(feature, scope, domain, scope.writeKey, async ctx => providers.icp(ctx), scope.attempts)
+        : clubDispatch.readFor(feature, scope, domain, async ctx => providers.icp(ctx));
     }
     // Unscoped club data would reach the shared canisters even for a moved club.
     if (domain) throw new Error(`"${feature}" call has no club scope; group routing cannot place it.`);
