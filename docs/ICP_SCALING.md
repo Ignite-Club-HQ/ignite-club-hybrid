@@ -11,8 +11,24 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
 - Deployment-bound preparation (`frontend/src/live/groupDeployment.ts`) validates
   approved identity/revision/HTTPS origin/network against every domain's subnet
   placement. Secondary approved subnets remain gated; cache scopes isolate account
-  and deployment. No actor wiring or authoritative registry ingestion yet; never
-  accept browser-authored approvals. No Cloud Engine selected or created.
+  and deployment. Explicit inactive read sessions now ingest consensus router
+  metadata, never browser-authored approvals. No Cloud Engine selected or created.
+- Integrated group-read stage: immutable governor-attested router placement in
+  stable partition 8; authenticated consensus registry reads; private assignment
+  reads call assigned club authorities and reject revoked, unavailable, foreign
+  or stale results without partial data. Caller/locally-linked membership pages
+  scan at most 200 profiles and return at most 100 IDs. This is bounded offset
+  traversal, NOT indexed or snapshot-consistent membership storage; cross-group
+  linked-account synchronization and ACL revision coverage remain unfinished.
+  Current memberships are rechecked before feature reads.
+  `groupSessionLive.ts` connects only when explicitly called, never in production
+  dispatch. Lazy adapters cover profiles, teams, subscriptions, events and
+  forward-paged messages. All 13 domain IDs move together; global services stay
+  unchanged. Coalescing isolates host/network/IDs. Mixed engines reject without
+  fallback. Real isolated two-club-authority/router tests verify private pages,
+  revocation, anonymous/foreign/stale denial, upgrade persistence and unavailable
+  authority. Other domain IDs are fixtures, not complete feature-group testing.
+  Placement is operator-attested, not independently measured. Nothing deployed.
 - Coordinated recovery core (`scripts/media-recovery-coordinator.mjs`) requires
   exact inventory, stops stores before authority, checks all stopped before
   snapshots/restores, rejects partial manifests and leaves failures stopped.

@@ -109,6 +109,35 @@ export const idlFactory = ({ IDL }) => {
     'stable_bytes' : IDL.Nat,
     'heap_bytes' : IDL.Nat,
   });
+  const DomainPlacement = IDL.Record({
+    'domain' : IDL.Text,
+    'subnet' : IDL.Principal,
+    'canister' : IDL.Principal,
+  });
+  const GroupPlacement = IDL.Record({
+    'host' : IDL.Text,
+    'network_kind' : IDL.Text,
+    'deployment_revision' : IDL.Nat64,
+    'approved_subnets' : IDL.Vec(IDL.Principal),
+    'additional_subnets_enabled' : IDL.Bool,
+    'group_id' : IDL.Text,
+    'domains' : IDL.Vec(DomainPlacement),
+    'deployment_id' : IDL.Text,
+    'primary_subnet' : IDL.Principal,
+  });
+  const GroupRegistrySnapshot = IDL.Record({
+    'groups' : IDL.Vec(ShardGroup),
+    'placements' : IDL.Vec(GroupPlacement),
+    'revision' : IDL.Nat64,
+  });
+  const Result_13 = IDL.Variant({
+    'Ok' : GroupRegistrySnapshot,
+    'Err' : IDL.Text,
+  });
+  const Result_14 = IDL.Variant({
+    'Ok' : IDL.Vec(GroupAssignment),
+    'Err' : IDL.Text,
+  });
   
   return IDL.Service({
     'abort_domain_migration' : IDL.Func(
@@ -157,12 +186,23 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
+    'read_group_registry' : IDL.Func([IDL.Text], [Result_13], []),
+    'read_my_group_assignments' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Text, IDL.Nat64],
+        [Result_14],
+        [],
+      ),
     'record_group_health' : IDL.Func(
         [IDL.Text, IDL.Nat64, IDL.Nat64, IDL.Nat64],
         [Result],
         [],
       ),
     'register_group' : IDL.Func([ShardGroup, IDL.Nat64], [Result], []),
+    'register_group_placement' : IDL.Func(
+        [GroupPlacement, IDL.Nat64],
+        [Result],
+        [],
+      ),
     'version' : IDL.Func([], [IDL.Nat64], ['query']),
   });
 };

@@ -35,6 +35,11 @@ export interface DomainMigration {
   'club_id' : string,
   'migration_revision' : bigint,
 }
+export interface DomainPlacement {
+  'domain' : string,
+  'subnet' : Principal,
+  'canister' : Principal,
+}
 export interface DomainRoute {
   'domain' : string,
   'shard' : Principal,
@@ -45,6 +50,22 @@ export interface GroupAssignment {
   'group_id' : string,
   'revision' : bigint,
   'club_id' : string,
+}
+export interface GroupPlacement {
+  'host' : string,
+  'network_kind' : string,
+  'deployment_revision' : bigint,
+  'approved_subnets' : Array<Principal>,
+  'additional_subnets_enabled' : boolean,
+  'group_id' : string,
+  'domains' : Array<DomainPlacement>,
+  'deployment_id' : string,
+  'primary_subnet' : Principal,
+}
+export interface GroupRegistrySnapshot {
+  'groups' : Array<ShardGroup>,
+  'placements' : Array<GroupPlacement>,
+  'revision' : bigint,
 }
 export interface Init { 'governor' : Principal }
 export interface MemoryStats {
@@ -73,6 +94,10 @@ export type Result_10 = { 'Ok' : [] | [Route] } |
 export type Result_11 = { 'Ok' : Array<ShardGroup> } |
   { 'Err' : string };
 export type Result_12 = { 'Ok' : Page } |
+  { 'Err' : string };
+export type Result_13 = { 'Ok' : GroupRegistrySnapshot } |
+  { 'Err' : string };
+export type Result_14 = { 'Ok' : Array<GroupAssignment> } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
@@ -136,8 +161,14 @@ export interface _SERVICE {
    * Public: live memory reading for the admin health page.
    */
   'memory_stats' : ActorMethod<[], MemoryStats>,
+  'read_group_registry' : ActorMethod<[string], Result_13>,
+  'read_my_group_assignments' : ActorMethod<
+    [Array<string>, string, bigint],
+    Result_14
+  >,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
+  'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,
   'version' : ActorMethod<[], bigint>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

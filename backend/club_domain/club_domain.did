@@ -1151,6 +1151,16 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
+   read_has_club_membership: (user: principal, club_id: text) -> (bool);
+   read_my_club_memberships: (offset: nat, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             acl_revision: nat64;
+             clubs: vec text;
+             next: opt nat;
+           };
+     });
    record_presence_heartbeat: () -> (variant {
                                        Err: text;
                                        Ok;

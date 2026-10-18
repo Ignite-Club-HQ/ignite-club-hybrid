@@ -1,0 +1,16 @@
+import Page "../src/membershipPage";
+import Array "mo:core/Array";
+let items = Array.tabulate<Nat>(501, func(i) = i);
+let first = Page.read<Nat>(items, 0, 100, func(i) = i % 2 == 0);
+assert first.rows.size() == 100;
+assert first.next == ?199;
+let sparse = Page.read<Nat>(items, 0, 100, func(i) = i == 500);
+assert sparse.rows.size() == 0;
+assert sparse.scanned == 200;
+assert sparse.next == ?200;
+let last = Page.read<Nat>(items, 400, 100, func(i) = i == 500);
+assert last.rows == [500];
+assert last.next == null;
+let denied = Page.read<Nat>(items, 0, 100, func(_) = false);
+assert denied.rows.size() == 0;
+assert denied.scanned == 200;

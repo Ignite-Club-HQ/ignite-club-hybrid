@@ -1003,6 +1003,18 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'read_has_club_membership' : ActorMethod<[Principal, string], boolean>,
+  'read_my_club_memberships' : ActorMethod<
+    [bigint, number],
+    {
+        'Ok' : {
+          'clubs' : Array<string>,
+          'next' : [] | [bigint],
+          'acl_revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'record_presence_heartbeat' : ActorMethod<
     [],
     { 'Ok' : null } |
