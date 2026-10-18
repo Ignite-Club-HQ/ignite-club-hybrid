@@ -42,7 +42,7 @@ try {
     return Buffer.concat(parts);
   }
   const path = 'users/u/ciphertext.bin';
-  const bytes = Buffer.alloc(2_100_007); for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
+  const bytes = Buffer.alloc(10_551_296); for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
   await upload(path, bytes);
   assert.deepEqual(await download(path), bytes);
   actor.setPrincipal(other);
@@ -61,6 +61,8 @@ try {
   const replacement = Buffer.from('encrypted replacement');
   await upload(path, replacement);
   assert.deepEqual(await download(path), replacement);
+  const stale = await actor.http_request_streaming_callback({ path, content_hash: createHash('sha256').update(bytes).digest('hex'), offset: 1_000_000n });
+  assert.equal(stale.body.length, 0, 'a replaced file must never continue an old stream');
   const allocated = (await actor.stable_storage_status()).allocated_bytes;
   ok(await actor.delete_blob(path));
   await upload(path, replacement);
@@ -110,6 +112,10 @@ try {
   await pic.advanceTime(31 * 86_400_000); await pic.tick();
   const nextCycle = ok(await actor.begin_upload('clubs/c1/photos/next-cycle.jpg', 'image/jpeg', 1n, 1));
   ok(await actor.put_chunk(nextCycle, 0, [43])); ok(await actor.finalize_upload(nextCycle));
+  await pic.advanceTime(181 * 86_400_000); await pic.tick(10);
+  const expired = await actor.http_request({ url: '/clubs/c1/photos/0.jpg', method: 'GET', headers: [], body: [] });
+  assert.equal(expired.status_code, 404, 'known-free club ciphertext must expire after six months');
+  assert.deepEqual(await download(path), replacement, 'personal media without a club retention rule is retained');
   console.log('PASS: authenticated upload, streaming read-back, migration integrity/idempotency, owner denial, replacement/delete/reuse and EOP upgrade preservation.');
   console.log('PASS: real two-store freeze/import/activation, denied spoofed reservation, 10 shared slots including pending writes, idempotent begin/finalize, release/refund and 30-day boundary.');
 } finally {
