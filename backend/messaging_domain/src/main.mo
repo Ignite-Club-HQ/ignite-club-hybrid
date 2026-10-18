@@ -2454,6 +2454,16 @@ persistent actor class Main(governorInit : Principal) {
     await ws.ws_message(caller, args, msg_type);
   };
 
+  /// Location-only lookup for group routing: which club owns this chat, if
+  /// it lives in this canister. Participants only; null when not held here.
+  public query ({ caller }) func read_conversation_club(conversation_id : Text) : async { #Ok : ?Text; #Err : Text } {
+    if (Principal.isAnonymous(caller)) return #Err("Sign in required");
+    switch (findConversationIndex(conversation_id)) {
+      case null { #Ok(null) };
+      case (?i) { if (not canAccessConversation(caller, conversation_id)) #Err("Forbidden") else #Ok(?conversations[i].club_id) };
+    }
+  };
+
   public shared query ({ caller }) func ws_get_messages(args : IcWebSocketCdk.CanisterWsGetMessagesArguments) : async IcWebSocketCdk.CanisterWsGetMessagesResult {
     ws.ws_get_messages(caller, args);
   };
