@@ -61,6 +61,9 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 - Automatically place new clubs into a healthy, eligible group while honoring residency and backend rules.
 - Provision and fully wire another group when capacity requires it, with controller checks, funding safeguards, audit records and duplicate-provisioning protection.
 - Support independent domain expansion where needed—for example, additional messaging capacity without unnecessarily duplicating every service.
+- Build optional subnet-aware provisioning now, but keep cross-subnet expansion disabled until deliberately enabled by an authorized operator. Record each group's actual subnet and verified deployment target; do not assume that creating more canisters places them on another subnet.
+- Keep frequently interacting services together where practical, while allowing additional groups or independently scaled domains on other eligible subnets. Routing and authorization must use verified canister identities, not assume every service shares a subnet.
+- Honor existing country/backend eligibility rules; subnet placement alone must never be represented as a country-residency guarantee.
 - Never mark an incomplete or unhealthy group eligible for clubs.
 
 **Completion gate:** load tests trigger one correctly configured expansion, place new clubs safely and demonstrate capacity protection when provisioning fails.
@@ -70,6 +73,7 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 - Run the integrated multi-group, migration, recovery and authorization suites—not just isolated helpers.
 - Exercise busy clubs, multiple memberships, maximum permitted uploads, simultaneous retries, scheduled delivery and interrupted transfers.
 - Validate upgrade compatibility against the identified live versions and rehearse the full operator procedure with snapshots and rollback.
+- Test cross-subnet behavior: delayed or lost confirmations, unavailable destinations, idempotent retries, permissions and revocation, notifications, encrypted media access and interrupted club transfers. Local simulations prepare the behavior; they do not prove actual cross-subnet performance.
 
 **Completion gate:** all relevant regressions pass and every planned production action has a tested stop/rollback point.
 
@@ -83,6 +87,16 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 - Include the outstanding real-device photo-send check: one confirmed message after leaving and reopening the thread.
 
 **Completion gate:** authenticated mainnet and device checks pass; monitor capacity, latency, errors and cycles before expanding use. Local tests alone do not satisfy this gate.
+
+#### Optional later activation: expansion onto additional subnets
+
+- Leave this capability off during the initial scaling rollout. Capacity alerts may recommend expansion, but must not silently enable it or move existing clubs.
+- When needed, an authorized operator selects an eligible subnet/deployment target, confirms funding and provisions a fully wired test group there.
+- Verify the actual subnet assignment and run authenticated checks across real distinct subnets, measuring latency, error recovery and cycles before admitting clubs.
+- Enable new-club placement gradually only after those checks pass. Moving an existing club uses the same fenced, verified transfer procedure in step 5—not a routing toggle or an assumption that its existing canister can simply change subnets.
+- If validation fails, keep the new group ineligible and retain existing assignments; use the tested recovery process for any transfer already underway.
+
+**Activation gate:** real cross-subnet checks pass, the group is healthy and fully authorized, and the operator explicitly enables placement. No cross-subnet production activation is requested by this plan update.
 
 ### 9. Finish ChatGPT / MCP / OQL live verification
 
