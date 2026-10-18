@@ -17,7 +17,8 @@ interface ThreadRow {
   updatedAt: string;
 }
 
-export function CompetitionAdminInboxCard({ competitionId }: { competitionId: string }) {
+/** hostClubId: the club running the competition, whose canisters hold its threads. */
+export function CompetitionAdminInboxCard({ competitionId, hostClubId }: { competitionId: string; hostClubId?: string | null }) {
   const { data: threads = [], isLoading } = useQuery({
     queryKey: ["competition-admin-inbox", competitionId],
     enabled: !!competitionId,

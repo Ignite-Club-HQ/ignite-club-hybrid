@@ -373,7 +373,7 @@ export function CompetitionAdminsCard({
         </div>
       </CardContent>
     </Card>
-    <CompetitionAdminInboxCard competitionId={competitionId} />
+    <CompetitionAdminInboxCard competitionId={competitionId} hostClubId={organizerClubId} />
     </div>
   );
 }
