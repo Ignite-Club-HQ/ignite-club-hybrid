@@ -73,6 +73,11 @@ type Main =
        Err: text;
        Ok;
      });
+   claim_legacy_sponsor_metrics: (club_id: text, sponsor_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    client_perf_aggregate: (path: text, metric: opt text, since_ms: nat64,
     until_ms: nat64) -> (variant {
                            Err: text;
@@ -266,6 +271,11 @@ type Main =
        Err: text;
        Ok: nat32;
      });
+   record_club_sponsor_metric: (club_id: text, sponsor_id: text, metric:
+    text, delta: float64, account_id: opt text) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
    record_message_sent: (club_id: text, account_id: text) ->
     (variant {
        Err: text;
