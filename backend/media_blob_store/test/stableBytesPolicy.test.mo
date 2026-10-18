@@ -5,3 +5,7 @@ assert StableBytes.slotFor(65_537) == 131_072;
 assert StableBytes.slotFor(10_551_296) == 16_777_216;
 assert StableBytes.limit == 2_147_483_648;
 assert StableBytes.responseChunk == 1_000_000;
+assert StableBytes.validSlice(65_536, { offset = 0; length = 1; slot = 65_536 });
+assert not StableBytes.validSlice(65_536, { offset = 0; length = 65_537; slot = 65_536 });
+assert not StableBytes.validSlice(65_536, { offset = 1; length = 1; slot = 65_536 });
+assert not StableBytes.validSlice(65_536, { offset = 65_536; length = 1; slot = 65_536 });

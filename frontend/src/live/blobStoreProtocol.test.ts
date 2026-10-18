@@ -69,6 +69,7 @@ describe("media_blob_store contract", () => {
       "cycles_balance",
       "delete_blob",
       "enable_shared_media_quota",
+      "enable_stable_media_storage",
       "finalize_upload",
       "freeze_media_quota",
       "get_club_media_usage",
@@ -77,8 +78,10 @@ describe("media_blob_store contract", () => {
       "get_usage",
       "health",
       "http_request",
+      "http_request_streaming_callback",
       "memory_stats",
       "merge_principal",
+      "migrate_legacy_blob",
       "put_chunk",
       "quota_snapshot_page",
       "reconcile_upload_operations",
@@ -86,6 +89,7 @@ describe("media_blob_store contract", () => {
       "retire_upload_outcomes",
       "set_capacity_limit",
       "set_club_domain_canister",
+      "stable_storage_status",
     ]);
   });
 

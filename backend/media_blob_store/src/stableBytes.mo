@@ -9,6 +9,10 @@ module {
   // Keep the existing operational budget until measured capacity tests pass.
   public let limit : Nat = 2_147_483_648;
   public let responseChunk : Nat = 1_000_000;
+  public func validSlice(end : Nat, slice : Slice) : Bool {
+    slice.slot >= 65_536 and slice.slot <= 16_777_216 and slotFor(slice.slot) == slice.slot and
+    slice.length <= slice.slot and slice.offset.toNat() % 65_536 == 0 and slice.offset.toNat() + slice.slot <= end
+  };
   public func slotFor(length : Nat) : Nat {
     var slot = 65_536;
     while (slot < length) { slot *= 2 };
@@ -20,7 +24,10 @@ module {
     if (slot > 16_777_216) return null;
     let offsets = switch (store.free.get(slot)) { case (?map) map; case null { let map = Map.empty<Nat64, ()>(); store.free.add(slot, map); map } };
     let offset = switch (offsets.entries().next()) {
-      case (?(offset, _)) { offsets.remove(offset); offset };
+      case (?(offset, _)) {
+        if (not validSlice(store.end.toNat(), { offset; length; slot })) return null;
+        offsets.remove(offset); offset
+      };
       case null {
         if (store.end.toNat() + slot > limit) return null;
         let requiredPages = (store.end.toNat() + slot + 65_535) / 65_536;
@@ -35,11 +42,12 @@ module {
     ?{ offset; length; slot }
   };
   public func release(store : Store, slice : Slice) {
+    if (not validSlice(store.end.toNat(), slice)) return;
     let offsets = switch (store.free.get(slice.slot)) { case (?map) map; case null { let map = Map.empty<Nat64, ()>(); store.free.add(slice.slot, map); map } };
     offsets.add(slice.offset, ())
   };
   public func read(store : Store, slice : Slice, offset : Nat, requested : Nat) : Blob {
-    if (offset >= slice.length) return "";
+    if (not validSlice(store.end.toNat(), slice) or slice.offset.toNat() + slice.slot > Region.size(store.region).toNat() * 65_536 or offset >= slice.length) return "";
     Region.loadBlob(store.region, slice.offset + Nat64.fromNat(offset), Nat.min(requested, slice.length - offset))
   };
   public func canAllocate(store : Store, length : Nat) : Bool {
