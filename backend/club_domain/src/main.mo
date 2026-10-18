@@ -1976,10 +1976,27 @@ persistent actor class Main(governorInit : Principal) {
   // Keep shared club/team records and parent-owned children intact.
   public shared ({ caller }) func erase_my_membership() : async { #Ok; #Err : Text } {
     auth(caller);
-    let principals = switch (accountFor(caller)) {
-      case (?account) { account.principals };
-      case null { [caller] };
-    };
+    let account = accountFor(caller);
+    eraseMembership(switch (account) { case (?a) { a.principals }; case null { [caller] } },
+      switch (account) { case (?a) { a.id }; case null { "principal:" # Principal.toText(caller) } })
+  };
+
+  public shared ({ caller }) func erase_account_membership(account_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("App admin required");
+    switch (accounts.find(func(a) = a.id == account_id)) {
+      case (?a) { eraseMembership(a.principals, a.id) };
+      case null {
+        // Unlinked accounts use the canonical principal:<text> key.
+        switch (Text.stripStart(account_id, #text "principal:")) {
+          case null { #Err("Unknown club account; cannot safely revoke membership") };
+          case (?text) { eraseMembership([Principal.fromText(text)], account_id) };
+        }
+      };
+    }
+  };
+
+  func eraseMembership(principals : [Principal], accountId : Text) : { #Ok; #Err : Text } {
     if (principals.any(func(p) = p.equal(governor))) return #Err("Governor account cannot be erased");
     var exclusions = acl.exclusions;
     // Explicitly exclude every club, including family-derived membership.
@@ -1991,7 +2008,6 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     acl := { acl with roles = acl.roles.filter(func(g) = AccountErasure.keepRole(g, principals)); exclusions };
-    let accountId = switch (accountFor(caller)) { case (?a) { a.id }; case null { "principal:" # Principal.toText(caller) } };
     accountRoles := accountRoles.filter(func(g) = g.account_id != accountId);
     #Ok
   };

@@ -9,7 +9,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: m.from } })
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => "icp" }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, handlers: { icp: (ctx: unknown) => unknown }) => handlers.icp({}) }));
 vi.mock("@/live/features/appSettings", () => ({ getLiveAppSetting: m.get, setLiveAppSetting: m.set }));
-vi.mock("@/live/features/messaging", () => ({ runLiveChatPhotoGalleryReminders: m.run }));
+vi.mock("@/live/features/messaging", () => ({ runLiveChatPhotoGalleryReminders: m.run, getLiveChatPhotoReminderSettings: m.get, setLiveChatPhotoReminderSettings: m.set }));
 vi.mock("sonner", () => ({ toast: { success: m.success, error: m.error } }));
 import Page from "./AdminChatPhotoRemindersPage";
 function open() {
@@ -19,7 +19,7 @@ function open() {
 beforeEach(() => {
   vi.clearAllMocks();
   m.admin = true;
-  m.get.mockResolvedValue(JSON.stringify({ enabled: true, window_start_hours: 24, window_end_hours: 48, cooldown_days: 7 }));
+  m.get.mockResolvedValue({ enabled: true, window_start_hours: 24, window_end_hours: 48, cooldown_days: 7 });
   m.set.mockResolvedValue(undefined);
   m.run.mockResolvedValue({ scanned: 3, posted: 2, skipped: 1 });
 });
@@ -29,7 +29,7 @@ describe("ICP photo reminder administration", () => {
     const start = await screen.findByLabelText("Window start (hours ago)");
     fireEvent.change(start, { target: { value: "36" } });
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
-    await waitFor(() => expect(m.set).toHaveBeenCalledWith({}, "chat_photo_gallery_reminders", {
+    await waitFor(() => expect(m.set).toHaveBeenCalledWith({}, {
       enabled: true, window_start_hours: 36, window_end_hours: 48, cooldown_days: 7,
     }));
     expect(m.from).not.toHaveBeenCalled();
@@ -40,7 +40,7 @@ describe("ICP photo reminder administration", () => {
     expect(button).toBeEnabled();
     fireEvent.click(button);
     await waitFor(() => expect(m.run).toHaveBeenCalledWith({}, expect.any(Number), 24, 48, 7));
-    await waitFor(() => expect(m.success).toHaveBeenCalledWith("Done — scanned 3, posted 2, skipped 1"));
+    await waitFor(() => expect(m.success).toHaveBeenCalledWith("Done — scanned 3, queued 2, skipped 1"));
     expect(m.from).not.toHaveBeenCalled();
   });
   it("reports a failed run instead of success", async () => {
@@ -56,5 +56,15 @@ describe("ICP photo reminder administration", () => {
     expect(screen.getByText("Access denied. App admin role required.")).toBeInTheDocument();
     expect(m.get).not.toHaveBeenCalled();
     expect(m.run).not.toHaveBeenCalled();
+  });
+  it("rejects fractional timing before saving", async () => {
+    open(); fireEvent.change(await screen.findByLabelText("Window start (hours ago)"), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(m.error).toHaveBeenCalledWith("Enter whole numbers.")); expect(m.set).not.toHaveBeenCalled();
+  });
+  it("persists disabled automatic sending", async () => {
+    open(); await screen.findByLabelText("Window start (hours ago)"); fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(m.set).toHaveBeenCalledWith({}, expect.objectContaining({ enabled: false })));
   });
 });

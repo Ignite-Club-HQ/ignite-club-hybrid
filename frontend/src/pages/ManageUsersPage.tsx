@@ -611,20 +611,14 @@ function SupabaseManageUsersPage() {
         // identity_access.erase_account is app_admin-gated and immediate —
         // there is no canister-side "scheduled" deletion, so any delete type
         // selected here erases the account straight away.
-        const [{ getCurrentInternetIdentity }, { connectLiveIdentityAccessClientWithIdentity }] = await Promise.all([
+        const [{ getCurrentInternetIdentity }, { eraseIcpAccountAsAdmin }] = await Promise.all([
           import("@/live/internetIdentityAuth"),
-          import("@/live/identityAccess"),
+          import("@/live/adminAccountDeletion"),
         ]);
         const { getActiveIcpTarget } = await import("@/live/targetRegistry");
         const identity = await getCurrentInternetIdentity();
         if (!identity) throw new Error("You need to sign in again.");
-        const { client } = await connectLiveIdentityAccessClientWithIdentity(getActiveIcpTarget(), identity);
-        try {
-          await client.eraseAccount(userId);
-        } finally {
-          client.dispose();
-        }
-        return { success: true };
+        return eraseIcpAccountAsAdmin(identity, getActiveIcpTarget(), userId);
       }
       const { data, error } = await supabase.functions.invoke('admin-delete-account', {
         body: { userId, immediate, gdprRequest }
@@ -638,7 +632,9 @@ function SupabaseManageUsersPage() {
       queryClient.invalidateQueries({ queryKey: ["search-users-manage"] });
       const deletedName = deleteTarget?.name || "User";
       
-      if (!immediate && !gdprRequest) {
+      if (resolveAuthBackend() === "icp") {
+        toast({ title: "Account permanently deleted", description: `${deletedName}'s sign-in and club access have been removed. Shared content is retained.` });
+      } else if (!immediate && !gdprRequest) {
         setRecentDeletion({ id: userId, name: deletedName, immediate: false });
         
         toast({ 
