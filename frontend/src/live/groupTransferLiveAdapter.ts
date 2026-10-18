@@ -26,9 +26,10 @@ export type ChatActor = FenceActor & {
   purge_club_snapshot(club: string): Promise<R<bigint>>;
 };
 type Fenced = SnapshotActor & FenceActor;
+export type InsightsActor = Fenced & { claim_legacy_sponsor_metrics(club: string, sponsors: string[]): Promise<R<null>> };
 const SIMPLE = ['events_domain', 'vault_domain', 'club_points_domain', 'mini_league_domain', 'competition_domain', 'media_metadata',
   'insights_domain', 'notification_queue', 'pii_access_control', 'timer_jobs'] as const;
-export type GroupActors = { club_domain: ClubActor; messaging_domain: ChatActor } & { [K in (typeof SIMPLE)[number]]: Fenced };
+export type GroupActors = { club_domain: ClubActor; messaging_domain: ChatActor } & { [K in Exclude<(typeof SIMPLE)[number], 'insights_domain'>]: Fenced } & { insights_domain: InsightsActor };
 export const LIVE_DOMAINS = ['club_domain', 'messaging_domain', ...SIMPLE] as const;
 const FENCE_DOMAINS = ['messaging_domain', ...SIMPLE] as const;
 /** Deployment-wide services holding no club data (workload identities/secret audit): never copied, never purged. */
@@ -42,8 +43,8 @@ export async function sha256Hex(data: Uint8Array): Promise<string> {
 
 export type LiveAdapterDeps = {
   actors(group: string): GroupActors;
-  /** Called with a cursor of null when the domain has no move endpoints: must prove the club is empty there. */
-  assertDomainEmpty(group: string, clubId: string, domain: string): Promise<void>;
+  /** Sponsor ids the club owns on the source group; their older sponsor-only counts are folded into the club before copying. */
+  clubSponsorIds(group: string, clubId: string): Promise<string[]>;
   sameDeployment: TransferAdapter['sameDeployment'];
   readRegistryRevision: TransferAdapter['readRegistryRevision'];
   swapAssignment: TransferAdapter['swapAssignment'];
@@ -81,6 +82,11 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     sameDeployment: d.sameDeployment,
     async setFence(group, club, on) {
       await fenceAll(group, club, on);
+      if (on) { // locked first, so no new sponsor-only count can land after the fold
+        const sponsors = await d.clubSponsorIds(group, club);
+        for (let i = 0; i < sponsors.length; i += 500)
+          ok(await d.actors(group).insights_domain.claim_legacy_sponsor_metrics(club, sponsors.slice(i, i + 500)));
+      }
       const target = on ? null : await d.targetFor(club);
       if (target && target !== group) { // abort before cutover: discard the partial target copy
         await fenceAll(target, club, true); // purge requires the lock; idempotent
@@ -90,7 +96,8 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     },
     async exportPage(group, club, domain, cursor) {
       if (global(domain)) return { rows: [], next: null };
-      if (!live(domain)) { await d.assertDomainEmpty(group, club, domain); return { rows: [], next: null }; }
+      // Every club-data canister has move endpoints; anything unknown fails closed rather than being skipped.
+      if (!live(domain)) throw new Error(`${domain} has no move endpoints; refusing to move the club`);
       const a = d.actors(group);
       if (domain === 'messaging_domain') {
         const offset = cursor === null ? 0n : BigInt(cursor);
@@ -110,7 +117,8 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       }
     },
     async digest(group, club, domain): Promise<DomainDigest> {
-      if (!live(domain)) return { domain, records: 0, digest: 'empty' };
+      if (global(domain)) return { domain, records: 0, digest: 'deployment-wide' };
+      if (!live(domain)) throw new Error(`${domain} has no move endpoints; refusing to move the club`);
       const a = d.actors(group);
       const parts = domain === 'messaging_domain' ? await chatPages(group, club) : [bytes(ok(await a[domain as 'club_domain'].export_club_snapshot(club)))];
       const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0;
