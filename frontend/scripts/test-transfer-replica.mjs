@@ -67,6 +67,12 @@ try {
   const comp = ok(await A.competition_domain.create_competition(CLUB, 'Winter Cup', '2026'));
   const asset = ok(await A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum1', `clubs/${CLUB}/p1.jpg`, 'club', 99_999_999_999_999n));
   ok(await A.insights_domain.record_photo_upload(CLUB, 'p1'));
+  // Sponsor numbers: an older sponsor-only count is folded into the club on
+  // the next club-filed count; a sponsor shared with another club splits.
+  ok(await A.insights_domain.record_sponsor_metric('sp1', 'impressions', 1, []));
+  ok(await A.insights_domain.record_club_sponsor_metric(CLUB, 'sp1', 'impressions', 1, []));
+  ok(await A.insights_domain.record_club_sponsor_metric(CLUB, 'sp-shared', 'impressions', 1, []));
+  ok(await A.insights_domain.record_club_sponsor_metric('other-club', 'sp-shared', 'impressions', 1, []));
   ok(await A.notification_queue.enqueue('n1', 'u1', CLUB, 'news', 'Hello', 'nk1'));
   ok(await A.pii_access_control.register_pii('child-1', 'name', [1, 2, 3], governor));
   ok(await A.pii_access_control.grant_pii_read_club('child-1', 'name', CLUB));
@@ -95,6 +101,7 @@ try {
       blocked.comp = await refused(A.competition_domain.create_competition(CLUB, 'Sneaky Cup', '2026'));
       blocked.media = await refused(A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum2', `clubs/${CLUB}/p2.jpg`, 'club', 99_999_999_999_999n));
       blocked.insights = await refused(A.insights_domain.record_photo_upload(CLUB, 'p2'));
+      blocked.sponsor = await refused(A.insights_domain.record_club_sponsor_metric(CLUB, 'sp1', 'impressions', 1, []));
       blocked.notify = await refused(A.notification_queue.enqueue('n2', 'u1', CLUB, 'news', 'Sneaky', 'nk2'));
       blocked.pii = await refused(A.pii_access_control.grant_pii_read_club('child-2', 'name', CLUB));
       blocked.timer = await refused(A.timer_jobs.schedule('job-2', CLUB, 99_999_999_999n, 'tk3'));
@@ -124,6 +131,9 @@ try {
   assert.deepEqual(ok(await B.competition_domain.list_competitions(CLUB)).map(x => x.id), [comp.id]);
   assert.deepEqual((await B.media_metadata.list_assets(CLUB)).map(x => x.id), [asset.id]);
   assert.equal((await A.media_metadata.list_assets(CLUB)).length, 0);
+  const imps = async (X) => Object.fromEntries(ok(await X.insights_domain.get_sponsor_benchmarks(['sp1', 'sp-shared'], '0', '99999999')).map(r => [r.sponsor_id, r.impressions]));
+  assert.deepEqual(await imps(B), { sp1: 2, 'sp-shared': 1 }, 'club sponsor numbers moved');
+  assert.deepEqual(await imps(A), { sp1: 0, 'sp-shared': 1 }, 'only the other club\'s share stays behind');
   assert.equal((await B.timer_jobs.get_job('job-1'))[0]?.scope, CLUB);
   assert.equal((await A.timer_jobs.get_job('job-1')).length, 0);
   assert.equal((await B.timer_jobs.get_job('job-other'))[0]?.scope, 'other-club');
