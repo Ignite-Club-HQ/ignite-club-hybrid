@@ -8,6 +8,8 @@ use ic_stable_structures::{
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+#[path = "placementPolicy.rs"]
+mod placement_policy;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
@@ -743,6 +745,10 @@ fn set_residency(
     validate_id(&club_id)?;
     validate_id(&profile)?;
     validate_id(&target_alias)?;
+    if let Some(existing) = RESIDENCY.with(|items| items.borrow().get(&club_id.as_bytes().to_vec()).map(|bytes| decode::<ResidencyAssignment>(&bytes))) {
+        placement_policy::unchanged_residency(&existing, &profile, &target_alias)?;
+        return Ok(existing);
+    }
     let placement = placement_for(&club_id).ok_or("Club has no placement")?;
     let target = target_for(&target_alias).ok_or("Target not registered")?;
     if !target.enabled {
@@ -802,6 +808,10 @@ fn set_placement(
     validate_id(&club_id)?;
     validate_country(&country)?;
     validate_backend(&backend)?;
+    if let Some(existing) = placement_for(&club_id) {
+        placement_policy::unchanged_placement(&existing, &country, &backend)?;
+        return Ok(existing);
+    }
     let policy = policy_for(&country);
     if matches!(backend, Backend::Supabase { .. }) && !policy.supabase_enabled {
         return Err("Supabase disallowed in country".into());

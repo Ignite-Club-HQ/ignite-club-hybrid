@@ -51,293 +51,370 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface init {
-    governor: Principal;
-}
-export type result_assign = {
-    __kind__: "Ok";
-    Ok: assign_result;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result_migration = {
-    __kind__: "Ok";
-    Ok: migration;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface assign_domain_request {
-    domain: string;
+export interface AssignRequest {
     shard: Principal;
     expected_revision: bigint;
     club_id: string;
 }
-export interface assign_request {
-    shard: Principal;
-    expected_revision: bigint;
-    club_id: string;
-}
-export interface route {
+export interface Route {
     shard: Principal;
     revision: bigint;
     club_id: string;
 }
-export type result_assign_domain = {
-    __kind__: "Ok";
-    Ok: assign_domain_result;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result_opt_route = {
-    __kind__: "Ok";
-    Ok: route | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result_opt_domain_route = {
-    __kind__: "Ok";
-    Ok: domain_route | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface assign_domain_result {
-    revision: bigint;
-    route: domain_route;
+export interface MemoryStats {
+    memory_bytes: bigint;
+    stable_bytes: bigint;
+    heap_bytes: bigint;
 }
-export interface migration {
+export type Result_2 = {
+    __kind__: "Ok";
+    Ok: AssignDomainResult;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_6 = {
+    __kind__: "Ok";
+    Ok: DomainMigration | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface DomainMigration {
     destination: Principal;
+    domain: string;
     source: Principal;
     route_revision: bigint;
     club_id: string;
     migration_revision: bigint;
 }
-export interface page {
-    next?: string;
-    routes: Array<route>;
-    revision: bigint;
+export interface Init {
+    governor: Principal;
 }
-export type result_page = {
+export type Result_12 = {
     __kind__: "Ok";
-    Ok: page;
+    Ok: Page;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type result_nat64 = {
+export interface AssignDomainResult {
+    revision: bigint;
+    route: DomainRoute;
+}
+export type Result_1 = {
+    __kind__: "Ok";
+    Ok: AssignResult;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_5 = {
+    __kind__: "Ok";
+    Ok: Migration;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_9 = {
+    __kind__: "Ok";
+    Ok: Migration | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface GroupAssignment {
+    group_id: string;
+    revision: bigint;
+    club_id: string;
+}
+export interface AssignResult {
+    revision: bigint;
+    route: Route;
+}
+export type Result_11 = {
+    __kind__: "Ok";
+    Ok: Array<ShardGroup>;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result = {
     __kind__: "Ok";
     Ok: bigint;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type result_domain_migration = {
-    __kind__: "Ok";
-    Ok: domain_migration;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface assign_result {
+export interface Page {
+    next?: string;
+    routes: Array<Route>;
     revision: bigint;
-    route: route;
 }
-export type result_opt_migration = {
+export type Result_10 = {
     __kind__: "Ok";
-    Ok: migration | null;
+    Ok: Route | null;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type result_opt_domain_migration = {
-    __kind__: "Ok";
-    Ok: domain_migration | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface domain_route {
+export interface DomainRoute {
     domain: string;
     shard: Principal;
     revision: bigint;
     club_id: string;
 }
-export interface domain_migration {
-    destination: Principal;
+export interface AssignDomainRequest {
     domain: string;
+    shard: Principal;
+    expected_revision: bigint;
+    club_id: string;
+}
+export type Result_3 = {
+    __kind__: "Ok";
+    Ok: GroupAssignment;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_4 = {
+    __kind__: "Ok";
+    Ok: DomainMigration;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_7 = {
+    __kind__: "Ok";
+    Ok: DomainRoute | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_8 = {
+    __kind__: "Ok";
+    Ok: GroupAssignment | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface ShardGroup {
+    id: string;
+    max_clubs: number;
+    observed_at_ns: bigint;
+    accepting: boolean;
+    heap_budget_bytes: bigint;
+    cycles: bigint;
+    assigned_clubs: number;
+    domains: Array<DomainCanister>;
+    target_alias: string;
+    min_cycles: bigint;
+    heap_bytes: bigint;
+}
+export interface DomainCanister {
+    domain: string;
+    canister: Principal;
+}
+export interface Migration {
+    destination: Principal;
     source: Principal;
     route_revision: bigint;
     club_id: string;
     migration_revision: bigint;
 }
 export interface shard_routerInterface {
-    abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<result_nat64>;
-    abort_migration(arg0: string, arg1: bigint): Promise<result_nat64>;
-    assign(arg0: assign_request): Promise<result_assign>;
-    assign_domain(arg0: assign_domain_request): Promise<result_assign_domain>;
-    begin_domain_migration(arg0: string, arg1: string, arg2: Principal, arg3: bigint): Promise<result_domain_migration>;
-    begin_migration(arg0: string, arg1: Principal, arg2: bigint): Promise<result_migration>;
-    commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<result_assign_domain>;
-    commit_migration(arg0: string, arg1: bigint): Promise<result_assign>;
+    abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result>;
+    abort_migration(arg0: string, arg1: bigint): Promise<Result>;
+    assign(arg0: AssignRequest): Promise<Result_1>;
+    assign_domain(arg0: AssignDomainRequest): Promise<Result_2>;
+    assign_new_club_group(arg0: string, arg1: string, arg2: bigint): Promise<Result_3>;
+    begin_domain_migration(arg0: string, arg1: string, arg2: Principal, arg3: bigint): Promise<Result_4>;
+    begin_migration(arg0: string, arg1: Principal, arg2: bigint): Promise<Result_5>;
+    commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result_2>;
+    commit_migration(arg0: string, arg1: bigint): Promise<Result_1>;
     cycles_balance(): Promise<bigint>;
-    get_domain_migration(arg0: string, arg1: string): Promise<result_opt_domain_migration>;
-    get_domain_route(arg0: string, arg1: string): Promise<result_opt_domain_route>;
-    get_migration(arg0: string): Promise<result_opt_migration>;
-    get_route(arg0: string): Promise<result_opt_route>;
-    list_routes(arg0: string | null, arg1: number): Promise<result_page>;
-    memory_stats(): Promise<{
-        memory_bytes: bigint;
-        stable_bytes: bigint;
-        heap_bytes: bigint;
-    }>;
+    get_domain_migration(arg0: string, arg1: string): Promise<Result_6>;
+    get_domain_route(arg0: string, arg1: string): Promise<Result_7>;
+    get_group_assignment(arg0: string): Promise<Result_8>;
+    get_migration(arg0: string): Promise<Result_9>;
+    get_route(arg0: string): Promise<Result_10>;
+    list_groups(): Promise<Result_11>;
+    list_routes(arg0: string | null, arg1: number): Promise<Result_12>;
+    memory_stats(): Promise<MemoryStats>;
+    record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result>;
+    register_group(arg0: ShardGroup, arg1: bigint): Promise<Result>;
     version(): Promise<bigint>;
 }
-import type { assign_domain_result as _assign_domain_result, assign_result as _assign_result, domain_migration as _domain_migration, domain_route as _domain_route, migration as _migration, page as _page, result_assign as _result_assign, result_assign_domain as _result_assign_domain, result_domain_migration as _result_domain_migration, result_migration as _result_migration, result_nat64 as _result_nat64, result_opt_domain_migration as _result_opt_domain_migration, result_opt_domain_route as _result_opt_domain_route, result_opt_migration as _result_opt_migration, result_opt_route as _result_opt_route, result_page as _result_page, route as _route } from "./declarations/shard_router.did";
+import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
 export class Shard_router implements shard_routerInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
-    async abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<result_nat64> {
+    async abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result> {
         const result = await this.actor.abort_domain_migration(arg0, arg1, arg2);
-        return from_candid_result_nat64_n1(result);
+        return from_candid_Result_n1(result);
     }
-    async abort_migration(arg0: string, arg1: bigint): Promise<result_nat64> {
+    async abort_migration(arg0: string, arg1: bigint): Promise<Result> {
         const result = await this.actor.abort_migration(arg0, arg1);
-        return from_candid_result_nat64_n1(result);
+        return from_candid_Result_n1(result);
     }
-    async assign(arg0: assign_request): Promise<result_assign> {
+    async assign(arg0: AssignRequest): Promise<Result_1> {
         const result = await this.actor.assign(arg0);
-        return from_candid_result_assign_n3(result);
+        return from_candid_Result_1_n3(result);
     }
-    async assign_domain(arg0: assign_domain_request): Promise<result_assign_domain> {
+    async assign_domain(arg0: AssignDomainRequest): Promise<Result_2> {
         const result = await this.actor.assign_domain(arg0);
-        return from_candid_result_assign_domain_n5(result);
+        return from_candid_Result_2_n5(result);
     }
-    async begin_domain_migration(arg0: string, arg1: string, arg2: Principal, arg3: bigint): Promise<result_domain_migration> {
+    async assign_new_club_group(arg0: string, arg1: string, arg2: bigint): Promise<Result_3> {
+        const result = await this.actor.assign_new_club_group(arg0, arg1, arg2);
+        return from_candid_Result_3_n7(result);
+    }
+    async begin_domain_migration(arg0: string, arg1: string, arg2: Principal, arg3: bigint): Promise<Result_4> {
         const result = await this.actor.begin_domain_migration(arg0, arg1, arg2, arg3);
-        return from_candid_result_domain_migration_n7(result);
+        return from_candid_Result_4_n9(result);
     }
-    async begin_migration(arg0: string, arg1: Principal, arg2: bigint): Promise<result_migration> {
+    async begin_migration(arg0: string, arg1: Principal, arg2: bigint): Promise<Result_5> {
         const result = await this.actor.begin_migration(arg0, arg1, arg2);
-        return from_candid_result_migration_n9(result);
+        return from_candid_Result_5_n11(result);
     }
-    async commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<result_assign_domain> {
+    async commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result_2> {
         const result = await this.actor.commit_domain_migration(arg0, arg1, arg2);
-        return from_candid_result_assign_domain_n5(result);
+        return from_candid_Result_2_n5(result);
     }
-    async commit_migration(arg0: string, arg1: bigint): Promise<result_assign> {
+    async commit_migration(arg0: string, arg1: bigint): Promise<Result_1> {
         const result = await this.actor.commit_migration(arg0, arg1);
-        return from_candid_result_assign_n3(result);
+        return from_candid_Result_1_n3(result);
     }
     async cycles_balance(): Promise<bigint> {
         const result = await this.actor.cycles_balance();
         return result;
     }
-    async get_domain_migration(arg0: string, arg1: string): Promise<result_opt_domain_migration> {
+    async get_domain_migration(arg0: string, arg1: string): Promise<Result_6> {
         const result = await this.actor.get_domain_migration(arg0, arg1);
-        return from_candid_result_opt_domain_migration_n11(result);
+        return from_candid_Result_6_n13(result);
     }
-    async get_domain_route(arg0: string, arg1: string): Promise<result_opt_domain_route> {
+    async get_domain_route(arg0: string, arg1: string): Promise<Result_7> {
         const result = await this.actor.get_domain_route(arg0, arg1);
-        return from_candid_result_opt_domain_route_n14(result);
+        return from_candid_Result_7_n16(result);
     }
-    async get_migration(arg0: string): Promise<result_opt_migration> {
+    async get_group_assignment(arg0: string): Promise<Result_8> {
+        const result = await this.actor.get_group_assignment(arg0);
+        return from_candid_Result_8_n19(result);
+    }
+    async get_migration(arg0: string): Promise<Result_9> {
         const result = await this.actor.get_migration(arg0);
-        return from_candid_result_opt_migration_n17(result);
+        return from_candid_Result_9_n22(result);
     }
-    async get_route(arg0: string): Promise<result_opt_route> {
+    async get_route(arg0: string): Promise<Result_10> {
         const result = await this.actor.get_route(arg0);
-        return from_candid_result_opt_route_n20(result);
+        return from_candid_Result_10_n25(result);
     }
-    async list_routes(arg0: string | null, arg1: number): Promise<result_page> {
-        const result = await this.actor.list_routes(to_candid_opt_n23(arg0), arg1);
-        return from_candid_result_page_n24(result);
+    async list_groups(): Promise<Result_11> {
+        const result = await this.actor.list_groups();
+        return from_candid_Result_11_n28(result);
     }
-    async memory_stats(): Promise<{
-        memory_bytes: bigint;
-        stable_bytes: bigint;
-        heap_bytes: bigint;
-    }> {
+    async list_routes(arg0: string | null, arg1: number): Promise<Result_12> {
+        const result = await this.actor.list_routes(to_candid_opt_n30(arg0), arg1);
+        return from_candid_Result_12_n31(result);
+    }
+    async memory_stats(): Promise<MemoryStats> {
         const result = await this.actor.memory_stats();
         return result;
+    }
+    async record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result> {
+        const result = await this.actor.record_group_health(arg0, arg1, arg2, arg3);
+        return from_candid_Result_n1(result);
+    }
+    async register_group(arg0: ShardGroup, arg1: bigint): Promise<Result> {
+        const result = await this.actor.register_group(arg0, arg1);
+        return from_candid_Result_n1(result);
     }
     async version(): Promise<bigint> {
         const result = await this.actor.version();
         return result;
     }
 }
-function from_candid_opt_n13(value: [] | [_domain_migration]): domain_migration | null {
+function from_candid_Page_n33(value: _Page): Page {
+    return from_candid_record_n34(value);
+}
+function from_candid_Result_10_n25(value: _Result_10): Result_10 {
+    return from_candid_variant_n26(value);
+}
+function from_candid_Result_11_n28(value: _Result_11): Result_11 {
+    return from_candid_variant_n29(value);
+}
+function from_candid_Result_12_n31(value: _Result_12): Result_12 {
+    return from_candid_variant_n32(value);
+}
+function from_candid_Result_1_n3(value: _Result_1): Result_1 {
+    return from_candid_variant_n4(value);
+}
+function from_candid_Result_2_n5(value: _Result_2): Result_2 {
+    return from_candid_variant_n6(value);
+}
+function from_candid_Result_3_n7(value: _Result_3): Result_3 {
+    return from_candid_variant_n8(value);
+}
+function from_candid_Result_4_n9(value: _Result_4): Result_4 {
+    return from_candid_variant_n10(value);
+}
+function from_candid_Result_5_n11(value: _Result_5): Result_5 {
+    return from_candid_variant_n12(value);
+}
+function from_candid_Result_6_n13(value: _Result_6): Result_6 {
+    return from_candid_variant_n14(value);
+}
+function from_candid_Result_7_n16(value: _Result_7): Result_7 {
+    return from_candid_variant_n17(value);
+}
+function from_candid_Result_8_n19(value: _Result_8): Result_8 {
+    return from_candid_variant_n20(value);
+}
+function from_candid_Result_9_n22(value: _Result_9): Result_9 {
+    return from_candid_variant_n23(value);
+}
+function from_candid_Result_n1(value: _Result): Result {
+    return from_candid_variant_n2(value);
+}
+function from_candid_opt_n15(value: [] | [_DomainMigration]): DomainMigration | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n16(value: [] | [_domain_route]): domain_route | null {
+function from_candid_opt_n18(value: [] | [_DomainRoute]): DomainRoute | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n19(value: [] | [_migration]): migration | null {
+function from_candid_opt_n21(value: [] | [_GroupAssignment]): GroupAssignment | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n22(value: [] | [_route]): route | null {
+function from_candid_opt_n24(value: [] | [_Migration]): Migration | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n28(value: [] | [string]): string | null {
+function from_candid_opt_n27(value: [] | [_Route]): Route | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_page_n26(value: _page): page {
-    return from_candid_record_n27(value);
+function from_candid_opt_n35(value: [] | [string]): string | null {
+    return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n27(value: {
+function from_candid_record_n34(value: {
     next: [] | [string];
-    routes: Array<_route>;
+    routes: Array<_Route>;
     revision: bigint;
 }): {
     next?: string;
-    routes: Array<route>;
+    routes: Array<Route>;
     revision: bigint;
 } {
     return {
-        next: record_opt_to_undefined(from_candid_opt_n28(value.next)),
+        next: record_opt_to_undefined(from_candid_opt_n35(value.next)),
         routes: value.routes,
         revision: value.revision
     };
 }
-function from_candid_result_assign_domain_n5(value: _result_assign_domain): result_assign_domain {
-    return from_candid_variant_n6(value);
-}
-function from_candid_result_assign_n3(value: _result_assign): result_assign {
-    return from_candid_variant_n4(value);
-}
-function from_candid_result_domain_migration_n7(value: _result_domain_migration): result_domain_migration {
-    return from_candid_variant_n8(value);
-}
-function from_candid_result_migration_n9(value: _result_migration): result_migration {
-    return from_candid_variant_n10(value);
-}
-function from_candid_result_nat64_n1(value: _result_nat64): result_nat64 {
-    return from_candid_variant_n2(value);
-}
-function from_candid_result_opt_domain_migration_n11(value: _result_opt_domain_migration): result_opt_domain_migration {
-    return from_candid_variant_n12(value);
-}
-function from_candid_result_opt_domain_route_n14(value: _result_opt_domain_route): result_opt_domain_route {
-    return from_candid_variant_n15(value);
-}
-function from_candid_result_opt_migration_n17(value: _result_opt_migration): result_opt_migration {
-    return from_candid_variant_n18(value);
-}
-function from_candid_result_opt_route_n20(value: _result_opt_route): result_opt_route {
-    return from_candid_variant_n21(value);
-}
-function from_candid_result_page_n24(value: _result_page): result_page {
-    return from_candid_variant_n25(value);
-}
 function from_candid_variant_n10(value: {
-    Ok: _migration;
+    Ok: _DomainMigration;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: migration;
+    Ok: DomainMigration;
 } | {
     __kind__: "Err";
     Err: string;
@@ -351,57 +428,57 @@ function from_candid_variant_n10(value: {
     } : value;
 }
 function from_candid_variant_n12(value: {
-    Ok: [] | [_domain_migration];
+    Ok: _Migration;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: domain_migration | null;
+    Ok: Migration;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n13(value.Ok)
+        Ok: value.Ok
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n15(value: {
-    Ok: [] | [_domain_route];
+function from_candid_variant_n14(value: {
+    Ok: [] | [_DomainMigration];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: domain_route | null;
+    Ok: DomainMigration | null;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n16(value.Ok)
+        Ok: from_candid_opt_n15(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n18(value: {
-    Ok: [] | [_migration];
+function from_candid_variant_n17(value: {
+    Ok: [] | [_DomainRoute];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: migration | null;
+    Ok: DomainRoute | null;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n19(value.Ok)
+        Ok: from_candid_opt_n18(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -426,51 +503,108 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n21(value: {
-    Ok: [] | [_route];
+function from_candid_variant_n20(value: {
+    Ok: [] | [_GroupAssignment];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: route | null;
+    Ok: GroupAssignment | null;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n22(value.Ok)
+        Ok: from_candid_opt_n21(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n25(value: {
-    Ok: _page;
+function from_candid_variant_n23(value: {
+    Ok: [] | [_Migration];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: page;
+    Ok: Migration | null;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_page_n26(value.Ok)
+        Ok: from_candid_opt_n24(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n26(value: {
+    Ok: [] | [_Route];
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Route | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_opt_n27(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n29(value: {
+    Ok: Array<_ShardGroup>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<ShardGroup>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n32(value: {
+    Ok: _Page;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Page;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_Page_n33(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
 function from_candid_variant_n4(value: {
-    Ok: _assign_result;
+    Ok: _AssignResult;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: assign_result;
+    Ok: AssignResult;
 } | {
     __kind__: "Err";
     Err: string;
@@ -484,12 +618,12 @@ function from_candid_variant_n4(value: {
     } : value;
 }
 function from_candid_variant_n6(value: {
-    Ok: _assign_domain_result;
+    Ok: _AssignDomainResult;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: assign_domain_result;
+    Ok: AssignDomainResult;
 } | {
     __kind__: "Err";
     Err: string;
@@ -503,12 +637,12 @@ function from_candid_variant_n6(value: {
     } : value;
 }
 function from_candid_variant_n8(value: {
-    Ok: _domain_migration;
+    Ok: _GroupAssignment;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: domain_migration;
+    Ok: GroupAssignment;
 } | {
     __kind__: "Err";
     Err: string;
@@ -521,7 +655,7 @@ function from_candid_variant_n8(value: {
         Err: value.Err
     } : value;
 }
-function to_candid_opt_n23(value: string | null): [] | [string] {
+function to_candid_opt_n30(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

@@ -10,23 +10,24 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface assign_domain_request {
+export interface AssignDomainRequest {
   'domain' : string,
   'shard' : Principal,
   'expected_revision' : bigint,
   'club_id' : string,
 }
-export interface assign_domain_result {
+export interface AssignDomainResult {
   'revision' : bigint,
-  'route' : domain_route,
+  'route' : DomainRoute,
 }
-export interface assign_request {
+export interface AssignRequest {
   'shard' : Principal,
   'expected_revision' : bigint,
   'club_id' : string,
 }
-export interface assign_result { 'revision' : bigint, 'route' : route }
-export interface domain_migration {
+export interface AssignResult { 'revision' : bigint, 'route' : Route }
+export interface DomainCanister { 'domain' : string, 'canister' : Principal }
+export interface DomainMigration {
   'destination' : Principal,
   'domain' : string,
   'source' : Principal,
@@ -34,84 +35,109 @@ export interface domain_migration {
   'club_id' : string,
   'migration_revision' : bigint,
 }
-export interface domain_route {
+export interface DomainRoute {
   'domain' : string,
   'shard' : Principal,
   'revision' : bigint,
   'club_id' : string,
 }
-export interface init { 'governor' : Principal }
-export interface migration {
+export interface GroupAssignment {
+  'group_id' : string,
+  'revision' : bigint,
+  'club_id' : string,
+}
+export interface Init { 'governor' : Principal }
+export interface MemoryStats {
+  'memory_bytes' : bigint,
+  'stable_bytes' : bigint,
+  'heap_bytes' : bigint,
+}
+export interface Migration {
   'destination' : Principal,
   'source' : Principal,
   'route_revision' : bigint,
   'club_id' : string,
   'migration_revision' : bigint,
 }
-export interface page {
+export interface Page {
   'next' : [] | [string],
-  'routes' : Array<route>,
+  'routes' : Array<Route>,
   'revision' : bigint,
 }
-export type result_assign = { 'Ok' : assign_result } |
+export type Result = { 'Ok' : bigint } |
   { 'Err' : string };
-export type result_assign_domain = { 'Ok' : assign_domain_result } |
+export type Result_1 = { 'Ok' : AssignResult } |
   { 'Err' : string };
-export type result_domain_migration = { 'Ok' : domain_migration } |
+export type Result_10 = { 'Ok' : [] | [Route] } |
   { 'Err' : string };
-export type result_migration = { 'Ok' : migration } |
+export type Result_11 = { 'Ok' : Array<ShardGroup> } |
   { 'Err' : string };
-export type result_nat64 = { 'Ok' : bigint } |
+export type Result_12 = { 'Ok' : Page } |
   { 'Err' : string };
-export type result_opt_domain_migration = { 'Ok' : [] | [domain_migration] } |
+export type Result_2 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
-export type result_opt_domain_route = { 'Ok' : [] | [domain_route] } |
+export type Result_3 = { 'Ok' : GroupAssignment } |
   { 'Err' : string };
-export type result_opt_migration = { 'Ok' : [] | [migration] } |
+export type Result_4 = { 'Ok' : DomainMigration } |
   { 'Err' : string };
-export type result_opt_route = { 'Ok' : [] | [route] } |
+export type Result_5 = { 'Ok' : Migration } |
   { 'Err' : string };
-export type result_page = { 'Ok' : page } |
+export type Result_6 = { 'Ok' : [] | [DomainMigration] } |
   { 'Err' : string };
-export interface route {
+export type Result_7 = { 'Ok' : [] | [DomainRoute] } |
+  { 'Err' : string };
+export type Result_8 = { 'Ok' : [] | [GroupAssignment] } |
+  { 'Err' : string };
+export type Result_9 = { 'Ok' : [] | [Migration] } |
+  { 'Err' : string };
+export interface Route {
   'shard' : Principal,
   'revision' : bigint,
   'club_id' : string,
+}
+export interface ShardGroup {
+  'id' : string,
+  'max_clubs' : number,
+  'observed_at_ns' : bigint,
+  'accepting' : boolean,
+  'heap_budget_bytes' : bigint,
+  'cycles' : bigint,
+  'assigned_clubs' : number,
+  'domains' : Array<DomainCanister>,
+  'target_alias' : string,
+  'min_cycles' : bigint,
+  'heap_bytes' : bigint,
 }
 export interface _SERVICE {
-  'abort_domain_migration' : ActorMethod<
-    [string, string, bigint],
-    result_nat64
-  >,
-  'abort_migration' : ActorMethod<[string, bigint], result_nat64>,
-  'assign' : ActorMethod<[assign_request], result_assign>,
-  'assign_domain' : ActorMethod<[assign_domain_request], result_assign_domain>,
+  'abort_domain_migration' : ActorMethod<[string, string, bigint], Result>,
+  'abort_migration' : ActorMethod<[string, bigint], Result>,
+  'assign' : ActorMethod<[AssignRequest], Result_1>,
+  'assign_domain' : ActorMethod<[AssignDomainRequest], Result_2>,
+  'assign_new_club_group' : ActorMethod<[string, string, bigint], Result_3>,
   'begin_domain_migration' : ActorMethod<
     [string, string, Principal, bigint],
-    result_domain_migration
+    Result_4
   >,
-  'begin_migration' : ActorMethod<
-    [string, Principal, bigint],
-    result_migration
-  >,
-  'commit_domain_migration' : ActorMethod<
-    [string, string, bigint],
-    result_assign_domain
-  >,
-  'commit_migration' : ActorMethod<[string, bigint], result_assign>,
+  'begin_migration' : ActorMethod<[string, Principal, bigint], Result_5>,
+  'commit_domain_migration' : ActorMethod<[string, string, bigint], Result_2>,
+  'commit_migration' : ActorMethod<[string, bigint], Result_1>,
+  /**
+   * Public: remaining cycles (shown in admin settings).
+   */
   'cycles_balance' : ActorMethod<[], bigint>,
-  'get_domain_migration' : ActorMethod<
-    [string, string],
-    result_opt_domain_migration
-  >,
-  'get_domain_route' : ActorMethod<[string, string], result_opt_domain_route>,
-  'get_migration' : ActorMethod<[string], result_opt_migration>,
-  'get_route' : ActorMethod<[string], result_opt_route>,
-  'list_routes' : ActorMethod<[[] | [string], number], result_page>,
-  'memory_stats' : ActorMethod<
-    [],
-    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
-  >,
+  'get_domain_migration' : ActorMethod<[string, string], Result_6>,
+  'get_domain_route' : ActorMethod<[string, string], Result_7>,
+  'get_group_assignment' : ActorMethod<[string], Result_8>,
+  'get_migration' : ActorMethod<[string], Result_9>,
+  'get_route' : ActorMethod<[string], Result_10>,
+  'list_groups' : ActorMethod<[], Result_11>,
+  'list_routes' : ActorMethod<[[] | [string], number], Result_12>,
+  /**
+   * Public: live memory reading for the admin health page.
+   */
+  'memory_stats' : ActorMethod<[], MemoryStats>,
+  'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
+  'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'version' : ActorMethod<[], bigint>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

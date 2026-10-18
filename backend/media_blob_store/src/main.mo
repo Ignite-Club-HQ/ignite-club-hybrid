@@ -15,6 +15,7 @@ import Int "mo:core/Int";
 import Iter "mo:core/Iter";
 import Map "mo:core/Map";
 import Timer "mo:core/Timer";
+import UploadPolicy "uploadPolicy";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -211,8 +212,21 @@ persistent actor MediaBlobStore {
 
   // ==================== Helpers ====================
 
-  // New uploads are accepted up to 80% of the capacity limit.
-  func acceptThreshold() : Nat64 { capacity_limit_bytes / 10 * 8 };
+  func reservedBytes() : Nat {
+    var total = 0;
+    for (upload in pending_uploads.values()) { total += upload.total_size.toNat() };
+    total
+  };
+
+  func canReserve(size : Nat64) : Bool {
+    UploadPolicy.canAdmit(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size())
+  };
+
+  func storedChunkBytes(upload : PendingUpload) : Nat {
+    var total = 0;
+    for (chunk in upload.chunks.values()) { switch (chunk) { case (?bytes) { total += bytes.size() }; case null {} } };
+    total
+  };
 
   func subBytes(total : Nat64, size : Nat) : Nat64 {
     let s = Nat.toNat64(size);
@@ -262,11 +276,12 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func begin_upload(path : Text, mime : Text, total_size : Nat64, chunk_count : Nat32) : async ResultUploadId {
     auth(caller);
-    if (path == "") return #Err("Invalid path");
-    if (chunk_count == 0 and total_size > 0) return #Err("Chunk count does not cover total size");
+    if (path == "" or path.size() > 1_024 or mime.size() > 256) return #Err("Invalid path or MIME");
+    if (total_size > UploadPolicy.maxWireBytes) return #Err("FileTooLarge");
+    if (not UploadPolicy.validDeclaration(total_size, chunk_count.toNat())) return #Err("Invalid chunk declaration");
     // Sharding: refuse new bytes past the threshold so the app moves on to
     // the next photo store. Existing blobs stay readable forever.
-    if (total_bytes + total_size > acceptThreshold()) return #Err("StoreFull");
+    if (not canReserve(total_size)) return #Err("StoreFull");
     if (not isGovernor<system>(caller)) {
       switch (await checkFreeCap(path, total_size)) {
         case (?msg) { return #Err(msg) };
@@ -281,6 +296,12 @@ persistent actor MediaBlobStore {
       };
       case null {};
     };
+    // Recheck after the subscription await: another upload may have reserved
+    // capacity while this request was suspended. Reservation is now atomic.
+    if (not canReserve(total_size)) return #Err("StoreFull");
+    if (pending_uploads.size() >= UploadPolicy.maxPending) return #Err("StoreFull");
+    if (pending_uploads.filter(func(item) { item.owner.equal(caller) }).size() >= UploadPolicy.maxPendingPerOwner) return #Err("Too many pending uploads");
+    if (pending_uploads.any(func(item) { item.path == path })) return #Err("Upload already in progress for path");
     next_upload_seq += 1;
     let id = "upload-" # Nat64.toText(next_upload_seq) # "-" # Principal.toText(caller);
     let upload : PendingUpload = {
@@ -304,6 +325,8 @@ persistent actor MediaBlobStore {
         if (not upload.owner.equal(caller)) return #Err("Not the upload owner");
         if (index >= upload.chunk_count) return #Err("Chunk index out of range");
         let position = Nat32.toNat(index);
+        let replaced = switch (upload.chunks[position]) { case (?bytes) bytes.size(); case null 0 };
+        if (not UploadPolicy.canWriteChunk(upload.total_size, storedChunkBytes(upload), replaced, data.size(), PrimMem.rts_heap_size())) return #Err("Chunk exceeds size or memory budget");
         let chunks = Array.tabulate<?Blob>(upload.chunks.size(), func(i) {
           if (i == position) ?data else upload.chunks[i]
         });
@@ -324,13 +347,22 @@ persistent actor MediaBlobStore {
         if (upload.chunks.any(func(chunk) { chunk == null })) {
           return #Err("Missing chunks");
         };
-        var assembledArray : [Nat8] = [];
-        for (chunk in upload.chunks.values()) {
-          switch (chunk) {
-            case (?bytes) { assembledArray := assembledArray.concat(Blob.toArray(bytes)) };
-            case null {};
+        if (storedChunkBytes(upload) != upload.total_size.toNat()) return #Err("Accumulated byte count does not match total_size");
+        if (PrimMem.rts_heap_size() + upload.total_size.toNat() * 16 > UploadPolicy.heapBudget) return #Err("StoreFull");
+        // Linear assembly, not repeated concatenation of every preceding byte.
+        var chunkIndex = 0;
+        var offset = 0;
+        var current : [Nat8] = [];
+        let assembledArray = Array.tabulate<Nat8>(upload.total_size.toNat(), func(_) {
+          while (offset >= current.size()) {
+            current := switch (upload.chunks[chunkIndex]) { case (?bytes) bytes.toArray(); case null [] };
+            chunkIndex += 1;
+            offset := 0;
           };
-        };
+          let byte = current[offset];
+          offset += 1;
+          byte
+        });
         let assembled = Array.toBlob(assembledArray);
         if (Nat.toNat64(assembled.size()) != upload.total_size) {
           return #Err("Accumulated byte count does not match total_size");
@@ -482,7 +514,7 @@ persistent actor MediaBlobStore {
   // Sharding: the app reads this to skip full stores and to show fullness in
   // Placement Settings. Public query — reveals only byte totals.
   public query func get_usage() : async Usage {
-    { total_bytes; capacity_limit_bytes; accepting_uploads = total_bytes < acceptThreshold() }
+    { total_bytes; capacity_limit_bytes = UploadPolicy.effectiveCapacity(capacity_limit_bytes); accepting_uploads = canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
   };
 
   // Governor-only. Setting a limit at or below the current total closes the
@@ -490,6 +522,7 @@ persistent actor MediaBlobStore {
   public shared ({ caller }) func set_capacity_limit(limit_bytes : Nat64) : async Result {
     auth(caller);
     if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (limit_bytes > UploadPolicy.capacityCeiling) return #Err("Heap-backed store capacity cannot exceed 2 GiB");
     capacity_limit_bytes := limit_bytes;
     #Ok
   };
