@@ -1,6 +1,5 @@
 /** Which club a chat belongs to, for group routing. Pure (no ICP imports):
  * safe in the app's start-up bundle. */
-import { useLocation } from "react-router-dom";
 import type { ClubScope } from "./featureRouter";
 
 /** Chat kind + id as used across the app (scope_type / scope.kind). */
@@ -26,8 +25,9 @@ export function chatScopeFromPath(pathname: string): ClubScope | undefined {
   return undefined;
 }
 
-export function useCurrentChatScope(): ClubScope | undefined {
-  return chatScopeFromPath(useLocation().pathname);
+/** Read at call time (the app uses browser-path routing). */
+export function currentChatScope(): ClubScope | undefined {
+  return typeof window === "undefined" ? undefined : chatScopeFromPath(window.location.pathname);
 }
 
 /** Add a write marker to an optional chat scope. */
