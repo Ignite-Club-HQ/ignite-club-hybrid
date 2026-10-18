@@ -744,6 +744,23 @@ mod tests {
     }
 
     #[test]
+    fn hosted_lookup_returns_only_assigned_group_for_matching_deployment() {
+        let group = ShardGroup {
+            id: "host-group".into(), target_alias: "mainnet".into(), domains: vec![],
+            accepting: true, max_clubs: 5, assigned_clubs: 0,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+        };
+        GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+        let assigned = assign_group_record("host-club".into(), "mainnet".into(), current_revision(), 1).unwrap();
+        let rev = current_revision();
+        assert_eq!(hosted_assignment("host-club", "mainnet", rev, rev).unwrap(), assigned);
+        assert!(hosted_assignment("host-club", "other-engine", rev, rev).is_err());
+        assert!(hosted_assignment("host-club", "mainnet", rev - 1, rev).is_err());
+        assert!(hosted_assignment("unknown-club", "mainnet", rev, rev).is_err());
+        assert!(hosted_assignment("", "mainnet", rev, rev).is_err());
+    }
+
+    #[test]
     fn conflicting_revision_does_not_reserve_a_slot() {
         let before = current_revision();
         assert!(assign_group_record("conflict-club".into(), "mainnet".into(), before + 1, 1).is_err());
