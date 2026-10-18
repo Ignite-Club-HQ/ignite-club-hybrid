@@ -159,6 +159,7 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
   'register_file' : ActorMethod<
     [
       string,

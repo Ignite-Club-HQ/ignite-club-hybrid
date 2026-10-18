@@ -222,6 +222,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     register_file(id: string, folder_id: string, club: string, team: string | null, name: string, file_url: string, size: bigint, mime: string, is_external_link: boolean, blob_ref: BlobRef | null, mini_league_id: string | null, competition_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -620,6 +627,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.move_file(arg0, arg1);
         return from_candid_variant_n32(result);
     }
+    async purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_my_data();
+        return from_candid_variant_n33(result);
+    }
     async register_file(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string, arg5: string, arg6: bigint, arg7: string, arg8: boolean, arg9: BlobRef | null, arg10: string | null, arg11: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -627,7 +644,7 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n15(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n33(arg9), to_candid_opt_n15(arg10), to_candid_opt_n15(arg11));
+        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n15(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n34(arg9), to_candid_opt_n15(arg10), to_candid_opt_n15(arg11));
         return from_candid_variant_n32(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
@@ -638,7 +655,7 @@ export class Vault_domain implements vault_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n34(result);
+        return from_candid_variant_n35(result);
     }
     async rename_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -658,7 +675,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.restore_backup(arg0);
-        return from_candid_variant_n35(result);
+        return from_candid_variant_n36(result);
     }
     async restore_file(arg0: string): Promise<{
         __kind__: "Ok";
@@ -698,7 +715,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n15(arg3), to_candid_opt_n15(arg4), to_candid_opt_n15(arg5), to_candid_opt_n15(arg6), arg7);
-        return from_candid_variant_n36(result);
+        return from_candid_variant_n37(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -1156,7 +1173,26 @@ function from_candid_variant_n32(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n34(value: {
+function from_candid_variant_n33(value: {
+    Ok: number;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: number;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n35(value: {
     ok: bigint;
 } | {
     err: string;
@@ -1175,7 +1211,7 @@ function from_candid_variant_n34(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n35(value: {
+function from_candid_variant_n36(value: {
     Ok: bigint;
 } | {
     Err: string;
@@ -1194,7 +1230,7 @@ function from_candid_variant_n35(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n36(value: {
+function from_candid_variant_n37(value: {
     Ok: _PinnedVault;
 } | {
     Err: string;
@@ -1225,7 +1261,7 @@ function from_candid_vec_n5(value: Array<_VaultFile>): Array<VaultFile> {
 function to_candid_opt_n15(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n33(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n34(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

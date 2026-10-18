@@ -745,6 +745,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'purge_my_data' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
     'recapTransform' : IDL.Func(
         [
           IDL.Record({

@@ -485,6 +485,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'purge_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
   'recapTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult

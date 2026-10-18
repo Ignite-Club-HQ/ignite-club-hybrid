@@ -649,6 +649,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     recapTransform(arg0: {
         context: Uint8Array;
         response: HttpRequestResult;
@@ -1873,6 +1880,16 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.purge_group(arg0);
         return from_candid_variant_n1(result);
+    }
+    async purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_my_data();
+        return from_candid_variant_n16(result);
     }
     async recapTransform(arg0: {
         context: Uint8Array;
