@@ -70,7 +70,7 @@ export default function ChatGroupsList({ clubId, teamId, canManage = false }: Ch
             created_at: new Date(0).toISOString(),
           } satisfies ChatGroup));
         },
-      }, { clubId: clubId });
+      });
       return groups;
     },
     enabled: !!clubId || !!teamId,
@@ -91,7 +91,7 @@ export default function ChatGroupsList({ clubId, teamId, canManage = false }: Ch
           if (error) throw error;
         },
         icp: (ctx) => softDeleteLiveGroup(ctx, groupId),
-      }, { conversationId: groupId });
+      });
     },
     onSuccess: () => {
       toast.success("Chat removed. An app admin can restore it if needed.");

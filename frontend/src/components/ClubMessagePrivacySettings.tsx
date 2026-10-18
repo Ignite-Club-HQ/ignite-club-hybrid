@@ -41,7 +41,7 @@ export function ClubMessagePrivacySettings({ clubId }: Props) {
         icp: async (ctx) => {
           await setLiveClubMessagePrivacy(ctx, clubId, force_disable_message_previews);
         },
-      }, { clubId: clubId });
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-message-privacy", clubId] });

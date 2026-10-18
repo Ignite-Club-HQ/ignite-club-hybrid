@@ -366,7 +366,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
             team_id: event.team_id?.[0] ?? null,
           }));
         },
-      }, { clubId: clubId });
+      });
       
       if (existingEvents) {
         const newFixtures: ParsedFixture[] = [];
@@ -630,7 +630,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
               }))
               .filter((event) => event.event_date >= startIso && event.event_date <= endIso);
           },
-        }, { clubId: clubId });
+        });
 
         const localDateKey = (iso: string) => {
           const d = new Date(iso);
@@ -691,7 +691,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
             await createLiveEvent(ctx, buildLiveFixtureEventInput(fixture, clubId, teamId));
           }
         },
-      }, { clubId: clubId });
+      });
 
       toast({
         title: "Fixtures imported",

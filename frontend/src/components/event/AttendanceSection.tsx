@@ -139,7 +139,7 @@ export function AttendanceSection({
               recipients_count: log.recipients_count,
             };
           },
-        }, { eventId: eventId });
+        });
       }
       const cutoff = new Date(Date.now() - cooldownWindowMs).toISOString();
       const { data, error } = await supabase
@@ -303,7 +303,7 @@ export function AttendanceSection({
               targets.map((userId) => recordLiveReminderSent(ctx, eventId, channels, userId)),
             );
           },
-        }, { eventId: eventId });
+        });
       }
       if (!isPerUser) refetchLastReminder();
     } catch (err: any) {

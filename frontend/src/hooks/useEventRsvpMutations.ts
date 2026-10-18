@@ -403,7 +403,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
           await adminUpdateLiveRsvpStatus(ctx, eventId, accountId, status, childPart === "self" ? null : childPart);
           return true;
         },
-      }, { eventId: eventId });
+      });
       if (routedToIcp) return;
 
       const { error } = await supabase.rpc('admin_update_rsvp_status', {

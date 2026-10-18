@@ -447,7 +447,7 @@ async function sendIcpTimerEvent(
       const { setLiveEventTimer } = await import("@/live/features/events");
       return setLiveEventTimer(ctx, eventId, event, minutesPerHalf ?? null, adjust);
     },
-  }, { eventId: eventId });
+  });
   if (!timer) throw new Error("server-timer-not-applicable");
   const state = icpTimerToServerTimer(timer as unknown as IcpEventTimer);
   const nowMs = Date.now();
@@ -471,7 +471,7 @@ async function readIcpTimer(teamId: string | null, empty: TimerReadResponse): Pr
         const { getLiveEventTimer } = await import("@/live/features/events");
         return getLiveEventTimer(ctx, eventId);
       },
-    }, { eventId: eventId });
+    });
     const timer = (Array.isArray(raw) ? raw[0] : raw) as IcpEventTimer | null | undefined;
     if (!timer) return empty;
     const state = icpTimerToServerTimer(timer);

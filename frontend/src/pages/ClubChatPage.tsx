@@ -596,7 +596,7 @@ export default function ClubChatPage() {
             };
 
           },
-        }, { clubId: clubId });
+        });
       }
 
       // If offline, return cached messages using the shared online manager
@@ -1034,7 +1034,7 @@ export default function ClubChatPage() {
                 : null;
             return { older, nextCursor };
           },
-        }, { clubId: clubId! });
+        });
         icpOlderCursorRef.current = result.nextCursor;
         setHasOlderMessages(result.nextCursor !== null);
         queryClient.setQueryData(["club-messages", clubId], (old: any) => {

@@ -155,7 +155,7 @@ export default function PlayerOfMatchSelector({
             children: isChild ? { id: rawId, name } : null,
           } as any;
         },
-      }, { eventId: eventId }),
+      }),
   });
 
   const playerOfMatchDisplay = useMemo(() => {
@@ -282,7 +282,7 @@ export default function PlayerOfMatchSelector({
             mvpPlayerName,
           });
         },
-      }, { eventId: eventId });
+      });
 
       // Only award points if there's a reward configured
       if (pointsToAward > 0) {

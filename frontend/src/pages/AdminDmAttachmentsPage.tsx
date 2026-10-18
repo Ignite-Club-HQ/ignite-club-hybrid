@@ -145,7 +145,7 @@ export default function AdminDmAttachmentsPage() {
           const current = await getLiveClubDmSettings(ctx, clubId);
           await setLiveClubDmSettings(ctx, clubId, current.dm_disabled, true);
         },
-      }, { clubId: clubId }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dm-attachment-restrictions"] });
       toast.success("Club restricted");
@@ -189,7 +189,7 @@ export default function AdminDmAttachmentsPage() {
             await setLiveDmAttachmentsDisabled(ctx, Principal.fromText(restriction.user_id!), false);
           }
         },
-      }, { clubId: restriction.club_id! }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dm-attachment-restrictions"] });
       toast.success("Restriction removed");

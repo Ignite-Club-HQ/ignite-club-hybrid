@@ -208,7 +208,7 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
         const rows = await withFeatureBackend("events", {
           supabase: async () => [] as never[],
           icp: (ctx) => getMyLiveChildRsvps(ctx, eventId, null),
-        }, { eventId: eventId });
+        });
         // Child records are nameless on events_domain (PII hardening) —
         // names resolve best-effort from pii_access_control.
         const childIds = (rows ?? [])
@@ -635,7 +635,7 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
           await setLiveEventRsvp(ctx, event.id, user!.id, status);
           return true;
         },
-      }, { eventId: event.id });
+      });
       if (routedToIcp) return;
 
       let rsvpId: string | null = null;
@@ -684,7 +684,7 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
           await adminUpsertLiveRsvp(ctx, event.id, user!.id, status, { childId });
           return true;
         },
-      }, { eventId: event.id });
+      });
       if (routedToIcp) return;
 
       // Server-authoritative lookup — do NOT trust the local cache to decide

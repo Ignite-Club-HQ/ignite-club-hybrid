@@ -163,7 +163,7 @@ export function ClubDaySummary({
           }
           return all;
         },
-      }, { clubId: clubId }).then((all) =>
+      }).then((all) =>
         all.sort((a, b) => {
           const at = a.start_time || a.event_date;
           const bt = b.start_time || b.event_date;

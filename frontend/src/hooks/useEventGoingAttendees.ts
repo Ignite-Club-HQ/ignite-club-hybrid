@@ -50,7 +50,7 @@ export function useEventGoingAttendees(eventId: string | null | undefined) {
           }
           return ids;
         },
-      }, { eventId: eventId! });
+      });
     },
     enabled: !!eventId,
     staleTime: 30 * 1000, // RSVPs change during a session — keep this short

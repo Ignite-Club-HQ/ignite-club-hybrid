@@ -99,7 +99,7 @@ export function useRemoteFillInSync(teamId: string | null | undefined, enabled: 
                 is_active: activeGame.is_active,
               };
             },
-          }, { teamId: teamId });
+          });
           applyRow(row);
         } catch (error) {
           if (!cancelled) {

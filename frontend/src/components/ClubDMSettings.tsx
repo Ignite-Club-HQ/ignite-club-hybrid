@@ -69,7 +69,7 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
         allowed_roles: DEFAULT_ROLES,
       };
       },
-    }, { clubId: clubId }),
+    }),
   });
 
   // Upsert settings mutation
@@ -99,7 +99,7 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
             await setLiveClubDmSettings(ctx, clubId, !dmEnabled, current.attachments_disabled);
           }
         },
-      }, { clubId: clubId });
+      });
       return { club_id: clubId, dm_enabled: dmEnabled, allowed_roles: allowedRoles };
     },
     onSuccess: (saved) => {

@@ -305,4 +305,4 @@ export default function ClubAdminInboxList({ clubFilter, withSectionHeader = fal
       })}
     </>
   );
-}, { clubId: clubId }, { clubId: clubId }
+}

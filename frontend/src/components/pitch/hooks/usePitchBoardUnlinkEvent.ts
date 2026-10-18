@@ -77,7 +77,7 @@ export function usePitchBoardUnlinkEvent({
           const { deactivateLiveActiveGame } = await import("@/live/features/events");
           await deactivateLiveActiveGame(ctx, teamId);
         },
-      }, { teamId: teamId });
+      });
     }
 
     invalidateTeamActiveGame();

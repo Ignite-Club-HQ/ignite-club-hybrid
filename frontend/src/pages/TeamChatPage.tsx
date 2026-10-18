@@ -609,7 +609,7 @@ export default function TeamChatPage() {
             };
 
           },
-        }, { teamId: teamId });
+        });
       }
 
       // If offline, return cached messages using the React Query online manager
@@ -1198,7 +1198,7 @@ export default function TeamChatPage() {
                 : null;
             return { older, nextCursor };
           },
-        }, { teamId: teamId! });
+        });
         icpOlderCursorRef.current = result.nextCursor;
         setHasOlderMessages(result.nextCursor !== null);
         const mergeOlder = (existing: Message[] | undefined): Message[] => {

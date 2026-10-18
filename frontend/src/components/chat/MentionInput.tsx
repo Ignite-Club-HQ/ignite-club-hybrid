@@ -555,7 +555,7 @@ export function MentionInput({
                 avatar_url: p.avatar_ref?.[0] ?? null,
               }));
           },
-        }, { clubId: clubId });
+        });
       }
 
       let userIds: string[] = [];

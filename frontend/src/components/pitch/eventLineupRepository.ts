@@ -128,7 +128,7 @@ export async function fetchEventLineup(
         return null;
       }
     },
-  }, { eventId: eventId });
+  });
   if (icpRecord) return icpRecord;
 
   try {
@@ -188,7 +188,7 @@ export async function saveEventLineup(args: {
       });
       return true;
     },
-  }, { eventId: eventId });
+  });
   if (savedToIcp) return true;
 
   try {

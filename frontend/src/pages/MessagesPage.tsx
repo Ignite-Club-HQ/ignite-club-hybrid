@@ -349,7 +349,7 @@ export default function MessagesPage() {
         icp: async (ctx) => {
           await softDeleteLiveGroup(ctx, groupId);
         },
-      }, { conversationId: groupId });
+      });
     },
     onSuccess: () => {
       toast({ title: "Chat removed. An app admin can restore it if needed." });

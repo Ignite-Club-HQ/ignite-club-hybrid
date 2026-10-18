@@ -57,7 +57,7 @@ export function useEventViewTracking(eventId: string | undefined, userId: string
           await recordLiveEventView(ctx, eventId!);
           return true;
         },
-      }, { eventId: eventId! });
+      });
       if (recordedOnIcp) return;
 
       const { error } = await supabase
@@ -175,4 +175,4 @@ export function useUserEventViews(userId: string | undefined, eventIds: string[]
         },
       }),
   });
-}, { eventId: eventId! }, { eventId: eventId! }
+}

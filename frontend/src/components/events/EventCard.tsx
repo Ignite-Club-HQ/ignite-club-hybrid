@@ -181,7 +181,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
                 }
               : null;
           },
-        }, { eventId: event.id });
+        });
       }
       const { data } = await supabase
         .from("game_results")
@@ -412,7 +412,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
       }));
     },
     enabled: !!user && !event.is_cancelled,
-  }, { eventId: event.id });
+  });
 
 
 
@@ -440,7 +440,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
             });
             return counts;
           },
-        }, { eventId: event.id });
+        });
       }
       let query = supabase
         .from("rsvps")
@@ -486,7 +486,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
                 status: d.completed ? "completed" : "open",
               }));
           },
-        }, { eventId: event.id });
+        });
       }
       const { data, error } = await supabase
         .from("duties")
@@ -540,7 +540,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
           await setLiveEventRsvp(ctx, event.id, user!.id, status);
           return true;
         },
-      }, { eventId: event.id });
+      });
       if (routedToIcp) return;
 
       let rsvpId: string | null = null;
@@ -590,7 +590,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
           await adminUpsertLiveRsvp(ctx, event.id, user!.id, status, { childId });
           return true;
         },
-      }, { eventId: event.id });
+      });
       if (routedToIcp) return;
 
       const existing = (householdChildren || []).find((c) => c.child_id === childId)?.rsvp;
@@ -746,7 +746,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
           await sendLiveEventReminders(ctx, event.id);
           return true;
         },
-      }, { eventId: event.id });
+      });
       if (routedToIcp) return;
 
       const { data: rsvps } = await supabase.from("rsvps").select("user_id").eq("event_id", event.id);

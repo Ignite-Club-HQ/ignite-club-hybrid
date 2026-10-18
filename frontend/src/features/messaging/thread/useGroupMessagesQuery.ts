@@ -265,7 +265,7 @@ const fetchGroupMessages = async ({
       };
     },
 
-  }, { conversationId: groupId });
+  });
 };
 
 const getGroupMessagesPlaceholderData = (

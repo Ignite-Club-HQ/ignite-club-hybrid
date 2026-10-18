@@ -85,7 +85,7 @@ export function useAICatchUpAvailability(
           );
           return !isAdmin;
         },
-      }, { clubId: clubId });
+      });
     },
   });
 

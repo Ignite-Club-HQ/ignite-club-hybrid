@@ -106,7 +106,7 @@ export function EventDutyTeamAssignment({
         const { getLiveEventDutyTeam } = await import("@/live/features/events");
         return getLiveEventDutyTeam(ctx, eventId);
       },
-    }, { eventId: eventId }),
+    }),
   });
 
   const update = async (nextTeamId: string | null) => {
@@ -124,7 +124,7 @@ export function EventDutyTeamAssignment({
           const { setLiveEventDutyTeam } = await import("@/live/features/events");
           await setLiveEventDutyTeam(ctx, eventId, nextTeamId);
         },
-      }, { eventId: eventId });
+      });
       await queryClient.invalidateQueries({ queryKey: ["event-duty-team", eventId] });
       toast({ title: "Duty team updated" });
     } catch (error) {

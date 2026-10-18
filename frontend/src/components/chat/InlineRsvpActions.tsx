@@ -198,4 +198,4 @@ export function InlineRsvpActions({ eventId, messageId }: Props) {
       })}
     </div>
   );
-}, { eventId: eventId }, { eventId: eventId }
+}

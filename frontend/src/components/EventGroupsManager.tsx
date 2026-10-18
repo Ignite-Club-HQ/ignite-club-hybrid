@@ -216,7 +216,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         );
         return groupsWithPlayers.sort((a, b) => a.display_order - b.display_order);
       },
-    }, { eventId: eventId }),
+    }),
     staleTime: 0,
     refetchOnMount: "always",
   });

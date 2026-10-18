@@ -405,7 +405,7 @@ export default function GroupChatPage() {
               return null;
             }
           },
-        }, { conversationId: groupId! });
+        });
       }
 
       const { data, error } = await supabase
@@ -1497,7 +1497,7 @@ export default function GroupChatPage() {
               .maybeSingle();
             return { adminsOnly: !!comp?.member_chat_admins_only, isCompetitionAdmin };
           },
-        }, { conversationId: groupId! });
+        });
       }
       const [{ data: comp }, { data: isAdmin }] = await Promise.all([
         supabase

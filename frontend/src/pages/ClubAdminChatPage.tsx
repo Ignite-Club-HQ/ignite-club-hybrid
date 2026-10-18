@@ -442,7 +442,7 @@ function SupabaseClubAdminChatPage() {
             }) as unknown as ClubAdminMessage[];
             return { messages, hasOlderMessages: icpOlderCursorRef.current !== null };
           },
-        }, { conversationId: conversationId });
+        });
       }
 
       // 15s wall budget (mirrors TeamChatPage) so a socket left half-dead by an
@@ -1634,4 +1634,4 @@ function SupabaseClubAdminChatPage() {
       )}
     </div>
   );
-}, { conversationId: conversationId! }, { conversationId: conversationId! }
+}
