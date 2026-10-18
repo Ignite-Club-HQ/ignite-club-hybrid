@@ -633,14 +633,14 @@ function ClubCard({ club, subscription, sponsors = [], isMember = false }: {
   // Track sponsor view when displayed
   useEffect(() => {
     if (primarySponsor?.id) {
-      trackView(primarySponsor.id, "club_card");
+      trackView(primarySponsor.id, "club_card", club.id);
     }
   }, [primarySponsor?.id, trackView]);
 
   const handleSponsorClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (primarySponsor?.id) {
-      trackClick(primarySponsor.id, "club_card");
+      trackClick(primarySponsor.id, "club_card", club.id);
     }
   };
   

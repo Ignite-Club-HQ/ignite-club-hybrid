@@ -441,10 +441,16 @@ export async function recordLiveSponsorMetric(
   metric: string,
   delta: number,
   accountId?: string | null,
+  clubId?: string | null,
 ) {
   const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  const account: [] | [string] = accountId != null ? [accountId] : [];
   return unwrapCandid(
-    actor.record_sponsor_metric(sponsorId, metric, delta, accountId != null ? [accountId] : []),
+    // Club-owned counters move with the club during a group transfer; the
+    // sponsor-only call stays for displays that cannot name a club.
+    clubId
+      ? actor.record_club_sponsor_metric(clubId, sponsorId, metric, delta, account)
+      : actor.record_sponsor_metric(sponsorId, metric, delta, account),
     "Record sponsor metric",
   );
 }

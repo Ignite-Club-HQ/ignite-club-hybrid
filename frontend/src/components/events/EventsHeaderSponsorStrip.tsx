@@ -267,7 +267,7 @@ export function EventsHeaderSponsorStrip({
   );
 
   useEffect(() => {
-    if (activeSponsor && user?.id) trackSponsorView(activeSponsor.id, "event_page");
+    if (activeSponsor && user?.id) trackSponsorView(activeSponsor.id, "event_page", clubId);
   }, [activeSponsor?.id, user?.id, trackSponsorView]);
   useEffect(() => {
     if (activeAd && user?.id) trackAdView(activeAd.id, "events_page");
@@ -323,7 +323,7 @@ export function EventsHeaderSponsorStrip({
           logoUrl: activeSponsor.logo_url,
           websiteUrl: activeSponsor.website_url,
           onActivate: () => {
-            trackSponsorClick(activeSponsor.id, "event_page");
+            trackSponsorClick(activeSponsor.id, "event_page", clubId);
             safeOpenUrl(activeSponsor.website_url!);
           },
           onDismiss: handleDismiss,

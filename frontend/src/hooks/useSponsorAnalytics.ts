@@ -9,7 +9,7 @@ type Context = "club_page" | "team_page" | "club_card" | "event_page" | "event_c
 // Track which sponsors have been viewed to avoid duplicate tracking in a session
 const viewedSponsors = new Set<string>();
 
-async function recordSponsorEvent(sponsorId: string, eventType: EventType, context: Context) {
+async function recordSponsorEvent(sponsorId: string, eventType: EventType, context: Context, clubId?: string | null) {
   await withFeatureBackend("analytics", {
     supabase: async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -26,7 +26,7 @@ async function recordSponsorEvent(sponsorId: string, eventType: EventType, conte
       // breakdowns stay queryable via get_sponsor_performance, even though
       // there is no per-user attribution (record_sponsor_metric takes no
       // user id, unlike the Supabase row).
-      await recordLiveSponsorMetric(ctx, sponsorId, `${eventType}:${context}`, 1);
+      await recordLiveSponsorMetric(ctx, sponsorId, `${eventType}:${context}`, 1, null, clubId);
     },
   });
 }
@@ -37,7 +37,8 @@ export function useSponsorAnalytics() {
   const trackEvent = useCallback(async (
     sponsorId: string,
     eventType: EventType,
-    context: Context
+    context: Context,
+    clubId?: string | null,
   ) => {
     // For views, debounce and dedupe within the session
     if (eventType === "view") {
@@ -58,22 +59,22 @@ export function useSponsorAnalytics() {
       const timeout = setTimeout(async () => {
         viewedSponsors.add(key);
         pendingTracksRef.current.delete(key);
-        await recordSponsorEvent(sponsorId, eventType, context);
+        await recordSponsorEvent(sponsorId, eventType, context, clubId);
       }, 1000);
 
       pendingTracksRef.current.set(key, timeout);
     } else {
       // Clicks are tracked immediately
-      await recordSponsorEvent(sponsorId, eventType, context);
+      await recordSponsorEvent(sponsorId, eventType, context, clubId);
     }
   }, []);
 
-  const trackView = useCallback((sponsorId: string, context: Context) => {
-    trackEvent(sponsorId, "view", context);
+  const trackView = useCallback((sponsorId: string, context: Context, clubId?: string | null) => {
+    trackEvent(sponsorId, "view", context, clubId);
   }, [trackEvent]);
 
-  const trackClick = useCallback((sponsorId: string, context: Context) => {
-    trackEvent(sponsorId, "click", context);
+  const trackClick = useCallback((sponsorId: string, context: Context, clubId?: string | null) => {
+    trackEvent(sponsorId, "click", context, clubId);
   }, [trackEvent]);
 
   return { trackView, trackClick };
