@@ -951,7 +951,9 @@ fn get_state() -> QueueState {
 #[ic_cdk::query]
 fn export_state() -> Outcome<Snapshot> {
     authenticated()?;
-    let _governor = governor()?;
+    if caller() != governor()? {
+        return Err("Governor caller required".into());
+    }
     Ok(Snapshot {
         jobs: all_job_entries(),
         state: queue_state(),
@@ -961,7 +963,9 @@ fn export_state() -> Outcome<Snapshot> {
 #[ic_cdk::query]
 fn reconcile(snapshot: Snapshot) -> Outcome<Reconciliation> {
     authenticated()?;
-    let _governor = governor()?;
+    if caller() != governor()? {
+        return Err("Governor caller required".into());
+    }
     let local = all_job_entries();
     let matching = snapshot
         .jobs
@@ -978,7 +982,9 @@ fn reconcile(snapshot: Snapshot) -> Outcome<Reconciliation> {
 #[ic_cdk::query]
 fn list_jobs(start_after: Option<String>, limit: u16) -> Outcome<Page> {
     authenticated()?;
-    let _governor = governor()?;
+    if caller() != governor()? {
+        return Err("Governor caller required".into());
+    }
     if limit == 0 || limit > 100 {
         return Err("Invalid page size".into());
     }
@@ -998,7 +1004,9 @@ fn list_jobs(start_after: Option<String>, limit: u16) -> Outcome<Page> {
 #[ic_cdk::update]
 fn import_state(snapshot: Snapshot) -> Outcome<()> {
     authenticated()?;
-    let _governor = governor()?;
+    if caller() != governor()? {
+        return Err("Governor caller required".into());
+    }
     if !jobs_is_empty() {
         return Err("Destination is not empty".into());
     }
