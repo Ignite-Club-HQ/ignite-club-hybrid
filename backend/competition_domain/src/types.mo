@@ -50,6 +50,15 @@ module {
     accepted_by : ?Principal;
     revoked : Bool;
   };
+  // Pending welcome email for an official email invite. Keyed by the invite
+  // token (a capability); `to` is the recipient address the inviting manager
+  // supplied. The edge function reads this to deliver after acceptance.
+  public type CompetitionWelcomeJob = {
+    token : Text;
+    competition_id : Text;
+    to : Text;
+    created_at_ms : Nat64;
+  };
   // Expression-of-interest submission (parent sign-up for a season).
   // Mirrors the Supabase eoi_submissions columns the EOI hooks read/write;
   // *_at_ms timestamps replace ISO strings, Principal replaces auth.uid().
