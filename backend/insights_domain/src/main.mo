@@ -686,9 +686,14 @@ persistent actor class Main(governorInit : Principal) {
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let legacy = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period).map(func(item) = { metric = item.metric; value = item.value });
     let owned = clubSponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period);
-    let metrics = owned.foldLeft(legacy, func(acc : [{ metric : Text; value : Float }], item) =
-      if (acc.any(func(x) = x.metric == item.metric)) acc.map(func(x : { metric : Text; value : Float }) : { metric : Text; value : Float } = if (x.metric == item.metric) { metric = x.metric; value = x.value + item.value } else x)
-      else acc.concat([{ metric = item.metric; value = item.value }]));
+    var metrics = legacy;
+    for (item in owned.values()) {
+      if (metrics.any(func(x) = x.metric == item.metric)) {
+        metrics := metrics.map(func(x : { metric : Text; value : Float }) : { metric : Text; value : Float } { if (x.metric == item.metric) { { metric = x.metric; value = x.value + item.value } } else { x } });
+      } else {
+        metrics := metrics.concat([{ metric = item.metric; value = item.value }]);
+      };
+    };
     #Ok({ sponsor_id; period; metrics })
   };
 
