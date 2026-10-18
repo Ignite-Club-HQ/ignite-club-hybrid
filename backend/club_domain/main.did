@@ -203,10 +203,29 @@ type RoleGrant =
    team: opt text;
    user: principal;
  };
-type Result = 
+type Result__1 = 
  record {
    hasMore: bool;
    rows: vec Row;
+ };
+type Result = 
+ variant {
+   Err: text;
+   Ok: Reservation;
+ };
+type Reservation = 
+ record {
+   bytes: nat;
+   category: text;
+   club_id: text;
+   cycle: nat;
+   status: variant {
+             committed;
+             released;
+             "reserved";
+           };
+   store: principal;
+   token: text;
  };
 type Request = 
  record {
@@ -235,6 +254,12 @@ type PromoCode =
    scope_type: text;
    storage_gb: opt nat32;
    uses_count: nat32;
+ };
+type Progress = 
+ record {
+   done: bool;
+   offset: nat;
+   total: opt nat;
  };
 type ProfileTeamHistoryEntry = 
  record {
@@ -389,6 +414,10 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   activate_media_quota: () -> (variant {
+                                  Err: text;
+                                  Ok;
+                                });
    add_role_grant: (user: principal, club: text, role: text, team:
     opt text) -> (variant {
                     Err: text;
@@ -441,6 +470,8 @@ type Main =
                          Err: text;
                          Ok: nat;
                        });
+   cancel_media_quota: (token: text, club_id: text, category: text, bytes:
+    nat, cycle: nat) -> (Result);
    /// Public: remaining cycles of any canister this canister controls
    /// (the frontend asset canister adds club_domain as a controller at deploy
    /// time so admin settings can show its balance too).
@@ -459,6 +490,7 @@ type Main =
        Err: text;
        Ok: ClubSettings;
      });
+   commit_media_quota: (token: text) -> (Result);
    create_child_for_parent_in_club: (club_id: text, parent: principal) ->
     (variant {
        Err: text;
@@ -582,7 +614,7 @@ type Main =
                                  Err: text;
                                  Ok;
                                });
-   execute: (input: text) -> (Result) query;
+   execute: (input: text) -> (Result__1) query;
    export_acl: () -> (variant {
                         Err: text;
                         Ok: Config;
@@ -728,6 +760,11 @@ type Main =
        Ok: PendingInvite;
      }) query;
    get_pending_invite_label: (id: text) -> (opt text) query;
+   get_prepared_media_quota: (store: principal, token: text) ->
+    (variant {
+       Err: text;
+       Ok: opt Reservation;
+     }) query;
    get_public_eoi_config: (club_slug: text, season_slug: text) ->
     (variant {
        Err: text;
@@ -821,6 +858,10 @@ type Main =
                                         Err: text;
                                         Ok;
                                       });
+   import_media_quota_store: (store: principal) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
    invite_stats: (club_id: text, since_ms: nat64, until_ms: nat64) ->
     (variant {
        Err: text;
@@ -1052,6 +1093,16 @@ type Main =
                     Err: text;
                     Ok: MemberPayment;
                   });
+   media_quota_cutover_status: () ->
+    (record {
+       active: bool;
+       started: bool;
+       stores: vec record {
+                     principal;
+                     Progress;
+                   };
+     }) query;
+   media_quota_ready: () -> (bool) query;
    memory_stats: () ->
     (record {
        heap_bytes: nat;
@@ -1088,6 +1139,8 @@ type Main =
                                 Ok: Mutation;
                               });
    my_role_grants: () -> (vec RoleGrant) query;
+   prepare_media_quota_reservation: (store: principal, token: text, club_id:
+    text, category: text, bytes: nat) -> (Result);
    profile_team_history: (profile_id: text) ->
     (vec ProfileTeamHistoryEntry) query;
    publish_season: (season_id: text) -> (variant {
@@ -1098,6 +1151,15 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
+   read_my_club_memberships: (offset: nat, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             acl_revision: nat64;
+             clubs: vec text;
+             next: opt nat;
+           };
+     });
    record_presence_heartbeat: () -> (variant {
                                        Err: text;
                                        Ok;
@@ -1115,6 +1177,11 @@ type Main =
                 Err: text;
                 Ok: nat64;
               });
+   register_media_quota_store: (store: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    reject_club_join_request: (id: text) ->
     (variant {
        Err: text;
@@ -1183,6 +1250,8 @@ type Main =
              payload: InvitePayload;
            };
      });
+   reserve_media_quota: (token: text, club_id: text, category: text, bytes:
+    nat, cycle: nat) -> (Result);
    resolve_invite_short_code: (code: text) ->
     (variant {
        Err: text;
@@ -1201,6 +1270,16 @@ type Main =
                                   Err: text;
                                   Ok: ClubTeam;
                                 });
+   retire_media_quota_records: (reservation_cursor: text, usage_cursor:
+    text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             removed: nat;
+             reservation_cursor: text;
+             usage_cursor: text;
+           };
+     });
    revoke_identity: (target: principal, expected_version: nat64) ->
     (variant {
        Err: text;
@@ -1485,6 +1564,8 @@ type Main =
                                                   Err: text;
                                                   Ok;
                                                 });
+   settle_prepared_media_quota: (store: principal, token: text, commit:
+    bool) -> (Result);
    soft_delete_club: (id: text, cascade_teams: bool) ->
     (variant {
        Err: text;
@@ -1494,6 +1575,10 @@ type Main =
                                       Err: text;
                                       Ok: ClubTeam;
                                     });
+   start_media_quota_cutover: () -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;
