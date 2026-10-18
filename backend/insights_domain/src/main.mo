@@ -558,7 +558,7 @@ persistent actor class Main(governorInit : Principal) {
   // ================= Canister memory reports (app-admin only) =================
   // Readings + AI analysis written by the Canister health workflow (governor)
   // or added by hand by app admins. JSON kept as Text; capped at 200 entries.
-  var memoryReports : [{ at : Int; source : Text; readings_json : Text; analysis_json : Text; author : Principal }] = [];
+  var memoryReports : [{ at : Int; source : Text; readings_json : Text; analysis_json : Text; author : Principal }];
 
   public shared ({ caller }) func add_memory_report(source : Text, readings_json : Text, analysis_json : Text) : async { #Ok; #Err : Text } {
     if (not isAppAdmin(caller)) return #Err("App admins only");
