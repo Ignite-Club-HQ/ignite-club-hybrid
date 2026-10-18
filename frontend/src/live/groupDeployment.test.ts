@@ -73,7 +73,8 @@ describe('deployment-isolated group routing preparation', () => {
   it('rejects duplicate domain placements', () => {
     const f = fixture(); const binding = f.table.bindings.get('group-one');
     if (!binding || !binding.domains[0]) throw new Error('Fixture missing');
-    f.table.bindings = new Map([['group-one', { ...binding, domains: binding.domains.map(() => binding.domains[0]) }]]);
+    const first = binding.domains[0];
+    f.table.bindings = new Map([['group-one', { ...binding, domains: binding.domains.map(() => first) }]]);
     expect(() => resolve(f)).toThrow('Unapproved group domain placement');
   });
   it.each(['http://engine.example', 'https://user:password@engine.example', 'https://engine.example/path', 'https://engine.example?key=x'])('rejects unsafe endpoint %s', host => {
