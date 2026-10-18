@@ -601,9 +601,17 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func get_notification(id : Text) : async ?Types.Notification {
+  public shared ({ caller }) func get_notification(id : Text) : async ?Types.Notification {
     if (caller.equal(Principal.anonymous())) { return null };
-    get(id)
+    switch (get(id)) {
+      case null { null };
+      case (?item) {
+        switch (await callerAccountId(caller)) {
+          case null { null };
+          case (?accountId) { if (item.user == accountId) { ?item } else { null } };
+        };
+      };
+    };
   };
 
   public shared ({ caller }) func recover() : async Types.ResultNat16 {
