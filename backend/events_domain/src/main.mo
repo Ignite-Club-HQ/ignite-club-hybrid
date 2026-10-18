@@ -22,6 +22,25 @@ import Types "types";
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+
+  // ICP MCP Layer 3: behavioral guide for AI agents (see
+  // docs.internetcomputer.org/guides/frontends/service-discoverability).
+  public query func getApiDoc() : async Text {
+    "# events_domain — club/team events, RSVPs, attendance, fixtures\n\n" #
+    "## Authentication\n" #
+    "All methods require a signed (non-anonymous) principal. The caller's principal is resolved to an app account; event visibility is limited to the event's governor, its creator, and members of the owning club. You can only ever see events for clubs the signed-in user belongs to.\n\n" #
+    "## Key reads (queries)\n" #
+    "- `list_events(club, from_ms, to_ms)` / `list_events_multi(clubs, from_ms, to_ms)`: events for one or more clubs in a time window. Timestamps are milliseconds since the Unix epoch.\n" #
+    "- `get_event_roster(event_id)`: RSVPs/attendance for an event.\n" #
+    "- `get_event_timer(event_id)`: countdown/timer state for an event.\n" #
+    "- `list_playhq_fixtures(...)` is an UPDATE call (not a query): it fetches external fixture data and may take several seconds.\n\n" #
+    "## Writes\n" #
+    "Creating/updating events requires a coach, team-admin, or club-admin role in the owning club; the canister re-checks roles on every call. RSVPs are per-account and idempotent by event+account. Monthly recurrence clamps to the last day of shorter months, in UTC.\n\n" #
+    "## Gotchas\n" #
+    "- All timestamps are milliseconds (not seconds, not nanoseconds).\n" #
+    "- Omitting an option field on update keeps the stored value; passing an explicit empty value clears it.\n" #
+    "- Denied calls return `#Err(\"...\")` rather than trapping, except anonymous callers, which trap with `Forbidden`."
+  };
   // Live memory reading for the admin health page (public, like cycles_balance).
   public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
     {

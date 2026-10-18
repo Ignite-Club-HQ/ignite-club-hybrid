@@ -1964,6 +1964,23 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(rev)
   };
 
+  // ICP MCP Layer 3: behavioral guide for AI agents (see
+  // docs.internetcomputer.org/guides/frontends/service-discoverability).
+  public query func getApiDoc() : async Text {
+    "# club_domain — clubs, teams, memberships, roles\n\n" #
+    "## Authentication\n" #
+    "Directory reads (`list_clubs`, `get_club_profile`, `list_teams`, `get_team`) are anonymously callable and return only public directory data. Everything account- or role-related requires a signed principal; the caller's principal is resolved to an app account (`whoami` returns `#Err(\"Unlinked identity\")` until the account is registered via identity_access).\n\n" #
+    "## Key reads (queries)\n" #
+    "- `whoami()`: the caller's account record.\n" #
+    "- `list_role_grants(club)`: role roster for a club — requires club admin.\n" #
+    "- `list_clubs()` / `get_club_profile(id)` / `list_teams(club)` / `get_team(id)`: public directory.\n\n" #
+    "## Permissions model\n" #
+    "Roles (club admin, team admin, coach, member, guardian) are stored on-chain and re-checked on every call — a caller can never act on a club or team they have no role in, and can never see another club's private data. Role changes take effect immediately.\n\n" #
+    "## Gotchas\n" #
+    "- Club and team ids are opaque text ids, not principals.\n" #
+    "- Denied calls return `#Err(\"...\")`; anonymous calls to authenticated methods trap."
+  };
+
   public query ({ caller }) func whoami() : async { #Ok : Types.Account; #Err : Text } {
     auth(caller);
     switch (accountFor(caller)) {
