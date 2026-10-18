@@ -1015,6 +1015,17 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'read_my_club_memberships_indexed' : ActorMethod<
+    [[] | [string], number],
+    {
+        'Ok' : {
+          'clubs' : Array<string>,
+          'next' : [] | [string],
+          'acl_revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'record_presence_heartbeat' : ActorMethod<
     [],
     { 'Ok' : null } |
