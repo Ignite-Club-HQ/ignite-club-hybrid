@@ -19,12 +19,24 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
   Explicit verified resume starts authority first and refences on start failures.
   Unit and real local stop/status/snapshot/load/start tests preserve ciphertext,
   permissions and exact quota. Not a production command: authenticated inventory
-  adapters, durable receipts and content/ledger consistency verification remain.
+  adapters and content/ledger consistency verification remain.
   Replica inventory and load receipts are fixture/in-process only. A stopped
   authority cannot answer ordinary queries; production needs independently
   readable verified registry metadata. Stopping shared authority pauses other
   features too and needs a maintenance window. Admission-only drain/seal is not
   implemented. No changes deployed.
+- Local operator workflow (`scripts/media-recovery-receipts.mjs`) adds exclusive
+  locks and atomically replaced, file-and-directory-synced receipts. Intent is
+  saved before mutations and acknowledgements afterward. Interrupted/failed
+  restores cannot resume: replay every snapshot while stopped. Failed resume
+  refences participants and requires full restore before retry. Storage failure
+  retains the lock; crashed locks never expire automatically. Investigate the
+  old process and actual participant statuses before manual unlock. Use an
+  operator-owned durable directory per checkpoint. Receipts contain no secrets
+  or plaintext media and are not authorization. Adapter consistency verification
+  and explicit approval are still required. Disk reload and actual process-exit
+  tests are local only, not production controller or ledger/content verification.
+  Partial checkpoints need manual snapshot reconciliation, not guessed retries.
 - Unbounded-wait responses are delivered; bounded-wait calls can report unknown
   outcomes after remote commit. PocketIC 0.23.0 exposes no response-drop API.
   Client loss and unavailable-authority tests are not substitutes; genuine
