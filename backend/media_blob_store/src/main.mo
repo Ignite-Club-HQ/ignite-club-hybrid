@@ -148,7 +148,7 @@ persistent actor MediaBlobStore {
   };
 
   // Per-file cap for gallery/chat photos (all clubs) and free-club files.
-  transient let MAX_FILE_BYTES : Nat64 = 10_485_760; // 10 MB
+  transient let MAX_FILE_BYTES : Nat64 = UploadPolicy.maxWireBytes; // encrypted 10 MiB + framing
   // Free clubs keep uploaded media for 6 months; Pro/trial keep forever.
   transient let RETENTION_NS : Int = 180 * 86_400 * 1_000_000_000;
 
@@ -186,19 +186,27 @@ persistent actor MediaBlobStore {
   };
 
   /// Returns an error message when a free club is over its cap.
-  func checkFreeCap(path : Text, size : Nat64) : async ?Text {
+  func checkFreeCap(path : Text, size : Nat64, isPro : Bool) : ?Text {
     let ?category = categoryForPath(path) else return null;
     let ?clubId = clubIdFromPath(path) else return null;
     let (countLimit, bytesLimit) = limitsFor(category);
     if (size > MAX_FILE_BYTES) {
       if (category == "gallery_photo" or category == "chat_photo") return ?"FileTooLarge";
-      if (not (await clubIsPro(clubId))) return ?"FileTooLarge";
+      if (not isPro) return ?"FileTooLarge";
     };
     let (count, bytes) = usageFor(clubId, currentCycle(), category);
-    let overCount = count + 1 > countLimit;
-    let overBytes = switch (bytesLimit) { case (?l) { bytes + size > l }; case null { false } };
+    var pendingCount = 0;
+    var pendingBytes : Nat = 0;
+    for (upload in pending_uploads.values()) {
+      if (clubIdFromPath(upload.path) == ?clubId and categoryForPath(upload.path) == ?category) {
+        pendingCount += 1;
+        pendingBytes += upload.total_size.toNat();
+      };
+    };
+    let overCount = count + pendingCount + 1 > countLimit;
+    let overBytes = switch (bytesLimit) { case (?l) { bytes.toNat() + pendingBytes + size.toNat() > l.toNat() }; case null { false } };
     if (not overCount and not overBytes) return null;
-    if (await clubIsPro(clubId)) return null;
+    if (isPro) return null;
     ?("FreeLimitReached:" # category)
   };
 
@@ -284,7 +292,13 @@ persistent actor MediaBlobStore {
     // the next photo store. Existing blobs stay readable forever.
     if (not canReserve(total_size)) return #Err("StoreFull");
     if (not isGovernor<system>(caller)) {
-      switch (await checkFreeCap(path, total_size)) {
+      let isPro = switch (clubIdFromPath(path), categoryForPath(path)) {
+        case (?clubId, ?_) { await clubIsPro(clubId) };
+        case _ { false };
+      };
+      // Check committed usage and outstanding reservations AFTER the await,
+      // immediately before reserving. Concurrent sends cannot bypass caps.
+      switch (checkFreeCap(path, total_size, isPro)) {
         case (?msg) { return #Err(msg) };
         case null {};
       };
