@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import {
   calculateVaultStorageBreakdown,
@@ -10,6 +10,10 @@ import {
 } from "./vaultStorageRepository";
 
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const live = vi.hoisted(() => ({ files: vi.fn().mockResolvedValue([]), teams: vi.fn().mockResolvedValue([]), context: {} }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => supabaseMode ? p.supabase() : p.icp(live.context) }));
+vi.mock("@/live/features/vault", () => ({ listLiveVaultClubFiles: live.files }));
+vi.mock("@/live/features/club", () => ({ listLiveTeams: live.teams }));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type Call = { table: string; method: string; args: unknown[] };
@@ -154,7 +158,7 @@ describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () =>
     expect(fake.calls).toEqual([]);
   });
 
-  it("returns an empty storage breakdown without querying Supabase", async () => {
+  it("totals an empty on-chain vault without querying Supabase", async () => {
     const fake = scriptedClient({});
     await expect(fetchVaultStorageBreakdown("club-a", fake.client)).resolves.toMatchObject({
       photos: 0,
@@ -164,5 +168,6 @@ describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () =>
       byMiniLeague: [],
     });
     expect(fake.calls).toEqual([]);
+    expect(live.files).toHaveBeenCalledWith(live.context, "club-a", null, null);
   });
 });

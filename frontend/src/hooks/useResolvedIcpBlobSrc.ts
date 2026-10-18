@@ -2,7 +2,7 @@ import * as React from "react";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { listBlobStoreCanisterIds } from "@/live/mediaStorage";
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 
 /**
  * ICP media (profile photos, club logos, sponsor images) lives on the
@@ -46,7 +46,9 @@ export interface ResolvedIcpBlobSrc {
 }
 
 export function useResolvedIcpBlobSrc(src: string | undefined | null): ResolvedIcpBlobSrc {
-  const { user, sessionRestoration } = useAuth();
+  const auth = useOptionalAuth();
+  const user = auth?.user;
+  const sessionRestoration = auth?.sessionRestoration ?? "signed-out";
   const input = src ?? undefined;
   const cacheKey = `${user?.id ?? "signed-out"}:${input ?? ""}`;
   const ready = sessionRestoration === "authenticated" && !!user;

@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const live = vi.hoisted(() => ({ get: vi.fn().mockResolvedValue(null), remove: vi.fn().mockResolvedValue(undefined), context: { identity: {}, target: { canisterIds: {} } } }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => supabaseMode ? p.supabase() : p.icp(live.context) }));
+vi.mock("@/live/features/vault", () => ({ getLiveVaultFile: live.get, permanentlyDeleteLiveVaultFile: live.remove }));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: (...args: any[]) => invoke(...args) } },
 }));
@@ -203,9 +206,10 @@ describe.runIf(supabaseMode)("permanentlyDeleteVaultItems", () => {
 });
 
 describe.runIf(!supabaseMode)("permanentlyDeleteVaultItems — ICP boundary", () => {
-  it("fails closed before invoking the Supabase deletion function", async () => {
+  it("deletes on-chain files and reports invalid photo-table IDs without Supabase", async () => {
     await expect(permanentlyDeleteVaultItems({ photoIds: ["p1"], fileIds: ["f1"] }))
-      .rejects.toThrow(/not available yet for Internet Identity accounts/);
+      .resolves.toEqual({ photosDeleted: 0, filesDeleted: 1, succeeded: [{ id: "f1", kind: "file" }], failed: [{ id: "p1", kind: "photo", code: "unsupported_on_icp" }] });
+    expect(live.remove).toHaveBeenCalledWith(live.context, "f1");
     expect(invoke).not.toHaveBeenCalled();
   });
 });

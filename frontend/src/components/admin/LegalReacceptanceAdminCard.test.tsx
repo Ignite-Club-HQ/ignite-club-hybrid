@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const confirmation = "REQUIRE ALL USERS TO REACCEPT";
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => "supabase" }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown }) => p.supabase() }));
 const mocks = vi.hoisted(() => ({
   setting: {
     required: false,

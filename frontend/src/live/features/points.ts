@@ -424,8 +424,8 @@ async function liveTeamRosterSubjectIds(
   const { listLiveTeamRoleGrants } = await import("./membership");
   const { listLiveChildTeamAssignments } = await import("./events");
   const [grants, assignments] = await Promise.all([
-    listLiveTeamRoleGrants(ctx, teamId).catch(() => []),
-    listLiveChildTeamAssignments(ctx, clubId, teamId).catch(() => []),
+    listLiveTeamRoleGrants(ctx, teamId),
+    listLiveChildTeamAssignments(ctx, clubId, teamId),
   ]);
   const userIds = [...new Set(
     (grants as Array<{ role: string; account_id: string }>)

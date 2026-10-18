@@ -22,6 +22,9 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => backendMocks.mode }));
+const metadata = vi.hoisted(() => vi.fn().mockRejectedValue(new Error("not found")));
+vi.mock("@/lib/icpClubTeamLookup", () => ({ icpCtx: async () => ({}) }));
+vi.mock("@/live/features/messaging", () => ({ getLiveGroupMetadata: metadata }));
 
 import {
   resolveChatTargetForMessageId,
@@ -110,6 +113,15 @@ describe.runIf(backendMocks.mode === "icp")("ICP chat-target resolution boundary
     expect(await resolveChatTargetResult("message-icp")).toEqual({ status: "not_found", target: null });
     expect(await resolveChatTargetForMessageId("message-icp")).toBeNull();
     expect(backendMocks.lookups).toEqual([]);
+  });
+  it("resolves an authorized on-chain team conversation", async () => {
+    metadata.mockResolvedValueOnce({ kind: "team", teamId: "team-7" });
+    expect(await resolveChatTargetResult("chat-7")).toEqual({ status: "found", target: { kind: "team", targetId: "team-7", messageId: "chat-7", path: "/messages/team-7?message=chat-7" } });
+    expect(backendMocks.lookups).toEqual([]);
+  });
+  it("reports an unavailable on-chain read as unreachable, not deleted", async () => {
+    metadata.mockRejectedValueOnce(new Error("network unavailable"));
+    expect(await resolveChatTargetResult("chat-7")).toEqual({ status: "unreachable", target: null });
   });
 });
 

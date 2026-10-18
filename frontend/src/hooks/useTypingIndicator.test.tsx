@@ -2,10 +2,15 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { channel, removeChannel, channels } = vi.hoisted(() => ({ channel: vi.fn(), removeChannel: vi.fn(), channels: new Map<string, any>() }));
+const live = vi.hoisted(() => ({ users: [] as Array<{ user: { toText: () => string }; name: string }>, setTyping: vi.fn().mockResolvedValue(undefined), context: {} }));
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => icpMode }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => icpMode ? p.icp(live.context) : p.supabase() }));
+vi.mock("@/live/features/messaging", () => ({ setLiveTyping: live.setTyping, listLiveTyping: async () => live.users }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { channel, removeChannel } }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-  useQuery: () => ({ data: [], isLoading: false }),
+  useQuery: () => ({ data: live.users, isLoading: false }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -21,7 +26,7 @@ function makeChannel(name: string) {
   return record;
 }
 
-describe("useTypingIndicator", () => {
+describe.runIf(!icpMode)("useTypingIndicator", () => {
   beforeEach(() => { vi.clearAllMocks(); channels.clear(); channel.mockImplementation(makeChannel); });
 
   it("does not subscribe without both user and channel identity", () => {
@@ -69,5 +74,25 @@ describe("useTypingIndicator", () => {
     expect(removeChannel).toHaveBeenCalledWith(first);
     unmount();
     expect(removeChannel).toHaveBeenCalledWith(second);
+  });
+});
+
+describe.runIf(icpMode)("ICP typing indicators", () => {
+  beforeEach(() => { vi.clearAllMocks(); live.users = []; });
+  it("shows on-chain typing users without self or Supabase channels", () => {
+    live.users = [{ user: { toText: () => "user-1" }, name: "Alex" }, { user: { toText: () => "user-2" }, name: "Blair" }];
+    const { result } = renderHook(() => useTypingIndicator("team-1", "user-1", "Alex"));
+    expect(result.current.typingUsers).toEqual([{ id: "user-2", name: "Blair" }]);
+    expect(channel).not.toHaveBeenCalled();
+  });
+  it("sends each state once and stops after three seconds", async () => {
+    vi.useFakeTimers();
+    const { result, unmount } = renderHook(() => useTypingIndicator("team-1", "user-1", "Alex"));
+    await act(async () => { await result.current.startTyping(); await result.current.startTyping(); });
+    expect(live.setTyping).toHaveBeenCalledExactlyOnceWith(live.context, "team-1", true, "Alex");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(live.setTyping).toHaveBeenLastCalledWith(live.context, "team-1", false, "Alex");
+    unmount();
+    vi.useRealTimers();
   });
 });

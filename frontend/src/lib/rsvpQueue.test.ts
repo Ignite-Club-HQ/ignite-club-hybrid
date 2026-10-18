@@ -5,6 +5,7 @@ const liveMocks = vi.hoisted(() => ({
   context: { identity: {}, target: {} },
   setLiveEventRsvp: vi.fn(),
   adminUpsertLiveRsvp: vi.fn(),
+  setLiveMiniLeagueRsvp: vi.fn(),
   supabaseFromCalls: [] as unknown[][],
 }));
 const supabaseMode = liveMocks.backend === "supabase";
@@ -42,6 +43,7 @@ vi.mock("@/live/featureRouter", () => ({
 vi.mock("@/live/features/events", () => ({
   setLiveEventRsvp: (...args: unknown[]) => liveMocks.setLiveEventRsvp(...args),
   adminUpsertLiveRsvp: (...args: unknown[]) => liveMocks.adminUpsertLiveRsvp(...args),
+  setLiveMiniLeagueRsvp: (...args: unknown[]) => liveMocks.setLiveMiniLeagueRsvp(...args),
 }));
 
 import {
@@ -82,6 +84,7 @@ beforeEach(() => {
   insertMock.mockReset();
   liveMocks.setLiveEventRsvp.mockReset();
   liveMocks.adminUpsertLiveRsvp.mockReset();
+  liveMocks.setLiveMiniLeagueRsvp.mockReset();
   liveMocks.supabaseFromCalls.length = 0;
   insertMock.mockResolvedValue({ error: null });
   updateMock.mockResolvedValue({ error: null });
@@ -306,12 +309,12 @@ describe.runIf(!supabaseMode)("syncQueuedRsvps ICP adapter", () => {
     expect(liveMocks.supabaseFromCalls).toEqual([]);
   });
 
-  it("retains unsupported mini-league-player RSVPs for retry without Supabase fallback", async () => {
+  it("syncs mini-league-player RSVPs on-chain without Supabase fallback", async () => {
     queueRsvp({ eventId: "event-1", userId: "principal-1", miniLeaguePlayerId: "player-1", status: "going" });
 
-    await expect(syncQueuedRsvps()).resolves.toEqual({ synced: 0, failed: 0 });
-    expect(getQueuedRsvps()).toHaveLength(1);
-    expect(getQueuedRsvps()[0].retryCount).toBe(1);
+    await expect(syncQueuedRsvps()).resolves.toEqual({ synced: 1, failed: 0 });
+    expect(getQueuedRsvps()).toEqual([]);
+    expect(liveMocks.setLiveMiniLeagueRsvp).toHaveBeenCalledWith(liveMocks.context, "event-1", { mini_league_player: "player-1" }, "going");
     expect(liveMocks.supabaseFromCalls).toEqual([]);
     expect(liveMocks.setLiveEventRsvp).not.toHaveBeenCalled();
     expect(liveMocks.adminUpsertLiveRsvp).not.toHaveBeenCalled();
