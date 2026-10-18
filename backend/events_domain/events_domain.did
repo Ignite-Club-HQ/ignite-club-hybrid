@@ -361,6 +361,11 @@ type Main =
        Ok: EventRoster;
      }) query;
    execute: (input: text) -> (Result) query;
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    export_state: () ->
     (variant {
        Err: text;
@@ -522,6 +527,11 @@ type Main =
                     Err: text;
                     Ok;
                   });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    /// Imports the linked team's PlayHQ fixtures as game events now.
    import_playhq_team_fixtures: (club_id: text, team_id: text,
     competition_id: text, playhq_team_id: text) ->
@@ -967,6 +977,11 @@ type Main =
                               Err: text;
                               Ok;
                             });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    soft_delete_series: (id: text) -> (variant {
                                         Err: text;
                                         Ok: EventSeries;

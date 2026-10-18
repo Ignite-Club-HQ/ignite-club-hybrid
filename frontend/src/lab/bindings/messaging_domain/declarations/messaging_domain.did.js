@@ -462,6 +462,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
         [],
       ),
+    'export_club_snapshot_page' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Nat],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'export_state' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
@@ -555,6 +560,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'has_blocked' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
+    'import_club_snapshot_page' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'is_competition_admin' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'join_open_group' : IDL.Func(
         [IDL.Text],
@@ -909,6 +919,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_recap_config' : IDL.Func(
         [IDL.Opt(RecapConfig)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_transfer_fence' : IDL.Func(
+        [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

@@ -254,6 +254,11 @@ export interface Main {
     { 'Ok' : Conversation } |
       { 'Err' : string }
   >,
+  'export_club_snapshot_page' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'fetch_link_preview' : ActorMethod<
     [string],
@@ -323,6 +328,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'has_blocked' : ActorMethod<[Principal], boolean>,
+  'import_club_snapshot_page' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'is_competition_admin' : ActorMethod<[string], boolean>,
   'join_open_group' : ActorMethod<
     [string],
@@ -627,6 +637,11 @@ export interface Main {
   >,
   'set_recap_config' : ActorMethod<
     [[] | [RecapConfig]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

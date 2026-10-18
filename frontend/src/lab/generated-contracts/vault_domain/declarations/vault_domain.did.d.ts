@@ -74,6 +74,11 @@ export interface Main {
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,
+  'export_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'get_backup' : ActorMethod<[string], { 'Ok' : Backup } | { 'Err' : string }>,
   'get_competition_folder' : ActorMethod<
     [string],
@@ -98,6 +103,11 @@ export interface Main {
   'grant_role' : ActorMethod<
     [Principal, string, [] | [string], [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_club_snapshot' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'list_backups' : ActorMethod<
@@ -157,6 +167,11 @@ export interface Main {
   'move_file' : ActorMethod<
     [string, string],
     { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'purge_club_snapshot' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
@@ -220,6 +235,11 @@ export interface Main {
       boolean,
     ],
     { 'Ok' : PinnedVault } |
+      { 'Err' : string }
+  >,
+  'set_transfer_fence' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<
