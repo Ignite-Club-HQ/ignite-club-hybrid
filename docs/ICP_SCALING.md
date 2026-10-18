@@ -67,7 +67,6 @@ deploy new canisters, move clubs, or migrate stored ciphertext.
   placement, full-set continuous fencing, durable receipts and coordinated
   observation snapshots after every restore. The local transport is fixture-only;
   this increment does not supply or activate a production recovery command.
-- Unbounded-wait responses are delivered; bounded-wait calls can report unknown
 - Snapshot/receipt integration (`scripts/media-recovery-snapshots.mjs`) is opt-in
   for local adapters. Durable receipts bind complete raw baselines to placement
   and checkpoint IDs, record read intents/results, then compare fresh stopped
