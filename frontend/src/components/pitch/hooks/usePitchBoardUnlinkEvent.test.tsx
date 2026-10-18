@@ -17,6 +17,8 @@ vi.mock("../pitchStateUtils", () => ({
 }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
 
+vi.mock("@/live/featureRouter", () => ({ isSignedInWithEmail: () => mocks.mode === "supabase" }));
+
 const player = (id: string, name: string, onPitch = false): Player => ({
   id,
   name,

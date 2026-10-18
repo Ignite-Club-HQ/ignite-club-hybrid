@@ -23,6 +23,8 @@ vi.mock("@/live/authBackendMode", () => ({
   resolveAuthBackend: () => mocks.backend,
 }));
 
+vi.mock("@/live/appConfig", () => ({ readLiveAppConfig: async () => mocks.setting === null ? null : JSON.stringify(mocks.setting) }));
+
 vi.mock("@/live/internetIdentityAuth", () => ({
   getCurrentInternetIdentity: async () => mocks.icpIdentity,
 }));
