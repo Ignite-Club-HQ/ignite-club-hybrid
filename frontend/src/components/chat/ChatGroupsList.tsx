@@ -70,7 +70,7 @@ export default function ChatGroupsList({ clubId, teamId, canManage = false }: Ch
             created_at: new Date(0).toISOString(),
           } satisfies ChatGroup));
         },
-      });
+      }, { clubId: clubId });
       return groups;
     },
     enabled: !!clubId || !!teamId,

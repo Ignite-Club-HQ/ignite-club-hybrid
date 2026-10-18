@@ -80,7 +80,7 @@ export function useTrainingDefault({ teamId, childId, userId, clubId }: Args) {
             auto_paused_reason: null,
           };
         },
-      }),
+      }, { clubId: clubId }),
     staleTime: 60_000,
   });
 
@@ -112,7 +112,7 @@ export function useTrainingDefault({ teamId, childId, userId, clubId }: Args) {
           if (!clubId) return;
           await setLiveTrainingDefault(ctx, clubId, teamId!, childId ?? null, status);
         },
-      }),
+      }, { clubId: clubId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey });
       qc.invalidateQueries({ queryKey: ["event-rsvps"] });
@@ -151,4 +151,4 @@ export function useTrainingDefault({ teamId, childId, userId, clubId }: Args) {
     clearDefault: clear.mutate,
     isSaving: upsert.isPending || clear.isPending,
   };
-}
+}, { clubId: clubId }

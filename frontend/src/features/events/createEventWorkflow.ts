@@ -173,4 +173,4 @@ function runInBackground(
     }
   };
   void Promise.all(Array.from({ length: Math.min(6, tasks.length) }, worker)).then(() => onDone?.(failed));
-}
+}, { eventId: eventId }

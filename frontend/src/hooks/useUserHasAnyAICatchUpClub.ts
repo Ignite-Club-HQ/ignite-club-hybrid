@@ -171,5 +171,4 @@ export function useUserHasAnyAICatchUpClub(scopedClubId?: string | null) {
     isFetching,
     resolved,
   };
-}
-
+}, { teamId: teamId }

@@ -1198,8 +1198,7 @@ export default function DirectMessagePage() {
             author_id: user!.id,
             reply_to_id: replyToId || null,
             created_at: new Date().toISOString(),
-          };
-        },
+          };, { conversationId: conversationId! }},
       });
       return data;
     },

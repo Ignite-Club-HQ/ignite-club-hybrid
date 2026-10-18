@@ -68,7 +68,7 @@ export function EventGuestsManager({
             created_at: g.created_at_ms ? new Date(Number(g.created_at_ms)).toISOString() : new Date().toISOString(),
           })) as EventGuest[];
         },
-      });
+      }, { eventId: eventId });
       if (icpGuests) return icpGuests;
 
       const { data, error } = await supabase
@@ -116,7 +116,7 @@ export function EventGuestsManager({
           await addLiveEventGuest(ctx, eventId, piiRef);
           return true;
         },
-      });
+      }, { eventId: eventId });
       if (routedToIcp) return;
 
       const { error } = await supabase.from("event_guests").insert({

@@ -174,7 +174,7 @@ export function ChatParticipantsList({
             throw new Error("unreachable");
           },
           icp: (ctx) => removeLiveGroupMember(ctx, chatId, Principal.fromText(userId)),
-        });
+        }, { conversationId: chatId });
         return;
       }
       const { error } = await supabase
@@ -203,7 +203,7 @@ export function ChatParticipantsList({
             throw new Error("unreachable");
           },
           icp: (ctx) => leaveLiveGroup(ctx, chatId),
-        });
+        }, { conversationId: chatId });
         return;
       }
       const { error } = await supabase

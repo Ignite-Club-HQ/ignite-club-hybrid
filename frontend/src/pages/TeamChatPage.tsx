@@ -609,7 +609,7 @@ export default function TeamChatPage() {
             };
 
           },
-        });
+        }, { teamId: teamId });
       }
 
       // If offline, return cached messages using the React Query online manager
@@ -1198,7 +1198,7 @@ export default function TeamChatPage() {
                 : null;
             return { older, nextCursor };
           },
-        });
+        }, { teamId: teamId! });
         icpOlderCursorRef.current = result.nextCursor;
         setHasOlderMessages(result.nextCursor !== null);
         const mergeOlder = (existing: Message[] | undefined): Message[] => {
@@ -1719,8 +1719,7 @@ export default function TeamChatPage() {
               })();
           const saved = await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, teamId!, user!.id).catch(() => { /* best-effort engagement counter */ });
-          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };
-        },
+          return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };, { teamId: teamId! }},
       });
       return deliveredSend(confirmedMessage ?? undefined);
     },

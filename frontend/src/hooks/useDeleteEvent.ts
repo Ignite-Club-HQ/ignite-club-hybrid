@@ -65,7 +65,7 @@ export function useDeleteEvent(options: UseDeleteEventOptions = {}) {
               await deleteLiveEvent(ctx, event.id);
               return { kind: "success", deletedIds: [event.id] } as const;
             },
-          });
+          }, { eventId: event.id });
         } catch (err: any) {
           outcome = { kind: "failed", message: err?.message ?? "Unknown error" };
         }
