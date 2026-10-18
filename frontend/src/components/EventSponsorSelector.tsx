@@ -50,7 +50,7 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
             .filter((s: any) => s.is_active)
             .map((s: any) => ({ id: s.id, name: s.name, logo_url: s.logo_url ?? null, is_active: s.is_active })) as Sponsor[];
         },
-      });
+      }, { clubId: clubId });
     },
   });
 
@@ -72,7 +72,7 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
           const { getLiveEventSponsorIds } = await import("@/live/features/events");
           return (await getLiveEventSponsorIds(ctx, eventId)) || [];
         },
-      });
+      }, { eventId: eventId });
     },
   });
 
@@ -118,7 +118,7 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
           const { saveLiveEventSponsors } = await import("@/live/features/events");
           await saveLiveEventSponsors(ctx, eventId, sponsorIds);
         },
-      });
+      }, { eventId: eventId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-sponsors", eventId] });

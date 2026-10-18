@@ -733,6 +733,13 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   /// Location-only lookup for group routing: which club owns this event, if
+   /// it lives in this canister. Viewers only; returns null when not held here.
+   read_event_club: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) query;
    record_event_view: (event_id: text) -> (variant {
                                              Err: text;
                                              Ok;

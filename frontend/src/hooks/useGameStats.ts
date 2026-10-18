@@ -271,7 +271,7 @@ export function useGameStats() {
             })),
           );
         },
-      });
+      }, { eventId: eventId });
 
       // Send email notification to team admins/coaches (Pro Football only).
       // Game-stats email stays Supabase-only (allowed exception) — skipped

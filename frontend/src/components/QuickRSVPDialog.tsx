@@ -118,7 +118,7 @@ export function QuickRSVPDialog({
           teamDefault: null,
         };
       },
-    }),
+    }, { clubId: clubId }),
     enabled: open && !!eventId,
   });
   const audience = resolveRsvpAudience(eventScope?.event?.rsvp_audience, eventScope?.teamDefault);
@@ -203,7 +203,7 @@ export function QuickRSVPDialog({
           }));
         return [...own, ...children];
       },
-    }),
+    }, { eventId: eventId }),
     enabled: open && !!user,
   });
 
@@ -228,7 +228,7 @@ export function QuickRSVPDialog({
           await setLiveEventRsvp(ctx, eventId, user!.id, status);
           return true;
         },
-      });
+      }, { eventId: eventId });
       if (routedToIcp) return;
 
       let rsvpId: string | null = null;
@@ -295,7 +295,7 @@ export function QuickRSVPDialog({
           await adminUpsertLiveRsvp(ctx, eventId, user!.id, status, { childId });
           return true;
         },
-      });
+      }, { eventId: eventId });
       if (routedToIcp) return;
 
       const existingChildRsvp = existingRsvps?.find(r => r.child_id === childId);

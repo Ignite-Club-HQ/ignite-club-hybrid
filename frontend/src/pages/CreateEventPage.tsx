@@ -966,7 +966,7 @@ function SupabaseCreateEventPage() {
           })
           .filter((e) => e.event_date.split("T")[0] === eventDateStr);
       },
-    }).catch(() => undefined);
+    }, { clubId: clubId }).catch(() => undefined);
     if (icpRows === undefined) return { status: "error" };
     if (icpRows !== null) {
       const result = evaluateTrainingConflicts({

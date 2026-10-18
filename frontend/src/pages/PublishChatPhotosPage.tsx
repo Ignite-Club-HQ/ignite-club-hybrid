@@ -155,7 +155,7 @@ function IcpPublishChatPhotosPage() {
           images.sort((a, b) => b.created_at.localeCompare(a.created_at));
           return { clubId, teamName: group?.name ?? null, images };
         },
-      });
+      }, { teamId: teamId });
     },
     enabled: !!teamId,
   });

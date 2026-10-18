@@ -100,7 +100,7 @@ export default function MatchCaptainSelector({
           children,
         };
       },
-    }),
+    }, { eventId: eventId }),
   });
 
   const { data: playerUserIds = [] } = useQuery({
@@ -178,7 +178,7 @@ export default function MatchCaptainSelector({
           const refId = (userId || childId)!;
           await setLiveMatchCaptain(ctx, eventId, refKind, refId, "captain");
         },
-      });
+      }, { eventId: eventId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["match-captain", eventId] });
@@ -208,7 +208,7 @@ export default function MatchCaptainSelector({
           const refId = captain.child_id || captain.user_id;
           await removeLiveMatchCaptain(ctx, eventId, refKind, refId, "captain");
         },
-      });
+      }, { eventId: eventId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["match-captain", eventId] });

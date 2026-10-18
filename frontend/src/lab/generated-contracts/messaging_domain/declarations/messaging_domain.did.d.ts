@@ -501,6 +501,15 @@ export interface Main {
   >,
   'purge_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  /**
+   * / Location-only lookup for group routing: which club owns this chat, if
+   * / it lives in this canister. Participants only; null when not held here.
+   */
+  'read_conversation_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'recapTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult

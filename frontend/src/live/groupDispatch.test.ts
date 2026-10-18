@@ -41,3 +41,26 @@ describe('club-scoped dispatcher', () => {
     await expect(clubDispatch.read('events', 'x', 'events_domain', async () => 1)).rejects.toThrow(); // legacy path: no session in tests
   });
 });
+
+describe('entity scopes', () => {
+  function world(claims: Record<string, string[]>) {
+    const { d, session } = deps(ON);
+    const s2 = { ...session, readEveryGroup: vi.fn(async (_d: string, r: (ctx: never) => Promise<string[]>) => (await Promise.all(Object.keys(claims).map(g => r(g as never)))).flat()) };
+    const d2 = { ...d, open: vi.fn(async () => s2), lookup: vi.fn(async (g: unknown, _k: string, id: string) => (claims[g as string] ?? []).includes(id) ? (id.startsWith('m') ? 'moved' : 'legacy-club') : null) };
+    return { d: d2, s: s2 };
+  }
+  it('an event in a moved club routes to that group, and the lookup is cached', async () => {
+    const { d, s } = world({ g1: ['m-ev'], g2: [] }); const x = createClubDispatcher(d as never);
+    expect(await x.readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1)).toBe('group');
+    await x.readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1);
+    expect(s.readEveryGroup).toHaveBeenCalledTimes(1); expect(s.readClub).toHaveBeenCalledWith('moved', 'events_domain', expect.any(Function));
+  });
+  it('an event no group holds stays on the shared canisters', async () => {
+    const { d } = world({ g1: [] });
+    expect(await createClubDispatcher(d as never).readFor('events', { eventId: 'x' }, 'events_domain', async () => 1)).toBe('legacy');
+  });
+  it('an event claimed by two groups is refused', async () => {
+    const { d } = world({ g1: ['m-ev'], g2: ['m-ev'] }); (d.lookup as ReturnType<typeof vi.fn>).mockImplementation(async (g: unknown) => g === 'g1' ? 'moved' : 'other');
+    await expect(createClubDispatcher(d as never).readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1)).rejects.toThrow('more than one group');
+  });
+});

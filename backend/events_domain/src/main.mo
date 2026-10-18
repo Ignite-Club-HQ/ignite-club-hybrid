@@ -1432,6 +1432,16 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  /// Location-only lookup for group routing: which club owns this event, if
+  /// it lives in this canister. Viewers only; returns null when not held here.
+  public query ({ caller }) func read_event_club(event_id : Text) : async { #Ok : ?Text; #Err : Text } {
+    if (Principal.isAnonymous(caller)) return #Err("Sign in required");
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Ok(null) };
+      case (?event) { if (not canView(caller, event)) #Err("Forbidden") else #Ok(?event.club_id) };
+    }
+  };
+
   public query ({ caller }) func get_event_view_count(event_id : Text) : async { #Ok : Nat32; #Err : Text } {
     switch (events.find(func(item) = item.id == event_id)) {
       case null { #Err("Event not found") };
