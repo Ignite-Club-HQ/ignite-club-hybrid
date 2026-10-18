@@ -73,6 +73,33 @@ try {
   assert.equal((await actor.health()).total_bytes, BigInt(replacement.length));
   const response = await actor.http_request({ url: '/missing', method: 'GET', headers: [], body: [] });
   assert.equal(response.status_code, 404);
+  // Management-canister snapshot rollback must restore Region bytes, allocator,
+  // metadata and flags together. Exercise real management calls, not mocks.
+  const snapshotType = IDL.Record({ id: IDL.Vec(IDL.Nat8), taken_at_timestamp: IDL.Nat64, total_size: IDL.Nat64 });
+  async function management(method, inputType, input, outputTypes = [], sender = governor) {
+    const result = await pic.updateCall({ canisterId: Principal.managementCanister(), method, arg: IDL.encode([inputType], [input]), sender });
+    return IDL.decode(outputTypes, result);
+  }
+  await pic.stopCanister({ canisterId: fixture.canisterId, sender: governor });
+  const snapshotInput = IDL.Record({ canister_id: IDL.Principal, replace_snapshot: IDL.Opt(IDL.Vec(IDL.Nat8)) });
+  await assert.rejects(management('take_canister_snapshot', snapshotInput, { canister_id: fixture.canisterId, replace_snapshot: [] }, [snapshotType], other));
+  const [snapshot] = await management('take_canister_snapshot', snapshotInput, { canister_id: fixture.canisterId, replace_snapshot: [] }, [snapshotType]);
+  assert.ok(snapshot.id.length > 0);
+  await pic.startCanister({ canisterId: fixture.canisterId, sender: governor });
+  await upload(path, Buffer.from('changed after snapshot'));
+  await upload('users/u/after-snapshot.bin', Buffer.from('new file'));
+  assert.notDeepEqual(await download(path), replacement);
+  await pic.stopCanister({ canisterId: fixture.canisterId, sender: governor });
+  await management('load_canister_snapshot', IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8), sender_canister_version: IDL.Opt(IDL.Nat64) }), { canister_id: fixture.canisterId, snapshot_id: snapshot.id, sender_canister_version: [] });
+  await pic.startCanister({ canisterId: fixture.canisterId, sender: governor });
+  assert.deepEqual(await download(path), replacement);
+  assert.equal((await actor.health()).total_bytes, BigInt(replacement.length));
+  assert.equal((await actor.stable_storage_status()).allocated_bytes, allocated);
+  assert.equal((await actor.http_request({ url: '/users/u/after-snapshot.bin', method: 'GET', headers: [], body: [] })).status_code, 404);
+  actor.setPrincipal(other);
+  assert.ok('Err' in await actor.delete_blob(path), 'snapshot restore must preserve owner authorization');
+  actor.setPrincipal(owner);
+  await management('delete_canister_snapshot', IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8) }), { canister_id: fixture.canisterId, snapshot_id: snapshot.id });
   // Real actor calls across two stores, including concurrent quota admission.
   const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   club.actor.setPrincipal(governor);
@@ -110,14 +137,45 @@ try {
   assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/still-over.jpg', 'image/jpeg', 1n, 1));
   // Advance across an exact 30-day quota boundary; fresh allowance must open.
   await pic.advanceTime(31 * 86_400_000); await pic.tick();
+  const reserveRetryPath = 'clubs/c1/photos/reserve-retry.jpg';
+  await pic.stopCanister({ canisterId: club.canisterId, sender: governor });
+  const unavailableBegins = await Promise.all([actor.begin_upload(reserveRetryPath, 'image/jpeg', 1n, 1), actor.begin_upload(reserveRetryPath, 'image/jpeg', 1n, 1)]);
+  assert.ok(unavailableBegins.every(result => 'Err' in result));
+  await pic.startCanister({ canisterId: club.canisterId, sender: governor });
+  const resumedBegins = await Promise.all([actor.begin_upload(reserveRetryPath, 'image/jpeg', 1n, 1), actor.begin_upload(reserveRetryPath, 'image/jpeg', 1n, 1)]);
+  const reserveRetryId = ok(resumedBegins[0]);
+  assert.equal(ok(resumedBegins[1]), reserveRetryId, 'concurrent same-path retries must share one reservation');
+  ok(await actor.put_chunk(reserveRetryId, 0, [45]));
+  const concurrentFinals = await Promise.all([actor.finalize_upload(reserveRetryId), actor.finalize_upload(reserveRetryId)]);
+  assert.deepEqual(ok(concurrentFinals[0]), ok(concurrentFinals[1]));
+  assert.deepEqual(await download(reserveRetryPath), Buffer.from([45]));
   const nextCycle = ok(await actor.begin_upload('clubs/c1/photos/next-cycle.jpg', 'image/jpeg', 1n, 1));
   ok(await actor.put_chunk(nextCycle, 0, [43])); ok(await actor.finalize_upload(nextCycle));
+  const recoveryPath = 'clubs/c1/photos/interrupted.jpg';
+  const recoveryId = ok(await actor.begin_upload(recoveryPath, 'image/jpeg', 1n, 1));
+  ok(await actor.put_chunk(recoveryId, 0, [44]));
+  await pic.stopCanister({ canisterId: club.canisterId, sender: governor });
+  assert.ok('Err' in await actor.finalize_upload(recoveryId), 'failed authority call must not acknowledge publication');
+  assert.ok('Err' in await actor.abort_upload(recoveryId), 'uncertain commit cannot refund its slot');
+  await pic.startCanister({ canisterId: club.canisterId, sender: governor });
+  const recovered = ok(await actor.finalize_upload(recoveryId));
+  assert.deepEqual(ok(await actor.finalize_upload(recoveryId)), recovered);
+  assert.deepEqual(await download(recoveryPath), Buffer.from([44]));
+  assert.ok('Err' in await actor.abort_upload(recoveryId));
+  // Exactly three slots were consumed this cycle despite repeated operations.
+  // Fill the seven remaining slots, then prove a retry never double-charged.
+  for (let i = 0; i < 7; i++) {
+    const id = ok(await actor.begin_upload(`clubs/c1/photos/recovery-cap-${i}.jpg`, 'image/jpeg', 1n, 1));
+    ok(await actor.put_chunk(id, 0, [46])); ok(await actor.finalize_upload(id));
+  }
+  assert.ok('Err' in await actor.begin_upload('clubs/c1/photos/recovery-over.jpg', 'image/jpeg', 1n, 1));
   await pic.advanceTime(181 * 86_400_000); await pic.tick(10);
   const expired = await actor.http_request({ url: '/clubs/c1/photos/0.jpg', method: 'GET', headers: [], body: [] });
   assert.equal(expired.status_code, 404, 'known-free club ciphertext must expire after six months');
   assert.deepEqual(await download(path), replacement, 'personal media without a club retention rule is retained');
   console.log('PASS: authenticated upload, streaming read-back, migration integrity/idempotency, owner denial, replacement/delete/reuse and EOP upgrade preservation.');
   console.log('PASS: real two-store freeze/import/activation, denied spoofed reservation, 10 shared slots including pending writes, idempotent begin/finalize, release/refund and 30-day boundary.');
+  console.log('PASS: controller-only snapshot restore preserves Region bytes/allocator/owner; unavailable quota commit retries publish once without refund.');
 } finally {
   if (pic) await pic.tearDown();
   await server.stop();
