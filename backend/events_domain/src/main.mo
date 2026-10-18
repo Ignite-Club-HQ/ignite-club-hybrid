@@ -3089,7 +3089,7 @@ persistent actor class Main(governorInit : Principal) {
     removed += eventViews.size() - keepViews.size(); eventViews := keepViews;
     let keepReach = pushReachability.filter(func(p) = not p.user.equal(caller));
     removed += pushReachability.size() - keepReach.size(); pushReachability := keepReach;
-    let keepMini = miniLeagueRsvps.filter(func(r) = r.account_id != me);
+    let keepMini = miniLeagueRsvps.filter(func(r) = switch (r.subject) { case (#account(id)) id != me; case (#mini_league_player(_)) true });
     removed += miniLeagueRsvps.size() - keepMini.size(); miniLeagueRsvps := keepMini;
     #Ok(Nat32.fromNat(removed))
   };
