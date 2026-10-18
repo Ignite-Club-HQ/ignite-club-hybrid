@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [x] 14. Recover stopped frontend before syncing existing assets; remove destructive reinstall fallback. Offline regression tests pass. Live recovery and funding require the deployer workflow/account.
+
 - [x] 13. Correct frontend balance grant: verified and pinned ICP CLI 1.7.0, use `canister settings update --add-controller --force`, test failure propagation. Live grant requires rerunning the frontend workflow with this change.
 
 - [x] 10. Fix insights_domain M0250: removed actor initializer; added data-preserving partial migration 20261018_015713. Per-canister mops check, migration test and mops build pass. Root-wide check cannot verify all canisters because root dependencies omit events_domain's ic package; deploy uses per-canister dependency contexts. GitHub rerun still required.
