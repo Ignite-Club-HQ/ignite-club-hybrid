@@ -50,6 +50,7 @@ vi.mock("@/live/featureRouter", () => ({
 }));
 vi.mock("@/live/features/events", () => ({
   listLiveEvents: (...args: unknown[]) => backendMocks.listLiveEvents(...args),
+  createLiveEvent: (...args: unknown[]) => backendMocks.createEventTransaction(...args),
 }));
 vi.mock("@/features/events/createEventWorkflow", () => ({
   createEventTransaction: (...args: unknown[]) => backendMocks.createEventTransaction(...args),
