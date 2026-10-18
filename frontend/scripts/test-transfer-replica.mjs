@@ -65,7 +65,7 @@ try {
   const league = ok(await A.mini_league_domain.create_mini_league(CLUB, 'Under 8s', [], [], 5, 3, 10, [], true));
   // Remaining domains: competition, media records, insights, notifications, private-info grants, timers.
   const comp = ok(await A.competition_domain.create_competition(CLUB, 'Winter Cup', '2026'));
-  const asset = ok(await A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum1', `clubs/${CLUB}/p1.jpg`, 'club', 0n));
+  const asset = ok(await A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum1', `clubs/${CLUB}/p1.jpg`, 'club', 99_999_999_999_999n));
   ok(await A.insights_domain.record_photo_upload(CLUB, 'p1'));
   ok(await A.notification_queue.enqueue('n1', 'u1', CLUB, 'news', 'Hello', 'nk1'));
   ok(await A.pii_access_control.register_pii('child-1', 'name', [1, 2, 3], governor));
@@ -93,7 +93,7 @@ try {
       blocked.points = await refused(A.club_points_domain.award_points(CLUB, { User: 'u1' }, 'attendance', 'ev2', 5, 'sneaky', [], [], []));
       blocked.league = await refused(A.mini_league_domain.update_mini_league(league.id, 'Hacked', [], [], 5, 3, 10, [], true));
       blocked.comp = await refused(A.competition_domain.create_competition(CLUB, 'Sneaky Cup', '2026'));
-      blocked.media = await refused(A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum2', `clubs/${CLUB}/p2.jpg`, 'club', 0n));
+      blocked.media = await refused(A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum2', `clubs/${CLUB}/p2.jpg`, 'club', 99_999_999_999_999n));
       blocked.insights = await refused(A.insights_domain.record_photo_upload(CLUB, 'p2'));
       blocked.notify = await refused(A.notification_queue.enqueue('n2', 'u1', CLUB, 'news', 'Sneaky', 'nk2'));
       blocked.pii = await refused(A.pii_access_control.grant_pii_read_club('child-2', 'name', CLUB));
