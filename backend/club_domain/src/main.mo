@@ -21,6 +21,7 @@ import Oql "../../shared/Oql";
 import OqlClubs "oqlClubs";
 import MediaQuota "mediaQuota";
 import MediaQuotaCutover "mediaQuotaCutover";
+import MembershipPage "membershipPage";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -2092,6 +2093,22 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func my_role_grants() : async [Types.RoleGrant] {
     auth(caller);
     acl.roles.filter(func(grant) = grant.user.equal(caller))
+  };
+
+  // Caller-only consensus read; linked principals come from this canister's
+  // verified account, never a browser-supplied account/principal list.
+  // At most 200 profile slots scanned per call. Cursor is not a snapshot:
+  // consumers revalidate discovered memberships against current authority.
+  public shared ({ caller }) func read_my_club_memberships(offset : Nat, limit : Nat16) : async {
+    #Ok : { clubs : [Text]; next : ?Nat; acl_revision : Nat64 }; #Err : Text
+  } {
+    if (caller.equal(Principal.anonymous())) return #Err("Authentication required");
+    if (limit == 0 or limit > 100 or offset > profiles.size()) return #Err("Invalid membership page");
+    let principals = switch (accountFor(caller)) { case (?a) a.principals; case null [caller] };
+    let page = MembershipPage.read<Types.ClubProfile>(profiles, offset, Nat16.toNat(limit), func(club) {
+      club.deleted_at_ms == null and principals.any(func(p) = isMember(p, club.id))
+    });
+    #Ok({ clubs = page.rows.map(func(club) = club.id); next = page.next; acl_revision = aclVersion })
   };
 
   // Cross-canister membership check used by pii_access_control's
