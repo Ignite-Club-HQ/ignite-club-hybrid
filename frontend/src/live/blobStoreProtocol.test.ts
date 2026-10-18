@@ -75,6 +75,7 @@ describe("media_blob_store contract", () => {
       "health",
       "http_request",
       "merge_principal",
+      "memory_stats",
       "put_chunk",
       "rekey_principal",
       "set_capacity_limit",

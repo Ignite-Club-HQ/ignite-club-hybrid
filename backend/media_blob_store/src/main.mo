@@ -16,6 +16,7 @@ import Iter "mo:core/Iter";
 import Map "mo:core/Map";
 import Timer "mo:core/Timer";
 import UploadPolicy "uploadPolicy";
+import AssembleChunks "assembleChunks";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -349,21 +350,7 @@ persistent actor MediaBlobStore {
         };
         if (storedChunkBytes(upload) != upload.total_size.toNat()) return #Err("Accumulated byte count does not match total_size");
         if (PrimMem.rts_heap_size() + upload.total_size.toNat() * 16 > UploadPolicy.heapBudget) return #Err("StoreFull");
-        // Linear assembly, not repeated concatenation of every preceding byte.
-        var chunkIndex = 0;
-        var offset = 0;
-        var current : [Nat8] = [];
-        let assembledArray = Array.tabulate<Nat8>(upload.total_size.toNat(), func(_) {
-          while (offset >= current.size()) {
-            current := switch (upload.chunks[chunkIndex]) { case (?bytes) bytes.toArray(); case null [] };
-            chunkIndex += 1;
-            offset := 0;
-          };
-          let byte = current[offset];
-          offset += 1;
-          byte
-        });
-        let assembled = Array.toBlob(assembledArray);
+        let assembled = AssembleChunks.assemble(upload.chunks, upload.total_size.toNat());
         if (Nat.toNat64(assembled.size()) != upload.total_size) {
           return #Err("Accumulated byte count does not match total_size");
         };
