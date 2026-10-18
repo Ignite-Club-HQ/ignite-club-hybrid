@@ -14,7 +14,7 @@ type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendC
   isAssigned(c: string): boolean; dispose(): void };
 export type DispatchDeps = {
   gates: () => ActivationGates;
-  legacy: <T>(feature: FeatureArea, icp: (ctx: FeatureBackendContext) => Promise<T>) => Promise<T>;
+  legacy: <T>(feature: FeatureArea, clubId: string, icp: (ctx: FeatureBackendContext) => Promise<T>) => Promise<T>;
   context: () => Promise<FeatureBackendContext>;
   open: (ctx: FeatureBackendContext) => Promise<Session>;
 };
@@ -30,14 +30,14 @@ async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendCont
 export function createClubDispatcher(deps: DispatchDeps) {
   return {
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
-      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, fn);
+      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
       const { s } = await sessionFor(deps);
-      return chooseRoute(deps.gates(), s.isAssigned(clubId)) === 'group' ? s.readClub(clubId, domain, fn) : deps.legacy(feature, fn);
+      return chooseRoute(deps.gates(), s.isAssigned(clubId)) === 'group' ? s.readClub(clubId, domain, fn) : deps.legacy(feature, clubId, fn);
     },
     write: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
-      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, ctx => fn(ctx, key));
+      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, ctx => fn(ctx, key));
       const { s } = await sessionFor(deps);
-      return chooseRoute(deps.gates(), s.isAssigned(clubId)) === 'group' ? s.writeClub(clubId, domain, key, fn, attempts) : deps.legacy(feature, ctx => fn(ctx, key));
+      return chooseRoute(deps.gates(), s.isAssigned(clubId)) === 'group' ? s.writeClub(clubId, domain, key, fn, attempts) : deps.legacy(feature, clubId, ctx => fn(ctx, key));
     },
   };
 }
@@ -45,8 +45,8 @@ export function createClubDispatcher(deps: DispatchDeps) {
 /** Production dispatcher. Shipped gates are off, so this always takes the legacy path. */
 export const clubDispatch = createClubDispatcher({
   gates: () => SHIPPED_GATES,
-  legacy: async (feature, icp) => (await import('./featureRouter')).withFeatureBackend(feature, {
-    supabase: () => { throw new Error('Club-scoped dispatch is ICP-only'); }, icp }),
+  legacy: async (feature, clubId, icp) => (await import('./featureRouter')).withFeatureBackend(feature, {
+    supabase: () => { throw new Error('Club-scoped dispatch is ICP-only'); }, icp }, { clubId, legacy: true }),
   context: async () => {
     const [{ getCurrentInternetIdentityConfirmed }, { getActiveIcpTarget }] = await Promise.all([import('./internetIdentityAuth'), import('./targetRegistry')]);
     const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
