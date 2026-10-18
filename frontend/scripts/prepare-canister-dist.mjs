@@ -2,7 +2,7 @@
 // serves (dist-canister): index.html entry, SPA fallback (_redirects) and the
 // security/cache headers Netlify used to apply (_headers). Read by the
 // @dfinity/static-site recipe; see deploy/frontend/icp.yaml.
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, copyFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -64,7 +64,6 @@ writeFileSync(
 // Canister IDs come from the same sources the app itself uses: the
 // IGNITE_LIVE_ICP_CANISTER_IDS_JSON build env, falling back to the deployed
 // mainnet ID table committed at deploy/mainnet/.icp/data/mappings/ic.ids.json.
-import { readFileSync } from "node:fs";
 
 const CANISTER_ROLES = {
   club_domain: ["clubs", "Clubs, teams, memberships and role grants. Call getApiDoc() first."],
