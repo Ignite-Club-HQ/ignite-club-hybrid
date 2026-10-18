@@ -49,6 +49,13 @@ export const idlFactory = ({ IDL }) => {
     'headers' : IDL.Vec(HeaderField),
     'status_code' : IDL.Nat16,
   });
+  const FreeUsageRow = IDL.Record({
+    'count' : IDL.Nat,
+    'cycle' : IDL.Nat,
+    'category' : IDL.Text,
+    'bytes' : IDL.Nat64,
+    'club_id' : IDL.Text,
+  });
   
   return IDL.Service({
     'abort_upload' : IDL.Func([IDL.Text], [Result], []),
@@ -59,13 +66,20 @@ export const idlFactory = ({ IDL }) => {
       ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_blob' : IDL.Func([IDL.Text], [Result], []),
+    'enable_shared_media_quota' : IDL.Func([], [Result], []),
     'finalize_upload' : IDL.Func([IDL.Text], [ResultFinalized], []),
+    'freeze_media_quota' : IDL.Func([], [Result], []),
     'get_club_media_usage' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(MediaUsage)],
         ['query'],
       ),
     'get_content_hash' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
+    'get_upload_outcome' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(FinalizedBlob), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_usage' : IDL.Func([], [Usage], ['query']),
     'health' : IDL.Func([], [Health], ['query']),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
@@ -90,9 +104,27 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'quota_snapshot_page' : IDL.Func(
+        [IDL.Nat],
+        [
+          IDL.Record({
+            'total' : IDL.Nat,
+            'pending' : IDL.Nat,
+            'rows' : IDL.Vec(FreeUsageRow),
+            'offset' : IDL.Nat,
+            'frozen' : IDL.Bool,
+          }),
+        ],
+        [],
+      ),
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'retire_upload_outcomes' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),

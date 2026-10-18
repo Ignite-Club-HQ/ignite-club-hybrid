@@ -51,6 +51,13 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
+export interface FreeUsageRow {
+    count: bigint;
+    cycle: bigint;
+    category: string;
+    bytes: bigint;
+    club_id: string;
+}
 export interface FinalizedBlob {
     path: string;
     content_hash: string;
@@ -114,9 +121,18 @@ export interface media_blob_storeInterface {
      */
     cycles_balance(): Promise<bigint>;
     delete_blob(path: string): Promise<Result>;
+    enable_shared_media_quota(): Promise<Result>;
     finalize_upload(upload_id: string): Promise<ResultFinalized>;
+    freeze_media_quota(): Promise<Result>;
     get_club_media_usage(club_id: string): Promise<Array<MediaUsage>>;
     get_content_hash(path: string): Promise<string | null>;
+    get_upload_outcome(upload_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: FinalizedBlob | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_usage(): Promise<Usage>;
     health(): Promise<Health>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
@@ -133,12 +149,26 @@ export interface media_blob_storeInterface {
         err: string;
     }>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
+    quota_snapshot_page(offset: bigint): Promise<{
+        total: bigint;
+        pending: bigint;
+        rows: Array<FreeUsageRow>;
+        offset: bigint;
+        frozen: boolean;
+    }>;
     rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
         __kind__: "err";
         err: string;
+    }>;
+    retire_upload_outcomes(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
     }>;
     set_capacity_limit(limit_bytes: bigint): Promise<Result>;
     set_club_domain_canister(canister_id: Principal): Promise<Result>;
@@ -162,9 +192,17 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.delete_blob(arg0);
         return from_candid_Result_n1(result);
     }
+    async enable_shared_media_quota(): Promise<Result> {
+        const result = await this.actor.enable_shared_media_quota();
+        return from_candid_Result_n1(result);
+    }
     async finalize_upload(arg0: string): Promise<ResultFinalized> {
         const result = await this.actor.finalize_upload(arg0);
         return from_candid_ResultFinalized_n5(result);
+    }
+    async freeze_media_quota(): Promise<Result> {
+        const result = await this.actor.freeze_media_quota();
+        return from_candid_Result_n1(result);
     }
     async get_club_media_usage(arg0: string): Promise<Array<MediaUsage>> {
         const result = await this.actor.get_club_media_usage(arg0);
@@ -173,6 +211,16 @@ export class Media_blob_store implements media_blob_storeInterface {
     async get_content_hash(arg0: string): Promise<string | null> {
         const result = await this.actor.get_content_hash(arg0);
         return from_candid_opt_n11(result);
+    }
+    async get_upload_outcome(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: FinalizedBlob | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_upload_outcome(arg0);
+        return from_candid_variant_n12(result);
     }
     async get_usage(): Promise<Usage> {
         const result = await this.actor.get_usage();
@@ -202,11 +250,21 @@ export class Media_blob_store implements media_blob_storeInterface {
         err: string;
     }> {
         const result = await this.actor.merge_principal(arg0, arg1, arg2);
-        return from_candid_variant_n12(result);
+        return from_candid_variant_n14(result);
     }
     async put_chunk(arg0: string, arg1: number, arg2: Uint8Array): Promise<Result> {
         const result = await this.actor.put_chunk(arg0, arg1, arg2);
         return from_candid_Result_n1(result);
+    }
+    async quota_snapshot_page(arg0: bigint): Promise<{
+        total: bigint;
+        pending: bigint;
+        rows: Array<FreeUsageRow>;
+        offset: bigint;
+        frozen: boolean;
+    }> {
+        const result = await this.actor.quota_snapshot_page(arg0);
+        return result;
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -216,7 +274,17 @@ export class Media_blob_store implements media_blob_storeInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n12(result);
+        return from_candid_variant_n14(result);
+    }
+    async retire_upload_outcomes(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.retire_upload_outcomes();
+        return from_candid_variant_n15(result);
     }
     async set_capacity_limit(arg0: bigint): Promise<Result> {
         const result = await this.actor.set_capacity_limit(arg0);
@@ -245,6 +313,9 @@ function from_candid_opt_n10(value: [] | [bigint]): bigint | null {
 function from_candid_opt_n11(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
+function from_candid_opt_n13(value: [] | [_FinalizedBlob]): FinalizedBlob | null {
+    return value.length === 0 ? null : value[0];
+}
 function from_candid_record_n9(value: {
     count: bigint;
     count_limit: bigint;
@@ -267,6 +338,25 @@ function from_candid_record_n9(value: {
     };
 }
 function from_candid_variant_n12(value: {
+    Ok: [] | [_FinalizedBlob];
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: FinalizedBlob | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_opt_n13(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n14(value: {
     ok: bigint;
 } | {
     err: string;
@@ -283,6 +373,25 @@ function from_candid_variant_n12(value: {
     } : "err" in value ? {
         __kind__: "err",
         err: value.err
+    } : value;
+}
+function from_candid_variant_n15(value: {
+    Ok: bigint;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: bigint;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
     } : value;
 }
 function from_candid_variant_n2(value: {
