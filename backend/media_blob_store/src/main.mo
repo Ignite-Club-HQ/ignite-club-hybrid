@@ -173,14 +173,16 @@ persistent actor MediaBlobStore {
     var removed = 0;
     var scanned = 0;
     var next = "";
+    var deletes : [Text] = [];
     for ((id, op) in quota_operations.entriesFrom(cursor)) {
       if (id == cursor and cursor != "") continue;
       if (scanned >= 200) break;
       scanned += 1; next := id;
       if (op.cycle + 1 < currentCycle() and (op.status == #committed or op.status == #aborted)) {
-        quota_operations.remove(id); removed += 1
+        deletes := deletes.concat([id]); removed += 1
       }
     };
+    for (id in deletes.values()) quota_operations.remove(id);
     if (scanned < 200) next := "";
     #Ok({ removed; cursor = next })
   };
@@ -779,7 +781,9 @@ persistent actor MediaBlobStore {
     if (not dry_run) {
       blobs := newBlobs;
       pending_uploads := newPendingUploads;
-      for ((id, op) in quota_operations.entries()) { if (op.owner.equal(old)) quota_operations.add(id, { op with owner = new }) };
+      var rekeys : [(Text, QuotaOperation.Operation)] = [];
+      for ((id, op) in quota_operations.entries()) { if (op.owner.equal(old)) rekeys := rekeys.concat([(id, { op with owner = new })]) };
+      for ((id, op) in rekeys.values()) quota_operations.add(id, op);
     };
 
     #ok(changed)

@@ -2,6 +2,7 @@ import Map "mo:core/Map";
 import Text "mo:core/Text";
 import Principal "mo:core/Principal";
 import Nat "mo:core/Nat";
+import Array "mo:core/Array";
 
 module {
   public type Usage = { count : Nat; bytes : Nat; pending_count : Nat; pending_bytes : Nat };
@@ -65,16 +66,19 @@ module {
     var removed = 0;
     var scanned = 0;
     var nextReservation = "";
+    var reservationDeletes : [Text] = [];
     for ((key, row) in ledger.reservations.entriesFrom(reservationCursor)) {
       if (key == reservationCursor and reservationCursor != "") continue;
       if (scanned >= 200) break;
       scanned += 1; nextReservation := key;
-      if (row.cycle + 1 < cycle and row.status != #reserved) { ledger.reservations.remove(key); removed += 1 };
+      if (row.cycle + 1 < cycle and row.status != #reserved) { reservationDeletes := reservationDeletes.concat([key]); removed += 1 };
     };
+    for (key in reservationDeletes.values()) ledger.reservations.remove(key);
     if (scanned < 200) nextReservation := "";
     var usageRemoved = 0;
     scanned := 0;
     var nextUsage = "";
+    var usageDeletes : [Text] = [];
     for ((key, row) in ledger.usage.entriesFrom(usageCursor)) {
       if (key == usageCursor and usageCursor != "") continue;
       if (scanned >= 200) break;
@@ -84,9 +88,10 @@ module {
       if (usageRemoved < 200 and row.pending_count == 0) {
         let parts = Text.split(key, #char '\u{1f}');
         ignore parts.next(); ignore parts.next();
-        switch (parts.next()) { case (?value) { switch (Nat.fromText(value)) { case (?old) { if (old + 1 < cycle) { ledger.usage.remove(key); usageRemoved += 1 } }; case null {} } }; case null {} };
+        switch (parts.next()) { case (?value) { switch (Nat.fromText(value)) { case (?old) { if (old + 1 < cycle) { usageDeletes := usageDeletes.concat([key]); usageRemoved += 1 } }; case null {} } }; case null {} };
       };
     };
+    for (key in usageDeletes.values()) ledger.usage.remove(key);
     if (scanned < 200) nextUsage := "";
     { removed = removed + usageRemoved; reservation_cursor = nextReservation; usage_cursor = nextUsage }
   };
