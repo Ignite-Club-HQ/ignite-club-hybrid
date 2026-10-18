@@ -406,6 +406,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
+    'export_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'export_state' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
@@ -515,6 +520,11 @@ export const idlFactory = ({ IDL }) => {
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_club_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'invite_team' : IDL.Func(
@@ -653,6 +663,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'record_match' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
@@ -776,6 +791,11 @@ export const idlFactory = ({ IDL }) => {
     'set_season_status' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_transfer_fence' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_vault_domain_canister' : IDL.Func(

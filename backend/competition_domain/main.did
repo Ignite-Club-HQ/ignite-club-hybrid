@@ -237,6 +237,11 @@ type Main =
                 Err: text;
                 Ok: Season;
               });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    export_state: () -> (variant {
                           Err: text;
                           Ok: State;
@@ -330,6 +335,11 @@ type Main =
                              Err: text;
                              Ok;
                            });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    invite_team: (competition_id: text, team_id: text) ->
     (variant {
        Err: text;
@@ -453,6 +463,10 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    record_match: (competition_id: text, home_team: text, away_team: text) ->
     (variant {
        Err: text;
@@ -573,6 +587,11 @@ type Main =
                  Err: text;
                  Ok: Season;
                });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_vault_domain_canister: (id: principal) -> (variant {
                                                     Err: text;
                                                     Ok;

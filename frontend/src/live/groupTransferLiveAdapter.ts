@@ -1,7 +1,7 @@
 /** Live transfer adapter (inactive operator tooling). Connects the resumable
  * runner to real club_domain, events_domain, messaging_domain and vault_domain
- * canisters through governor-authenticated actors. Domains without move
- * endpoints yet must be empty for the club, otherwise the move refuses.
+ * canisters through governor-authenticated actors. Every club-scoped domain
+ * is covered; secret_workload_identity is deployment-wide and never copied.
  * Snapshots are opaque Candid blobs — never decoded or decrypted here. */
 import type { DomainDigest } from './groupTransfer';
 import type { TransferAdapter } from './groupTransferRunner';
@@ -26,9 +26,13 @@ export type ChatActor = FenceActor & {
   purge_club_snapshot(club: string): Promise<R<bigint>>;
 };
 type Fenced = SnapshotActor & FenceActor;
-export type GroupActors = { club_domain: ClubActor; events_domain: Fenced; messaging_domain: ChatActor; vault_domain: Fenced; club_points_domain: Fenced; mini_league_domain: Fenced };
-export const LIVE_DOMAINS = ['club_domain', 'events_domain', 'messaging_domain', 'vault_domain', 'club_points_domain', 'mini_league_domain'] as const;
-const FENCE_DOMAINS = ['events_domain', 'messaging_domain', 'vault_domain', 'club_points_domain', 'mini_league_domain'] as const;
+const SIMPLE = ['events_domain', 'vault_domain', 'club_points_domain', 'mini_league_domain', 'competition_domain', 'media_metadata',
+  'insights_domain', 'notification_queue', 'pii_access_control', 'timer_jobs'] as const;
+export type GroupActors = { club_domain: ClubActor; messaging_domain: ChatActor } & { [K in (typeof SIMPLE)[number]]: Fenced };
+export const LIVE_DOMAINS = ['club_domain', 'messaging_domain', ...SIMPLE] as const;
+const FENCE_DOMAINS = ['messaging_domain', ...SIMPLE] as const;
+/** Deployment-wide services holding no club data (workload identities/secret audit): never copied, never purged. */
+export const GLOBAL_DOMAINS = ['secret_workload_identity'] as const;
 const CHAT_PAGE = 500n;
 
 export async function sha256Hex(data: Uint8Array): Promise<string> {
@@ -51,6 +55,7 @@ export type LiveAdapterDeps = {
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
   const live = (domain: string) => (LIVE_DOMAINS as readonly string[]).includes(domain);
+  const global = (domain: string) => (GLOBAL_DOMAINS as readonly string[]).includes(domain);
   // Both sides are fenced: source blocks writes, target accepts imports only.
   const fenceAll = async (group: string, club: string, on: boolean) => {
     const a = d.actors(group);
@@ -84,6 +89,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       }
     },
     async exportPage(group, club, domain, cursor) {
+      if (global(domain)) return { rows: [], next: null };
       if (!live(domain)) { await d.assertDomainEmpty(group, club, domain); return { rows: [], next: null }; }
       const a = d.actors(group);
       if (domain === 'messaging_domain') {

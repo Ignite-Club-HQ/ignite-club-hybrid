@@ -147,6 +147,13 @@ export interface timer_jobsInterface {
     claim_with_lease(arg0: bigint, arg1: number, arg2: bigint): Promise<result_jobs>;
     complete(arg0: string, arg1: string): Promise<result_job>;
     cycles_balance(): Promise<bigint>;
+    export_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Uint8Array;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     export_state(): Promise<result_snapshot>;
     fail(arg0: string, arg1: string, arg2: bigint | null): Promise<result_job>;
     get_job(arg0: string): Promise<job | null>;
@@ -154,6 +161,13 @@ export interface timer_jobsInterface {
     grant_callback_scope(arg0: Principal, arg1: string): Promise<result_unit>;
     grant_worker(arg0: Principal): Promise<result_unit>;
     grant_worker_scope(arg0: Principal, arg1: string): Promise<result_unit>;
+    import_club_snapshot(arg0: string, arg1: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     import_state(arg0: snapshot): Promise<result_unit>;
     initialize(): Promise<result_unit>;
     list_jobs(arg0: string | null, arg1: number): Promise<result_page>;
@@ -162,11 +176,19 @@ export interface timer_jobsInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
+    purge_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     reconcile(arg0: snapshot): Promise<result_reconciliation>;
     recover_expired(arg0: bigint): Promise<result_nat16>;
     recover_interrupted(): Promise<result_nat16>;
     schedule(arg0: string, arg1: string, arg2: bigint, arg3: string): Promise<result_job>;
     schedule_with_callback(arg0: string, arg1: string, arg2: Principal | null, arg3: bigint, arg4: string): Promise<result_job>;
+    set_transfer_fence(arg0: string, arg1: boolean): Promise<result_unit>;
 }
 import type { job as _job, page as _page, queue_state as _queue_state, reconciliation as _reconciliation, result_job as _result_job, result_jobs as _result_jobs, result_nat16 as _result_nat16, result_page as _result_page, result_reconciliation as _result_reconciliation, result_snapshot as _result_snapshot, result_state as _result_state, result_unit as _result_unit, snapshot as _snapshot, status as _status } from "./declarations/timer_jobs.did";
 export class Timer_jobs implements timer_jobsInterface {
@@ -191,17 +213,27 @@ export class Timer_jobs implements timer_jobsInterface {
         const result = await this.actor.cycles_balance();
         return result;
     }
+    async export_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Uint8Array;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.export_club_snapshot(arg0);
+        return from_candid_variant_n17(result);
+    }
     async export_state(): Promise<result_snapshot> {
         const result = await this.actor.export_state();
-        return from_candid_result_snapshot_n17(result);
+        return from_candid_result_snapshot_n18(result);
     }
     async fail(arg0: string, arg1: string, arg2: bigint | null): Promise<result_job> {
-        const result = await this.actor.fail(arg0, arg1, to_candid_opt_n21(arg2));
+        const result = await this.actor.fail(arg0, arg1, to_candid_opt_n22(arg2));
         return from_candid_result_job_n15(result);
     }
     async get_job(arg0: string): Promise<job | null> {
         const result = await this.actor.get_job(arg0);
-        return from_candid_opt_n22(result);
+        return from_candid_opt_n23(result);
     }
     async get_state(): Promise<queue_state> {
         const result = await this.actor.get_state();
@@ -209,27 +241,37 @@ export class Timer_jobs implements timer_jobsInterface {
     }
     async grant_callback_scope(arg0: Principal, arg1: string): Promise<result_unit> {
         const result = await this.actor.grant_callback_scope(arg0, arg1);
-        return from_candid_result_unit_n23(result);
+        return from_candid_result_unit_n24(result);
     }
     async grant_worker(arg0: Principal): Promise<result_unit> {
         const result = await this.actor.grant_worker(arg0);
-        return from_candid_result_unit_n23(result);
+        return from_candid_result_unit_n24(result);
     }
     async grant_worker_scope(arg0: Principal, arg1: string): Promise<result_unit> {
         const result = await this.actor.grant_worker_scope(arg0, arg1);
-        return from_candid_result_unit_n23(result);
+        return from_candid_result_unit_n24(result);
+    }
+    async import_club_snapshot(arg0: string, arg1: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.import_club_snapshot(arg0, arg1);
+        return from_candid_variant_n26(result);
     }
     async import_state(arg0: snapshot): Promise<result_unit> {
-        const result = await this.actor.import_state(to_candid_snapshot_n25(arg0));
-        return from_candid_result_unit_n23(result);
+        const result = await this.actor.import_state(to_candid_snapshot_n27(arg0));
+        return from_candid_result_unit_n24(result);
     }
     async initialize(): Promise<result_unit> {
         const result = await this.actor.initialize();
-        return from_candid_result_unit_n23(result);
+        return from_candid_result_unit_n24(result);
     }
     async list_jobs(arg0: string | null, arg1: number): Promise<result_page> {
-        const result = await this.actor.list_jobs(to_candid_opt_n34(arg0), arg1);
-        return from_candid_result_page_n35(result);
+        const result = await this.actor.list_jobs(to_candid_opt_n36(arg0), arg1);
+        return from_candid_result_page_n37(result);
     }
     async memory_stats(): Promise<{
         memory_bytes: bigint;
@@ -239,25 +281,39 @@ export class Timer_jobs implements timer_jobsInterface {
         const result = await this.actor.memory_stats();
         return result;
     }
+    async purge_club_snapshot(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n26(result);
+    }
     async reconcile(arg0: snapshot): Promise<result_reconciliation> {
-        const result = await this.actor.reconcile(to_candid_snapshot_n25(arg0));
-        return from_candid_result_reconciliation_n39(result);
+        const result = await this.actor.reconcile(to_candid_snapshot_n27(arg0));
+        return from_candid_result_reconciliation_n41(result);
     }
     async recover_expired(arg0: bigint): Promise<result_nat16> {
         const result = await this.actor.recover_expired(arg0);
-        return from_candid_result_nat16_n41(result);
+        return from_candid_result_nat16_n43(result);
     }
     async recover_interrupted(): Promise<result_nat16> {
         const result = await this.actor.recover_interrupted();
-        return from_candid_result_nat16_n41(result);
+        return from_candid_result_nat16_n43(result);
     }
     async schedule(arg0: string, arg1: string, arg2: bigint, arg3: string): Promise<result_job> {
         const result = await this.actor.schedule(arg0, arg1, arg2, arg3);
         return from_candid_result_job_n15(result);
     }
     async schedule_with_callback(arg0: string, arg1: string, arg2: Principal | null, arg3: bigint, arg4: string): Promise<result_job> {
-        const result = await this.actor.schedule_with_callback(arg0, arg1, to_candid_opt_n43(arg2), arg3, arg4);
+        const result = await this.actor.schedule_with_callback(arg0, arg1, to_candid_opt_n45(arg2), arg3, arg4);
         return from_candid_result_job_n15(result);
+    }
+    async set_transfer_fence(arg0: string, arg1: boolean): Promise<result_unit> {
+        const result = await this.actor.set_transfer_fence(arg0, arg1);
+        return from_candid_result_unit_n24(result);
     }
 }
 function from_candid_job_n9(value: _job): job {
@@ -269,14 +325,14 @@ function from_candid_opt_n11(value: [] | [string]): string | null {
 function from_candid_opt_n14(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n22(value: [] | [_job]): job | null {
+function from_candid_opt_n23(value: [] | [_job]): job | null {
     return value.length === 0 ? null : from_candid_job_n9(value[0]);
 }
 function from_candid_opt_n5(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_page_n37(value: _page): page {
-    return from_candid_record_n38(value);
+function from_candid_page_n39(value: _page): page {
+    return from_candid_record_n40(value);
 }
 function from_candid_queue_state_n3(value: _queue_state): queue_state {
     return from_candid_record_n4(value);
@@ -314,7 +370,7 @@ function from_candid_record_n10(value: {
         idempotency_key: value.idempotency_key
     };
 }
-function from_candid_record_n20(value: {
+function from_candid_record_n21(value: {
     jobs: Array<_job>;
     state: _queue_state;
 }): {
@@ -324,18 +380,6 @@ function from_candid_record_n20(value: {
     return {
         jobs: from_candid_vec_n8(value.jobs),
         state: from_candid_queue_state_n3(value.state)
-    };
-}
-function from_candid_record_n38(value: {
-    jobs: Array<_job>;
-    next: [] | [string];
-}): {
-    jobs: Array<job>;
-    next?: string;
-} {
-    return {
-        jobs: from_candid_vec_n8(value.jobs),
-        next: record_opt_to_undefined(from_candid_opt_n11(value.next))
     };
 }
 function from_candid_record_n4(value: {
@@ -350,32 +394,44 @@ function from_candid_record_n4(value: {
         next_run_at_ms: record_opt_to_undefined(from_candid_opt_n5(value.next_run_at_ms))
     };
 }
+function from_candid_record_n40(value: {
+    jobs: Array<_job>;
+    next: [] | [string];
+}): {
+    jobs: Array<job>;
+    next?: string;
+} {
+    return {
+        jobs: from_candid_vec_n8(value.jobs),
+        next: record_opt_to_undefined(from_candid_opt_n11(value.next))
+    };
+}
 function from_candid_result_job_n15(value: _result_job): result_job {
     return from_candid_variant_n16(value);
 }
 function from_candid_result_jobs_n6(value: _result_jobs): result_jobs {
     return from_candid_variant_n7(value);
 }
-function from_candid_result_nat16_n41(value: _result_nat16): result_nat16 {
+function from_candid_result_nat16_n43(value: _result_nat16): result_nat16 {
+    return from_candid_variant_n44(value);
+}
+function from_candid_result_page_n37(value: _result_page): result_page {
+    return from_candid_variant_n38(value);
+}
+function from_candid_result_reconciliation_n41(value: _result_reconciliation): result_reconciliation {
     return from_candid_variant_n42(value);
 }
-function from_candid_result_page_n35(value: _result_page): result_page {
-    return from_candid_variant_n36(value);
-}
-function from_candid_result_reconciliation_n39(value: _result_reconciliation): result_reconciliation {
-    return from_candid_variant_n40(value);
-}
-function from_candid_result_snapshot_n17(value: _result_snapshot): result_snapshot {
-    return from_candid_variant_n18(value);
+function from_candid_result_snapshot_n18(value: _result_snapshot): result_snapshot {
+    return from_candid_variant_n19(value);
 }
 function from_candid_result_state_n1(value: _result_state): result_state {
     return from_candid_variant_n2(value);
 }
-function from_candid_result_unit_n23(value: _result_unit): result_unit {
-    return from_candid_variant_n24(value);
+function from_candid_result_unit_n24(value: _result_unit): result_unit {
+    return from_candid_variant_n25(value);
 }
-function from_candid_snapshot_n19(value: _snapshot): snapshot {
-    return from_candid_record_n20(value);
+function from_candid_snapshot_n20(value: _snapshot): snapshot {
+    return from_candid_record_n21(value);
 }
 function from_candid_status_n12(value: _status): status {
     return from_candid_variant_n13(value);
@@ -410,7 +466,26 @@ function from_candid_variant_n16(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n18(value: {
+function from_candid_variant_n17(value: {
+    Ok: Uint8Array;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Uint8Array;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n19(value: {
     Ok: _snapshot;
 } | {
     Err: string;
@@ -423,7 +498,7 @@ function from_candid_variant_n18(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_snapshot_n19(value.Ok)
+        Ok: from_candid_snapshot_n20(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -448,7 +523,7 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n24(value: {
+function from_candid_variant_n25(value: {
     Ok: null;
 } | {
     Err: string;
@@ -467,7 +542,26 @@ function from_candid_variant_n24(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n36(value: {
+function from_candid_variant_n26(value: {
+    Ok: bigint;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: bigint;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n38(value: {
     Ok: _page;
 } | {
     Err: string;
@@ -480,13 +574,13 @@ function from_candid_variant_n36(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_page_n37(value.Ok)
+        Ok: from_candid_page_n39(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n40(value: {
+function from_candid_variant_n42(value: {
     Ok: _reconciliation;
 } | {
     Err: string;
@@ -505,7 +599,7 @@ function from_candid_variant_n40(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n42(value: {
+function from_candid_variant_n44(value: {
     Ok: number;
 } | {
     Err: string;
@@ -546,22 +640,22 @@ function from_candid_variant_n7(value: {
 function from_candid_vec_n8(value: Array<_job>): Array<job> {
     return value.map((x)=>from_candid_job_n9(x));
 }
-function to_candid_job_n28(value: job): _job {
-    return to_candid_record_n29(value);
+function to_candid_job_n30(value: job): _job {
+    return to_candid_record_n31(value);
 }
-function to_candid_opt_n21(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n22(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n34(value: string | null): [] | [string] {
+function to_candid_opt_n36(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n43(value: Principal | null): [] | [Principal] {
+function to_candid_opt_n45(value: Principal | null): [] | [Principal] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_queue_state_n32(value: queue_state): _queue_state {
-    return to_candid_record_n33(value);
+function to_candid_queue_state_n34(value: queue_state): _queue_state {
+    return to_candid_record_n35(value);
 }
-function to_candid_record_n26(value: {
+function to_candid_record_n28(value: {
     jobs: Array<job>;
     state: queue_state;
 }): {
@@ -569,11 +663,11 @@ function to_candid_record_n26(value: {
     state: _queue_state;
 } {
     return {
-        jobs: to_candid_vec_n27(value.jobs),
-        state: to_candid_queue_state_n32(value.state)
+        jobs: to_candid_vec_n29(value.jobs),
+        state: to_candid_queue_state_n34(value.state)
     };
 }
-function to_candid_record_n29(value: {
+function to_candid_record_n31(value: {
     id: string;
     last_error?: string;
     status: status;
@@ -597,7 +691,7 @@ function to_candid_record_n29(value: {
     return {
         id: value.id,
         last_error: value.last_error ? candid_some(value.last_error) : candid_none(),
-        status: to_candid_status_n30(value.status),
+        status: to_candid_status_n32(value.status),
         run_at_ms: value.run_at_ms,
         attempts: value.attempts,
         scope: value.scope,
@@ -606,7 +700,7 @@ function to_candid_record_n29(value: {
         idempotency_key: value.idempotency_key
     };
 }
-function to_candid_record_n33(value: {
+function to_candid_record_n35(value: {
     armed: boolean;
     next_run_at_ms?: bigint;
 }): {
@@ -618,13 +712,13 @@ function to_candid_record_n33(value: {
         next_run_at_ms: value.next_run_at_ms ? candid_some(value.next_run_at_ms) : candid_none()
     };
 }
-function to_candid_snapshot_n25(value: snapshot): _snapshot {
-    return to_candid_record_n26(value);
+function to_candid_snapshot_n27(value: snapshot): _snapshot {
+    return to_candid_record_n28(value);
 }
-function to_candid_status_n30(value: status): _status {
-    return to_candid_variant_n31(value);
+function to_candid_status_n32(value: status): _status {
+    return to_candid_variant_n33(value);
 }
-function to_candid_variant_n31(value: status): {
+function to_candid_variant_n33(value: status): {
     Failed: null;
 } | {
     Processing: null;
@@ -643,8 +737,8 @@ function to_candid_variant_n31(value: status): {
         Pending: null
     } : value;
 }
-function to_candid_vec_n27(value: Array<job>): Array<_job> {
-    return value.map((x)=>to_candid_job_n28(x));
+function to_candid_vec_n29(value: Array<job>): Array<_job> {
+    return value.map((x)=>to_candid_job_n30(x));
 }
 export interface CreateActorOptions {
     agent?: Agent;

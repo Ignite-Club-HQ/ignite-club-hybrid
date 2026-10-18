@@ -23,6 +23,11 @@ type Main =
                                 Err: text;
                                 Ok;
                               });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    get_club_media_vetkey: (club_id: text, transport_public_key: blob) ->
     (variant {
        Err: text;
@@ -53,6 +58,11 @@ type Main =
                 Err: text;
                 Ok;
               });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    memory_stats: () ->
     (record {
        heap_bytes: nat;
@@ -70,6 +80,10 @@ type Main =
                                             Err: text;
                                             Ok: nat32;
                                           });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    register_pii: (pii_id: text, field_id: text, ciphertext: vec nat8,
     domain_owner: principal) -> (variant {
                                    Err: text;
@@ -106,6 +120,11 @@ type Main =
        Ok;
      });
    set_competition_domain_canister: (canister: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_transfer_fence: (club: text, fenced: bool) ->
     (variant {
        Err: text;
        Ok;

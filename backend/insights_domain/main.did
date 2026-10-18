@@ -62,6 +62,11 @@ type Main =
        Err: text;
        Ok: vec AdEventSummary;
      }) query;
+   add_memory_report: (source: text, readings_json: text, analysis_json:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    append_audit_log: (action_type: text, table_name: text, target_user_id:
     opt text, target_user_name: opt text, details: text) ->
     (variant {
@@ -131,7 +136,6 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
-   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
    delete_ad: (id: text) -> (variant {
                                Err: text;
                                Ok;
@@ -140,6 +144,11 @@ type Main =
                                      Err: text;
                                      Ok;
                                    });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
    get_ad_setting: (location: text) -> (opt AppAdSetting) query;
    get_benchmarks: (metric_keys: vec text) ->
     (variant {
@@ -166,8 +175,11 @@ type Main =
                     Err: text;
                     Ok;
                   });
-   add_memory_report: (text, text, text) -> (variant { Ok; Err: text });
-   list_memory_reports: (nat) -> (vec record { at: int; source: text; readings_json: text; analysis_json: text }) query;
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    is_app_admin: () -> (bool) query;
    list_active_ads: () -> (vec AppAd) query;
    list_ad_settings: () -> (variant {
@@ -205,11 +217,25 @@ type Main =
              total: nat32;
            };
      }) query;
+   list_memory_reports: (limit: nat) ->
+    (vec
+      record {
+        analysis_json: text;
+        at: int;
+        readings_json: text;
+        source: text;
+      }) query;
    list_user_activity: (club_id: opt text, since_ms: nat64, until_ms:
     nat64) -> (variant {
                  Err: text;
                  Ok: vec UserActivityEntry;
                }) query;
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
    my_feedback: () -> (vec Feedback) query;
    perf_aggregate: (surface: text, source: opt text, since_ms: nat64,
     until_ms: nat64) -> (variant {
@@ -221,6 +247,10 @@ type Main =
        Err: text;
        Ok: vec PhotoEngagementTotal;
      }) query;
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
    record_active_user: (club_id: text, account_id: text) ->
     (variant {
        Err: text;
@@ -313,6 +343,11 @@ type Main =
                                                       Err: text;
                                                       Ok;
                                                     });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    submit_feedback: (kind: text, title: opt text, message: text, page_url:
     opt text) -> (variant {
                     Err: text;

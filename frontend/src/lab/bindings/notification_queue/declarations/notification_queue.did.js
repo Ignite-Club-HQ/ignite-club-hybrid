@@ -244,6 +244,11 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'export_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'fail' : IDL.Func([IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64)], [Result], []),
     'fan_out' : IDL.Func(
         [
@@ -305,6 +310,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'import_club_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'list_device_tokens' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [DeviceTokensResult],
@@ -347,6 +357,11 @@ export const idlFactory = ({ IDL }) => {
     'merge_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'record_chat_notify_batch' : IDL.Func(
@@ -429,6 +444,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_messaging_domain_canister' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_transfer_fence' : IDL.Func(
+        [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

@@ -124,6 +124,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'export_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'export_state' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
@@ -138,6 +143,11 @@ export const idlFactory = ({ IDL }) => {
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_club_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'issue_capability' : IDL.Func(
@@ -172,6 +182,11 @@ export const idlFactory = ({ IDL }) => {
     'merge_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'register_asset' : IDL.Func(
@@ -227,6 +242,11 @@ export const idlFactory = ({ IDL }) => {
     'set_blob_ref' : IDL.Func(
         [IDL.Text, IDL.Opt(BlobRef)],
         [IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_transfer_fence' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'transfer_governorship' : IDL.Func(
