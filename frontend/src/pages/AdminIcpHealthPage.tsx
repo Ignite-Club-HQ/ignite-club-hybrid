@@ -47,6 +47,12 @@ const cyclesIdl: IDL.InterfaceFactory = ({ IDL }) =>
     cycles_balance: IDL.Func([], [IDL.Nat], ["query"]),
     memory_stats: IDL.Func([], [IDL.Record({ heap_bytes: IDL.Nat, memory_bytes: IDL.Nat, stable_bytes: IDL.Nat })], ["query"]),
   });
+// The web-app (asset) canister has no cycles_balance query of its own, so its
+// balance is read through club_domain's canister_cycles proxy (club_domain is
+// added as a controller by the frontend deploy workflow).
+const FRONTEND_CANISTER_ID = "proe7-kqaaa-aaaas-qg6gq-cai";
+const proxyIdl: IDL.InterfaceFactory = ({ IDL }) =>
+  IDL.Service({ canister_cycles: IDL.Func([IDL.Principal], [IDL.Nat], []) });
 type MemStats = { heap_bytes: bigint; memory_bytes: bigint; stable_bytes: bigint };
 const WARN_MEMORY_MB = 3000;
 
