@@ -117,14 +117,29 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'reconcile_upload_operations' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'attempted' : IDL.Nat, 'cursor' : IDL.Text }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
     'retire_upload_outcomes' : IDL.Func(
-        [],
-        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'cursor' : IDL.Text, 'removed' : IDL.Nat }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),

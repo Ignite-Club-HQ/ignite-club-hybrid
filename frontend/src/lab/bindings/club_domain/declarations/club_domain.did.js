@@ -1608,8 +1608,17 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'retire_media_quota_records' : IDL.Func(
-        [],
-        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'reservation_cursor' : IDL.Text,
+              'usage_cursor' : IDL.Text,
+              'removed' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'revoke_identity' : IDL.Func(

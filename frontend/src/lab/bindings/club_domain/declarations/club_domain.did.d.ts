@@ -1124,8 +1124,14 @@ export interface Main {
       { 'Err' : string }
   >,
   'retire_media_quota_records' : ActorMethod<
-    [],
-    { 'Ok' : bigint } |
+    [string, string],
+    {
+        'Ok' : {
+          'reservation_cursor' : string,
+          'usage_cursor' : string,
+          'removed' : bigint,
+        }
+      } |
       { 'Err' : string }
   >,
   'revoke_identity' : ActorMethod<

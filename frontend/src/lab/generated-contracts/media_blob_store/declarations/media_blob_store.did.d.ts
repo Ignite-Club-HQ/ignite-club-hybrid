@@ -101,14 +101,19 @@ export interface _SERVICE {
       'frozen' : boolean,
     }
   >,
+  'reconcile_upload_operations' : ActorMethod<
+    [string],
+    { 'Ok' : { 'attempted' : bigint, 'cursor' : string } } |
+      { 'Err' : string }
+  >,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
       { 'err' : string }
   >,
   'retire_upload_outcomes' : ActorMethod<
-    [],
-    { 'Ok' : bigint } |
+    [string],
+    { 'Ok' : { 'cursor' : string, 'removed' : bigint } } |
       { 'Err' : string }
   >,
   'set_capacity_limit' : ActorMethod<[bigint], Result>,

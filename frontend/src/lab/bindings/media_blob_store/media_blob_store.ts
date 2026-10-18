@@ -156,6 +156,16 @@ export interface media_blob_storeInterface {
         offset: bigint;
         frozen: boolean;
     }>;
+    reconcile_upload_operations(cursor: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            attempted: bigint;
+            cursor: string;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -163,9 +173,12 @@ export interface media_blob_storeInterface {
         __kind__: "err";
         err: string;
     }>;
-    retire_upload_outcomes(): Promise<{
+    retire_upload_outcomes(cursor: string): Promise<{
         __kind__: "Ok";
-        Ok: bigint;
+        Ok: {
+            cursor: string;
+            removed: bigint;
+        };
     } | {
         __kind__: "Err";
         Err: string;
@@ -266,6 +279,19 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.quota_snapshot_page(arg0);
         return result;
     }
+    async reconcile_upload_operations(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            attempted: bigint;
+            cursor: string;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.reconcile_upload_operations(arg0);
+        return from_candid_variant_n15(result);
+    }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -276,15 +302,18 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
         return from_candid_variant_n14(result);
     }
-    async retire_upload_outcomes(): Promise<{
+    async retire_upload_outcomes(arg0: string): Promise<{
         __kind__: "Ok";
-        Ok: bigint;
+        Ok: {
+            cursor: string;
+            removed: bigint;
+        };
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.retire_upload_outcomes();
-        return from_candid_variant_n15(result);
+        const result = await this.actor.retire_upload_outcomes(arg0);
+        return from_candid_variant_n16(result);
     }
     async set_capacity_limit(arg0: bigint): Promise<Result> {
         const result = await this.actor.set_capacity_limit(arg0);
@@ -376,12 +405,43 @@ function from_candid_variant_n14(value: {
     } : value;
 }
 function from_candid_variant_n15(value: {
-    Ok: bigint;
+    Ok: {
+        attempted: bigint;
+        cursor: string;
+    };
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: bigint;
+    Ok: {
+        attempted: bigint;
+        cursor: string;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n16(value: {
+    Ok: {
+        cursor: string;
+        removed: bigint;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        cursor: string;
+        removed: bigint;
+    };
 } | {
     __kind__: "Err";
     Err: string;
