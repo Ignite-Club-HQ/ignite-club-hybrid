@@ -1508,6 +1508,20 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_my_club_memberships_indexed' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Nat16],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'clubs' : IDL.Vec(IDL.Text),
+              'next' : IDL.Opt(IDL.Text),
+              'acl_revision' : IDL.Nat64,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'record_presence_heartbeat' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
