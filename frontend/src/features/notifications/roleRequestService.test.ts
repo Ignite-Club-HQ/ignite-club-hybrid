@@ -4,6 +4,9 @@ import type { Database } from "@/integrations/supabase/types";
 import { friendlyRoleRequestError, processRoleRequest } from "./roleRequestService";
 
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+const live = vi.hoisted(() => ({ approve: vi.fn().mockResolvedValue(undefined), reject: vi.fn().mockResolvedValue(undefined), context: {} }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => supabaseMode ? p.supabase() : p.icp(live.context) }));
+vi.mock("@/live/features/membership", () => ({ approveLiveRoleRequest: live.approve, rejectLiveRoleRequest: live.reject }));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -92,10 +95,11 @@ describe.runIf(supabaseMode)("role request service", () => {
 });
 
 describe.runIf(!supabaseMode)("role request service — ICP boundary", () => {
-  it("fails closed before reading or writing Supabase role requests", async () => {
+  it("approves through the authenticated on-chain provider without Supabase", async () => {
     const fake = fakeClient({ request });
     await expect(processRoleRequest("request-a", "approve", fake.client, profileLookup))
-      .rejects.toThrow(/not available yet for internet identity accounts/i);
+      .resolves.toBeUndefined();
+    expect(live.approve).toHaveBeenCalledWith(live.context, "request-a");
     expect(fake.calls).toEqual([]);
   });
 });

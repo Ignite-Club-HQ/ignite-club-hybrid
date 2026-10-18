@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc } }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown }) => p.supabase() }));
 
 import { markChatScopeNotificationsRead } from "./markChatScopeRead";
 

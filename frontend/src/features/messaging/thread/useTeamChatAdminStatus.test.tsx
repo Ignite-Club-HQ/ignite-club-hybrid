@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useTeamChatAdminStatus, type TeamChatSupabaseClient } from "./useTeamChatAdminStatus";
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => false }));
 
 function makeWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
