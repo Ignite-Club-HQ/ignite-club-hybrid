@@ -879,6 +879,15 @@ export interface Main {
       { 'Err' : string }
   >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  /**
+   * / Location-only lookup for group routing: which club owns this event, if
+   * / it lives in this canister. Viewers only; returns null when not held here.
+   */
+  'read_event_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'record_event_view' : ActorMethod<
     [string],
     { 'Ok' : null } |

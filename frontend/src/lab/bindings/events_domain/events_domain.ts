@@ -852,6 +852,17 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Location-only lookup for group routing: which club owns this event, if
+     * / it lives in this canister. Viewers only; returns null when not held here.
+     */
+    read_event_club(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     record_event_view(event_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2672,6 +2683,16 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.purge_my_data();
         return from_candid_variant_n43(result);
+    }
+    async read_event_club(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_event_club(arg0);
+        return from_candid_variant_n132(result);
     }
     async record_event_view(arg0: string): Promise<{
         __kind__: "Ok";

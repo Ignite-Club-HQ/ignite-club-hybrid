@@ -556,6 +556,13 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   /// Location-only lookup for group routing: which club owns this chat, if
+   /// it lives in this canister. Participants only; null when not held here.
+   read_conversation_club: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) query;
    recapTransform: (record {
                       context: blob;
                       response: HttpRequestResult;
