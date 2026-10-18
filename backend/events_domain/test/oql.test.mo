@@ -1,0 +1,41 @@
+import Oql "../../shared/Oql";
+import Events "../src/oqlEvents";
+import Types "../src/types";
+import Principal "mo:core/Principal";
+let member = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
+let owner = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+let governor = Principal.fromText("aaaaa-aa");
+let stranger = Principal.fromText("r7inp-6aaaa-aaaaa-aaabq-cai");
+let roles : [Types.RoleGrant] = [{ user = member; club_id = "club-a"; team_id = null; role = "player" }];
+let event : Types.Event = {
+  id = "event-a"; club_id = "club-a"; team_id = ?"team-a"; title = "Match";
+  description = "private notes"; event_type = "game"; location = null; cancelled = false;
+  creator = owner; starts_at_ms = 100; ends_at_ms = 200; series_id = null; revision = 1;
+  deleted = false; opponent = null; address = null; mini_league_id = null; updated_at_ms = 100;
+  rsvp_audience = null; adults_only = false; restricted_to_roles = null; target_team_ids = null;
+};
+let source = [event, { event with id = "hidden"; club_id = "club-b" }, { event with id = "deleted"; deleted = true }];
+let request = Oql.parse("{\"entity\":\"events\"}", [Events.entity]);
+func run(caller : Principal, q : Oql.Query) : Oql.Result {
+  Oql.run<Types.Event>(q, source, func(e) = not e.deleted and Events.canView(caller, governor, roles, e), Events.row)
+};
+assert run(Principal.anonymous(), request).rows.size() == 0;
+assert run(stranger, request).rows.size() == 0;
+assert run(member, request).rows.size() == 1;
+assert run(owner, request).rows.size() == 2;
+assert run(governor, request).rows.size() == 2;
+let count = Oql.parse("{\"entity\":\"events\",\"aggregate\":\"count\"}", [Events.entity]);
+assert run(member, count).rows == [[Oql.integer("count", 1)]];
+assert run(stranger, count).rows == [[Oql.integer("count", 0)]];
+let narrowed = Oql.parse("{\"entity\":\"events\",\"filters\":[{\"field\":\"club_id\",\"op\":\"eq\",\"value\":\"club-b\"}]}", [Events.entity]);
+assert run(member, narrowed).rows.size() == 0;
+let upcoming = Oql.parse("{\"entity\":\"events\",\"select\":[\"id\"],\"filters\":[{\"field\":\"starts_at_ms\",\"op\":\"gt\",\"value\":100}]}", [Events.entity]);
+assert run(member, upcoming).rows.size() == 0;
+let page = Oql.parse("{\"entity\":\"events\",\"select\":[\"id\"],\"orderBy\":{\"field\":\"id\",\"direction\":\"desc\"},\"limit\":1}", [Events.entity]);
+assert run(owner, page).rows == [[Oql.text("id", "hidden")]];
+assert run(owner, page).hasMore;
+let next = { page with offset = 1 };
+assert run(owner, next).rows == [[Oql.text("id", "event-a")]];
+assert not run(owner, next).hasMore;
+let grouped = Oql.parse("{\"entity\":\"events\",\"aggregate\":\"count\",\"groupBy\":\"club_id\"}", [Events.entity]);
+assert run(member, grouped).rows == [[Oql.text("club_id", "club-a"), Oql.integer("count", 1)]];

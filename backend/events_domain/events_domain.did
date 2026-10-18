@@ -1,3 +1,10 @@
+type Value = 
+ variant {
+   "bool": bool;
+   "int": int;
+   "null";
+   "text": text;
+ };
 type TeamTrainingPause = 
  record {
    club_id: text;
@@ -40,6 +47,7 @@ type Rsvp =
    state: text;
    updated_at_ms: nat64;
  };
+type Row = vec Cell;
 type RosterEntry = 
  record {
    account_id: text;
@@ -52,6 +60,11 @@ type RoleGrant =
    role: text;
    team_id: opt text;
    user: principal;
+ };
+type Result = 
+ record {
+   hasMore: bool;
+   rows: vec Row;
  };
 type ReminderLog = 
  record {
@@ -347,6 +360,7 @@ type Main =
        Err: text;
        Ok: EventRoster;
      }) query;
+   execute: (input: text) -> (Result) query;
    export_state: () ->
     (variant {
        Err: text;
@@ -816,6 +830,7 @@ type Main =
        Err: text;
        Ok: PitchBoardSettings;
      });
+   schema: () -> (text) query;
    send_event_reminders: (event_id: text) -> (variant {
                                                 Err: text;
                                                 Ok: nat16;
@@ -1279,6 +1294,11 @@ type Child =
  record {
    id: text;
    parent_id: opt text;
+ };
+type Cell = 
+ record {
+   name: text;
+   value: Value;
  };
 type AttendanceInput = 
  record {

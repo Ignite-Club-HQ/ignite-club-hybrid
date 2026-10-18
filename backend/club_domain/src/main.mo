@@ -17,6 +17,8 @@ import Time "mo:core/Time";
 import Timer "mo:core/Timer";
 import Types "types";
 import AccountErasure "accountErasure";
+import Oql "../../shared/Oql";
+import OqlClubs "oqlClubs";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -1973,12 +1975,26 @@ persistent actor class Main(governorInit : Principal) {
     "## Key reads (queries)\n" #
     "- `whoami()`: the caller's account record.\n" #
     "- `list_role_grants(club)`: role roster for a club — requires club admin.\n" #
-    "- `list_clubs()` / `get_club_profile(id)` / `list_teams(club)` / `get_team(id)`: public directory.\n\n" #
+    "- `schema()` describes read-only clubs/teams OQL; `execute(json)` requires Internet Identity and returns only non-deleted clubs/teams where the caller is a member or administrator. Filters, projection, ordering, count/groupBy and paging are documented in schema. No contacts, tokens or principal fields.\n" #
+    "- `list_clubs(start_after:?text, limit:nat16)` / `get_club_profile(id)` / `list_teams(club)` / `get_team(id)`: existing directory methods, not caller-scoped.\n\n" #
     "## Permissions model\n" #
     "Roles (club admin, team admin, coach, member, guardian) are stored on-chain and re-checked on every call — a caller can never act on a club or team they have no role in, and can never see another club's private data. Role changes take effect immediately.\n\n" #
     "## Gotchas\n" #
     "- Club and team ids are opaque text ids, not principals.\n" #
     "- Denied calls return `#Err(\"...\")`; anonymous calls to authenticated methods trap."
+  };
+
+  public query func schema() : async Text {
+    Oql.schema(OqlClubs.entities, "{\"entity\":\"clubs\",\"select\":[\"id\",\"name\"],\"limit\":50}")
+  };
+  public query ({ caller }) func execute(input : Text) : async Oql.Result {
+    auth(caller);
+    let request = Oql.parse(input, OqlClubs.entities);
+    if (request.entity == "clubs") {
+      Oql.run<Types.ClubProfile>(request, profiles, func(club) = club.deleted_at_ms == null and (isMember(caller, club.id) or isAdmin(caller, club.id)), OqlClubs.clubRow)
+    } else {
+      Oql.run<Types.ClubTeam>(request, teams, func(team) = team.deleted_at_ms == null and (isMember(caller, team.club_id) or isAdmin(caller, team.club_id)), OqlClubs.teamRow)
+    }
   };
 
   public query ({ caller }) func whoami() : async { #Ok : Types.Account; #Err : Text } {

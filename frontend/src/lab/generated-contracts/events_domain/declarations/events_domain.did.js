@@ -139,6 +139,15 @@ export const idlFactory = ({ IDL }) => {
     'guests' : IDL.Vec(EventGuest),
     'rsvps' : IDL.Vec(RsvpWithChild),
   });
+  const Value = IDL.Variant({
+    'int' : IDL.Int,
+    'bool' : IDL.Bool,
+    'null' : IDL.Null,
+    'text' : IDL.Text,
+  });
+  const Cell = IDL.Record({ 'value' : Value, 'name' : IDL.Text });
+  const Row = IDL.Vec(Cell);
+  const Result = IDL.Record({ 'hasMore' : IDL.Bool, 'rows' : IDL.Vec(Row) });
   const CompetitionEventOperation = IDL.Record({
     'event_ids' : IDL.Vec(IDL.Text),
     'operation_id' : IDL.Text,
@@ -686,6 +695,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : EventRoster, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'execute' : IDL.Func([IDL.Text], [Result], ['query']),
     'export_state' : IDL.Func(
         [],
         [
@@ -1271,6 +1281,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : PitchBoardSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'schema' : IDL.Func([], [IDL.Text], ['query']),
     'send_event_reminders' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],

@@ -18,6 +18,8 @@ import Timer "mo:core/Timer";
 import Call "mo:ic/Call";
 import IC "mo:ic/Types";
 import Types "types";
+import Oql "../../shared/Oql";
+import OqlEvents "oqlEvents";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -30,7 +32,8 @@ persistent actor class Main(governorInit : Principal) {
     "## Authentication\n" #
     "All methods require a signed (non-anonymous) principal. The caller's principal is resolved to an app account; event visibility is limited to the event's governor, its creator, and members of the owning club. You can only ever see events for clubs the signed-in user belongs to.\n\n" #
     "## Key reads (queries)\n" #
-    "- `list_events(club, from_ms, to_ms)` / `list_events_multi(clubs, from_ms, to_ms)`: events for one or more clubs in a time window. Timestamps are milliseconds since the Unix epoch.\n" #
+    "- `schema()` documents read-only OQL events and its JSON dialect; `execute(json)` filters, sorts, projects, counts and pages caller-visible, non-deleted events. Obtain Internet Identity delegation first. Invalid queries trap. No writes or PII decryption.\n" #
+    "- `list_events(club_id:?text, team_id:?text)` / `list_events_multi(club_ids:vec text, team_ids:vec text)`: accept club/team filters, not dates. Use execute with starts_at_ms filters for upcoming events. Timestamps are Unix milliseconds.\n" #
     "- `get_event_roster(event_id)`: RSVPs/attendance for an event.\n" #
     "- `get_event_timer(event_id)`: countdown/timer state for an event.\n" #
     "- `list_playhq_fixtures(...)` is an UPDATE call (not a query): it fetches external fixture data and may take several seconds.\n\n" #
@@ -40,6 +43,14 @@ persistent actor class Main(governorInit : Principal) {
     "- All timestamps are milliseconds (not seconds, not nanoseconds).\n" #
     "- Omitting an option field on update keeps the stored value; passing an explicit empty value clears it.\n" #
     "- Denied calls return `#Err(\"...\")` rather than trapping, except anonymous callers, which trap with `Forbidden`."
+  };
+  public query func schema() : async Text {
+    Oql.schema([OqlEvents.entity], "{\"entity\":\"events\",\"filters\":[{\"field\":\"starts_at_ms\",\"op\":\"gte\",\"value\":1792285200000},{\"field\":\"cancelled\",\"op\":\"eq\",\"value\":false}],\"orderBy\":{\"field\":\"starts_at_ms\",\"direction\":\"asc\"},\"limit\":50}")
+  };
+  public query ({ caller }) func execute(input : Text) : async Oql.Result {
+    auth(caller);
+    let request = Oql.parse(input, [OqlEvents.entity]);
+    Oql.run<Types.Event>(request, events, func(event) = not event.deleted and canView(caller, event), OqlEvents.row)
   };
   // Live memory reading for the admin health page (public, like cycles_balance).
   public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
@@ -250,9 +261,7 @@ persistent actor class Main(governorInit : Principal) {
     roles.any(func(grant) = grant.user.equal(caller) and grant.club_id == club)
   };
   func canView(caller : Principal, event : Types.Event) : Bool {
-    if (caller.equal(Principal.anonymous())) return false;
-    if (isGovernor(caller) or event.creator.equal(caller)) return true;
-    isClubMember(caller, event.club_id)
+    OqlEvents.canView(caller, governor, roles, event)
   };
   func roleInEventScope(caller : Principal, event : Types.Event, allowedRoles : [Text]) : Bool {
     let targets = event.target_team_ids ?? [];

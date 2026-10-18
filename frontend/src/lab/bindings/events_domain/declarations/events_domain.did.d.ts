@@ -45,6 +45,7 @@ export interface AttendanceInput {
   'subject_id' : string,
   'notes' : string,
 }
+export interface Cell { 'value' : Value, 'name' : string }
 export interface Child { 'id' : string, 'parent_id' : [] | [string] }
 export interface ChildGuardian {
   'is_primary' : boolean,
@@ -508,6 +509,7 @@ export interface Main {
     { 'Ok' : EventRoster } |
       { 'Err' : string }
   >,
+  'execute' : ActorMethod<[string], Result>,
   'export_state' : ActorMethod<
     [],
     {
@@ -998,6 +1000,7 @@ export interface Main {
     { 'Ok' : PitchBoardSettings } |
       { 'Err' : string }
   >,
+  'schema' : ActorMethod<[], string>,
   'send_event_reminders' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -1318,6 +1321,7 @@ export interface ReminderLog {
   'event_id' : string,
   'channel' : string,
 }
+export interface Result { 'hasMore' : boolean, 'rows' : Array<Row> }
 export interface RoleGrant {
   'role' : string,
   'user' : Principal,
@@ -1329,6 +1333,7 @@ export interface RosterEntry {
   'child_id' : [] | [string],
   'event_id' : string,
 }
+export type Row = Array<Cell>;
 export interface Rsvp {
   'account_id' : string,
   'source' : string,
@@ -1361,6 +1366,10 @@ export interface TeamTrainingPause {
   'club_id' : string,
   'reason' : string,
 }
+export type Value = { 'int' : bigint } |
+  { 'bool' : boolean } |
+  { 'null' : null } |
+  { 'text' : string };
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];
