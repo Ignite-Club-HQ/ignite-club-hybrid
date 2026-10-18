@@ -103,7 +103,45 @@ Deno.serve(async (request: Request) => {
 
   let claimedInviteId: string | null = null;
   try {
-    const body = (await request.json().catch(() => ({}))) as { inviteId?: unknown };
+    const body = (await request.json().catch(() => ({}))) as { inviteId?: unknown; competitionWelcomeToken?: unknown };
+    const competitionToken = typeof body.competitionWelcomeToken === "string" ? body.competitionWelcomeToken : "";
+
+    if (competitionToken) {
+      // Competition official welcome: recipient and message come from the
+      // competition canister, keyed by the unguessable invite token.
+      const competitionCanisterId = Deno.env.get("COMPETITION_DOMAIN_CANISTER_ID");
+      if (!competitionCanisterId) return json({ error: "Welcome email delivery is not configured" }, 503);
+      if (!INVITE_ID.test(competitionToken)) return json({ error: "Invalid welcome email request" }, 400);
+      const result = await loadCompetitionJob(competitionCanisterId, competitionToken);
+      if ("Err" in result) return json({ sent: false, reason: result.Err });
+      const job = result.Ok;
+      const claimId = `competition:${competitionToken}`;
+      const { data: claimed, error: claimError } = await admin.rpc("claim_icp_welcome_email", { _invite_id: claimId });
+      if (claimError) throw claimError;
+      if (!claimed) return json({ sent: false, reason: "already_sent_or_processing" });
+      claimedInviteId = claimId;
+      const { subject, text, html } = buildWelcomeEmail(
+        { subject: job.subject, message: job.message },
+        { teamName: "", clubName: "", competitionName: job.competition_name, recipientName: job.to.split("@")[0] },
+      );
+      const providerMessageId = await sendWithResend(resendApiKey, {
+        from,
+        to: job.to,
+        subject,
+        text,
+        html,
+        idempotencyKey: `icp-welcome:${claimId}`,
+      });
+      const { error: finishError } = await admin.rpc("finish_icp_welcome_email", {
+        _invite_id: claimId,
+        _sent: true,
+        _provider_message_id: providerMessageId,
+        _error: null,
+      });
+      if (finishError) throw finishError;
+      return json({ sent: true });
+    }
+
     const inviteId = typeof body.inviteId === "string" ? body.inviteId : "";
     if (!INVITE_ID.test(inviteId)) return json({ error: "Invalid welcome email request" }, 400);
 
