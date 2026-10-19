@@ -20,6 +20,11 @@ function adapter(o: Partial<TransferAdapter> = {}) {
   return { a, saved, fences };
 }
 describe('transfer runner', () => {
+  it.each(['fenced', 'copied'] as const)('checks media before resuming %s without copying or releasing locks', async phase => {
+    const { a, fences } = adapter({ verifyMedia: async () => { throw new Error('media registry unavailable'); }, importPage: vi.fn() });
+    await expect(runTransfer({ ...planTransfer('club','a','b',7n), phase }, a)).rejects.toThrow('media registry unavailable');
+    expect(a.importPage).not.toHaveBeenCalled(); expect(a.swapAssignment).not.toHaveBeenCalled(); expect(fences).toEqual([]);
+  });
   it('checks media before locking, copying or changing assignment', async () => {
     const { a, fences } = adapter({ verifyMedia: async () => { throw new Error('Encrypted media'); } });
     await expect(runTransfer(planTransfer('club', 'a', 'b', 7n), a)).rejects.toThrow('Encrypted media');
@@ -49,7 +54,8 @@ describe('transfer runner', () => {
   });
   it('resumes from a persisted phase without refencing', async () => {
     const { a, saved, fences } = adapter();
-    const first = await runTransfer(planTransfer('club', 'a', 'b', 7n), { ...a, readRegistryRevision: async () => { throw new Error('crash'); } }).catch(() => saved.at(-1)!);
+    const first = await runTransfer(planTransfer('club', 'a', 'b', 7n), { ...a, readRegistryRevision: async () => { throw new Error('crash'); } }).catch(() => saved.at(-1));
+    if (!first) throw new Error('Missing persisted transfer');
     expect(first.phase).toBe('verified');
     const done = await runTransfer(first, a); expect(done.phase).toBe('released'); expect(fences).toEqual([true]);
   });
