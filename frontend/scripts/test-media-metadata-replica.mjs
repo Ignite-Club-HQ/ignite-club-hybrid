@@ -32,7 +32,7 @@ try {
     if (name === 'club_domain') ok(await f.actor.freeze_club('c', 1n)); else ok(await f.actor.set_transfer_fence('c', true));
     const first = ok(await f.actor.read_club_media_references('c', 0n, []));
     assert.ok(first.scanned <= 200n); assert.ok('Err' in await f.actor.read_club_media_references('c', 0n, [first.revision + 1n]));
-    f.actor.setPrincipal(stranger); assert.ok('Err' in await f.actor.read_club_media_references('c', 0n, [])); f.actor.setPrincipal(governor);
+    f.actor.setPrincipal(stranger); assert.ok('Err' in await f.actor.read_club_media_references('c', 0n, []).catch(e => ({ Err: String(e) }))); f.actor.setPrincipal(governor);
     if (name === 'media_metadata') {
       assert.equal(first.references.length, 0); assert.deepEqual(first.next, [200n]);
       assert.equal(ok(await f.actor.read_club_media_references('c', 200n, [first.revision])).references.length, 1);
