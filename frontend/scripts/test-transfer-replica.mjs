@@ -118,6 +118,10 @@ try {
   const link = ok(await A.club_domain.create_team_invite_link(CLUB, team, 'player'));
   const inflight = new Map(); let registryRev = 1n; let assignment = 'a'; const blocked = {}; const saved = [];
   const base = liveTransferAdapter({
+    // Isolated fixtures below contain no ICP ciphertext/blob refs or pending
+    // uploads; this is NOT a production inventory reader or activation proof.
+    mediaInventory: async (fromGroup, toGroup, clubId) => ({ fromGroup, toGroup, clubId, complete: true,
+      encryptedObjects: 0, pendingUploads: 0, sharedQuotaReady: true }),
     actors: g => groups[g], fenceRevision: 1n, targetFor: async club => inflight.get(club) ?? null,
     clubSponsorIds: async () => ['sp-legacy'],
     sameDeployment: async () => true,

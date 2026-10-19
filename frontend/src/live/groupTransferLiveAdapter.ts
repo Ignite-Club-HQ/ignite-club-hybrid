@@ -5,6 +5,7 @@
  * Snapshots are opaque Candid blobs — never decoded or decrypted here. */
 import type { DomainDigest } from './groupTransfer';
 import type { TransferAdapter } from './groupTransferRunner';
+import { assertMediaTransferSafe, type MediaTransferInventory } from './mediaTransferSafety';
 
 type R<T> = { Ok: T } | { Err: string };
 const ok = <T>(r: R<T>): T => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
@@ -52,9 +53,16 @@ export type LiveAdapterDeps = {
   fenceRevision: bigint;
   /** Destination group of the club's persisted in-flight transfer — durable, so a restarted operator still unlocks it. */
   targetFor(clubId: string): Promise<string | null>;
+  /** Authenticated complete inventory including chat/vault/article blobs and
+   * pending operations; unavailable readers fail closed, including on resume. */
+  mediaInventory?(fromGroup: string, toGroup: string, clubId: string): Promise<MediaTransferInventory>;
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
+  const verifyMedia = async (from: string, to: string, club: string) => {
+    if (!d.mediaInventory) throw new Error('Authenticated media inventory reader required; club move blocked');
+    assertMediaTransferSafe(await d.mediaInventory(from, to, club), club, from, to);
+  };
   const live = (domain: string) => (LIVE_DOMAINS as readonly string[]).includes(domain);
   const global = (domain: string) => (GLOBAL_DOMAINS as readonly string[]).includes(domain);
   // Both sides are fenced: source blocks writes, target accepts imports only.
@@ -80,6 +88,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
   };
   return {
     sameDeployment: d.sameDeployment,
+    verifyMedia,
     async setFence(group, club, on) {
       await fenceAll(group, club, on);
       if (on) { // locked first, so no new sponsor-only count can land after the fold
@@ -128,6 +137,9 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     readRegistryRevision: d.readRegistryRevision,
     swapAssignment: d.swapAssignment,
     async purgeSource(group, club) {
+      const destination = await d.targetFor(club);
+      if (!destination || destination === group) throw new Error('Persisted destination required before media-safe purge');
+      await verifyMedia(group, destination, club);
       const a = d.actors(group);
       for (const dom of LIVE_DOMAINS) ok(await a[dom].purge_club_snapshot(club));
       await fenceAll(group, club, false);

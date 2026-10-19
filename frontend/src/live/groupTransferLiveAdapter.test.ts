@@ -14,6 +14,19 @@ function deps(sponsors: string[]) {
 }
 
 describe('live move adapter', () => {
+  it('refuses moves without an authenticated media reader', async () => {
+    const { d } = deps([]);
+    await expect(liveTransferAdapter(d).verifyMedia?.('a', 'b', 'club')).rejects.toThrow('inventory reader required');
+  });
+  it('blocks encrypted media and preserves the source before purge', async () => {
+    const { d } = deps([]);
+    d.targetFor = async () => 'b';
+    d.mediaInventory = async (fromGroup, toGroup, clubId) => ({ fromGroup, toGroup, clubId, complete: true, encryptedObjects: 1, pendingUploads: 0, sharedQuotaReady: true });
+    const a = liveTransferAdapter(d);
+    await expect(a.verifyMedia?.('a', 'b', 'club')).rejects.toThrow('Encrypted media');
+    await expect(a.purgeSource('a', 'club')).rejects.toThrow('Encrypted media');
+    expect(d.actors('a').media_metadata.purge_club_snapshot).not.toHaveBeenCalled();
+  });
   it('folds older sponsor-only numbers into the club when it is locked, in chunks of 500', async () => {
     const ids = Array.from({ length: 501 }, (_, i) => `sp${i}`);
     const { d, claim } = deps(ids);
