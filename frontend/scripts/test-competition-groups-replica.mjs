@@ -19,6 +19,7 @@ try {
   const A = await setup(clubIdl, 'CLUB_DOMAIN_WASM'), B = await setup(clubIdl, 'CLUB_DOMAIN_WASM');
   const C = await setup(compIdl, 'COMPETITION_DOMAIN_WASM'), V = await setup(vaultIdl, 'VAULT_DOMAIN_WASM');
   const a = A.actor, b = B.actor, c = C.actor, v = V.actor;
+  for (const actor of [a, b, c, v]) actor.setPrincipal(governor);
   ok(await a.create_club('host', 'Host FC', 'host', [], []));
   ok(await b.create_club('guest', 'Guest FC', 'guest', [], []));
   const home = ok(await a.create_shell_team_invite('host', 'Home', [], [])).id;

@@ -49,6 +49,13 @@ esac
         self.assertEqual(result.returncode, 1)
         self.assertFalse(any(call.startswith("deploy") for call in calls))
 
+    def test_competition_participant_authorities_are_wired_reciprocally(self):
+        result, calls = self.run_deploy(True, deployed=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = json.loads((ROOT / "deploy/mainnet/.icp/data/mappings/ic.ids.json").read_text())
+        self.assertIn(f'canister call club_domain set_competition_authorities (vec {{ principal "{ids["competition_domain"]}" }}) -e ic', calls)
+        self.assertIn(f'canister call competition_domain set_participant_club_authorities (vec {{ principal "{ids["club_domain"]}" }}) -e ic', calls)
+
     def test_eop_aware_cli_uses_state_preserving_auto_mode(self):
         _, calls = self.run_deploy(True)
         self.assertIn("deploy -e ic -y --mode auto --cycles 1000000000000", calls)

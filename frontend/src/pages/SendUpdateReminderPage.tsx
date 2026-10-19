@@ -1,4 +1,5 @@
 import { acrossLists } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
