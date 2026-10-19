@@ -4,6 +4,13 @@ import { adaptLocalAccountReads, isLoopbackRehearsalHost } from './accountReadAd
 import { idlFactory as vaultIdl } from '../lab/bindings/vault_domain/declarations/vault_domain.did.js';
 
 describe('local protected read adapter', () => {
+  it('validates every generated service before exposing exact-signature twins', () => {
+    const contracts = import.meta.glob<{ idlFactory: (args: { IDL: typeof IDL }) => IDL.ServiceClass }>('../lab/bindings/*/declarations/*.did.js', { eager: true });
+    expect(Object.keys(contracts).length).toBeGreaterThanOrEqual(12);
+    for (const [path, contract] of Object.entries(contracts)) {
+      expect(() => adaptLocalAccountReads({}, contract.idlFactory({ IDL }), 'http://localhost:4943'), path).not.toThrow();
+    }
+  });
   it('never admits remote, malformed or credential-bearing hosts', () => {
     for (const host of ['https://icp-api.io', 'https://localhost.example.com', 'file://localhost', 'http://user@localhost', 'invalid']) {
       expect(isLoopbackRehearsalHost(host)).toBe(false);
