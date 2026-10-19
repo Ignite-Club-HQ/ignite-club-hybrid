@@ -78,7 +78,9 @@ try {
   const approval = approveProvision({ kind: 'provision', deploymentId: 'local', subnetId: appSubnet, reason: 'full' }, { operator: governor.toText(), proposalId: 'p1', deploymentId: 'local', subnetId: appSubnet }, 'b', await router.version());
   const failed = await runProvision(approval, provAdapter);
   assert.equal(failed.phase, 'failed'); assert.deepEqual(ok(await router.list_groups()), [], 'incomplete group never registered');
-  const provDone = await runProvision({ ...provSaved, phase: 'approved', error: undefined }, provAdapter);
+  // The injected failure occurred before the management call; explicitly
+  // reconcile that known non-commit rather than blindly replaying an intent.
+  const provDone = await runProvision({ ...provSaved, pending: undefined, phase: 'approved', error: undefined }, provAdapter);
   assert.equal(provDone.phase, 'enabled', provDone.error);
   const listed = ok(await router.list_groups()); assert.equal(listed.length, 1); assert.equal(listed[0].id, 'b'); assert.equal(listed[0].accepting, true);
   const snap = ok(await router.read_group_registry('local')); assert.ok(JSON.stringify(snap, (_k, v) => typeof v === 'bigint' ? String(v) : v).includes('"b"'), 'placement recorded');
