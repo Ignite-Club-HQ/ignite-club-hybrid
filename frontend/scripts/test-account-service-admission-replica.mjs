@@ -283,7 +283,7 @@ try {
  await delayed.actor.release(); await denied(erasedPhotoKey);
  pii.setPrincipal(identity.canisterId);
  assert.equal(ok(await pii.read_account_removal_drain(receiverRequest)).outstanding,0n,'Settled denied key must release its tracked hold');
- await pic.upgradeCanister({canisterId:services[1].canisterId,wasm:process.env.PII_ACCESS_CONTROL_WASM,sender:governor,wasmMemoryPersistence:'keep',arg:IDL.encode([IDL.Principal],[governor])});
+ await pic.upgradeCanister({canisterId:services[1].canisterId,wasm:process.env.PII_ACCESS_CONTROL_WASM,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
  assert.equal(ok(await pii.read_account_removal_drain(receiverRequest)).outstanding,0n);
  pii.setPrincipal(governor); assert.ok('err' in await pii.rekey_principal(victim,stranger,false));
  pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(extra[0].canisterId));

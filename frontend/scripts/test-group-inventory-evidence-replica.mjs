@@ -136,7 +136,7 @@ try {
     store.actor.setPrincipal(outsider);
     await assert.rejects(()=>store.actor.finalize_upload(staged[n]));
     assert.equal((await store.actor.http_request({url:'/clubs/local/gallery/staged.jpg',method:'GET',headers:[],body:new Uint8Array()})).status_code,404);
-    await pic.upgradeCanister({canisterId:store.canisterId,wasm:'/tmp/removal/media_blob_store.wasm',sender:governor,wasmMemoryPersistence:'keep'});
+    await pic.upgradeCanister({canisterId:store.canisterId,wasm:'/tmp/removal/media_blob_store.wasm',sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
     await assert.rejects(()=>store.actor.begin_upload('after.jpg','image/jpeg',1n,1));
     assert.deepEqual(ok(await actor.advance_account_removal_receiver(removedAccount.id,store.canisterId)),receipt);
   }
@@ -148,7 +148,7 @@ try {
   denied(await actor.set_service_authorities([mappedGroups[0][1].canister]));
   denied(await actor.set_removal_supplemental_inventory(supplemental,await revision()));
   assert.deepEqual(ok(await actor.begin_account_removal(removedAccount.id,0n)),intent);
-  await pic.upgradeCanister({canisterId:identity.canisterId,wasm:identityWasm,sender:governor,wasmMemoryPersistence:'keep'});
+  await pic.upgradeCanister({canisterId:identity.canisterId,wasm:identityWasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
   assert.deepEqual(ok(await actor.read_account_removal_intent(removedAccount.id)),intent);
   actor.setPrincipal(outsider); denied(await actor.whoami()); denied(await actor.register_account()); actor.setPrincipal(governor);
   assert.deepEqual(ok(await actor.begin_account_removal(removedAccount.id,0n)),intent);
