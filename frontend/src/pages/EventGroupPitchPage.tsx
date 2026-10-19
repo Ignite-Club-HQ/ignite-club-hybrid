@@ -186,7 +186,7 @@ function SupabaseEventGroupPitchPage() {
         supabase: async () => [], icp: async ctx => {
           const rows = await (await import("@/live/features/events")).listLiveGroupDuties(ctx, groupId ?? "");
           const profiles = await withFeatureBackend("membership", { supabase: async () => [], icp: shared => import("@/live/features/identityAccessClient").then(api => api.listLiveProfilesByIds(shared, rows.flatMap(r => r.account_id))) }, { shared: "person" });
-          return rows.map(row => ({ id: row.id, name: row.duty, assigned_to: row.account_id[0] ?? null, status: row.account_id.length ? "confirmed" : "pending", points: 0, assignee: { display_name: profiles.find(p => p.account_id === row.account_id[0])?.display_name ?? "Member" } })) as GroupDuty[];
+          return rows.map(row => ({ id: row.id, name: row.duty, assigned_to: row.account_id[0] ?? null, status: row.account_id.length ? "confirmed" : "pending", points: 0, assignee: row.account_id[0] ? { display_name: profiles.find(p => p.account_id === row.account_id[0])?.display_name ?? "Member" } : null })) as GroupDuty[];
         },
       }, { eventId: eventId ?? "" });
       const { data, error } = await supabase
@@ -222,7 +222,7 @@ function SupabaseEventGroupPitchPage() {
           return {
             minutes_per_half: league.minutes_per_half,
             club_id: league.club_id,
-            clubs: { sport: (await (await import("@/live/leagueReads")).readLeagueClub(ctx, league.club_id))?.sport?.[0] ?? null },
+            clubs: { sport: (await (await import("@/live/leagueReads")).readLeagueClub(ctx, league.club_id))?.sport ?? null },
           };
         },
       }, { miniLeagueId: group?.event?.mini_league_id ?? "" }),

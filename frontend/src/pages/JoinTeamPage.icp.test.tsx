@@ -12,10 +12,14 @@ vi.mock("@/live/features/membership", () => ({
   acceptLiveTeamInvite: (...args: unknown[]) => acceptLiveTeamInviteMock(...args),
 }));
 
+const playerPreviewMock = vi.fn();
+const claimPlayerMock = vi.fn();
 const getLiveJoinLinkByTokenMock = vi.fn();
 const getLiveMiniLeagueMock = vi.fn();
 const claimLiveAdminJoinLinkMock = vi.fn();
 vi.mock("@/live/features/miniLeagues", () => ({
+  getLivePlayerInvitePreview: (...args: unknown[]) => playerPreviewMock(...args),
+  claimLiveInvite: (...args: unknown[]) => claimPlayerMock(...args),
   getLiveJoinLinkByToken: (...args: unknown[]) => getLiveJoinLinkByTokenMock(...args),
   getLiveMiniLeague: (...args: unknown[]) => getLiveMiniLeagueMock(...args),
   claimLiveAdminJoinLink: (...args: unknown[]) => claimLiveAdminJoinLinkMock(...args),
@@ -120,6 +124,8 @@ beforeEach(() => {
   rpcMock.mockReset();
   getLiveTeamInviteMock.mockReset();
   acceptLiveTeamInviteMock.mockReset();
+  playerPreviewMock.mockReset().mockResolvedValue(null);
+  claimPlayerMock.mockReset();
   getLiveJoinLinkByTokenMock.mockReset();
   getLiveMiniLeagueMock.mockReset();
   claimLiveAdminJoinLinkMock.mockReset();
