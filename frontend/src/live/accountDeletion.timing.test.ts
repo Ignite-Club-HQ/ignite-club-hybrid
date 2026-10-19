@@ -23,7 +23,7 @@ const ok=(r:any)=>{ expect(r.Err).toBeUndefined(); expect('Ok' in r).toBe(true);
 let server:PocketIcServer, pic:PocketIc;
 describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
   beforeAll(async()=>{ server=await PocketIcServer.start(); pic=await PocketIc.create(server.getUrl()); },60000);
-  afterAll(async()=>{ await pic?.tearDown(); await server?.stop(); });
+  afterAll(async()=>{ await pic?.tearDown(); await server?.stop(); },60000);
   async function fixture(){
     const env=[{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}];
     const shared=await pic.setupCanister({idlFactory:identityIdl,wasm:process.env.IDENTITY_ACCESS_WASM,sender:governor,controllers:[governor],environmentVariables:env,
@@ -101,5 +101,23 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
     f.router.actor.setPrincipal(governor);expect(await f.router.actor.record_group_health('new',1n,2n,f.revision)).toEqual({Err:'Deletion registry locked'});
     await eraseIcpAccountAsAdmin({getPrincipal:()=>governor} as Identity,f.targets[0],f.account.id);
     for(let i=0;i<2;i++)expect(await f.roles(i,linked)).toEqual([]);
+  },60000);
+  it('retains reservation when the identity commit reply is lost and settles by confirmed erasure',async()=>{
+    const f=await fixture();
+    const original=seam.identity;
+    seam.identity=async(...args:any[])=>{const c=await original(...args);return {client:{...c.client,
+      commitAccountDeletion:async(a:string)=>{await c.client.commitAccountDeletion(a);throw Error('Commit reply lost');}}};};
+    await expect(eraseIcpAccountAsAdmin({getPrincipal:()=>governor} as Identity,f.targets[0],f.account.id)).rejects.toThrow('reply lost');
+    f.router.actor.setPrincipal(governor);expect(await f.router.actor.record_group_health('new',1n,2n,f.revision)).toEqual({Err:'Deletion registry locked'});
+    for(let i=0;i<2;i++)expect(await f.roles(i,linked)).toEqual([]);
+    f.id.setPrincipal(governor);ok(await f.id.settle_account_deletion(f.account.id));
+    f.router.actor.setPrincipal(governor);ok(await f.router.actor.record_group_health('new',1n,2n,f.revision));
+  },60000);
+  it('rejects a changed linked-account snapshot at commit and keeps its registry reservation',async()=>{
+    const f=await fixture();f.id.setPrincipal(governor);ok(await f.id.prepare_account_deletion(f.account.id,f.revision));
+    f.id.setPrincipal(user);const challenge=ok(await f.id.begin_link(stranger));f.id.setPrincipal(stranger);ok(await f.id.accept_link(challenge.id));
+    f.id.setPrincipal(governor);expect(await f.id.commit_account_deletion(f.account.id)).toHaveProperty('Err');
+    f.router.actor.setPrincipal(governor);expect(await f.router.actor.record_group_health('new',1n,2n,f.revision)).toEqual({Err:'Deletion registry locked'});
+    f.id.setPrincipal(user);expect(ok(await f.id.whoami()).id).toBe(f.account.id);
   },60000);
 });

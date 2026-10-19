@@ -774,6 +774,15 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reservation_blocks_registry_mutations_and_self_placement_until_settled() {
+        let lock=DeletionLock {account_id:"account".into(),revision:4};
+        DELETION_LOCKS.with(|m|m.borrow_mut().insert(lock.account_id.clone(),encode(&lock)));
+        assert_eq!(registry_writable(),Err("Deletion registry locked".into()));
+        assert!(assign_group_record("club".into(),"mainnet".into(),4,0).is_err());
+        DELETION_LOCKS.with(|m|m.borrow_mut().remove(&lock.account_id));
+        assert!(registry_writable().is_ok());
+    }
 
     #[test]
     fn ids_and_pages_are_bounded() {
