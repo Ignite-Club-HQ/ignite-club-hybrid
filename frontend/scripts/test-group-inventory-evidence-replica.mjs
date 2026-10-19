@@ -6,6 +6,8 @@ import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
 import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
+import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
+import { idlFactory as blobIdl } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 const p = n => Principal.fromUint8Array(Uint8Array.from([n, 1]));
 const governor = p(1), outsider = p(2);
 const domains = ['club_domain', 'events_domain', 'messaging_domain', 'vault_domain', 'competition_domain', 'club_points_domain',
@@ -23,9 +25,16 @@ try {
     sender: governor, controllers: [governor], arg: args });
   const actor = identity.actor; actor.setPrincipal(governor); router.actor.setPrincipal(governor);
   const subnet = await pic.getCanisterSubnetId(router.canisterId); assert.ok(subnet);
-  const clubs = [], mappedGroups = [];
+  const clubs = [], mappedGroups = [], mediaStores = [], supplemental = [];
   for (let n = 0; n < 2; n++) {
-    const club = await pic.createCanister({ sender: governor, controllers: [governor] }); clubs.push(club);
+    const clubFixture = await pic.setupCanister({ idlFactory: clubIdl, wasm: '/tmp/club_domain-admission.wasm', sender: governor, controllers: [governor],
+      environmentVariables: [{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'},{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()}], arg:IDL.encode([IDL.Principal],[governor]) });
+    clubFixture.actor.setPrincipal(governor);
+    const club = clubFixture.canisterId; clubs.push(club);
+    const store = await pic.setupCanister({idlFactory:blobIdl,wasm:'/tmp/media_blob_store-admission.wasm',sender:governor,controllers:[governor],
+      environmentVariables:[{name:'GOVERNOR_PRINCIPAL',value:governor.toText()}],arg:IDL.encode([IDL.Principal],[governor])});
+    ok(await clubFixture.actor.register_media_quota_store(store.canisterId)); mediaStores.push({store,clubFixture});
+    supplemental.push({group_id:`g${n}`,domain:'media_blob_store',canister:store.canisterId,subnet});
     const mapped = domains.map((domain, i) => ({ domain, canister: i === 0 ? club : p(10 + n * 20 + i) })); mappedGroups.push(mapped);
     let rev = await router.actor.version();
     rev = ok(await router.actor.register_group({ id: `g${n}`, target_alias: 'local', domains: mapped, accepting: false, max_clubs: 100,
@@ -63,14 +72,48 @@ try {
   await pic.startCanister({ canisterId: router.canisterId, sender: governor });
   denied(IDL.decode(signature.retTypes, (await pic.client.awaitCall(message)).body)[0]);
   history = await revision(); ok(await actor.read_group_inventory_evidence(history));
+  // Identity fetches operator-authorized store lists from both REAL clubs.
+  ok(await actor.set_service_authorities([mappedGroups[0][1].canister,mappedGroups[1][1].canister,...mediaStores.map(s=>s.store.canisterId)]));
+  history=await revision(); denied(await actor.read_group_inventory_evidence(history));
+  denied(await actor.read_removal_inventory_evidence(history));
+  ok(await actor.set_removal_supplemental_inventory(supplemental.slice(0,1),history)); history=await revision();
+  denied(await actor.read_removal_inventory_evidence(history));
+  ok(await actor.set_removal_supplemental_inventory(supplemental,history)); history=await revision();
+  let complete=ok(await actor.read_removal_inventory_evidence(history));
+  assert.equal(complete.media.length,2); assert.equal(complete.supplemental.length,2);
+  assert.deepEqual(complete.media.map(e=>e.registry.stores[0].toText()).sort(),mediaStores.map(e=>e.store.canisterId.toText()).sort());
+  mediaStores[0].clubFixture.actor.setPrincipal(outsider);
+  denied(await mediaStores[0].clubFixture.actor.read_removal_media_registry());
+  mediaStores[0].clubFixture.actor.setPrincipal(governor);
+  denied(await mediaStores[0].clubFixture.actor.read_removal_media_registry()); // governor uses existing operator endpoint
+  ok(await mediaStores[0].clubFixture.actor.read_media_quota_store_registry());
+  actor.setPrincipal(outsider); denied(await actor.read_removal_inventory_evidence(history)); actor.setPrincipal(governor);
+  denied(await actor.set_removal_supplemental_inventory(supplemental.slice(0,1),history));
+  // Stop a real media registry, mutate pinned inventory during the await.
+  await pic.stopCanister({canisterId:clubs[0],sender:governor});
+  const completeSignature=new Map(identityIdl({IDL})._fields).get('read_removal_inventory_evidence'); assert.ok(completeSignature);
+  const held=await pic.client.submitCall({canisterId:identity.canisterId,sender:governor,method:'read_removal_inventory_evidence',payload:new Uint8Array(IDL.encode(completeSignature.argTypes,[history]))});
+  await pic.tick(3);
+  ok(await actor.set_removal_supplemental_inventory(supplemental,history));
+  await pic.startCanister({canisterId:clubs[0],sender:governor});
+  denied(IDL.decode(completeSignature.retTypes,(await pic.client.awaitCall(held)).body)[0]);
+  history=await revision(); complete=ok(await actor.read_removal_inventory_evidence(history));
+  // Additional store registered later MUST appear in the pinned placements.
+  const third=await pic.createCanister({sender:governor,controllers:[governor]});
+  ok(await mediaStores[0].clubFixture.actor.register_media_quota_store(third));
+  denied(await actor.read_removal_inventory_evidence(history));
+  supplemental.push({group_id:'g0',domain:'media_blob_store',canister:third,subnet});
+  ok(await actor.set_removal_supplemental_inventory(supplemental,history)); history=await revision();
+  assert.equal(ok(await actor.read_removal_inventory_evidence(history)).media[0].registry.stores.length,2);
   await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: identityWasm, sender: governor, wasmMemoryPersistence: 'keep' });
   denied(await actor.read_group_inventory_evidence(history)); history = await revision();
-  assert.equal(ok(await actor.read_group_inventory_evidence(history)).binding.registry.toText(), router.canisterId.toText());
+  assert.equal(ok(await actor.read_removal_inventory_evidence(history)).groups.binding.registry.toText(), router.canisterId.toText());
   // A missing service reader (including media) cannot silently disappear.
   ok(await actor.set_service_authorities([mappedGroups[0][1].canister, mappedGroups[1][1].canister, p(99)]));
   history = await revision(); denied(await actor.read_group_inventory_evidence(history));
   const production = await pic.setupCanister({ idlFactory: identityIdl, wasm: identityWasm, sender: governor, controllers: [governor], arg: args });
   production.actor.setPrincipal(governor); denied(await production.actor.set_group_inventory_binding(binding, 0n));
   denied(await production.actor.read_group_inventory_evidence(0n));
-  console.log('PASS: real registry→identity consensus, two-group/26-domain metadata, pinned trust, stale callback/revision denial, missing reader, upgrade preservation and closed production gates. NOT media completeness or global drain.');
+  denied(await production.actor.set_removal_supplemental_inventory(supplemental,0n)); denied(await production.actor.read_removal_inventory_evidence(0n));
+  console.log('PASS: real identity/router/two-club registry reads, additional-store omission, supplemental service coverage, stale interrupted media replies, protected relay, upgrade preservation and closed production gates. Domain metadata placeholders do not prove full two-group drain.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }

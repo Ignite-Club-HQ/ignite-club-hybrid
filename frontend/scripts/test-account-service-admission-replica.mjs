@@ -197,6 +197,35 @@ try {
  vault.setPrincipal(governor); ok(await vault.set_club_domain_canister(extra[0].canisterId));
  vault.setPrincipal(victim); assert.equal(ok(await vault.read_account_list_club_files('club',[],[])).length,1);
  await denied(()=>club.read_has_club_membership(victim,'club'));
+ // Actual club-photo ciphertext round trip on TWO admission-enabled stores.
+ // Cached plaintext/keys cannot be revoked; assertions request fresh keys.
+ const secondBlobFixture=await pic.setupCanister({idlFactory:blobFactory,wasm:process.env.MEDIA_BLOB_STORE_WASM,sender:governor,controllers:[governor],
+  environmentVariables:[...env,{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()},{name:'GOVERNOR_PRINCIPAL',value:governor.toText()}],arg:IDL.encode([IDL.Principal],[governor])});
+ const secondBlob=secondBlobFixture.actor;
+ id.setPrincipal(governor); ok(await id.set_service_authorities([...services,...extra,secondBlobFixture].map(s=>s.canisterId)));
+ pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(extra[0].canisterId));
+ const photoIdentity=new TextEncoder().encode('clubmedia:club\u001fblob');
+ const photoBytes=new TextEncoder().encode('Local encrypted photo bytes');
+ const photoCipher=IbeCiphertext.encrypt(verification,IbeIdentity.fromBytes(photoIdentity),photoBytes,IbeSeed.random()).serialize();
+ const photoPaths=[], pendingPhotos=[];
+ for(const [n,store] of [blob,secondBlob].entries()) {
+  store.setPrincipal(governor); ok(await store.set_club_domain_canister(extra[0].canisterId));
+  ok(await club.register_media_quota_store(n===0?extra[7].canisterId:secondBlobFixture.canisterId));
+  store.setPrincipal(victim);
+  const path=`clubs/club/gallery/removal-${n}.jpg`;
+  const upload=ok(await store.begin_upload(path,'image/jpeg',BigInt(photoCipher.length),1));
+  ok(await store.put_chunk(upload,0,photoCipher)); ok(await store.finalize_upload(upload));
+  const response=await store.http_request({url:`/${path}`,method:'GET',headers:[],body:new Uint8Array()});
+  assert.equal(response.status_code,200); assert.deepEqual(Uint8Array.from(response.body),photoCipher);
+  pii.setPrincipal(victim); const transport=TransportSecretKey.random();
+  const encrypted=ok(await pii.get_club_media_vetkey('club',transport.publicKeyBytes()));
+  const key=EncryptedVetKey.deserialize(Uint8Array.from(encrypted)).decryptAndVerify(transport,verification,photoIdentity);
+  assert.deepEqual(IbeCiphertext.deserialize(Uint8Array.from(response.body)).decrypt(key),photoBytes);
+  photoPaths.push(path);
+  const pendingPath=`clubs/club/gallery/removal-pending-${n}.jpg`;
+  const pending=ok(await store.begin_upload(pendingPath,'image/jpeg',BigInt(photoCipher.length),1));
+  ok(await store.put_chunk(pending,0,photoCipher)); pendingPhotos.push(pending);
+ }
  // Exercise the exact adapter used by dev-loopback app connectors with a
  // real actor; legacy private queries are closed under this rehearsal.
  const adaptedVault=adaptLocalAccountReads(vault,vaultIdl({IDL}),'http://localhost:4943');
@@ -228,7 +257,7 @@ try {
   ()=>club.read_account_my_role_grants(), ()=>events.read_account_list_my_viewed_event_ids([]),
   ()=>competition.create_competition('club','Denied','2026'), ()=>league.read_account_get_mini_league(mini.id),
   ()=>points.read_account_get_user_points('club',victim.toText()), ()=>media.read_account_get_asset(asset.id),
-  ()=>insights.record_web_vital('LCP',12,'good','/denied'), ()=>blob.begin_upload('clubs/club/denied.jpg','image/jpeg','sum',1n,99999999999999n),
+  ()=>insights.record_web_vital('LCP',12,'good','/denied'), ()=>blob.begin_upload('clubs/club/denied.jpg','image/jpeg',1n,1),
   ()=>queue.enqueue('denied-write',victim.toText(),'club','event','denied','denied')
  ];
  queue.setPrincipal(victim);
@@ -236,7 +265,27 @@ try {
  await denied(()=>chat.read_account_list_messages_page(conversation.id,[],10));
  ok(await id.set_account_status(account.id,{Active:null}));
  assert.equal(ok(await chat.read_account_list_messages_page(conversation.id,[],10)).messages.length,1);
+ // Erase while a REAL derived club key awaits its second membership reply.
+ pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(delayed.canisterId));
+ await delayed.actor.hold_on(2n);
+ const erasedPhotoKey=await deferred(piiIdl,services[1].canisterId,'get_club_media_vetkey',['club',TransportSecretKey.random().publicKeyBytes()]);
+ await waitForHold(2);
  id.setPrincipal(victim); ok(await id.erase_account(account.id));
+ await delayed.actor.release(); await denied(erasedPhotoKey);
+ pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(extra[0].canisterId));
+ pii.setPrincipal(victim); await denied(()=>pii.get_club_media_vetkey('club',TransportSecretKey.random().publicKeyBytes()));
+ vault.setPrincipal(victim); await denied(()=>vault.read_account_list_club_files('club',[],[]));
+ for(const [n,store] of [blob,secondBlob].entries()) {
+  store.setPrincipal(victim);
+  await denied(()=>store.begin_upload(`clubs/club/gallery/after-erasure-${n}.jpg`,'image/jpeg',1n,1));
+  await denied(()=>store.put_chunk(pendingPhotos[n],0,photoCipher));
+  await denied(()=>store.finalize_upload(pendingPhotos[n]));
+  const pendingResponse=await store.http_request({url:`/clubs/club/gallery/removal-pending-${n}.jpg`,method:'GET',headers:[],body:new Uint8Array()});
+  assert.equal(pendingResponse.status_code,404,'Denied finalize must not publish ciphertext');
+  const retained=await store.http_request({url:`/${photoPaths[n]}`,method:'GET',headers:[],body:new Uint8Array()});
+  assert.deepEqual(Uint8Array.from(retained.body),photoCipher,'Public endpoint remains ciphertext, never plaintext');
+ }
+ console.log('PASS: real two-store ciphertext upload/read/decrypt, erase during post-derivation membership callback, fresh club-photo key denial, denied upload/chunk/finalize with no publication, and real vault-to-club original-human denial. Cached keys/previous downloads are not revoked.');
  for (const call of domainCalls) await denied(call);
  await denied(()=>chat.read_account_list_messages_page(conversation.id,[],10));
  await denied(()=>chat.send_message(conversation.id,'must fail','m2',[],[]));
