@@ -73,7 +73,7 @@ try {
     queue.actor.setPrincipal(worker);
     const claimed = ok(await queue.actor.claim(100000n, 50)); assert.equal(claimed.length, 4);
     for (const row of claimed) assert.equal(ok(await queue.actor.authorize_delivery(row.id, row.idempotency_key)), true);
-    groups.push({ id, club, queue, messaging, pii, blob, read, upload, pendingUpload, claimed });
+    groups.push({ id, club, queue, messaging, pii, blob, read, upload, pendingUpload, claimed, conversation });
   }
   const [a, b] = groups;
   a.club.actor.setPrincipal(governor); ok(await a.club.actor.remove_member(a.id, removed));
@@ -152,6 +152,15 @@ try {
   assert.equal(ok(await a.queue.actor.fan_out([retained.toText()], a.id, 'photo_added', 'Private photo', 'photo', [])), 0);
   directory.actor.setPrincipal(worker);
   assert.equal(ok(await directory.actor.list_device_tokens([removed.toText(), retained.toText()])).length, 2);
+  // Real human sends and read-back in the same upgraded groups, not fabricated message rows.
+  a.messaging.actor.setPrincipal(removed);
+  await deniedMutation(() => a.messaging.actor.send_message(a.conversation.id, 'must be denied', 'denied-after-upgrade', [], []));
+  a.messaging.actor.setPrincipal(retained);
+  const retainedMessage = ok(await a.messaging.actor.send_message(a.conversation.id, 'retained member message', 'retained-after-upgrade', [], []));
+  assert.equal(ok(await a.messaging.actor.list_messages_page(a.conversation.id, [], 10)).messages.some(m => m.id === retainedMessage.id), true);
+  b.messaging.actor.setPrincipal(removed);
+  const otherMessage = ok(await b.messaging.actor.send_message(b.conversation.id, 'other club message', 'other-after-upgrade', [], []));
+  assert.equal(ok(await b.messaging.actor.list_messages_page(b.conversation.id, [], 10)).messages.some(m => m.id === otherMessage.id), true);
   console.log('PASS: same two groups, real encrypted photo decrypt/fresh-key denial, pending/new uploads denied only in removed club, retained/other-club photos/uploads, shared-device photo/chat notifications, six permitted stub sends, retries/outage/dedupe and all five service upgrades preserving keys and denial. Full provisioning/app/browser/native/FCM acceptance NOT established.');
-  console.log('PASS: two real group queues, shared caller-owned devices, canonical retry dedupe, claimed photo/chat revocation, retained/other-club delivery, authority outage/retry body preservation, lease/key guards and recovery. FCM sends stubbed; no live services.');
+  console.log('PASS: real retained/other-club chat sends read back after upgrades; removed-club sender denied. FCM sends stubbed; no live services.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
