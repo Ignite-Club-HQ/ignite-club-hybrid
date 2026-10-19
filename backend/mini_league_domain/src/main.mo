@@ -409,7 +409,7 @@ persistent actor class Main(governorInit : Principal) {
     let league = switch (findLeague(id)) { case null return #Err("Mini-league not found"); case (?l) l };
     if (not canViewLeague(caller, league)) return #Err("Forbidden");
     var parentIds : [Text] = [];
-    var staffIds : [Text] = [];
+    var staffIds : [Text] = [league.created_by.toText()];
     let add = func(ids : [Text], id : Text) : [Text] {
       if (id == "" or ids.any(func(x) = x == id)) ids else ids.concat([id])
     };
@@ -427,7 +427,7 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     for (a in admins.values()) { if (a.mini_league_id == id) staffIds := add(staffIds, a.user_id.toText()) };
-    for (r in roles.values()) { if (r.club_id == league.club_id and r.role == "league_admin" and r.team_id == null) staffIds := add(staffIds, r.user.toText()) };
+    for (r in roles.values()) { if (r.club_id == league.club_id and (r.role == "league_admin" or r.role == "club_admin") and r.team_id == null) staffIds := add(staffIds, r.user.toText()) };
     var all = parentIds;
     for (u in staffIds.values()) { all := add(all, u) };
     if (all.size() > 500) return #Err("League member list exceeds 500");
