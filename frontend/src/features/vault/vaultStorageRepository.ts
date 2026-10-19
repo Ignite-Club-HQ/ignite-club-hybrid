@@ -139,7 +139,7 @@ export async function fetchVaultStorageSubscription(
     const gb = await withFeatureBackend("membership", {
       supabase: async () => 0,
       icp: (ctx) => getLiveClubStoragePurchasedGb(ctx, clubId),
-    }).catch(() => 0);
+    }, { clubId: clubId! }).catch(() => 0);
     return { storage_purchased_gb: gb, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
   }
   const { data } = await client

@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -150,7 +151,7 @@ export function ContactClubButton({ clubFilter, compact = false }: ContactClubBu
           );
           return clubs;
         },
-      });
+      }, { everyGroup: true, merge: mergeLists });
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,

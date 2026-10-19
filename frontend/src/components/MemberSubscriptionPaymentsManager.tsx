@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { createMemberCheckout, listenForPaymentStatus } from "@/lib/memberCheckout";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   listLiveMemberPayments,
   markLiveMemberPaid,
@@ -202,7 +203,7 @@ export default function MemberSubscriptionPaymentsManager({
             };
           });
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: allUserIds.length > 0,
   });
@@ -282,7 +283,7 @@ export default function MemberSubscriptionPaymentsManager({
             notes: notes.trim() || null,
           });
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["member-subscription-payments", clubId] });
@@ -312,7 +313,7 @@ export default function MemberSubscriptionPaymentsManager({
           if (error) throw error;
         },
         icp: (ctx) => unmarkLiveMemberPaid(ctx, paymentId),
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["member-subscription-payments", clubId] });
@@ -368,7 +369,7 @@ export default function MemberSubscriptionPaymentsManager({
           const message = `Your ${feeLabel} fees for ${paymentPeriod} are due. Please make payment as soon as possible.`;
           return sendLiveFeeReminders(ctx, clubId, paymentPeriod, activeTab, message);
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: (count) => {
       toast({

@@ -84,6 +84,7 @@ import { CLUB_ADMIN_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdap
 import { Capacitor } from "@capacitor/core";
 
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { sendLiveMessage, updateLiveMessage, ensureLiveClubAdminThread, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 import { getLiveClubProfile } from "@/live/features/club";
 import { recordLiveMessageSent } from "@/live/features/insights";
@@ -291,7 +292,7 @@ function SupabaseClubAdminChatPage() {
             const profile: any = await getLiveClubProfile(ctx, icpClubId);
             return profile ? { id: icpClubId, name: profile.name ?? null, logo_url: null } : null;
           },
-        });
+        }, { clubId: icpClubId! });
       }
 
       const clubId = conversation?.club_id;
@@ -324,7 +325,7 @@ function SupabaseClubAdminChatPage() {
               ? { id: memberId, display_name: profile.display_name, avatar_url: (profile as any).avatar_ref?.[0] ?? (profile as any).avatar_url ?? null }
               : null;
           },
-        });
+        }, { shared: 'person' });
       }
       const { data, error } = await selectCachedProfileById(memberId);
       if (error) throw error;
@@ -1163,7 +1164,7 @@ function SupabaseClubAdminChatPage() {
         icp: async (ctx) => {
           await updateLiveMessage(ctx, editingMessage.id, message.trim());
         },
-      });
+      }, writeOnce({ conversationId: conversationId! }));
     },
     onSuccess: () => {
       setMessage("");

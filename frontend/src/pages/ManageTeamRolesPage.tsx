@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -82,7 +83,7 @@ function SupabaseManageTeamRolesPage() {
               clubs: { name: null, bot_user_id: null },
             } as any;
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("teams")
@@ -110,7 +111,7 @@ function SupabaseManageTeamRolesPage() {
               profiles: { id: g.account_id, display_name: g.account_id, avatar_url: null },
             }));
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("user_roles")
@@ -142,7 +143,7 @@ function SupabaseManageTeamRolesPage() {
                 requester: { id: r.account_id, display_name: r.account_id, avatar_url: null },
               }));
           },
-        });
+        }, { clubId: team?.club_id as string });
       }
       if (!teamId) return [];
       return listSupabaseRoleRequests({ teamId });
@@ -174,7 +175,7 @@ function SupabaseManageTeamRolesPage() {
               console.warn("Failed to notify user of role removal", e);
             }
           },
-        });
+        }, writeOnce({ teamId: teamId! }));
         return;
       }
       const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
@@ -215,7 +216,7 @@ function SupabaseManageTeamRolesPage() {
               );
             }
           },
-        });
+        }, writeOnce({ teamId: teamId! }));
         return;
       }
       // Per-club balance: only reset points for THIS team's club.
@@ -254,7 +255,7 @@ function SupabaseManageTeamRolesPage() {
               await rejectLiveRoleRequest(ctx, requestId);
             }
           },
-        });
+        }, writeOnce({ teamId: teamId! }));
         return;
       }
       const rpcName = approved ? "approve_role_request" : "deny_role_request";

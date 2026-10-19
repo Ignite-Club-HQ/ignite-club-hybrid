@@ -27,6 +27,8 @@ export type DispatchDeps = {
   context: () => Promise<FeatureBackendContext>;
   open: (ctx: FeatureBackendContext) => Promise<Session>;
   lookup?: EntityLookup;
+  /** Does this group hold the invite token? (invitees aren't members yet) */
+  holdsInvite?: (ctx: FeatureBackendContext, token: string) => Promise<boolean>;
   store?: OwnerStore;
 };
 export const MAX_DEVICE_OWNERS = 2000;
@@ -85,6 +87,14 @@ export function createClubDispatcher(deps: DispatchDeps) {
       for (const [id, club] of pairs) owners.set(`${kind}:${id}`, club);
       persist(deps, principal);
     },
+    /** Data spanning the caller's clubs: shared canisters + every group, asked
+     * at the same time (load time = slowest group, not the sum). */
+    readAcross: async <T, R>(feature: FeatureArea, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>, merge: (parts: T[]) => R): Promise<R> => {
+      if (!activationStatus(deps.gates()).active) return merge([await deps.legacy(feature, '', fn)]);
+      const { s } = await sessionFor(deps);
+      const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn), s.readEveryGroup(domain, async ctx => [await fn(ctx)], Number.MAX_SAFE_INTEGER)]);
+      return merge([shared, ...groups]);
+    },
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
@@ -95,6 +105,20 @@ export function createClubDispatcher(deps: DispatchDeps) {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
       const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
       return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.writeClub(club, domain, key, fn, attempts) : deps.legacy(feature, club ?? '', ctx => fn(ctx, key));
+    },
+    /** Invite links/codes: the invitee isn't a member yet, so ask every group
+     * which one holds the token and run the call there only. None = shared
+     * canisters (club not moved). Two claims = refuse. Never retried; the
+     * session is reopened afterwards so the newly joined club is routable. */
+    forInvite: async <T>(feature: FeatureArea, token: string, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
+      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, '', fn);
+      if (!deps.holdsInvite) throw new Error('Invite lookup unavailable');
+      const holds = deps.holdsInvite;
+      const { s } = await sessionFor(deps);
+      const hits = await s.readEveryGroup('club_domain', async ctx => (await holds(ctx, token)) ? [ctx] : [], 2);
+      if (hits.length > 1) throw new Error('Invite claimed by more than one group');
+      try { return hits[0] ? await fn(hits[0]) : await deps.legacy(feature, '', fn); }
+      finally { cached?.session.then(x => x.dispose(), () => {}); cached = null; }
     },
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
@@ -122,6 +146,7 @@ export const clubDispatch = createClubDispatcher({
   },
   open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx),
   lookup: async (ctx, kind, id) => (await import('./groupSessionLive')).lookupEntityClub(ctx, kind, id),
+  holdsInvite: async (ctx, token) => (await import('./groupSessionLive')).groupHoldsInvite(ctx, token),
   store: {
     load: p => JSON.parse(localStorage.getItem(`ignite.groupOwners.${p}`) ?? '{}'),
     save: (p, o) => localStorage.setItem(`ignite.groupOwners.${p}`, JSON.stringify(o)),

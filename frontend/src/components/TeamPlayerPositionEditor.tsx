@@ -11,6 +11,7 @@ import { Target, Loader2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveTeamPlayerPositionsV2, setLiveTeamPlayerPositionsV2 } from "@/live/features/club";
 import { cn } from "@/lib/utils";
 
@@ -98,7 +99,7 @@ export default function TeamPlayerPositionEditor({ teamId, members, children: te
             updated_at: "",
           }));
         },
-      }),
+      }, { teamId: teamId! }),
     enabled: open,
   });
 
@@ -146,7 +147,7 @@ export default function TeamPlayerPositionEditor({ teamId, members, children: te
         icp: async (ctx) => {
           await setLiveTeamPlayerPositionsV2(ctx, teamId, playerId, positions, number);
         },
-      });
+      }, writeOnce({ teamId: teamId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-player-positions", teamId] });

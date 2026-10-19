@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { setLiveClubInviteEmailStyle } from "@/live/features/club";
 import { toast } from "sonner";
 
@@ -65,7 +66,7 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
           const s: any = await getLiveClubSettings(ctx, clubId).catch(() => null);
           return { invite_email_style: s?.invite_email_style?.[0] ?? null };
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   const { data: savedDefaultMessage = "", isLoading: isLoadingDefaultMessage } = useQuery({
@@ -86,7 +87,7 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
           const value = await getLiveClubInviteMessageDefault(ctx, clubId);
           return value?.message ?? "";
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   useEffect(() => setDefaultMessageDraft(savedDefaultMessage), [savedDefaultMessage]);
@@ -104,7 +105,7 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
         icp: async (ctx) => {
           await setLiveClubInviteEmailStyle(ctx, clubId, invite_email_style);
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onMutate: async (style) => {
       const key = ["club-invite-email-style", clubId];
@@ -135,7 +136,7 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
           const { setLiveClubInviteMessageDefault } = await import("@/live/features/club");
           await setLiveClubInviteMessageDefault(ctx, clubId, message.trim());
         },
-      }),
+      }, writeOnce({ clubId: clubId! })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-invite-message-default", clubId] });
       toast.success("Default invite message updated");

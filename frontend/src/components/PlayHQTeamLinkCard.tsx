@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Trophy, Loader2, Unlink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveClubProfile, getLiveTeam, saveLiveTeam } from "@/live/features/club";
 import { listLivePlayHQCompetitions, listLivePlayHQFixtures, importLivePlayHQTeamFixtures, setLivePlayHQTeamSync } from "@/live/features/events";
 
@@ -67,7 +68,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             playhq_org_id: profile?.playhq_org_id[0] ?? null,
           };
         },
-      }),
+      }, { clubId: clubId! }),
   });
   const clubHasPlayHQ = !!(club?.playhq_tenant && club?.playhq_org_id);
 
@@ -93,7 +94,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             playhq_auto_create_events: liveTeam.playhq_auto_create_events,
           } as TeamRow;
         },
-      }),
+      }, { teamId: teamId! }),
     enabled: clubHasPlayHQ,
   });
 
@@ -124,7 +125,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             season: r.season[0] ?? null,
           })) as Competition[];
         },
-      }),
+      }, { clubId }),
     enabled: clubHasPlayHQ,
   });
 
@@ -153,7 +154,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             away_team_name: r.away_team_name[0] ?? null,
           })) as MatchRow[];
         },
-      }),
+      }, { clubId }),
   });
 
   const playhqTeams = useMemo(() => {
@@ -207,7 +208,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
               .catch((e) => toast.error(e?.message ?? "Import failed"));
           }
         },
-      });
+      }, writeOnce({ teamId: teamId! }));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["team-playhq-link", teamId] });
@@ -233,7 +234,7 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             clubId, teamId, competitionId: team.playhq_competition_id, playhqTeamId: team.playhq_team_id,
           });
         },
-      });
+      }, writeOnce({ teamId }));
       toast.success(`Imported: ${r.created} new, ${r.updated} updated, ${r.cancelled} cancelled`);
       qc.invalidateQueries({ queryKey: ["events"] });
     } catch (e: any) {

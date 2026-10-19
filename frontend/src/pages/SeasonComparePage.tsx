@@ -47,7 +47,7 @@ function SupabaseSeasonComparePage() {
           const rows = await getLiveClubProfile(ctx, clubId);
           return rows.length ? { id: rows[0].id, name: rows[0].name } : null;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -76,7 +76,7 @@ function SupabaseSeasonComparePage() {
           const me = ctx.identity.getPrincipal().toText();
           return grants.some((g: any) => g.account_id === me && (g.role === "club_admin" || g.role === "app_admin" || g.role === "coach" || g.role === "team_admin"));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId && !!user?.id,
   });

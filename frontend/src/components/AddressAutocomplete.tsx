@@ -106,7 +106,7 @@ export function AddressAutocomplete({
           const rows = await withFeatureBackend("events", {
             supabase: async () => [],
             icp: (ctx) => listLiveSavedLocations(ctx),
-          });
+          }, { shared: "person" });
           setFavoriteLocations(
             rows.map((loc) => ({
               id: loc.id,
@@ -307,7 +307,7 @@ export function AddressAutocomplete({
         const saved = await withFeatureBackend("events", {
           supabase: async () => null,
           icp: (ctx) => saveLiveLocation(ctx, currentAddress.address, fullAddress, bias?.lat ?? 0, bias?.lng ?? 0),
-        });
+        }, { shared: "person" });
         const id = (saved as { id?: string } | null)?.id;
         setFavoriteLocations((prev) => [
           { id, address: fullAddress, name: currentAddress.address, isFavorite: true },
@@ -351,7 +351,7 @@ export function AddressAutocomplete({
         await withFeatureBackend("events", {
           supabase: async () => undefined,
           icp: (ctx) => deleteLiveSavedLocation(ctx, locationId),
-        });
+        }, { shared: "person" });
       } else {
         const { error } = await supabase
           .from('saved_locations')

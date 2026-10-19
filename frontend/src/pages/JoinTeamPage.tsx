@@ -268,7 +268,7 @@ function SupabaseJoinTeamPage() {
             },
           };
         },
-      }),
+      }, { inviteToken: token! }),
     enabled: !!token && isPendingInvite,
     retry: 2,
     retryDelay: 1000,
@@ -405,7 +405,7 @@ function SupabaseJoinTeamPage() {
             },
           };
         },
-      });
+      }, { inviteToken: token! });
     },
     enabled: !!token && !isPendingInvite,
     retry: 2,
@@ -1149,7 +1149,7 @@ function SupabaseJoinTeamPage() {
             await getLiveTeamInvite(ctx, invite.id);
             await acceptLiveTeamInvite(ctx, invite.id);
           },
-        });
+        }, { inviteToken: token! });
         // Provisional: II users are identified by principal, not a Supabase
         // uuid, so the user_roles insert below (and its RLS/email-mismatch
         // handling) does not apply here — the canister call above is the
@@ -1542,7 +1542,7 @@ function SupabaseJoinTeamPage() {
               await acceptIcpInviteAndWelcome(token!);
               return [(pendingInviteData?.role ?? "player") as AppRole];
             },
-          });
+          }, { inviteToken: token! });
         }
         throw new Error("Accepting invites isn't available for Internet Identity accounts yet.");
       }
@@ -1965,7 +1965,7 @@ function SupabaseJoinTeamPage() {
               .filter((g) => g.role === "team_admin" || g.role === "coach" || g.role === "club_admin")
               .map((g) => ({ user_id: g.user.toText() }));
           },
-        });
+        }, { teamId: invite?.team_id as string });
       } else {
         const { data } = await supabase
           .from("user_roles")

@@ -1,5 +1,6 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain } from "../domains";
+import { fetchMyRoleGrantsEverywhere } from "./myRoleGrants";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
 import { registerLivePiiText } from "./vault";
@@ -1172,8 +1173,7 @@ export async function getLiveMyThemePreference(ctx: FeatureBackendContext) {
  * the signed-in user across every club they belong to).
  */
 export async function myLiveRoleGrants(ctx: FeatureBackendContext) {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return actor.my_role_grants();
+  return fetchMyRoleGrantsEverywhere(ctx);
 }
 
 /** Auto-accept a pending email invite under the ICP backend (PendingInviteWelcomeDialog). */

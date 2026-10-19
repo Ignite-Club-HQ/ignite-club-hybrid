@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -81,7 +82,7 @@ function SupabaseSeasonDetailPage() {
           const s = seasons.find((x) => x.id === seasonId);
           return s ? mapLiveSeason(s as any) : null;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!seasonId,
   });
@@ -99,7 +100,7 @@ function SupabaseSeasonDetailPage() {
           const rows = await getLiveClubProfile(ctx, clubId);
           return rows.length ? { id: rows[0].id, name: rows[0].name } : null;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -129,7 +130,7 @@ function SupabaseSeasonDetailPage() {
               lifecycle_status: t.lifecycle_status ?? (t.archived ? "archived" : "active"),
             }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!seasonId,
   });
@@ -163,7 +164,7 @@ function SupabaseSeasonDetailPage() {
           });
           return counts;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: teamIds.length > 0,
   });
@@ -206,7 +207,7 @@ function SupabaseSeasonDetailPage() {
           }
           return { notified, notifyError };
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: ({ notified, notifyError }) => {
       if (notifyError) {
@@ -252,7 +253,7 @@ function SupabaseSeasonDetailPage() {
           });
           return userIds.length;
         },
-      });
+      }, { clubId: clubId! });
     },
     onSuccess: (count) => {
       toast.success(
@@ -301,7 +302,7 @@ function SupabaseSeasonDetailPage() {
           }
           return { notified, notifyError };
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: ({ notified, notifyError }) => {
       if (notifyError) {

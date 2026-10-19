@@ -21,6 +21,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { toast } from "sonner";
 import { Principal } from "@icp-sdk/core/principal";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   getLiveClubDmSettings,
   listLiveAllClubDmSettings,
@@ -69,7 +70,7 @@ export default function AdminDmAttachmentsPage() {
             ...userPrincipals.map((p) => ({ id: `user:${p}`, scope: "user" as const, user_id: p })),
           ];
         },
-      }),
+      }, { everyGroup: true, merge: (parts: DmRestriction[][]) => parts.flat() }),
     enabled: isAppAdmin === true,
   });
 
@@ -92,7 +93,7 @@ export default function AdminDmAttachmentsPage() {
           }
           return out.sort((a, b) => a.name.localeCompare(b.name));
         },
-      }),
+      }, { shared: 'app' }),
     enabled: isAppAdmin === true,
   });
 
@@ -128,7 +129,7 @@ export default function AdminDmAttachmentsPage() {
             avatar_url: p.avatar_ref?.[0] || null,
           }));
         },
-      }),
+      }, { shared: "app" }),
     enabled: isAppAdmin === true && restrictedUserIds.size > 0,
   });
 
@@ -165,7 +166,7 @@ export default function AdminDmAttachmentsPage() {
         icp: async (ctx) => {
           await setLiveDmAttachmentsDisabled(ctx, Principal.fromText(userId), true);
         },
-      }),
+      }, { shared: "person" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dm-attachment-restrictions"] });
       qc.invalidateQueries({ queryKey: ["dm-restriction-user-profiles"] });
@@ -189,7 +190,7 @@ export default function AdminDmAttachmentsPage() {
             await setLiveDmAttachmentsDisabled(ctx, Principal.fromText(restriction.user_id!), false);
           }
         },
-      }),
+      }, restriction.scope === "club" && restriction.club_id ? writeOnce({ clubId: restriction.club_id }) : { shared: "person" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dm-attachment-restrictions"] });
       toast.success("Restriction removed");
@@ -226,7 +227,7 @@ export default function AdminDmAttachmentsPage() {
             email: null as string | null,
           }));
         },
-      });
+      }, { shared: "app" });
       setSearchedUsers(results);
       setKnownUserNames((prev) => {
         const next = new Map(prev);

@@ -538,7 +538,7 @@ function SupabaseCreateEventPage() {
               (g.club?.[0] ?? null) === clubId,
           );
         },
-      }),
+      }, { shared: 'person' }),
     enabled: !!clubId && !!user,
   });
 
@@ -561,7 +561,7 @@ function SupabaseCreateEventPage() {
         // Canister Pro flags: team grant -> club grant -> caller IAP, same as
         // the event detail and attendance pages.
         icp: async (ctx) => resolveLiveProFootballAccess(ctx, { teamId: null, clubId }),
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
     placeholderData: false, // Prevent undefined state causing delayed render
   });
@@ -613,7 +613,7 @@ function SupabaseCreateEventPage() {
           const grants = await getLiveMyRoleGrants(ctx);
           return [...new Set(grants.map((g) => g.team?.[0]).filter((t): t is string => !!t))];
         },
-      }),
+      }, { shared: 'person' }),
     enabled: !!clubId && !!user,
   });
 
@@ -659,7 +659,7 @@ function SupabaseCreateEventPage() {
           }
           return [];
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId && userTeamIds !== undefined,
   });
@@ -686,7 +686,7 @@ function SupabaseCreateEventPage() {
             .map((t) => ({ id: t.id, name: t.name }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
   });
 
@@ -744,7 +744,7 @@ function SupabaseCreateEventPage() {
         // Duty assignment stays optional in ICP mode — the canister roster
         // has no display-name directory to pick from yet.
         icp: async () => [] as { id: string; display_name: string; avatar_url: string | null }[],
-      }),
+      }, { shared: 'person' }),
     enabled: !!clubId,
   });
 
@@ -798,7 +798,7 @@ function SupabaseCreateEventPage() {
             name: loc.location_label,
             isFavorite: true,
           })) as SavedLocation[],
-      }),
+      }, { shared: 'person' }),
     enabled: !!clubId,
   });
 
@@ -828,7 +828,7 @@ function SupabaseCreateEventPage() {
             created_at: "",
             user_id: "",
           })),
-      }),
+      }, { shared: 'person' }),
     enabled: !!user,
   });
 
@@ -856,7 +856,7 @@ function SupabaseCreateEventPage() {
           return { code: "23505" } as any;
         }
       },
-    });
+    }, { shared: "person" });
 
     if (error) {
       if (error.code === "23505") {
@@ -884,7 +884,7 @@ function SupabaseCreateEventPage() {
         await removeLiveFavouriteEventTitle(ctx, id);
         return null;
       },
-    });
+    }, { shared: "person" });
 
     if (!error) {
       queryClient.invalidateQueries({ queryKey: ["favorite-event-titles"] });
@@ -1049,7 +1049,7 @@ function SupabaseCreateEventPage() {
     // system message — would land in a dead chat thread.
     // ICP mode has no Supabase team rows; the club/team scope guard below
     // checks the team against the canister-loaded team list instead.
-    if (teamId && !(await withFeatureBackend("events", { supabase: async () => false, icp: async () => true }))) {
+    if (teamId && !(await withFeatureBackend("events", { supabase: async () => false, icp: async () => true }, { shared: "app" }))) {
       const { data: teamRow, error: teamCheckError } = await supabase
         .from("teams")
         .select("id, deleted_at")

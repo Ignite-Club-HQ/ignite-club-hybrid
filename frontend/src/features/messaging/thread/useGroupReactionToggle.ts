@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ensureFreshSession } from "@/lib/ensureFreshSession";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { toggleLiveReaction } from "@/live/features/messaging";
 import {
   normalizeGroupReactionType,
@@ -58,7 +59,7 @@ export const useGroupReactionToggle = ({
         await withFeatureBackend("messaging", {
           supabase: async () => {},
           icp: async (ctx) => { await toggleLiveReaction(ctx, messageId, normalizedReactionType); },
-        });
+        }, writeOnce({ conversationId: groupId }));
         void queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
         return { action: 'none' as const };
       }

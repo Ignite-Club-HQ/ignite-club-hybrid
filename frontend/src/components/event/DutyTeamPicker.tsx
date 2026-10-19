@@ -51,7 +51,7 @@ export function DutyTeamPicker({
           .filter((team: any) => team.is_active && !team.archived && !team.is_shell && !team.deleted_at_ms)
           .map((team: any) => ({ id: team.id, name: team.name }));
       },
-    }),
+    }, { clubId: clubId! }),
   });
 
   if (!clubId) return null;

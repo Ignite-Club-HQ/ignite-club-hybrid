@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { markLiveConversationRead, listLiveReadReceipts } from "@/live/features/messaging";
 import { selectCachedProfilesByIds, selectCachedProfileById } from "@/lib/profileCache";
 
@@ -173,7 +174,7 @@ export function useMessageReads(
       const receipts = await withFeatureBackend("messaging", {
         supabase: async () => [],
         icp: (ctx) => listLiveReadReceipts(ctx, contextId),
-      });
+      }, { conversationId: contextId });
 
       const readers: Record<string, Map<string, ReaderInfo>> = {};
       for (const receipt of receipts) {
@@ -283,7 +284,7 @@ export function useMessageReads(
         await withFeatureBackend("messaging", {
           supabase: async () => undefined, // unreachable — guarded above
           icp: (ctx) => markLiveConversationRead(ctx, contextId, ids[ids.length - 1]),
-        });
+        }, writeOnce({ conversationId: contextId }));
         return;
       }
 

@@ -89,3 +89,18 @@ describe('entity scopes', () => {
     expect(s.readEveryGroup).not.toHaveBeenCalled();
   });
 });
+
+describe('lists spanning several clubs', () => {
+  it('switched off: asks only the shared canisters', async () => {
+    const { d } = deps(); const x = createClubDispatcher(d);
+    expect(await x.readAcross('events', 'events_domain', async () => ['a'], (p: string[][]) => p.flat())).toEqual(['legacy']);
+    expect(d.open).not.toHaveBeenCalled();
+  });
+  it('switched on: shared canisters and every group are combined', async () => {
+    const { d, session } = deps(ON);
+    const s2 = { ...session, readEveryGroup: vi.fn(async (_d: string, r: (ctx: never) => Promise<string[]>) => (await Promise.all(['g1', 'g2'].map(g => r(g as never)))).flat()) };
+    const x = createClubDispatcher({ ...d, open: vi.fn(async () => s2) } as never);
+    const out = await x.readAcross('events', 'events_domain', async (ctx: unknown) => `from-${String(ctx)}`, (p: string[]) => p);
+    expect(out).toEqual(['legacy', 'from-g1', 'from-g2']);
+  });
+});

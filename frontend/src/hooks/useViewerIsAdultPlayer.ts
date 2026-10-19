@@ -35,7 +35,7 @@ export function useViewerIsAdultPlayer(event: {
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: (ctx) => myLiveRoleGrants(ctx),
-        });
+        }, { shared: 'person' });
         return grants.some((g) => {
           if (g.role !== "player") return false;
           if (teamId) return g.team === teamId;

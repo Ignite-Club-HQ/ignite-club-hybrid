@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -635,7 +636,7 @@ function SupabaseEditEventPage() {
             const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
             return profiles.flatMap((rows) => (rows as Array<{ id: string; name: string; deleted_at_ms: [] | [bigint] }>).filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       const { data } = await supabase
         .from("user_roles")
@@ -663,7 +664,7 @@ function SupabaseEditEventPage() {
             const teams = await listLiveTeams(ctx, selectedClubId);
             return teams.filter((t) => ids.has(t.id) && !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name, club_id: t.club_id, default_match_arrival_minutes: null }));
           },
-        });
+        }, { clubId: selectedClubId! });
       }
       const query = supabase
         .from("user_roles")
@@ -696,7 +697,7 @@ function SupabaseEditEventPage() {
         return withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await listLiveTeams(ctx, selectedClubId)).filter((t) => !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name, club_id: t.club_id, default_match_arrival_minutes: null })),
-        });
+        }, { clubId: selectedClubId! });
       }
       const { data } = await supabase
         .from("teams")
@@ -719,7 +720,7 @@ function SupabaseEditEventPage() {
         return withFeatureBackend("membership", {
           supabase: async () => false,
           icp: async (ctx) => (await getLiveMyRoleGrants(ctx)).some((g) => g.club[0] === selectedClubId && ["club_admin", "committee_member", "league_admin", "app_admin"].includes(g.role)),
-        });
+        }, { shared: 'person' });
       }
       const { data: appAdmin } = await supabase
         .from("user_roles")

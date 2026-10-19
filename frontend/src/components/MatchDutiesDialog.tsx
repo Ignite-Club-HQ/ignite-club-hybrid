@@ -4,6 +4,7 @@ import { Plus, X, Loader2, Check, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { setLiveGroupDuty, removeLiveGroupDuty, listLiveGroupDuties } from "@/live/features/events";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -33,6 +34,8 @@ interface MatchDutiesDialogProps {
   groupId: string;
   groupName: string;
   miniLeagueId: string;
+  /** Event the group belongs to: lets duty reads/writes reach the club's own canisters. */
+  eventId: string;
   /** Pre-select a duty for assignment (quick-assign from badge) */
   initialDutyId?: string | null;
 }
@@ -45,6 +48,7 @@ export function MatchDutiesDialog({
   groupId,
   groupName,
   miniLeagueId,
+  eventId,
   initialDutyId,
 }: MatchDutiesDialogProps) {
   const queryClient = useQueryClient();
@@ -85,7 +89,7 @@ export function MatchDutiesDialog({
             } satisfies GroupDuty;
           });
         },
-      }),
+      }, { eventId }),
     enabled: open && !!groupId,
   });
 
@@ -165,7 +169,7 @@ export function MatchDutiesDialog({
           await setLiveGroupDuty(ctx, groupId, name, null);
           return true;
         },
-      });
+      }, writeOnce({ eventId }));
       if (addedOnIcp) return;
 
       const { error } = await supabase.from("event_group_duties").insert({
@@ -196,7 +200,7 @@ export function MatchDutiesDialog({
           await setLiveGroupDuty(ctx, groupId, duty.name, assignedTo);
           return true;
         },
-      });
+      }, writeOnce({ eventId }));
       if (assignedOnIcp) {
         queryClient.invalidateQueries({ queryKey: ["event-group-duties", groupId] });
         setView("list");
@@ -233,7 +237,7 @@ export function MatchDutiesDialog({
             await removeLiveGroupDuty(ctx, groupId, duty.name);
             return true;
           },
-        });
+        }, writeOnce({ eventId }));
         if (removedOnIcp) return;
       }
 

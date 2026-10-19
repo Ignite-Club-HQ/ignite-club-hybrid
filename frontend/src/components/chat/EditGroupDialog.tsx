@@ -16,6 +16,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -180,7 +181,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
           }
           return false;
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user && open,
     staleTime: 5 * 60 * 1000,
@@ -195,7 +196,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
       const metadata = await withFeatureBackend("messaging", {
         supabase: async () => null,
         icp: (ctx) => getLiveGroupMetadata(ctx, group.id),
-      });
+      }, { conversationId: group.id });
       if (metadata) {
         setDescription(metadata.description ?? "");
         setAvatar(metadata.avatar ?? "");
@@ -204,7 +205,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
       const policy = await withFeatureBackend("messaging", {
         supabase: async () => null,
         icp: async (ctx) => (await import("@/live/features/messaging")).getLiveGroupJoinPolicy(ctx, group.id),
-      }).catch(() => null);
+      }, { conversationId: group.id }).catch(() => null);
       if (policy) setJoinPolicy(normalizeJoinPolicy(policy.joinPolicy));
       return metadata;
     },
@@ -246,7 +247,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
           );
           await setLiveGroupJoinPolicy(ctx, group.id, joinPolicy, (group as { category?: string | null }).category ?? null);
         },
-      });
+      }, writeOnce({ conversationId: group.id }));
     },
     onSuccess: () => {
       toast({ title: "Group updated successfully" });

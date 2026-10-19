@@ -93,7 +93,7 @@ export function AccessibilityPrefsProvider({ children }: { children: React.React
           const json = await withFeatureBackend("membership", {
             supabase: async () => null,
             icp: async (ctx) => (await import("@/live/features/club")).getLiveAccessibilityPrefs(ctx),
-          });
+          }, { shared: 'person' });
           remote = json ? (JSON.parse(json) as Partial<AccessibilityPrefs>) : null;
         } catch {
           remote = null;
@@ -134,7 +134,7 @@ export function AccessibilityPrefsProvider({ children }: { children: React.React
           await withFeatureBackend("membership", {
             supabase: async () => undefined,
             icp: async (ctx) => (await import("@/live/features/club")).saveLiveAccessibilityPrefs(ctx, JSON.stringify(next)),
-          });
+          }, { shared: 'person' });
         } catch (e) {
           console.warn("[a11y] on-chain save failed", e);
         }

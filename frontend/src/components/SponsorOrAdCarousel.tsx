@@ -38,7 +38,7 @@ async function isEventsStripEnabledForClub(candidateClubId: string): Promise<boo
       const settingsOpt = await getLiveClubSettings(ctx, candidateClubId);
       return !!settingsOpt[0]?.events_sponsor_strip_enabled;
     },
-  });
+  }, { clubId: candidateClubId });
 }
 
 export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdCarouselProps) {
@@ -106,7 +106,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           }
           return { allowed: false, effectiveClubId: null as string | null };
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: isEventsPlacement,
   });
@@ -284,7 +284,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           }
           return sponsors.some((s) => s.is_active);
         },
-      });
+      }, { shared: 'app' });
     },
   });
 

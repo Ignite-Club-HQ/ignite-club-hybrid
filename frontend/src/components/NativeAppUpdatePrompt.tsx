@@ -68,7 +68,7 @@ export function NativeAppUpdatePrompt() {
             const { getLiveMinimumAppVersions } = await import("@/live/features/messaging");
             return Object.fromEntries(await getLiveMinimumAppVersions(ctx));
           },
-        });
+        }, { shared: "app" });
         const requiredVersion = minVersions?.[platform];
         if (!requiredVersion) return;
 

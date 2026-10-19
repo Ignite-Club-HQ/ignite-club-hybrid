@@ -120,7 +120,7 @@ export default function MemberDetailSheet({
               const { canLiveDmUser } = await import("@/live/features/messaging");
               return canLiveDmUser(ctx, Principal.fromText(userId));
             },
-          });
+          }, { shared: "person" });
           if (!cancelled) setCanDM(allowed !== false);
         } catch {
           // Fail open — the canister enforces can_dm_user on send either way.
@@ -162,7 +162,7 @@ export default function MemberDetailSheet({
             const record = dm as unknown as Record<string, unknown>;
             return (record.conversation_id ?? record.conversationId ?? record.id ?? null) as string | null;
           },
-        });
+        }, { shared: "person" });
         if (conversationId) {
           onOpenChange(false);
           navigate(`/messages/dm/${conversationId}`);

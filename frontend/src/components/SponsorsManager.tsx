@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { compressImage } from "@/lib/imageCompression";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { deleteLiveSponsor, listLiveSponsors, saveLiveSponsor, type LiveClubSponsor } from "@/live/features/club";
 
 interface Sponsor {
@@ -113,7 +114,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
               display_order: Number(r.sort_order),
             }) as unknown as Sponsor);
         },
-      });
+      }, { clubId: clubId! });
     },
   });
 
@@ -211,7 +212,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
           };
           await saveLiveSponsor(ctx, sponsor);
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       invalidateSponsorQueries();
@@ -290,7 +291,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
               };
           await saveLiveSponsor(ctx, sponsor);
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       invalidateSponsorQueries();
@@ -314,7 +315,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
           if (error) throw error;
         },
         icp: (ctx) => deleteLiveSponsor(ctx, id),
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       invalidateSponsorQueries();
@@ -349,7 +350,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
         if (!existing) throw new Error("Sponsor not found");
         await saveLiveSponsor(ctx, { ...existing, [field]: value });
       },
-    });
+    }, writeOnce({ clubId: clubId! }));
 
   const toggleOptimistic = {
     onMutate: async ({ id, value, field }: { id: string; value: boolean; field: "is_active" | "is_team_only" }) => {

@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useScheduleBroadcastListener } from "@/hooks/useScheduleBroadcastListener";
@@ -37,6 +38,7 @@ import {
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveClubProfile, getLiveTeam, listLiveClubs, listLiveTeams } from "@/live/features/club";
 import { requestLiveRole } from "@/live/features/membership";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
@@ -840,7 +842,7 @@ export default function HomePage() {
             .filter((r) => r.name !== "")
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      });
+      }, { everyGroup: true, merge: mergeLists });
     },
     enabled: !!user && !!userMemberships && (userMemberships?.clubIds?.length ?? 0) > 0,
     staleTime: 5 * 60 * 1000,
@@ -887,7 +889,7 @@ export default function HomePage() {
             if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
             return fetchLiveCallerIapPro(ctx);
           },
-        });
+        }, { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) });
       }
 
       // Check club subs, team subs, and teams table (for trial is_pro) in parallel
@@ -939,7 +941,7 @@ export default function HomePage() {
               }];
             });
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       if (activeClubFilter) {
         const [clubResult, subResult] = await Promise.all([
@@ -1030,7 +1032,7 @@ export default function HomePage() {
           return mergeHomeUserChildren(owned as any, guardianLinks as any);
         },
         icp: (ctx) => fetchLiveHomeChildren(ctx),
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
@@ -1467,7 +1469,7 @@ export default function HomePage() {
                 };
               });
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       // Only fetch teams where user is coach or team_admin (direct team edit access)
       const { data: userRoles, error: rolesError } = await supabase
@@ -1615,7 +1617,7 @@ export default function HomePage() {
                 };
               });
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       // Get user's roles
       const { data: userRoles, error: rolesError } = await supabase
@@ -1797,7 +1799,7 @@ export default function HomePage() {
             const team = await getLiveTeam(ctx, teamId).catch(() => null);
             return resolveLiveProFootballAccess(ctx, { teamId, clubId: team?.club_id ?? null });
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data: teamSubscription } = await supabase
         .from("team_subscriptions")
@@ -1958,7 +1960,7 @@ export default function HomePage() {
           await withFeatureBackend("membership", {
             supabase: async () => { throw new Error("unreachable"); },
             icp: (ctx) => requestLiveRole(ctx, league.club_id, selectedLeagueRole!),
-          });
+          }, writeOnce({ clubId: league?.club_id as string }));
           return;
         }
         if (userRoles?.some(r => r.team_id === selectedTeam && r.role === selectedTeamRole)) {
@@ -1969,7 +1971,7 @@ export default function HomePage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: (ctx) => requestLiveRole(ctx, team.club_id, selectedTeamRole!, selectedTeam),
-        });
+        }, writeOnce({ clubId: team?.club_id as string }));
         return;
       }
       if (isLeagueSelected && actualLeagueId) {
@@ -2062,7 +2064,7 @@ export default function HomePage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: (ctx) => requestLiveRole(ctx, team.club_id, role, selectedTeam),
-        });
+        }, writeOnce({ clubId: team?.club_id as string }));
         return;
       }
       const { error } = await supabase.from("role_requests").insert({

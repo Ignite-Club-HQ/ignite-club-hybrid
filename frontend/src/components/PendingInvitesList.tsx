@@ -77,7 +77,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
         const branding = await withFeatureBackend("membership", {
           supabase: async () => null,
           icp: (ctx) => getLiveClubBranding(ctx, effectiveClubId),
-        });
+        }, { clubId: effectiveClubId });
 
         const clubName = branding?.name || "The Club";
         const clubLogoUrl = branding?.logo_url[0];
@@ -89,7 +89,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
           const team = await withFeatureBackend("membership", {
             supabase: async () => null,
             icp: (ctx) => getLiveTeam(ctx, teamId),
-          });
+          }, { teamId: teamId! });
           teamName = team && team.length ? team[0].name : "";
         }
 
@@ -100,7 +100,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
                 throw new Error("unreachable: already routed to icp");
               },
               icp: (ctx) => resendLivePendingInvite(ctx, invite.id),
-            });
+            }, { inviteToken: invite.id });
 
             // Resending on canister returns the invite record (or similar payload).
             // We use the same invite ID as the token for ICP pending invites.

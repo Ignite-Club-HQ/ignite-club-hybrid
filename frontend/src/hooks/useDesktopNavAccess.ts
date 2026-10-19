@@ -40,7 +40,7 @@ export function useDesktopNavAccess() {
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
-        });
+        }, { shared: 'person' });
         rows = grants.map((g) => ({ role: g.role, club_id: g.club ?? null, team_id: g.team ?? null }));
       } else {
         const { data: roles, error } = await supabase
@@ -224,7 +224,7 @@ export function useNextPitchBoardTarget(teamIds: string[], enabled: boolean) {
             const preferredTeamId = inScope[0]?.team_id[0] ?? teamIds[0];
             return preferredTeamId ? `/teams/${preferredTeamId}?openPitchBoard=1` : null;
           },
-        });
+        }, { everyGroup: true, merge: (parts: (string | null)[]) => parts.find(Boolean) ?? null });
         return result;
       }
       const { data: events, error } = await supabase

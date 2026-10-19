@@ -217,7 +217,7 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
         const names = await withFeatureBackend("events", {
           supabase: async () => new Map<string, string>(),
           icp: (ctx) => resolveLivePiiTextBatch(ctx, childIds, "name", "child_rsvps", "Household RSVP child names"),
-        });
+        }, { shared: "app" });
         return (rows ?? []).map((r) => {
           const child = r.child[0];
           const childId = r.rsvp.child_id[0] ?? "";
@@ -307,7 +307,7 @@ function useChildrenForEvent(
               const children = await fetchLiveHomeChildren(ctx);
               return children.map((c) => ({ id: c.id, name: c.name ?? "" }));
             },
-          });
+          }, { shared: 'person' });
           if (merged.length === 0) return [];
           const players = await withFeatureBackend("mini_leagues", {
             supabase: async () => [] as never[],

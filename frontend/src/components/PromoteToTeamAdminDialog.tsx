@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShieldPlus, Check, Search } from "lucide-react";
@@ -99,7 +100,7 @@ export default function PromoteToTeamAdminDialog({
             console.error("Failed to send ICP notification:", e);
           }
         },
-      });
+      }, writeOnce({ clubId }));
 
       // Invalidate the promoted user's roles cache
       invalidateRolesCache();

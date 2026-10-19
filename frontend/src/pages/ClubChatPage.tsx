@@ -106,6 +106,7 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
@@ -384,7 +385,7 @@ export default function ClubChatPage() {
               is_pro: false,
             };
           },
-        });
+        }, { clubId: clubId! });
       }
 
       const { data, error } = await supabase
@@ -461,7 +462,7 @@ export default function ClubChatPage() {
               expires_at: row.expires_at_ms.length ? new Date(Number(row.expires_at_ms[0])).toISOString() : null,
             };
           },
-        });
+        }, { clubId: clubId! });
       }
 
       const { data } = await supabase
@@ -1668,7 +1669,7 @@ export default function ClubChatPage() {
         icp: async (ctx) => {
           await updateLiveMessage(ctx, editingMessage.id, message.trim());
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       setMessage("");

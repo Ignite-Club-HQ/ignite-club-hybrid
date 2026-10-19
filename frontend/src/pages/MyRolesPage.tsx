@@ -192,7 +192,7 @@ function HybridMyRolesPage() {
             };
           });
       }
-    }),
+    }, { shared: 'person' }),
     enabled: !!user,
   });
 

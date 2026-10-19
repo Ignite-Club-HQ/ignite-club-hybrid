@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -81,7 +82,7 @@ export default function LeaderboardPage() {
           const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
           return profiles.flatMap((rows) => (rows as Array<{ id: string; name: string; deleted_at_ms: [] | [bigint] }>).filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
         },
-      });
+      }, { everyGroup: true, merge: mergeLists });
       const { data, error } = await supabase
         .from("user_roles")
         .select("club_id, clubs:club_id(id, name, deleted_at)")
@@ -122,7 +123,7 @@ export default function LeaderboardPage() {
       if (isIcpPoints) return withFeatureBackend("membership", {
         supabase: async () => [],
         icp: async (ctx) => (await listLiveTeams(ctx, clubId)).filter((t) => !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name })),
-      });
+      }, { clubId: clubId! });
       const { data, error } = await supabase.rpc("list_leaderboard_teams", { _club_id: clubId });
       if (error) throw error;
       return (data ?? []) as { id: string; name: string }[];
@@ -160,7 +161,7 @@ export default function LeaderboardPage() {
         const profiles = await withFeatureBackend("membership", {
           supabase: () => [],
           icp: (ctx) => listLiveProfilesByIds(ctx, entries.map((e) => e.subject_id)),
-        });
+        }, { shared: 'person' });
         const profileById = new Map(profiles.map((p) => [p.account_id, p]));
         return entries.map((e, i) => {
           const profile = profileById.get(e.subject_id);

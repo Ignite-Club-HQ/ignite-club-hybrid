@@ -3,6 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { setLiveMiniLeagueRsvp } from "@/live/features/events";
 
 export type RsvpStatus = "going" | "not_going" | "maybe";
@@ -41,7 +42,7 @@ export function useParentLeaguePlayerRsvpMutation(params: UseParentLeaguePlayerR
             );
             return true;
           },
-        });
+        }, writeOnce({ eventId: id ?? "" }));
         if (setOnIcp) return;
       }
 

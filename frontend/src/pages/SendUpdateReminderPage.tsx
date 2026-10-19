@@ -66,7 +66,7 @@ function IcpSendUpdateReminderPage() {
     queryFn: () => withFeatureBackend("messaging", {
       supabase: async () => { throw new Error("Internet Identity connection required"); },
       icp: async ctx => (await import("@/live/features/messaging")).getLiveMinimumAppVersions(ctx),
-    }),
+    }, { shared: "app" }),
   });
   useEffect(() => {
     if (minimums) { const values = Object.fromEntries(minimums); setMinIos(values.ios ?? ""); setMinAndroid(values.android ?? ""); }
@@ -78,7 +78,7 @@ function IcpSendUpdateReminderPage() {
       await withFeatureBackend("messaging", {
         supabase: async () => { throw new Error("Internet Identity connection required"); },
         icp: async ctx => (await import("@/live/features/messaging")).setLiveMinimumAppVersions(ctx, [["ios", minIos], ["android", minAndroid]]),
-      }); toast.success("Minimum versions saved");
+      }, { shared: "app" }); toast.success("Minimum versions saved");
     } catch (e) { toast.error(e instanceof Error ? e.message : "Save failed"); }
     finally { setSavingMinimum(false); }
   };

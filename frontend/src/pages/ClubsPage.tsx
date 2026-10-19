@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Users, Plus, Crown, ChevronRight, Filter, Search, X, Info, RotateCcw, Trash2 } from "lucide-react";
@@ -20,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -80,7 +82,7 @@ export default function ClubsPage() {
         const rows = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await import("@/live/features/club")).listLiveMyRemovedClubs(ctx),
-        });
+        }, { everyGroup: true, merge: mergeLists });
         const o = (v: any) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
         return (rows as any[])
           .map((c) => ({
@@ -116,7 +118,7 @@ export default function ClubsPage() {
         await withFeatureBackend("membership", {
           supabase: async () => undefined,
           icp: async (ctx) => { await (await import("@/live/features/club")).restoreLiveClub(ctx, clubId, true); },
-        });
+        }, writeOnce({ clubId: clubId! }));
       } catch (e) {
         error = { message: e instanceof Error ? e.message : "Unknown error" };
       }
@@ -147,7 +149,7 @@ export default function ClubsPage() {
         await withFeatureBackend("membership", {
           supabase: async () => undefined,
           icp: async (ctx) => { await (await import("@/live/features/club")).deleteLiveClubPermanent(ctx, targetId); },
-        });
+        }, writeOnce({ clubId: targetId }));
       } catch (e) {
         error = { message: e instanceof Error ? e.message : "Unknown error" };
       }
@@ -197,7 +199,7 @@ export default function ClubsPage() {
             }));
             return clubs.filter((c): c is Club => c !== null);
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
 
       const { data, error } = await supabase
@@ -234,7 +236,7 @@ export default function ClubsPage() {
                 club_id: s.club_id,
               }) as Sponsor);
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       const { data, error } = await supabase
         .from("sponsors")
@@ -265,7 +267,7 @@ export default function ClubsPage() {
               admin_pro_football_override: s.admin_pro_football_override,
             }) as ClubSubscription);
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       const { data, error } = await supabase
         .from("club_subscriptions")
@@ -293,7 +295,7 @@ export default function ClubsPage() {
               team_id: g.team[0] ?? null,
             }));
           },
-        });
+        }, { shared: 'person' });
       }
       const { data, error } = await supabase
         .from("user_roles")

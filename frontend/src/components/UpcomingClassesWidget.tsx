@@ -152,7 +152,7 @@ export function UpcomingClassesWidget() {
           );
           return { classes, childNamesByTeam };
         },
-      });
+      }, { everyGroup: true, merge: (parts: any[]) => ({ classes: parts.flatMap((p) => p.classes), childNamesByTeam: Object.assign({}, ...parts.map((p) => p.childNamesByTeam)) }) });
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,

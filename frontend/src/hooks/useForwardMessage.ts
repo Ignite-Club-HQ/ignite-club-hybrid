@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { forwardLiveMessage, listLiveGroupsByClub, listLiveGroupsByTeam } from "@/live/features/messaging";
 import { recordLiveChatNotifyBatch } from "@/live/features/notifications";
 import { getLiveClubProfile } from "@/live/features/club";
@@ -105,7 +106,7 @@ export function useForwardDestinations(userId: string | undefined, enabled: bool
             .map((group) => ({ ...group, club_name: clubNames.get(group.club_id!) ?? null }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      });
+      }, { everyGroup: true, merge: (parts: ForwardDestinationGroup[][]) => parts.flat() });
     },
   });
 }
@@ -145,13 +146,16 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
       const { source, destinationGroupIds } = args;
       if (destinationGroupIds.length === 0) return { forwarded: 0 };
 
-      const forwardedViaIcp = await withFeatureBackend("messaging", {
+      // One call per destination so each reaches its own club's canisters.
+      let forwardedViaIcp = false;
+      for (const dest of destinationGroupIds) {
+      forwardedViaIcp = await withFeatureBackend("messaging", {
         supabase: () => false,
         icp: async (ctx) => {
           if (!source.messageId) {
             throw new Error("Missing original message id — can't forward this message.");
           }
-          for (const toConversationId of destinationGroupIds) {
+          for (const toConversationId of [dest]) {
             const forwarded = await forwardLiveMessage(ctx, source.messageId!, toConversationId);
             // Best-effort notify of the original author only: that's the one
             // recipient this flow genuinely knows client-side (there's no
@@ -176,7 +180,8 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
           }
           return true;
         },
-      });
+      }, writeOnce({ conversationId: dest }));
+      }
       if (forwardedViaIcp) {
         return { forwarded: destinationGroupIds.length };
       }

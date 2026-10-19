@@ -77,7 +77,7 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
           teams.forEach((t) => t?.club_id && out.add(t.club_id));
           return out;
         },
-      });
+      }, { shared: 'person' });
       return ids.size === 1 ? Array.from(ids)[0] : null;
     },
   });
@@ -102,7 +102,7 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
           const settingsOpt = await getLiveClubSettings(ctx, resolvedClubId!);
           return !!settingsOpt[0]?.media_sponsors_enabled;
         },
-      });
+      }, { clubId: resolvedClubId! });
 
       const isPro = await withFeatureBackend("membership", {
         supabase: async () => {
@@ -114,7 +114,7 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
           return !!sub?.is_pro;
         },
         icp: (ctx) => isLiveClubPro(ctx, resolvedClubId!),
-      });
+      }, { clubId: resolvedClubId! });
 
       return { enabled, isPro };
     },
@@ -150,7 +150,7 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
               website_url: r.website_url[0] ?? null,
               tier: r.tier as SponsorTier,
             })),
-      });
+      }, { clubId: resolvedClubId! });
     },
   });
 

@@ -96,13 +96,14 @@ export function ReportContentDialog({
           return;
         }
         const { withFeatureBackend } = await import("@/live/featureRouter");
+        const { writeOnce } = await import("@/live/clubScope");
         await withFeatureBackend("messaging", {
           supabase: async () => undefined,
           icp: async (ctx) => {
             const { submitLiveContentReport } = await import("@/live/features/messaging");
             await submitLiveContentReport(ctx, subjectKind, subjectId, conversationId ?? null, reasonLabel, details);
           },
-        });
+        }, conversationId ? writeOnce({ conversationId }) : { shared: "app" });
         toast.success("Report submitted successfully. Our team will review it.");
         handleClose();
         return;

@@ -88,7 +88,7 @@ export function AddGroupMembersDialog({
               } satisfies Candidate;
             });
           },
-        });
+        }, { clubId: activeClubFilter ?? "" });
       }
 
       const { data: myRoles } = await supabase

@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { LogoImage } from "@/components/ui/logo-image";
 import { useQuery } from "@tanstack/react-query";
@@ -613,7 +614,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
           // Unreachable: this branch only runs when ICP mode is active.
           supabase: async () => [] as TeamOrLeague[],
           icp: (ctx) => fetchIcpCarouselItems(ctx, activeClubFilter ?? null),
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
 
       const { data: roles, error: rolesError } = await supabase
@@ -849,7 +850,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
             );
             return map;
           },
-        });
+        }, { everyGroup: true, merge: (parts: Record<string, unknown>[]) => Object.assign({}, ...parts) });
       }
 
       // PER-SCOPE FAN-OUT: one `.in(...)` query with a global limit lets a

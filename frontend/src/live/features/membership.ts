@@ -1,5 +1,6 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain } from "../domains";
+import { fetchMyRoleGrantsEverywhere } from "./myRoleGrants";
 import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
@@ -67,8 +68,7 @@ export async function listLiveMembershipClubs(ctx: FeatureBackendContext) {
  * previously relied on Supabase `user_roles` rows keyed by the II principal.
  */
 export async function getLiveMyRoleGrants(ctx: FeatureBackendContext) {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return actor.my_role_grants();
+  return fetchMyRoleGrantsEverywhere(ctx);
 }
 
 /** The caller's club_domain identity view (account id + roles). */

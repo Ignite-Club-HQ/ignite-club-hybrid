@@ -69,7 +69,7 @@ export function ClubSetupProgressCard({
               sponsorsCount: sponsors.length,
             };
           },
-        });
+        }, { clubId: clubId! });
       }
       const [
         teamsRes,

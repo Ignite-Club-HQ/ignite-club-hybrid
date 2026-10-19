@@ -156,7 +156,7 @@ export function useMessagesPageAccessData({
             if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
             return fetchLiveCallerIapPro(ctx);
           },
-        });
+        }, { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) });
       }
       const { data: userTeamRoles } = await client
         .from("user_roles")
@@ -206,7 +206,7 @@ export function useMessagesPageAccessData({
             const subs = await listLiveClubSubscriptions(ctx, memberClubIds);
             return Object.fromEntries(memberClubIds.map((id) => [id, liveHasAnyPro(subs.get(id))]));
           },
-        });
+        }, { everyGroup: true, merge: (parts: Record<string, unknown>[]) => Object.assign({}, ...parts) });
       }
       const { data: subscriptions, error } = await client
         .from("club_subscriptions")

@@ -52,7 +52,7 @@ export function useClubSeasons(clubId: string | undefined) {
             .map(mapLiveSeason)
             .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -80,7 +80,7 @@ export function useCurrentSeason(clubId: string | undefined) {
           const opt = await getLiveCurrentSeason(ctx, clubId);
           return opt.length === 0 ? null : mapLiveSeason(opt[0]);
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });

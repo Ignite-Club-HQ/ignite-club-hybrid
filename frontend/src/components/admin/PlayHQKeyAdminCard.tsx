@@ -24,7 +24,7 @@ export function PlayHQKeyAdminCard() {
       withFeatureBackend("events", {
         supabase: async () => null,
         icp: (ctx) => getLivePlayHQConfigStatus(ctx),
-      }),
+      }, { shared: "app" }),
     retry: false,
   });
 
@@ -34,7 +34,7 @@ export function PlayHQKeyAdminCard() {
         supabase: async () => undefined,
         icp: (ctx) =>
           setLivePlayHQConfig(ctx, clear ? null : { baseUrl: baseUrl.trim(), apiKey: apiKey.trim() }),
-      }),
+      }, { shared: "app" }),
     onSuccess: (_d, clear) => {
       setApiKey("");
       qc.invalidateQueries({ queryKey: ["icp-playhq-config-status"] });

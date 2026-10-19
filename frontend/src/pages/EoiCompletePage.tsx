@@ -147,7 +147,7 @@ function SupabaseEoiCompletePage() {
           if (!profile) return null;
           return { id: profile.id, name: profile.name, logo_url: profile.logo_url ?? null };
         },
-      });
+      }, { clubId: eoi?.club_id as string });
     },
     enabled: !!eoi?.club_id,
   });
@@ -171,7 +171,7 @@ function SupabaseEoiCompletePage() {
           if (!t) return null;
           return { id: t.id, name: t.name, level_age: t.level_age ?? null };
         },
-      });
+      }, { teamId: eoi.assigned_team_id! });
     },
     enabled: !!eoi?.assigned_team_id,
   });

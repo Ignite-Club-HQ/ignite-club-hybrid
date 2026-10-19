@@ -5,6 +5,7 @@ import { eventKeys } from "@/lab/eventQueryKeys";
 import { getMatchArrivalDate } from "@/lib/matchArrivalTime";
 import { setLocalEventDuty } from "@/lab/localEventsService";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   completeLiveEventDuty,
@@ -77,7 +78,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
             await createLiveOpenDuty(ctx, id, args.dutyName);
             return true;
           },
-        });
+        }, writeOnce({ eventId: id ?? "" }));
         if (createdOnIcp) return;
       }
 
@@ -155,7 +156,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
           if (String(duty.id).startsWith("open:")) await claimLiveOpenDuty(ctx, String(duty.id).slice(5), user.id).catch(() => undefined);
           return true;
         },
-      });
+      }, writeOnce({ eventId: id ?? "" }));
       if (claimedOnIcp) return;
 
       const { error } = await supabase
@@ -322,7 +323,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
             await completeLiveEventDuty(ctx, id, duty.assigned_to as string);
             return true;
           },
-        });
+        }, writeOnce({ eventId: id ?? "" }));
         if (completedOnIcp) {
           await notifyDutyCompleted(duty);
           return { outcome: "completed" as const };
@@ -399,7 +400,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
             await uncompleteLiveEventDuty(ctx, id, duty.assigned_to as string);
             return true;
           },
-        });
+        }, writeOnce({ eventId: id ?? "" }));
         if (reopenedOnIcp) return;
       }
 
@@ -447,7 +448,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
             await removeLiveEventDuty(ctx, id, duty.assigned_to as string);
             return true;
           },
-        });
+        }, writeOnce({ eventId: id ?? "" }));
         if (removedOnIcp) return;
       }
 
@@ -498,7 +499,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
           await withFeatureBackend("events", {
             supabase: async () => undefined,
             icp: async (ctx) => { await removeLiveEventDuty(ctx, id, prev); },
-          });
+          }, writeOnce({ eventId: id ?? "" }));
         }
         return;
       }
@@ -513,7 +514,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
               if (String(duty.id).startsWith("open:")) await claimLiveOpenDuty(ctx, String(duty.id).slice(5), userId).catch(() => undefined);
               return true;
             },
-          })
+          }, writeOnce({ eventId: id ?? "" }))
         : false;
       if (assignedOnIcp) {
         // Notify the assignee through the notifications feature routing;

@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { listLiveSeriesOccurrences, addLiveSeriesOccurrence, deleteLiveEvent } from "@/live/features/events";
 
 interface Props {
@@ -100,7 +101,7 @@ export function SeriesEndDateEditor({ eventId, parentEventId, canEdit, onUpdated
           const parent = all.length > 0 ? all[0] : null;
           return { parent, all };
         },
-      }),
+      }, { eventId }),
   });
 
   const currentEnd = series?.parent?.recurrence_end_date ?? null;
@@ -153,7 +154,7 @@ export function SeriesEndDateEditor({ eventId, parentEventId, canEdit, onUpdated
         // no canister field to sync — the occurrence list itself is the
         // source of truth under ICP.
         icp: (ctx) => applyIcpChange(ctx),
-      });
+      }, writeOnce({ eventId }));
 
       toast({
         title: "Series end date updated",

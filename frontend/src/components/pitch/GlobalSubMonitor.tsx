@@ -190,7 +190,7 @@ export default function GlobalSubMonitor() {
                 const f = await getLiveTeamPitchNotify(ctx, teamId);
                 flags = { coach: f.coach, team_admin: f.team_admin, subs_manager: f.subs_manager };
               },
-            }).catch((e) => console.warn("[SYNC] ICP pitch alert switches lookup failed:", e));
+            }, { teamId: teamId! }).catch((e) => console.warn("[SYNC] ICP pitch alert switches lookup failed:", e));
             await withFeatureBackend("membership", {
               supabase: async () => undefined,
               icp: async (ctx) => {
@@ -200,7 +200,7 @@ export default function GlobalSubMonitor() {
                   if ((g.role === "team_admin" && flags.team_admin) || (g.role === "coach" && flags.coach)) recipients.add(g.account_id);
                 }
               },
-            }).catch((e) => console.warn("[SYNC] ICP pitch staff lookup failed:", e));
+            }, { teamId: teamId! }).catch((e) => console.warn("[SYNC] ICP pitch staff lookup failed:", e));
             if (linkedEventId && flags.subs_manager) {
               await withFeatureBackend("events", {
                 supabase: async () => undefined,
@@ -211,7 +211,7 @@ export default function GlobalSubMonitor() {
                     if (d.account_id && d.duty.trim().toLowerCase() === "subs manager") recipients.add(d.account_id);
                   }
                 },
-              }).catch((e) => console.warn("[SYNC] ICP subs manager lookup failed:", e));
+              }, { eventId: linkedEventId }).catch((e) => console.warn("[SYNC] ICP subs manager lookup failed:", e));
             }
             await withFeatureBackend("notifications", {
               supabase: async () => 0,

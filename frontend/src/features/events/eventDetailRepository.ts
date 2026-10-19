@@ -35,7 +35,7 @@ export async function fetchEventDetail(client: any, eventId: string) {
       const raw = events.find((event) => event.id === eventId);
       return raw ? toEventDetailShape(raw) : null;
     },
-  });
+  }, { eventId });
 }
 
 /**

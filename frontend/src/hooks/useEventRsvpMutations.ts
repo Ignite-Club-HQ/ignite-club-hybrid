@@ -6,6 +6,7 @@ import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { setLocalEventRsvp } from "@/lab/localEventsService";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { setLiveEventRsvp, setLiveChildRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus, setLiveRsvpNote } from "@/live/features/events";
 import { recordLiveRsvpCompleted } from "@/live/features/insights";
 
@@ -92,7 +93,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
           }
           return true;
         },
-      });
+      }, writeOnce({ eventId: id ?? "" }));
       if (routedToIcp) return;
 
       // Offline path: queue the RSVP, return early
@@ -213,7 +214,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
           await setLiveChildRsvp(ctx, id, user.id, childId, status, existingRsvp?.notes ?? "");
           return true;
         },
-      });
+      }, writeOnce({ eventId: id ?? "" }));
       if (routedToIcp) return;
 
       let rsvpId: string | null = null;
@@ -298,7 +299,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
           await setLiveRsvpNote(ctx, id, user.id, note ?? "");
           return true;
         },
-      });
+      }, writeOnce({ eventId: id ?? "" }));
       if (routedToIcp) return;
 
       const { error } = await supabase
@@ -348,7 +349,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
           await adminUpsertLiveRsvp(ctx, id, parentUserId || user!.id, status, { childId });
           return true;
         },
-      });
+      }, writeOnce({ eventId: id ?? "" }));
       if (routedToIcp) return;
 
       if (childId) {
@@ -403,7 +404,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
           await adminUpdateLiveRsvpStatus(ctx, eventId, accountId, status, childPart === "self" ? null : childPart);
           return true;
         },
-      });
+      }, writeOnce({ eventId: parts[0] ?? "" }));
       if (routedToIcp) return;
 
       const { error } = await supabase.rpc('admin_update_rsvp_status', {
@@ -439,7 +440,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
           await adminUpsertLiveRsvp(ctx, id, memberId, status);
           return true;
         },
-      });
+      }, writeOnce({ eventId: id ?? "" }));
       if (routedToIcp) return;
 
       const { error } = await supabase.rpc('admin_upsert_rsvp', {
@@ -474,7 +475,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
           await adminUpsertLiveRsvp(ctx, id, parentUserId, status, { childId });
           return true;
         },
-      });
+      }, writeOnce({ eventId: id ?? "" }));
       if (routedToIcp) return;
 
       // Check if RSVP already exists for this child

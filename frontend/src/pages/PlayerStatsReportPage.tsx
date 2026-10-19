@@ -94,7 +94,7 @@ function SupabasePlayerStatsReportPage() {
         return lockedTeamId ? allTeams.filter((t) => t.id === lockedTeamId) : allTeams;
       },
       supabase: () => fetchSupabaseTeams(),
-    }),
+    }, { clubId: activeClubFilter ?? "" }),
     enabled: !!user,
   });
 
@@ -193,7 +193,7 @@ function SupabasePlayerStatsReportPage() {
         return games as GameEvent[];
       },
       supabase: () => fetchSupabaseGameEvents(),
-    }),
+    }, { teamId: selectedTeamId ?? "" }),
     enabled: !!selectedTeamId,
   });
 
@@ -248,7 +248,7 @@ function SupabasePlayerStatsReportPage() {
         return false;
       },
       supabase: () => fetchSupabaseProFootballAccess(),
-    }),
+    }, activeClubFilter ? { clubId: activeClubFilter } : { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) }),
     enabled: !!user && !!teams,
   });
 

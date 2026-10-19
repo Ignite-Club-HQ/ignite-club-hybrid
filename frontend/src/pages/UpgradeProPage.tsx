@@ -34,6 +34,7 @@ import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   getLiveClubProfile,
   getLiveClubSubscription,
@@ -155,7 +156,7 @@ function SupabaseUpgradeProPage() {
               (g.role === "team_admin" || g.role === "coach") && (g.team[0] ?? null) === teamId);
             return { isTeamAdmin, isClubAdmin };
           },
-        });
+        }, { teamId: teamId! });
       }
       // First get user roles
       const { data: roles } = await supabase
@@ -226,7 +227,7 @@ function SupabaseUpgradeProPage() {
               },
             };
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data, error } = await supabase
         .from("teams")
@@ -249,7 +250,7 @@ function SupabaseUpgradeProPage() {
             const sub = await getLiveTeamSubscription(ctx, teamId!);
             return sub ? { ...mapLiveTeamSubscriptionToRow(sub), expires_at: null } : null;
           },
-        });
+        }, { teamId: teamId! });
       }
       const { data } = await supabase
         .from("team_subscriptions")
@@ -272,7 +273,7 @@ function SupabaseUpgradeProPage() {
             const sub = await getLiveClubSubscription(ctx, team!.club_id);
             return sub ? mapLiveClubSubscriptionToRow(sub) : null;
           },
-        });
+        }, { clubId: team?.club_id as string });
       }
       const { data } = await supabase
         .from("club_subscriptions")
@@ -303,7 +304,7 @@ function SupabaseUpgradeProPage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("Promo codes are unavailable right now. Please try again."); },
           icp: (ctx) => redeemLiveTeamPromoCode(ctx, { code, teamId: teamId!, tier, isAnnual }),
-        });
+        }, writeOnce({ teamId: teamId! }));
         return tier;
       }
       // Validate promo code

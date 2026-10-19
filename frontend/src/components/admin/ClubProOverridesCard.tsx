@@ -68,7 +68,7 @@ export function ClubProOverridesCard() {
   const setPro = async (club: ClubRow, pro: boolean) => {
     setBusyId(club.id);
     try {
-      const [{ withFeatureBackend }, { getLiveClubSubscription, saveLiveClubSubscription }] =
+      const [{ withFeatureBackend, writeOnce }, { getLiveClubSubscription, saveLiveClubSubscription }] =
         await Promise.all([import("@/live/featureRouter"), import("@/live/features/club")]);
       await withFeatureBackend("membership", {
         supabase: async () => {
@@ -84,7 +84,7 @@ export function ClubProOverridesCard() {
             activated_at_ms: pro && base.activated_at_ms.length === 0 ? [BigInt(Date.now())] : base.activated_at_ms,
           });
         },
-      });
+      }, writeOnce({ clubId: club?.id as string }));
       qc.invalidateQueries();
       toast.success(`${club.name}: Pro ${pro ? "on" : "off"} — desktop unlocked`);
     } catch (e) {

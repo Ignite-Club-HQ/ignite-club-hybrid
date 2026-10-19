@@ -95,7 +95,7 @@ function IcpSponsorAnalyticsPage() {
           }
           return out.sort((a, b) => a.name.localeCompare(b.name));
         },
-      }),
+      }, { shared: 'app' }),
     enabled: isAppAdmin === true,
   });
 

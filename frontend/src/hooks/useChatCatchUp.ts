@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { scopeForChat } from "@/live/chatScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { generateLiveChatRecap } from "@/live/features/messaging";
@@ -250,7 +251,7 @@ export function useChatCatchUp({
                 throw new Error("unreachable");
               },
               icp: (ctx) => generateLiveChatRecap(ctx, scope_id, sinceMs),
-            });
+            }, scopeForChat(scope_type, scope_id));
             // The on-chain LLM returns a plain-text/markdown recap.
             const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
             const bullets: string[] = [];

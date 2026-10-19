@@ -51,7 +51,7 @@ export default function ClaimTeamPage() {
             const team = await claimLiveShellTeam(ctx, token);
             return (team as { id: string }).id;
           },
-        });
+        }, { inviteToken: token! });
         setTeamId(teamId);
         setStatus("done");
         toast({ title: "Team claimed", description: "You're now the team admin." });

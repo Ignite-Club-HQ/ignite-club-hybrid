@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { invalidateRolesCache } from "@/lib/rolesCache";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { addLiveTeamCaptain, removeLiveTeamCaptain, listLiveTeamCaptains } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 
@@ -62,7 +63,7 @@ export default function TeamCaptainCard({
           const list = await listLiveTeamCaptains(ctx, teamId);
           return list.map((c) => ({ id: c.user.toText(), user_id: c.user.toText() }));
         },
-      }),
+      }, { teamId: teamId! }),
     enabled: !!teamId,
   });
 
@@ -119,7 +120,7 @@ export default function TeamCaptainCard({
             console.error("Failed to send ICP notification:", e);
           }
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       afterChange();
@@ -151,7 +152,7 @@ export default function TeamCaptainCard({
         icp: async (ctx) => {
           await removeLiveTeamCaptain(ctx, clubId, teamId, Principal.fromText(userId));
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       afterChange();

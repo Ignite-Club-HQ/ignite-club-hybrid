@@ -59,7 +59,7 @@ export default function AdminChatPhotoRemindersPage() {
             const { getLiveChatPhotoReminderSettings } = await import("@/live/features/messaging");
             return { value: await getLiveChatPhotoReminderSettings(ctx) };
           },
-        });
+        }, { shared: "app" });
       }
       const { data, error } = await supabase
         .from("app_settings")
@@ -119,7 +119,7 @@ export default function AdminChatPhotoRemindersPage() {
             const { setLiveChatPhotoReminderSettings } = await import("@/live/features/messaging");
             await setLiveChatPhotoReminderSettings(ctx, form);
           },
-        });
+        }, { shared: "app" });
       } else {
         const { error } = await supabase
           .from("app_settings")
@@ -155,7 +155,7 @@ export default function AdminChatPhotoRemindersPage() {
             form.window_start_hours, form.window_end_hours, form.cooldown_days,
           );
         },
-      });
+      }, { everyGroup: true, merge: (parts: Array<{ scanned?: number; posted?: number; skipped?: number } | null>) => parts.reduce((t, p) => ({ scanned: (t.scanned ?? 0) + (p?.scanned ?? 0), posted: (t.posted ?? 0) + (p?.posted ?? 0), skipped: (t.skipped ?? 0) + (p?.skipped ?? 0) }), { scanned: 0, posted: 0, skipped: 0 }) });
     } catch (e) {
       setRunning(false);
       toast.error("Run failed: " + (e as Error).message);

@@ -15,6 +15,7 @@ import { getLocalLabRoleRoster } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { roleLabels, type AppRole } from "@/features/membership/rolePresentation";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { Principal } from "@icp-sdk/core/principal";
 import {
   listLiveRoleGrants,
@@ -177,7 +178,7 @@ function SupabaseManageRolesPage() {
             teams: null,
           }));
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
     refetchOnMount: true,
   });
@@ -205,7 +206,7 @@ function SupabaseManageRolesPage() {
               requester: { id: r.account_id, display_name: r.account_id, avatar_url: null },
             }));
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: !!clubId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -246,7 +247,7 @@ function SupabaseManageRolesPage() {
           return removeLiveRoleGrant(ctx, Principal.fromText(userId), clubId!, roleValue, teamId);
         },
         // itself is the only effect.
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-members-roles", clubId] });
@@ -274,7 +275,7 @@ function SupabaseManageRolesPage() {
             await rejectLiveRoleRequest(ctx, requestId);
           }
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-role-requests", clubId] });

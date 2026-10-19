@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   listLiveClubTerms,
   saveLiveClubTerm,
@@ -93,7 +94,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
             })
             .sort((a, b) => b.start_date.localeCompare(a.start_date));
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   const saveMutation = useMutation({
@@ -156,7 +157,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
           };
           await saveLiveClubTerm(ctx, term);
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });
@@ -181,7 +182,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
         icp: async (ctx) => {
           await setLiveClubTermStatus(ctx, id, isActive ? "active" : "archived");
         },
-      });
+      }, writeOnce({ clubId: id! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });
@@ -202,7 +203,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
         icp: async (ctx) => {
           await setLiveClubTermStatus(ctx, id, status);
         },
-      });
+      }, writeOnce({ clubId: id! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });
@@ -219,7 +220,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
         icp: async (ctx) => {
           await deleteLiveClubTerm(ctx, id);
         },
-      });
+      }, writeOnce({ clubId: id! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });

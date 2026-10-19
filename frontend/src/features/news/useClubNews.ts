@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -265,7 +266,7 @@ export function useNewsPublishableClubs() {
             .filter(c => adminClubIds.includes(c.id) && !isLiveClubDeleted(c))
             .map(c => ({ id: c.id, name: c.name }));
         }
-      });
+      }, { everyGroup: true, merge: mergeLists });
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
@@ -296,7 +297,7 @@ export function useClubTeamsForNews(clubId?: string | null) {
           const teams = await listLiveTeams(ctx, clubId!);
           return teams.map(t => ({ id: t.id, name: t.name }));
         }
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
     staleTime: 5 * 60 * 1000,

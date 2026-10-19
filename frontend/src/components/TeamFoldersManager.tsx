@@ -27,6 +27,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { CreateTeamFolderDialog } from "@/components/CreateTeamFolderDialog";
@@ -102,7 +103,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
             }))
             .sort((a, b) => a.sort_order - b.sort_order) as TeamFolder[];
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -134,7 +135,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
             created_at_ms: BigInt(Date.now()),
           });
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });
@@ -174,7 +175,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
             created_at_ms: BigInt(new Date(editingFolder.created_at).getTime()),
           });
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });
@@ -203,7 +204,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
           const { deleteLiveTeamFolder } = await import("@/live/features/club");
           await deleteLiveTeamFolder(ctx, folderId);
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });
@@ -243,7 +244,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
             });
           }
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });

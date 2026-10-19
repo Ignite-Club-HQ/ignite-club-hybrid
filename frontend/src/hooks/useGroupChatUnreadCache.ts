@@ -69,7 +69,7 @@ export function useGroupChatUnreadCache(userId: string | null | undefined) {
           }
           return map;
         },
-      });
+      }, { everyGroup: true, merge: (parts: Record<string, unknown>[]) => Object.assign({}, ...parts) });
     },
   });
 

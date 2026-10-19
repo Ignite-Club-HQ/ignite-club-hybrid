@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { addLiveEventGuest, removeLiveEventGuest, getLiveEventRosterDetailed } from "@/live/features/events";
 import { grantLiveClubPiiRead, registerLivePiiText, resolveLivePiiTextBatch } from "@/live/features/vault";
 import { Input } from "@/components/ui/input";
@@ -144,7 +145,7 @@ export function EventGuestsManager({
           await removeLiveEventGuest(ctx, guestId);
           return true;
         },
-      });
+      }, writeOnce({ eventId }));
       if (routedToIcp) return;
 
       const { error } = await supabase

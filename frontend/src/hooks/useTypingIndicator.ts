@@ -30,7 +30,7 @@ export function useTypingIndicator(
       withFeatureBackend("messaging", {
         supabase: async () => [],
         icp: (ctx) => listLiveTyping(ctx, channelName),
-      }),
+      }, { shared: "person" }),
     enabled: routedToIcp && !!userId && !!channelName,
     refetchInterval: 2500,
   });
@@ -96,7 +96,7 @@ export function useTypingIndicator(
         await withFeatureBackend("messaging", {
           supabase: async () => {},
           icp: (ctx) => setLiveTyping(ctx, channelName, isTyping, userName || "Someone"),
-        }).catch(() => {});
+        }, { shared: "person" }).catch(() => {});
 
         if (isTyping) {
           if (typingTimeoutRef.current) {
@@ -107,7 +107,7 @@ export function useTypingIndicator(
             withFeatureBackend("messaging", {
               supabase: async () => {},
               icp: (ctx) => setLiveTyping(ctx, channelName, false, userName || "Someone"),
-            }).catch(() => {});
+            }, { shared: "person" }).catch(() => {});
           }, 3000);
         }
         return;

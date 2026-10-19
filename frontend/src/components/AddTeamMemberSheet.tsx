@@ -46,6 +46,7 @@ import { useAddExistingTeamMemberMutation } from "@/hooks/useAddExistingTeamMemb
 import { useAddPendingTeamMemberMutation } from "@/hooks/useAddPendingTeamMemberMutation";
 import { useAddBulkTeamMembersMutation } from "@/hooks/useAddBulkTeamMembersMutation";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { createLiveTeamInviteLink } from "@/live/features/club";
 
 interface BulkMember {
@@ -245,7 +246,7 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
           const row = await getLiveClubInviteMessageDefault(ctx, clubId).catch(() => null);
           return row?.message ?? "";
         },
-      }),
+      }, { clubId: clubId! }),
   });
 
   const { data: canSaveDefaultInviteMessage = false } = useQuery({
@@ -269,7 +270,7 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
           const grants = await getLiveMyRoleGrants(ctx);
           return grants.some((grant: any) => grant.role === "club_admin" && grant.club?.[0] === clubId);
         },
-      }),
+      }, { shared: 'person' }),
   });
 
   const inviteMessageClubIdRef = useRef(clubId);
@@ -302,7 +303,7 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
           const { setLiveClubInviteMessageDefault } = await import("@/live/features/club");
           await setLiveClubInviteMessageDefault(ctx, clubId, trimmed);
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
       return trimmed;
     },
     onSuccess: (message) => {
@@ -471,7 +472,7 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
         if (!link?.token) throw new Error("Failed to create team invite link");
         return `${window.location.origin}/join/${link.token}`;
       },
-    });
+    }, writeOnce({ clubId: clubId! }));
   };
 
   const addExistingUserMutation = useAddExistingTeamMemberMutation({

@@ -53,7 +53,7 @@ export async function fetchUnreadMessageCounts(userId: string): Promise<UnreadMe
       }
       return counts;
     },
-  });
+  }, { everyGroup: true, merge: mergeUnreadMessageCounts });
 }
 
 async function fetchUnreadMessageCountsSupabase(userId: string): Promise<UnreadMessageCounts> {
@@ -198,4 +198,17 @@ async function fetchUnreadMessageCountsLegacy(userId: string): Promise<UnreadMes
   }
 
   return counts;
+}
+
+/** Combine unread counts read from several canister groups. */
+export function mergeUnreadMessageCounts(parts: UnreadMessageCounts[]): UnreadMessageCounts {
+  const out = createEmptyUnreadMessageCounts();
+  const add = (into: Record<string, number>, from: Record<string, number>) => {
+    for (const [k, v] of Object.entries(from)) into[k] = (into[k] ?? 0) + v;
+  };
+  for (const p of parts) {
+    out.broadcast = Math.max(out.broadcast, p.broadcast); // broadcast lives only on the shared canisters
+    add(out.teams, p.teams); add(out.clubs, p.clubs); add(out.groups, p.groups); add(out.dms, p.dms);
+  }
+  return out;
 }

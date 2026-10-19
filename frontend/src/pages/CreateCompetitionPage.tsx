@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -179,7 +180,7 @@ function SupabaseCreateCompetitionPage() {
           const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
           return profiles.flatMap((rows) => (rows as Array<{ id: string; name: string; deleted_at_ms: [] | [bigint] }>).filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
         },
-      });
+      }, { everyGroup: true, merge: mergeLists });
       const { data } = await supabase
         .from("user_roles")
         .select("club_id, role, clubs:club_id(id, name, kind)")

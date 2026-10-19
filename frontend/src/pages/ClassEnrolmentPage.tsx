@@ -26,6 +26,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import {
   enrolLiveInClass,
   withdrawLiveFromClass,
@@ -80,7 +81,7 @@ function SupabaseClassEnrolmentPage() {
           const p = profile.length ? profile[0] : null;
           return p ? { name: p.name, logo_url: p.logo_url[0], class_mode_enabled: true } : null;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -112,7 +113,7 @@ function SupabaseClassEnrolmentPage() {
               is_active: true,
             }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -164,7 +165,7 @@ function SupabaseClassEnrolmentPage() {
               team_type: ((r.team_type?.[0] ?? r.team_type) as unknown as TeamType) || "mixed",
             }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!clubId,
   });
@@ -199,7 +200,7 @@ function SupabaseClassEnrolmentPage() {
              parent_id: user!.id,
           }));
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user && hasChildClasses,
   });
@@ -231,7 +232,7 @@ function SupabaseClassEnrolmentPage() {
             waitlist_position: r.waitlist_position[0] ? Number(r.waitlist_position[0]) : null,
           }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!termId && childIds.length > 0,
   });
@@ -262,7 +263,7 @@ function SupabaseClassEnrolmentPage() {
             waitlist_position: r.waitlist_position[0] ? Number(r.waitlist_position[0]) : null,
           }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!termId && !!user && hasAdultClasses,
   });
@@ -302,7 +303,7 @@ function SupabaseClassEnrolmentPage() {
           });
           return counts;
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: !!termId && classes.length > 0,
   });
@@ -345,7 +346,7 @@ function SupabaseClassEnrolmentPage() {
           // enrolLiveInClass returns the enrolment record
           return { status: (res as any).status };
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["class-enrolments-children"] });
@@ -408,7 +409,7 @@ function SupabaseClassEnrolmentPage() {
           const res = await enrolLiveInClass(ctx, clubId!, termId, teamId, user.id);
           return { status: (res as any).status };
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["class-enrolments-self"] });

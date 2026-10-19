@@ -9,6 +9,7 @@ import { Trash2, Loader2, CalendarOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   createLiveTeamTrainingPause,
@@ -109,7 +110,7 @@ export default function TeamTrainingPausesCard({ teamId, clubId }: { teamId: str
           await deleteLiveTeamTrainingPause(ctx, id);
           return true;
         },
-      });
+      }, writeOnce({ teamId }));
       if (removedOnIcp) return;
 
       const { error } = await supabase.from("team_training_pauses").delete().eq("id", id);

@@ -52,7 +52,7 @@ export function AssociationEventsPanel({ associationId, isAdmin, clubs }: Props)
             child_event_ids: p.child_event_ids,
           }));
         },
-      });
+      }, { shared: "app" });
     },
   });
 
@@ -224,7 +224,7 @@ function CreateAssociationEventSheet({
             endsAtMs: startsAtMs + 3 * 60 * 60 * 1000,
           });
         },
-      });
+      }, { shared: "app" });
       toast.success(`Event created and sent to ${invitedCount} club(s)`);
       setOpen(false);
       setTitle(""); setDescription(""); setDate(""); setLocation(""); setAddress("");

@@ -132,7 +132,7 @@ export function UploadPhotoSheet({
         return withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await getLiveMyRoleGrants(ctx)).map((g) => ({ role: g.role, club_id: g.club[0] ?? null, team_id: g.team[0] ?? null })),
-        });
+        }, { shared: 'person' });
       }
       const { data, error } = await supabase
         .from("user_roles")
@@ -289,7 +289,7 @@ export function UploadPhotoSheet({
               .filter((t) => !t.deleted_at_ms.length && (canManageClub || ids.has(t.id)))
               .map((t) => ({ id: t.id, name: t.name, is_pro: true }));
           },
-        });
+        }, { clubId: selectedClubId! });
       }
       
       // Get user's team IDs from their roles
@@ -452,7 +452,7 @@ export function UploadPhotoSheet({
           const clubId = await withFeatureBackend("membership", {
             supabase: async () => null as string | null,
             icp: async (ctx) => (await getLiveTeam(ctx, defaultTeamId))[0]?.club_id ?? null,
-          });
+          }, { teamId: defaultTeamId! });
           if (!cancelled && clubId) setSelectedClubId((prev) => prev || clubId);
           return;
         }
