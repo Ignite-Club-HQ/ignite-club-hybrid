@@ -36,18 +36,24 @@ function parseRequestsFile(path, label) {
   return parsed;
 }
 
-const args = process.argv.slice(2);
-if (args.length < 2) throw new Error('Usage: capacity-alert.mjs <prev.json> <next.json> [--github-output <path>]');
-const [prevPath, nextPath] = args;
-const outputIndex = args.indexOf('--github-output');
-const githubOutput = outputIndex >= 0 ? args[outputIndex + 1] : undefined;
+export function main(argv) {
+  const args = argv.slice(2);
+  if (args.length < 2) throw new Error('Usage: capacity-alert.mjs <prev.json> <next.json> [--github-output <path>]');
+  const [prevPath, nextPath] = args;
+  const outputIndex = args.indexOf('--github-output');
+  const githubOutput = outputIndex >= 0 ? args[outputIndex + 1] : undefined;
 
-const prev = parseRequestsFile(prevPath, 'previous');
-const next = parseRequestsFile(nextPath, 'current');
-const { addedCount, summary } = summarizeAlert(prev, next);
+  const prev = parseRequestsFile(prevPath, 'previous');
+  const next = parseRequestsFile(nextPath, 'current');
+  const { addedCount, summary } = summarizeAlert(prev, next);
 
-if (githubOutput) {
-  appendFileSync(githubOutput, `added=${addedCount}\n`);
-  appendFileSync(githubOutput, `summary<<EOF\n${summary || 'none'}\nEOF\n`);
+  if (githubOutput) {
+    appendFileSync(githubOutput, `added=${addedCount}\n`);
+    appendFileSync(githubOutput, `summary<<EOF\n${summary || 'none'}\nEOF\n`);
+  }
+  console.log(`Newly queued closed requests: ${addedCount}${summary ? ` — ${summary}` : ''}`);
 }
-console.log(`Newly queued closed requests: ${addedCount}${summary ? ` — ${summary}` : ''}`);
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main(process.argv);
+}
