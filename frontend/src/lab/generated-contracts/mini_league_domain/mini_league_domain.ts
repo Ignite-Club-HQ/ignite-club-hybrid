@@ -379,6 +379,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_can_read_league_matches(viewer: Principal, league_id: string, club_id: string): Promise<boolean>;
     rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -1094,6 +1095,10 @@ export class Mini_league_domain implements mini_league_domainInterface {
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
         return from_candid_variant_n52(result);
+    }
+    async read_can_read_league_matches(arg0: Principal, arg1: string, arg2: string): Promise<boolean> {
+        const result = await this.actor.read_can_read_league_matches(arg0, arg1, arg2);
+        return result;
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";

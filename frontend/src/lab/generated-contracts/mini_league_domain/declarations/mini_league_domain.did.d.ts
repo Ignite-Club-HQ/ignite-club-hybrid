@@ -288,6 +288,10 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_can_read_league_matches' : ActorMethod<
+    [Principal, string, string],
+    boolean
+  >,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |

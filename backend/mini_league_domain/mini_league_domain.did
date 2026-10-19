@@ -385,6 +385,8 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_can_read_league_matches: (viewer: principal, league_id: text,
+    club_id: text) -> (bool);
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
