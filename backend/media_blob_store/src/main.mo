@@ -1,3 +1,4 @@
+import AccountAdmission "../../shared/AccountAdmission";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -43,6 +44,19 @@ import MediaInventory "mediaInventory";
 // MUST set it (deployer principal) before first use.
 
 persistent actor MediaBlobStore {
+  // Local rehearsal only. Eligibility never grants resource permissions.
+  transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
+  transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
+    case (?id) ?Principal.fromText(id); case null null
+  };
+  transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  func admitAccount(subject : Principal) : async () {
+    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+  };
+  func denyLegacyAccountQuery() {
+    if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
+  };
+
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -259,6 +273,7 @@ persistent actor MediaBlobStore {
     } catch (_) { #Err("Quota authority unavailable") }
   };
   public query ({ caller }) func get_upload_outcome(upload_id : Text) : async { #Ok : ?FinalizedBlob; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (quota_operations.get(upload_id)) {
       case (?op) {
         if (not op.owner.equal(caller)) return #Err("Not the upload owner");
@@ -610,6 +625,7 @@ persistent actor MediaBlobStore {
   // ==================== Upload protocol ====================
 
   public shared ({ caller }) func begin_upload(path : Text, mime : Text, total_size : Nat64, chunk_count : Nat32) : async ResultUploadId {
+    await admitAccount(caller);
     auth(caller);
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
     if (quota_mode == #frozen) return #Err("Uploads temporarily frozen for quota cutover");
@@ -685,6 +701,7 @@ persistent actor MediaBlobStore {
   };
 
   public shared ({ caller }) func put_chunk(upload_id : Text, index : Nat32, data : Blob) : async Result {
+    await admitAccount(caller);
     auth(caller);
     switch (findUpload(upload_id)) {
       case null { #Err("Unknown upload") };
@@ -707,6 +724,7 @@ persistent actor MediaBlobStore {
   };
 
   public shared ({ caller }) func finalize_upload(upload_id : Text) : async ResultFinalized {
+    await admitAccount(caller);
     auth(caller);
     bumpInventory();
     switch (quota_operations.get(upload_id)) {
@@ -774,6 +792,7 @@ persistent actor MediaBlobStore {
   };
 
   public shared ({ caller }) func abort_upload(upload_id : Text) : async Result {
+    if (not isGovernor<system>(caller)) await admitAccount(caller);
     auth(caller);
     bumpInventory();
     switch (quota_operations.get(upload_id)) {
@@ -844,6 +863,7 @@ persistent actor MediaBlobStore {
   };
 
   public shared ({ caller }) func delete_blob(path : Text) : async Result {
+    await admitAccount(caller);
     auth(caller);
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
     switch (metadata(path)) {
@@ -1084,4 +1104,16 @@ persistent actor MediaBlobStore {
   };
   transient let _retentionTimer = Timer.recurringTimer<system>(#seconds(86_400), sweepRetention);
 
+
+  // Additive protected consensus reads; live UI rollout is a separate release gate.
+  public shared ({ caller }) func read_account_get_upload_outcome(upload_id : Text) : async { #Ok : ?FinalizedBlob; #Err : Text } {
+    await admitAccount(caller);
+    switch (quota_operations.get(upload_id)) {
+      case (?op) {
+        if (not op.owner.equal(caller)) return #Err("Not the upload owner");
+        if (op.status == #committed) #Ok(op.result) else #Err("Upload not committed; retry finalize or abort")
+      };
+      case null #Err("Unknown upload")
+    }
+  }
 };

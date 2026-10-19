@@ -1,3 +1,4 @@
+import AccountAdmission "../../shared/AccountAdmission";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -14,6 +15,19 @@ import Time "mo:core/Time";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
+  // Local rehearsal only. Eligibility never grants resource permissions.
+  transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
+  transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
+    case (?id) ?Principal.fromText(id); case null null
+  };
+  transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  func admitAccount(subject : Principal) : async () {
+    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+  };
+  func denyLegacyAccountQuery() {
+    if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
+  };
+
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -163,6 +177,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");
@@ -184,6 +199,7 @@ persistent actor class Main(governorInit : Principal) {
   // Mirrors ManageUsersPage's "Fetch all app admins" query. App-admin gated
   // (not governor-only) so any current app admin can audit the roster.
   public query ({ caller }) func list_app_admins() : async { #Ok : [Principal]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let admins = roles.filter(func(item) = item.role == "app_admin");
     var out : [Principal] = [];
@@ -197,6 +213,7 @@ persistent actor class Main(governorInit : Principal) {
   // existing app admin may promote another principal (not governor-only —
   // Internet Identity app admins have no Supabase-style single owner).
   public shared ({ caller }) func grant_app_admin(principal : Principal) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");
@@ -212,6 +229,7 @@ persistent actor class Main(governorInit : Principal) {
   // via isGovernor — removing a role grant from them would be a no-op that
   // misleads the admin UI into thinking they lost access).
   public shared ({ caller }) func revoke_app_admin(principal : Principal) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (principal.equal(caller)) return #Err("Cannot revoke your own app admin access");
@@ -223,6 +241,7 @@ persistent actor class Main(governorInit : Principal) {
   // ================= Perf / analytics ingest =================
 
   public shared ({ caller }) func record_web_vital(metric_name : Text, metric_value : Float, rating : Text, page_path : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(metric_name) or not valid(page_path)) return #Err("Invalid web vital");
     webVitals := webVitals.concat([{ id = freshId("wv"); user = caller; metric_name; metric_value; rating; page_path; created_at_ms = nowMs() }]);
@@ -232,6 +251,7 @@ persistent actor class Main(governorInit : Principal) {
   public type PerfSampleInput = { surface : Text; source : Text; duration_ms : Nat32; cache_hit : Bool; platform : Text };
 
   public shared ({ caller }) func record_perf_sample(surface : Text, source : Text, duration_ms : Nat32, cache_hit : Bool, platform : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(surface) or not valid(source)) return #Err("Invalid perf sample");
     perfSamples := perfSamples.concat([{ surface; user = caller; source; duration_ms; cache_hit; platform; created_at_ms = nowMs() }]);
@@ -242,6 +262,7 @@ persistent actor class Main(governorInit : Principal) {
   // ship several buffered samples in one call instead of one round trip
   // each; caps at MAX_BATCH to bound message size like create_series' 366 cap.
   public shared ({ caller }) func record_perf_samples_batch(samples : [PerfSampleInput]) : async { #Ok : Nat32; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (samples.size() == 0) return #Err("Empty batch");
     if (samples.size() > MAX_BATCH) return #Err("Batch too large");
@@ -263,6 +284,7 @@ persistent actor class Main(governorInit : Principal) {
   // [since_ms, until_ms). Mirrors the per-surface dashboards (home/inbox/chat/
   // schedule open perf, realtime + generic client perf log).
   public query ({ caller }) func perf_aggregate(surface : Text, source : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.PerfAggregate; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let matches = perfSamples.filter(func(item) =
       item.surface == surface and (source == null or source == ?item.source) and item.created_at_ms >= since_ms and item.created_at_ms < until_ms
@@ -301,6 +323,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_message_sent(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     let day = dayKey(nowMs());
@@ -310,6 +333,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_rsvp_completed(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     let day = dayKey(nowMs());
@@ -319,6 +343,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_active_user(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id) or not valid(account_id)) return #Err("Invalid input");
     bumpCounter(club_id, dayKey(nowMs()), #ActiveUser, ?account_id);
@@ -326,6 +351,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_sponsor_impression(club_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     bumpCounter(club_id, dayKey(nowMs()), #SponsorImpression, null);
@@ -333,6 +359,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_sponsor_click(club_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     bumpCounter(club_id, dayKey(nowMs()), #SponsorClick, null);
@@ -359,6 +386,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Mirrors club_engagement_totals: aggregate counts for a club over a window.
   public query ({ caller }) func club_engagement_totals(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.EngagementTotals; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(totalsFor(club_id, since_ms, until_ms))
   };
@@ -366,6 +394,7 @@ persistent actor class Main(governorInit : Principal) {
   // Mirrors club_engagement_benchmarks: current window vs. a prior window of
   // the same club for trend comparison.
   public query ({ caller }) func club_engagement_benchmarks(club_id : Text, since_ms : Nat64, until_ms : Nat64, prev_since_ms : Nat64, prev_until_ms : Nat64) : async { #Ok : Types.EngagementBenchmarks; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok({ club_id; current = totalsFor(club_id, since_ms, until_ms); previous = totalsFor(club_id, prev_since_ms, prev_until_ms) })
   };
@@ -379,18 +408,21 @@ persistent actor class Main(governorInit : Principal) {
 
   // Mirrors club_engagement_message_volume: daily message counts.
   public query ({ caller }) func club_engagement_message_volume(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(seriesFor(club_id, #Message, since_ms, until_ms))
   };
 
   // Mirrors club_engagement_rsvp_completion_series: daily RSVP counts.
   public query ({ caller }) func club_engagement_rsvp_completion_series(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(seriesFor(club_id, #Rsvp, since_ms, until_ms))
   };
 
   // Mirrors club_engagement_active_users: daily distinct-active-user counts.
   public query ({ caller }) func club_engagement_active_users(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     let inRange = engagementCounters.filter(func(item) = item.club_id == club_id and kindEq(item.kind, #ActiveUser) and item.day >= dayKey(since_ms) and item.day <= dayKey(until_ms));
     #Ok(inRange.map(func(item) = { day = item.day; value = Nat.toNat32(item.activeUsers.size()) }).sort(func(a, b) = if (a.day == b.day) #equal else if (a.day < b.day) #less else #greater))
@@ -398,6 +430,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Mirrors club_engagement_sponsor_performance: daily impressions/clicks.
   public query ({ caller }) func club_engagement_sponsor_performance(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : { impressions : [Types.EngagementDayPoint]; clicks : [Types.EngagementDayPoint] }; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok({ impressions = seriesFor(club_id, #SponsorImpression, since_ms, until_ms); clicks = seriesFor(club_id, #SponsorClick, since_ms, until_ms) })
   };
@@ -405,6 +438,7 @@ persistent actor class Main(governorInit : Principal) {
   // Mirrors club_engagement_total_unique_reach: distinct active users across
   // the whole window (not summed per-day).
   public query ({ caller }) func club_engagement_total_unique_reach(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Nat32; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(totalsFor(club_id, since_ms, until_ms).active_users)
   };
@@ -412,6 +446,7 @@ persistent actor class Main(governorInit : Principal) {
   // ================= Admin alerts =================
 
   public shared ({ caller }) func create_admin_alert(alert_type : Text, details : Text) : async { #Ok : Types.AdminAlert; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(alert_type)) return #Err("Invalid alert");
     let value : Types.AdminAlert = { id = freshId("alert"); alert_type; details; status = #Open; created_at_ms = nowMs(); resolved_at_ms = null; resolved_by = null };
@@ -420,11 +455,13 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_admin_alerts(status : ?Types.AlertStatus) : async { #Ok : [Types.AdminAlert]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     #Ok(adminAlerts.filter(func(item) = status == null or status == ?item.status))
   };
 
   public shared ({ caller }) func resolve_admin_alert(id : Text) : async { #Ok : Types.AdminAlert; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     switch (adminAlerts.find(func(item) = item.id == id)) {
       case null { #Err("Alert not found") };
@@ -439,6 +476,7 @@ persistent actor class Main(governorInit : Principal) {
   // ================= Audit logs =================
 
   public shared ({ caller }) func append_audit_log(action_type : Text, table_name : Text, target_user_id : ?Text, target_user_name : ?Text, details : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(action_type)) return #Err("Invalid audit log");
     auditLogs := auditLogs.concat([{ id = freshId("audit"); action_type; actor_id = caller; target_user_id; target_user_name; details; table_name; created_at_ms = nowMs() }]);
@@ -447,6 +485,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Paginated, optionally filtered by actor and/or action_type/table_name.
   public query ({ caller }) func list_audit_logs(actor_filter : ?Principal, action_type : ?Text, table_name : ?Text, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.AuditLog]; total : Nat32 }; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let boundedLimit = Nat32.min(limit, 200);
     let matches = auditLogs.filter(func(item) =
@@ -462,6 +501,7 @@ persistent actor class Main(governorInit : Principal) {
   // ================= Feedback =================
 
   public shared ({ caller }) func submit_feedback(kind : Text, title : ?Text, message : Text, page_url : ?Text) : async { #Ok : Types.Feedback; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(kind) or message == "" or message.size() > 4000) return #Err("Invalid feedback");
     let now = nowMs();
@@ -471,11 +511,13 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func my_feedback() : async [Types.Feedback] {
+    denyLegacyAccountQuery();
     auth(caller);
     feedback.filter(func(item) = item.user.equal(caller))
   };
 
   public query ({ caller }) func list_feedback(status : ?Types.FeedbackStatus, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.Feedback]; total : Nat32 }; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let boundedLimit = Nat32.min(limit, 200);
     let matches = feedback.filter(func(item) = status == null or status == ?item.status);
@@ -485,6 +527,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_feedback_status(id : Text, status : Types.FeedbackStatus, admin_notes : ?Text) : async { #Ok : Types.Feedback; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     switch (feedback.find(func(item) = item.id == id)) {
       case null { #Err("Feedback not found") };
@@ -498,6 +541,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Mirrors ManageFeedbackPage's delete action (Supabase `feedback.delete`).
   public shared ({ caller }) func delete_feedback(id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not feedback.any(func(item) = item.id == id)) return #Err("Feedback not found");
     feedback := feedback.filter(func(item) = item.id != id);
@@ -515,6 +559,7 @@ persistent actor class Main(governorInit : Principal) {
   // stronger per-entry attestation.
 
   public shared ({ caller }) func record_client_perf(entries : [Types.ClientPerfEntry]) : async { #Ok : Nat32; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (entries.size() == 0) return #Err("Empty batch");
     if (entries.size() > MAX_BATCH) return #Err("Batch too large");
@@ -527,6 +572,7 @@ persistent actor class Main(governorInit : Principal) {
   // Avg/p50/p95 value_ms for a page path (optionally filtered by metric)
   // over [since_ms, until_ms).
   public query ({ caller }) func client_perf_aggregate(path : Text, metric : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.ClientPerfAggregate; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let matches = clientPerfSamples.filter(func(item) =
       item.path == path and (metric == null or metric == ?item.metric) and item.at_ms >= since_ms and item.at_ms < until_ms
@@ -565,6 +611,7 @@ persistent actor class Main(governorInit : Principal) {
     posters : ?Nat32,
     read_rate : ?Float,
   ) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(metric_key) or not valid(period)) return #Err("Invalid benchmark");
     let updated : Types.Benchmark = { metric_key; period; value; updated_at_ms = nowMs(); total_members; dau; wau; mau; posters; read_rate };
@@ -576,6 +623,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_benchmarks(metric_keys : [Text]) : async { #Ok : [Types.Benchmark]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     if (metric_keys.size() == 0) return #Ok(benchmarks);
     #Ok(benchmarks.filter(func(item) = metric_keys.any(func(k) = k == item.metric_key)))
@@ -592,6 +640,7 @@ persistent actor class Main(governorInit : Principal) {
   // instead of accumulating into the plain float counter, so repeat
   // impressions from the same account count once toward unique_reach.
   public shared ({ caller }) func record_sponsor_metric(sponsor_id : Text, metric : Text, delta : Float, account_id : ?Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(sponsor_id) or not valid(metric)) return #Err("Invalid sponsor metric");
     let period = dayKey(nowMs());
@@ -628,6 +677,7 @@ persistent actor class Main(governorInit : Principal) {
   // move with the club. Legacy sponsor-only rows for this sponsor are
   // folded into this club on first use (a sponsor belongs to one club).
   public shared ({ caller }) func record_club_sponsor_metric(club_id : Text, sponsor_id : Text, metric : Text, delta : Float, account_id : ?Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(club_id) or not valid(sponsor_id) or not valid(metric)) return #Err("Invalid sponsor metric");
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
@@ -676,6 +726,7 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-only: fold legacy sponsor-only rows into a club before a move,
   // so a sponsor that has not been shown since the upgrade still moves.
   public shared ({ caller }) func claim_legacy_sponsor_metrics(club_id : Text, sponsor_ids : [Text]) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (not fenceGov(caller)) return #Err("Governor required");
     if (sponsor_ids.size() > 500) return #Err("Too many sponsors");
     for (s in sponsor_ids.values()) claimLegacySponsor(club_id, s);
@@ -683,6 +734,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_sponsor_performance(sponsor_id : Text, period : Text) : async { #Ok : Types.SponsorPerformance; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let legacy = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period).map(func(item) = { metric = item.metric; value = item.value });
     let owned = clubSponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period);
@@ -701,6 +753,7 @@ persistent actor class Main(governorInit : Principal) {
   // unique_reach, derived ctr) over [since_period, until_period] day-key
   // strings (see dayKey), for the engagement analytics UI's sponsor table.
   public query ({ caller }) func get_sponsor_benchmarks(sponsor_ids : [Text], since_period : Text, until_period : Text) : async { #Ok : [Types.SponsorBenchmarkRow]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (sponsor_ids.size() == 0 or sponsor_ids.size() > 100) return #Err("Invalid sponsor list");
     #Ok(sponsor_ids.map(func(sponsor_id : Text) : Types.SponsorBenchmarkRow {
@@ -724,6 +777,7 @@ persistent actor class Main(governorInit : Principal) {
   var memoryReports : [{ at : Int; source : Text; readings_json : Text; analysis_json : Text; author : Principal }];
 
   public shared ({ caller }) func add_memory_report(source : Text, readings_json : Text, analysis_json : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (not isAppAdmin(caller)) return #Err("App admins only");
     if (readings_json.size() > 20_000 or analysis_json.size() > 20_000) return #Err("Report too large");
     let entry = { at = Time.now(); source; readings_json; analysis_json; author = caller };
@@ -733,6 +787,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_memory_reports(limit : Nat) : async [{ at : Int; source : Text; readings_json : Text; analysis_json : Text }] {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return [];
     let n = memoryReports.size();
     let start = if (n > limit) n - limit : Nat else 0;
@@ -740,6 +795,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func is_app_admin() : async Bool {
+    denyLegacyAccountQuery();
     isAppAdmin(caller)
   };
 
@@ -756,6 +812,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func upsert_ad_setting(location : Text, is_enabled : Bool, override_sponsors : Bool, show_only_when_no_sponsors : Bool) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(location)) return #Err("Invalid location");
     let now = nowMs();
@@ -768,11 +825,13 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_ads() : async { #Ok : [Types.AppAd]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     #Ok(ads.sort(func(a, b) = Nat32.compare(a.display_order, b.display_order)))
   };
 
   public shared ({ caller }) func create_ad(input : Types.AppAdInput) : async { #Ok : Types.AppAd; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(input.name)) return #Err("Invalid ad name");
     if (input.ad_type != "image" and input.ad_type != "logo_text") return #Err("Invalid ad type");
@@ -790,6 +849,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_ad(id : Text, input : Types.AppAdInput) : async { #Ok : Types.AppAd; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(input.name)) return #Err("Invalid ad name");
     if (input.ad_type != "image" and input.ad_type != "logo_text") return #Err("Invalid ad type");
@@ -810,6 +870,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_ad_active(id : Text, is_active : Bool) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not ads.any(func(a) = a.id == id)) return #Err("Ad not found");
     ads := ads.map(func(a) = if (a.id == id) ({ a with is_active; updated_at_ms = nowMs() }) else a);
@@ -817,6 +878,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_ad(id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not ads.any(func(a) = a.id == id)) return #Err("Ad not found");
     ads := ads.filter(func(a) = a.id != id);
@@ -827,6 +889,7 @@ persistent actor class Main(governorInit : Principal) {
   // View/click ingest for the ad carousel (app_ad_analytics). Any signed-in
   // member may record; the dedupe/debounce policy stays client-side.
   public shared ({ caller }) func record_ad_event(ad_id : Text, event_type : Text, context : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(ad_id) or not valid(context)) return #Err("Invalid ad event");
     if (event_type != "view" and event_type != "click") return #Err("Invalid event type");
@@ -837,12 +900,14 @@ persistent actor class Main(governorInit : Principal) {
 
   // All location settings, for the admin ads settings tab.
   public query ({ caller }) func list_ad_settings() : async { #Ok : [Types.AppAdSetting]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     #Ok(adSettings.sort(func(a, b) = Text.compare(a.location, b.location)))
   };
 
   // Per-ad, per-context view/click counts since since_ms, for the admin ads table.
   public query ({ caller }) func ad_event_summary(since_ms : Nat64) : async { #Ok : [Types.AdEventSummary]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let inRange = adEvents.filter(func(e) = e.created_at_ms >= since_ms);
     var result : [Types.AdEventSummary] = [];
@@ -867,6 +932,7 @@ persistent actor class Main(governorInit : Principal) {
   // view/reaction/comment totals without this canister holding any media.
 
   public shared ({ caller }) func record_photo_upload(club_id : Text, photo_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(photo_id)) return #Err("Invalid photo upload");
@@ -875,6 +941,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_photo_engagement(photo_id : Text, kind : Types.PhotoEngagementKind) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(photo_id)) return #Err("Invalid photo engagement");
     photoEngagementEvents := photoEngagementEvents.concat([{ photo_id; kind; created_at_ms = nowMs() }]);
@@ -883,6 +950,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Count of photos uploaded to a club within [since_ms, until_ms).
   public query ({ caller }) func count_photos(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Nat; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(photoUploads.filter(func(item) = item.club_id == club_id and item.uploaded_at_ms >= since_ms and item.uploaded_at_ms < until_ms).size())
   };
@@ -890,6 +958,7 @@ persistent actor class Main(governorInit : Principal) {
   // Per-photo view/reaction/comment totals for the requested photo ids
   // (bounded to 300 ids per call, matching the prior Supabase chunking).
   public query ({ caller }) func photo_engagement_totals(photo_ids : [Text]) : async { #Ok : [Types.PhotoEngagementTotal]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     if (photo_ids.size() == 0) return #Ok([]);
     if (photo_ids.size() > 300) return #Err("Too many photo ids");
@@ -918,6 +987,7 @@ persistent actor class Main(governorInit : Principal) {
     session_id : Text,
     duration_seconds : Nat32,
   ) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(user_id) or not valid(page_path) or not valid(page_label) or not valid(session_id)) return #Err("Invalid activity entry");
     userActivity := userActivity.concat([{ user_id; club_id; page_path; page_label; session_id; started_at_ms = nowMs(); duration_seconds }]);
@@ -929,6 +999,7 @@ persistent actor class Main(governorInit : Principal) {
   // callers needing a larger window should narrow since_ms/until_ms rather
   // than paginate, matching this canister's other bounded list queries.
   public query ({ caller }) func list_user_activity(club_id : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.UserActivityEntry]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isAppAdmin(caller) and (switch (club_id) { case (?c) not isClubAdmin(caller, c); case null true })) return #Err("Admin required");
     let matches = userActivity.filter(func(item) =
       (club_id == null or club_id == item.club_id) and item.started_at_ms >= since_ms and item.started_at_ms < until_ms
@@ -1045,4 +1116,254 @@ persistent actor class Main(governorInit : Principal) {
     #ok(changed)
   };
 
+
+  // Additive protected consensus reads; live UI rollout is a separate release gate.
+  public shared ({ caller }) func read_account_list_app_admins() : async { #Ok : [Principal]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let admins = roles.filter(func(item) = item.role == "app_admin");
+    var out : [Principal] = [];
+    for (item in admins.values()) {
+      if (not out.any(func(p) = p.equal(item.user))) { out := out.concat([item.user]) };
+    };
+    #Ok(out)
+  }
+
+  public shared ({ caller }) func read_account_perf_aggregate(surface : Text, source : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.PerfAggregate; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let matches = perfSamples.filter(func(item) =
+      item.surface == surface and (source == null or source == ?item.source) and item.created_at_ms >= since_ms and item.created_at_ms < until_ms
+    );
+    if (matches.size() == 0) return #Ok({ surface; source = switch (source) { case (?s) s; case null "" }; count = 0; avg_ms = 0.0; p50_ms = 0; p95_ms = 0 });
+    let durations = matches.map(func(item) = item.duration_ms);
+    let sorted = durations.sort(func(a, b) = Nat32.compare(a, b));
+    let total = durations.foldLeft(0.0, func(acc, item) = acc + Int.toFloat(Nat32.toNat(item)));
+    #Ok({
+      surface; source = switch (source) { case (?s) s; case null "" };
+      count = Nat.toNat32(matches.size());
+      avg_ms = total / Int.toFloat(matches.size());
+      p50_ms = percentile(sorted, 0.5);
+      p95_ms = percentile(sorted, 0.95);
+    })
+  }
+
+  public shared ({ caller }) func read_account_club_engagement_totals(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.EngagementTotals; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(totalsFor(club_id, since_ms, until_ms))
+  }
+
+  public shared ({ caller }) func read_account_club_engagement_benchmarks(club_id : Text, since_ms : Nat64, until_ms : Nat64, prev_since_ms : Nat64, prev_until_ms : Nat64) : async { #Ok : Types.EngagementBenchmarks; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok({ club_id; current = totalsFor(club_id, since_ms, until_ms); previous = totalsFor(club_id, prev_since_ms, prev_until_ms) })
+  }
+
+  public shared ({ caller }) func read_account_club_engagement_message_volume(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(seriesFor(club_id, #Message, since_ms, until_ms))
+  }
+
+  public shared ({ caller }) func read_account_club_engagement_rsvp_completion_series(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(seriesFor(club_id, #Rsvp, since_ms, until_ms))
+  }
+
+  public shared ({ caller }) func read_account_club_engagement_active_users(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    let inRange = engagementCounters.filter(func(item) = item.club_id == club_id and kindEq(item.kind, #ActiveUser) and item.day >= dayKey(since_ms) and item.day <= dayKey(until_ms));
+    #Ok(inRange.map(func(item) = { day = item.day; value = Nat.toNat32(item.activeUsers.size()) }).sort(func(a, b) = if (a.day == b.day) #equal else if (a.day < b.day) #less else #greater))
+  }
+
+  public shared ({ caller }) func read_account_club_engagement_sponsor_performance(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : { impressions : [Types.EngagementDayPoint]; clicks : [Types.EngagementDayPoint] }; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok({ impressions = seriesFor(club_id, #SponsorImpression, since_ms, until_ms); clicks = seriesFor(club_id, #SponsorClick, since_ms, until_ms) })
+  }
+
+  public shared ({ caller }) func read_account_club_engagement_total_unique_reach(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Nat32; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(totalsFor(club_id, since_ms, until_ms).active_users)
+  }
+
+  public shared ({ caller }) func read_account_list_admin_alerts(status : ?Types.AlertStatus) : async { #Ok : [Types.AdminAlert]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    #Ok(adminAlerts.filter(func(item) = status == null or status == ?item.status))
+  }
+
+  public shared ({ caller }) func read_account_list_audit_logs(actor_filter : ?Principal, action_type : ?Text, table_name : ?Text, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.AuditLog]; total : Nat32 }; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let boundedLimit = Nat32.min(limit, 200);
+    let matches = auditLogs.filter(func(item) =
+      (actor_filter == null or (switch (actor_filter) { case (?a) a.equal(item.actor_id); case null true }))
+        and (action_type == null or action_type == ?item.action_type)
+        and (table_name == null or table_name == ?item.table_name)
+    );
+    let start = Nat.min(Nat32.toNat(offset), matches.size());
+    let end = Nat.min(start + Nat32.toNat(boundedLimit), matches.size());
+    #Ok({ items = matches.sliceToArray(start, end); total = Nat.toNat32(matches.size()) })
+  }
+
+  public shared ({ caller }) func read_account_my_feedback() : async [Types.Feedback] {
+    await admitAccount(caller);
+    auth(caller);
+    feedback.filter(func(item) = item.user.equal(caller))
+  }
+
+  public shared ({ caller }) func read_account_list_feedback(status : ?Types.FeedbackStatus, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.Feedback]; total : Nat32 }; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let boundedLimit = Nat32.min(limit, 200);
+    let matches = feedback.filter(func(item) = status == null or status == ?item.status);
+    let start = Nat.min(Nat32.toNat(offset), matches.size());
+    let end = Nat.min(start + Nat32.toNat(boundedLimit), matches.size());
+    #Ok({ items = matches.sliceToArray(start, end); total = Nat.toNat32(matches.size()) })
+  }
+
+  public shared ({ caller }) func read_account_client_perf_aggregate(path : Text, metric : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.ClientPerfAggregate; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let matches = clientPerfSamples.filter(func(item) =
+      item.path == path and (metric == null or metric == ?item.metric) and item.at_ms >= since_ms and item.at_ms < until_ms
+    );
+    if (matches.size() == 0) return #Ok({ path; count = 0; avg_ms = 0.0; p50_ms = 0; p95_ms = 0 });
+    let durations = matches.map(func(item) = item.value_ms);
+    let sorted = durations.sort(func(a, b) = Nat32.compare(a, b));
+    let total = durations.foldLeft(0.0, func(acc, item) = acc + Int.toFloat(Nat32.toNat(item)));
+    #Ok({
+      path;
+      count = Nat.toNat32(matches.size());
+      avg_ms = total / Int.toFloat(matches.size());
+      p50_ms = percentile(sorted, 0.5);
+      p95_ms = percentile(sorted, 0.95);
+    })
+  }
+
+  public shared ({ caller }) func read_account_get_benchmarks(metric_keys : [Text]) : async { #Ok : [Types.Benchmark]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    if (metric_keys.size() == 0) return #Ok(benchmarks);
+    #Ok(benchmarks.filter(func(item) = metric_keys.any(func(k) = k == item.metric_key)))
+  }
+
+  public shared ({ caller }) func read_account_get_sponsor_performance(sponsor_id : Text, period : Text) : async { #Ok : Types.SponsorPerformance; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let legacy = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period).map(func(item) = { metric = item.metric; value = item.value });
+    let owned = clubSponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period);
+    var metrics = legacy;
+    for (item in owned.values()) {
+      if (metrics.any(func(x) = x.metric == item.metric)) {
+        metrics := metrics.map(func(x : { metric : Text; value : Float }) : { metric : Text; value : Float } { if (x.metric == item.metric) { { metric = x.metric; value = x.value + item.value } } else { x } });
+      } else {
+        metrics := metrics.concat([{ metric = item.metric; value = item.value }]);
+      };
+    };
+    #Ok({ sponsor_id; period; metrics })
+  }
+
+  public shared ({ caller }) func read_account_get_sponsor_benchmarks(sponsor_ids : [Text], since_period : Text, until_period : Text) : async { #Ok : [Types.SponsorBenchmarkRow]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (sponsor_ids.size() == 0 or sponsor_ids.size() > 100) return #Err("Invalid sponsor list");
+    #Ok(sponsor_ids.map(func(sponsor_id : Text) : Types.SponsorBenchmarkRow {
+      let inRange = func(sid : Text, p : Text) : Bool = sid == sponsor_id and p >= since_period and p <= until_period;
+      let metricMatches = sponsorMetrics.filter(func(item) = inRange(item.sponsor_id, item.period))
+        .concat(clubSponsorMetrics.filter(func(item) = inRange(item.sponsor_id, item.period)).map(func(item) : Types.SponsorMetricCounter = { sponsor_id = item.sponsor_id; metric = item.metric; period = item.period; value = item.value }));
+      let impressions = Nat.toNat32(Int.abs(Float.toInt(metricMatches.filter(func(item) = item.metric == "impressions").foldLeft(0.0, func(acc, item) = acc + item.value))));
+      let clicks = Nat.toNat32(Int.abs(Float.toInt(metricMatches.filter(func(item) = item.metric == "clicks").foldLeft(0.0, func(acc, item) = acc + item.value))));
+      let reachMatches = sponsorReach.filter(func(item) = inRange(item.sponsor_id, item.period))
+        .concat(clubSponsorReach.filter(func(item) = inRange(item.sponsor_id, item.period)).map(func(item) : Types.SponsorReachCounter = { sponsor_id = item.sponsor_id; period = item.period; accountIds = item.accountIds }));
+      let reachSet = reachMatches.foldLeft([] : [Text], func(acc, item) = item.accountIds.foldLeft(acc, func(a, id) = if (a.any(func(x) = x == id)) a else a.concat([id])));
+      let unique_reach = Nat.toNat32(reachSet.size());
+      let ctr = if (impressions == 0) 0.0 else Int.toFloat(Nat32.toNat(clicks)) / Int.toFloat(Nat32.toNat(impressions));
+      { sponsor_id; impressions; clicks; unique_reach; ctr }
+    }))
+  }
+
+  public shared ({ caller }) func read_account_list_memory_reports(limit : Nat) : async [{ at : Int; source : Text; readings_json : Text; analysis_json : Text }] {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return [];
+    let n = memoryReports.size();
+    let start = if (n > limit) n - limit : Nat else 0;
+    memoryReports.sliceToArray(start, n).map(func(r) = { at = r.at; source = r.source; readings_json = r.readings_json; analysis_json = r.analysis_json })
+  }
+
+  public shared ({ caller }) func read_account_is_app_admin() : async Bool {
+    await admitAccount(caller);
+    isAppAdmin(caller)
+  }
+
+  public shared ({ caller }) func read_account_list_ads() : async { #Ok : [Types.AppAd]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    #Ok(ads.sort(func(a, b) = Nat32.compare(a.display_order, b.display_order)))
+  }
+
+  public shared ({ caller }) func read_account_list_ad_settings() : async { #Ok : [Types.AppAdSetting]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    #Ok(adSettings.sort(func(a, b) = Text.compare(a.location, b.location)))
+  }
+
+  public shared ({ caller }) func read_account_ad_event_summary(since_ms : Nat64) : async { #Ok : [Types.AdEventSummary]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let inRange = adEvents.filter(func(e) = e.created_at_ms >= since_ms);
+    var result : [Types.AdEventSummary] = [];
+    for (a in ads.values()) {
+      let mine = inRange.filter(func(e) = e.ad_id == a.id);
+      let contexts = mine.foldLeft([] : [Text], func(acc, e) = if (acc.any(func(c) = c == e.context)) acc else acc.concat([e.context]));
+      for (ctx in contexts.values()) {
+        let scoped = mine.filter(func(e) = e.context == ctx);
+        result := result.concat([{
+          ad_id = a.id;
+          context = ctx;
+          views = Nat.toNat32(scoped.filter(func(e) = e.event_type == "view").size());
+          clicks = Nat.toNat32(scoped.filter(func(e) = e.event_type == "click").size());
+        }]);
+      };
+    };
+    #Ok(result)
+  }
+
+  public shared ({ caller }) func read_account_count_photos(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Nat; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(photoUploads.filter(func(item) = item.club_id == club_id and item.uploaded_at_ms >= since_ms and item.uploaded_at_ms < until_ms).size())
+  }
+
+  public shared ({ caller }) func read_account_photo_engagement_totals(photo_ids : [Text]) : async { #Ok : [Types.PhotoEngagementTotal]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    if (photo_ids.size() == 0) return #Ok([]);
+    if (photo_ids.size() > 300) return #Err("Too many photo ids");
+    #Ok(photo_ids.map(func(photo_id : Text) : Types.PhotoEngagementTotal {
+      let matches = photoEngagementEvents.filter(func(item) = item.photo_id == photo_id);
+      {
+        photo_id;
+        views = matches.filter(func(item) = item.kind == #View).size();
+        reactions = matches.filter(func(item) = item.kind == #Reaction).size();
+        comments = matches.filter(func(item) = item.kind == #Comment).size();
+      }
+    }))
+  }
+
+  public shared ({ caller }) func read_account_list_user_activity(club_id : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.UserActivityEntry]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isAppAdmin(caller) and (switch (club_id) { case (?c) not isClubAdmin(caller, c); case null true })) return #Err("Admin required");
+    let matches = userActivity.filter(func(item) =
+      (club_id == null or club_id == item.club_id) and item.started_at_ms >= since_ms and item.started_at_ms < until_ms
+    );
+    let sorted = matches.sort(func(a, b) = Nat64.compare(b.started_at_ms, a.started_at_ms));
+    let end = Nat.min(MAX_ACTIVITY_LIST, sorted.size());
+    #Ok(sorted.sliceToArray(0, end))
+  }
 }
