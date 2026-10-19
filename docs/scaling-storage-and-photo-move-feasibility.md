@@ -112,3 +112,22 @@ Implement the independently authorized original-key locator, full byte/reference
 Use concrete tests for the 5 GiB plus add-ons boundary, cross-store concurrent reservations, free monthly limits, branding paths, retry/overwrite/delete accounting, entitlement changes, heap/index/allocator pressure and consistent recovery. Keep existing 70%/80% rules but evaluate true usable space and committed growth. Live larger-store activation, opening a group, and moving a club each require their own approval and existing scaling release gates.
 
 Batch 1's source investigation and public live reads are complete. Authorized production evidence remains blocked on the GitHub-held operator identity; implementation and policy changes remain blocked on separate approval.
+
+## Approved same-group implementation foundations — 19 October 2026
+
+The owner approved the same-group recommendations. No live changes were made.
+
+- `mediaRetainedQuota.mo` is a tested standalone ledger, **not yet imported into production canister state or mutation handlers**. It requires all registered stores sealed, counts pending and finalized bytes across categories, conservatively reserves replacements, and retains monotonically increasing revisions across deletion/recreation to reject stale refunds. Its caller must authenticate stores, derive Pro/add-on status on-chain and prove exact frozen inventory; its Boolean `pro` argument is not browser authority.
+- `groupGrowthReservations.ts` validates exact deployment/group commitments and blocks the local placement planner when a required commitment cannot fit. It is **not the router's authoritative admission or entitlement-change protocol**. Physical commitments must include tested allocation overhead, not just the advertised 5 GiB allowance.
+- Local Pro classification now uses the club path rather than monthly categories; a real replica test verifies logo reservations are counted. This closes that local path gap but does not make shared monthly quota accounting a retained ledger.
+- `mediaExpansionPolicy.ts` sequences complete inventory, drain, migration, stable writes, capacity tests and operator approval. It performs no mutation. `Group media capacity report` performs signed reads with the stored deploy identity and records remaining evidence gaps; it does not claim complete inventory from primary-authority readings.
+
+### Checks completed
+
+Retained-ledger Motoko tests (including delete/recreate ABA denial), allocator/admission boundary tests, 25 existing placement/collector checks, 59 Supabase and 41 ICP upload/expansion checks, and 9 offline cutover/shard checks pass. The real local storage rehearsal passes migration/hash read-back, stable writes, owner denial, streaming, replacement/slot reuse, coordinated snapshots, retry/upgrade recovery and the opt-in 32 GiB setting. The real local Pro rehearsal passes combined accounting including logo reservations. The clubs and media canisters compile; preview log is OK. A root-wide Mops check encounters the existing events-domain `mo:ic` package resolution issue; scoped clubs/media compilation succeeds.
+
+**The 32 GiB rehearsal verifies configuration and upgrade preservation, not a 32 GiB fill or representative performance test.** No safe club-count increase or live capacity activation is established.
+
+### Remaining implementation and live evidence
+
+Wire the ledger through immutable state migration and every authenticated baseline/reserve/commit/cancel/replacement/deletion/retention path; preserve journal and await-race semantics. Extend authoritative group admission and allowed entitlement changes to reserve measured growth capacity. Reconcile every group/store registry and expose exact global pending/mode evidence. Measure allocator pressure and workload performance, then obtain separate approval for live migration/expansion. No encrypted club moves, re-encryption, payment activation or group opening is included.

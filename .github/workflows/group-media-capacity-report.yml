@@ -1,0 +1,42 @@
+name: Group media capacity report
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Install frontend dependencies
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Prepare operator identity
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM" || { echo "::error::DEPLOYER_PEM secret missing"; exit 1; }
+          umask 077
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/operator.pem"
+      - name: Read group and photo store evidence
+        working-directory: frontend
+        run: npx --yes tsx@4 scripts/report-group-media-capacity.ts "$RUNNER_TEMP/operator.pem" "$RUNNER_TEMP/group-media-capacity.json"
+      - name: Remove operator identity
+        if: always()
+        run: rm -f "$RUNNER_TEMP/operator.pem"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: group-media-capacity
+          path: ${{ runner.temp }}/group-media-capacity.json
+          if-no-files-found: error

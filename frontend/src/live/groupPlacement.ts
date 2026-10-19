@@ -1,6 +1,7 @@
 /** Fill-first placement and closed preparation planning. Operator evidence is
  * mandatory; proposals never authorize opening or move existing assignments. */
 import { capacityPercent, capacityState, ROLLOVER_PERCENT, type CapacityEvidence } from './groupCapacityPolicy';
+import { canCommitGrowth, type GroupGrowthEvidence } from './groupGrowthReservations';
 export const GIB = 1024 ** 3;
 export const MAX_CLUBS_PER_GROUP = 500;
 
@@ -8,6 +9,7 @@ export type GroupCapacity = {
   groupId: string; deploymentId: string; subnetId: string; enabled: boolean;
   clubs: number; maxDomainBytes: number; dailyGrowthBytes: number;
   capacity?: CapacityEvidence;
+  growth?: GroupGrowthEvidence;
   /** True only after operator approval and full readiness checks. */
   ready?: boolean;
   cyclesHealthy?: boolean;
@@ -18,6 +20,8 @@ export type PlacementPolicy = {
   requiredDeploymentId?: string;
   currentGroupId?: string;
   nowMs?: number;
+  /** Required by production admission; omission preserves legacy offline planners. */
+  requiredNewClubBytes?: number;
 };
 export type PlacementDecision =
   | { kind: 'place'; groupId: string }
@@ -35,7 +39,8 @@ export function placeNewClub(groups: GroupCapacity[], policy: PlacementPolicy): 
   const eligible = groups.filter(g => {
     const percent = capacityPercent(g.capacity, deployment, now);
     return g.enabled && g.ready === true && g.cyclesHealthy === true && g.deploymentId === deployment &&
-      allowedSubnets.has(g.subnetId) && percent !== null && percent < ROLLOVER_PERCENT;
+      allowedSubnets.has(g.subnetId) && percent !== null && percent < ROLLOVER_PERCENT &&
+      (policy.requiredNewClubBytes === undefined || canCommitGrowth(g.growth, deployment, g.groupId, now, policy.requiredNewClubBytes));
   }).sort((a, b) => {
     if (a.groupId === policy.currentGroupId) return -1;
     if (b.groupId === policy.currentGroupId) return 1;

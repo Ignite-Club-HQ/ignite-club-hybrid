@@ -74,6 +74,9 @@ try {
   assert.equal(bytes.finalized, 1_000n);
   assert.equal(bytes.pending, FILE);
   ok(await actor.abort_upload(pendingAgain));
+  const branding = ok(await reserve('clubs/club-pro/logos/logo.png', 50n));
+  assert.equal((await actor.get_club_media_bytes('club-pro')).pending, 50n);
+  ok(await actor.abort_upload(branding));
 
   // Free clubs are not subject to the Pro allowance, only their cycle caps.
   ok(await clubActor.create_club('club-free', 'Free Club', 'club-free', [], []));

@@ -72,6 +72,23 @@ try {
   assert.deepEqual(await download(path), replacement);
   assert.equal((await actor.stable_storage_status()).enabled, true);
   assert.equal((await actor.health()).total_bytes, BigInt(replacement.length));
+  // Wiring rehearsal only: this does not allocate/fill 32 GiB or prove load.
+  const large = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [
+    { name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }, { name: 'IGNITE_MEDIA_LARGE_CAPACITY', value: '1' },
+  ] });
+  large.actor.setPrincipal(governor);
+  assert.ok('Err' in await large.actor.set_capacity_limit(34_359_738_368n));
+  ok(await large.actor.enable_stable_media_storage());
+  ok(await large.actor.set_capacity_limit(34_359_738_368n));
+  assert.equal((await large.actor.get_usage()).capacity_limit_bytes, 34_359_738_368n);
+  assert.ok('Err' in await large.actor.set_capacity_limit(34_359_738_369n));
+  large.actor.setPrincipal(other);
+  assert.ok('Err' in await large.actor.set_capacity_limit(2_147_483_648n));
+  large.actor.setPrincipal(governor);
+  await pic.upgradeCanister({ canisterId: large.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  assert.equal((await large.actor.get_usage()).capacity_limit_bytes, 34_359_738_368n);
+  assert.equal((await large.actor.stable_storage_status()).enabled, true);
+  console.log('PASS: bounded governor-only 32 GiB setting needs stable writes and survives upgrade; not a full-volume load test.');
   const response = await actor.http_request({ url: '/missing', method: 'GET', headers: [], body: [] });
   assert.equal(response.status_code, 404);
   // Management-canister snapshot rollback must restore Region bytes, allocator,
