@@ -52,7 +52,7 @@ pub fn validate_clubs(clubs: &[String]) -> Result<(), String> {
     fn fixture() -> (ShardGroup, GroupPlacement) {
         let g = ShardGroup { id: "a".into(), target_alias: "mainnet".into(),
             domains: DOMAINS.iter().enumerate().map(|(i, d)| crate::groups::DomainCanister { domain: d.to_string(), canister: Principal::from_slice(&[i as u8 + 1, 1]) }).collect(),
-            accepting: false, max_clubs: 100, assigned_clubs: 0, heap_budget_bytes: 1, heap_bytes: 0, min_cycles: 1, cycles: 1, observed_at_ns: 1 };
+            accepting: false, max_clubs: 100, assigned_clubs: 0, heap_budget_bytes: 1, heap_bytes: 0, min_cycles: 1, cycles: 1, observed_at_ns: 1, photo_store: None };
         let s = Principal::from_slice(&[50, 1]);
         let p = GroupPlacement { group_id: "a".into(), deployment_id: "ic".into(), deployment_revision: 1, host: "https://icp-api.io".into(), network_kind: "public_mainnet".into(),
             primary_subnet: s, approved_subnets: vec![s], additional_subnets_enabled: false,

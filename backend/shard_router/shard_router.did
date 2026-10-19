@@ -97,6 +97,7 @@ type ShardGroup = record {
   target_alias : text;
   min_cycles : nat64;
   heap_bytes : nat64;
+  photo_store : opt principal;
 };
 service : (Init) -> {
   abort_domain_migration : (text, text, nat64) -> (Result);

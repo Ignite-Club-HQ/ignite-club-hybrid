@@ -101,6 +101,7 @@ export const idlFactory = ({ IDL }) => {
     'target_alias' : IDL.Text,
     'min_cycles' : IDL.Nat64,
     'heap_bytes' : IDL.Nat64,
+    'photo_store' : IDL.Opt(IDL.Principal),
   });
   const Result_12 = IDL.Variant({
     'Ok' : IDL.Vec(ShardGroup),
