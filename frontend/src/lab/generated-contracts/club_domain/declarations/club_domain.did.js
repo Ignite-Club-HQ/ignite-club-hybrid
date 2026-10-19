@@ -1137,6 +1137,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : WelcomeEmailJob, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'has_child_guardian' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'has_club_staff_role' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
@@ -1731,6 +1736,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],
         [],
       ),
+    'revoke_linked_principal' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'revoke_pending_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -1943,6 +1953,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_identity_access_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_messaging_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -2054,6 +2069,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'start_media_quota_cutover' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'sync_my_linked_account' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

@@ -221,6 +221,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'my_roles' : IDL.Func([], [Result_11], ['query']),
     'my_terms_acceptance' : IDL.Func([], [Result_10], ['query']),
+    'read_linked_account' : IDL.Func([IDL.Principal], [Result], []),
     'redeem_entitlement' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Text, IDL.Text],
         [Result_12],
@@ -253,6 +254,7 @@ export const idlFactory = ({ IDL }) => {
     'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_14], ['query']),
     'set_account_status' : IDL.Func([IDL.Text, AccountStatus], [Result], []),
     'set_attestation_secret' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result_2], []),
+    'set_club_authorities' : IDL.Func([IDL.Vec(IDL.Principal)], [Result_2], []),
     'set_club_switcher_hint_seen' : IDL.Func([], [Result_9], []),
     'set_entitlement' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Nat64, IDL.Text],

@@ -35,7 +35,8 @@ export function routerGroupRecord(p: Provision, globals: { secret_workload_ident
 }
 
 /** Adapter pieces for runProvision: readRegistryRevision / registerGroup / enableGroup. */
-export function routerProvisionSteps(router: RouterActor, globals: { secret_workload_identity: string }, dep: DeploymentInfo, limits: GroupLimits) {
+export function routerProvisionSteps(router: RouterActor, globals: { secret_workload_identity: string }, dep: DeploymentInfo, limits: GroupLimits,
+  wireAuthorities?: (provision: Provision) => Promise<void>, localRehearsal = false) {
   return {
     readRegistryRevision: () => router.version(),
     registerGroup: async (p: Provision) => {
@@ -44,6 +45,9 @@ export function routerProvisionSteps(router: RouterActor, globals: { secret_work
       ok(await router.register_group_placement(placement, r1), 'Register placement');
     },
     enableGroup: async (p: Provision) => {
+      if (!localRehearsal || dep.targetAlias !== 'local' || dep.deploymentId !== 'local') throw new Error('New-group activation awaits account revocation verification');
+      if (!wireAuthorities) throw new Error('Complete account authority wiring required before group activation');
+      await wireAuthorities(p);
       const { group } = routerGroupRecord(p, globals, dep, limits, true);
       ok(await router.register_group(group, await router.version()), 'Enable group');
     },

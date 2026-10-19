@@ -813,12 +813,17 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // Lists the pii_ids (children) the caller is a verified guardian of.
-  public shared query ({ caller }) func my_guardian_children() : async [Text] {
+  public composite query ({ caller }) func my_guardian_children() : async [Text] {
     auth(caller);
-    switch (guardian_relationships.find(func(g) = g.guardian.equal(caller))) {
-      case (?g) { g.children };
-      case null { [] };
-    }
+    let id = switch (club_domain_canister) { case null return []; case (?id) id };
+    let service : actor { has_child_guardian : shared query (Principal, Text) -> async Bool } = actor(id.toText());
+    let candidates = switch (guardian_relationships.find(func(g) = g.guardian.equal(caller))) { case (?g) g.children; case null [] };
+    var out : [Text] = [];
+    for (child in candidates.values()) {
+      let allowed = try { await service.has_child_guardian(caller, child) } catch (_) { false };
+      if (allowed and club_domain_canister == ?id) out := out.concat([child]);
+    };
+    out
   };
 
   public shared ({ caller }) func revoke_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {

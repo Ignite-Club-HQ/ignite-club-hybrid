@@ -164,7 +164,7 @@ export const idlFactory = ({ IDL }) => {
     'can_read_league_matches' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text],
         [IDL.Bool],
-        ['query'],
+        ['composite_query'],
       ),
     'cancel_session' : IDL.Func(
         [IDL.Text],
@@ -271,6 +271,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'filter_visible_leagues' : IDL.Func(
+        [IDL.Principal, IDL.Vec(MiniLeague)],
+        [IDL.Vec(MiniLeague)],
+        ['composite_query'],
+      ),
     'get_availability' : IDL.Func(
         [IDL.Text, IDL.Text],
         [
@@ -279,7 +284,7 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        ['composite_query'],
       ),
     'get_join_link_by_token' : IDL.Func(
         [IDL.Text],
@@ -300,17 +305,17 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        ['composite_query'],
       ),
     'get_mini_league' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : MiniLeague, 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'get_mini_leagues' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeague), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'get_my_league_access' : IDL.Func(
         [IDL.Vec(IDL.Text)],
@@ -327,17 +332,17 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        ['composite_query'],
       ),
     'get_news_audience' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : MiniLeagueNewsAudience, 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'get_player_guardian_status' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : PlayerGuardianStatus, 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'get_player_invite_preview' : IDL.Func(
         [IDL.Text],
@@ -391,7 +396,7 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        ['composite_query'],
       ),
     'list_group_players' : IDL.Func(
         [IDL.Text],
@@ -401,12 +406,12 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        ['composite_query'],
       ),
     'list_groups' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeagueGroup), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'list_invites' : IDL.Func(
         [IDL.Text],
@@ -421,17 +426,17 @@ export const idlFactory = ({ IDL }) => {
     'list_mini_leagues_by_club' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(MiniLeague)],
-        ['query'],
+        ['composite_query'],
       ),
     'list_mini_leagues_by_clubs' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeague), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'list_players' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeaguePlayer), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'list_public_mini_leagues' : IDL.Func(
         [],
@@ -446,12 +451,12 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        ['composite_query'],
       ),
     'list_sessions' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeagueSession), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'memory_stats' : IDL.Func(
         [],
@@ -467,12 +472,17 @@ export const idlFactory = ({ IDL }) => {
     'my_availability' : IDL.Func(
         [],
         [IDL.Vec(MiniLeagueSessionAvailability)],
-        ['query'],
+        ['composite_query'],
       ),
-    'my_leagues' : IDL.Func([], [IDL.Vec(MiniLeague)], ['query']),
+    'my_leagues' : IDL.Func([], [IDL.Vec(MiniLeague)], ['composite_query']),
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_can_read_league_matches' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [IDL.Bool],
         [],
       ),
     'rekey_principal' : IDL.Func(
@@ -590,6 +600,21 @@ export const idlFactory = ({ IDL }) => {
         ],
         [IDL.Variant({ 'Ok' : MiniLeagueSession, 'Err' : IDL.Text })],
         [],
+      ),
+    'verify_child_guardian' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['composite_query'],
+      ),
+    'verify_league_access' : IDL.Func(
+        [IDL.Principal, MiniLeague],
+        [IDL.Bool],
+        ['composite_query'],
+      ),
+    'verify_player_access' : IDL.Func(
+        [IDL.Principal, MiniLeaguePlayer],
+        [IDL.Bool],
+        ['composite_query'],
       ),
   });
   

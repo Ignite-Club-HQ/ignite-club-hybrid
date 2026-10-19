@@ -263,6 +263,7 @@ export interface _SERVICE {
    * users).
    */
   'my_terms_acceptance' : ActorMethod<[], Result_10>,
+  'read_linked_account' : ActorMethod<[Principal], Result>,
   /**
    * Caller-authenticated: redeems a signed attestation minted by the
    * session-free IAP verification endpoint after it confirms an Apple
@@ -323,6 +324,7 @@ export interface _SERVICE {
    */
   'set_account_status' : ActorMethod<[string, AccountStatus], Result>,
   'set_attestation_secret' : ActorMethod<[Uint8Array], Result_2>,
+  'set_club_authorities' : ActorMethod<[Array<Principal>], Result_2>,
   /**
    * Records that the caller has dismissed the club switcher coach-mark, so
    * it stays dismissed across devices. Creates a blank profile entry if the

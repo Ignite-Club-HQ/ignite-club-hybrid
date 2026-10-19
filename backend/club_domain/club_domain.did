@@ -867,6 +867,7 @@ type Main =
        Err: text;
        Ok: WelcomeEmailJob;
      }) query;
+   has_child_guardian: (user: principal, child_id: text) -> (bool) query;
    has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
    http_request: (request: HttpRequest) -> (HttpResponse) query;
    import_club_snapshot: (club: text, snapshot: blob) ->
@@ -1349,6 +1350,11 @@ type Main =
        Err: text;
        Ok: Account;
      });
+   revoke_linked_principal: (account_id: text, user: principal, version:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok;
+               });
    revoke_pending_invite: (id: text) -> (variant {
                                            Err: text;
                                            Ok;
@@ -1540,6 +1546,10 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   set_identity_access_canister: (id: principal) -> (variant {
+                                                       Err: text;
+                                                       Ok;
+                                                     });
    set_messaging_domain_canister: (id: principal) ->
     (variant {
        Err: text;
@@ -1648,6 +1658,10 @@ type Main =
                                        Err: text;
                                        Ok;
                                      });
+   sync_my_linked_account: () -> (variant {
+                                    Err: text;
+                                    Ok;
+                                  });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;

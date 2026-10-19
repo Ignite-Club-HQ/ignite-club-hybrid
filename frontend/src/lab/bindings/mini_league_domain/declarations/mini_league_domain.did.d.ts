@@ -132,6 +132,10 @@ export interface Main {
     { 'Ok' : Uint8Array } |
       { 'Err' : string }
   >,
+  'filter_visible_leagues' : ActorMethod<
+    [Principal, Array<MiniLeague>],
+    Array<MiniLeague>
+  >,
   'get_availability' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [MiniLeagueSessionAvailability] } |
@@ -284,6 +288,10 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_can_read_league_matches' : ActorMethod<
+    [Principal, string, string],
+    boolean
+  >,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
@@ -384,6 +392,9 @@ export interface Main {
     { 'Ok' : MiniLeagueSession } |
       { 'Err' : string }
   >,
+  'verify_child_guardian' : ActorMethod<[Principal, string], boolean>,
+  'verify_league_access' : ActorMethod<[Principal, MiniLeague], boolean>,
+  'verify_player_access' : ActorMethod<[Principal, MiniLeaguePlayer], boolean>,
 }
 export interface MiniLeague {
   'id' : string,

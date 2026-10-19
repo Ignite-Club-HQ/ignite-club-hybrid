@@ -339,6 +339,7 @@ export interface identity_accessInterface {
     }>;
     my_roles(): Promise<Result_11>;
     my_terms_acceptance(): Promise<Result_10>;
+    read_linked_account(arg0: Principal): Promise<Result>;
     redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12>;
     register_account(): Promise<Result>;
     rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_13>;
@@ -349,6 +350,7 @@ export interface identity_accessInterface {
     search_profiles(arg0: string, arg1: number): Promise<Result_14>;
     set_account_status(arg0: string, arg1: AccountStatus): Promise<Result>;
     set_attestation_secret(arg0: Uint8Array): Promise<Result_2>;
+    set_club_authorities(arg0: Array<Principal>): Promise<Result_2>;
     set_club_switcher_hint_seen(): Promise<Result_9>;
     set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_12>;
     set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_2>;
@@ -455,6 +457,10 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.my_terms_acceptance();
         return from_candid_Result_10_n40(result);
     }
+    async read_linked_account(arg0: Principal): Promise<Result> {
+        const result = await this.actor.read_linked_account(arg0);
+        return from_candid_Result_n1(result);
+    }
     async redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12> {
         const result = await this.actor.redeem_entitlement(arg0, arg1, arg2, arg3, arg4);
         return from_candid_Result_12_n45(result);
@@ -493,6 +499,10 @@ export class Identity_access implements identity_accessInterface {
     }
     async set_attestation_secret(arg0: Uint8Array): Promise<Result_2> {
         const result = await this.actor.set_attestation_secret(arg0);
+        return from_candid_Result_2_n10(result);
+    }
+    async set_club_authorities(arg0: Array<Principal>): Promise<Result_2> {
+        const result = await this.actor.set_club_authorities(arg0);
         return from_candid_Result_2_n10(result);
     }
     async set_club_switcher_hint_seen(): Promise<Result_9> {

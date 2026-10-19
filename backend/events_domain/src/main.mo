@@ -344,8 +344,8 @@ persistent actor class Main(governorInit : Principal) {
     if (canView(caller, event)) return true;
     let leagueId = switch (event.mini_league_id) { case null return false; case (?id) id };
     let authority = switch (miniLeagueDomainCanister) { case null return false; case (?id) id };
-    let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
-    try { await (with timeout = 10) ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+    let ml : actor { read_can_read_league_matches : shared (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+    try { await (with timeout = 10) ml.read_can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
   };
   func roleInEventScope(caller : Principal, event : Types.Event, allowedRoles : [Text]) : Bool {
     let targets = event.target_team_ids ?? [];

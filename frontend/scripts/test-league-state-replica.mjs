@@ -6,6 +6,7 @@ import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as eventsIdl } from '../src/lab/bindings/events_domain/declarations/events_domain.did.js';
 import { idlFactory as leagueIdl } from '../src/lab/bindings/mini_league_domain/declarations/mini_league_domain.did.js';
 import { idlFactory as chatIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
+import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 const governor = Principal.fromUint8Array(Uint8Array.from([1, 1]));
 const parent = Principal.fromUint8Array(Uint8Array.from([2, 1]));
 const stranger = Principal.fromUint8Array(Uint8Array.from([3, 1]));
@@ -19,6 +20,12 @@ try {
   const destination = await setup(eventsIdl, process.env.EVENTS_DOMAIN_WASM);
   const league = await setup(leagueIdl, process.env.MINI_LEAGUE_DOMAIN_WASM);
   const chat = await setup(chatIdl, process.env.MESSAGING_DOMAIN_WASM);
+  const club = await setup(clubIdl, process.env.CLUB_DOMAIN_WASM);
+  club.setPrincipal(governor);
+  ok(await club.replace_acl(0n, { clubs: ['club-a'], teams: [{ id: 'team-a', club: 'club-a' }],
+    children: [{ id: 'legacy-child', club_id: ['club-a'], teams: ['team-a'], parent: [governor] }],
+    guardians: [{ child: 'legacy-child', user: parent }], roles: [], exclusions: [] }));
+  league.setPrincipal(governor); ok(await league.set_club_domain_canister(ids.get(club)));
   if (process.env.EVENTS_DOMAIN_OLD_WASM && process.env.MINI_LEAGUE_DOMAIN_OLD_WASM) {
     const oldEvents = await setup(eventsIdl, process.env.EVENTS_DOMAIN_OLD_WASM);
     const oldLeague = await setup(leagueIdl, process.env.MINI_LEAGUE_DOMAIN_OLD_WASM);
@@ -117,6 +124,30 @@ try {
   events.setPrincipal(parent);
   assert.ok('Err' in await events.get_event_group(board.id));
   assert.deepEqual(ok(await events.list_events_multi(['club-a'], [])), []);
+  // Legacy child access comes from club_domain, not the stale player/guardian mirrors.
+  league.setPrincipal(governor);
+  const legacy = ok(await league.create_mini_league('club-a', 'Legacy', [], [], 6, 3, 10, [], true));
+  const legacyPlayer = ok(await league.add_player(legacy.id, 'Legacy child', ['legacy-child'], [parent.toText()], [], []));
+  ok(await league.link_mini_league_guardian('legacy-child', parent));
+  assert.ok('Err' in await league.link_mini_league_guardian('legacy-child', stranger));
+  events.setPrincipal(governor);
+  const legacyEvent = ok(await events.create_event('club-a', [], 'Legacy match', 'Round', 'mini_league', [], [], [], [legacy.id], 3000n, 4000n, [], false, [], []));
+  const legacyBoard = ok(await events.create_event_group(legacyEvent.id, 'Legacy pitch', [], [], [], []));
+  league.setPrincipal(parent); events.setPrincipal(parent);
+  assert.equal(ok(await league.get_mini_league(legacy.id)).id, legacy.id);
+  assert.equal(ok(await league.get_player_guardian_status(legacyPlayer.id)).guardian_count, 1n);
+  assert.equal(ok(await events.get_event_group(legacyBoard.id))[0].id, legacyBoard.id);
+  league.setPrincipal(stranger);
+  assert.ok('Err' in await league.get_player_guardian_status(legacyPlayer.id));
+  club.setPrincipal(governor); ok(await club.unlink_guardian('legacy-child', parent));
+  league.setPrincipal(parent); events.setPrincipal(parent);
+  assert.ok('Err' in await league.get_mini_league(legacy.id));
+  assert.ok('Err' in await league.get_player_guardian_status(legacyPlayer.id));
+  assert.ok('Err' in await events.get_event_group(legacyBoard.id));
+  league.setPrincipal(governor);
+  assert.equal(ok(await league.get_player_guardian_status(legacyPlayer.id)).pending, true);
+  assert.ok(!ok(await league.get_league_members(legacy.id)).some(u => u.user_id === parent.toText()));
+  console.log('PASS: legacy parent access, private status, stale mirror denial and events board revocation after authoritative unlink.');
   chat.setPrincipal(governor);
   const privateChat = ok(await chat.ensure_mini_league_chat('club-a', a.id, 'A chat', [governor, parent]));
   assert.equal(ok(await chat.ensure_mini_league_chat('club-a', a.id, 'A chat', [governor, parent])).conversation_id, privateChat.conversation_id);

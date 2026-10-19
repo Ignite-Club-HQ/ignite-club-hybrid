@@ -121,7 +121,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
-    'my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+    'my_guardian_children' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Text)],
+        ['composite_query'],
+      ),
     'pii_vetkey_verification_key' : IDL.Func([], [IDL.Vec(IDL.Nat8)], []),
     'purge_club_grants' : IDL.Func(
         [IDL.Text],

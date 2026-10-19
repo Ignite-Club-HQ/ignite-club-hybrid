@@ -74,6 +74,8 @@ persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
   var mediaEvidenceRevision : Nat;
   var competitionAuthorities : [Principal];
+  var identityAccessCanister : ?Principal;
+  var identityUnlinkReceipts : [(Text, Principal, Nat64)];
   // Preparation-only ledger. No upload activation API until legacy usage
   // import and recoverable store-side sagas exist; existing stores unchanged.
   var mediaQuotaLedger : MediaQuota.Ledger;
@@ -414,6 +416,7 @@ persistent actor class Main(governorInit : Principal) {
 
   func isExcluded(caller : Principal, club : Text) : Bool {
     acl.exclusions.any(func(exclusion) = exclusion.user.equal(caller) and exclusion.club == club)
+    or removedMembers.any(func(member) = member.user == caller and member.club == club)
   };
 
   // A parent or guardian of a child assigned to one of the club's teams is
@@ -460,7 +463,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func isAdmin(caller : Principal, club : Text) : Bool {
-    isGovernor(caller) or acl.roles.any(func(grant) = grant.user.equal(caller) and (grant.role == "club_admin" or grant.role == "app_admin") and (grant.club == ?club or grant.club == null))
+    isGovernor(caller) or (not isExcluded(caller, club) and acl.roles.any(func(grant) = grant.user.equal(caller) and (grant.role == "club_admin" or grant.role == "app_admin") and (grant.club == ?club or grant.club == null)))
   };
 
   func nowNs() : Nat64 { Nat.toNat64(Int.abs(Time.now())) };
@@ -518,6 +521,54 @@ persistent actor class Main(governorInit : Principal) {
       if (account.principals.any(func(item) = item.equal(principal))) return ?account;
     };
     null
+  };
+
+  public shared ({ caller }) func set_identity_access_canister(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid identity authority required");
+    if (Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") != ?"1") return #Err("Cross-group account lifecycle not released");
+    if (identityUnlinkReceipts.size() > 0 and identityAccessCanister != ?id) return #Err("Cannot replace identity authority after unlink");
+    identityAccessCanister := ?id; membershipEpoch += 1; #Ok
+  };
+  type LinkedAccount = { id : Text; principals : [Principal]; version : Nat64; status : { #Active; #Suspended } };
+  public shared ({ caller }) func sync_my_linked_account() : async { #Ok; #Err : Text } {
+    auth(caller);
+    let authority = switch (identityAccessCanister) { case null return #Err("Identity authority not configured"); case (?id) id };
+    let epoch = membershipEpoch;
+    let service : actor { read_linked_account : shared (Principal) -> async { #Ok : LinkedAccount; #Err : Text } } = actor(authority.toText());
+    let reply = try { await (with timeout = 10) service.read_linked_account(caller) } catch (_) { return #Err("Identity authority unavailable") };
+    if (identityAccessCanister != ?authority or epoch != membershipEpoch) return #Err("Account authority changed; retry");
+    let account = switch (reply) { case (#Err(e)) return #Err(e); case (#Ok(a)) a };
+    if (account.status != #Active or account.principals.size() == 0 or account.principals.size() > 8 or not account.principals.any(func(p) = p == caller)
+        or account.principals.any(Principal.isAnonymous)) return #Err("Invalid linked account");
+    if (accounts.any(func(a) = a.id == account.id and a.version > account.version)) return #Err("Stale linked account");
+    // A linked identity cannot bypass a removal recorded for another alias.
+    var exclusions = acl.exclusions.concat(removedMembers.map(func(m) = { club = m.club; user = m.user }));
+    for (e in exclusions.values()) if (account.principals.any(func(p) = p == e.user)) {
+      for (p in account.principals.values()) if (not exclusions.any(func(x) = x.club == e.club and x.user == p)) exclusions := exclusions.concat([{ club = e.club; user = p }]);
+    };
+    acl := { acl with exclusions };
+    // Drop obsolete local aliases instead of trusting old local link challenges.
+    accounts := accounts.filter(func(a) = a.id != account.id and not a.principals.any(func(p) = account.principals.any(func(q) = p == q)))
+      .concat([{ id = account.id; version = account.version; principals = account.principals; legacy_subject = caller }]);
+    membershipEpoch += 1; #Ok
+  };
+  public shared ({ caller }) func revoke_linked_principal(account_id : Text, user : Principal, version : Nat64) : async { #Ok; #Err : Text } {
+    if (identityAccessCanister != ?caller or Principal.isAnonymous(caller)) return #Err("Identity authority required");
+    if (Principal.isAnonymous(user) or user == governor) return #Err("Cannot revoke identity");
+    if (identityUnlinkReceipts.any(func(r) = r.0 == account_id and r.1 == user and r.2 >= version)) return #Ok;
+    switch (accounts.find(func(a) = a.id == account_id)) {
+      case (?a) { if (a.version > version) return #Err("Account version conflict") };
+      case null {};
+    };
+    if (identityUnlinkReceipts.size() >= 100000) return #Err("Identity unlink ledger full");
+    // Unlink is NOT permanent account erasure. Remove this principal's
+    // authority, preserving account-owned rows and other people's roles.
+    acl := { acl with roles = acl.roles.filter(func(r) = r.user != user);
+      guardians = acl.guardians.filter(func(g) = g.user != user);
+      children = acl.children.map(func(c) = if (c.parent == ?user) ({ c with parent = null }) else c) };
+    accounts := accounts.map(func(a) = { a with principals = a.principals.filter(func(p) = p != user) });
+    identityUnlinkReceipts := identityUnlinkReceipts.filter(func(r) = not (r.0 == account_id and r.1 == user)).concat([(account_id, user, version)]);
+    membershipEpoch += 1; #Ok
   };
 
   func getListing(club : Text) : Types.Listing {
@@ -2446,7 +2497,7 @@ persistent actor class Main(governorInit : Principal) {
   // Same public boolean scope as is_club_member, through consensus and with
   // locally verified linked identities. No roster, names or account IDs.
   public shared func read_has_club_membership(user : Principal, club_id : Text) : async Bool {
-    if (user.equal(Principal.anonymous())) return false;
+    if (user.equal(Principal.anonymous()) or isExcluded(user, club_id)) return false;
     let principals = switch (accountFor(user)) { case (?a) a.principals; case null [user] };
     principals.any(func(p) = isMember(p, club_id))
   };
@@ -2457,16 +2508,19 @@ persistent actor class Main(governorInit : Principal) {
     acl.roles.any(func(grant) = grant.user.equal(user) and grant.club == ?club_id)
   };
 
-  public shared func read_has_child_guardian(user : Principal, child_id : Text) : async Bool {
-    if (user.equal(Principal.anonymous())) return false;
+  func currentChildGuardian(user : Principal, child_id : Text) : Bool {
+    if (Principal.isAnonymous(user)) return false;
     switch (acl.children.find(func(child) = child.id == child_id)) {
       case null false;
       case (?child) {
-        (switch (child.parent) { case (?p) p.equal(user); case null false })
-        or acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))
+        (switch (child.club_id) { case (?club) not isExcluded(user, club); case null true }) and
+        ((switch (child.parent) { case (?p) p.equal(user); case null false })
+        or acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user)))
       };
     }
   };
+  public query func has_child_guardian(user : Principal, child_id : Text) : async Bool { currentChildGuardian(user, child_id) };
+  public shared func read_has_child_guardian(user : Principal, child_id : Text) : async Bool { currentChildGuardian(user, child_id) };
 
   // The user's role grants in one club as (role, team) pairs. events_domain
   // mirrors these on create/update so club and team admins set up here can
@@ -2523,13 +2577,14 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Unlinked identity") };
       case (?account) {
         let childIds = accountFamilies.filter(func(link) = link.account_id == account.id).map(func(link) = link.child_id);
-        #Ok(acl.children.filter(func(child) = childIds.any(func(id) = id == child.id)))
+        #Ok(acl.children.filter(func(child) = childIds.any(func(id) = id == child.id) and currentChildGuardian(caller, child.id)))
       };
     }
   };
 
   public shared ({ caller }) func begin_identity_link(target : Principal) : async { #Ok : Types.Challenge; #Err : Text } {
     auth(caller);
+    if (identityAccessCanister != null) return #Err("Use shared identity authority");
     if (target.equal(Principal.anonymous())) return #Err("Invalid target identity");
     switch (accountFor(caller), accountFor(target)) {
       case (null, _) { #Err("Unlinked identity") };
@@ -2553,6 +2608,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func accept_identity_link(id : Nat64) : async { #Ok : Types.Account; #Err : Text } {
     auth(caller);
+    if (identityAccessCanister != null) return #Err("Use shared identity authority");
     let now = nowNs();
     switch (Array.findIndex(accountChallenges, func(challenge) = challenge.id == id)) {
       case null { #Err("Unknown challenge") };
@@ -2579,6 +2635,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func revoke_identity(target : Principal, expected_version : Nat64) : async { #Ok : Types.Account; #Err : Text } {
     auth(caller);
+    if (identityAccessCanister != null) return #Err("Use shared identity authority");
     switch (accountFor(caller)) {
       case null { #Err("Unlinked identity") };
       case (?current) {

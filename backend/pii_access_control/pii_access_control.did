@@ -74,7 +74,7 @@ type Main =
        err: text;
        ok: nat;
      });
-   my_guardian_children: () -> (vec text) query;
+   my_guardian_children: () -> (vec text) composite_query;
    pii_vetkey_verification_key: () -> (blob);
    purge_club_grants: (club_id: text) -> (variant {
                                             Err: text;

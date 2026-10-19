@@ -83,6 +83,10 @@ VAULT_DOMAIN="$(cid vault_domain)"
 PII_ACCESS_CONTROL="$(cid pii_access_control)"
 IDENTITY_ACCESS="$(cid identity_access)"
 
+# Cross-group account lifecycle remains local-only until complete inventory,
+# authority-wide revocation fencing and mirror invalidation are proven.
+# Never singleton-overwrite identity_access authorities or set the rehearsal env.
+
 echo "==> Wiring: timer_jobs.initialize() (first-caller-wins governor)"
 icp canister call timer_jobs initialize '()' -e "$ICP_ENV"
 
