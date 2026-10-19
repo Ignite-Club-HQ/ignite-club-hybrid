@@ -802,6 +802,8 @@ persistent actor MediaBlobStore {
     auth(caller);
     if (not isGovernor<system>(caller)) return #Err("Governor required");
     if (quota_mode != #local and club_domain_canister != ?canister_id) return #Err("Quota authority immutable after freeze");
+    if (media_transfer_fences.size() != 0) return #Err("Club media transfer in progress");
+    bumpInventory();
     club_domain_canister := ?canister_id;
     #Ok
   };
@@ -835,6 +837,7 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func delete_blob(path : Text) : async Result {
     auth(caller);
+    if (mediaFenced(path)) return #Err("Club media frozen for transfer");
     switch (metadata(path)) {
       case null { #Err("Unknown blob") };
       case (?record) {
@@ -845,6 +848,7 @@ persistent actor MediaBlobStore {
         };
         // Authorization may yield; never apply stale accounting to a replacement.
         switch (metadata(path)) { case (?current) { if (current.content_hash != record.content_hash or current.owner != record.owner) return #Err("Blob changed; retry delete") }; case null return #Ok };
+        if (mediaFenced(path)) return #Err("Club media frozen for transfer");
         removeStored(path);
         #Ok
       };
@@ -964,6 +968,8 @@ persistent actor MediaBlobStore {
     };
 
     if (not dry_run) {
+      if (media_transfer_fences.size() != 0) return #err("Club media transfer in progress");
+      bumpInventory();
       blobs := newBlobs;
       pending_uploads := newPendingUploads;
       for ((p, r) in stableRekeys.values()) stable_blobs.add(p, r);
@@ -1004,10 +1010,11 @@ persistent actor MediaBlobStore {
     };
     retention_cursor := if (page.size() == 50) page[49].0 else "";
     for ((p, r) in page.values()) {
-      if (Time.now() - r.uploaded_at > RETENTION_NS) {
+      if (not mediaFenced(p) and Time.now() - r.uploaded_at > RETENTION_NS) {
         switch (categoryForPath(p), clubIdFromPath(p)) {
           case (?_, ?club) {
             if ((await clubProStatus(club)) == ?false) {
+              if (mediaFenced(p)) continue;
               switch (stable_blobs.get(p)) {
                 case (?current) { if (current.content_hash == r.content_hash and current.uploaded_at == r.uploaded_at and Time.now() - current.uploaded_at > RETENTION_NS) removeStored(p) };
                 case null {}
@@ -1049,6 +1056,7 @@ persistent actor MediaBlobStore {
     for (index in indices.values()) {
         let (clubId, paths) = clubs[index];
         if ((await clubProStatus(clubId)) == ?false) {
+          if (media_transfer_fences.get(clubId) != null) continue;
           let doomed = Map.empty<Text, ()>();
           for (p in paths.values()) {
             // A replacement during subscription lookup must not be deleted.
@@ -1058,6 +1066,7 @@ persistent actor MediaBlobStore {
             }
           };
           var freed : Nat = 0;
+          if (doomed.size() > 0) bumpInventory();
           for (b in blobs.values()) { if (Map.containsKey(doomed, Text.compare, b.path)) freed += b.bytes.size() };
           blobs := blobs.filter(func(b) { not Map.containsKey(doomed, Text.compare, b.path) });
           blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { not Map.containsKey(doomed, Text.compare, p) });
