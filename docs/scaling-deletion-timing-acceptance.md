@@ -90,3 +90,23 @@ gap for access drain: vault, events, messaging and media all delegate
 authorization to live club_domain queries and fail closed once club
 membership is erased. Content-purge coverage (caller's own files, messages,
 RSVPs) remains the self-deletion `purge_my_data` path and is not claimed here.
+
+## Production operator transport (19 October 2026, fifth batch)
+
+`frontend/src/live/operatorTransport.ts` is the production operator transport:
+an Ed25519 operator identity loaded from PEM signs every call, governor
+control is proven per canister through the management canister's
+`canister_status` (target canister as the effective id), and configuration
+calls go through per-canister Candid contracts. `statusOverride` exists only
+for local replicas because PocketIC's management canister refuses ingress
+`canister_status`; it is never set on mainnet.
+
+`frontend/src/live/operatorTransport.rehearsal.test.ts` runs the full
+install/health/read-back rehearsal over the live HTTP gateway with real
+signed calls: all twelve routed services plus blob storage and identity are
+installed with the operator as controller, `configureProvisionGroup`
+completes through the signed transport (resume repeats no call), a foreign
+principal is rejected by `verifyGovernor`, health read-back
+(`cycles_balance`, `memory_stats`) succeeds on every service, and business
+read-back (create club, grant role, create and list an event) succeeds
+through the same transport. The group is never registered or enabled.
