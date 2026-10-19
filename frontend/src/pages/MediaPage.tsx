@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment, Suspense } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { usePersistedFilter } from "@/lib/persistedFilter";
@@ -376,11 +377,11 @@ function SupabaseMediaPage() {
             ? [...new Set([...roleClubIds, activeClubFilter])]
             : roleClubIds;
           for (const clubId of candidates) {
-            if (await isLiveClubPro(ctx, clubId)) return true;
+            if (await readMembershipInScope(ctx, { clubId }, (scoped) => isLiveClubPro(scoped, clubId))) return true;
           }
           return false;
         },
-      });
+      }, { shared: 'person' });
       if (icpResult !== null) return icpResult;
       try { await ensureFreshSession(); } catch { /* offline / signed out — let queries surface real errors */ }
       const overall = performance.now();

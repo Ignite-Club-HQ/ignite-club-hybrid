@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
@@ -87,7 +88,7 @@ export default function MiniLeagueAdminJoinLinkCard({ miniLeagueId, miniLeagueNa
             metadata: { kind: MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
           } as JoinLinkRow;
         },
-      }),
+      }, { clubId }),
     staleTime: 30_000,
   });
 
@@ -114,7 +115,7 @@ export default function MiniLeagueAdminJoinLinkCard({ miniLeagueId, miniLeagueNa
         // admins are granted directly or via the join link, so there are
         // never pending named invites to count.
         icp: async () => 0,
-      }),
+      }, { clubId }),
     staleTime: 30_000,
   });
 
@@ -136,7 +137,7 @@ export default function MiniLeagueAdminJoinLinkCard({ miniLeagueId, miniLeagueNa
             metadata: { kind: MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
           } as JoinLinkRow;
         },
-      });
+      }, writeOnce({ clubId }));
       if (icpResult) return icpResult;
       const userId = requireAuthenticatedUserId(user?.id);
       if (rotate && link) {
@@ -183,7 +184,7 @@ export default function MiniLeagueAdminJoinLinkCard({ miniLeagueId, miniLeagueNa
         icp: async (ctx) => {
           await revokeLiveMiniLeagueJoinLink(ctx, miniLeagueId, "admin");
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });

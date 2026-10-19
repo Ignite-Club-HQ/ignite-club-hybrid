@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { useNavigate } from "react-router-dom";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { useQuery } from "@tanstack/react-query";
@@ -47,7 +48,7 @@ function SupabaseAdminPage() {
           .filter((g) => (g.role === "team_admin" || g.role === "coach") && g.team.length > 0)
           .map((g) => g.team[0] as string)));
       },
-    }),
+    }, { everyGroup: true, merge: (parts) => [...new Set(parts.flat())] }),
     enabled: !!user,
   });
   const isTeamAdminOrCoach = teamAdminCoachTeamIds.length > 0;
@@ -61,9 +62,9 @@ function SupabaseAdminPage() {
     queryFn: async () => withFeatureBackend<boolean>("membership", {
       icp: async (ctx) => {
         const { getLiveTeam, getLiveClubSubscription } = await import("@/live/features/club");
-        const teams = await Promise.all(teamAdminCoachTeamIds.map((id) => getLiveTeam(ctx, id).catch(() => [] as const)));
+        const teams = await Promise.all(teamAdminCoachTeamIds.map((id) => readMembershipInScope(ctx, { teamId: id }, (scoped) => getLiveTeam(scoped, id)).catch(() => [] as const)));
         const clubIds = Array.from(new Set(teams.map((t: any) => t?.[0]?.club_id).filter(Boolean))) as string[];
-        const subs = await Promise.all(clubIds.map((id) => getLiveClubSubscription(ctx, id).catch(() => null)));
+        const subs = await Promise.all(clubIds.map((id) => readMembershipInScope(ctx, { clubId: id }, (scoped) => getLiveClubSubscription(scoped, id)).catch(() => null)));
         const nowMs = Date.now();
         return subs.some((s: any) => {
           if (!s) return false;
@@ -89,7 +90,7 @@ function SupabaseAdminPage() {
           (!s.expires_at || new Date(s.expires_at) > new Date()),
       );
       },
-    }),
+    }, { shared: 'person' }),
   });
 
   // Check if user is club admin (for club-scoped tools like restoring deleted chats)
@@ -112,7 +113,7 @@ function SupabaseAdminPage() {
           .filter((g) => g.role === "club_admin" && g.club.length > 0)
           .map((g) => g.club[0] as string)));
       },
-    }),
+    }, { everyGroup: true, merge: (parts) => [...new Set(parts.flat())] }),
     enabled: !!user,
   });
   const isClubAdmin = clubAdminClubIds.length > 0;

@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Search, Trash2, Shield, Mail, Send, Copy, Check, X, Share2 } from "lucide-react";
@@ -112,7 +113,7 @@ export function ManageMiniLeagueAdminsSheet({
         // Gated: admin display names come from Supabase profiles joined by
         // uuid, which has no canister equivalent (canister keys by principal).
         icp: async () => [] as { id: string; user_id: string; display_name: string | null; avatar_url: string | null }[],
-      }),
+      }, { clubId }),
     enabled: open && !!miniLeagueId,
   });
 
@@ -153,7 +154,7 @@ export function ManageMiniLeagueAdminsSheet({
         icp: async (ctx) => {
           await addLiveAdmin(ctx, miniLeagueId, Principal.fromText(targetUserId));
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-admins", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["mini-league-members"] });
@@ -181,7 +182,7 @@ export function ManageMiniLeagueAdminsSheet({
         icp: async (ctx) => {
           await removeLiveAdmin(ctx, miniLeagueId, Principal.fromText(admin.user_id));
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-admins", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["mini-league-members"] });

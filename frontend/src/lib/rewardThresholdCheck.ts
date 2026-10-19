@@ -49,12 +49,12 @@ export async function checkRewardThreshold({
           .slice(0, 1)
           .map((r) => ({ id: r.id, name: r.name, points_required: r.points_required }));
       },
-    });
+    }, { clubId });
 
     if (!crossedRewards || crossedRewards.length === 0) return undefined;
 
     const reward = crossedRewards[0];
-    const notifyUserId = userId || (childId ? await getParentId(childId) : null);
+    const notifyUserId = userId || (childId ? await getParentId(childId, clubId) : null);
 
     if (notifyUserId) {
       // Routed: notification_queue under ICP, the Supabase table otherwise.
@@ -74,8 +74,8 @@ export async function checkRewardThreshold({
   }
 }
 
-async function getParentId(childId: string): Promise<string | null> {
-  return withFeatureBackend("points", {
+async function getParentId(childId: string, clubId: string): Promise<string | null> {
+  return withFeatureBackend("membership", {
     supabase: async () => {
       const { data } = await supabase
         .from("children")
@@ -92,5 +92,5 @@ async function getParentId(childId: string): Promise<string | null> {
       const guardians = await listLiveChildGuardians(ctx, childId);
       return guardians.length ? guardians[0].toText() : null;
     },
-  });
+  }, { clubId });
 }

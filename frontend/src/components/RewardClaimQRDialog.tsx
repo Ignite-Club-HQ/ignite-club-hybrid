@@ -21,6 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { writeOnce } from "@/live/clubScope";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { fulfillLiveRedemption } from "@/live/features/points";
 
@@ -30,6 +31,7 @@ interface RewardClaimQRDialogProps {
   rewardName: string;
   clubName: string;
   redemptionId: string;
+  clubId: string;
   qrCodeUrl: string | null;
   userName?: string;
   userId: string;
@@ -41,6 +43,7 @@ export function RewardClaimQRDialog({
   rewardName,
   clubName,
   redemptionId,
+  clubId,
   qrCodeUrl,
   userName,
   userId,
@@ -58,6 +61,7 @@ export function RewardClaimQRDialog({
 
       // Mark redemption as fulfilled
       if (redemptionId) {
+        if (!clubId) throw new Error("Reward club is missing");
         await withFeatureBackend("points", {
           supabase: async () => {
             const { error: redemptionError } = await supabase
@@ -73,7 +77,7 @@ export function RewardClaimQRDialog({
           icp: async (ctx) => {
             await fulfillLiveRedemption(ctx, redemptionId);
           },
-        });
+        }, writeOnce({ clubId }));
       }
 
       // Invalidate queries to refresh data

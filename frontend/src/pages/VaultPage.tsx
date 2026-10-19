@@ -334,7 +334,7 @@ function SupabaseVaultPage() {
               .map((l) => ({ id: l.id, name: l.name }))
               .sort((a, b) => a.name.localeCompare(b.name));
           },
-        });
+        }, { clubId });
         console.log("[Vault Mini-Leagues] Fetched leagues:", data);
         return data || [];
       } else {
@@ -359,7 +359,7 @@ function SupabaseVaultPage() {
               .filter((l) => l.club_id === clubId)
               .map((l) => ({ id: l.id, name: l.name }));
           },
-        });
+        }, { clubId });
         console.log("[Vault Mini-Leagues] Leagues via children:", filtered);
         return filtered;
       }

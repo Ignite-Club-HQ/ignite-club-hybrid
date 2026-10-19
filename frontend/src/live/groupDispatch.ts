@@ -12,11 +12,12 @@ import { activationStatus, chooseRoute, SHIPPED_GATES, type ActivationGates } fr
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
   isAssigned(c: string): boolean; dispose(): void;
+  createInGroup?<T>(g: string, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   readEveryGroup<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]> };
 /** What a call is about. Non-club scopes are resolved to their owning club. */
-export type EntityScope = { clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string };
-export type EntityLookup = (ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team', id: string) => Promise<string | null>;
-const ENTITY_DOMAIN = { event: 'events_domain', conversation: 'messaging_domain', team: 'club_domain' } as const;
+export type EntityScope = { clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string };
+export type EntityLookup = (ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest', id: string) => Promise<string | null>;
+const ENTITY_DOMAIN = { event: 'events_domain', conversation: 'messaging_domain', team: 'club_domain', clubLink: 'club_domain', roleRequest: 'club_domain' } as const;
 /** Device store for entity→club answers (an event/chat never changes club, so
  * positive answers are safe to keep; "not in any group" stays memory-only
  * because the club may move later). Scoped per principal. */
@@ -30,6 +31,8 @@ export type DispatchDeps = {
   /** Does this group hold the invite token? (invitees aren't members yet) */
   holdsInvite?: (ctx: FeatureBackendContext, token: string) => Promise<boolean>;
   store?: OwnerStore;
+  /** Ask the global directory to place a new club; returns its group id. */
+  placeNewClub?: (ctx: FeatureBackendContext, clubId: string) => Promise<string>;
 };
 export const MAX_DEVICE_OWNERS = 2000;
 const owners = new Map<string, string | null>(); // kind:id -> club (null = shared canisters)
@@ -60,9 +63,9 @@ async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendCont
  * Answers are remembered (device + memory) and concurrent asks share one probe. */
 async function resolveClub(deps: DispatchDeps, s: Session, principal: string, scope: EntityScope): Promise<string | null> {
   if ('clubId' in scope) return scope.clubId;
-  const [kind, id] = 'eventId' in scope ? ['event', scope.eventId] as const : 'conversationId' in scope ? ['conversation', scope.conversationId] as const : ['team', scope.teamId] as const;
+  const [kind, id] = 'eventId' in scope ? ['event', scope.eventId] as const : 'conversationId' in scope ? ['conversation', scope.conversationId] as const : 'clubLinkId' in scope ? ['clubLink', scope.clubLinkId] as const : 'roleRequestId' in scope ? ['roleRequest', scope.roleRequestId] as const : ['team', scope.teamId] as const;
   const key = `${kind}:${id}`;
-  if (owners.has(key)) return owners.get(key)!;
+  if (owners.has(key)) return owners.get(key) ?? null;
   const pending = inflight.get(key); if (pending) return pending;
   if (!deps.lookup) throw new Error('Entity lookup unavailable');
   const lookup = deps.lookup;
@@ -120,6 +123,18 @@ export function createClubDispatcher(deps: DispatchDeps) {
       try { return hits[0] ? await fn(hits[0]) : await deps.legacy(feature, '', fn); }
       finally { cached?.session.then(x => x.dispose(), () => {}); cached = null; }
     },
+    /** Creating a club/association: the global directory picks the group
+     * (healthiest with room), then the club is created there, once. If no
+     * group is placed the call fails rather than silently using shared. */
+    forNewClub: async <T>(feature: FeatureArea, clubId: string, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
+      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
+      if (!deps.placeNewClub) throw new Error('Club placement unavailable');
+      const { ctx, s } = await sessionFor(deps);
+      if (!s.createInGroup) throw new Error('Club placement unavailable');
+      const groupId = await deps.placeNewClub(ctx, clubId);
+      try { return await s.createInGroup(groupId, 'club_domain', fn); }
+      finally { cached?.session.then(x => x.dispose(), () => {}); cached = null; }
+    },
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
       const { s } = await sessionFor(deps);
@@ -147,6 +162,13 @@ export const clubDispatch = createClubDispatcher({
   open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx),
   lookup: async (ctx, kind, id) => (await import('./groupSessionLive')).lookupEntityClub(ctx, kind, id),
   holdsInvite: async (ctx, token) => (await import('./groupSessionLive')).groupHoldsInvite(ctx, token),
+  placeNewClub: async (ctx, clubId) => {
+    const { connectLiveShardRouter } = await import('./domains');
+    const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
+    const reply = await actor.place_my_new_club(clubId, ctx.target.alias);
+    if ('Err' in reply) throw new Error(reply.Err);
+    return reply.Ok.group_id;
+  },
   store: {
     load: p => JSON.parse(localStorage.getItem(`ignite.groupOwners.${p}`) ?? '{}'),
     save: (p, o) => localStorage.setItem(`ignite.groupOwners.${p}`, JSON.stringify(o)),

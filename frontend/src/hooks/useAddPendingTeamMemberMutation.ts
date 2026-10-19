@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMutation } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import type { BulkChild } from "@/components/members/ChildAndSecondGuardianFields";
@@ -444,7 +445,7 @@ export function useAddPendingTeamMemberMutation({
         secondParentFailure,
       };
       },
-    }),
+    }, writeOnce({ clubId })),
     onSuccess: async (result) => {
       const {
         link,

@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Capacitor } from "@capacitor/core";
@@ -75,7 +76,7 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
             metadata: { kind: MINI_LEAGUE_PARENT_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
           } as JoinLinkRow;
         },
-      }),
+      }, { clubId }),
     staleTime: 30_000,
   });
 
@@ -94,7 +95,7 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
             metadata: { kind: MINI_LEAGUE_PARENT_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
           } as JoinLinkRow;
         },
-      });
+      }, writeOnce({ clubId }));
       if (icpResult) return icpResult;
       const userId = requireAuthenticatedUserId(user?.id);
       if (rotate && link) {
@@ -141,7 +142,7 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
         icp: async (ctx) => {
           await revokeLiveMiniLeagueJoinLink(ctx, miniLeagueId, "player");
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });

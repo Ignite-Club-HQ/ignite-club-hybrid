@@ -13,6 +13,16 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it.each([
+    ['mini_leagues', 'mini_league_domain'],
+    ['points', 'club_points_domain'],
+  ] as const)('routes %s saves once to the club group', async (feature, domain) => {
+    const { d, session } = deps(ON);
+    const dispatcher = createClubDispatcher(d);
+    expect(await dispatcher.write(feature, 'moved', domain, 'once', async () => 'saved', 1)).toBe('group');
+    expect(session.writeClub).toHaveBeenCalledWith('moved', domain, 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   it('switched off: always the shared canisters, never opens a group session', async () => {
     const { d } = deps(); const x = createClubDispatcher(d);
     expect(await x.read('events', 'moved', 'events_domain', async () => 'r')).toBe('legacy');
@@ -102,5 +112,21 @@ describe('lists spanning several clubs', () => {
     const x = createClubDispatcher({ ...d, open: vi.fn(async () => s2) } as never);
     const out = await x.readAcross('events', 'events_domain', async (ctx: unknown) => `from-${String(ctx)}`, (p: string[]) => p);
     expect(out).toEqual(['legacy', 'from-g1', 'from-g2']);
+  });
+});
+
+describe('membership entity routing', () => {
+  it.each([
+    ['clubLink', { clubLinkId: 'link-a' }],
+    ['roleRequest', { roleRequestId: 'request-a' }],
+  ] as const)('routes %s writes once to the verified owner', async (kind, scope) => {
+    const { d, session } = deps(ON);
+    const s = { ...session, readEveryGroup: vi.fn(async (_domain, read) => read({} as never)) };
+    const lookup = vi.fn(async () => 'moved');
+    const dispatcher = createClubDispatcher({ ...d, open: async () => s, lookup } as never);
+    expect(await dispatcher.writeFor('membership', scope, 'club_domain', 'once', async () => 'saved', 1)).toBe('group');
+    expect(lookup).toHaveBeenCalledWith(expect.anything(), kind, kind === 'clubLink' ? 'link-a' : 'request-a');
+    expect(session.writeClub).toHaveBeenCalledWith('moved', 'club_domain', 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
   });
 });

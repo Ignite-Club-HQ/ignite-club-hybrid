@@ -283,6 +283,7 @@ export interface shard_routerInterface {
     list_groups(): Promise<Result_11>;
     list_routes(arg0: string | null, arg1: number): Promise<Result_12>;
     memory_stats(): Promise<MemoryStats>;
+    place_my_new_club(arg0: string, arg1: string): Promise<Result_3>;
     read_group_registry(arg0: string): Promise<Result_13>;
     read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_15>;
     read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_14>;
@@ -365,6 +366,10 @@ export class Shard_router implements shard_routerInterface {
     async memory_stats(): Promise<MemoryStats> {
         const result = await this.actor.memory_stats();
         return result;
+    }
+    async place_my_new_club(arg0: string, arg1: string): Promise<Result_3> {
+        const result = await this.actor.place_my_new_club(arg0, arg1);
+        return from_candid_Result_3_n7(result);
     }
     async read_group_registry(arg0: string): Promise<Result_13> {
         const result = await this.actor.read_group_registry(arg0);

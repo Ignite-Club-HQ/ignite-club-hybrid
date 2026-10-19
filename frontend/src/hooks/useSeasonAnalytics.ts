@@ -20,9 +20,9 @@ export interface SeasonPlayerStat {
   games_played: number;
 }
 
-export function useSeasonTeamSummary(seasonId: string | undefined, enabled = true) {
+export function useSeasonTeamSummary(seasonId: string | undefined, enabled = true, clubId?: string) {
   return useQuery({
-    queryKey: ["season-team-summary", seasonId],
+    queryKey: ["season-team-summary", seasonId, clubId],
     queryFn: async (): Promise<SeasonTeamSummary[]> => {
       if (!seasonId) return [];
       return withFeatureBackend("membership", {
@@ -41,7 +41,7 @@ export function useSeasonTeamSummary(seasonId: string | undefined, enabled = tru
             roster_size: Number(row.roster_size),
           }));
         },
-      });
+      }, { clubId: clubId ?? '' });
     },
     enabled: !!seasonId && enabled,
     staleTime: 30_000,
@@ -77,7 +77,7 @@ export function useSeasonPlayerStats(
             games_played: Number(row.games_played),
           }));
         },
-      }, { teamId: teamId! });
+      }, { teamId });
     },
     enabled: !!seasonId && !!teamId && enabled,
     staleTime: 30_000,

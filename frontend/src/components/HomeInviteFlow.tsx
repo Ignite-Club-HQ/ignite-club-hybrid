@@ -162,7 +162,7 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
                   })),
                 };
               },
-            })
+            }, { everyGroup: true, merge: (parts) => ({ data: [...new Map(parts.flatMap((part) => part.data ?? []).map((row) => [row.id, row])).values()] }) })
           : Promise.resolve({ data: [] as any[] }),
         allClubIds.length
           ? withFeatureBackend("membership", {
@@ -180,7 +180,7 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
                     .map((c) => ({ id: c.id, name: c.name })),
                 };
               },
-            })
+            }, { everyGroup: true, merge: (parts) => ({ data: [...new Map(parts.flatMap((part) => part.data ?? []).map((row) => [row.id, row])).values()] }) })
           : Promise.resolve({ data: [] as any[] }),
         leagueAdminClubIds.length
           ? withFeatureBackend("mini_leagues", {

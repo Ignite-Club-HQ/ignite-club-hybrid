@@ -194,6 +194,7 @@ export default function ClubRewardsReportPage() {
           return redeemedAt >= startDate && redeemedAt <= endDate;
         });
       }
+      if (!clubId) return [];
       return withFeatureBackend<ReportRedemption[]>("points", {
         supabase: async () => {
           // First, get redemptions within date range
@@ -288,7 +289,7 @@ export default function ClubRewardsReportPage() {
           // names ("Unknown Reward" etc., already handled downstream) and
           // ignore the team filter (ungated: ICP has no cross-table team
           // membership lookup to apply it against).
-          const redemptions = await listLiveRedemptions(ctx, clubId!, null);
+          const redemptions = await listLiveRedemptions(ctx, clubId, null);
           return redemptions
             .filter((r) => {
               const redeemedAt = r.redeemed_at_ms[0] ? new Date(Number(r.redeemed_at_ms[0])) : new Date(Number(r.created_at_ms));
@@ -306,7 +307,7 @@ export default function ClubRewardsReportPage() {
               profiles: null,
             }));
         },
-      });
+      }, { clubId });
     },
     enabled: !!clubId,
   });

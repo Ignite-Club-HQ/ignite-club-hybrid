@@ -24,6 +24,8 @@ import { toast } from "sonner";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { readMembershipInScope } from "@/live/membershipRouting";
+import { writeOnce } from "@/live/clubScope";
 
 interface ProClubRow {
   id: string;
@@ -103,6 +105,7 @@ function IcpAdminAICatchUpPage() {
               if (c.is_active && c.deleted_at_ms.length === 0) allClubs.push({ id: c.id, name: c.name });
             }
             if (batch.length < 50) break;
+            if (i === 39) throw new Error('Club directory exceeds page budget');
             const last = batch.at(-1);
             if (!last) break;
             cursor = last.id;
@@ -133,7 +136,7 @@ function IcpAdminAICatchUpPage() {
           }
           return rows.sort((a, b) => a.name.localeCompare(b.name));
         },
-      }),
+      }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [row.id, row])).values()].sort((a, b) => a.name.localeCompare(b.name)) }),
   });
 
   const filtered = useMemo(() => {
@@ -152,13 +155,16 @@ function IcpAdminAICatchUpPage() {
           let clubsUpdated = 0;
           let membersUpdated = 0;
           for (const id of ids) {
-            await setLiveClubAiCatchUp(ctx, id, true);
+            const count = await readMembershipInScope(ctx, writeOnce({ clubId: id }), async scoped => {
+              await setLiveClubAiCatchUp(scoped, id, true);
+              return enableLiveAiCatchUpForAllMembers(scoped, id);
+            });
             clubsUpdated += 1;
-            membersUpdated += await enableLiveAiCatchUpForAllMembers(ctx, id);
+            membersUpdated += count;
           }
           return { clubs_updated: clubsUpdated, members_updated: membersUpdated, total_pro_clubs: ids.length };
         },
-      }),
+      }, { shared: 'app' }),
     onSuccess: (r) => {
       toast.success(
         `Enabled on ${r.total_pro_clubs} Pro club${r.total_pro_clubs === 1 ? "" : "s"} · ${r.members_updated} member${r.members_updated === 1 ? "" : "s"} switched on`

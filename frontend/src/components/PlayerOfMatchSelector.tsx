@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trophy, Loader2, Star, X } from "lucide-react";
@@ -327,7 +328,7 @@ export default function PlayerOfMatchSelector({
               );
               return entry.balance_after;
             },
-          });
+          }, writeOnce({ clubId }));
           const previousPoints = balanceAfter - pointsToAward;
 
           // Check reward threshold
@@ -362,7 +363,7 @@ export default function PlayerOfMatchSelector({
                 relatedId: eventId,
               });
             },
-          });
+          }, writeOnce({ clubId }));
         } else if (childId) {
           // Child display record for the notification: Supabase children
           // row, or events_domain's get_event_child (manager-gated) in ICP.
@@ -383,7 +384,7 @@ export default function PlayerOfMatchSelector({
               // guards below treat it the same as Supabase's null.
               return { parent_id: c.parent_id[0] ?? "", name: names.get(childId) ?? "Your child" };
             },
-          });
+          }, { clubId });
 
           // Atomic child points increment (+ matching history entry,
           // recorded atomically by award_points on the ICP branch).
@@ -424,7 +425,7 @@ export default function PlayerOfMatchSelector({
               );
               return entry.balance_after;
             },
-          });
+          }, writeOnce({ clubId }));
           const previousChildPoints = childBalanceAfter - pointsToAward;
 
           // Notify parent with points.
@@ -457,7 +458,7 @@ export default function PlayerOfMatchSelector({
                   relatedId: eventId,
                 });
               },
-            });
+            }, writeOnce({ clubId }));
           }
         }
       } else {
@@ -515,7 +516,7 @@ export default function PlayerOfMatchSelector({
               }
             }
           },
-        });
+        }, writeOnce({ clubId }));
       }
     },
     onSuccess: () => {
@@ -604,7 +605,7 @@ export default function PlayerOfMatchSelector({
                 'Player of the Match award removed',
               );
             },
-          });
+          }, writeOnce({ clubId }));
         } else if (pointsToDeduct > 0 && playerOfMatch.child_id) {
           await withFeatureBackend("points", {
             supabase: async () => {
@@ -635,7 +636,7 @@ export default function PlayerOfMatchSelector({
                 'Player of the Match award removed',
               );
             },
-          });
+          }, writeOnce({ clubId }));
         }
       } catch (e) {
         console.error("[POM remove] points cleanup failed (award already removed):", e);

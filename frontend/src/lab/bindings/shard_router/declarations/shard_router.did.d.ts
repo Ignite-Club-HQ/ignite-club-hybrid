@@ -163,6 +163,7 @@ export interface _SERVICE {
    * Public: live memory reading for the admin health page.
    */
   'memory_stats' : ActorMethod<[], MemoryStats>,
+  'place_my_new_club' : ActorMethod<[string, string], Result_3>,
   'read_group_registry' : ActorMethod<[string], Result_13>,
   'read_hosted_club_assignment' : ActorMethod<
     [string, string, bigint],

@@ -447,7 +447,7 @@ function SupabaseSeasonDetailPage() {
         </CardContent>
       </Card>
 
-      {(isActive || isArchived) && seasonId && <SeasonAnalyticsCard seasonId={seasonId} />}
+      {(isActive || isArchived) && seasonId && clubId && <SeasonAnalyticsCard seasonId={seasonId} clubId={clubId} />}
 
       {seasonId && club && season && (
         <>
