@@ -11,10 +11,10 @@
 
 - Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
 - Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html to dist/index.html for static hosting/SPA fallback.
-- Read each directory's AGENTS.md before changing frontend/, backend/ or scripts/.
+- Read directory AGENTS.md before editing frontend/, backend/ or scripts/.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule updates: omit to keep; empty image/zero end-date clears. Monthly recurrence clamps in UTC. Why: Candid compatibility.
-- Self/admin erasure retains inventory; local timing uses persistent router locks through commit. Gallery copies decrypt under club keys.
+- Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
 - Competition welcome settings live on competition_domain behind refreshed manager access; club-role mirrors fail closed. Why: no Supabase fallback or stale access.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
@@ -44,4 +44,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
 - Cross-group accounts/admission stay local-only: no live UI/deploy flags. Identity uses durable unlink denials and consensus eligibility, never resource grants. Activation requires complete all-service fences/inventory/drain/mirror proof; follow backend/AGENTS.md for evidence. Why: eligibility and fan-out cannot prove global revocation or deny unreached groups.
 
-- Mainnet photo-key preflight: SDK offline derivation, signed controller checks, durable pre/post-upgrade receipts; other targets fail closed (vetKD rejects ingress).
+- Mainnet photo-key preflight: offline SDK derivation, signed controller checks, durable pre/post-upgrade receipts; other targets fail closed (vetKD rejects ingress).
