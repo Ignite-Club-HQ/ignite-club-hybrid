@@ -2,6 +2,8 @@
 
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 
+- [ ] Owner-requested capacity and photo-move plan: establish real store headroom and combined accounting, test growth within existing groups, reserve existing-club allowances, and assess safe encrypted-photo club moves before a separate implementation approval. No photo-move gate changes or live activation authorized by planning.
+
 - [x] Correct the owner's misleading health report: exact actual Cycles/Balance and Memory size parsing replaces allocation/reservation settings; six regression tests pass and whole-script fixtures show 0.40T/201.33 MB with low-fuel warning, while missing actual fields fail the run. Preview build OK. Owner reports mainnet upgrade succeeded; signed-in acceptance and scaling activation remain separate.
 - [x] Health report made key-free and self-verifying: it now asks each service's own public `cycles_balance`/`memory_stats` queries over HTTPS with an anonymous identity instead of parsing management-canister settings, so it needs no deploy key and cannot report a reserved 5T or a 0-byte allocation as usage. Live mainnet reads confirm media_metadata 0.41T, migration_coordinator 0.42T and secret_workload_identity 0.43T (all LOW FUEL), shard_router 1.03T, largest memory 201.3 MB — the owner's "all healthy" run therefore did not use these readings. Workflow drops the icp CLI install and deployer identity import; unreadable fuel or memory still fails the run.
 - [ ] Owner top-up: fund media_metadata, migration_coordinator and secret_workload_identity (each ≈0.4T, ≈US$1.30 per trillion) before shard_router (1.03T) also drops under 1T, then rerun Canister health report to confirm the low-fuel warnings clear.
