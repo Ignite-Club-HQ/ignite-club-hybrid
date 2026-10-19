@@ -49,6 +49,7 @@ export type ClubScope = ({ clubId: string } | { eventId: string } | { conversati
   /** Invite link/code/id: the invitee isn't a member yet; the group holding
    * the token serves the call. */
   | { inviteToken: string }
+  | { newClubId: string }
   /** Spans the caller's clubs (inbox, unread counts, "my events"): asked of
    * the shared canisters and every group the caller belongs to at the same
    * time, then combined with merge. Reads only. */
@@ -96,12 +97,13 @@ export async function withFeatureBackend<T>(
   if (activationStatus(SHIPPED_GATES).active && !scope?.legacy) {
     const domain = FEATURE_GROUP_DOMAIN[feature];
     if (scope && 'shared' in scope) return providers.icp({ identity, target: getActiveIcpTarget() });
+    if (scope && 'newClubId' in scope) return clubDispatch.forNewClub(feature, scope.newClubId, async ctx => providers.icp(ctx));
     if (scope && 'inviteToken' in scope) return clubDispatch.forInvite(feature, scope.inviteToken, async ctx => providers.icp(ctx));
     if (scope && domain && 'everyGroup' in scope) {
       if (scope.writeKey) throw new Error(`"${feature}" writes must name one club; group routing cannot fan them out.`);
       return clubDispatch.readAcross(feature, domain, async ctx => providers.icp(ctx), scope.merge) as Promise<T>;
     }
-    if (scope && domain && !('shared' in scope) && !('everyGroup' in scope) && !('inviteToken' in scope)) {
+    if (scope && domain && !('shared' in scope) && !('everyGroup' in scope) && !('inviteToken' in scope) && !('newClubId' in scope)) {
       return scope.writeKey
         ? clubDispatch.writeFor(feature, scope, domain, scope.writeKey, async ctx => providers.icp(ctx), scope.attempts)
         : clubDispatch.readFor(feature, scope, domain, async ctx => providers.icp(ctx));

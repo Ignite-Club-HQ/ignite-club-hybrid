@@ -33,11 +33,12 @@ export default function CreateAssociationPage() {
     if (!name.trim() || !user) return;
     setSaving(true);
     try {
+      const newClubId = crypto.randomUUID();
       const clubId = await withFeatureBackend("membership", {
         icp: async (ctx) => {
           const profile = await createLiveClub(
             ctx,
-            crypto.randomUUID(),
+            newClubId,
             name.trim(),
             slugifyClubName(name.trim()) || `association-${Date.now()}`,
             description.trim() || "",
@@ -72,7 +73,7 @@ export default function CreateAssociationPage() {
           }
           return club.id as string;
         },
-      });
+      }, { newClubId });
       setSaving(false);
       toast({ title: "Association created" });
       void queryClient.invalidateQueries();

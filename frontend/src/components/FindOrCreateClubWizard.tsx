@@ -128,12 +128,13 @@ export default function FindOrCreateClubWizard({
     setSaving(true);
 
     try {
+      const newClubId = crypto.randomUUID();
       const clubId = await withFeatureBackend("membership", {
         icp: async (ctx) => {
           const { Principal } = await import("@icp-sdk/core/principal");
           const profile = await createLiveClub(
             ctx,
-            crypto.randomUUID(),
+            newClubId,
             clubName.trim(),
             clubName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `club-${Date.now()}`,
             clubDescription.trim() || "",
@@ -229,7 +230,7 @@ export default function FindOrCreateClubWizard({
 
           return club.id as string;
         },
-      });
+      }, { newClubId });
 
       setSaving(false);
       void queryClient.invalidateQueries();

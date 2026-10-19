@@ -117,6 +117,30 @@ thread_local! {
     static GROUP_ASSIGNMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(7)));
     // Additive partition; never reuse IDs belonging to existing deployments.
     static GROUP_PLACEMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(8)));
+    // Per-principal count of self-service new-club placements (abuse cap).
+    static PLACERS: RefCell<StableBTreeMap<Vec<u8>, u64, Memory>> = RefCell::new(StableBTreeMap::init(memory(9)));
+}
+
+/// Self-service placements one principal may make; each consumes a group slot.
+const MAX_SELF_PLACEMENTS: u64 = 10;
+
+fn is_uuid(id: &str) -> bool {
+    id.len() == 36 && id.char_indices().all(|(i, c)| if [8, 13, 18, 23].contains(&i) { c == '-' } else { c.is_ascii_hexdigit() })
+}
+
+fn place_new_club_for(user: Principal, club_id: String, target_alias: String, now: u64) -> Outcome<GroupAssignment> {
+    if user == Principal::anonymous() { return Err("Authentication required".into()); }
+    if !is_uuid(&club_id) { return Err("Club id must be a fresh UUID".into()); }
+    // Idempotent retry: an existing assignment never counts against the cap.
+    if group_assignment_for(&club_id).is_some() {
+        return assign_group_record(club_id, target_alias, current_revision(), now);
+    }
+    let key = user.as_slice().to_vec();
+    let used = PLACERS.with(|m| m.borrow().get(&key).unwrap_or(0));
+    if used >= MAX_SELF_PLACEMENTS { return Err("New club placement limit reached".into()); }
+    let assignment = assign_group_record(club_id, target_alias, current_revision(), now)?;
+    PLACERS.with(|m| m.borrow_mut().insert(key, used + 1));
+    Ok(assignment)
 }
 
 fn memory(id: u8) -> Memory {
@@ -673,6 +697,13 @@ fn assign_new_club_group(club_id: String, target_alias: String, expected_revisio
     assign_group_record(club_id, target_alias, expected_revision, ic_cdk::api::time())
 }
 
+/// Any signed-in user creating a club asks for its group here; the router picks
+/// the healthiest accepting group. Capped per principal; retries are free.
+#[ic_cdk::update]
+fn place_my_new_club(club_id: String, target_alias: String) -> Outcome<GroupAssignment> {
+    place_new_club_for(caller(), club_id, target_alias, ic_cdk::api::time())
+}
+
 fn assign_group_record(club_id: String, target_alias: String, expected_revision: u64, now: u64) -> Outcome<GroupAssignment> {
     validate_club_id(&club_id)?;
     // Retrying an acknowledged assignment never consumes a second slot.
@@ -741,6 +772,25 @@ mod tests {
         assert_eq!(group_assignment_for("club-one"), Some(first));
         assert!(assign_group_record("club-two".into(), "mainnet".into(), current_revision(), 1).is_err());
         assert!(assign_group_record("club-one".into(), "other-engine".into(), current_revision(), 1).is_err());
+    }
+
+    #[test]
+    fn self_service_placement_is_authenticated_capped_and_retry_free() {
+        let group = ShardGroup {
+            id: "self-group".into(), target_alias: "selftest".into(), domains: vec![],
+            accepting: true, max_clubs: 100, assigned_clubs: 0,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+        };
+        GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+        let user = Principal::from_slice(&[7; 29]);
+        let id = |n: u64| format!("00000000-0000-4000-8000-{:012x}", n);
+        assert!(place_new_club_for(Principal::anonymous(), id(0), "selftest".into(), 1).is_err());
+        assert!(place_new_club_for(user, "not-a-uuid".into(), "selftest".into(), 1).is_err());
+        let first = place_new_club_for(user, id(1), "selftest".into(), 1).unwrap();
+        assert_eq!(place_new_club_for(user, id(1), "selftest".into(), 1).unwrap(), first);
+        for n in 2..=MAX_SELF_PLACEMENTS { place_new_club_for(user, id(n), "selftest".into(), 1).unwrap(); }
+        assert!(place_new_club_for(user, id(99), "selftest".into(), 1).is_err());
+        assert_eq!(group_for("self-group").unwrap().assigned_clubs, MAX_SELF_PLACEMENTS as u32);
     }
 
     #[test]
