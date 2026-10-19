@@ -5,6 +5,7 @@
  * Snapshots are opaque Candid blobs — never decoded or decrypted here. */
 import type { DomainDigest } from './groupTransfer';
 import type { TransferAdapter } from './groupTransferRunner';
+import { assertMediaTransferSafe, type MediaTransferInventory } from './mediaTransferSafety';
 
 type R<T> = { Ok: T } | { Err: string };
 const ok = <T>(r: R<T>): T => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
@@ -52,9 +53,16 @@ export type LiveAdapterDeps = {
   fenceRevision: bigint;
   /** Destination group of the club's persisted in-flight transfer — durable, so a restarted operator still unlocks it. */
   targetFor(clubId: string): Promise<string | null>;
+  /** Authenticated complete inventory including chat/vault/article blobs and
+   * pending operations; unavailable readers fail closed, including on resume. */
+  mediaInventory?(fromGroup: string, toGroup: string, clubId: string): Promise<MediaTransferInventory>;
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
+  const verifyMedia = async (from: string, to: string, club: string) => {
+    if (!d.mediaInventory) throw new Error('Authenticated media inventory reader required; club move blocked');
+    assertMediaTransferSafe(await d.mediaInventory(from, to, club), club, from, to);
+  };
   const live = (domain: string) => (LIVE_DOMAINS as readonly string[]).includes(domain);
   const global = (domain: string) => (GLOBAL_DOMAINS as readonly string[]).includes(domain);
   // Both sides are fenced: source blocks writes, target accepts imports only.
@@ -79,10 +87,14 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     return !(probe.length === terminal.length && probe.every((b, i) => b === terminal[i]));
   };
   return {
-    sameDeployment: d.sameDeployment,
+    async sameDeployment(from, to) { return d.sameDeployment(from, to); },
     async setFence(group, club, on) {
       await fenceAll(group, club, on);
       if (on) { // locked first, so no new sponsor-only count can land after the fold
+        const target = await d.targetFor(club);
+        // Initial move destination is checked by the runner's preflight below;
+        // fenced resumes are checked again before assignment and purge.
+        if (target && target !== group) await verifyMedia(group, target, club);
         const sponsors = await d.clubSponsorIds(group, club);
         for (let i = 0; i < sponsors.length; i += 500)
           ok(await d.actors(group).insights_domain.claim_legacy_sponsor_metrics(club, sponsors.slice(i, i + 500)));
@@ -126,8 +138,17 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       return { domain, records: all.length, digest: await sha256Hex(all) };
     },
     readRegistryRevision: d.readRegistryRevision,
-    swapAssignment: d.swapAssignment,
+    async swapAssignment(club, to, revision) {
+      if (!d.mediaInventory) throw new Error('Authenticated media inventory reader required; club move blocked');
+      const inventory = await d.mediaInventory('', to, club);
+      assertMediaTransferSafe(inventory, club, inventory.fromGroup, to);
+      if (!inventory.fromGroup || inventory.fromGroup === to) throw new Error('Invalid source media inventory');
+      await d.swapAssignment(club, to, revision);
+    },
     async purgeSource(group, club) {
+      const destination = await d.targetFor(club);
+      if (!destination || destination === group) throw new Error('Persisted destination required before media-safe purge');
+      await verifyMedia(group, destination, club);
       const a = d.actors(group);
       for (const dom of LIVE_DOMAINS) ok(await a[dom].purge_club_snapshot(club));
       await fenceAll(group, club, false);
