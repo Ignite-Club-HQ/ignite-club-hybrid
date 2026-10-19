@@ -1,5 +1,6 @@
 import AccountAdmission "../../shared/AccountAdmission";
 import RemovalReceiver "../../shared/RemovalReceiver";
+import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 /// PII Access Control Canister
 /// Mediates access to personally identifiable information (PII) with
@@ -57,9 +58,9 @@ persistent actor class Main(governorInit : Principal) = this {
   transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
   func admitAccount(subject : Principal) : async () {
-    if (removalReceiver.denied(subject)) Runtime.trap("Account removal fenced");
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
     let eligible = await accountAdmission.eligible(subject);
-    if (removalReceiver.denied(subject) or not eligible) Runtime.trap("Account admission denied or unavailable");
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
@@ -1314,9 +1315,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   
   public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
+    let fresh = removal_intents.get(request.account_id) == null;
     switch (removalReceiver.prepare(caller, request)) {
       case (#Err(message)) #Err(message);
-      case (#Ok) { mediaAuthEpoch += 1; #Ok }
+      case (#Ok) { if (fresh) mediaAuthEpoch += 1; #Ok }
     }
   };
   public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
