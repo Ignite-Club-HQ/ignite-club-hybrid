@@ -46,8 +46,9 @@ try {
   // (pending only; no bytes transferred), then prove every other category
   // is refused against the same combined pot.
   const reserved = [];
-  for (let i = 0; i < 512; i++) reserved.push(ok(await reserve(`clubs/club-pro/photos/giant-${i}.jpg`, FILE)));
-  reserved.push(ok(await reserve('clubs/club-pro/photos/giant-last.jpg', ALLOWANCE - FILE * 512n)));
+  const fullSlots = 508; // 508 × 10 MiB + remainder = exactly 5 GiB
+  for (let i = 0; i < fullSlots; i++) reserved.push(ok(await reserve(`clubs/club-pro/photos/giant-${i}.jpg`, FILE)));
+  reserved.push(ok(await reserve('clubs/club-pro/photos/giant-last.jpg', ALLOWANCE - FILE * BigInt(fullSlots))));
   let bytes = await actor.get_club_media_bytes('club-pro');
   assert.equal(bytes.pending, ALLOWANCE);
   assert.equal(bytes.finalized, 0n);
