@@ -31,6 +31,13 @@ try {
   const afterReaders = ok(await actor.read_removal_history_manifest());
   ok(await actor.set_club_authorities([p(11)]));
   denied(await actor.read_removal_history_page(afterReaders.revision, { Done: null }, 1));
+  actor.setPrincipal(p(6)); const unlinkAccount = ok(await actor.register_account());
+  const challenge = ok(await actor.begin_link(p(7)));
+  actor.setPrincipal(p(7)); ok(await actor.accept_link(challenge.id));
+  actor.setPrincipal(governor); const beforeUnlink = ok(await actor.read_removal_history_manifest());
+  actor.setPrincipal(p(6)); denied(await actor.revoke(p(7), 1n));
+  actor.setPrincipal(governor);
+  denied(await actor.read_removal_history_page(beforeUnlink.revision, { Done: null }, 1));
   actor.setPrincipal(stranger); denied(await actor.read_removal_history_manifest());
   denied(await actor.read_removal_history_page(0n, { Done: null }, 1));
   actor.setPrincipal(Principal.anonymous()); denied(await actor.read_removal_history_manifest());
@@ -60,6 +67,12 @@ try {
   assert.equal(before.rows.erased[0][0], erased.id);
   assert.equal(before.manifest.service_readers[0].toText(), p(10).toText());
   assert.equal(before.manifest.club_authorities[0].toText(), p(11).toText());
+  assert.equal(before.manifest.pending_intents, 1n);
+  assert.equal(before.rows.pending[0].account_id, unlinkAccount.id);
+  assert.equal(before.rows.pending[0].principal.toText(), p(7).toText());
+  assert.equal(before.rows.pending[0].version, 1n);
+  assert.deepEqual(before.rows.pending[0].authorities.map(p => p.toText()), [p(11).toText()]);
+  assert.deepEqual(before.rows.pending[0].acknowledged, []);
   for (const limit of [0, 201]) denied(await actor.read_removal_history_page(before.manifest.revision, { Done: null }, limit));
   await pic.upgradeCanister({ canisterId, wasm, sender: governor, arg });
   denied(await actor.read_removal_history_page(before.manifest.revision, { Done: null }, 1));
@@ -69,5 +82,6 @@ try {
   assert.deepEqual(after.manifest.club_authorities, before.manifest.club_authorities);
   for (const subject of [old, erasedUser]) { actor.setPrincipal(subject); denied(await actor.register_account()); }
   actor.setPrincipal(replacement); assert.equal(ok(await actor.whoami()).id, moved.id);
+  actor.setPrincipal(p(7)); denied(await actor.register_account());
   console.log('PASS: bounded whole removal history, stale inventory/upgrade snapshots, governor privacy, real erase/rekey preservation; no restore/global drain claim.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
