@@ -1411,7 +1411,13 @@ persistent actor class Main(governorInit : Principal) {
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
         if (isExcluded(invite.invited_by, invite.club_id) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
         if (not parentInviteScopeValid(invite.club_id, invite.team_id, invite.child_id)) return #Err("Referenced child not in invite scope");
-        switch (invite.accepted_by) { case (?user) { if (not user.equal(caller)) return #Err("Invite already accepted") }; case null {} };
+        switch (invite.accepted_by) {
+          case (?user) {
+            if (not user.equal(caller)) return #Err("Invite already accepted");
+            if (not acl.guardians.any(func(g) = g.child == invite.child_id and g.user.equal(caller))) return #Err("Guardian authorization changed");
+          };
+          case null {};
+        };
         #Ok(invite)
       };
     }

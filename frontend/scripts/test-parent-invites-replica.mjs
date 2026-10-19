@@ -45,6 +45,7 @@ try {
   assert.ok('Err' in await a.list_child_guardians('child-a'));
   a.setPrincipal(parent); ok(await a.set_own_child_guardian('child-a', parent, false));
   assert.deepEqual(await a.list_my_children(), []);
+  assert.ok('Err' in await a.get_parent_invite(token));
   assert.ok('Err' in await a.accept_parent_invite(token)); // Replay cannot re-add removed guardian.
   a.setPrincipal(admin);
   const removedIssuer = ok(await a.create_parent_invite('club-a', ['team-a'], 'child-a')).id;
