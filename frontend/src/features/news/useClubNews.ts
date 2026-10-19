@@ -164,11 +164,16 @@ export function useClubNewsFeed(clubId?: string | null, limit = 50) {
           const rows = (posts as Array<Parameters<typeof liveNewsPostToRow>[0]>)
             .filter((p) => p.status === "published")
             .map(liveNewsPostToRow)
+            .sort((a, b) => b.published_at.localeCompare(a.published_at))
             .slice(0, limit);
           writeHomeSectionSnapshot("club-news", snapshotScope, rows);
           return rows;
         },
-      });
+      }, clubId ? { clubId } : { everyGroup: true, merge: (parts: ClubNewsRow[][]) => {
+        const rows = [...new Map(parts.flat().map(row => [row.id, row])).values()].sort((a, b) => b.published_at.localeCompare(a.published_at)).slice(0, limit);
+        writeHomeSectionSnapshot("club-news", snapshotScope, rows);
+        return rows;
+      } });
     },
     // Paint the last known posts immediately on cold open so the Home section
     // doesn't pop in after everything else.
@@ -190,13 +195,14 @@ export function useClubNewsPost(newsId?: string | null) {
   return useQuery<ClubNewsRow | null>({
     queryKey: ["club-news-post", newsId],
     queryFn: async () => {
-      if (useIcpLab) return getLocalLabNewsPost(newsId!) as ClubNewsRow | null;
+      if (!newsId) return null;
+      if (useIcpLab) return getLocalLabNewsPost(newsId) as ClubNewsRow | null;
       return withFeatureBackend("news", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("club_news")
             .select(NEWS_COLUMNS)
-            .eq("id", newsId!)
+            .eq("id", newsId)
             .maybeSingle();
           if (error) throw error;
           return (data as ClubNewsRow | null) ?? null;
@@ -222,7 +228,7 @@ export function useClubNewsPost(newsId?: string | null) {
             .find((p) => p.id === newsId);
           return post ? liveNewsPostToRow(post) : null;
         },
-      });
+      }, { newsId: newsId });
     },
     enabled: !!newsId,
   });

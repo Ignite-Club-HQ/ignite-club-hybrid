@@ -1,3 +1,5 @@
+import { readContentInScope } from "../contentRouting";
+import { acrossLists } from "../featureScopes";
 import type { FeatureBackendContext } from "../featureRouter";
 import { getLiveClubProfile, getLiveTeam, listLivePersonalTeams } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
@@ -163,19 +165,23 @@ export async function fetchLiveHomeFeed(
   ctx: FeatureBackendContext,
 ): Promise<{ memberships: LiveHomeMemberships; events: LiveHomeEvent[] }> {
   // Personal teams don't depend on grants — start them in parallel.
-  const personalTeamsPromise = listLivePersonalTeams(ctx).catch(() => []);
+  const personalTeamsPromise = readContentInScope(ctx, "membership", { shared: "person" }, listLivePersonalTeams);
   const raw = deriveLiveMemberships(await getLiveMyRoleGrants(ctx));
   // Memoise per-open lookups so tombstone checks and card-name lookups share
   // one canister call per club/team instead of repeating them.
   const clubCache = new Map<string, ReturnType<typeof getLiveClubProfile>>();
   const teamCache = new Map<string, ReturnType<typeof getLiveTeam>>();
   const clubProfile = (id: string) => {
-    if (!clubCache.has(id)) clubCache.set(id, getLiveClubProfile(ctx, id));
-    return clubCache.get(id)!;
+    if (!clubCache.has(id)) clubCache.set(id, readContentInScope(ctx, "membership", { clubId: id }, scoped => getLiveClubProfile(scoped, id)));
+    const cached = clubCache.get(id);
+    if (!cached) throw new Error("Missing club lookup");
+    return cached;
   };
   const teamRecord = (id: string) => {
-    if (!teamCache.has(id)) teamCache.set(id, getLiveTeam(ctx, id));
-    return teamCache.get(id)!;
+    if (!teamCache.has(id)) teamCache.set(id, readContentInScope(ctx, "membership", { teamId: id }, scoped => getLiveTeam(scoped, id)));
+    const cached = teamCache.get(id);
+    if (!cached) throw new Error("Missing team lookup");
+    return cached;
   };
 
   // Drop soft-deleted clubs/teams. Grants survive the tombstone (mirroring
@@ -192,8 +198,8 @@ export async function fetchLiveHomeFeed(
   // Start event reads for every candidate scope now, in parallel with the
   // tombstone checks; results for inactive scopes are simply discarded.
   const eventPromises = new Map<string, Promise<LiveEvent[]>>();
-  for (const clubId of raw.clubIds) eventPromises.set(`c:${clubId}`, listLiveEvents(ctx, clubId, null));
-  for (const teamId of raw.teamIds) eventPromises.set(`t:${teamId}`, listLiveEvents(ctx, null, teamId));
+  for (const clubId of raw.clubIds) eventPromises.set(`c:${clubId}`, readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, clubId, null)));
+  for (const teamId of raw.teamIds) eventPromises.set(`t:${teamId}`, readContentInScope(ctx, "events", { teamId }, scoped => listLiveEvents(scoped, null, teamId)));
   for (const p of eventPromises.values()) p.catch(() => {});
   const activeClubIds = new Set<string>();
   await Promise.all(
@@ -239,8 +245,8 @@ export async function fetchLiveHomeFeed(
   };
 
   const eventResults = await Promise.all([
-    ...memberships.clubIds.map((clubId) => eventPromises.get(`c:${clubId}`) ?? listLiveEvents(ctx, clubId, null)),
-    ...memberships.teamIds.map((teamId) => eventPromises.get(`t:${teamId}`) ?? listLiveEvents(ctx, null, teamId)),
+    ...memberships.clubIds.map((clubId) => eventPromises.get(`c:${clubId}`) ?? readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, clubId, null))),
+    ...memberships.teamIds.map((teamId) => eventPromises.get(`t:${teamId}`) ?? readContentInScope(ctx, "events", { teamId }, scoped => listLiveEvents(scoped, null, teamId))),
   ]);
 
   const mergedById = new Map<string, LiveEvent>();
@@ -321,7 +327,7 @@ export async function fetchLiveHomeRsvps(
 ): Promise<{ event_id: string; status: string }[]> {
   if (eventIds.length === 0) return [];
   const visible = new Set(eventIds);
-  const rsvps = await listLiveMyRsvps(ctx);
+  const rsvps = await readContentInScope(ctx, "events", acrossLists, listLiveMyRsvps);
   return rsvps
     .filter((rsvp) => visible.has(rsvp.event_id))
     .map((rsvp) => ({ event_id: rsvp.event_id, status: rsvp.state }));

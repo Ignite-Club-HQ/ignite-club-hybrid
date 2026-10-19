@@ -32,7 +32,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
             // Team name resolves from club_domain; the canister Event record
             // has no opponent field, so opponentLabel/eventStart stay null and
             // the headline falls back to the team-name wording.
-            const team = await getLiveTeam(ctx, row.team_id).catch(() => null);
+            const team = await withFeatureBackend("membership", { supabase: async () => null, icp: scoped => getLiveTeam(scoped, row.team_id) }, { teamId: row.team_id });
             const teamRow = Array.isArray(team) ? team[0] : team;
             return {
               id: row.id,
@@ -48,7 +48,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
             };
           },
           supabase: async () => null,
-        });
+        }, { galleryCardId: cardId });
       }
       const { data } = await supabase
         .from("gallery_chat_cards")
@@ -70,7 +70,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
 
       return data ? { ...data, opponentLabel, eventStart } : null;
     },
-    enabled: !!cardId && !isIcp,
+    enabled: !!cardId,
     staleTime: 30 * 1000,
   });
 

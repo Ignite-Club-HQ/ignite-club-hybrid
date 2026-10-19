@@ -21,6 +21,7 @@ export default function ClubLinkEmbedPage() {
     queryKey: ["club-link", linkId, providerKey],
     enabled: !!linkId,
     queryFn: async () => {
+      if (!linkId) return null;
       // ICP branch resolves against club_domain's club listings; inactive
       // links return null, matching the "no longer available" state below.
       return withFeatureBackend("news", {
@@ -28,13 +29,13 @@ export default function ClubLinkEmbedPage() {
           const { data, error } = await supabase
             .from("club_links")
             .select("id, title, url")
-            .eq("id", linkId!)
+            .eq("id", linkId)
             .maybeSingle();
           if (error) throw error;
           return data;
         },
-        icp: (ctx) => getLiveClubLink(ctx, linkId!),
-      });
+        icp: (ctx) => getLiveClubLink(ctx, linkId),
+      }, { clubLinkId: linkId });
     },
   });
 

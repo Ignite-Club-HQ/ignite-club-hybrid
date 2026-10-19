@@ -603,7 +603,7 @@ export default function HomePage() {
         // used elsewhere — neither is part of this consolidated query.
         supabase: fetchHomeFromSupabase,
         icp: (ctx) => fetchLiveHomeFeed(ctx),
-      });
+      }, { shared: "person" });
     },
     enabled: !!user,
     staleTime: 2 * 60 * 1000,
@@ -740,7 +740,7 @@ export default function HomePage() {
           return results.flat();
         },
         icp: (ctx) => fetchLiveHomeRsvps(ctx, eventIds),
-      });
+      }, { shared: "person" });
     },
     enabled: !!user && eventIds.length > 0,
     staleTime: 2 * 60 * 1000,

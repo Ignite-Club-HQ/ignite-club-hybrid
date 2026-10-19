@@ -63,6 +63,20 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
 export async function lookupEntityClub(ctx: FeatureBackendContext, kind: EntityKind, id: string): Promise<string | null> {
+  if (kind === 'news') {
+    const { listLiveMembershipClubs } = await import('./features/membership');
+    const { listLiveNewsMulti } = await import('./features/club');
+    const { listMyLiveMiniLeagues } = await import('./features/miniLeagues');
+    const [clubs, leagues] = await Promise.all([listLiveMembershipClubs(ctx), listMyLiveMiniLeagues(ctx)]);
+    const ids = [...new Set([...clubs.map(c => c.id), ...leagues.map(l => l.club_id)])];
+    if (!ids.length) return null;
+    return (await listLiveNewsMulti(ctx, ids)).find(p => p.id === id)?.club_id ?? null;
+  }
+  if (kind === 'photo' || kind === 'galleryCard') {
+    const m = await import('./features/media');
+    const row = kind === 'photo' ? await m.getLiveAsset(ctx, id) : await m.getLiveGalleryChatCard(ctx, id);
+    return row?.club_id ?? null;
+  }
   if (kind === 'miniLeague') return (await import('./miniLeagueOwner')).lookupMiniLeagueOwner(ctx, id);
   if (kind === 'roleRequest') return (await import('./roleRequestOwner')).lookupRoleRequestOwner(ctx, id);
   const d = await import('./domains');

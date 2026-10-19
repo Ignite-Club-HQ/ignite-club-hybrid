@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 /**
  * Media photo deletion — "Remove from feed only" vs "Delete from feed and vault".
  *
@@ -64,7 +65,7 @@ export async function deleteMediaPhoto(
       await deleteLiveAsset(ctx, photoId);
       return { photoId, mode, vaultFileId: null, vaultUpdated: false };
     },
-  });
+  }, writeOnce({ photoId }));
 }
 
 async function deleteMediaPhotoSupabase(
