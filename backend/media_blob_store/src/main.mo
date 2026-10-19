@@ -20,6 +20,7 @@ import AssembleChunks "assembleChunks";
 import QuotaOperation "quotaOperation";
 import StableBytes "stableBytes";
 import RetentionPage "retentionPage";
+import MediaInventory "mediaInventory";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -131,6 +132,82 @@ persistent actor MediaBlobStore {
   var stable_writes : Bool;
   var retention_cursor : Text;
   var legacy_retention_cursor : Nat;
+  var media_inventory_revision : Nat;
+  var media_transfer_fences : Map.Map<Text, Nat>;
+
+  func bumpInventory() { media_inventory_revision += 1 };
+  func mediaFenced(path : Text) : Bool {
+    switch (clubIdFromPath(path)) { case (?club) media_transfer_fences.get(club) != null; case null false }
+  };
+  // Drain existing uploads via finalize/abort/reconcile; deny new writes and
+  // deletions for this club. Fence survives upgrades and requires exact CAS.
+  public shared ({ caller }) func set_club_media_transfer_fence(club : Text, on : Bool, expected : ?Nat) : async Result {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (club == "" or club.size() > 128 or club.contains(#char '/')) return #Err("Invalid club id");
+    let current = media_transfer_fences.get(club);
+    if (current != expected) return #Err("Media fence revision changed");
+    if (on) {
+      if (current == null) { bumpInventory(); media_transfer_fences.add(club, media_inventory_revision) }
+    } else if (current != null) { media_transfer_fences.remove(club); bumpInventory() };
+    #Ok
+  };
+
+  // Update rather than query: authenticated consensus evidence for operators.
+  // Each call scans <=200 records, includes orphan blobs and unsettled journal
+  // operations, and binds every page to one mutation revision. No bytes/PII.
+  public shared ({ caller }) func club_media_inventory_page(club : Text, cursor : MediaInventory.Cursor, expected_revision : ?Nat) : async { #Ok : MediaInventory.Page; #Err : Text } {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (club == "" or club.size() > 128 or club.contains(#char '/')) return #Err("Invalid club id");
+    switch (expected_revision) { case (?r) { if (r != media_inventory_revision) return #Err("Media inventory changed; restart scan") }; case null {} };
+    var entries : [MediaInventory.Entry] = [];
+    var scanned = 0;
+    var next : ?MediaInventory.Cursor = null;
+    func add(path : Text, kind : { #blob; #pending; #journal }, id : Text, hash : Text, length : Nat, unsettled : Bool) {
+      if (clubIdFromPath(path) == ?club) entries := entries.concat([{ kind; path; upload_id = id; content_hash = hash; content_length = length; unsettled }])
+    };
+    switch (cursor.phase) {
+      case (#legacy) {
+        var offset = cursor.offset;
+        while (offset < blobs.size() and scanned < MediaInventory.pageLimit) {
+          let r = blobs[offset]; add(r.path, #blob, "", r.content_hash, r.bytes.size(), false);
+          offset += 1; scanned += 1
+        };
+        next := ?(if (offset < blobs.size()) { phase = #legacy; offset; after = "" } else { phase = #stable; offset = 0; after = "" })
+      };
+      case (#stable) {
+        var after = cursor.after;
+        for ((path, r) in stable_blobs.entriesFrom(cursor.after)) {
+          if (path == cursor.after and cursor.after != "") continue;
+          if (scanned >= MediaInventory.pageLimit) break;
+          add(path, #blob, "", r.content_hash, r.slice.length, false); after := path; scanned += 1
+        };
+        next := ?(if (scanned == MediaInventory.pageLimit) { phase = #stable; offset = 0; after } else { phase = #pending; offset = 0; after = "" })
+      };
+      case (#pending) {
+        var offset = cursor.offset;
+        while (offset < pending_uploads.size() and scanned < MediaInventory.pageLimit) {
+          let r = pending_uploads[offset]; add(r.path, #pending, r.id, "", r.total_size.toNat(), true);
+          offset += 1; scanned += 1
+        };
+        next := ?(if (offset < pending_uploads.size()) { phase = #pending; offset; after = "" } else { phase = #journal; offset = 0; after = "" })
+      };
+      case (#journal) {
+        var after = cursor.after;
+        for ((id, r) in quota_operations.entriesFrom(cursor.after)) {
+          if (id == cursor.after and cursor.after != "") continue;
+          if (scanned >= MediaInventory.pageLimit) break;
+          let unsettled = r.status != #committed and r.status != #aborted;
+          if (unsettled) add(r.path, #journal, id, "", r.bytes, true);
+          after := id; scanned += 1
+        };
+        if (scanned == MediaInventory.pageLimit) next := ?{ phase = #journal; offset = 0; after }
+      };
+      case (#done) {}
+    };
+    #Ok({ revision = media_inventory_revision; fenced = media_transfer_fences.get(club) != null;
+      fence_revision = media_transfer_fences.get(club); quota_shared = quota_mode == #sharedQuota;
+      quota_authority = club_domain_canister; entries; next; scanned })
+  };
 
   type QuotaReservation = { store : Principal; token : Text; club_id : Text; category : Text; cycle : Nat; bytes : Nat; status : { #reserved; #committed; #released } };
   type QuotaResult = { #Ok : QuotaReservation; #Err : Text };
@@ -161,6 +238,7 @@ persistent actor MediaBlobStore {
     { frozen = quota_mode == #frozen; pending = pending_uploads.size(); total = quota_snapshot.size(); offset; rows = Array.tabulate<FreeUsageRow>(count, func(i) = quota_snapshot[offset + i]) }
   };
   public shared ({ caller }) func enable_shared_media_quota() : async Result {
+    bumpInventory();
     if (not isGovernor<system>(caller)) return #Err("Governor required");
     if (quota_mode == #sharedQuota) return #Ok;
     if (quota_mode != #frozen) return #Err("Freeze and import this store first");
@@ -168,6 +246,7 @@ persistent actor MediaBlobStore {
     try {
       if (not (await service.media_quota_ready())) return #Err("All-store quota import not activated");
       quota_mode := #sharedQuota;
+      bumpInventory();
       #Ok
     } catch (_) { #Err("Quota authority unavailable") }
   };
@@ -182,6 +261,7 @@ persistent actor MediaBlobStore {
   };
   public shared ({ caller }) func retire_upload_outcomes(cursor : Text) : async { #Ok : { removed : Nat; cursor : Text }; #Err : Text } {
     if (not isGovernor<system>(caller)) return #Err("Governor required");
+    bumpInventory();
     var removed = 0;
     var scanned = 0;
     var next = "";
@@ -225,12 +305,14 @@ persistent actor MediaBlobStore {
   };
 
   func reserveShared(upload : PendingUpload) : async ResultUploadId {
+    bumpInventory();
     let ?op = quota_operations.get(upload.id) else return #Err("Missing quota journal");
     if (op.status == #uploading) return #Ok(upload.id);
     if (op.status != #reserving) return #Err("Upload cannot be resumed");
     let ?service = quotaService() else return #Err("Quota authority unset; retry begin");
     try {
       let result = await service.reserve_media_quota(upload.id, op.club_id, op.category, op.bytes, op.cycle);
+      bumpInventory();
       // Concurrent abort/finalize must never be overwritten by a callback.
       let ?latest = quota_operations.get(upload.id) else return #Err("Missing quota journal");
       if (latest.status == #uploading) return #Ok(upload.id);
@@ -251,6 +333,7 @@ persistent actor MediaBlobStore {
     } catch (_) { #Err("Quota reservation outcome unknown; retry same upload path") }
   };
   func commitShared(id : Text) : async ResultFinalized {
+    bumpInventory();
     let ?op = quota_operations.get(id) else return #Err("Unknown upload");
     if (op.status == #committed) { let ?result = op.result else return #Err("Missing result"); return #Ok(result) };
     if (op.status != #committing) return #Err("Upload not ready to commit");
@@ -258,6 +341,7 @@ persistent actor MediaBlobStore {
     try {
       switch (await service.commit_media_quota(id)) {
         case (#Ok(r)) {
+          bumpInventory();
           if (r.status != #committed) return #Err("Quota not committed");
           let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
           let ?result = latest.result else return #Err("Missing result");
@@ -269,6 +353,7 @@ persistent actor MediaBlobStore {
     } catch (_) { #Err("Quota commit outcome unknown; retry finalize, do not abort") }
   };
   func abortShared(id : Text) : async Result {
+    bumpInventory();
     let ?op = quota_operations.get(id) else return #Err("Unknown upload");
     if (op.status == #aborted) return #Ok;
     if (not QuotaOperation.canAbort(op)) return #Err("Already finalized; retry finalize");
@@ -277,6 +362,7 @@ persistent actor MediaBlobStore {
     try {
       switch (await service.cancel_media_quota(id, op.club_id, op.category, op.bytes, op.cycle)) {
         case (#Ok(r)) {
+          bumpInventory();
           if (r.status != #released) return #Err("Reservation not released");
           let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
           quota_operations.add(id, { latest with status = #aborted });
@@ -459,6 +545,7 @@ persistent actor MediaBlobStore {
     }
   };
   func removeStored(path : Text) {
+    bumpInventory();
     switch (metadata(path)) { case (?r) { total_bytes := subBytes(total_bytes, r.length) }; case null {} };
     switch (stable_blobs.get(path)) { case (?r) { StableBytes.release(stable_bytes, r.slice); stable_blobs.remove(path) }; case null {} };
     blobs := blobs.filter(func(r) = r.path != path);
@@ -469,6 +556,8 @@ persistent actor MediaBlobStore {
   /// Publish only after exact SHA-256 read-back; preserve path/owner/timestamp.
   public shared ({ caller }) func migrate_legacy_blob() : async { #Ok : { remaining : Nat; copied_bytes : Nat }; #Err : Text } {
     if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (media_transfer_fences.size() != 0) return #Err("Club media transfer in progress");
+    bumpInventory();
     if (pending_uploads.size() != 0) return #Err("Drain uploads before migration");
     if (blobs.size() == 0) return #Ok({ remaining = 0; copied_bytes = 0 });
     let old = blobs[0];
@@ -514,6 +603,7 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func begin_upload(path : Text, mime : Text, total_size : Nat64, chunk_count : Nat32) : async ResultUploadId {
     auth(caller);
+    if (mediaFenced(path)) return #Err("Club media frozen for transfer");
     if (quota_mode == #frozen) return #Err("Uploads temporarily frozen for quota cutover");
     if (path == "" or path.size() > 1_024 or mime.size() > 256) return #Err("Invalid path or MIME");
     if (total_size > UploadPolicy.maxWireBytes) return #Err("FileTooLarge");
@@ -558,6 +648,8 @@ persistent actor MediaBlobStore {
     if (pending_uploads.size() >= UploadPolicy.maxPending) return #Err("StoreFull");
     if (pending_uploads.filter(func(item) { item.owner.equal(caller) }).size() >= UploadPolicy.maxPendingPerOwner) return #Err("Too many pending uploads");
     if (pending_uploads.any(func(item) { item.path == path })) return #Err("Upload already in progress for path");
+    if (mediaFenced(path)) return #Err("Club media frozen for transfer");
+    bumpInventory();
     next_upload_seq += 1;
     let id = "upload-" # Nat64.toText(next_upload_seq);
     let upload : PendingUpload = {
@@ -608,6 +700,7 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func finalize_upload(upload_id : Text) : async ResultFinalized {
     auth(caller);
+    bumpInventory();
     switch (quota_operations.get(upload_id)) {
       case (?op) {
         if (not op.owner.equal(caller)) return #Err("Not the upload owner");
@@ -674,6 +767,7 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func abort_upload(upload_id : Text) : async Result {
     auth(caller);
+    bumpInventory();
     switch (quota_operations.get(upload_id)) {
       case (?op) {
         if (not op.owner.equal(caller) and not isGovernor<system>(caller)) return #Err("Not the upload owner");
