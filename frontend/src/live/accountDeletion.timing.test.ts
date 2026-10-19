@@ -168,4 +168,21 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
     f.router.actor.setPrincipal(governor);ok(await f.router.actor.record_group_health('new',1n,2n,bumped));
     f.id.setPrincipal(user);expect(ok(await f.id.whoami()).id).toBe(f.account.id);
   },60000);
+  it('opens the protocol with the production release flag alone, and stays closed without it',async()=>{
+    const setup=async(environmentVariables:{name:string,value:string}[])=>{
+      const c=await pic.setupCanister({idlFactory:identityIdl,wasm:process.env.IDENTITY_ACCESS_WASM,sender:governor,controllers:[governor],environmentVariables,
+        arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor}])});
+      c.actor.setPrincipal(governor); ok(await c.actor.register_account()); return c.actor;
+    };
+    // No flag: the protocol stays closed.
+    const closed=await setup([]);
+    expect(await closed.prepare_account_deletion('anything',0n)).toEqual({Err:'Bound deletion not released'});
+    // Production release flag alone (no local rehearsal flag): the gate opens and
+    // the call proceeds to the real precondition checks.
+    const released=await setup([{name:'IGNITE_BOUND_DELETION_RELEASE',value:'1'}]);
+    expect(await released.prepare_account_deletion('anything',0n)).toEqual({Err:'Deletion registry not pinned'});
+    for(const m of ['commit_account_deletion','cancel_account_deletion','settle_account_deletion'] as const){
+      expect(await released[m]('anything')).toEqual({Err:'Missing deletion ticket'});
+    }
+  },60000);
 });

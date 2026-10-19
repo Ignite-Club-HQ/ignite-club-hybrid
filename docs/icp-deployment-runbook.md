@@ -172,3 +172,22 @@ is the single check):
 - **Push notifications: stay Supabase-only.** Under an ICP-only deployment
   push is out of scope; the UI must not assume it. A future HTTP-outcall
   push worker canister is possible but not built.
+
+## Releasing bound account deletion (approved 19 October 2026)
+
+The deletion timing protocol (prepare/commit/cancel/settle) is gated by
+`bound_deletion_released()` in identity_access, independent of the local
+rehearsal flag. To open it on mainnet after deploying the identity_access
+upgrade:
+
+```sh
+icp canister settings update identity_access -e ic \
+  --add-environment-variable IGNITE_BOUND_DELETION_RELEASE=1
+```
+
+Verify with a governor call to `prepare_account_deletion`: it must fail with
+"Deletion registry not pinned" (gate open, binding unset) rather than "Bound
+deletion not released". Never set `IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL` on
+mainnet; the other rehearsal-gated lifecycle features remain closed. A
+create-class reinstall re-applies static YAML variables and can drop settings
+values — re-assert this variable after any such deploy.
