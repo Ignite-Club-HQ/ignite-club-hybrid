@@ -488,6 +488,7 @@ export default function NotificationsPage() {
         },
       }, { shared: 'person' });
     },
+    onError: () => { invalidateNotificationSurfaces(queryClient, { includeMessageUnread: true }); refreshUnreadCount(); },
     onMutate: async () => {
       // Optimistic update - mark visible notifications as read
       queryClient.setQueriesData<Notification[]>(
@@ -552,6 +553,7 @@ export default function NotificationsPage() {
         },
       }, { shared: 'person' });
     },
+    onError: () => { invalidateNotificationSurfaces(queryClient, { includeMessageUnread: true }); refreshUnreadCount(); },
     onMutate: async () => {
       // Cancel any in-flight queries to prevent stale data overwriting
       await queryClient.cancelQueries({ queryKey: notificationListFamilyKey(user?.id) });
