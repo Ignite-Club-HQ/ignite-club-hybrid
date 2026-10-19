@@ -48,4 +48,3 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
 
-- Cross-club reward helpers split catalog/history/redemption reads by club using the points routing helper and membership metadata by resource; failed group reads propagate. Why: sharing a single context or swallowing errors hides moved-club rewards.
