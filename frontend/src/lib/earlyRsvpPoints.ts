@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInDays, parseISO } from "date-fns";
 import { recordPointsHistory } from "@/lib/pointsHistory";
@@ -50,7 +51,7 @@ export async function awardEarlyRsvpPoints({
       const icpSettings = await withFeatureBackend("points", {
         supabase: async () => null,
         icp: (ctx) => getLiveClubPointsSettings(ctx, clubId),
-      });
+      }, { clubId });
       if (icpSettings?.disabled) return false;
       icpPointsName = icpSettings?.display_name[0] ?? null;
     } else {
@@ -149,7 +150,7 @@ export async function awardEarlyRsvpPoints({
           );
           return entry.balance_after;
         },
-      });
+      }, writeOnce({ clubId }));
     } catch (updateError) {
       console.error("Failed to award early RSVP points:", updateError);
       if (!pointsOnIcp) {

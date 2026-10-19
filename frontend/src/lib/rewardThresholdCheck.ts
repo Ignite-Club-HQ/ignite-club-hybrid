@@ -49,7 +49,7 @@ export async function checkRewardThreshold({
           .slice(0, 1)
           .map((r) => ({ id: r.id, name: r.name, points_required: r.points_required }));
       },
-    });
+    }, { clubId });
 
     if (!crossedRewards || crossedRewards.length === 0) return undefined;
 

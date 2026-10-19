@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trophy, Loader2, Plus, Pencil, Trash2, Info } from "lucide-react";
@@ -100,7 +101,7 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
               created_at: new Date(Number(r.created_at_ms)).toISOString(),
             })) as TeamReward[];
         },
-      });
+      }, { clubId });
     },
   });
 
@@ -139,7 +140,7 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
               created_at: new Date(Number(r.created_at_ms)).toISOString(),
             })) as TeamReward[];
         },
-      });
+      }, { clubId });
     },
   });
 
@@ -177,7 +178,7 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
             teamId,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-pom-rewards", teamId] });
@@ -225,7 +226,7 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
             teamId,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-pom-rewards", teamId] });
@@ -269,7 +270,7 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
             teamId,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-pom-rewards", teamId] });
@@ -288,7 +289,7 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
         icp: async (ctx) => {
           await deleteLiveClubReward(ctx, id);
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-pom-rewards", teamId] });

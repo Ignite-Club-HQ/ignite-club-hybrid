@@ -38,7 +38,7 @@ export function TeamRankCard({ teamId, clubId }: TeamRankCardProps) {
         const teams = await withFeatureBackend("points", {
           supabase: () => [],
           icp: (ctx) => computeLiveTeamLeaderboard(ctx, clubId, "all"),
-        });
+        }, { clubId });
         return teams.map((t, i) => ({ rank: i + 1, team_id: t.team_id, team_name: t.team_name, points: t.points })) as LeaderboardRow[];
       }
       const { data, error } = await supabase.rpc("get_teams_leaderboard", {

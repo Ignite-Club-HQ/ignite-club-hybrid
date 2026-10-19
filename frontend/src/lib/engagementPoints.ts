@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { recordPointsHistory, type PointsSourceType } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
@@ -82,7 +83,7 @@ export async function awardEngagementPoints({
       const disabled = await withFeatureBackend("points", {
         supabase: async () => false,
         icp: (ctx) => getLiveClubPointsSettings(ctx, clubId).then((row) => row?.disabled ?? false),
-      });
+      }, { clubId });
       if (disabled) return false;
     } else {
       // Check if club has Pro subscription and points system enabled
@@ -145,7 +146,7 @@ export async function awardEngagementPoints({
           );
           return entry.balance_after;
         },
-      });
+      }, writeOnce({ clubId }));
     } catch (updateError) {
       console.error("Failed to award engagement points:", updateError);
       return false;

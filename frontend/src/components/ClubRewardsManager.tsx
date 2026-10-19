@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -143,7 +144,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             iconUrl: settings?.points_icon_url[0] || null,
           };
         },
-      });
+      }, { clubId });
       setCustomPointsName(name);
       setPointsIconUrl(iconUrl);
       return { name, iconUrl };
@@ -171,7 +172,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             disable_points_system: settings?.disabled ?? false,
           } as { disable_team_pom_rewards: boolean | null; disable_points_system: boolean | null };
         },
-      }),
+      }, { clubId }),
   });
 
   // Toggle team POM rewards setting
@@ -199,7 +200,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             disabled,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-subscription-rewards", clubId] });
@@ -237,7 +238,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             current?.disable_team_pom_rewards ?? false,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-subscription-rewards", clubId] });
@@ -301,7 +302,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
               sponsors: null,
             })) as ClubReward[];
         },
-      });
+      }, { clubId });
     },
   });
 
@@ -333,7 +334,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             null,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -374,7 +375,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             null,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -426,7 +427,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             null,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -470,7 +471,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             null,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -535,7 +536,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             null,
           );
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -553,7 +554,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         icp: async (ctx) => {
           await deleteLiveClubReward(ctx, id);
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -836,7 +837,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                   );
                   return null;
                 },
-              });
+              }, writeOnce({ clubId }));
               if (!error) {
                 queryClient.invalidateQueries({ queryKey: ["user-clubs"] });
                 queryClient.invalidateQueries({ queryKey: ["points-display-name"] });
@@ -872,7 +873,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                   );
                   return null;
                 },
-              });
+              }, writeOnce({ clubId }));
               setSavingPointsName(false);
               if (error) {
                 toast({ title: "Failed to save", variant: "destructive" });

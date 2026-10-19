@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { recordPointsHistory } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
@@ -92,7 +93,7 @@ export async function checkLeaderboardPosition({
         const idx = entries.findIndex((e) => e.subject_id === userId);
         return idx >= 0 ? idx + 1 : 0;
       },
-    });
+    }, { clubId });
 
     if (!rank || rank <= 0) return;
 
@@ -179,7 +180,7 @@ export async function checkEngagementStreak({
         );
         return { streak: s, canAward: !awardedThisWeek };
       },
-    });
+    }, { clubId });
 
     if (!streak) return;
 
@@ -254,7 +255,7 @@ export async function checkEngagementStreak({
         );
         return entry.balance_after;
       },
-    });
+    }, writeOnce({ clubId }));
 
     // Send notification
     await sendGamificationNotification({
@@ -313,7 +314,7 @@ export async function checkRewardProximity({
           .slice(0, 1)
           .map((r) => ({ id: r.id, name: r.name, points_required: r.points_required }));
       },
-    });
+    }, { clubId });
 
     if (!rewards || rewards.length === 0) return;
 
