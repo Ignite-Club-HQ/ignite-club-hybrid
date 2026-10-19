@@ -4,7 +4,8 @@
 import type { GroupCapacity } from './groupPlacement';
 import { LOW_FUEL_T } from './groupCapacityFuel';
 
-export type HealthRow = { name: string; memory_mb: number | null; cycles_t: number | null };
+/** club_domain's row may carry the live club count from its public usage_stats. */
+export type HealthRow = { name: string; memory_mb: number | null; cycles_t: number | null; clubs?: number };
 export type TestedLimits = {
   deploymentId: string; groupId: string; subnetId: string;
   /** Usable bytes per service, from load tests or app admission budgets — never ICP headline limits. */
@@ -25,7 +26,9 @@ export function collectGroupCapacity(rows: HealthRow[], limits: TestedLimits, no
     return { resource: `storage:${svc}`, used: (r?.memory_mb ?? NaN) * 1e6, testedLimit: limit, evidence: 'memory_stats query' };
   });
   if (!readings.length) problems.push('no tested limits configured');
-  if (!Number.isInteger(limits.clubCount) || limits.clubCount < 0) problems.push('club count required');
+  const live = byName.get('club_domain')?.clubs;
+  const clubCount = Number.isInteger(live) && live! >= 0 ? live! : limits.clubCount;
+  if (!Number.isInteger(clubCount) || clubCount < 0) problems.push('club count required');
   const all = [...readings, ...(limits.extra ?? [])];
   const fuelRows = rows.filter(r => limits.storageLimitBytes[r.name] !== undefined);
   const cyclesHealthy = fuelRows.length === readings.length &&
@@ -33,7 +36,7 @@ export function collectGroupCapacity(rows: HealthRow[], limits: TestedLimits, no
   if (problems.length) return { group: null, problems };
   return { problems, group: {
     groupId: limits.groupId, deploymentId: limits.deploymentId, subnetId: limits.subnetId, enabled: true,
-    clubs: limits.clubCount, maxDomainBytes: Math.max(...readings.map(r => r.used)), dailyGrowthBytes: 0,
+    clubs: clubCount, maxDomainBytes: Math.max(...readings.map(r => r.used)), dailyGrowthBytes: 0,
     cyclesHealthy, ready: true,
     capacity: { deploymentId: limits.deploymentId, observedAtMs: nowMs, readings: all,
       requiredResources: all.map(r => r.resource) },
