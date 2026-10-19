@@ -649,6 +649,7 @@ persistent actor MediaBlobStore {
         case (?clubId, ?_) { await clubIsPro(clubId) };
         case _ { false };
       };
+      if (accountAdmissionEnabled) await admitAccount(caller);
       // Check committed usage and outstanding reservations AFTER the await,
       // immediately before reserving. Concurrent sends cannot bypass caps.
       switch (checkFreeCap(path, total_size, isPro)) {

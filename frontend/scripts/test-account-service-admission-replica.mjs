@@ -67,6 +67,64 @@ try {
  chat.setPrincipal(governor); ok(await chat.set_notification_queue_canister(services[3].canisterId));
  queue.setPrincipal(stranger); await denied(()=>queue.read_account_get_digest({Club:null},conversation.id,0n,10));
  queue.setPrincipal(victim); assert.deepEqual(ok(await queue.read_account_get_digest({Club:null},conversation.id,0n,10)),[]);
+ // Focused deterministic interruption tests: the fixture exposes observed
+ // wait state, so one arbitrary tick is never treated as proof of a pause.
+ const delayIdl = ({IDL}) => IDL.Service({
+  hold_on:IDL.Func([IDL.Nat],[],[]), release:IDL.Func([],[],[]),
+  progress:IDL.Func([],[IDL.Nat,IDL.Bool],['query']), pulse:IDL.Func([],[],[])
+ });
+ const delayed=await pic.setupCanister({idlFactory:delayIdl,wasm:process.env.DELAYED_PERMISSION_WASM,sender:governor,controllers:[governor]});
+ const waitForHold=async n=>{
+  for(let round=0;round<60;round++) {
+   await pic.tick(1);
+   const [calls,released]=await delayed.actor.progress();
+   if(calls===BigInt(n)&&!released) return;
+  }
+  assert.fail('Permission callback did not reach its observed hold point');
+ };
+ vault.setPrincipal(governor); ok(await vault.set_competition_domain_canister(delayed.canisterId));
+ // The installed deferred actor uses an async Promise executor that loses
+ // rejects on trapped callbacks. Use its underlying bounded submit/await API.
+ const deferred=async(factory,canisterId,method,args)=>{
+  const signature=factory({IDL})._fields.find(([name])=>name===method)?.[1];
+  assert.ok(signature,'Test method must exist in the actual contract');
+  const message=await pic.client.submitCall({canisterId,sender:victim,method,payload:new Uint8Array(IDL.encode(signature.argTypes,args))});
+  return async()=>{const response=await pic.client.awaitCall(message);return IDL.decode(signature.retTypes,response.body)[0];};
+ };
+ const folderArgs=name=>[name,'club',[],[],name,[],[],['competition'],0,[],[]];
+ // Positive control: exact same delegated permission actually creates a row.
+ vault.setPrincipal(victim); ok(await vault.create_folder(...folderArgs('control')));
+ await delayed.actor.hold_on(2n);
+ const interruptedFolder=await deferred(vaultIdl,services[2].canisterId,'create_folder',folderArgs('interrupted'));
+ await waitForHold(2);
+ id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
+ await delayed.actor.release(); await denied(interruptedFolder);
+ ok(await id.set_account_status(account.id,{Active:null}));
+ vault.setPrincipal(victim);
+ assert.equal(ok(await vault.create_folder(...folderArgs('interrupted'))).id,'interrupted','Denied callback must not have inserted the folder');
+ // Replacing the authority invalidates the old otherwise-permitting reply.
+ await delayed.actor.hold_on(2n);
+ const replacedFolder=await deferred(vaultIdl,services[2].canisterId,'create_folder',folderArgs('replaced'));
+ await waitForHold(2);
+ vault.setPrincipal(governor); ok(await vault.set_competition_domain_canister(extra[2].canisterId));
+ await delayed.actor.release(); await denied(replacedFolder);
+ ok(await vault.set_competition_domain_canister(delayed.canisterId));
+ vault.setPrincipal(victim); ok(await vault.create_folder(...folderArgs('replaced')));
+ // Upload quota/subscription waits must not admit an account removed mid-wait.
+ await pic.updateCanisterSettings({canisterId:extra[7].canisterId,sender:governor,environmentVariables:[...env,{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()},{name:'GOVERNOR_PRINCIPAL',value:governor.toText()}]});
+ blob.setPrincipal(governor); ok(await blob.set_club_domain_canister(delayed.canisterId));
+ blob.setPrincipal(victim); const controlUpload=ok(await blob.begin_upload('clubs/club/gallery/control.jpg','image/jpeg',1n,1));
+ ok(await blob.abort_upload(controlUpload));
+ const blobFactory=(await import('../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js')).idlFactory;
+ await delayed.actor.hold_on(1n);
+ const interruptedUpload=await deferred(blobFactory,extra[7].canisterId,'begin_upload',['clubs/club/gallery/interrupted.jpg','image/jpeg',1n,1]);
+ await waitForHold(1);
+ ok(await id.set_account_status(account.id,{Suspended:null}));
+ await delayed.actor.release(); await denied(interruptedUpload);
+ ok(await id.set_account_status(account.id,{Active:null}));
+ const retried=ok(await blob.begin_upload('clubs/club/gallery/interrupted.jpg','image/jpeg',1n,1));
+ ok(await blob.abort_upload(retried));
+ console.log('Focused delayed callbacks passed: vault suspension, authority replacement, upload suspension; denied writes leave no pending row/reservation.');
  id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
  chat.setPrincipal(victim);
  for (const actor of [club,events,competition,league,points,media,insights,blob]) actor.setPrincipal(victim);

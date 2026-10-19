@@ -115,6 +115,10 @@ persistent actor class Main(governorInit : Principal) {
         } catch (_) {
           return null;
         };
+        // Every delegated single/batch read and write uses this helper.
+        // Discard a reply from a replaced authority or removed human.
+        await admitAccount(caller);
+        if (competition_domain_canister != ?canister) return null;
         switch (result) {
           case (#Ok(access)) { ?access };
           case (#Err(_)) { null };
