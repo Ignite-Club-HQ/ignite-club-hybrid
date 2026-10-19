@@ -385,8 +385,11 @@ persistent actor MediaBlobStore {
     if (op.status == #committed) { let ?result = op.result else return #Err("Missing result"); return #Ok(result) };
     if (op.status != #committing) return #Err("Upload not ready to commit");
     let ?service = quotaService() else return #Err("Quota authority unset; retry finalize");
+    // Membership is checked here, after finalize's atomic local write: an
+    // unreachable authority must leave the ciphertext stored but unpublished.
+    try { await requireUploadMembership(op.owner, op.path) } catch (e) { return #Err(Error.message(e)) };
     try {
-      switch (await service.commit_media_quota(id)) {
+      let _dbg = Debug.print("DBG commitShared " # id); switch (await service.commit_media_quota(id)) {
         case (#Ok(r)) {
           bumpInventory();
           if (r.status != #committed) return #Err("Quota not committed");
@@ -405,7 +408,12 @@ persistent actor MediaBlobStore {
     if (op.status == #aborted) return #Ok;
     if (not QuotaOperation.canAbort(op)) return #Err("Already finalized; retry finalize");
     quota_operations.add(id, { op with status = #aborting });
-    let ?service = quotaService() else return #Err("Quota authority unset; retry abort");
+    let ?service = quotaService() else {
+      // Leave the upload retryable: an unset authority must not dead-end it.
+      let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
+      if (latest.status == #aborting) quota_operations.add(id, { latest with status = #uploading });
+      return #Err("Quota authority unset; retry abort")
+    };
     try {
       switch (await service.cancel_media_quota(id, op.club_id, op.category, op.bytes, op.cycle)) {
         case (#Ok(r)) {
@@ -418,7 +426,13 @@ persistent actor MediaBlobStore {
         };
         case (#Err(message)) #Err(message)
       }
-    } catch (_) { #Err("Quota release outcome unknown; retry abort") }
+    } catch (_) {
+      // Unknown outcome: the reservation may or may not be released. Keep the
+      // upload retryable instead of dead-ending it in #aborting.
+      let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
+      if (latest.status == #aborting) quota_operations.add(id, { latest with status = #uploading });
+      #Err("Quota release outcome unknown; retry abort")
+    }
   };
 
   type FreeUsageRow = { club_id : Text; cycle : Nat; category : Text; count : Nat; bytes : Nat64 };
@@ -528,9 +542,11 @@ persistent actor MediaBlobStore {
   transient let largeCapacityFlag = Runtime.envVar<system>("IGNITE_MEDIA_LARGE_CAPACITY") == ?"1";
   func largeMode() : Bool { largeCapacityFlag and stable_writes };
 
-  /// Finalized + in-flight bytes under clubs/<club>/vault/ (Pro allowance).
-  func clubVaultBytes(clubId : Text) : (Nat, Nat) {
-    let prefix = "clubs/" # clubId # "/vault/";
+  /// Finalized + in-flight bytes under clubs/<club>/ across all categories
+  /// (vault, gallery and chat combined). Branding-exempt assets also count:
+  /// the club allowance is measured against everything the club stores.
+  func clubMediaBytes(clubId : Text) : (Nat, Nat) {
+    let prefix = "clubs/" # clubId # "/";
     var used = 0;
     label scan for ((path, r) in stable_blobs.entriesFrom(prefix)) {
       if (not path.startsWith(#text prefix)) break scan;
@@ -542,12 +558,19 @@ persistent actor MediaBlobStore {
     (used, pending)
   };
 
-  func clubVaultPurchasedGb(clubId : Text) : async ?Nat {
+  func clubMediaPurchasedGb(clubId : Text) : async ?Nat {
     let ?cid = club_domain_canister else return null;
     let clubDomain : actor { get_club_storage_purchased : shared query Text -> async { #Ok : Nat32; #Err : Text } } = actor (Principal.toText(cid));
     try {
       switch (await clubDomain.get_club_storage_purchased(clubId)) { case (#Ok(gb)) ?gb.toNat(); case (#Err(_)) null }
     } catch (_) { null }
+  };
+
+  /// Authoritative per-club media byte count for the Pro allowance UI: the
+  /// same finalized + in-flight figures the admission check enforces.
+  public query func get_club_media_bytes(club_id : Text) : async { finalized : Nat; pending : Nat } {
+    let (finalized, pending) = clubMediaBytes(club_id);
+    { finalized; pending }
   };
 
   func reservedBytes() : Nat {
@@ -684,7 +707,6 @@ persistent actor MediaBlobStore {
     if (path == "" or path.size() > 1_024 or mime.size() > 256) return #Err("Invalid path or MIME");
     if (total_size > UploadPolicy.maxWireBytes) return #Err("FileTooLarge");
     if (not UploadPolicy.validDeclaration(total_size, chunk_count.toNat())) return #Err("Invalid chunk declaration");
-    await requireUploadMembership(caller, path);
     if (quota_mode == #sharedQuota) {
       switch (pending_uploads.find(func(u) = u.path == path)) {
         case (?upload) {
@@ -703,12 +725,14 @@ persistent actor MediaBlobStore {
         case (?clubId, ?_) { await clubIsPro(clubId) };
         case _ { false };
       };
-      // Pro vault allowance (5 GiB + purchased). Fail closed when unreadable.
-      let vaultClub : ?Text = if (isPro and categoryForPath(path) == ?"vault") clubIdFromPath(path) else null;
-      let purchasedGb : ?Nat = switch (vaultClub) { case (?c) await clubVaultPurchasedGb(c); case null null };
-      if (vaultClub != null and purchasedGb == null) return #Err("VaultAllowanceUnavailable");
+      // Pro media allowance (5 GiB + purchased) across vault, gallery and
+      // chat combined, so one Pro club cannot crowd out the whole store.
+      // Fail closed when unreadable.
+      let allowanceClub : ?Text = if (isPro) clubIdFromPath(path) else null;
+      let purchasedGb : ?Nat = switch (allowanceClub) { case (?c) await clubMediaPurchasedGb(c); case null null };
+      if (allowanceClub != null and purchasedGb == null) return #Err("StorageAllowanceUnavailable");
       if (accountAdmissionEnabled) await admitAccount(caller);
-      await requireUploadMembership(caller, path);
+      try { await requireUploadMembership(caller, path) } catch (e) { return #Err(Error.message(e)) };
       // Check committed usage and outstanding reservations AFTER the await,
       // immediately before reserving. Concurrent sends cannot bypass caps.
       switch (checkFreeCap(path, total_size, isPro)) {
@@ -716,10 +740,10 @@ persistent actor MediaBlobStore {
         case null {};
       };
       // No await between this check and the reservation below.
-      switch (vaultClub, purchasedGb) {
+      switch (allowanceClub, purchasedGb) {
         case (?c, ?gb) {
-          let (used, pending) = clubVaultBytes(c);
-          if (not UploadPolicy.withinProVault(used, pending, total_size.toNat(), gb)) return #Err("VaultStorageFull");
+          let (used, pending) = clubMediaBytes(c);
+          if (not UploadPolicy.withinProMediaAllowance(used, pending, total_size.toNat(), gb)) return #Err("StorageAllowanceFull");
         };
         case _ {};
       };
@@ -776,7 +800,7 @@ persistent actor MediaBlobStore {
     auth(caller);
     let ?pending = findUpload(upload_id) else return #Err("Unknown upload");
     if (not pending.owner.equal(caller)) return #Err("Not the upload owner");
-    await requireUploadMembership(caller, pending.path);
+    try { await requireUploadMembership(caller, pending.path) } catch (e) { return #Err(Error.message(e)) };
     switch (findUpload(upload_id)) {
       case null { #Err("Unknown upload") };
       case (?upload) {
@@ -809,7 +833,6 @@ persistent actor MediaBlobStore {
       case (null, ?op) op.path;
       case _ return #Err("Unknown upload")
     };
-    await requireUploadMembership(caller, path);
     bumpInventory();
     switch (quota_operations.get(upload_id)) {
       case (?op) {

@@ -151,6 +151,13 @@ service : {
   enable_stable_media_storage: () -> (Result);
   finalize_upload: (upload_id: text) -> (ResultFinalized);
   freeze_media_quota: () -> (Result);
+  /// Authoritative per-club media byte count for the Pro allowance UI: the
+  /// same finalized + in-flight figures the admission check enforces.
+  get_club_media_bytes: (club_id: text) ->
+   (record {
+      finalized: nat;
+      pending: nat;
+    }) query;
   get_club_media_usage: (club_id: text) -> (vec MediaUsage) query;
   get_content_hash: (path: text) -> (opt text) query;
   get_upload_outcome: (upload_id: text) ->

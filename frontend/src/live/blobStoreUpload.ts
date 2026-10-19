@@ -44,15 +44,15 @@ const FREE_LIMIT_MESSAGES: Record<string, string> = {
   gallery_photo: "You've used your 10 free photo uploads this cycle. Upgrade to Pro for unlimited uploads.",
   chat_photo: "You've used your 10 free chat photos this cycle. Upgrade to Pro for unlimited chat photos.",
   chat_file: "Your club has used its free chat file allowance (10 files / 25 MB) this cycle. Upgrade to Pro for unlimited chat attachments.",
-  vault: "Your club has used its free vault allowance (10 files / 25 MB) this cycle. Upgrade to Pro for 5 GB of vault storage.",
+  vault: "Your club has used its free vault allowance (10 files / 25 MB) this cycle. Upgrade to Pro for 5 GB of club storage.",
 };
 
 /** Free-plan cap rejection from the canister, mapped to the Supabase wording. */
 export function freeLimitMessage(error: unknown): string | null {
   const text = error instanceof Error ? error.message : String(error);
   if (text.includes("FileTooLarge")) return "This file is larger than 10 MB. Please choose a smaller file.";
-  if (text.includes("VaultStorageFull")) return "Your club has used all of its vault storage. Delete files or add more storage to keep uploading.";
-  if (text.includes("VaultAllowanceUnavailable")) return "We couldn't check your club's vault storage right now. Please try again shortly.";
+  if (text.includes("StorageAllowanceFull")) return "Your club has used all of its storage. Delete files or purchase more storage to keep uploading.";
+  if (text.includes("StorageAllowanceUnavailable")) return "We couldn't check your club's storage right now. Please try again shortly.";
   const m = /FreeLimitReached:(\w+)/.exec(text);
   return m ? FREE_LIMIT_MESSAGES[m[1]] ?? "Free plan upload limit reached. Upgrade to Pro." : null;
 }
@@ -86,6 +86,36 @@ export async function getLiveClubMediaUsage(
           bytesLimit: r.bytes_limit.length ? Number(r.bytes_limit[0]) : null,
         };
       }
+    } catch {
+      // Store not upgraded yet / unreachable — skip it.
+    }
+  }
+  return out;
+}
+
+export interface ClubMediaBytes {
+  finalized: number;
+  pending: number;
+}
+
+/**
+ * Authoritative per-club media bytes (vault + gallery + chat combined) as the
+ * photo store's own admission check sees them, summed across photo stores.
+ * Stores that predate the query or are unreachable contribute nothing, so
+ * callers can fall back to their own accounting.
+ */
+export async function getLiveClubMediaBytes(
+  target: IcpTargetConfig,
+  identity: Identity,
+  clubId: string,
+): Promise<ClubMediaBytes> {
+  const out: ClubMediaBytes = { finalized: 0, pending: 0 };
+  for (const key of listBlobStoreKeys(target)) {
+    try {
+      const { actor } = await connectLiveBlobStore(target, identity, key);
+      const r = await actor.get_club_media_bytes(clubId);
+      out.finalized += Number(r.finalized);
+      out.pending += Number(r.pending);
     } catch {
       // Store not upgraded yet / unreachable — skip it.
     }

@@ -13,13 +13,18 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const wasm = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
 const owner = Principal.fromUint8Array(new Uint8Array([2, 1]));
-const ok = r => { assert.ok('Ok' in r); return r.Ok; };
+const ok = r => { assert.ok('Ok' in r, JSON.stringify(r, (_, v) => typeof v === 'bigint' ? String(v) : v)); return r.Ok; };
 const start = { phase: { legacy: null }, offset: 0n, after: '' };
 const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
   const fixture = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
   const a = fixture.actor;
+  // Club-path uploads require a live membership authority; wire the club up first.
+  const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
+  club.actor.setPrincipal(governor); ok(await club.actor.create_club('c', 'Test club', 'test-club', [], []));
+  ok(await club.actor.add_role_grant(owner, 'c', 'player', []));
+  a.setPrincipal(governor); ok(await a.set_club_domain_canister(club.canisterId)); a.setPrincipal(owner);
   a.setPrincipal(owner);
   const oldPath = 'clubs/c/chat/orphan';
   const id = ok(await a.begin_upload(oldPath, 'image/jpeg', 1n, 1));
@@ -69,9 +74,7 @@ try {
   assert.equal(new Set(entries.map(e => e.path)).size, 203);
   // Actual two-store consensus reader and uncertain quota journal coverage.
   // Registry is the complete isolated fixture, not production inventory proof.
-  const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   const second = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
-  club.actor.setPrincipal(governor); ok(await club.actor.create_club('c', 'Test club', 'test-club', [], []));
   // Wiring is immutable while fenced. Release only this fixture's fence before
   // shared-quota setup, then take fresh fences on both registered stores.
   const existingFence = ok(await a.club_media_inventory_page('c', start, [])).fence_revision;
@@ -103,7 +106,8 @@ try {
   assert.equal(inventory.pendingUploads, 1, 'published ciphertext with uncertain commit remains unsettled');
   assert.equal(inventory.stores.length, 2);
   await pic.startCanister({ canisterId: club.canisterId, sender: governor });
-  ok(await second.actor.reconcile_upload_operations(''));
+  second.actor.setPrincipal(owner); const rec = await second.actor.finalize_upload(uncertain); console.log('FINALIZE:', JSON.stringify(rec, (_, v) => typeof v === 'bigint' ? String(v) : v)); second.actor.setPrincipal(governor); const rec2 = await second.actor.reconcile_upload_operations(''); console.log('RECONCILE:', JSON.stringify(rec2, (_, v) => typeof v === 'bigint' ? String(v) : v));
+  try { console.log('LOGS:', JSON.stringify(await pic.fetchCanisterLogs({ canisterId: fixture.canisterId }), (_, v) => typeof v === 'bigint' ? String(v) : v).slice(0, 2000)); } catch (e) { console.log('LOGS-ERR', String(e)); }
   const settled = await readFencedClubStoreInventory('c', 'isolated-pocketic', async () => registry);
   assert.equal(settled.pendingUploads, 0); assert.equal(settled.encryptedObjects, 204);
   // Production preparation module, local authenticated complete fixture only.

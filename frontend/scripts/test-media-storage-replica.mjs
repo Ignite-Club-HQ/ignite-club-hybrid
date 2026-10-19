@@ -105,6 +105,8 @@ try {
   const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   club.actor.setPrincipal(governor);
   ok(await club.actor.create_club('c1', 'Test club', 'test-club', [], []));
+  // Uploads now require live membership in every quota mode.
+  ok(await club.actor.add_role_grant(owner, 'c1', 'player', []));
   const second = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
   for (const store of [fixture, second]) {
     store.actor.setPrincipal(governor);
@@ -161,7 +163,7 @@ try {
   assert.ok('Err' in await actor.finalize_upload(recoveryId), 'failed authority call must not acknowledge publication');
   assert.ok('Err' in await actor.abort_upload(recoveryId), 'uncertain commit cannot refund its slot');
   await pic.startCanister({ canisterId: club.canisterId, sender: governor });
-  const recovered = ok(await actor.finalize_upload(recoveryId));
+  const recoveredRaw = await actor.finalize_upload(recoveryId); console.log("RECOVERED:", JSON.stringify(recoveredRaw, (_, v) => typeof v === "bigint" ? String(v) : v)); const recovered = ok(recoveredRaw);
   assert.deepEqual(ok(await actor.finalize_upload(recoveryId)), recovered);
   assert.deepEqual(await download(recoveryPath), Buffer.from([44]));
   assert.ok('Err' in await actor.abort_upload(recoveryId));
