@@ -106,7 +106,7 @@ try {
   assert.equal(inventory.pendingUploads, 1, 'published ciphertext with uncertain commit remains unsettled');
   assert.equal(inventory.stores.length, 2);
   await pic.startCanister({ canisterId: club.canisterId, sender: governor });
-  ok(await second.actor.reconcile_upload_operations(''));
+  const rec = await second.actor.reconcile_upload_operations(''); console.log('RECONCILE:', JSON.stringify(rec, (_, v) => typeof v === 'bigint' ? String(v) : v));
   const settled = await readFencedClubStoreInventory('c', 'isolated-pocketic', async () => registry);
   assert.equal(settled.pendingUploads, 0); assert.equal(settled.encryptedObjects, 204);
   // Production preparation module, local authenticated complete fixture only.
