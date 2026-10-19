@@ -51,7 +51,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
         const service = [...services.values()].find(s => s.canisterId.toText() === id);
         if (!service) throw Error('Foreign receiver');
         service.actor.setPrincipal(governor); calls++;
-        return service.actor[method](...args);
+        try { return await service.actor[method](...args); } catch (e) { throw Error(`${[...services.entries()].find(([, s]) => s === service)?.[0]}.${method}: ${String(e)}`); }
       },
     };
     await configureProvisionGroup(saved, async p => { saved = structuredClone(p); checkpoints.push(saved); }, transport, governor.toText(), globals);
