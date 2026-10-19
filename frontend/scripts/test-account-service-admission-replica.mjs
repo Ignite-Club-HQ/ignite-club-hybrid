@@ -68,6 +68,7 @@ try {
  queue.setPrincipal(stranger); await denied(()=>queue.read_account_get_digest({Club:null},conversation.id,0n,10));
  queue.setPrincipal(victim); assert.deepEqual(ok(await queue.read_account_get_digest({Club:null},conversation.id,0n,10)),[]);
  id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
+ chat.setPrincipal(victim);
  for (const actor of [club,events,competition,league,points,media,insights,blob]) actor.setPrincipal(victim);
  const domainCalls=[
   ()=>club.read_account_my_role_grants(), ()=>events.read_account_list_my_viewed_event_ids([]),
