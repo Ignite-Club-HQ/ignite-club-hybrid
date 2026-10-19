@@ -461,7 +461,7 @@ export const idlFactory = ({ IDL }) => {
     'get_eoi_stats' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : EoiStats, 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'get_join_link_preview' : IDL.Func(
         [IDL.Text],
@@ -496,7 +496,7 @@ export const idlFactory = ({ IDL }) => {
     'get_role_link' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(RoleLink), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'get_role_link_preview' : IDL.Func(
         [IDL.Text],
@@ -570,7 +570,7 @@ export const idlFactory = ({ IDL }) => {
     'list_competition_invites' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(CompetitionInvite), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_competition_join_links' : IDL.Func(
         [IDL.Text],
@@ -580,12 +580,12 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        [],
       ),
     'list_competition_roles' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(RoleGrant), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_competitions' : IDL.Func(
         [IDL.Text],
@@ -615,7 +615,7 @@ export const idlFactory = ({ IDL }) => {
     'list_eoi_submissions' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(EoiSubmission), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_invites_by_invitee' : IDL.Func(
         [],
@@ -847,7 +847,7 @@ export const idlFactory = ({ IDL }) => {
     'suggest_eoi_teams' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(EoiTeamSuggestion), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'sync_my_competition_access' : IDL.Func(
         [IDL.Text],

@@ -284,7 +284,7 @@ type Main =
     (variant {
        Err: text;
        Ok: EoiStats;
-     }) query;
+     });
    get_join_link_preview: (token: text) ->
     (variant {
        Err: text;
@@ -315,7 +315,7 @@ type Main =
     (variant {
        Err: text;
        Ok: opt RoleLink;
-     }) query;
+     });
    get_role_link_preview: (token: text) ->
     (variant {
        Err: text;
@@ -381,17 +381,17 @@ type Main =
     (variant {
        Err: text;
        Ok: vec CompetitionInvite;
-     }) query;
+     });
    list_competition_join_links: (competition_id: text) ->
     (variant {
        Err: text;
        Ok: vec CompetitionJoinLink;
-     }) query;
+     });
    list_competition_roles: (competition_id: text) ->
     (variant {
        Err: text;
        Ok: vec RoleGrant;
-     }) query;
+     });
    list_competitions: (club_id: text) ->
     (variant {
        Err: text;
@@ -421,7 +421,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec EoiSubmission;
-     }) query;
+     });
    list_invites_by_invitee: () ->
     (variant {
        Err: text;
@@ -628,7 +628,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec EoiTeamSuggestion;
-     }) query;
+     });
    /// Refreshes the caller's mirrored club-admin role for a competition's
    /// organiser club so later management queries see it.
    sync_my_competition_access: (competition_id: text) ->

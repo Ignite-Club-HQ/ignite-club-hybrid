@@ -259,7 +259,7 @@ persistent actor class Main(governorInit : Principal) {
   // unguessable token; the old link stops working immediately.
   public shared ({ caller }) func create_role_link(competition_id : Text, role : Text) : async { #Ok : Types.RoleLink; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -273,7 +273,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func revoke_role_link(competition_id : Text, role : Text) : async { #Ok; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -281,7 +281,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public query ({ caller }) func get_role_link(competition_id : Text, role : Text) : async { #Ok : ?Types.RoleLink; #Err : Text } {
+  public shared ({ caller }) func get_role_link(competition_id : Text, role : Text) : async { #Ok : ?Types.RoleLink; #Err : Text } {
     auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
@@ -316,7 +316,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_official_chat(competition_id : Text, scope : Text, conversation_id : Text) : async { #Ok; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -518,7 +518,7 @@ persistent actor class Main(governorInit : Principal) {
   // CompetitionSettingsPage update.
   public shared ({ caller }) func update_competition_settings(competition_id : Text, name : Text, description : ?Text, status : Text, visibility : Text, points_win : Nat16, points_draw : Nat16, points_loss : Nat16) : async { #Ok : Types.Competition; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -962,7 +962,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func add_competition_role(competition_id : Text, principal : Principal, role : Text, team_id : ?Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -976,7 +976,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func remove_competition_role(competition_id : Text, principal : Principal, role : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -984,7 +984,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public query ({ caller }) func list_competition_roles(competition_id : Text) : async { #Ok : [Types.RoleGrant]; #Err : Text } {
+  public shared ({ caller }) func list_competition_roles(competition_id : Text) : async { #Ok : [Types.RoleGrant]; #Err : Text } {
     auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
@@ -1022,7 +1022,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_chat_settings(competition_id : Text, chat_enabled : Bool, admins_only : Bool, expected_revision : Nat64) : async { #Ok : Types.ChatSettings; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -1089,7 +1089,7 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func list_competition_invites(competition_id : Text) : async { #Ok : [Types.CompetitionInvite]; #Err : Text } {
+  public shared ({ caller }) func list_competition_invites(competition_id : Text) : async { #Ok : [Types.CompetitionInvite]; #Err : Text } {
     auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
@@ -1334,7 +1334,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public query ({ caller }) func list_competition_join_links(competition_id : Text) : async { #Ok : [Types.CompetitionJoinLink]; #Err : Text } {
+  public shared ({ caller }) func list_competition_join_links(competition_id : Text) : async { #Ok : [Types.CompetitionJoinLink]; #Err : Text } {
     auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
@@ -1854,7 +1854,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_division_hide_ladder(competition_id : Text, division : Text, hide_ladder : Bool) : async { #Ok : Types.DivisionSetting; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -1871,7 +1871,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_competition_hide_ladder(competition_id : Text, hide_ladder : Bool) : async { #Ok; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
@@ -1888,7 +1888,7 @@ persistent actor class Main(governorInit : Principal) {
   // through notification_queue (same path as announcement broadcasts).
   public shared ({ caller }) func send_competition_broadcast(competition_id : Text, title : Text, body : Text) : async { #Ok : Types.Broadcast; #Err : Text } {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller); await syncForCompetition(caller, competition_id);
+    auth(caller);
     await syncForCompetition(caller, competition_id);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
