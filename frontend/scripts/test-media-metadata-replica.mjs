@@ -21,7 +21,7 @@ try {
   const a = fixtures.media_metadata.actor;
   for (let i = 0; i < 201; i++) ok(await a.register_asset(i === 200 ? 'c' : 'other', 'photo', 'image/jpeg', 'hash', `clubs/${i === 200 ? 'c' : 'other'}/${i}`, 'club', 99_999_999_999_999n));
   const c = fixtures.messaging_domain.actor; const conv = ok(await c.create_conversation('c', [], [governor]));
-  ok(await c.send_message(conv.id, 'Photo', 'media', [{ kind: 'image', ref_id: '', url: ['https://store.raw.icp0.io/clubs/c/chat/photo'] }], []));
+  ok(await c.send_message(conv.id, 'Photo', 'media', [{ kind: 'image', ref_id: 'photo', url: ['https://store.raw.icp0.io/clubs/c/chat/photo'] }], []));
   const v = fixtures.vault_domain.actor; ok(await v.grant_role(governor, 'club_admin', ['c'], []));
   ok(await v.create_folder('f', 'c', [], [], 'Files', [], [], [], 0, [], []));
   ok(await v.register_file('p', 'f', 'c', [], 'private.pdf', 'https://store.raw.icp0.io/clubs/c/vault/p', 1n, 'application/pdf', false, [], [], []));

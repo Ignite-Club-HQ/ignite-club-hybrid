@@ -11,7 +11,7 @@ import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
 import { attestDeployKey, verifyDeployKey } from './media-key-deploy-rules.mjs';
 const [phase, mappingFile, receiptFile, deploymentId, environment] = process.argv.slice(2);
 if (!['before', 'after'].includes(phase) || !mappingFile || !receiptFile || !deploymentId || !environment) throw new Error('Explicit deployment binding required');
-const pem = process.env.DEPLOYER_PEM;
+const pem = process.env.DEPLOYER_PEM_FILE ? readFileSync(process.env.DEPLOYER_PEM_FILE, 'utf8') : process.env.DEPLOYER_PEM;
 if (!pem) throw new Error('Governor credential unavailable: encrypted-photo key upgrade blocked');
 const jwk = createPrivateKey(pem.replace(/\r/g, '').replace(/\\n/g, '\n')).export({ format: 'jwk' });
 if (!jwk.d) throw new Error('Governor signing identity required');

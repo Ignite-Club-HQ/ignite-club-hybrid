@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import shutil
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,14 +30,15 @@ case "$*" in
 esac
 ''')
             executable.chmod(0o755)
-            preflight = temp / "bun"
+            preflight = temp / "node"
             preflight.write_text('''#!/usr/bin/env bash
+if [[ "$1" != *media-key-deploy-preflight.mjs ]]; then exec "$REAL_NODE" "$@"; fi
 printf 'key-preflight %s\n' "$2" >> "$CALL_LOG"
 if [ "$KEY_SAFE" != 1 ]; then exit 43; fi
 exit 0
 ''')
             preflight.chmod(0o755)
-            environment = dict(os.environ, PATH=f"{temp}:{os.environ['PATH']}",
+            environment = dict(os.environ, PATH=f"{temp}:{os.environ['PATH']}", REAL_NODE=shutil.which("node"),
                                CALL_LOG=str(log), MODERN=str(int(modern)), DEPLOYED=str(int(deployed)), ICP_PUSH_WORKER_SEED="",
                                TEST_GOVERNOR=GOVERNOR, GOVERNOR=GOVERNOR,
                                KEY_SAFE=str(int(key_safe)),
