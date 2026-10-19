@@ -61,13 +61,13 @@ export function usePhotoMentionSuggestions(
             players.forEach((p) => p.parent_user_id[0] && out.add(p.parent_user_id[0]));
             return [...out];
           },
-        });
+        }, { miniLeagueId: mlId });
         userIds = ids;
       } else if (icp && (scope.teamId || scope.clubId)) {
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: (ctx) => (scope.teamId ? listLiveTeamRoleGrants(ctx, scope.teamId) : myLiveRoleGrants(ctx)),
-        }, { teamId: scope?.teamId as string });
+        }, scope.teamId ? { teamId: scope.teamId } : { clubId: scope.clubId ?? "" });
         userIds = [
           ...new Set(
             grants

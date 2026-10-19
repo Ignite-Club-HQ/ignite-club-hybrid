@@ -326,7 +326,7 @@ export function useClubMiniLeaguesForNews(clubId?: string | null) {
           const leagues = await listLiveMiniLeaguesByClub(ctx, clubId);
           return leagues.filter((league: any) => league.status === "active").map((league: any) => ({ id: league.id, name: league.name }));
         },
-      });
+      }, { clubId });
     },
     enabled: !!clubId,
     staleTime: 5 * 60 * 1000,

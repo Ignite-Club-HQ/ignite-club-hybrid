@@ -38,4 +38,19 @@ describe('invite routing', () => {
     await x.forInvite('membership', 'tok', async () => 1);
     expect(s.dispose).toHaveBeenCalled();
   });
+  it('league joins execute once on the token-owning group and refresh membership', async () => {
+    const { d, s } = world({ g1: [], g2: ['league-token'] });
+    const join = vi.fn(async (c: any) => c.group);
+    expect(await createClubDispatcher(d as never).forInvite('mini_leagues', 'league-token', join)).toBe('g2');
+    expect(join).toHaveBeenCalledTimes(1);
+    expect(s.dispose).toHaveBeenCalledTimes(1);
+  });
+  it('does not execute a league join when token discovery fails', async () => {
+    const { d } = world({ g1: [] });
+    d.holdsInvite = async () => { throw new Error('Group unavailable'); };
+    const join = vi.fn();
+    await expect(createClubDispatcher(d as never).forInvite('mini_leagues', 'league-token', join)).rejects.toThrow('Group unavailable');
+    expect(join).not.toHaveBeenCalled();
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
 });

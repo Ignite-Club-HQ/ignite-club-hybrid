@@ -2101,7 +2101,7 @@ function SupabaseJoinTeamPage() {
                 await joinLiveMiniLeagueByToken(ctx, token!, addedLabel);
                 return true;
               },
-            })
+            }, writeOnce({ inviteToken: token ?? "" }))
           : invite?.team_id
             // ICP team link: create the child on club_domain and keep its
             // name on pii_access_control — same as the auto-create path.

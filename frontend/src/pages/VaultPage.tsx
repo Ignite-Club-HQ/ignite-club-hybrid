@@ -689,7 +689,7 @@ function SupabaseVaultPage() {
                 return null;
               }
             },
-          });
+          }, { miniLeagueId });
 
           if (league) {
             const club = userClubs.find(c => c.id === league.club_id);

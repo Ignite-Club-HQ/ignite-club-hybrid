@@ -1076,7 +1076,7 @@ export default function NotificationsPage() {
                 return null;
               }
             },
-          });
+          }, { miniLeagueId: relatedId });
           if (miniLeagueCheck) {
             navigate(`/mini-leagues/${relatedId}`);
           } else {

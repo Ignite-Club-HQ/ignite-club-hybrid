@@ -153,7 +153,7 @@ export function MatchDutiesDialog({
         // neither of which has a canister equivalent. Rather than invent
         // data, ICP-routed sessions see an empty assignee list here.
         icp: async () => [] as Array<{ id: string; display_name: string | null; avatar_url: string | null }>,
-      }),
+      }, { miniLeagueId }),
     enabled: open && !!miniLeagueId,
   });
 
