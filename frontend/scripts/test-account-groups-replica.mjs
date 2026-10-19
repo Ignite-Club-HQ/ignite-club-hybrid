@@ -5,6 +5,7 @@ import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
+import { adaptLocalAccountReads } from '../src/live/accountReadAdapter.mjs';
 const governor = Principal.fromUint8Array(Uint8Array.from([1, 1]));
 const primary = Principal.fromUint8Array(Uint8Array.from([2, 1]));
 const linked = Principal.fromUint8Array(Uint8Array.from([3, 1]));
@@ -15,6 +16,9 @@ try {
   pic = await PocketIc.create(server.getUrl());
   const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: process.env.IDENTITY_ACCESS_WASM,
     sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
+  for (const subject of [governor, primary, linked, stranger]) {
+    identity.actor.setPrincipal(subject); ok(await identity.actor.register_account());
+  }
   const groups = [];
   const productionGroup = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM,
     sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
@@ -22,7 +26,10 @@ try {
   assert.ok('Err' in await productionGroup.actor.set_identity_access_canister(identity.canisterId), 'production authority setter stays closed');
   for (const suffix of ['a', 'b']) {
     const group = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM,
-      sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: IDL.encode([IDL.Principal], [governor]) });
+      sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }, { name: "IGNITE_ACCOUNT_SERVICE_IDENTITY", value: identity.canisterId.toText() }], arg: IDL.encode([IDL.Principal], [governor]) });
+    identity.actor.setPrincipal(governor);
+    ok(await identity.actor.set_service_authorities([...groups.map(g => g.canisterId), group.canisterId]));
+    group.actor = adaptLocalAccountReads(group.actor, clubIdl({ IDL }), 'http://localhost:4943');
     group.actor.setPrincipal(governor);
     ok(await group.actor.create_club(`club-${suffix}`, suffix, suffix, [], []));
     ok(await group.actor.add_role_grant(primary, `club-${suffix}`, 'player', []));
