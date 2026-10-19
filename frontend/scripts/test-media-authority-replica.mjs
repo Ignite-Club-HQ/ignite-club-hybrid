@@ -45,7 +45,8 @@ try {
   };
   const denied = async user => {
     a.setPrincipal(user);
-    assert.ok('Err' in await a.get_club_media_vetkey('moving', TransportSecretKey.random().publicKeyBytes()));
+    const result = await a.get_club_media_vetkey('moving', TransportSecretKey.random().publicKeyBytes()).catch(error => ({ Err: String(error) }));
+    assert.ok('Err' in result);
   };
   await decrypt(member); await decrypt(stale); await denied(stranger);
   a.setPrincipal(member);
