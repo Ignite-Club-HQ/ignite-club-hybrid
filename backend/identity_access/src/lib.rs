@@ -505,6 +505,7 @@ fn history_page(revision: u64, cursor: RemovalHistoryCursor, limit: u16) -> Outc
     let bound = limit as usize;
     match cursor {
         RemovalHistoryCursor::PrincipalDenials(after) => {
+            if after.as_ref().is_some_and(|s| s.len() > 256) { return Err("Invalid history key cursor".into()); }
             page.denials = PRINCIPAL_DENIALS.with(|m| {
                 use std::ops::Bound::{Excluded, Unbounded};
                 let map = m.borrow();
@@ -516,6 +517,7 @@ fn history_page(revision: u64, cursor: RemovalHistoryCursor, limit: u16) -> Outc
             } else { RemovalHistoryCursor::ErasedAccounts(None) };
         }
         RemovalHistoryCursor::ErasedAccounts(after) => {
+            if after.as_ref().is_some_and(|s| s.len() > 256) { return Err("Invalid history key cursor".into()); }
             page.erased = ERASED_ACCOUNTS.with(|m| {
                 use std::ops::Bound::{Excluded, Unbounded};
                 let map = m.borrow();
@@ -3107,6 +3109,66 @@ mod tests {
             methods(&exported),
             "identity_access.did drifted from the exported candid interface"
         );
+    }
+    #[test]
+    fn history_access_is_local_governor_only() {
+        let governor = principal(140);
+        assert!(history_access(true, governor, governor).is_ok());
+        assert_eq!(history_access(false, governor, governor), Err("Removal history recovery not released".into()));
+        assert!(history_access(true, governor, principal(141)).is_err());
+        assert!(history_access(true, governor, Principal::anonymous()).is_err());
+    }
+    #[test]
+    fn history_pages_preserve_terminal_fields_and_reject_stale_snapshots() {
+        let subject = principal(142);
+        deny_principals(&[subject], "history-page-account", 12, DenialReason::Rekeyed).unwrap();
+        let mut denial = principal_denial(subject).unwrap();
+        denial.rekey_destination = Some(principal(143));
+        bump_removal_history();
+        PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(subject.to_text(), encode(&denial)));
+        let revision = removal_history_revision();
+        let mut cursor = RemovalHistoryCursor::PrincipalDenials(None);
+        let mut found = false;
+        for _ in 0..100 {
+            let page = history_page(revision, cursor, 1).unwrap();
+            assert!(page.denials.len() + page.erased.len() + page.pending.len() <= 1);
+            for (key, row) in page.denials {
+                if key == subject.to_text() {
+                    found = true;
+                    assert_eq!(row.reason, DenialReason::Rekeyed);
+                    assert_eq!(row.version, 12);
+                    assert_eq!(row.rekey_destination, Some(principal(143)));
+                }
+            }
+            cursor = page.next;
+            if matches!(cursor, RemovalHistoryCursor::Done) { break; }
+        }
+        assert!(found);
+        assert!(history_page(revision, RemovalHistoryCursor::Done, 0).is_err());
+        assert!(history_page(revision, RemovalHistoryCursor::Done, 201).is_err());
+        assert!(history_page(revision, RemovalHistoryCursor::ErasedAccounts(Some("x".repeat(257))), 1).is_err());
+        bump_removal_history();
+        assert!(history_page(revision, RemovalHistoryCursor::PrincipalDenials(None), 1).is_err());
+    }
+    #[test]
+    fn history_lifecycle_preserves_exact_legacy_receipts_without_drain_claim() {
+        let authority = principal(144);
+        let before = removal_history_revision();
+        store_link_lifecycle(&LinkLifecycle { authorities: vec![authority], pending: vec![UnlinkIntent {
+            account_id: "history-intent".into(), principal: principal(145), version: 7,
+            authorities: vec![authority], acknowledged: vec![authority],
+        }] });
+        assert!(removal_history_revision() > before);
+        let manifest = history_manifest();
+        assert_eq!(manifest.pending_intents, 1);
+        assert_eq!(manifest.club_authorities, vec![authority]);
+        let page = history_page(manifest.revision, RemovalHistoryCursor::PendingIntents(0), 1).unwrap();
+        assert_eq!(page.pending[0].authorities, vec![authority]);
+        assert_eq!(page.pending[0].acknowledged, vec![authority]);
+        assert_eq!(page.pending[0].version, 7);
+        assert!(history_page(manifest.revision, RemovalHistoryCursor::PendingIntents(2), 1).is_err());
+        store_link_lifecycle(&LinkLifecycle::default());
+        assert!(history_page(manifest.revision, page.next, 1).is_err());
     }
 }
 
