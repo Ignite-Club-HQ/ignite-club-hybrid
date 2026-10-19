@@ -177,6 +177,11 @@ type Notification =
 type Main = 
  service {
    acknowledge: (id: text, key: text) -> (Result);
+   authorize_delivery: (id: text, key: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
    cancel_scheduled: (id: text, author: text) -> (ScheduledResult);
    claim: (now_ms: nat64, limit: nat16) -> (Results);
    cleanup_stale_device_tokens: (now_ms: nat64, max_age_ms: nat64) ->
@@ -197,8 +202,8 @@ type Main =
        Ok: blob;
      }) query;
    fail: (id: text, error: text, retry_at_ms: opt nat64) -> (Result);
-   fan_out: (users: vec text, club: text, kind: text, body: text, key_prefix:
-    text, related_id: opt text) -> (ResultNat16);
+   fan_out: (inputUsers: vec text, club: text, kind: text, body: text,
+    key_prefix: text, related_id: opt text) -> (ResultNat16);
    get_digest: (source: DigestSource, chat_scope_id: text, since_ms: 
     nat64, limit: nat16) -> (DigestResults) query;
    get_notification: (id: text) -> (opt Notification);
