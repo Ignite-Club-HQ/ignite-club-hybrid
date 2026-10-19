@@ -76,6 +76,9 @@ try {
   // Token is capability-only; EOI IDs never reveal personal data to strangers.
   const eoi = ok(await c.submit_public_eoi('host', 'season', 'Parent', 'parent@example.invalid', [], 'Child', [], [], [], [], [3], [], [], [], 'app'));
   const row = ok(await c.list_eoi_submissions('host', []))[0];
+  await pic.upgradeCanister({ canisterId: C.canisterId, sender: governor, wasm: process.env.COMPETITION_DOMAIN_WASM, arg: IDL.encode([IDL.Principal], [governor]) });
+  assert.equal(ok(await c.list_eoi_submissions('host', []))[0].id, eoi);
+  assert.equal(ok(await c.list_entries(competition)).length, 2);
   c.setPrincipal(stranger);
   assert.deepEqual(ok(await c.read_resource_club('eoi', eoi)), []);
   c.setPrincipal(parent);
