@@ -49,13 +49,17 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
     const clubs = [];
     for (const name of ['legacy', 'new']) {
       const c = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM,
-        sender: governor, controllers: [governor], environmentVariables: env,
+        sender: governor, controllers: [governor],
         arg: IDL.encode([IDL.Principal], [governor]) });
       c.actor.setPrincipal(governor);
       ok(await c.actor.create_club(name, name, name, [], []));
       ok(await c.actor.add_role_grant(primary, name, 'player', []));
       ok(await c.actor.add_role_grant(linked, name, 'coach', []));
+      // Setter-only local wiring: transient admission stays OFF because these
+      // services were installed without the flag. Remove it before all calls.
+      await pic.updateCanisterSettings({ canisterId: c.canisterId, sender: governor, environmentVariables: env });
       ok(await c.actor.set_identity_access_canister(shared.canisterId));
+      await pic.updateCanisterSettings({ canisterId: c.canisterId, sender: governor, environmentVariables: [] });
       clubs.push(c);
     }
     const id = shared.actor;
