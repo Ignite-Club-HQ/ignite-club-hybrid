@@ -721,12 +721,17 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before media inventory");
     switch (expected) { case (?r) { if (r != mediaEvidenceRevision) return #Err("Media inventory revision changed") }; case null { if (offset != 0) return #Err("Revision required after first page") } };
-    let (start, end) = MediaEvidence.bounds(offset, assets.size());
+    let total = assets.size() + galleryChatCards.size();
+    let (start, end) = MediaEvidence.bounds(offset, total);
     var refs : [MediaEvidence.Reference] = [];
-    for (i in Nat.range(start, end)) { let a = assets[i]; if (a.club_id == club) {
+    for (i in Nat.range(start, end)) { if (i < assets.size()) { let a = assets[i]; if (a.club_id == club) {
       let r = switch (a.blob_ref) { case (?b) { { resource_id = a.id; url = a.storage_path; store = ?b.canister; path = ?b.path; content_hash = ?b.content_hash } }; case null { { resource_id = a.id; url = a.storage_path; store = null; path = null; content_hash = null } } };
       refs := refs.concat([r]);
+    } } else {
+      let c = galleryChatCards[i - assets.size()]; if (c.club_id == club) {
+        switch (c.hero_image_url) { case (?url) { refs := refs.concat([{ resource_id = "card:" # c.id; url; store = null; path = null; content_hash = null }]) }; case null {} };
+      };
     } };
-    #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < assets.size()) ?end else null; references = refs })
+    #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < total) ?end else null; references = refs })
   };
 }
