@@ -105,6 +105,7 @@ persistent actor class Main(governorInit : Principal) {
     reactions := reactions.filter(func(x) = not (inA(x.asset_id)));
     comments := comments.filter(func(x) = not (inA(x.asset_id)));
     roles := roles.filter(func(x) = not (x.club_id == ?c));
+    mediaEvidenceRevision += 1;
     galleryChatCards := galleryChatCards.filter(func(x) = not (x.club_id == c));
   };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
@@ -134,6 +135,7 @@ persistent actor class Main(governorInit : Principal) {
     reactions := reactions.concat(s.reactions);
     comments := comments.concat(s.comments);
     roles := roles.concat(s.roles);
+    mediaEvidenceRevision += 1;
     galleryChatCards := galleryChatCards.concat(s.cards);
     #Ok(s.assets.size())
   };
@@ -562,6 +564,7 @@ persistent actor class Main(governorInit : Principal) {
           created_at_ms = now;
           updated_at_ms = now;
         };
+        mediaEvidenceRevision += 1;
         galleryChatCards := galleryChatCards.concat([card]);
         #Ok(card)
       };
@@ -585,6 +588,7 @@ persistent actor class Main(governorInit : Principal) {
               push_sent;
               updated_at_ms = nowMs();
             };
+            mediaEvidenceRevision += 1;
             galleryChatCards := Array.tabulate<Types.GalleryChatCard>(galleryChatCards.size(), func(position) {
               if (position == i) updated else galleryChatCards[position]
             });
@@ -614,6 +618,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?i) {
         let existing = galleryChatCards[i];
         if (not existing.uploader_id.equal(caller) and not isClubStaff(caller, existing.club_id)) return #Err("Card author or club staff required");
+        mediaEvidenceRevision += 1;
         galleryChatCards := galleryChatCards.filter(func(c) = c.id != card_id);
         #Ok
       };
@@ -713,6 +718,7 @@ persistent actor class Main(governorInit : Principal) {
       comments := newComments;
       roles := newRoles;
       bulkAccessPrincipals := newBulk;
+      mediaEvidenceRevision += 1;
       galleryChatCards := newGalleryChatCards;
     };
     #ok(changed)
