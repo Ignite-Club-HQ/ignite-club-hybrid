@@ -36,6 +36,7 @@ import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Map "mo:core/Map";
+import Iter "mo:core/Iter";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
@@ -352,7 +353,7 @@ persistent actor class Main(governorInit : Principal) {
   func clubsWhereStaff(caller : Principal, clubIds : [Text]) : async [Text] {
     var ok : [Text] = [];
     for (club_id in clubIds.values()) {
-      let authority = mediaAuthority(club_id).authority ?? club_domain_canister;
+      let authority = switch (mediaAuthority(club_id).authority) { case (?p) ?p; case null club_domain_canister };
       switch (authority) {
       case null {};
       case (?cid) {
@@ -395,9 +396,9 @@ persistent actor class Main(governorInit : Principal) {
       let authority = switch (grant) {
         case null competition_domain_canister;
         case (?g) {
-          let parts = Text.split(g.pii_id, #char '/').toArray();
+          let parts = Iter.toArray(Text.split(g.pii_id, #char '/'));
           if (parts.size() >= 4 and parts[0] == "clubs" and parts[2] == "competitions" and parts[3] == competitionId) {
-            switch (privateMediaAuthorities.get(parts[1])) { case (?a) { a.competition ?? competition_domain_canister }; case null competition_domain_canister }
+            switch (privateMediaAuthorities.get(parts[1])) { case (?a) { switch (a.competition) { case (?p) ?p; case null competition_domain_canister } }; case null competition_domain_canister }
           } else competition_domain_canister
         };
       };
