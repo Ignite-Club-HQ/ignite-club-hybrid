@@ -246,7 +246,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             bib_colors: league.bib_colors,
             show_matches_to_members: league.show_matches_to_members,
             club_id: league.club_id,
-            clubs: club ? { sport: club.sport } : null,
+            clubs: club ? { sport: club.sport[0] ?? null } : null,
           };
         },
       }, { miniLeagueId }),

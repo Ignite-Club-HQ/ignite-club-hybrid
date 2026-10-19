@@ -51,6 +51,12 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity required"); },
+          icp: async ctx => (await import("@/live/leagueInviteTargets")).readLiveInviteTargets(ctx),
+        }, { shared: "person" });
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("team_id, club_id, role")
