@@ -1,4 +1,4 @@
-import { acrossLists, acrossVoid } from "@/live/featureScopes";
+import { acrossLists } from "@/live/featureScopes";
 import { writeOnce } from "@/live/clubScope";
 import { useEffect, useCallback, useState, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -291,6 +291,8 @@ export default function NotificationsPage() {
             user_id: n.user,
             type: n.kind,
             message: n.body,
+            club: n.club,
+            idempotency_key: n.idempotency_key,
             read: n.read,
             created_at: new Date(Number(n.created_at_ms)).toISOString(),
             related_id: Array.isArray(n.related_id) ? (n.related_id[0] ?? null) : null,
@@ -484,7 +486,7 @@ export default function NotificationsPage() {
           // matching the visible-set semantics of this mutation.
           await markAllLiveNotificationsRead(ctx, user!.id, activeClubFilter ?? null);
         },
-      }, acrossVoid);
+      }, { shared: 'person' });
     },
     onMutate: async () => {
       // Optimistic update - mark visible notifications as read
@@ -548,7 +550,7 @@ export default function NotificationsPage() {
         icp: async (ctx) => {
           await clearLiveInbox(ctx, user!.id, activeClubFilter ?? null);
         },
-      }, acrossVoid);
+      }, { shared: 'person' });
     },
     onMutate: async () => {
       // Cancel any in-flight queries to prevent stale data overwriting
