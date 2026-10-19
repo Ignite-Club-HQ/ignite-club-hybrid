@@ -54,12 +54,12 @@ describe('closed-group reciprocal configuration', () => {
     expect(w.saved().configuration?.completed).toHaveLength(count);
     await configureProvisionGroup(w.saved(), w.checkpoint, w.transport, id(92), globals);
     expect(w.transport.call).toHaveBeenCalledTimes(count);
-    expect(w.transport.verifyGovernor).toHaveBeenCalledTimes(PER_GROUP_DOMAINS.length * 2 + count);
+    expect(w.transport.verifyGovernor).toHaveBeenCalledTimes((PER_GROUP_DOMAINS.length + 1) * 2 + count);
   });
   it('retains the exact unresolved setting on lost reply and refuses replay', async () => {
     const w = world(); w.transport.call = vi.fn(async () => { throw new Error('committed reply lost'); });
     await expect(configureProvisionGroup(initial(), w.checkpoint, w.transport, id(92), globals)).rejects.toThrow('reply lost');
-    expect(w.saved().pending).toEqual({ kind: 'configure', domain: 'pii_access_control', operation: 'pii_access_control.set_club_domain_canister' });
+    expect(w.saved().pending).toEqual({ kind: 'configure', operation: 'media_blob_store.set_club_domain_canister' });
     await expect(configureProvisionGroup(w.saved(), w.checkpoint, w.transport, id(92), globals)).rejects.toThrow('Unresolved');
     expect(w.transport.call).toHaveBeenCalledTimes(1);
   });
@@ -104,7 +104,7 @@ describe('closed-group reciprocal configuration', () => {
       configure: (p, checkpoint) => configureProvisionGroup(p, checkpoint, w.transport, id(92), globals),
       healthy: vi.fn(), readRegistryRevision: vi.fn(), registerGroup: vi.fn(), enableGroup: vi.fn(), save: w.checkpoint };
     const result = await runProvision(initial(), adapter, { stopAfterRegistration: true });
-    expect(result.pending?.operation).toBe('pii_access_control.set_club_domain_canister');
+    expect(result.pending?.operation).toBe('media_blob_store.set_club_domain_canister');
     expect(adapter.healthy).not.toHaveBeenCalled(); expect(adapter.registerGroup).not.toHaveBeenCalled(); expect(adapter.enableGroup).not.toHaveBeenCalled();
   });
 });

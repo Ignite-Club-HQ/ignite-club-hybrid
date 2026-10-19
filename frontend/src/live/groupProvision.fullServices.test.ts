@@ -44,7 +44,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     const transport = {
       verifyGovernor: async (id: string, operator: string) => {
         expect(operator).toBe(governor.toText());
-        const status = await pic.getCanisterStatus({ canisterId: Principal.fromText(id), sender: governor });
+        const status = await pic.canisterStatus({ canisterId: Principal.fromText(id), sender: governor });
         expect(status.settings.controllers.some(p => p.toText() === operator)).toBe(true);
       },
       call: async (id: string, method: string, args: unknown[]) => {
