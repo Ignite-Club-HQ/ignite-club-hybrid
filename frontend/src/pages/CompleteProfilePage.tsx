@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useEffect, useLayoutEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -704,7 +705,7 @@ function SupabaseCompleteProfilePage() {
                     icp: async () => {
                       console.warn("[CompleteProfile] Mini-league pre-link skipped on ICP backend.");
                     },
-                  });
+                  }, writeOnce({ inviteToken: invite.id }));
                 }
               } catch (preLinkErr) {
                 console.warn("[CompleteProfile] Pre-link before role insert failed (non-fatal):", preLinkErr);
@@ -798,7 +799,7 @@ function SupabaseCompleteProfilePage() {
                     icp: async () => {
                       console.warn("[CompleteProfile] Mini-league child link skipped on ICP backend.");
                     },
-                  });
+                  }, writeOnce({ inviteToken: invite.id }));
                 } else if (invite.role === "parent" && invite.metadata?.child_id) {
                   // Non-league invite with existing child_id — just link
                   console.log("[CompleteProfile] Linking existing child to parent:", invite.metadata.child_id);
@@ -820,7 +821,7 @@ function SupabaseCompleteProfilePage() {
                       icp: async () => {
                         console.warn("[CompleteProfile] mini_league_players link skipped on ICP backend.");
                       },
-                    });
+                    }, writeOnce({ inviteToken: invite.id }));
                   }
               } else if (invite.metadata?.children && invite.metadata.children.length > 0 && invite.role === "parent") {
                   // Create children from invite metadata (standard team invite flow)
@@ -883,7 +884,7 @@ function SupabaseCompleteProfilePage() {
                         icp: async () => {
                           console.warn("[CompleteProfile] Mini-league assignment skipped on ICP backend.");
                         },
-                      });
+                      }, writeOnce({ inviteToken: invite.id }));
                       continue;
                     }
 
@@ -952,7 +953,7 @@ function SupabaseCompleteProfilePage() {
                         icp: async () => {
                           console.warn("[CompleteProfile] Mini-league child assignment skipped on ICP backend.");
                         },
-                      });
+                      }, writeOnce({ inviteToken: invite.id }));
                     }
                   }
                 }
@@ -1010,7 +1011,7 @@ function SupabaseCompleteProfilePage() {
                 icp: async () => {
                   console.warn("[CompleteProfile] Mini-league child link (role exists) skipped on ICP backend.");
                 },
-              });
+              }, writeOnce({ inviteToken: invite.id }));
             } else if (invite.role === "parent" && invite.metadata?.child_id) {
               // Link existing child to this parent
               await supabase
@@ -1031,7 +1032,7 @@ function SupabaseCompleteProfilePage() {
                   icp: async () => {
                     console.warn("[CompleteProfile] mini_league_players link (role exists) skipped on ICP backend.");
                   },
-                });
+                }, writeOnce({ inviteToken: invite.id }));
               }
             } else if (invite.role === "parent" && invite.metadata?.children && invite.metadata.children.length > 0) {
               console.log("[CompleteProfile] Role exists but creating children from metadata:", invite.metadata.children);
@@ -1090,7 +1091,7 @@ function SupabaseCompleteProfilePage() {
                       icp: async () => {
                         console.warn("[CompleteProfile] Mini-league assignment (existing child) skipped on ICP backend.");
                       },
-                    });
+                    }, writeOnce({ inviteToken: invite.id }));
                   }
                   continue;
                 }
@@ -1151,7 +1152,7 @@ function SupabaseCompleteProfilePage() {
                     icp: async () => {
                       console.warn("[CompleteProfile] Mini-league child creation assignment skipped on ICP backend.");
                     },
-                  });
+                  }, writeOnce({ inviteToken: invite.id }));
                 }
               }
             }
