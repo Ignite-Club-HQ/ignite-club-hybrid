@@ -749,6 +749,18 @@ fn account_group_rehearsal_enabled() -> bool {
     { false }
 }
 
+/// The bound account-deletion timing protocol (prepare/commit/cancel/settle)
+/// is released independently of the broader cross-group rehearsal gate: the
+/// local rehearsal flag still enables it in tests, and production sets
+/// IGNITE_BOUND_DELETION_RELEASE=1 on the identity_access canister to open it
+/// live without releasing the remaining rehearsal-gated lifecycle features.
+fn bound_deletion_released() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    { account_group_rehearsal_enabled() || (ic_cdk::api::env_var_name_exists("IGNITE_BOUND_DELETION_RELEASE") && ic_cdk::api::env_var_value("IGNITE_BOUND_DELETION_RELEASE") == "1") }
+    #[cfg(not(target_arch = "wasm32"))]
+    { false }
+}
+
 #[ic_cdk::update]
 fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {
     if !account_group_rehearsal_enabled() { return Err("Cross-group account lifecycle not released".into()); }

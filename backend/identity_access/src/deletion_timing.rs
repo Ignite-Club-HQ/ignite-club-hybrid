@@ -24,7 +24,7 @@ async fn acquire(t: &Ticket) -> Outcome<()> {
 #[ic_cdk::update]
 pub async fn prepare_account_deletion(account_id: String, expected_revision: u64) -> Outcome<Ticket> {
     // Keep this additive protocol unavailable until a separately approved release.
-    if !account_group_rehearsal_enabled() { return Err("Bound deletion not released".into()); }
+    if !bound_deletion_released() { return Err("Bound deletion not released".into()); }
     let caller=ic_cdk::api::msg_caller(); authorized(&account_id,caller)?;
     let binding=group_inventory_binding().ok_or("Deletion registry not pinned")?;
     if binding.registry_revision!=expected_revision { return Err("Deletion registry revision changed".into()); }
@@ -48,7 +48,7 @@ pub async fn prepare_account_deletion(account_id: String, expected_revision: u64
 }
 #[ic_cdk::update]
 pub async fn commit_account_deletion(account_id: String) -> Outcome<()> {
-    if !account_group_rehearsal_enabled() { return Err("Bound deletion not released".into()); }
+    if !bound_deletion_released() { return Err("Bound deletion not released".into()); }
     let caller=ic_cdk::api::msg_caller(); authorized(&account_id,caller)?;
     let t=ticket(&account_id).ok_or("Missing deletion ticket")?;
     acquire(&t).await?;
@@ -88,7 +88,7 @@ fn recoverable(t: &Ticket) -> Outcome<()> {
 }
 #[ic_cdk::update]
 pub async fn cancel_account_deletion(account_id: String) -> Outcome<()> {
-    if !account_group_rehearsal_enabled() { return Err("Bound deletion not released".into()); }
+    if !bound_deletion_released() { return Err("Bound deletion not released".into()); }
     let caller=ic_cdk::api::msg_caller(); authorized(&account_id,caller)?;
     let t=ticket(&account_id).ok_or("Missing deletion ticket")?;
     recoverable(&t)?;
@@ -100,7 +100,7 @@ pub async fn cancel_account_deletion(account_id: String) -> Outcome<()> {
 }
 #[ic_cdk::update]
 pub async fn settle_account_deletion(account_id: String) -> Outcome<()> {
-    if !account_group_rehearsal_enabled() { return Err("Bound deletion not released".into()); }
+    if !bound_deletion_released() { return Err("Bound deletion not released".into()); }
     let caller=ic_cdk::api::msg_caller();
     let Some(t)=ticket(&account_id) else { return Err("Missing deletion ticket".into()); };
     if caller!=state().governor && !t.account.principals.contains(&caller) { authorized(&account_id,caller)?; }
