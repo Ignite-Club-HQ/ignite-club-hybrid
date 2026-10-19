@@ -196,12 +196,12 @@ export async function fetchVaultStorageBreakdown(
       },
     }, { clubId });
   }
-  const { data: photos, error: photosError } = await client
+  const { error: photosError } = await client
     .from("photos")
     .select("file_size, team_id, mini_league_id")
     .eq("club_id", clubId)
     .is("deleted_at", null);
-  const { data: files, error: filesError } = await client
+  const { error: filesError } = await client
     .from("vault_files")
     .select("*")
     .eq("club_id", clubId)

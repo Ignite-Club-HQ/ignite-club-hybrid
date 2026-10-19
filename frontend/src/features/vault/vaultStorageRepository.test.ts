@@ -146,6 +146,24 @@ describe("Vault storage accounting", () => {
     }
     expect(fake.calls.some((call) => call.table === "mini_leagues" && call.method === "is")).toBe(false);
   });
+  it.runIf(supabaseMode)("indicator includes chat bytes and counts a gallery/vault mirror only once", async () => {
+    const fake = scriptedClient({
+      photos: [[{ file_size: 100, team_id: "team-a", mini_league_id: null }]],
+      vault_files: [[{ file_size: 100, name: "gallery.jpg", team_id: "team-a", mini_league_id: null }]],
+      teams: [[{ id: "team-a", name: "Team A" }]], mini_leagues: [[]],
+    });
+    fake.client.storage.from = ((bucket: string) => ({ list: async (folder: string) => ({ data:
+      folder === "clubs/club-a" && bucket !== "competition-vault"
+        ? [{ id: null, name: "teams", metadata: null }]
+        : folder.endsWith("/teams") ? [{ id: null, name: "team-a", metadata: null }]
+        : bucket === "photos" ? [{ id: "photo", name: "gallery.jpg", metadata: { size: 100 } }]
+        : bucket === "chat-attachments" ? [{ id: "chat", name: "chat.jpg", metadata: { size: 200 } }, { id: "file", name: "policy.pdf", metadata: { size: 300 } }]
+        : [], error: null,
+    }) })) as typeof fake.client.storage.from;
+    const result = await fetchVaultStorageBreakdown("club-a", fake.client);
+    expect(result).toMatchObject({ photos: 300, documents: 300, total: 600 });
+    expect(result.byTeam).toEqual([{ teamId: "team-a", teamName: "Team A", photosSize: 300, documentsSize: 300, size: 600 }]);
+  });
 });
 
 describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () => {
