@@ -3540,7 +3540,6 @@ persistent actor class Main(governorInit : Principal) {
     #ok(changed)
   };
 
-}
   public shared ({ caller }) func read_club_media_references(club : Text, offset : Nat, expected : ?Nat) : async { #Ok : MediaEvidence.Page; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before media inventory");
