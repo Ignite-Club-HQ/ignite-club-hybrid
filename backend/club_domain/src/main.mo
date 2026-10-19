@@ -2400,6 +2400,23 @@ persistent actor class Main(governorInit : Principal) {
     principals.any(func(p) = isMember(p, club_id))
   };
 
+  // Consensus booleans only: no child names, guardian lists or stored grants.
+  public shared func read_has_club_staff_role(user : Principal, club_id : Text) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    acl.roles.any(func(grant) = grant.user.equal(user) and grant.club == ?club_id)
+  };
+
+  public shared func read_has_child_guardian(user : Principal, child_id : Text) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    switch (acl.children.find(func(child) = child.id == child_id)) {
+      case null false;
+      case (?child) {
+        (switch (child.parent) { case (?p) p.equal(user); case null false })
+        or acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))
+      };
+    }
+  };
+
   // The user's role grants in one club as (role, team) pairs. events_domain
   // mirrors these on create/update so club and team admins set up here can
   // schedule events without a separate grant there. Public query, same
@@ -4693,6 +4710,12 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func media_quota_cutover_status() : async { active : Bool; started : Bool; stores : [(Principal, MediaQuotaCutover.Progress)] } {
     if (not isGovernor(caller)) Runtime.trap("Governor required");
     { active = mediaQuotaCutover.active; started = mediaQuotaCutover.started; stores = mediaQuotaStores.map(func(p) = (p, MediaQuotaCutover.progress(mediaQuotaCutover, p))) }
+  };
+  // Complete operator inventory through consensus, not an uncertified query
+  // or the browser's configured primary blob store. Bounded by 64 stores.
+  public shared ({ caller }) func read_media_quota_store_registry() : async { #Ok : { active : Bool; stores : [Principal] }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok({ active = mediaQuotaCutover.active; stores = mediaQuotaStores })
   };
   public shared ({ caller }) func reserve_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
     if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");

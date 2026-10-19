@@ -1515,9 +1515,32 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'read_has_child_guardian' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
     'read_has_club_membership' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
+        [],
+      ),
+    'read_has_club_staff_role' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_media_quota_store_registry' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'stores' : IDL.Vec(IDL.Principal),
+              'active' : IDL.Bool,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'read_my_club_memberships' : IDL.Func(
