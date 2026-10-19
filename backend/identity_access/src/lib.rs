@@ -370,7 +370,7 @@ fn store_link_lifecycle(value: &LinkLifecycle) {
     LINK_LIFECYCLE.with(|s| s.borrow_mut().set(encode(value)));
 }
 fn effective_account(mut account: Account, lifecycle: &LinkLifecycle) -> Account {
-    account.principals.retain(|p| !lifecycle.pending.iter().any(|job| job.account_id == account.id && job.principal == *p));
+    account.principals.retain(|p| !principal_is_denied(*p) && !lifecycle.pending.iter().any(|job| job.account_id == account.id && job.principal == *p));
     account
 }
 
@@ -533,6 +533,11 @@ fn account_for(principal: Principal) -> Outcome<Account> {
     authenticated(principal)?;
     if principal_is_denied(principal) { return Err("Identity revoked; surviving-account relink required".into()); }
     let account = find_account_by_principal(principal).ok_or("Unlinked identity")?;
+    if let Some(denial) = principal_denial(principal) {
+        if denial.account_id != account.id || denial.reauthorized_version.is_none_or(|v| account.version < v) {
+            return Err("Revoked identity account generation mismatch".into());
+        }
+    }
     if link_lifecycle().pending.iter().any(|job| job.account_id == account.id && job.principal == principal) {
         return Err("Identity revocation pending".into());
     }
@@ -578,6 +583,7 @@ fn ensure_account(principal: Principal) -> Outcome<String> {
         account_for(principal)?;
         return Ok(account.id);
     }
+    if principal_denial(principal).is_some() { return Err("Previous identity authorization requires surviving account".into()); }
     if account_count() >= MAX_ACCOUNTS as u64 {
         return Err("Account quota reached".into());
     }
@@ -1972,6 +1978,40 @@ mod tests {
             assert!(rekey_principal_core(&mut core, removed, active, dry).is_err());
             assert!(rekey_principal_core(&mut core, active, removed, dry).is_err());
         }
+    }
+    #[test]
+    fn eligibility_denies_unknown_suspended_and_removed_but_keeps_survivor() {
+        let removed = principal(94); let survivor = principal(95); let unknown = principal(96);
+        let mut account = Account { id: "eligibility".into(), principals: vec![removed, survivor], version: 3, status: AccountStatus::Active };
+        put_account(&account); index_principal(removed, &account.id); index_principal(survivor, &account.id);
+        deny_unlinked_principal(removed, &account.id, 3).unwrap();
+        assert_eq!(principal_eligibility(removed).decision, EligibilityDecision::Denied);
+        assert_eq!(principal_eligibility(removed).denied_through_version, Some(3));
+        assert_eq!(principal_eligibility(survivor).decision, EligibilityDecision::Eligible);
+        assert_eq!(principal_eligibility(unknown).decision, EligibilityDecision::Denied);
+        account.status = AccountStatus::Suspended; put_account(&account);
+        assert_eq!(principal_eligibility(survivor).decision, EligibilityDecision::Denied);
+    }
+    #[test]
+    fn reauthorization_retains_history_and_rejects_mismatched_restored_accounts() {
+        let removed = principal(97);
+        deny_unlinked_principal(removed, "original-generation", 8).unwrap();
+        let mut denial = principal_denial(removed).unwrap(); denial.reauthorized_version = Some(10);
+        PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(removed.to_text(), encode(&denial)));
+        let mut account = Account { id: denial.account_id.clone(), principals: vec![removed], version: 10, status: AccountStatus::Active };
+        put_account(&account); index_principal(removed, &account.id);
+        assert_eq!(principal_eligibility(removed).decision, EligibilityDecision::Eligible);
+        account.version = 9; put_account(&account);
+        assert_eq!(principal_eligibility(removed).decision, EligibilityDecision::Denied);
+        account.id = "unrelated-generation".into(); account.version = 11; put_account(&account); index_principal(removed, &account.id);
+        assert_eq!(principal_eligibility(removed).decision, EligibilityDecision::Denied);
+        deindex_principal(removed);
+        assert!(ensure_account(removed).is_err());
+        assert_eq!(principal_denial(removed).unwrap().version, 8);
+    }
+    #[test]
+    fn eligibility_transport_remains_unreleased() {
+        assert_eq!(authority_eligibilities(principal(98), vec![principal(99)]), Err("Cross-group eligibility not released".into()));
     }
     #[test]
     fn unlink_recovery_uses_the_persisted_targets_not_a_new_registry() {
