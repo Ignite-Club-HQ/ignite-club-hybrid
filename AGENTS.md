@@ -34,9 +34,9 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 (https://skills.internetcomputer.org/.well-known/skills/{name}/SKILL.md) and follow
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
-- ICP frontend deploy: start mapped canisters before auto deploy; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets and balance access.
-- No client secrets; opt-in routing; split league/profile/host scopes. Provisioning uses checkpoints/adapters; full-service local tests never authorize activation.
-- Both II paths enforce club scope; uploads verify human membership. Why: no revocation bypass.
+- ICP frontend deploy: start mapped canisters; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets/access.
+- No client secrets; opt-in scoped routing; checkpoint provisioning. Local tests never authorize activation.
+- II paths enforce club scope; uploads verify membership. Why: prevent revocation bypass.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
@@ -44,3 +44,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
 - Cross-group accounts stay local-only; identity uses durable unlink denials and consensus eligibility, never resource grants. Block activation until all-service fences/inventory/mirror checks pass. Why: fan-out cannot deny unreached groups.
 - Account admission stays local-only with no live UI/deploy flags; follow backend/AGENTS.md for test evidence requirements. Why: eligibility alone cannot prove complete inventory/drain or global revocation.
+
+- Mainnet photo-key preflight uses SDK offline derivation, signed controller checks and durable pre/post-upgrade receipts; other targets fail closed. Why: vetKD rejects ingress.
