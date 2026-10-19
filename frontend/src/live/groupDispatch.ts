@@ -12,12 +12,14 @@ import { activationStatus, chooseRoute, SHIPPED_GATES, type ActivationGates } fr
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
   isAssigned(c: string): boolean; dispose(): void;
+  readHosted?<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   createInGroup?<T>(g: string, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   readEveryGroup<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]> };
 /** What a call is about. Non-club scopes are resolved to their owning club. */
-export type EntityScope = { clubId: string } | { competitionId: string } | { eventGroupId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string };
-export type EntityLookup = (ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague' | 'competition' | 'eventGroup', id: string) => Promise<string | null>;
-const ENTITY_DOMAIN = { eventGroup: 'events_domain', event: 'events_domain', conversation: 'messaging_domain', team: 'club_domain', clubLink: 'club_domain', roleRequest: 'club_domain', miniLeague: 'mini_league_domain', competition: 'competition_domain' } as const;
+export type EntityScope = { clubId: string } | { competitionId: string } | { competitionMatchId: string } | { eoiId: string } | { seasonId: string } | { vaultFileId: string } | { vaultFolderId: string } | { notificationId: string } | { scheduledMessageId: string } | { eventGroupId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string };
+export type EntityKind = 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague' | 'competition' | 'competitionMatch' | 'eoi' | 'season' | 'vaultFile' | 'vaultFolder' | 'notification' | 'scheduledMessage' | 'eventGroup';
+export type EntityLookup = (ctx: FeatureBackendContext, kind: EntityKind, id: string) => Promise<string | null>;
+const ENTITY_DOMAIN = { eventGroup: 'events_domain', event: 'events_domain', conversation: 'messaging_domain', team: 'club_domain', clubLink: 'club_domain', roleRequest: 'club_domain', miniLeague: 'mini_league_domain', competition: 'competition_domain', competitionMatch: 'competition_domain', eoi: 'competition_domain', season: 'club_domain', vaultFile: 'vault_domain', vaultFolder: 'vault_domain', notification: 'notification_queue', scheduledMessage: 'notification_queue' } as const;
 /** Device store for entity→club answers (an event/chat never changes club, so
  * positive answers are safe to keep; "not in any group" stays memory-only
  * because the club may move later). Scoped per principal. */
@@ -63,7 +65,7 @@ async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendCont
  * Answers are remembered (device + memory) and concurrent asks share one probe. */
 async function resolveClub(deps: DispatchDeps, s: Session, principal: string, scope: EntityScope): Promise<string | null> {
   if ('clubId' in scope) return scope.clubId;
-  const [kind, id] = 'eventGroupId' in scope ? ['eventGroup', scope.eventGroupId] as const : 'competitionId' in scope ? ['competition', scope.competitionId] as const : 'miniLeagueId' in scope ? ['miniLeague', scope.miniLeagueId] as const : 'eventId' in scope ? ['event', scope.eventId] as const : 'conversationId' in scope ? ['conversation', scope.conversationId] as const : 'clubLinkId' in scope ? ['clubLink', scope.clubLinkId] as const : 'roleRequestId' in scope ? ['roleRequest', scope.roleRequestId] as const : ['team', scope.teamId] as const;
+  const [kind, id] = 'competitionMatchId' in scope ? ['competitionMatch', scope.competitionMatchId] as const : 'eoiId' in scope ? ['eoi', scope.eoiId] as const : 'seasonId' in scope ? ['season', scope.seasonId] as const : 'vaultFileId' in scope ? ['vaultFile', scope.vaultFileId] as const : 'vaultFolderId' in scope ? ['vaultFolder', scope.vaultFolderId] as const : 'notificationId' in scope ? ['notification', scope.notificationId] as const : 'scheduledMessageId' in scope ? ['scheduledMessage', scope.scheduledMessageId] as const : 'eventGroupId' in scope ? ['eventGroup', scope.eventGroupId] as const : 'competitionId' in scope ? ['competition', scope.competitionId] as const : 'miniLeagueId' in scope ? ['miniLeague', scope.miniLeagueId] as const : 'eventId' in scope ? ['event', scope.eventId] as const : 'conversationId' in scope ? ['conversation', scope.conversationId] as const : 'clubLinkId' in scope ? ['clubLink', scope.clubLinkId] as const : 'roleRequestId' in scope ? ['roleRequest', scope.roleRequestId] as const : ['team', scope.teamId] as const;
   const key = `${kind}:${id}`;
   if (owners.has(key)) return owners.get(key) ?? null;
   const pending = inflight.get(key); if (pending) return pending;
@@ -74,6 +76,12 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
     if (found.length > 1) throw new Error(`${kind} claimed by more than one group`);
     const club = found[0] ?? null;
     owners.set(key, club); if (club) persist(deps, principal);
+    if (!club && ['competitionMatch', 'eoi', 'vaultFile', 'vaultFolder', 'notification', 'scheduledMessage'].includes(kind)) {
+      const shared = await deps.context();
+      const sharedClub = await lookup(shared, kind, id);
+      if (!sharedClub) throw new Error(`${kind} not found or not authorized`);
+      return null;
+    }
     return club;
   })();
   inflight.set(key, probe);
@@ -102,11 +110,21 @@ export function createClubDispatcher(deps: DispatchDeps) {
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
       const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
+      if (club && !s.isAssigned(club) && !('clubId' in scope)) {
+        if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
+        return s.readHosted(club, domain, fn);
+      }
       return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.readClub(club, domain, fn) : deps.legacy(feature, club ?? '', fn);
     },
     writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
       const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
+      if (club && !s.isAssigned(club) && !('clubId' in scope)) {
+        if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
+        // Location only, one attempt: the destination verifies the actual
+        // participant/claimant permission. Never manufacture club membership.
+        return s.readHosted(club, domain, ctx => fn(ctx, key));
+      }
       return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.writeClub(club, domain, key, fn, attempts) : deps.legacy(feature, club ?? '', ctx => fn(ctx, key));
     },
     /** Invite links/codes: the invitee isn't a member yet, so ask every group
