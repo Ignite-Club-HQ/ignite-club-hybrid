@@ -34,11 +34,16 @@ try {
  assert.equal(ok(await pii.get_encrypted_pii_batch(['private'],'name','read','local')).length,1);
  vault.setPrincipal(governor); ok(await vault.grant_role(victim,'club_admin',['club'],[]));
  vault.setPrincipal(victim); ok(await vault.create_folder('f','club',[],[],'local',[],[],[],0,[],[]));
- queue.setPrincipal(governor); ok(await queue.enqueue('n',victim.toText(),'club','event','local','k')); 
+ queue.setPrincipal(governor); ok(await queue.enqueue('n',victim.toText(),'club','event','local','k'));
+ ok(await queue.enqueue('malformed','legacy-account-id','club','event','legacy','legacy')); 
  queue.setPrincipal(victim); assert.equal(ok(await queue.list_inbox(victim.toText(),[],10)).length,1);
  queue.setPrincipal(stranger); assert.ok('Err' in await queue.clear_inbox(victim.toText(),[]));
  queue.setPrincipal(victim); await queue.register_device_token('android','local-test-token',[],[]);
  queue.setPrincipal(governor); assert.equal(ok(await queue.list_device_tokens([victim.toText()])).length,1);
+ id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
+ await denied(()=>chat.read_account_list_messages_page(conversation.id,[],10));
+ ok(await id.set_account_status(account.id,{Active:null}));
+ assert.equal(ok(await chat.read_account_list_messages_page(conversation.id,[],10)).messages.length,1);
  id.setPrincipal(victim); ok(await id.erase_account(account.id));
  await denied(()=>chat.read_account_list_messages_page(conversation.id,[],10));
  await denied(()=>chat.send_message(conversation.id,'must fail','m2',[],[]));
@@ -58,5 +63,13 @@ try {
  // Stable reader inventory survives an upgrade; removal cannot be bypassed.
  await pic.upgradeCanister({canisterId:identity.canisterId,wasm:process.env.IDENTITY_ACCESS_WASM,sender:governor,arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor}])});
  chat.setPrincipal(victim); await denied(()=>chat.read_account_list_messages_page(conversation.id,[],10));
+ id.setPrincipal(stranger); const kept=ok(await id.whoami());
+ id.setPrincipal(governor); ok(await id.rekey_principal(stranger,p(4),false));
+ chat.setPrincipal(stranger); await denied(()=>chat.read_account_my_unread_counts());
+ pii.setPrincipal(stranger); await denied(()=>pii.get_encrypted_pii_batch(['private'],'name','read','rekey'));
+ vault.setPrincipal(stranger); await denied(()=>vault.read_account_list_folders('club',[],[]));
+ queue.setPrincipal(stranger); await denied(()=>queue.list_inbox(stranger.toText(),[],10));
+ chat.setPrincipal(p(4)); assert.deepEqual(await chat.read_account_my_unread_counts(),[]);
+ id.setPrincipal(p(4)); assert.equal(ok(await id.whoami()).id,kept.id);
  console.log('Local service admission passed: real private rows, erased subject, worker recipients, outage and identity upgrade. No production/global revocation claim.');
 } finally { if(pic) await pic.tearDown(); await server.stop(); }

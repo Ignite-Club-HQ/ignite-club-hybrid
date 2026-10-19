@@ -167,8 +167,12 @@ persistent actor class Main(governorInit : Principal) {
     if (users.size() > 200) Runtime.trap("Admission batch exceeds 200");
     var allowed : [Text] = [];
     for (user in users.values()) {
-      let subject = Principal.fromText(user);
-      if (await accountAdmission.eligible(subject)) allowed := allowed.concat([user]);
+      // Isolate parsing in an async message so one malformed ID cannot abort a batch.
+      let subject = try { await async { ?Principal.fromText(user) } } catch (_) { null };
+      switch (subject) {
+        case null {};
+        case (?principal) { if (await accountAdmission.eligible(principal)) allowed := allowed.concat([user]) }
+      };
     };
     allowed
   };
