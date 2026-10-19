@@ -123,7 +123,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
           icp: async () => {
             throw new Error("Duplicating season teams and staff isn't available in ICP yet.");
           },
-        });
+        }, writeOnce({ clubId }));
       }
       return withFeatureBackend("membership", {
         supabase: async () => {
@@ -194,7 +194,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
             }
             return n;
           },
-      });
+      }, writeOnce({ clubId }));
     },
   });
 

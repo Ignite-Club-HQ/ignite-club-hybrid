@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -226,7 +227,7 @@ export default function ProfilePage() {
             }
             return { clubs, teams };
           },
-        });
+        }, { everyGroup: true, merge: (parts: any[]) => ({ clubs: parts.flatMap((p) => p.clubs), teams: parts.flatMap((p) => p.teams) }) });
       }
       const { data: roles } = await supabase
         .from("user_roles")
@@ -526,7 +527,7 @@ export default function ProfilePage() {
             }
             return out;
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       const { data: appAdminRole } = await supabase
         .from("user_roles")
@@ -649,7 +650,7 @@ export default function ProfilePage() {
             }
             return out;
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       const { data: roles } = await supabase
         .from("user_roles")

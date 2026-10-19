@@ -275,7 +275,7 @@ function SupabaseManageRolesPage() {
             await rejectLiveRoleRequest(ctx, requestId);
           }
         },
-      });
+      }, writeOnce({ clubId: clubId! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-role-requests", clubId] });
