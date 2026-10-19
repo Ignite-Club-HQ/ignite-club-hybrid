@@ -1383,6 +1383,7 @@ fn begin_link(target: Principal) -> Outcome<LinkChallenge> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     let account = account_for_write(caller)?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
     if link_lifecycle().pending.iter().any(|job| job.account_id == account.id) { return Err("Unlink recovery pending".into()); }
     authenticated(target)?;
     validate_denied_relink(target, &account.id, account.version)?;
@@ -1435,6 +1436,7 @@ fn accept_link(id: u64) -> Outcome<Account> {
         return Err("Identity already assigned".into());
     }
     let mut account = get_account(&challenge.account_id).ok_or("Account unavailable")?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
     if account.status != AccountStatus::Active || link_lifecycle().pending.iter().any(|job| job.account_id == account.id) {
         return Err("Account unavailable during link recovery".into());
     }
@@ -1470,6 +1472,7 @@ async fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account>
     let caller = ic_cdk::api::msg_caller();
     // A self-unlink may only be resumed by a surviving sign-in identity.
     let current = account_for_write(caller)?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&current.id)) { return Err("Deletion reservation pending".into()); }
     if principal == caller { return Err("Use a surviving identity to revoke this sign-in".into()); }
     if !current.principals.contains(&principal) || current.principals.len() == 1 {
         return Err("Cannot revoke missing or last identity".into());
@@ -1988,6 +1991,7 @@ fn set_account_status(account_id: String, status: AccountStatus) -> Outcome<Acco
         return Err("Forbidden".into());
     }
     let mut account = get_account(&account_id).ok_or("Unknown account")?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
     if status == AccountStatus::Suspended && account.principals.contains(&state.governor) {
         return Err("Governor account cannot be suspended".into());
     }

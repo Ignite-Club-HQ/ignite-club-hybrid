@@ -91,6 +91,7 @@ pub fn validate(snapshot: &Snapshot, b: &Binding, clubs: &[Principal], readers: 
     }
     let mut group_ids = BTreeSet::new(); let mut placement_ids = BTreeSet::new();
     let mut all = BTreeSet::new(); let mut club_ids = BTreeSet::new(); let mut subnet_binding = None;
+    let mut shared_workload = None;
     for p in &snapshot.placements { if !placement_ids.insert(&p.group_id) { return Err("Duplicate placement".into()); } }
     for g in &snapshot.groups {
         if g.id.is_empty() || g.id.len() > 64 || !group_ids.insert(&g.id) || g.target_alias != b.target_alias {
@@ -112,9 +113,14 @@ pub fn validate(snapshot: &Snapshot, b: &Binding, clubs: &[Principal], readers: 
         for d in &p.domains { if !placed_names.insert(&d.domain) { return Err("Duplicate placed domain".into()); } }
         if g.domains.len() != DOMAINS.len() || p.domains.len() != DOMAINS.len() { return Err("Incomplete domain inventory".into()); }
         for d in &g.domains {
-            if !DOMAINS.contains(&d.domain.as_str()) || !names.insert(&d.domain) || !principal_ok(d.canister) || !all.insert(d.canister) {
+            if !DOMAINS.contains(&d.domain.as_str()) || !names.insert(&d.domain) || !principal_ok(d.canister) {
                 return Err("Invalid or shared group authority".into());
             }
+            if d.domain == "secret_workload_identity" {
+                if shared_workload.is_some_and(|prior| prior != d.canister) { return Err("Mixed shared workload authority".into()); }
+                if shared_workload.is_none() && !all.insert(d.canister) { return Err("Shared workload collides with group authority".into()); }
+                shared_workload = Some(d.canister);
+            } else if !all.insert(d.canister) { return Err("Invalid or shared group authority".into()); }
             let placed = p.domains.iter().find(|v| v.domain == d.domain).ok_or("Missing placed domain")?;
             if placed.canister != d.canister || !approved.contains(&placed.subnet) ||
                 (!p.additional_subnets_enabled && placed.subnet != p.primary_subnet) { return Err("Unapproved domain placement".into()); }
@@ -134,7 +140,7 @@ pub fn validate(snapshot: &Snapshot, b: &Binding, clubs: &[Principal], readers: 
         let b = Binding { registry: p(90), registry_revision: 4, target_alias: "local".into(), deployment_id: "replica".into(),
             deployment_revision: 1, host: "https://isolated.invalid".into(), network_kind: "public_mainnet".into() };
         let groups: Vec<_> = (0..2).map(|n| Group { id: format!("g{n}"), target_alias: b.target_alias.clone(),
-            domains: DOMAINS.iter().enumerate().map(|(i, d)| Domain { domain: d.to_string(), canister: p(1 + i as u8 + n * 20) }).collect() }).collect();
+            domains: DOMAINS.iter().enumerate().map(|(i, d)| Domain { domain: d.to_string(), canister: if *d == "secret_workload_identity" { p(70) } else { p(1 + i as u8 + n * 20) } }).collect() }).collect();
         let placements = groups.iter().map(|g| Placement { group_id: g.id.clone(), deployment_id: b.deployment_id.clone(),
             deployment_revision: 1, host: b.host.clone(), network_kind: b.network_kind.clone(), primary_subnet: p(80),
             approved_subnets: vec![p(80)], additional_subnets_enabled: false,
@@ -149,6 +155,15 @@ pub fn validate(snapshot: &Snapshot, b: &Binding, clubs: &[Principal], readers: 
         let (s, b, clubs) = fixture();
         for i in 0..13 { let mut bad = s.clone(); bad.groups[0].domains.remove(i); assert!(validate(&bad, &b, &clubs, &[]).is_err()); }
         let mut bad = s; bad.placements[1].domains.pop(); assert!(validate(&bad, &b, &clubs, &[]).is_err());
+    }
+    #[test] fn shared_global_is_exact_and_cannot_alias_a_routed_domain() {
+        let (s,b,clubs) = fixture(); assert!(validate(&s,&b,&clubs,&[]).is_ok());
+        let mut mixed=s.clone(); mixed.groups[1].domains[12].canister=Principal::from_slice(&[71,1]);
+        mixed.placements[1].domains[12].canister=mixed.groups[1].domains[12].canister;
+        assert!(validate(&mixed,&b,&clubs,&[]).is_err());
+        let mut alias=s; alias.groups[1].domains[1].canister=alias.groups[0].domains[12].canister;
+        alias.placements[1].domains[1].canister=alias.groups[1].domains[1].canister;
+        assert!(validate(&alias,&b,&clubs,&[]).is_err());
     }
     #[test] fn foreign_revision_deployment_and_shared_authorities_denied() {
         let (s, b, clubs) = fixture(); let mut bad = s.clone(); bad.revision = 3; assert!(validate(&bad, &b, &clubs, &[]).is_err());

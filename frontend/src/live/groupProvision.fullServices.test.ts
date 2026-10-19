@@ -103,7 +103,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     ok(await blob.actor.put_chunk(upload, 0, [1, 2, 3])); ok(await blob.actor.finalize_upload(upload));
     expect((await blob.actor.http_request({ url: '/clubs/new-club/gallery/one.jpg', method: 'GET', headers: [], body: [] })).status_code).toBe(200);
     blob.actor.setPrincipal(outsider);
-    expect(await blob.actor.begin_upload('clubs/new-club/gallery/denied.jpg', 'image/jpeg', 3n, 1)).toHaveProperty('Err');
+    await expect(blob.actor.begin_upload('clubs/new-club/gallery/denied.jpg', 'image/jpeg', 3n, 1)).rejects.toThrow();
     for (const [name, service] of services) {
       expect(await service.actor.cycles_balance(), name).toBeGreaterThan(0n);
       const stats = await service.actor.memory_stats(); expect(stats.memory_bytes, name).toBeGreaterThan(0n);
