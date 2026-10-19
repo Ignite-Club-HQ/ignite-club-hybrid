@@ -100,7 +100,9 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     await eraseIcpAccountAsAdmin({ getPrincipal: () => governor } as Identity, target, account.id);
 
     // Post-deletion: every service denies the erased principal.
-    expect(await club.actor.read_account_membership_erased([member])).toBe(true);
+    club.actor.setPrincipal(governor);
+    const grants = ok(await club.actor.list_role_grants('c1'));
+    expect(grants.some((g: any) => g.user.toText() === member.toText())).toBe(false);
     vault.actor.setPrincipal(member);
     denied(await vault.actor.create_folder('f2', 'c1', [], [], 'Folder', [], [], [], 0, [], []));
     (await events).actor.setPrincipal(member);
