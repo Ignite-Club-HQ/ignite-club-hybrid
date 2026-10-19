@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Identity } from '@icp-sdk/core/agent';
 import type { IcpTargetConfig } from './targetRegistry';
 const state = vi.hoisted(() => ({ active: true, registry: vi.fn(), dispose: vi.fn(), erase: vi.fn(),
-  revoke: vi.fn(), purge: vi.fn(), order: [] as string[], targets: [] as unknown[] }));
+  revoke: vi.fn(), purge: vi.fn(), validate: vi.fn(), order: [] as string[], targets: [] as unknown[] }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: state.active }) }));
 vi.mock('./groupSessionLive', () => ({ openLiveGroupReadSession: async () => {
   const targets = await state.registry();
-  return { dispose: state.dispose, readEveryGroup: async () => targets };
+  return { dispose: state.dispose, readEveryGroup: async () => targets, assertRegistryUnchanged: state.validate };
 } }));
 vi.mock('./identityAccess', () => ({ isLiveIdentityAccessConfigured: () => true,
   connectLiveIdentityAccessClientWithIdentity: async () => ({ client: {
@@ -27,6 +27,7 @@ const target = (prefix: string) => ({ alias: 'mainnet', host: 'https://icp-api.i
 const identity = {} as Identity;
 beforeEach(() => {
   vi.clearAllMocks(); state.active = true; state.order = [];
+  state.validate.mockResolvedValue(undefined);
   state.registry.mockResolvedValue([target('a'), target('b')]);
   state.revoke.mockImplementation(async id => { state.order.push(`revoke:${id}`); return { Ok: null }; });
   state.purge.mockImplementation(async (domain, id) => { state.order.push(`purge:${id}`); return { Ok: 1 }; });
@@ -74,5 +75,13 @@ describe('account erasure across all registered groups', () => {
     state.active = false;
     await eraseMyIcpAccount(identity, target('shared'));
     expect(state.registry).not.toHaveBeenCalled(); expect(state.revoke).toHaveBeenCalledTimes(1);
+  });
+  it('stops shared erasure on registry drift during a tolerated content purge', async () => {
+    state.purge.mockImplementation(async () => {
+      state.validate.mockRejectedValue(new Error('Group registry changed'));
+      return { Ok: 1 };
+    });
+    await expect(eraseMyIcpAccount(identity, target('shared'))).rejects.toThrow('registry changed');
+    expect(state.erase).not.toHaveBeenCalled(); expect(state.dispose).toHaveBeenCalledOnce();
   });
 });

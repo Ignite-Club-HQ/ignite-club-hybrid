@@ -98,7 +98,11 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
       if (index === 1 && unavailable) throw new Error('Authority unavailable');
       const actor = clubs[index].actor;
       actor.setPrincipal(human.getPrincipal());
-      return { actor: { erase_account_membership: (a: string) => actor.erase_account_membership(a),
+      return { actor: { erase_account_membership: async (a: string) => {
+        const r = await actor.erase_account_membership(a);
+        if (index === 0 && mutateAfterRevoke) registry.revision += 1n;
+        return r;
+      },
         erase_my_membership: async () => { const r = await actor.erase_my_membership();
           if (index === 0 && mutateAfterRevoke) registry.revision += 1n;
           if (index === 0 && outageAfterFirst) {
@@ -185,14 +189,16 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
     for (let i = 0; i < 2; i++) expect(await f.roles(i, f.linked)).toEqual([]);
   }, 60000);
 
-  it.fails('RELEASE BLOCKER: registry changes after revocation must stop shared erasure', async () => {
+  it('registry changes after self revocation stop shared erasure', async () => {
     const f = await fixture(); f.midRemovalDrift();
-    // Characterization of a release blocker, not an approved behavior rule:
-    // the entrypoint closes its session before writes and never revalidates.
-    await expect(eraseMyIcpAccount(f.identity, f.targets[0])).rejects.toThrow();
+    await expect(eraseMyIcpAccount(f.identity, f.targets[0])).rejects.toThrow('registry changed');
+    f.id.setPrincipal(f.primary); expect(ok(await f.id.whoami()).id).toBe(f.account.id);
+    expect(await f.roles(0, f.linked)).toEqual([]);
+    expect(await f.roles(1, f.linked)).toHaveLength(1);
+    expect(seam.purges).toEqual([]);
   }, 60000);
 
-  it.fails('RELEASE BLOCKER: admin erasure must revoke new-group linked roles', async () => {
+  it('admin erasure revokes both linked principals in new and legacy groups', async () => {
     const f = await fixture();
     const admin = { getPrincipal: () => governor } as Identity;
     await eraseIcpAccountAsAdmin(admin, f.targets[0], f.account.id);
@@ -202,5 +208,13 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
       f.id.setPrincipal(principal); expect(await f.id.whoami()).toHaveProperty('Err');
       expect(await f.id.register_account()).toHaveProperty('Err');
     }
+  }, 60000);
+  it('registry changes after admin revocation preserve shared identity', async () => {
+    const f = await fixture(); f.midRemovalDrift();
+    const admin = { getPrincipal: () => governor } as Identity;
+    await expect(eraseIcpAccountAsAdmin(admin, f.targets[0], f.account.id)).rejects.toThrow('registry changed');
+    f.id.setPrincipal(f.primary); expect(ok(await f.id.whoami()).id).toBe(f.account.id);
+    expect(await f.roles(0, f.linked)).toEqual([]);
+    expect(await f.roles(1, f.linked)).toHaveLength(1);
   }, 60000);
 });
