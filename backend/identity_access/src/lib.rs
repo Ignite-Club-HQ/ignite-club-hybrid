@@ -12,6 +12,7 @@ use std::cell::RefCell;
 mod group_inventory;
 mod removal_barrier;
 mod deletion_timing;
+use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
@@ -544,6 +545,7 @@ fn group_inventory_binding() -> Option<group_inventory::Binding> {
 }
 fn store_group_inventory_binding(binding: group_inventory::Binding, expected_history_revision: u64) -> Outcome<()> {
     if removal_pending() { return Err("Removal barrier pending".into()); }
+    if DELETION_TICKETS.with(|m|m.borrow().len())>0 { return Err("Deletion reservation pending".into()); }
     group_inventory::validate_binding(&binding)?;
     if removal_history_revision() != expected_history_revision { return Err("History revision changed".into()); }
     if !link_lifecycle().pending.is_empty() { return Err("Unlink recovery pending".into()); }

@@ -27,6 +27,7 @@ export async function openAccountDeletionInventory(target: IcpTargetConfig, iden
       }));
     }
     return {
+      revision: session?.deletionRegistryRevision,
       targetsFor: (domain: DeletionDomain) => byDomain.get(domain) ?? [],
       // Point-in-time consensus check, NOT an atomic cross-canister erasure fence.
       validate: async () => { if (session) await session.assertRegistryUnchanged(); },

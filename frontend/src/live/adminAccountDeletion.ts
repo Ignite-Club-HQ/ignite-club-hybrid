@@ -10,6 +10,7 @@ export async function eraseIcpAccountAsAdmin(identity: Identity, target: IcpTarg
   let inventory: Awaited<ReturnType<typeof openAccountDeletionInventory>> | undefined;
   try {
     inventory = await openAccountDeletionInventory(target, identity, ['club_domain']);
+    if (inventory.revision !== undefined) await client.prepareAccountDeletion(accountId, inventory.revision);
     for (const authority of inventory.targetsFor('club_domain')) {
       await inventory.validate();
       const { actor } = await connectLiveClubDomain(authority, identity);
@@ -19,7 +20,10 @@ export async function eraseIcpAccountAsAdmin(identity: Identity, target: IcpTarg
       await inventory.validate();
     }
     await inventory.validate();
-    await client.eraseAccount(accountId);
+    if (inventory.revision !== undefined) {
+      await client.commitAccountDeletion(accountId);
+      await client.settleAccountDeletion(accountId);
+    } else await client.eraseAccount(accountId);
     return { success: true, immediate: true };
   } finally { inventory?.dispose(); client.dispose(); }
 }
