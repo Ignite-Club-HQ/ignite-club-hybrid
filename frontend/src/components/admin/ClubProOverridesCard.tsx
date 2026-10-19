@@ -21,7 +21,7 @@ async function loadClubs(): Promise<ClubRow[]> {
     supabase: async () => [],
     icp: async (ctx) => {
       const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-      const clubs = [] as Awaited<ReturnType<typeof actor.list_clubs>> extends { Ok: infer Rows } ? Rows : never;
+      const clubs: { id: string; name: string; deleted_at_ms: [] | [bigint] }[] = [];
       let cursor: [] | [string] = [];
       for (let page = 0; page < 40; page++) {
         const batch = await unwrapCandid(actor.list_clubs(cursor, 100), "List clubs");
