@@ -5546,6 +5546,10 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
     MediaRetainedQuota.deleted(mediaRetainedState.ledger, caller, token, entry)
   };
+  public shared ({ caller }) func prepare_deleted_retained_media(token : Text, entry : MediaRetainedQuota.Object) : async MediaRetainedQuota.Result {
+    if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    MediaRetainedQuota.prepareDeleted(mediaRetainedState.ledger, caller, token, entry)
+  };
 
   public shared ({ caller }) func register_media_quota_store(store : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");

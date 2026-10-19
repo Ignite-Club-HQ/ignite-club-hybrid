@@ -4,7 +4,7 @@ module {
   public type Cursor = { phase : { #legacy; #indexed; #done }; offset : Nat; after : Text };
   public type Row = { path : Text; club : ?Text; bytes : Nat; content_hash : Text; revision : Nat };
   public type Page = { frozen : Bool; pending : Nat; authority : ?Principal; revision : Nat; total : Nat; total_bytes : Nat; cursor : Cursor; next : Cursor; rows : [Row] };
-  public type Deletion = { token : Text; path : Text; club : Text; bytes : Nat; revision : Nat; owner : Principal };
+  public type Deletion = { token : Text; path : Text; club : Text; bytes : Nat; revision : Nat; owner : Principal; removed : Bool };
   public func club(path : Text) : ?Text {
     let ?rest = path.stripStart(#text "clubs/") else return null;
     let ?id = rest.split(#char '/').next() else return null;

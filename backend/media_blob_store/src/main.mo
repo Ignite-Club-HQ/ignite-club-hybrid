@@ -174,11 +174,12 @@ persistent actor MediaBlobStore {
     commit_retained_media : shared Text -> async RetainedQuota.Result;
     cancel_retained_media : shared (Text, Text, Text, Nat) -> async RetainedQuota.Result;
     credit_deleted_retained_media : shared (Text, RetainedQuota.Object) -> async RetainedQuota.Result;
+    prepare_deleted_retained_media : shared (Text, RetainedQuota.Object) -> async RetainedQuota.Result;
   };
   func retainedService() : ?RetainedService { switch (club_domain_canister) { case (?id) ?(actor(id.toText()) : RetainedService); case null null } };
 
 
-  func bumpInventory() { media_inventory_revision += 1 };
+  func bumpInventory() { if (retained_mode != #frozen) media_inventory_revision += 1 };
   func mediaFenced(path : Text) : Bool {
     switch (clubIdFromPath(path)) { case (?club) media_transfer_fences.get(club) != null; case null false }
   };
