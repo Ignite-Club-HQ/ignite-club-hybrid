@@ -66,7 +66,7 @@ export async function recordPointsHistory(params: RecordPointsHistoryParams): Pr
       // the same transaction. This is intentionally a no-op on the ICP
       // branch rather than a Supabase fallback write.
       icp: async () => true,
-    });
+    }, { shared: "person" });
   } catch (error) {
     console.error("Error recording points history:", error);
     return false;

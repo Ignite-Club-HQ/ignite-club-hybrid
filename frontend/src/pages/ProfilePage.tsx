@@ -356,7 +356,7 @@ export default function ProfilePage() {
           const { liveMyRedemptions } = await import("@/lib/icpRewardsReads");
           return liveMyRedemptions(ctx, user!.id, activeClubFilter);
         },
-      });
+      }, { shared: "person" });
     },
     enabled: !!user,
   });
@@ -466,7 +466,7 @@ export default function ProfilePage() {
           if (idx < 0) return null;
           return { rank: idx + 1, total: entries.length, points: entries[idx].points };
         },
-      });
+      }, { clubId: activeClubFilter });
     },
     enabled: !!user && hasProAccess === true && !!activeClubFilter,
   });
@@ -491,7 +491,7 @@ export default function ProfilePage() {
         // No canister-side season-scoped rank RPC — see rankData's ICP branch
         // comment above; gate to no-rank rather than approximating one.
         icp: async () => null,
-      });
+      }, { clubId: activeClubFilter });
     },
     enabled: !!user && hasProAccess === true && !!activeClubFilter && selectedSeasonId !== "all",
   });
