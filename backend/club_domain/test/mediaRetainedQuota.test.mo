@@ -48,3 +48,13 @@ ignore ok(Quota.reserve(aba, a, "recreate", "c", small.path, 7, true, 0));
 ignore ok(Quota.settle(aba, a, "recreate", true));
 denied(Quota.deleted(aba, a, "late", small));
 assert Quota.usage(aba, "c").finalized == 7;
+// Deletion preparation locks the exact object and reserves journal capacity
+// before the store physically removes ciphertext. Credit stays idempotent.
+let deletion = Quota.empty();
+assert Quota.register(deletion,a); assert Quota.baseline(deletion,small); assert Quota.seal(deletion,a);
+ignore ok(Quota.prepareDeleted(deletion,a,"prepared-delete",small));
+denied(Quota.reserve(deletion,a,"blocked-write","c",small.path,1,true,0));
+assert Quota.usage(deletion,"c").finalized == 7;
+ignore ok(Quota.deleted(deletion,a,"prepared-delete",small));
+ignore ok(Quota.deleted(deletion,a,"prepared-delete",small));
+assert Quota.usage(deletion,"c").finalized == 0;

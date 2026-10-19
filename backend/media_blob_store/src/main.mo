@@ -326,19 +326,40 @@ persistent actor MediaBlobStore {
     } catch (_) { #Err("Retained authority unavailable") }
   };
   func creditDeletion(path : Text) : async Result {
-    let ?receipt = retained_deletions.get(path) else return #Ok;
+    let ?original = retained_deletions.get(path) else return #Ok;
     if (not retainedRehearsal or retained_mode != #active) return #Err("Retained accounting unavailable");
     let ?service = retainedService() else return #Err("Retained authority unset");
     let authority = club_domain_canister;
+    let entry : RetainedQuota.Object = { store = Principal.fromActor(MediaBlobStore); path; club = original.club; bytes = original.bytes; revision = original.revision };
     try {
-      switch (await (with timeout = 10) service.credit_deleted_retained_media(receipt.token, { store = Principal.fromActor(MediaBlobStore); path; club = receipt.club; bytes = receipt.bytes; revision = receipt.revision })) {
+      if (not original.removed) {
+        switch (await (with timeout = 10) service.prepare_deleted_retained_media(original.token, entry)) {
+          case (#Err(message)) return #Err(message);
+          case (#Ok(op)) { if (op.state != #reserved) return #Err("Deletion preparation conflict") }
+        };
+        if (authority != club_domain_canister or retainedBlocked()) return #Err("Deletion authority changed");
+        let ?latest = retained_deletions.get(path) else return #Ok;
+        if (not latest.removed) {
+          if (latest.token != original.token or (retained_revisions.get(path) ?? 0) != original.revision) return #Err("Deletion revision changed");
+          let ?record = metadata(path) else return #Err("Deletion object unavailable");
+          if (record.length != original.bytes or record.owner != original.owner) return #Err("Deletion object changed");
+          retained_deletions.add(path, { latest with removed = true }); removeStored(path)
+        }
+      };
+      switch (await (with timeout = 10) service.credit_deleted_retained_media(original.token, entry)) {
         case (#Err(message)) #Err(message);
         case (#Ok(op)) {
-          if (op.state != #committed or authority != club_domain_canister or retained_deletions.get(path) != ?receipt) return #Err("Deletion receipt changed");
-          retained_deletions.remove(path); bumpInventory(); #Ok
+          if (op.state != #committed or authority != club_domain_canister) return #Err("Deletion receipt changed");
+          switch (retained_deletions.get(path)) {
+            case null #Ok;
+            case (?latest) {
+              if (latest.token != original.token or not latest.removed) return #Err("Deletion receipt changed");
+              retained_deletions.remove(path); bumpInventory(); #Ok
+            }
+          }
         }
       }
-    } catch (_) { #Err("Deletion credit outcome unknown; retry same path") }
+    } catch (_) { #Err("Deletion outcome unknown; retry same path") }
   };
   // Physical deletion + receipt are atomic. The path remains locked until
   // exact-revision credit is acknowledged, including after an upgrade.
@@ -351,8 +372,8 @@ persistent actor MediaBlobStore {
     let ?club = RetainedProtocol.club(path) else return #Err("Club path required");
     if (retained_deletions.size() >= 100_000) return #Err("Deletion ledger full");
     next_upload_seq += 1;
-    let receipt : RetainedProtocol.Deletion = { token = "delete-" # next_upload_seq.toText(); path; club; bytes = record.length; revision = retained_revisions.get(path) ?? 0; owner = record.owner };
-    retained_deletions.add(path, receipt); removeStored(path);
+    let receipt : RetainedProtocol.Deletion = { token = "delete-" # next_upload_seq.toText(); path; club; bytes = record.length; revision = retained_revisions.get(path) ?? 0; owner = record.owner; removed = false };
+    retained_deletions.add(path, receipt);
     await creditDeletion(path)
   };
   public shared ({ caller }) func reconcile_retained_deletions(cursor : Text) : async { #Ok : { cursor : Text; attempted : Nat }; #Err : Text } {
