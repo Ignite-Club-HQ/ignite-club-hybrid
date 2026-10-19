@@ -41,18 +41,18 @@ try {
   const canisterIdsA = {};
   const argFor = c => c === 'timer_jobs' ? IDL.encode([], []) : IDL.encode([IDL.Principal], [governor]);
   for (const c of Object.keys(idls)) {
-    const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], arg: argFor(c) });
+    const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: argFor(c) });
     f.actor.setPrincipal(governor); groups.a[c] = f.actor; canisterIdsA[c] = f.canisterId.toText();
     if (c === 'timer_jobs') ok(await f.actor.initialize());
   }
   // Group B is built by the production provisioner on real canisters, with a crash mid-build.
   const appSubnet = (await pic.getApplicationSubnets())[0].id.toText();
-  const routerF = await pic.setupCanister({ idlFactory: routerIdl, wasm: process.env.SHARD_ROUTER_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/shard_router.wasm'), sender: governor, controllers: [governor],
+  const routerF = await pic.setupCanister({ idlFactory: routerIdl, wasm: process.env.SHARD_ROUTER_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/shard_router.wasm'), sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }],
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   const router = routerF.actor; router.setPrincipal(governor);
   const globalWid = (await pic.createCanister({ sender: governor, controllers: [governor], targetSubnetId: Principal.fromText(appSubnet) })).toText();
   const identityFixture = await pic.setupCanister({ idlFactory: identityIdl,
-    wasm: process.env.IDENTITY_ACCESS_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/identity_access.wasm'), sender: governor, controllers: [governor],
+    wasm: process.env.IDENTITY_ACCESS_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/identity_access.wasm'), sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }],
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   identityFixture.actor.setPrincipal(governor);
   const authorityActors = {
@@ -62,12 +62,13 @@ try {
   const routerSteps = routerProvisionSteps(router, { secret_workload_identity: globalWid },
     { targetAlias: 'local', deploymentId: 'local', deploymentRevision: 1n, host: 'https://icp-api.io', networkKind: 'public_mainnet', primarySubnet: appSubnet, approvedSubnets: [appSubnet], additionalSubnetsEnabled: false },
     { maxClubs: 500, heapBudgetBytes: 3n * 1024n ** 3n, minCycles: 1_000_000_000n },
-    async p => wireAccountGroupAuthorities([{ groupId: 'a', clubDomain: canisterIdsA.club_domain }, { groupId: p.groupId, clubDomain: p.canisters.club_domain }], identityFixture.canisterId.toText(), authorityActors));
+    async p => wireAccountGroupAuthorities([{ groupId: 'a', clubDomain: canisterIdsA.club_domain }, { groupId: p.groupId, clubDomain: p.canisters.club_domain }], identityFixture.canisterId.toText(), authorityActors), true);
   let creates = 0; let provSaved = null;
   const provAdapter = {
     createCanister: async (_p, d) => {
       if (++creates === 3) throw new Error('Request timed out (injected)');
       const id = await pic.createCanister({ sender: governor, controllers: [governor], targetSubnetId: Principal.fromText(appSubnet) });
+      await pic.updateCanisterSettings({ canisterId: id, sender: governor, environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }] });
       return { canisterId: id.toText(), subnetId: (await pic.getCanisterSubnetId(id)).toText() };
     },
     install: async (_p, d, id) => { if (!idls[d]) return; await pic.installCode({ canisterId: Principal.fromText(id), wasm: wasm(d), arg: argFor(d), sender: governor }); },

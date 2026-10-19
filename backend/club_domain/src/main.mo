@@ -525,6 +525,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_identity_access_canister(id : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid identity authority required");
+    if (Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") != ?"1") return #Err("Cross-group account lifecycle not released");
     if (identityUnlinkReceipts.size() > 0 and identityAccessCanister != ?id) return #Err("Cannot replace identity authority after unlink");
     identityAccessCanister := ?id; membershipEpoch += 1; #Ok
   };

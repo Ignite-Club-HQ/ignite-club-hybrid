@@ -14,11 +14,11 @@ const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
   const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: process.env.IDENTITY_ACCESS_WASM,
-    sender: governor, controllers: [governor], arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
+    sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   const groups = [];
   for (const suffix of ['a', 'b']) {
     const group = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM,
-      sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
+      sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: IDL.encode([IDL.Principal], [governor]) });
     group.actor.setPrincipal(governor);
     ok(await group.actor.create_club(`club-${suffix}`, suffix, suffix, [], []));
     ok(await group.actor.add_role_grant(primary, `club-${suffix}`, 'player', []));

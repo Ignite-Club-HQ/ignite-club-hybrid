@@ -39,16 +39,12 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
     },
     async readMemberships(context, offset, limit) {
       const { actor } = await connectLiveClubDomain(context.target, context.identity);
-      const synced = await actor.sync_my_linked_account();
-      if ('Err' in synced) throw new Error(synced.Err);
       const reply = await actor.read_my_club_memberships(offset, limit);
       if ('Err' in reply) throw new Error(reply.Err);
       return { clubs: reply.Ok.clubs, next: reply.Ok.next[0] ?? null, aclRevision: reply.Ok.acl_revision };
     },
     async readMembershipsIndexed(context, after, limit) {
       const { actor } = await connectLiveClubDomain(context.target, context.identity);
-      const synced = await actor.sync_my_linked_account();
-      if ('Err' in synced) throw new Error(synced.Err);
       const reply = await actor.read_my_club_memberships_indexed(after === null ? [] : [after], limit);
       if ('Err' in reply) throw new Error(reply.Err);
       return { clubs: reply.Ok.clubs, next: reply.Ok.next[0] ?? null, aclRevision: reply.Ok.acl_revision };

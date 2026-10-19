@@ -273,8 +273,18 @@ fn effective_account(mut account: Account, lifecycle: &LinkLifecycle) -> Account
 
 /// Governor attests the complete same-deployment club authority inventory.
 /// Configuration is immutable while an unlink is incomplete.
+// Temporary local-only protocol gate. Production deployment never sets this
+// environment variable; remove only after authority-wide revocation attestation.
+fn account_group_rehearsal_enabled() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    { ic_cdk::api::env_var_name_exists("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") && ic_cdk::api::env_var_value("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == "1" }
+    #[cfg(not(target_arch = "wasm32"))]
+    { false }
+}
+
 #[ic_cdk::update]
 fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {
+    if !account_group_rehearsal_enabled() { return Err("Cross-group account lifecycle not released".into()); }
     require_governor(&state(), ic_cdk::api::msg_caller())?;
     if authorities.is_empty() || authorities.len() > 64 || authorities.iter().any(|p| *p == Principal::anonymous()) {
         return Err("Complete bounded club authority inventory required".into());
@@ -965,6 +975,7 @@ fn accept_link(id: u64) -> Outcome<Account> {
 }
 #[ic_cdk::update]
 async fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
+    if !account_group_rehearsal_enabled() { return Err("Cross-group identity revocation not released".into()); }
     let caller = ic_cdk::api::msg_caller();
     // A self-unlink may only be resumed by a surviving sign-in identity.
     let current = account_for_write(caller)?;
@@ -1769,6 +1780,11 @@ fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cross_group_account_lifecycle_is_off_outside_local_canisters() {
+        assert!(!account_group_rehearsal_enabled());
+        assert_eq!(set_club_authorities(vec![Principal::self_authenticating([125; 32])]), Err("Cross-group account lifecycle not released".into()));
+    }
     #[test]
     fn pending_unlink_does_not_expose_revoked_identity_to_group_sync() {
         let a = Principal::self_authenticating([120; 32]);
