@@ -524,6 +524,32 @@ persistent actor MediaBlobStore {
 
   // ==================== Helpers ====================
 
+  // Larger capacity is opt-in per store and only for stable-backed writes.
+  transient let largeCapacityFlag = Runtime.envVar<system>("IGNITE_MEDIA_LARGE_CAPACITY") == ?"1";
+  func largeMode() : Bool { largeCapacityFlag and stable_writes };
+
+  /// Finalized + in-flight bytes under clubs/<club>/vault/ (Pro allowance).
+  func clubVaultBytes(clubId : Text) : (Nat, Nat) {
+    let prefix = "clubs/" # clubId # "/vault/";
+    var used = 0;
+    label scan for ((path, r) in stable_blobs.entriesFrom(prefix)) {
+      if (not path.startsWith(#text prefix)) break scan;
+      used += r.slice.length
+    };
+    for (r in blobs.values()) { if (r.path.startsWith(#text prefix) and stable_blobs.get(r.path) == null) used += r.bytes.size() };
+    var pending = 0;
+    for (u in pending_uploads.values()) { if (u.path.startsWith(#text prefix)) pending += u.total_size.toNat() };
+    (used, pending)
+  };
+
+  func clubVaultPurchasedGb(clubId : Text) : async ?Nat {
+    let ?cid = club_domain_canister else return null;
+    let clubDomain : actor { get_club_storage_purchased : shared query Text -> async { #Ok : Nat32; #Err : Text } } = actor (Principal.toText(cid));
+    try {
+      switch (await clubDomain.get_club_storage_purchased(clubId)) { case (#Ok(gb)) ?gb.toNat(); case (#Err(_)) null }
+    } catch (_) { null }
+  };
+
   func reservedBytes() : Nat {
     var total = 0;
     for (upload in pending_uploads.values()) { total += upload.total_size.toNat() };
@@ -531,8 +557,8 @@ persistent actor MediaBlobStore {
   };
 
   func canReserve(size : Nat64) : Bool {
-    UploadPolicy.canAdmit(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size()) and
-    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocate(stable_bytes, size.toNat())))
+    UploadPolicy.canAdmitFor(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
+    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), StableBytes.limitFor(largeMode()))))
   };
 
   func storedChunkBytes(upload : PendingUpload) : Nat {
@@ -677,6 +703,10 @@ persistent actor MediaBlobStore {
         case (?clubId, ?_) { await clubIsPro(clubId) };
         case _ { false };
       };
+      // Pro vault allowance (5 GiB + purchased). Fail closed when unreadable.
+      let vaultClub : ?Text = if (isPro and categoryForPath(path) == ?"vault") clubIdFromPath(path) else null;
+      let purchasedGb : ?Nat = switch (vaultClub) { case (?c) await clubVaultPurchasedGb(c); case null null };
+      if (vaultClub != null and purchasedGb == null) return #Err("VaultAllowanceUnavailable");
       if (accountAdmissionEnabled) await admitAccount(caller);
       await requireUploadMembership(caller, path);
       // Check committed usage and outstanding reservations AFTER the await,
@@ -684,6 +714,14 @@ persistent actor MediaBlobStore {
       switch (checkFreeCap(path, total_size, isPro)) {
         case (?msg) { return #Err(msg) };
         case null {};
+      };
+      // No await between this check and the reservation below.
+      switch (vaultClub, purchasedGb) {
+        case (?c, ?gb) {
+          let (used, pending) = clubVaultBytes(c);
+          if (not UploadPolicy.withinProVault(used, pending, total_size.toNat(), gb)) return #Err("VaultStorageFull");
+        };
+        case _ {};
       };
     };
     if (quota_mode == #frozen) return #Err("Uploads temporarily frozen for quota cutover");
@@ -805,7 +843,7 @@ persistent actor MediaBlobStore {
         // Replace any prior blob at this path (re-upload by owner/governor).
         if (stable_writes) {
           if (stable_blobs.size() >= 100_000 and stable_blobs.get(upload.path) == null) return #Err("Stable metadata capacity reached");
-          let ?slice = StableBytes.write(stable_bytes, assembled) else return #Err("StoreFull");
+          let ?slice = StableBytes.writeWithin(stable_bytes, assembled, StableBytes.limitFor(largeMode())) else return #Err("StoreFull");
           removeStored(upload.path);
           stable_blobs.add(upload.path, { path = upload.path; mime = upload.mime; owner = upload.owner; content_hash; slice; uploaded_at = Time.now() });
         } else {
@@ -992,7 +1030,7 @@ persistent actor MediaBlobStore {
   // Sharding: the app reads this to skip full stores and to show fullness in
   // Placement Settings. Public query — reveals only byte totals.
   public query func get_usage() : async Usage {
-    { total_bytes; capacity_limit_bytes = UploadPolicy.effectiveCapacity(capacity_limit_bytes); accepting_uploads = quota_mode != #frozen and canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
+    { total_bytes; capacity_limit_bytes = UploadPolicy.effectiveCapacityFor(capacity_limit_bytes, largeMode()); accepting_uploads = quota_mode != #frozen and canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
   };
 
   // Governor-only. Setting a limit at or below the current total closes the
@@ -1000,7 +1038,7 @@ persistent actor MediaBlobStore {
   public shared ({ caller }) func set_capacity_limit(limit_bytes : Nat64) : async Result {
     auth(caller);
     if (not isGovernor<system>(caller)) return #Err("Governor required");
-    if (limit_bytes > UploadPolicy.capacityCeiling) return #Err("Heap-backed store capacity cannot exceed 2 GiB");
+    if (limit_bytes > UploadPolicy.ceilingFor(largeMode())) return #Err(if (largeMode()) "Store capacity cannot exceed 32 GiB" else "Heap-backed store capacity cannot exceed 2 GiB");
     capacity_limit_bytes := limit_bytes;
     #Ok
   };
