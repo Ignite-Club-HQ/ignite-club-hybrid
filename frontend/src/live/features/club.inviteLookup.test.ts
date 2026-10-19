@@ -4,7 +4,7 @@ const state = vi.hoisted(() => ({ preview: vi.fn() }));
 vi.mock('../domains', () => ({ connectLiveClubDomain: async () => ({ actor: { get_pending_invite: state.preview } }) }));
 import { getLivePendingInvite } from './club';
 const ctx = {} as FeatureBackendContext;
-beforeEach(() => state.preview.mockReset());
+beforeEach(() => { state.preview.mockReset(); });
 describe('pending email invitation discovery', () => {
   it('returns the actual pending invitation', async () => {
     const invite = { id: 'pinv-a', club_id: 'club-b' };
