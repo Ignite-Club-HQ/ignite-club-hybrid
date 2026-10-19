@@ -66,7 +66,7 @@ try {
   assert.ok('Ok' in await a.get_club_media_vetkey('bystander', TransportSecretKey.random().publicKeyBytes()), 'other club keeps original authority');
   await pic.upgradeCanister({ canisterId: original.canisterId,
     wasm: resolve(root, 'backend/pii_access_control/.mops/.build/pii_access_control.wasm'), sender: governor,
-    upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+    arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   a.setPrincipal(governor); assert.deepEqual(ok(await a.read_club_media_authority('moving')), receipt);
   assert.deepEqual(Uint8Array.from(await a.pii_vetkey_verification_key()), verification.serialize());
   await decrypt(member); await denied(stale);
