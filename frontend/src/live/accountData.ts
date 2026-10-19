@@ -88,35 +88,65 @@ export async function eraseMyIcpAccount(
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
   try {
     const account = await client.whoami();
+    const [{ activationStatus, SHIPPED_GATES }, domains] = await Promise.all([
+      import('./groupActivation'), import('./domains'),
+    ]);
+    // Capture the complete authoritative registry BEFORE removing membership.
+    // Registry failure prevents any erasure; browser-supplied group IDs and
+    // linked-principal lists are never accepted here.
+    let targets: IcpTargetConfig[] = [target];
+    if (activationStatus(SHIPPED_GATES).active) {
+      const { openLiveGroupReadSession } = await import('./groupSessionLive');
+      const session = await openLiveGroupReadSession({ target, identity });
+      try {
+        targets = [target, ...await session.readEveryGroup('club_domain', async ctx => [ctx.target], 64)];
+      } finally { session.dispose(); }
+    }
+    const uniqueTargets = (domain: 'club_domain' | 'vault_domain' | 'events_domain' | 'messaging_domain') => {
+      const seen = new Set<string>();
+      return targets.filter(t => {
+        const id = t.canisterIds?.[domain];
+        if (!id) throw new Error(`Account erasure requires ${domain} for every registered group`);
+        const key = JSON.stringify([t.host, t.networkKind, id]);
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      });
+    };
+    // Validate every required participant before the first destructive call.
+    const revokeTargets = activationStatus(SHIPPED_GATES).active ? uniqueTargets('club_domain') : targets;
+    const purgeTargets = new Map((['vault_domain', 'events_domain', 'messaging_domain'] as const).map(domain =>
+      [domain, activationStatus(SHIPPED_GATES).active ? uniqueTargets(domain) : targets]));
     // Revoke the independent club authorization source before erasing the
     // identity profile. Partial failure is surfaced and safe to retry.
-    const { connectLiveClubDomain } = await import("./domains");
-    const { actor } = await connectLiveClubDomain(target, identity);
-    const revoked = await actor.erase_my_membership();
-    if ("Err" in revoked) throw new Error(revoked.Err);
+    for (const t of revokeTargets) {
+      const { actor } = await domains.connectLiveClubDomain(t, identity);
+      const revoked = await actor.erase_my_membership();
+      if ("Err" in revoked) throw new Error(revoked.Err);
+    }
     // Purge the caller's own content on each domain before erasing the
     // identity. Failures are collected and disclosed, never silently dropped.
     const purgeFailures: string[] = [];
-    for (const [label, connect] of [
-      ["vault", "connectLiveVaultDomain"],
-      ["events", "connectLiveEventsDomain"],
-      ["messaging", "connectLiveMessagingDomain"],
+    for (const [label, connect, domain] of [
+      ["vault", "connectLiveVaultDomain", "vault_domain"],
+      ["events", "connectLiveEventsDomain", "events_domain"],
+      ["messaging", "connectLiveMessagingDomain", "messaging_domain"],
     ] as const) {
+      for (const t of purgeTargets.get(domain) ?? []) {
       try {
-        const domains = await import("./domains");
-        const domainActor = (await domains[connect](target, identity)).actor as { purge_my_data: () => Promise<{ Ok?: unknown; Err?: string }> };
+        const domainActor = (await domains[connect](t, identity)).actor as { purge_my_data: () => Promise<{ Ok?: unknown; Err?: string }> };
         const purged = await domainActor.purge_my_data();
         if ("Err" in purged) throw new Error(purged.Err);
       } catch (error) {
         console.error(`[account-erase] ${label} purge failed`, error);
-        purgeFailures.push(label);
+        if (!purgeFailures.includes(label)) purgeFailures.push(label);
+      }
       }
     }
     await client.eraseAccount(account.id);
     return {
       note:
         "Your identity_access account has been erased and club/team role access revoked. " +
-        "Your vault files, chat messages and event records have been permanently removed. " +
+        (purgeFailures.length === 0 ? "Your vault files, chat messages and event records have been permanently removed. " : "Some personal content could not be removed. ") +
         "Shared club records and parent-owned children are retained." +
         (purgeFailures.length > 0
           ? ` The ${purgeFailures.join(", ")} purge could not be completed — please contact support to finish removing that content.`

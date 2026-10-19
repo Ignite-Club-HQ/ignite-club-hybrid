@@ -127,12 +127,19 @@ export async function groupHoldsInvite(ctx: FeatureBackendContext, token: string
   const c = await import('./features/club');
   const probes: Array<() => Promise<unknown>> = [
     () => c.getLivePendingInvite(ctx, token),
+    () => c.getLiveParentInvite(ctx, token),
     () => c.getLiveTeamInviteLinkByToken(ctx, token),
     () => c.getLiveShellTeamByToken(ctx, token),
     () => c.resolveLiveInviteShortCode(ctx, token),
   ];
   for (const p of probes) {
-    try { const r = await p(); if (r && !(Array.isArray(r) && r.length === 0)) return true; } catch { /* not this kind */ }
+    try { const r = await p(); if (r && !(Array.isArray(r) && r.length === 0)) return true; }
+    catch (error) {
+      // Only explicit domain absence is negative evidence. A timeout or
+      // denied/expired token must never redirect acceptance to shared state.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/failed: (Invite not found|Invite link not found|Shell invite not found|Short code not found)$/.test(message)) throw error;
+    }
   }
   const { connectLiveMiniLeagueDomain } = await import('./domains');
   if (!ctx.target.canisterIds.mini_league_domain) return false;
