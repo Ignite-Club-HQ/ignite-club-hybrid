@@ -12,7 +12,10 @@
 - [x] Live capacity collector: scheduled workflow reads real per-service memory/fuel, builds evidence against owner `deploy/groups/tested-limits.json`, queues CLOSED requests at 70%; 4 collector tests pass.
 - [ ] Owner: commit `deploy/groups/tested-limits.json` (tested storage limits; processing limits after load test).
 - [x] Closed-group installer: `install-new-group.yml` + `install-group-closed.ts` create (cycles-ledger dedup), install (module-hash idempotent, never overwrite), configure and health-check 12 services, stop before registration. Not yet run on mainnet.
-- [ ] Release-path safety review, live mainnet acceptance, owner-approved opening/rollover (plan batches 2–4).
+- [x] Release-path review: new groups get their own photo store (configuring against the live shared store would repoint its single club authority and break group-1 uploads/quotas/staff deletes).
+- [ ] Before opening: app must route a group's club uploads/photos to that group's own store (today it sends them to the shared store, which would refuse them).
+- [ ] Before opening: opening must prove each group's removal/admission wiring server-side (router registration and frontend approvals don't check it; admission is off unless enabled).
+- [ ] Live mainnet acceptance, owner-approved opening/rollover (plan batches 3–4).
 
 Owner request: revisit the plan and simplify overengineered scope. Ordinary club removal revokes that club only; preserve other-club access and existing protections. Pause expanded whole-account erasure/global-drain development. The current simplified plan is `.lovable/plan.md` (archived after approval); it supersedes the older A–F execution order, not historical evidence or existing fail-closed gates.
 
