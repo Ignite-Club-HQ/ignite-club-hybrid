@@ -1,0 +1,10 @@
+import Migration "../src/backend/migrations/20261030_000000";
+let legacy = { var eventGroups = [{ id = "g"; event_id = "e"; name = "Pitch"; created_at_ms = (1 : Nat64); team_letter = null; colour = null; team_b_colour = null; display_order = (0 : Nat16); ability_band = null; pitch_name = null }]; var eventGroupDuties = [{ group_id = "g"; duty = "Referee"; account_id = ?"parent-a" }, { group_id = "g"; duty = "Referee"; account_id = ?"parent-b" }] };
+let upgraded = Migration.migration(legacy);
+assert upgraded.eventGroups[0].id == "g";
+assert upgraded.eventGroups[0].state_revision == 0;
+assert upgraded.eventGroups[0].timer_state_json == null;
+assert upgraded.eventGroupDuties.size() == 2;
+assert upgraded.eventGroupDuties[0].id != upgraded.eventGroupDuties[1].id;
+assert upgraded.eventGroupDuties[0].account_id == ?"parent-a";
+assert upgraded.eventGroupDuties[1].account_id == ?"parent-b";

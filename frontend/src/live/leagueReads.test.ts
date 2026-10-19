@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureBackendContext } from './featureRouter';
-const state = vi.hoisted(() => ({ access: vi.fn(), members: vi.fn(), profiles: vi.fn(), leagues: vi.fn(), events: vi.fn(), groups: vi.fn(), players: vi.fn() }));
+const state = vi.hoisted(() => ({ access: vi.fn(), members: vi.fn(), profiles: vi.fn(), leagues: vi.fn(), events: vi.fn(), groups: vi.fn(), players: vi.fn(), league: vi.fn(), roster: vi.fn(), duties: vi.fn(), edit: vi.fn() }));
 vi.mock('./domains', () => ({ connectLiveMiniLeagueDomain: async () => ({ actor: { get_my_league_access: state.access, get_league_members: state.members } }) }));
-vi.mock('./featureRouter', () => ({ withFeatureBackend: async (_f: unknown, p: { icp: (ctx: unknown) => unknown }, scope: { clubId?: string; eventId?: string }) => p.icp({ target: { alias: scope.clubId ?? scope.eventId ?? 'shared' } }) }));
+vi.mock('./featureRouter', () => ({ withFeatureBackend: async (_f: unknown, p: { icp: (ctx: unknown) => unknown }, scope: { clubId?: string; eventId?: string }) => p.icp({ identity: { getPrincipal: () => ({ toText: () => 'parent' }) }, target: { alias: scope.clubId ?? scope.eventId ?? 'shared' } }) }));
 vi.mock('./miniLeagueRouting', () => ({ readMiniLeagueInScope: async (ctx: unknown, _s: unknown, fn: (c: unknown) => unknown) => fn(ctx) }));
 vi.mock('./membershipRouting', () => ({ readMembershipInScope: async (ctx: unknown, _s: unknown, fn: (c: unknown) => unknown) => fn(ctx) }));
 vi.mock('./features/identityAccessClient', () => ({ listLiveProfilesByIds: state.profiles }));
-vi.mock('./features/miniLeagues', () => ({ listMyLiveMiniLeagues: state.leagues }));
-vi.mock('./features/events', () => ({ listLiveEvents: state.events, listLiveEventGroups: state.groups, listLiveGroupPlayers: state.players }));
-import { readLeagueAccess, readLeagueMembers, readManageableLeagues, readLeagueEvents } from './leagueReads';
-const ctx = { target: { alias: 'league-group' } } as FeatureBackendContext;
+vi.mock('./features/miniLeagues', () => ({ listMyLiveMiniLeagues: state.leagues, getLiveMiniLeague: state.league, listLivePlayers: state.roster }));
+vi.mock('./features/events', () => ({ listLiveEvents: state.events, listLiveEventGroups: state.groups, listLiveGroupPlayers: state.players, listLiveGroupDuties: state.duties, getLiveGroupEditAccess: state.edit }));
+import { readLeagueAccess, readLeagueMembers, readManageableLeagues, readLeagueEvents, readLiveLeagueMatches } from './leagueReads';
+const ctx = { identity: { getPrincipal: () => ({ toText: () => 'parent' }) }, target: { alias: 'league-group' } } as FeatureBackendContext;
 beforeEach(() => { vi.resetAllMocks(); });
 describe('league canister reads', () => {
   it('returns authoritative management permissions, not viewer roles inferred in the browser', async () => {
@@ -52,4 +52,17 @@ describe('league canister reads', () => {
     expect(state.events.mock.calls[0]?.[0].target.alias).toBe('club-a');
     expect(state.groups.mock.calls[0]?.[0].target.alias).toBe('event-a');
   });
+  it('keeps same-parent siblings distinct by league-player ids in live matches', async () => {
+    state.league.mockResolvedValue({ id: 'league-a', club_id: 'club-a', name: 'A', minutes_per_half: 10 });
+    state.access.mockResolvedValue({ Ok: [{ id: 'league-a', can_manage: false }] });
+    state.roster.mockResolvedValue([{ id: 'sibling-a', name: 'A', parent_user_id: ['parent'], claimed_by: [] }, { id: 'sibling-b', name: 'B', parent_user_id: ['parent'], claimed_by: [] }]);
+    state.events.mockResolvedValue([{ id: 'e', mini_league_id: ['league-a'], title: 'Round', deleted: false, cancelled: false }]);
+    state.groups.mockResolvedValue([{ id: 'g', name: 'Pitch', timer_state_json: ['{"elapsedSeconds":30}'], pitch_state_json: [], colour: [], team_b_colour: [] }]);
+    state.players.mockResolvedValue([{ account_id: 'sibling-a', team_letter: ['a'] }, { account_id: 'sibling-b', team_letter: ['b'] }]);
+    state.duties.mockResolvedValue([]); state.edit.mockResolvedValue(false);
+    const matches = await readLiveLeagueMatches(ctx, ['league-a']);
+    expect(matches[0].players.map(p => [p.id, p.team])).toEqual([['sibling-a', 'a'], ['sibling-b', 'b']]);
+    expect(matches[0].isAdmin).toBe(false);
+  });
+
 });
