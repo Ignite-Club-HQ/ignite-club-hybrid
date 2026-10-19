@@ -44,6 +44,7 @@ persistent actor class Main(governorInit : Principal) {
   var children : [Types.MiniLeagueChild];
   var guardians : [Types.MiniLeagueGuardian];
   var clubDomainCanister : ?Principal;
+  var eventsDomainCanister : ?Principal;
   var transferFences : [Text];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
@@ -255,6 +256,22 @@ persistent actor class Main(governorInit : Principal) {
     if (id.equal(Principal.anonymous())) return #Err("Invalid club_domain canister id");
     clubDomainCanister := ?id;
     #Ok
+  };
+
+  public shared ({ caller }) func set_events_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (Principal.isAnonymous(id)) return #Err("Invalid canister id");
+    eventsDomainCanister := ?id;
+    #Ok
+  };
+  // Trusted events authority supplies the original signed caller. No user may impersonate a parent.
+  public query ({ caller }) func can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
+    if (eventsDomainCanister != ?caller or Principal.isAnonymous(viewer)) return false;
+    switch (findLeague(league_id)) {
+      case null false;
+      case (?league) league.club_id == club_id and league.status == "active" and canViewLeague(viewer, league);
+    }
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
