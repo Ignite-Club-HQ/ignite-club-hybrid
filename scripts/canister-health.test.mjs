@@ -1,40 +1,49 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseBytes, parseCyclesT } from "./canister-health.mjs";
+import { cyclesT, memoryMB, rowNote } from "./canister-health.mjs";
 
-// ICP CLI emits settings before the actual usage fields.
-const status = `Canister Status Report:
-  Memory allocation: 0
-  Reserved cycles limit: 5000000000000
-  Wasm memory limit: 0
-  Memory size: 201_326_592
-  Cycles: 14321000000000
-  Reserved cycles: 900000000000
-  Idle cycles burned per day: 5000000`;
+// Each service replies with a raw Nat of individual cycles.
+test("raw cycle balances become trillions", () => {
+  assert.equal(cyclesT(14_321_000_000_000n), 14.321);
+  assert.equal(cyclesT(410_000_000_000n), 0.41);
+  assert.equal(cyclesT(0n), 0);
+});
 
-test("actual balance is not the 5T reserved-cycles limit", () => {
-  assert.equal(parseCyclesT(status), 14.321);
+test("a missing or non-Nat balance is never a healthy zero", () => {
+  assert.equal(cyclesT(undefined), null);
+  assert.equal(cyclesT(null), null);
+  assert.equal(cyclesT("5000000000000"), null);
 });
-test("actual memory is not zero memory allocation", () => {
-  assert.equal(parseBytes(status), 201326592);
+
+test("memory_bytes becomes megabytes and a missing reading stays null", () => {
+  assert.equal(memoryMB({ heap_bytes: 1n, memory_bytes: 201_326_592n, stable_bytes: 1n }), 201.326592);
+  assert.equal(memoryMB(null), null);
+  assert.equal(memoryMB({ memory_bytes: undefined }), null);
 });
-test("settings alone cannot establish health", () => {
-  assert.equal(parseCyclesT("Reserved cycles limit: 5000000000000"), null);
-  assert.equal(parseBytes("Memory allocation: 0\nWasm memory limit: 0"), null);
+
+test("fuel under 1T is flagged for a top-up", () => {
+  const r = rowNote({ cyclesT: 0.41, memoryMB: 6.7, requireMemory: true });
+  assert.match(r.note, /LOW FUEL/);
+  assert.equal(r.problems, 1);
 });
-test("supports decimal cycles units", () => {
-  assert.equal(parseCyclesT("Balance: 3.21 TCycles"), 3.21);
-  assert.equal(parseCyclesT("Cycles: 400,000,000,000"), 0.4);
+
+test("1T is the boundary: exactly 1T is not low", () => {
+  assert.equal(rowNote({ cyclesT: 1, memoryMB: 100, requireMemory: true }).problems, 0);
+  assert.equal(rowNote({ cyclesT: 0.99, memoryMB: 100, requireMemory: true }).problems, 1);
 });
-test("binary memory units retain their actual byte size", () => {
-  assert.equal(parseBytes("Memory size: 12.5 MiB"), 13107200);
-  assert.equal(parseBytes("Memory size: 12.5 MB"), 12500000);
+
+test("3 GB memory is the advisory boundary", () => {
+  assert.equal(rowNote({ cyclesT: 5, memoryMB: 3000, requireMemory: true }).problems, 0);
+  assert.match(rowNote({ cyclesT: 5, memoryMB: 3001, requireMemory: true }).note, /HIGH MEMORY/);
 });
-test("zero actual values remain valid and ambiguous or malformed values fail closed", () => {
-  assert.equal(parseCyclesT("Cycles: 0"), 0);
-  assert.equal(parseBytes("Memory size: 0"), 0);
-  assert.equal(parseCyclesT("Cycles: unknown"), null);
-  assert.equal(parseBytes("Memory size: unknown"), null);
-  assert.equal(parseCyclesT("Cycles: 1\nCycles: 2"), null);
-  assert.equal(parseBytes("Memory size: 1\nMemory size: 2"), null);
+
+test("unreadable fuel or memory fails the run", () => {
+  const noFuel = rowNote({ cyclesT: null, memoryMB: 10, requireMemory: true });
+  assert.match(noFuel.note, /could not read fuel/);
+  assert.equal(noFuel.problems, 1);
+  const noMemory = rowNote({ cyclesT: 5, memoryMB: null, requireMemory: true });
+  assert.match(noMemory.note, /could not read memory/);
+  assert.equal(noMemory.problems, 1);
+  // The web-app canister has no memory_stats query of its own.
+  assert.equal(rowNote({ cyclesT: 5, memoryMB: null, requireMemory: false }).problems, 0);
 });
