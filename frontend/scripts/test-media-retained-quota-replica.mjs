@@ -38,7 +38,7 @@ try {
  await upload(stores[1].actor,'users/u/orphan',[8]);
  if(oldClub && oldStore) {
    for(const store of stores) await pic.upgradeCanister({canisterId:store.canisterId,wasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
-   await pic.upgradeCanister({canisterId:club.canisterId,wasm:clubWasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+   await pic.upgradeCanister({canisterId:club.canisterId,wasm:clubWasm,sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
    assert.equal((await stores[0].actor.health()).total_bytes,3n);
    assert.equal((await stores[1].actor.health()).total_bytes,3n);
    assert.equal((await stores[1].actor.stable_storage_status()).indexed_count,2n);
