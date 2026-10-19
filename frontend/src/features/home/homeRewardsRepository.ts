@@ -97,7 +97,7 @@ export async function fetchHomeUserChildren(
 // ---------------------------------------------------------------------------
 
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
-import { listLiveClubRewards } from "@/live/features/points";
+import { readPointsInClub } from "@/live/pointsRouting";
 
 export type HomeRewardRow = {
   id: string;
@@ -128,6 +128,7 @@ export async function fetchAvailableHomeRewardsForBackend(
   return withFeatureBackend("points", {
     supabase: async () => fetchAvailableHomeRewards(client, clubId),
     icp: async (icpCtx) => {
+      const { listLiveClubRewards } = await import("@/live/features/points");
       const rewards = await listLiveClubRewards(icpCtx, clubId, null, true);
       return rewards
         .filter((r) => r.reward_type !== "player_of_match")
@@ -147,7 +148,7 @@ export async function fetchAvailableHomeRewardsForBackend(
           sponsors: null,
         }));
     },
-  });
+  }, { clubId });
 }
 
 /**
@@ -170,8 +171,10 @@ export async function fetchNextHomeRewardInfoForBackend(
         true,
       ),
     icp: async (icpCtx) => {
+      const { listLiveClubRewards } = await import("@/live/features/points");
       const perClub = await Promise.all(
-        eligibleClubIds.map((clubId) => listLiveClubRewards(icpCtx, clubId, null, true)),
+        [...new Set(eligibleClubIds)].map((clubId) =>
+          readPointsInClub(icpCtx, clubId, scoped => listLiveClubRewards(scoped, clubId, null, true))),
       );
       const candidates = perClub
         .flat()
@@ -179,18 +182,15 @@ export async function fetchNextHomeRewardInfoForBackend(
         .sort((a, b) => a.points_required - b.points_required);
       return candidates[0] ? { points_required: candidates[0].points_required, name: candidates[0].name } : null;
     },
-  });
+  }, { shared: "person" });
 }
 
 /**
  * Most recent pending redemption for the signed-in user, used to drive the
  * "ready to claim" Home banner.
  *
- * PROVISIONAL: `list_redemptions` requires an explicit club_id — there is no
- * canister equivalent of "this user's latest pending redemption across every
- * club". Per the documented bulk-lookup limitation, the ICP branch returns
- * no pending redemption rather than guessing a club or falling back to
- * Supabase while the feature is routed to ICP.
+ * Each club read is dispatched independently; denied or failed reads reject
+ * rather than showing an empty ready-to-claim banner.
  */
 export async function fetchPendingHomeRedemptionsForBackend(
   client: any,
@@ -199,6 +199,12 @@ export async function fetchPendingHomeRedemptionsForBackend(
 ): Promise<ReturnType<typeof fetchPendingHomeRedemptions> extends Promise<infer T> ? T : never> {
   return withFeatureBackend("points", {
     supabase: async () => fetchPendingHomeRedemptions(client, userId),
-    icp: async () => [],
-  });
+    icp: async (icpCtx) => {
+      const { liveMyRedemptions } = await import("@/lib/icpRewardsReads");
+      const rows = await liveMyRedemptions(icpCtx, userId, null);
+      return rows.filter(row => row.status === "pending")
+        .sort((a, b) => Date.parse(b.redeemed_at) - Date.parse(a.redeemed_at))
+        .slice(0, 1);
+    },
+  }, { shared: "person" });
 }

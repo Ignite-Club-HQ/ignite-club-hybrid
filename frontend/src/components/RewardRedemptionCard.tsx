@@ -141,7 +141,7 @@ export default function RewardRedemptionCard() {
         return withFeatureBackend("points", {
           supabase: async () => [],
           icp: async (ctx) => liveRewardClubs(ctx, activeClubFilter ? [activeClubFilter] : await liveMyRewardClubIds(ctx)),
-        }) as any;
+        }, { shared: "person" }) as any;
       }
       // If active club filter, only return that club
       if (activeClubFilter) {
@@ -213,8 +213,11 @@ export default function RewardRedemptionCard() {
       if (isFeatureRoutedToIcp("points")) {
         return withFeatureBackend("points", {
           supabase: async () => [],
-          icp: async (ctx) => liveRedeemableRewards(ctx, [selectedClubId!]),
-        }) as any;
+          icp: async (ctx) => {
+            if (!selectedClubId) return [];
+            return liveRedeemableRewards(ctx, [selectedClubId]);
+          },
+        }, { clubId: selectedClubId ?? "" }) as any;
       }
       const { data } = await supabase
         .from("club_rewards")
@@ -238,7 +241,7 @@ export default function RewardRedemptionCard() {
           icp: async (ctx) => (await fetchLiveHomeChildren(ctx))
             .map((c) => ({ id: c.id, name: c.name ?? "Child", ignite_points: 0 }))
             .sort((a, b) => a.name.localeCompare(b.name)),
-        }) as any;
+        }, { shared: "person" }) as any;
       }
       // Children where this user is the primary parent
       const ownedPromise = supabase
@@ -277,7 +280,7 @@ export default function RewardRedemptionCard() {
         return withFeatureBackend("points", {
           supabase: async () => [],
           icp: async (ctx) => (await liveMyRedemptions(ctx, user!.id, activeClubFilter, new Map(children.map((c) => [c.id, c.name])))).slice(0, 10),
-        }) as any;
+        }, { shared: "person" }) as any;
       }
       let query = supabase
         .from("reward_redemptions")
@@ -323,7 +326,7 @@ export default function RewardRedemptionCard() {
               .filter((r) => r.amount > 0 && new Date(r.created_at).getTime() >= since)
               .reduce((sum, r) => sum + r.amount, 0);
           },
-        });
+        }, { shared: "person" });
       }
       const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       let q = supabase
@@ -349,7 +352,7 @@ export default function RewardRedemptionCard() {
           supabase: async () => [],
           icp: async (ctx) => (await liveRedeemableRewards(ctx, activeClubFilter ? [activeClubFilter] : await liveMyRewardClubIds(ctx)))
             .map((r) => ({ id: r.id, name: r.name, points_required: r.points_required })),
-        }) as any;
+        }, { shared: "person" }) as any;
       }
       let clubIds: string[] = [];
       if (activeClubFilter) {
@@ -899,6 +902,7 @@ export default function RewardRedemptionCard() {
             rewardName={selectedRedemption.club_rewards?.name || "Reward"}
             clubName={selectedRedemption.clubs?.name || "Club"}
             redemptionId={selectedRedemption.id}
+            clubId={selectedRedemption.club_id}
             qrCodeUrl={selectedRedemption.club_rewards?.qr_code_url || null}
             userName={profile?.display_name || undefined}
             userId={user?.id || ""}
