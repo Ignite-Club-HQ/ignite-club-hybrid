@@ -71,6 +71,8 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
       environmentVariables: [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }] });
     club.actor.setPrincipal(governor);
     ok(await club.actor.set_identity_access_canister(identity.canisterId));
+    identity.actor.setPrincipal(governor);
+    ok(await identity.actor.set_club_authorities([club.canisterId]));
     club.actor.setPrincipal(member); ok(await club.actor.sync_my_linked_account());
     await pic.updateCanisterSettings({ canisterId: club.canisterId, sender: governor, environmentVariables: [] });
 
