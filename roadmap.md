@@ -2,6 +2,8 @@
 
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 
+- [ ] Correct the owner's misleading health report: exact actual usage parsing, regression tests and rerun on GitHub; current 5T/zero figures are settings, not verified balances. Owner reports mainnet upgrade succeeded; signed-in acceptance and scaling activation remain separate.
+
 - [x] Resolve reported mainnet deploy preflight IC0406: replaced forbidden ingress vetkd_public_key with canonical SDK offline mainnet public derivation; sole-controller, durable receipt and before/after key-preservation checks retained. Nine key checks and six deploy safeguards pass; live public PII key matches independently derived mainnet key_1. Preview build OK. Mainnet upgrade rerun remains owner action; full signed pre/post-upgrade flow is not yet verified and scaling stays off.
 
 - [x] Capacity policy foundation (owner approved 20 October Adelaide): 70% closed preparation request queue and 80% fill-first placement; fresh complete tested-resource evidence, approved-ready/fuel/subnet checks, immutable assignments and activation guards retained. 43 focused frontend + 22 router tests pass; real CLI rerun/read-back produces one closed request. Preview build OK. Evidence and limitations: `docs/scaling-capacity-policy.md`. No live changes.
