@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { mergeMiniLeagueRows } from "@/live/miniLeagueRouting";
 import { writeOnce } from "@/live/clubScope";
 import { mergeLists } from "@/live/featureRouter";
@@ -74,7 +75,7 @@ export default function MiniLeaguesPage() {
         icp: async (ctx) => {
           const ids = [...new Set((await getLiveMyRoleGrants(ctx)).filter((g) => ["club_admin", "league_admin", "coach", "app_admin"].includes(g.role)).map((g) => g.club[0]).filter((id): id is string => !!id))];
           const rows = await Promise.all(ids.map(async (id) => {
-            const [profile, hasPro] = await Promise.all([getLiveClubProfile(ctx, id), resolveLiveProFootballAccess(ctx, { clubId: id })]);
+            const [profile, hasPro] = await Promise.all([readMembershipInScope(ctx, { clubId: id }, scoped => getLiveClubProfile(scoped, id)), readMembershipInScope(ctx, { clubId: id }, scoped => resolveLiveProFootballAccess(scoped, { clubId: id }))]);
             const club = profile[0];
             return club && !club.deleted_at_ms.length && hasPro ? { id: club.id, name: club.name } : null;
           }));
@@ -217,8 +218,8 @@ export default function MiniLeaguesPage() {
           const leaguesWithCounts = await Promise.all(
             leagues.map(async (league) => {
               const [players, sessions] = await Promise.all([
-                listLivePlayers(ctx, league.id).catch(() => []),
-                listLiveSessions(ctx, league.id).catch(() => []),
+                listLivePlayers(ctx, league.id),
+                listLiveSessions(ctx, league.id),
               ]);
               return {
                 id: league.id,

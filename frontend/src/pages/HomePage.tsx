@@ -1,3 +1,4 @@
+import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
 import { mergeMiniLeagueRows } from "@/live/miniLeagueRouting";
 import { mergeLists } from "@/live/featureRouter";
 import { useState, useMemo, useEffect, useRef } from "react";
@@ -471,7 +472,7 @@ export default function HomePage() {
               supabase: async () => supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr),
               icp: async (ctx) => {
                 const leagues = (
-                  await Promise.all(leagueAdminArr.map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)))
+                  await Promise.all(leagueAdminArr.map((clubId) => readMiniLeagueInScope(ctx, { clubId }, scoped => listLiveMiniLeaguesByClub(scoped, clubId))))
                 ).flat();
                 return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
               },

@@ -67,7 +67,7 @@ export function usePhotoMentionSuggestions(
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: (ctx) => (scope.teamId ? listLiveTeamRoleGrants(ctx, scope.teamId) : myLiveRoleGrants(ctx)),
-        }, { teamId: scope?.teamId as string });
+        }, scope.teamId ? { teamId: scope.teamId } : { clubId: scope.clubId ?? "" });
         userIds = [
           ...new Set(
             grants

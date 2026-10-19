@@ -1,3 +1,4 @@
+import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { mergeMemberships } from "@/live/membershipMerge";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
@@ -546,7 +547,7 @@ export default function EventsPage() {
               icp: async (ctx) => {
                 const leagues = (
                   await Promise.all(
-                    Array.from(leagueAdminClubIds).map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)),
+                    Array.from(leagueAdminClubIds).map((clubId) => readMiniLeagueInScope(ctx, { clubId }, scoped => listLiveMiniLeaguesByClub(scoped, clubId))),
                   )
                 ).flat();
                 return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
@@ -681,7 +682,7 @@ export default function EventsPage() {
           return data || [];
         },
         icp: async (ctx) => {
-          const leagues = await Promise.all(ids.map((leagueId) => getLiveMiniLeague(ctx, leagueId).catch(() => null)));
+          const leagues = await Promise.all(ids.map((leagueId) => readMiniLeagueInScope(ctx, { miniLeagueId: leagueId }, scoped => getLiveMiniLeague(scoped, leagueId))));
           return leagues
             .filter((l): l is NonNullable<typeof l> => !!l)
             .filter((l) => !clubFilter || l.club_id === clubFilter)
