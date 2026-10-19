@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Mail } from "lucide-react";
@@ -99,7 +100,7 @@ export function WelcomeEmailSettingsCard({
             await setLiveTeamWelcomeEmail(ctx, scopeId, { enabled, subject: values.subject, message: values.message });
             return true;
           },
-        });
+        }, writeOnce({ teamId: scopeId }));
         if (handled) return;
       } else {
         const handled = await withFeatureBackend("competitions", {
