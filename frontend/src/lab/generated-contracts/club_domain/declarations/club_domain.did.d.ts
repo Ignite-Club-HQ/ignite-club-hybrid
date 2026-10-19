@@ -1302,6 +1302,7 @@ export interface Main {
     [Principal, string],
     Array<[string, [] | [string]]>
   >,
+  'read_account_membership_erased' : ActorMethod<[Array<Principal>], boolean>,
   'read_account_my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
   'read_account_profile_team_history' : ActorMethod<
     [string],

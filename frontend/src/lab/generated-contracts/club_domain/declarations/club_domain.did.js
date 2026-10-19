@@ -1869,6 +1869,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Opt(IDL.Text)))],
         [],
       ),
+    'read_account_membership_erased' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
+        [IDL.Bool],
+        [],
+      ),
     'read_account_my_role_grants' : IDL.Func([], [IDL.Vec(RoleGrant)], []),
     'read_account_profile_team_history' : IDL.Func(
         [IDL.Text],

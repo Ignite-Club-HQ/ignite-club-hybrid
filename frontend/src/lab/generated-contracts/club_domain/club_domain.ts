@@ -1687,6 +1687,7 @@ export interface MainInterface {
         Err: string;
     }>;
     read_account_list_user_club_roles(user: Principal, club_id: string): Promise<Array<[string, string | null]>>;
+    read_account_membership_erased(principals: Array<Principal>): Promise<boolean>;
     read_account_my_role_grants(): Promise<Array<RoleGrant>>;
     read_account_profile_team_history(profile_id: string): Promise<Array<ProfileTeamHistoryEntry>>;
     read_account_read_competition_team_access(team_id: string, user: Principal): Promise<{
@@ -5057,6 +5058,10 @@ export class Club_domain implements club_domainInterface {
     async read_account_list_user_club_roles(arg0: Principal, arg1: string): Promise<Array<[string, string | null]>> {
         const result = await this.actor.read_account_list_user_club_roles(arg0, arg1);
         return from_candid_vec_n228(result);
+    }
+    async read_account_membership_erased(arg0: Array<Principal>): Promise<boolean> {
+        const result = await this.actor.read_account_membership_erased(arg0);
+        return result;
     }
     async read_account_my_role_grants(): Promise<Array<RoleGrant>> {
         const result = await this.actor.read_account_my_role_grants();
