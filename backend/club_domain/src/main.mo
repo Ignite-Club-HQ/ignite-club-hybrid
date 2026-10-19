@@ -28,6 +28,8 @@ import Oql "../../shared/Oql";
 import OqlClubs "oqlClubs";
 import MediaQuota "mediaQuota";
 import MediaQuotaCutover "mediaQuotaCutover";
+import MediaRetainedQuota "mediaRetainedQuota";
+import MediaRetainedCutover "mediaRetainedCutover";
 import MembershipPage "membershipPage";
 import MembershipIndex "membershipIndex";
 
@@ -104,6 +106,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var mediaQuotaLedger : MediaQuota.Ledger;
   var mediaQuotaStores : [Principal];
   var mediaQuotaCutover : MediaQuotaCutover.State;
+  var mediaRetainedState : MediaRetainedCutover.State;
+  transient let retainedRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL") == ?"1";
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -5490,10 +5494,64 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(null)
   };
 
+  // Retained activation is intentionally local-only, independent of monthly quotas.
+  public shared ({ caller }) func start_media_retained_cutover() : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or not retainedRehearsal) return #Err("Local retained rehearsal governor required");
+    if (not mediaQuotaCutover.started or mediaQuotaCutover.active) return #Err("Start monthly cutover before retained baseline");
+    if (not MediaRetainedCutover.start(mediaRetainedState, mediaQuotaStores)) return #Err("Complete immutable store registry required");
+    #Ok
+  };
+  public shared ({ caller }) func import_media_retained_store(store : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or not retainedRehearsal) return #Err("Local retained rehearsal governor required");
+    if (not mediaRetainedState.started or not mediaRetainedState.stores.any(func(p) = p == store)) return #Err("Sealed registered store required");
+    let progress = MediaRetainedCutover.progress(mediaRetainedState, store);
+    if (progress.done) return #Ok;
+    let source : actor { retained_snapshot_page : shared MediaRetainedCutover.Cursor -> async MediaRetainedCutover.Page } = actor(store.toText());
+    try {
+      let page = await (with timeout = 10) source.retained_snapshot_page(progress.cursor);
+      MediaRetainedCutover.apply(mediaRetainedState, Principal.fromActor(this), store, page)
+    } catch (_) { #Err("Retained snapshot read failed; retry same cursor") }
+  };
+  public shared ({ caller }) func activate_media_retained_quota() : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or not retainedRehearsal) return #Err("Local retained rehearsal governor required");
+    if (not MediaRetainedCutover.complete(mediaRetainedState) or mediaRetainedState.stores != mediaQuotaStores or not mediaQuotaCutover.active) return #Err("Every store and both baselines required");
+    mediaRetainedState.active := true; #Ok
+  };
+  public shared ({ caller }) func read_media_retained_ready() : async Bool {
+    retainedRehearsal and MediaRetainedCutover.ready(mediaRetainedState, caller)
+  };
+  public shared ({ caller }) func read_club_retained_media_bytes(club_id : Text) : async { #Ok : { finalized : Nat; pending : Nat }; #Err : Text } {
+    if (not retainedRehearsal or not mediaRetainedState.active) return #Err("Retained quota inactive");
+    if (not isGovernor(caller) and not mediaRetainedState.stores.any(func(p) = p == caller) and not hasClubMembership(caller, club_id)) return #Err("Club member required");
+    #Ok(MediaRetainedQuota.usage(mediaRetainedState.ledger, club_id))
+  };
+  public shared ({ caller }) func reserve_retained_media(token : Text, path : Text, bytes : Nat) : async MediaRetainedQuota.Result {
+    if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    let segments = Iter.toArray(path.split(#char '/'));
+    if (segments.size() < 3 or segments[0] != "clubs") return #Err("Club path required");
+    let club = segments[1];
+    if (not profiles.any(func(p) = p.id == club) or not path.startsWith(#text("clubs/" # club # "/"))) return #Err("Unknown club path");
+    let pro = clubSubscriptions.any(func(s) = s.club_id == club and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial));
+    MediaRetainedQuota.reserve(mediaRetainedState.ledger, caller, token, club, path, bytes, pro, clubStorageGb(club).toNat())
+  };
+  public shared ({ caller }) func commit_retained_media(token : Text) : async MediaRetainedQuota.Result {
+    if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    MediaRetainedQuota.settle(mediaRetainedState.ledger, caller, token, true)
+  };
+  public shared ({ caller }) func cancel_retained_media(token : Text, club : Text, path : Text, bytes : Nat) : async MediaRetainedQuota.Result {
+    if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    MediaRetainedQuota.cancel(mediaRetainedState.ledger, caller, token, club, path, bytes)
+  };
+  public shared ({ caller }) func credit_deleted_retained_media(token : Text, entry : MediaRetainedQuota.Object) : async MediaRetainedQuota.Result {
+    if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    MediaRetainedQuota.deleted(mediaRetainedState.ledger, caller, token, entry)
+  };
+
   public shared ({ caller }) func register_media_quota_store(store : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (store.equal(Principal.anonymous()) or store.equal(Principal.fromText("aaaaa-aa"))) return #Err("Invalid store");
     if (mediaQuotaStores.any(func(p) { p.equal(store) })) return #Ok;
+    if (mediaRetainedState.started) return #Err("Retained store registry sealed");
     if (mediaQuotaCutover.started and not mediaQuotaCutover.active) return #Err("Store registry sealed for initial cutover");
     if (mediaQuotaStores.size() >= 64) return #Err("Store registry full");
     mediaQuotaStores := mediaQuotaStores.concat([store]);
