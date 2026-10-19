@@ -7,11 +7,16 @@ assert Admission.matches(subject, good);
 assert not Admission.matches(other, good);
 assert not Admission.matches(subject, { good with decision = #Denied });
 assert not Admission.matches(subject, { good with account_version = null });
+assert not Admission.matches(subject, { good with denied_through_version = ?4 });
+assert not Admission.matches(subject, { good with denied_through_version = ?5 });
+assert Admission.matches(subject, { good with denied_through_version = ?3 });
+assert not Admission.matches(Principal.fromText("aaaaa-aa"), { good with subject = Principal.fromText("aaaaa-aa") });
 assert not Admission.matches(Principal.anonymous(), { good with subject = Principal.anonymous() });
 let account : Admission.Account = { id = "account"; principals = [subject]; version = 4; status = #Active };
 assert Admission.owns(subject, account);
 assert not Admission.owns(other, account);
 assert not Admission.owns(subject, { account with status = #Suspended });
+assert not Admission.owns(Principal.fromText("aaaaa-aa"), { account with principals = [Principal.fromText("aaaaa-aa")] });
 let _run = async {
   assert not (await Admission.Gate(true, null).eligible(subject));
   assert (await Admission.Gate(false, null).eligible(subject));

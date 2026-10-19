@@ -7,10 +7,14 @@ module {
   public type Account = { id : Text; principals : [Principal]; version : Nat64; status : { #Active; #Suspended } };
   public func matches(subject : Principal, evidence : Evidence) : Bool {
     not Principal.isAnonymous(subject) and subject != Principal.fromText("aaaaa-aa") and
-    evidence.subject == subject and evidence.decision == #Eligible and evidence.account_version != null
+    evidence.subject == subject and evidence.decision == #Eligible and
+    (switch (evidence.account_version) {
+      case null false;
+      case (?version) switch (evidence.denied_through_version) { case null true; case (?denied) version > denied }
+    })
   };
   public func owns(subject : Principal, account : Account) : Bool {
-    if (Principal.isAnonymous(subject) or account.status != #Active or account.id == "") return false;
+    if (Principal.isAnonymous(subject) or subject == Principal.fromText("aaaaa-aa") or account.status != #Active or account.id == "") return false;
     for (p in account.principals.values()) { if (p == subject) return true };
     false
   };
