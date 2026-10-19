@@ -92,9 +92,6 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     const league = ok(await actor('mini_league_domain', member).create_mini_league('new-club', 'League', [], [], 5, 3, 10, ['red', 'green'], true));
     expect(league.id).toBeTruthy();
     expect(await actor('mini_league_domain', outsider).create_mini_league('new-club', 'Denied', [], [], 5, 3, 10, ['red'], true)).toHaveProperty('Err');
-    ok(await actor('club_domain').remove_member('new-club', member));
-    expect(await actor('mini_league_domain', member).create_mini_league('new-club', 'Removed', [], [], 5, 3, 10, ['red'], true)).toHaveProperty('Err');
-    ok(await actor('club_domain').add_role_grant(member, 'new-club', 'club_admin', []));
     const media = actor('media_metadata', member);
     const asset = ok(await media.register_asset('new-club', 'photo', 'image/jpeg', 'checksum', 'clubs/new-club/gallery/one.jpg', 'private', 99999999999999n));
     expect((await media.get_asset(asset.id))[0].id).toBe(asset.id);
@@ -114,6 +111,16 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
       expect(await service.actor.cycles_balance(), name).toBeGreaterThan(0n);
       let stats; try { stats = await service.actor.memory_stats(); } catch (e) { throw Error(`${name} health: ${String(e)}`); } expect(stats.memory_bytes, name).toBeGreaterThan(0n);
     }
+    for (const [name, service] of services) {
+      await pic.upgradeCanister({ canisterId: service.canisterId, sender: governor, wasm: process.env[`${name.toUpperCase()}_WASM`] });
+    }
+    expect((await actor('events_domain', member).list_events(['new-club'], [])).some((r: any) => r.id === event.id)).toBe(true);
+    expect(ok(await actor('messaging_domain', member).list_messages_page(conversation.id, [], 10)).messages.some((m: any) => m.id === message.id)).toBe(true);
+    expect(ok(await actor('club_points_domain', member).get_user_points('new-club', member.toText()))).toBe(7);
+    expect((await actor('media_metadata', member).get_asset(asset.id))[0].id).toBe(asset.id);
+    ok(await actor('club_domain').remove_member('new-club', member));
+    expect(await actor('mini_league_domain', member).create_mini_league('new-club', 'Removed', [], [], 5, 3, 10, ['red'], true)).toHaveProperty('Err');
+    await expect(actor('media_blob_store', member).begin_upload('clubs/new-club/gallery/removed.jpg', 'image/jpeg', 3n, 1)).rejects.toThrow();
     expect(saved.phase).toBe('installed'); expect(saved.registration).toBeUndefined(); // Never enabled/registered by a health test.
   }, 120000);
 });
