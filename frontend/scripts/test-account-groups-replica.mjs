@@ -11,6 +11,13 @@ const primary = Principal.fromUint8Array(Uint8Array.from([2, 1]));
 const linked = Principal.fromUint8Array(Uint8Array.from([3, 1]));
 const stranger = Principal.fromUint8Array(Uint8Array.from([4, 1]));
 const ok = r => { assert.ok('Ok' in r, JSON.stringify(r, (_, v) => typeof v === 'bigint' ? String(v) : v)); return r.Ok; };
+const accessDenied = async run => {
+  let reply;
+  try { reply = await run(); } catch (error) {
+    assert.match(String(error), /Account admission denied or unavailable/); return;
+  }
+  assert.ok('Err' in reply, 'Expected explicit denial');
+};
 const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
@@ -68,7 +75,7 @@ try {
   groups[0].actor.setPrincipal(identity.canisterId);
   ok(await groups[0].actor.revoke_linked_principal(account.id, linked, 1n));
   await pic.startCanister({ canisterId: identity.canisterId, sender: governor });
-  assert.ok('Err' in await staleSync(), 'suspended account sync cannot cross a receiver removal');
+  await accessDenied(staleSync);
   groups[0].actor.setPrincipal(linked);
   assert.ok('Err' in await groups[0].actor.sync_my_linked_account(), 'old authority snapshot also fails when sync starts after the removal receipt');
   assert.deepEqual(await groups[0].actor.my_role_grants(), []);
@@ -110,9 +117,9 @@ try {
   assert.ok('Err' in await service.rekey_principal(primary, linked, false));
   for (const [index, group] of groups.entries()) {
     group.actor.setPrincipal(linked);
-    assert.ok('Err' in await group.actor.sync_my_linked_account());
-    assert.deepEqual(await group.actor.my_role_grants(), []);
-    assert.deepEqual(ok(await group.actor.read_my_club_memberships_indexed([], 100)).clubs, []);
+    await accessDenied(() => group.actor.sync_my_linked_account());
+    await accessDenied(() => group.actor.my_role_grants());
+    await accessDenied(() => group.actor.read_my_club_memberships_indexed([], 100));
     group.actor.setPrincipal(primary); ok(await group.actor.sync_my_linked_account());
     assert.deepEqual(ok(await group.actor.read_my_club_memberships_indexed([], 100)).clubs, [`club-${index ? 'b' : 'a'}`]);
   }
@@ -158,8 +165,8 @@ try {
   assert.ok('Denied' in persistedEligibility.decision);
   assert.equal(persistedEligibility.denied_through_version[0], 3n);
   for (const group of groups) {
-    group.actor.setPrincipal(linked); assert.deepEqual(await group.actor.my_role_grants(), []);
-    assert.ok('Err' in await group.actor.sync_my_linked_account());
+    group.actor.setPrincipal(linked); await accessDenied(() => group.actor.my_role_grants());
+    await accessDenied(() => group.actor.sync_my_linked_account());
   }
   console.log('PASS: gated two-group recovery, durable registration/rekey/unrelated-link denial, bounded authorized consensus eligibility, retained history and explicit newer survivor relink without role restoration, upgrades and concurrent removal. This does NOT prove untouched-group or other-domain revocation.');
 } finally { await pic?.tearDown(); await server.stop(); }
