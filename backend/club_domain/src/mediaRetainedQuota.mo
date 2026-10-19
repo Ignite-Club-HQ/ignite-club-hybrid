@@ -16,12 +16,12 @@ module {
   public type Ledger = {
     objects : Map.Map<Text, Object>; operations : Map.Map<Text, Operation>;
     locks : Map.Map<Text, Text>; totals : Map.Map<Text, Nat>; pending : Map.Map<Text, Nat>;
-    stores : Map.Map<Text, Bool>;
+    stores : Map.Map<Text, Bool>; revisions : Map.Map<Text, Nat>;
   };
   public type Result = { #Ok : Operation; #Err : Text };
   public func empty() : Ledger {
     { objects = Map.empty(); operations = Map.empty(); locks = Map.empty();
-      totals = Map.empty(); pending = Map.empty(); stores = Map.empty() }
+      totals = Map.empty(); pending = Map.empty(); stores = Map.empty(); revisions = Map.empty() }
   };
   func key(store : Principal, id : Text) : Text { store.toText() # "\u{1f}" # id };
   func valid(id : Text) : Bool { id.size() > 0 and id.size() <= 512 and not Text.contains(id, #char '\u{1f}') };
@@ -46,7 +46,7 @@ module {
       case null {};
     };
     if (ledger.objects.size() >= maxEntries) return false;
-    ledger.objects.add(id, entry);
+    ledger.objects.add(id, entry); ledger.revisions.add(id, entry.revision);
     ledger.totals.add(entry.club, amount(ledger.totals, entry.club) + entry.bytes); true
   };
   // Caller must prove end-of-inventory, hashes and no concurrent mutations.
@@ -97,7 +97,8 @@ module {
     if (held < op.bytes or used < oldBytes or ledger.locks.get(objectId) != ?id or ledger.objects.get(objectId) != op.previous) return #Err("Retained accounting mismatch");
     let updated = { op with state = if (commit) #committed else #released };
     if (commit) {
-      let revision = switch (op.previous) { case (?previous) previous.revision + 1; case null 1 };
+      let revision = (ledger.revisions.get(objectId) ?? 0) + 1;
+      ledger.revisions.add(objectId, revision);
       ledger.objects.add(objectId, { store; path = op.path; club = op.club; bytes = op.bytes; revision });
       ledger.totals.add(op.club, used - oldBytes + op.bytes)
     };

@@ -14,7 +14,7 @@
 - Read each directory's AGENTS.md before changing frontend/, backend/ or scripts/.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule updates: omit to keep; empty image/zero end-date clears. Monthly recurrence clamps in UTC. Why: Candid compatibility.
-- Self/admin erasure retains inventory; local timing uses persistent router locks through commit. Gallery copies decrypt under club keys. Why: prevent access leaks.
+- Self/admin erasure retains inventory; local timing uses persistent router locks through commit. Gallery copies decrypt under club keys.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
 - Competition welcome settings live on competition_domain behind refreshed manager access; club-role mirrors fail closed. Why: no Supabase fallback or stale access.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
@@ -35,12 +35,12 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets/access.
-- No client secrets; opt-in scoped routing; checkpoint provisioning. Local tests never authorize activation.
+- No client secrets; opt-in routing; checkpoint provisioning. Retained ledger/growth commitments stay local-only until authenticated baselines and mutation receipts are wired; monthly quotas are not retained bytes. Local tests never authorize activation.
 - II paths enforce club scope; uploads verify membership. Why: prevent revocation bypass.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
-- ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
+- ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
 - Cross-group accounts/admission stay local-only: no live UI/deploy flags. Identity uses durable unlink denials and consensus eligibility, never resource grants. Activation requires complete all-service fences/inventory/drain/mirror proof; follow backend/AGENTS.md for evidence. Why: eligibility and fan-out cannot prove global revocation or deny unreached groups.
 

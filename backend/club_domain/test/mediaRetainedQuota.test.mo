@@ -39,3 +39,12 @@ denied(Quota.reserve(ledger, a, "replace-again", "different", "clubs/c/vault/a",
 assert Quota.register(ledger, Principal.fromText("r7inp-6aaaa-aaaaa-aaabq-cai"));
 assert not Quota.ready(ledger);
 denied(Quota.reserve(ledger, b, "incomplete", "c", "clubs/c/chat/new", 1, true, 0));
+// Equal-size delete/recreate cannot reset revisions and admit a stale receipt.
+let aba = Quota.empty();
+let small : Quota.Object = { original with bytes = 7 };
+assert Quota.register(aba, a); assert Quota.baseline(aba, small); assert Quota.seal(aba, a);
+ignore ok(Quota.deleted(aba, a, "d", small));
+ignore ok(Quota.reserve(aba, a, "recreate", "c", small.path, 7, true, 0));
+ignore ok(Quota.settle(aba, a, "recreate", true));
+denied(Quota.deleted(aba, a, "late", small));
+assert Quota.usage(aba, "c").finalized == 7;
