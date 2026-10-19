@@ -16,7 +16,7 @@ const stranger = Principal.fromUint8Array(Uint8Array.from([4, 1]));
 const ok = r => { assert.ok('Ok' in r, JSON.stringify(r, (_, v) => typeof v === 'bigint' ? String(v) : v)); return r.Ok; };
 const server = await PocketIcServer.start(); let pic;
 try {
-  pic = await PocketIc.create(server.getUrl());
+  pic = await PocketIc.create(server.getUrl(), { fiduciary: { state: { type: 'new' } } });
   const setup = (idlFactory, domain) => pic.setupCanister({ idlFactory,
     wasm: resolve(root, `backend/${domain}/.mops/.build/${domain}.wasm`),
     sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
