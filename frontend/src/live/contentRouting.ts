@@ -1,4 +1,5 @@
-import type { ClubScope, FeatureArea, FeatureBackendContext } from './contentRoutingTypes';
+import type { ClubScope, FeatureBackendContext } from './featureRouter';
+import type { FeatureArea } from './featureBackend';
 import { activationStatus, SHIPPED_GATES } from './groupActivation';
 
 /** Composite feeds route each nested resource separately, never their whole context. */
