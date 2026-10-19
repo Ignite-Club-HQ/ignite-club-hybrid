@@ -280,6 +280,9 @@ persistent actor class Main(governorInit : Principal) {
     if (not isOfficialRole(role)) return #Err("Invalid role");
     if (competitionName(competition_id) == null) return #Err("Competition not found");
     let hex = eoiHex(await Random.blob());
+    await admitAccount(caller);
+    await syncForCompetition(caller, competition_id);
+    if (compFenced(competition_id) or competitionName(competition_id) == null or not canManageCompetition(caller, competition_id)) return #Err("Competition authorization changed");
     let link : Types.RoleLink = { competition_id; role; token = "crl-" # hex; revoked = false; created_by = caller; created_at_ms = nowMs() };
     roleLinks := roleLinks.filter(func(l) = not (l.competition_id == competition_id and l.role == role)).concat([link]);
     #Ok(link)
@@ -497,8 +500,8 @@ persistent actor class Main(governorInit : Principal) {
   func teamAccess(user : Principal, teamId : Text) : async TeamAccess {
     var result : TeamAccess = { club_id = null; is_member = false; can_manage = false };
     for (id in participantAuthorities().values()) {
-      let authority : actor { read_competition_team_access : shared query (Text, Principal) -> async TeamAccess } = actor (id.toText());
-      let row = try { await (with timeout = 10) authority.read_competition_team_access(teamId, user) } catch (_) { return { club_id = null; is_member = false; can_manage = false } };
+      let authority : actor { read_competition_team_access : shared query (Text, Principal) -> async TeamAccess; read_account_read_competition_team_access : shared (Text, Principal) -> async TeamAccess } = actor (id.toText());
+      let row = try { if (accountAdmissionEnabled) await (with timeout = 10) authority.read_account_read_competition_team_access(teamId, user) else await (with timeout = 10) authority.read_competition_team_access(teamId, user) } catch (_) { return { club_id = null; is_member = false; can_manage = false } };
       switch (row.club_id) { case null {}; case (?_) { if (result.club_id != null) return { club_id = null; is_member = false; can_manage = false }; result := row } };
     };
     result
@@ -1833,9 +1836,9 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubDomainCanister) {
       case null { roles := roles.filter(func(item) = not (item.user.equal(caller) and item.role == "club_admin" and item.competition_id == club_id)) };
       case (?cid) {
-        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
+        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)]; read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
         try {
-          let fresh = await cd.list_user_club_roles(caller, club_id);
+          let fresh = if (accountAdmissionEnabled) await cd.read_account_list_user_club_roles(caller, club_id) else await cd.list_user_club_roles(caller, club_id);
           await admitAccount(caller);
           if (clubDomainCanister != ?cid or isFenced(club_id)) Runtime.trap("Competition authority changed");
           let isAdmin = fresh.any(func((role, _)) = role == "club_admin");

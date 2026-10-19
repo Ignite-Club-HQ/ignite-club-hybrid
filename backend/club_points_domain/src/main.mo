@@ -155,9 +155,9 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubDomainCanister) {
       case null #Err("Club membership service is not configured");
       case (?cid) {
-        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
+        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)]; read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
         try {
-          let fresh = await cd.list_user_club_roles(caller, club_id);
+          let fresh = if (accountAdmissionEnabled) await cd.read_account_list_user_club_roles(caller, club_id) else await cd.list_user_club_roles(caller, club_id);
           await admitAccount(caller);
           if (clubDomainCanister != ?cid or isFenced(club_id)) return #Err("Reward authority changed");
           roles := RewardRoleMirror.replace(roles, caller, club_id, fresh);

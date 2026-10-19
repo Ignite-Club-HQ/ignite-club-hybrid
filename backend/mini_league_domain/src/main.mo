@@ -1521,26 +1521,23 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_verify_child_guardian(user : Principal, child : Text) : async Bool {
-    await admitAccount(user);
     if (caller != Principal.fromActor(this)) return false;
-    let id = switch (clubDomainCanister) { case null return false; case (?id) id };
-    let domain : actor { has_child_guardian : shared query (Principal, Text) -> async Bool } = actor(id.toText());
-    let allowed = try { await domain.has_child_guardian(user, child) } catch (_) { false };
-    allowed and clubDomainCanister == ?id
+    if (not (await accountAdmission.eligible(user))) return false;
+    await* currentGuardianWrite(user, child)
   };
 
   public shared ({ caller }) func read_account_verify_player_access(user : Principal, player : Types.MiniLeaguePlayer) : async Bool {
-    await admitAccount(user);
     if (caller != Principal.fromActor(this)) return false;
-    switch (player.child_id) {
-      case (?child) await this.read_account_verify_child_guardian(user, child);
-      case null player.claimed_by == ?user or player.parent_user_id == ?user.toText();
-    }
+    if (not (await accountAdmission.eligible(user))) return false;
+    let current = switch (findPlayer(player.id)) { case null return false; case (?p) p };
+    if (current != player) return false;
+    let allowed = await* playerAccessWrite(user, current);
+    allowed and findPlayer(player.id) == ?current and not playerFenced(player.id)
   };
 
   public shared ({ caller = origin }) func read_account_verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
-    await admitAccount(viewer);
     if (origin != Principal.fromActor(this)) return false;
+    await admitAccount(viewer);
     let caller = viewer;
     if (Principal.isAnonymous(caller)) return false;
     if (isLeagueAdmin(caller, league) or isClubMember(caller, league.club_id)) return true;
@@ -1551,8 +1548,8 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller = origin }) func read_account_filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
-    await admitAccount(viewer);
     if (origin != Principal.fromActor(this)) return [];
+    await admitAccount(viewer);
     let caller = viewer;
     var out : [Types.MiniLeague] = [];
     for (league in candidates.values()) if (await this.read_account_verify_league_access(caller, league)) out := out.concat([league]);

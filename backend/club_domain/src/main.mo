@@ -4839,6 +4839,7 @@ persistent actor class Main(governorInit : Principal) {
   // and teams created before this wiring existed. The chat pages call this
   // before first read/send so a missing conversation self-heals.
   public shared ({ caller }) func ensure_club_conversations(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    await admitAccount(caller);
     if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
@@ -5337,7 +5338,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_app_config(key : Text, value : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not isGovernor(caller)) await admitAccount(caller);
     auth(caller);
     if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Only governor or app admin can set app config");
     if (key.size() == 0 or key.size() > 128) return #Err("Key must be 1-128 chars");

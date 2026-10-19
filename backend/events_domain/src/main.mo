@@ -307,7 +307,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Typed view of the club_domain app_admin query. Fail-closed while
   // clubDomainCanister is unset (set_club_domain_canister, governor-only).
-  type ClubDomainRef = actor { is_app_admin : shared query (Principal) -> async Bool };
+  type ClubDomainRef = actor { is_app_admin : shared query (Principal) -> async Bool; read_account_is_app_admin : shared (Principal) -> async Bool };
   func clubDomainRef() : ?ClubDomainRef {
     switch (clubDomainCanister) {
       case null { null };
@@ -320,7 +320,7 @@ persistent actor class Main(governorInit : Principal) {
     if (isGovernor(caller)) return true;
     switch (clubDomainRef()) {
       case null { false };
-      case (?cd) { try { await cd.is_app_admin(caller) } catch (_) { false } };
+      case (?cd) { try { if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller) } catch (_) { false } };
     };
   };
   func hasBulkAccess(caller : Principal) : Bool {
@@ -1917,9 +1917,9 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubDomainCanister) {
       case null {};
       case (?cid) {
-        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
+        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)]; read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
         try {
-          let fresh = await cd.list_user_club_roles(caller, club_id);
+          let fresh = if (accountAdmissionEnabled) await cd.read_account_list_user_club_roles(caller, club_id) else await cd.list_user_club_roles(caller, club_id);
           let mirrored = fresh.filter(func((role, _)) = role == "club_admin" or role == "team_admin" or role == "coach");
           roles := roles.filter(func(item) = not (item.user.equal(caller) and item.club_id == club_id))
             .concat(mirrored.map(func((role, team)) = { user = caller; role; club_id; team_id = team }));

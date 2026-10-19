@@ -853,9 +853,11 @@ persistent actor MediaBlobStore {
   func isClubStaffForPath(caller : Principal, path : Text) : async Bool {
     let ?clubId = clubIdFromPath(path) else return false;
     let ?cid = club_domain_canister else return false;
-    let clubDomain : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+    let clubDomain : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool; read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
     try {
-      await clubDomain.has_club_staff_role(caller, clubId)
+      let allowed = if (accountAdmissionEnabled) await clubDomain.read_has_club_staff_role(caller, clubId) else await clubDomain.has_club_staff_role(caller, clubId);
+      await admitAccount(caller);
+      allowed and club_domain_canister == ?cid
     } catch (_) {
       false
     }
