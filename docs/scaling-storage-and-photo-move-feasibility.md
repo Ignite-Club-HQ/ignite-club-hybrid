@@ -130,4 +130,23 @@ Retained-ledger Motoko tests (including delete/recreate ABA denial), allocator/a
 
 ### Remaining implementation and live evidence
 
-Wire the ledger through immutable state migration and every authenticated baseline/reserve/commit/cancel/replacement/deletion/retention path; preserve journal and await-race semantics. Extend authoritative group admission and allowed entitlement changes to reserve measured growth capacity. Reconcile every group/store registry and expose exact global pending/mode evidence. Measure allocator pressure and workload performance, then obtain separate approval for live migration/expansion. No encrypted club moves, re-encryption, payment activation or group opening is included.
+The local ledger integration described below is complete; production activation is not. Extend authoritative group admission and allowed entitlement changes to reserve measured growth capacity. Reconcile every live group/store registry and expose exact global pending/mode evidence. Measure allocator pressure and workload performance, then obtain separate approval for live migration/expansion. No encrypted club moves, re-encryption, payment activation or group opening is included.
+
+## Local retained-accounting integration — 19 October 2026
+
+The authority and photo-store actors now import retained accounting through additive state migrations. The explicit `IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL=1` gate is required on both services; production installations reject cutover even for the governor. Do not add this flag to a deployment workflow.
+
+- The authority captures an immutable store registry, then imports each store directly in bounded frozen pages. Legacy heap objects, stable-indexed objects, personal/orphan bytes, object revisions and exact complete counts/bytes bind readiness; unresolved club paths, changed evidence and incomplete stores reject activation.
+- Shared monthly quotas remain separate from retained combined totals. Store-authenticated reservations cover club gallery, chat, vault and branding; Pro entitlement and purchased allowance come from the authority, never browser flags. Pending writes across both stores count before publication.
+- Replacement revisions, durable reservation/commit/cancellation tokens and exact-object deletion locks preserve retry semantics. Deletion reserves authority journal capacity **before** removing ciphertext, then credits the exact revision. Unknown outcomes keep the path locked for retry; retention uses the same protocol.
+- Frozen stores reject writes and publication. Authority outages fail closed. Coordinated recovery restores every store and the retained/monthly authority before restarting authority first; isolated-store recovery is not authorized.
+
+### Verified locally
+
+All 14 club-service and 6 store unit files passed before the final guard addition; the two retained unit files subsequently passed including the 100,000-entry deletion-journal boundary. Both final actors compile and their stable types are compatible with pinned pre-retained commit `6956b30d1`. The full two-store replica script starts from that old version and verifies additive upgrade with legacy and indexed ciphertext, authenticated baseline, combined pending/finalized totals, branding, replacement, outage/upgrade retries, deletion preparation/credit, free monthly limits and retention. Real controller snapshots restore both stores and both authority ledgers together; exact totals and object presence read back correctly. Production cutover refusal is tested.
+
+Existing single-store Pro, full storage/shared-monthly recovery and bounded two-store inventory rehearsals also passed. Candid drift check passes for all 17 active contracts. These are isolated local canister tests, not signed-in live browser/phone acceptance or production activation.
+
+### Still required
+
+Retained operation history is capped at 100,000 entries and fails closed; a safe bounded retirement/replay protocol is **not implemented**. Prove this before long-term use. Authoritative physical growth commitments for admission/entitlement changes, representative full-volume capacity evidence, complete signed live inventory and separately approved release/activation remain outstanding. No live canisters, capacity settings, group openings or club moves changed.
