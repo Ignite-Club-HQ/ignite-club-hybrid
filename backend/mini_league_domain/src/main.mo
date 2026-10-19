@@ -13,7 +13,7 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -177,7 +177,8 @@ persistent actor class Main(governorInit : Principal) {
   // parent/claimant of a player enrolled in the league can view it.
   // Mirrors are candidates, never child-link authority. Query callers use
   // composite reads; writes use consensus and recheck local rows after await.
-  func currentGuardian(user : Principal, child : Text) : async* Bool {
+  public composite query ({ caller }) func verify_child_guardian(user : Principal, child : Text) : async Bool {
+    if (caller != Principal.fromActor(this)) return false;
     let id = switch (clubDomainCanister) { case null return false; case (?id) id };
     let domain : actor { has_child_guardian : shared query (Principal, Text) -> async Bool } = actor(id.toText());
     let allowed = try { await domain.has_child_guardian(user, child) } catch (_) { false };
@@ -189,9 +190,10 @@ persistent actor class Main(governorInit : Principal) {
     let allowed = try { await (with timeout = 10) domain.read_has_child_guardian(user, child) } catch (_) { false };
     allowed and clubDomainCanister == ?id
   };
-  func playerAccess(user : Principal, player : Types.MiniLeaguePlayer) : async* Bool {
+  public composite query ({ caller }) func verify_player_access(user : Principal, player : Types.MiniLeaguePlayer) : async Bool {
+    if (caller != Principal.fromActor(this)) return false;
     switch (player.child_id) {
-      case (?child) await* currentGuardian(user, child);
+      case (?child) await this.verify_child_guardian(user, child);
       case null player.claimed_by == ?user or player.parent_user_id == ?user.toText();
     }
   };
@@ -201,17 +203,21 @@ persistent actor class Main(governorInit : Principal) {
       case null player.claimed_by == ?user or player.parent_user_id == ?user.toText();
     }
   };
-  func canViewLeague(caller : Principal, league : Types.MiniLeague) : async* Bool {
+  public composite query ({ caller }) func verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
+    if (caller != Principal.fromActor(this)) return false;
+    let caller = viewer;
     if (Principal.isAnonymous(caller)) return false;
     if (isLeagueAdmin(caller, league) or isClubMember(caller, league.club_id)) return true;
     for (p in players.values()) {
-      if (p.mini_league_id == league.id and (await* playerAccess(caller, p))) return true;
+      if (p.mini_league_id == league.id and (await this.verify_player_access(caller, p))) return true;
     };
     false
   };
-  func visibleLeagues(caller : Principal, candidates : [Types.MiniLeague]) : async* [Types.MiniLeague] {
+  public composite query ({ caller }) func filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
+    if (caller != Principal.fromActor(this)) return [];
+    let caller = viewer;
     var out : [Types.MiniLeague] = [];
-    for (league in candidates.values()) if (await* canViewLeague(caller, league)) out := out.concat([league]);
+    for (league in candidates.values()) if (await this.verify_league_access(caller, league)) out := out.concat([league]);
     out
   };
   func findLeague(id : Text) : ?Types.MiniLeague { leagues.find(func(item) = item.id == id) };
@@ -303,7 +309,7 @@ persistent actor class Main(governorInit : Principal) {
     if (eventsDomainCanister != ?caller or Principal.isAnonymous(viewer)) return false;
     switch (findLeague(league_id)) {
       case null false;
-      case (?league) league.club_id == club_id and league.status == "active" and (await* canViewLeague(viewer, league));
+      case (?league) league.club_id == club_id and league.status == "active" and (await this.verify_league_access(viewer, league));
     }
   };
 
@@ -364,12 +370,12 @@ persistent actor class Main(governorInit : Principal) {
   public composite query ({ caller }) func get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
     switch (findLeague(id)) {
       case null #Err("Mini-league not found");
-      case (?league) { if (not (await* canViewLeague(caller, league))) #Err("Forbidden") else #Ok(league) };
+      case (?league) { if (not (await this.verify_league_access(caller, league))) #Err("Forbidden") else #Ok(league) };
     }
   };
 
   public composite query ({ caller }) func list_mini_leagues_by_club(club_id : Text) : async [Types.MiniLeague] {
-    await* visibleLeagues(caller, leagues.filter(func(item) = item.club_id == club_id))
+    await this.filter_visible_leagues(caller, leagues.filter(func(item) = item.club_id == club_id))
   };
 
   func addNewsRecipient(recipients : [Principal], candidate : ?Principal) : [Principal] {
@@ -403,18 +409,18 @@ persistent actor class Main(governorInit : Principal) {
         };
         for (player in players.values()) {
           if (player.mini_league_id == mini_league_id) {
-            switch (player.claimed_by) { case (?u) { if (await* playerAccess(u, player)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+            switch (player.claimed_by) { case (?u) { if (await this.verify_player_access(u, player)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
             switch (player.child_id) {
               case (?childId) {
                 switch (findChild(childId)) {
                   case (?child) {
-                    switch (child.parent_user_id) { case (?u) { if (await* currentGuardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
-                    switch (child.claimed_by) { case (?u) { if (await* currentGuardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+                    switch (child.parent_user_id) { case (?u) { if (await this.verify_child_guardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+                    switch (child.claimed_by) { case (?u) { if (await this.verify_child_guardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
                   };
                   case null {};
                 };
                 for (guardian in guardians.values()) {
-                  if (guardian.child_id == childId and (await* currentGuardian(guardian.guardian_user_id, childId))) recipients := addNewsRecipient(recipients, ?guardian.guardian_user_id);
+                  if (guardian.child_id == childId and (await this.verify_child_guardian(guardian.guardian_user_id, childId))) recipients := addNewsRecipient(recipients, ?guardian.guardian_user_id);
                 };
               };
               case null {};
@@ -430,25 +436,25 @@ persistent actor class Main(governorInit : Principal) {
   // ---- Batched reads (same canViewLeague visibility; capped) ----
   public composite query ({ caller }) func get_mini_leagues(ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
     if (ids.size() > 300) return #Err("Too many ids");
-    #Ok(await* visibleLeagues(caller, leagues.filter(func(item) = ids.any(func(i) = i == item.id))))
+    #Ok(await this.filter_visible_leagues(caller, leagues.filter(func(item) = ids.any(func(i) = i == item.id))))
   };
 
   public composite query ({ caller }) func list_mini_leagues_by_clubs(club_ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
     if (club_ids.size() > 200) return #Err("Too many ids");
-    #Ok(await* visibleLeagues(caller, leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id))))
+    #Ok(await this.filter_visible_leagues(caller, leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id))))
   };
 
   // Caller-scoped: leagues the caller administers, belongs to via a club
   // role grant, or has a claimed player in.
   public composite query ({ caller }) func my_leagues() : async [Types.MiniLeague] {
-    await* visibleLeagues(caller, leagues)
+    await this.filter_visible_leagues(caller, leagues)
   };
 
   // UI permissions use the same authoritative checks as league mutations.
   // This is caller-scoped, not an arbitrary-user permission oracle.
   public composite query ({ caller }) func get_my_league_access(ids : [Text]) : async { #Ok : [{ id : Text; can_manage : Bool; can_delete : Bool; is_club_admin : Bool }]; #Err : Text } {
     if (ids.size() > 200) return #Err("Too many ids");
-    #Ok((await* visibleLeagues(caller, leagues.filter(func(l) = ids.any(func(id) = id == l.id)))).map(func(l) = {
+    #Ok((await this.filter_visible_leagues(caller, leagues.filter(func(l) = ids.any(func(id) = id == l.id)))).map(func(l) = {
       id = l.id; can_manage = isLeagueAdmin(caller, l); can_delete = isLeagueAdmin(caller, l); is_club_admin = isClubAdmin(caller, l.club_id)
     }))
   };
@@ -457,7 +463,7 @@ persistent actor class Main(governorInit : Principal) {
   // Parent/guardian links and scoped admins travel in the league snapshot.
   public composite query ({ caller }) func get_league_members(id : Text) : async { #Ok : [{ user_id : Text; is_staff : Bool; is_parent : Bool }]; #Err : Text } {
     let league = switch (findLeague(id)) { case null return #Err("Mini-league not found"); case (?l) l };
-    if (not (await* canViewLeague(caller, league))) return #Err("Forbidden");
+    if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
     var parentIds : [Text] = [];
     var staffIds : [Text] = [league.created_by.toText()];
     let add = func(ids : [Text], id : Text) : [Text] {
@@ -465,11 +471,11 @@ persistent actor class Main(governorInit : Principal) {
     };
     for (p in players.values()) {
       if (p.mini_league_id == id) {
-        switch (p.parent_user_id) { case (?u) { let user = Principal.fromText(u); if (await* playerAccess(user, p)) parentIds := add(parentIds, u) }; case null {} };
-        switch (p.claimed_by) { case (?u) { if (await* playerAccess(u, p)) parentIds := add(parentIds, u.toText()) }; case null {} };
+        switch (p.parent_user_id) { case (?u) { let user = Principal.fromText(u); if (await this.verify_player_access(user, p)) parentIds := add(parentIds, u) }; case null {} };
+        switch (p.claimed_by) { case (?u) { if (await this.verify_player_access(u, p)) parentIds := add(parentIds, u.toText()) }; case null {} };
         switch (p.child_id) {
           case (?child) {
-            for (g in guardians.values()) { if (g.child_id == child and (await* currentGuardian(g.guardian_user_id, child))) parentIds := add(parentIds, g.guardian_user_id.toText()) };
+            for (g in guardians.values()) { if (g.child_id == child and (await this.verify_child_guardian(g.guardian_user_id, child))) parentIds := add(parentIds, g.guardian_user_id.toText()) };
           };
           case null {};
         };
@@ -559,7 +565,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (findLeague(mini_league_id)) {
       case null #Err("Mini-league not found");
       case (?league) {
-        if (not (await* canViewLeague(caller, league))) return #Err("Forbidden");
+        if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
         #Ok(sessions.filter(func(item) = item.mini_league_id == mini_league_id))
       };
     }
@@ -651,7 +657,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (findLeague(mini_league_id)) {
       case null #Err("Mini-league not found");
       case (?league) {
-        if (not (await* canViewLeague(caller, league))) return #Err("Forbidden");
+        if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
         #Ok(players.filter(func(item) = item.mini_league_id == mini_league_id))
       };
     }
@@ -699,7 +705,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (findLeague(player.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not isLeagueAdmin(caller, league) and not (await* playerAccess(caller, player))) return #Err("Forbidden");
+            if (not isLeagueAdmin(caller, league) and not (await this.verify_player_access(caller, player))) return #Err("Forbidden");
             var guardianCount : Nat = 0;
             var parentLinked = false;
             switch (player.child_id) {
@@ -709,7 +715,7 @@ persistent actor class Main(governorInit : Principal) {
                 switch (player.claimed_by) { case (?u) candidates := candidates.concat([u]); case null {} };
                 switch (player.parent_user_id) { case (?u) candidates := candidates.concat([Principal.fromText(u)]); case null {} };
                 for (g in guardians.values()) if (g.child_id == cid and not candidates.any(func(u) = u == g.guardian_user_id)) candidates := candidates.concat([g.guardian_user_id]);
-                for (u in candidates.values()) if (await* currentGuardian(u, cid)) { guardianCount += 1; parentLinked := true };
+                for (u in candidates.values()) if (await this.verify_child_guardian(u, cid)) { guardianCount += 1; parentLinked := true };
               };
             };
             let pending = not parentLinked and guardianCount == 0;
@@ -885,7 +891,7 @@ persistent actor class Main(governorInit : Principal) {
             switch (findLeague(leagueId)) {
               case null #Err("Mini-league not found");
               case (?league) {
-                if (not (await* canViewLeague(caller, league))) return #Err("Forbidden");
+                if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
                 #Ok(groupPlayers.filter(func(item) = item.group_id == group_id))
               };
             }
@@ -902,7 +908,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not (await* canViewLeague(caller, league))) return #Err("Forbidden");
+            if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
             #Ok(groups.filter(func(item) = item.session_id == session_id))
           };
         }
@@ -995,7 +1001,7 @@ persistent actor class Main(governorInit : Principal) {
             switch (findLeague(leagueId)) {
               case null #Err("Mini-league not found");
               case (?league) {
-                if (not (await* canViewLeague(caller, league))) return #Err("Forbidden");
+                if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
                 #Ok(duties.filter(func(item) = item.group_id == group_id))
               };
             }
@@ -1050,7 +1056,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not (await* canViewLeague(caller, league))) return #Err("Forbidden");
+            if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
             #Ok(availability.find(func(item) = item.session_id == session_id and item.player_id == player_id))
           };
         }
@@ -1065,7 +1071,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not (await* canViewLeague(caller, league))) return #Err("Forbidden");
+            if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
             #Ok(availability.filter(func(item) = item.session_id == session_id))
           };
         }
@@ -1076,7 +1082,7 @@ persistent actor class Main(governorInit : Principal) {
   // Caller-scoped: availability rows for players the caller has claimed.
   public composite query ({ caller }) func my_availability() : async [Types.MiniLeagueSessionAvailability] {
     var myPlayerIds : [Text] = [];
-    for (p in players.values()) if (await* playerAccess(caller, p)) myPlayerIds := myPlayerIds.concat([p.id]);
+    for (p in players.values()) if (await this.verify_player_access(caller, p)) myPlayerIds := myPlayerIds.concat([p.id]);
     availability.filter(func(item) = myPlayerIds.any(func(pid) = pid == item.player_id))
   };
 

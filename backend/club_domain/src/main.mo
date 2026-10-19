@@ -552,7 +552,7 @@ persistent actor class Main(governorInit : Principal) {
     let erased = eraseMembership([user], "principal:" # user.toText());
     switch (erased) { case (#Err(e)) return #Err(e); case _ {} };
     acl := { acl with guardians = acl.guardians.filter(func(g) = g.user != user);
-      children = acl.children.map(func(c) = if (c.parent == ?user) { c with parent = null } else c) };
+      children = acl.children.map(func(c) = if (c.parent == ?user) ({ c with parent = null }) else c) };
     accounts := accounts.map(func(a) = { a with principals = a.principals.filter(func(p) = p != user) });
     membershipEpoch += 1; #Ok
   };
@@ -2499,7 +2499,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (acl.children.find(func(child) = child.id == child_id)) {
       case null false;
       case (?child) {
-        not isExcluded(user, child.club) and
+        (switch (child.club_id) { case (?club) not isExcluded(user, club); case null true }) and
         ((switch (child.parent) { case (?p) p.equal(user); case null false })
         or acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user)))
       };
