@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -116,9 +117,9 @@ function SupabaseAssociationDetailPage() {
             const perClub = await Promise.all(
               clubIds.map(async (cid) => {
                 const [teams, events, grants] = await Promise.all([
-                  listLiveTeams(ctx, cid).catch(() => []),
-                  listLiveEvents(ctx, cid).catch(() => []),
-                  listLiveRoleGrants(ctx, cid).catch(() => []),
+                  readMembershipInScope(ctx, { clubId: cid }, (scoped) => listLiveTeams(scoped, cid)).catch(() => []),
+                  readMembershipInScope(ctx, { clubId: cid }, (scoped) => listLiveEvents(scoped, cid)).catch(() => []),
+                  readMembershipInScope(ctx, { clubId: cid }, (scoped) => listLiveRoleGrants(scoped, cid)).catch(() => []),
                 ]);
                 const upcoming = events.filter((e) => {
                   const t = Number(e.starts_at_ms);

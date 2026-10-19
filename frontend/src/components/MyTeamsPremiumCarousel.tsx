@@ -610,7 +610,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
       if (!user) return [];
 
       if (isIcp) {
-        return withFeatureBackend("membership", {
+        return withFeatureBackend("competitions", {
           // Unreachable: this branch only runs when ICP mode is active.
           supabase: async () => [] as TeamOrLeague[],
           icp: (ctx) => fetchIcpCarouselItems(ctx, activeClubFilter ?? null),
@@ -1015,7 +1015,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
       if (teamIds.length === 0) return [] as CompetitionRow[];
 
       if (isIcp) {
-        return withFeatureBackend("membership", {
+        return withFeatureBackend("competitions", {
           // Unreachable: this branch only runs when ICP mode is active.
           supabase: async () => [] as CompetitionRow[],
           icp: async (ctx) => {

@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 /**
  * Club filter handling when a user accepts an invite.
  *
@@ -48,7 +49,7 @@ async function fetchClubNames(clubIds: string[]): Promise<Record<string, string>
         await Promise.all(
           ids.map(async (id) => {
             try {
-              const profileOpt = await getLiveClubProfile(ctx, id);
+              const profileOpt = await readMembershipInScope(ctx, { clubId: id }, (scoped) => getLiveClubProfile(scoped, id));
               const profile = profileOpt[0];
               if (profile?.name) map[id] = String(profile.name).trim();
             } catch {

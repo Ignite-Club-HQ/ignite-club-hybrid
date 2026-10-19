@@ -160,7 +160,7 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
         // Internet Identity users: resolve the team/club name from club_domain.
         icp: async (ctx) => {
           if (rootScope === "team") {
-            const t = (await getLiveTeam(ctx, rootId)) as { name?: string } | null;
+            const t = (await getLiveTeam(ctx, rootId))[0];
             return t?.name ? { name: t.name } : null;
           }
           const c = await getLiveClubProfile(ctx, rootId);

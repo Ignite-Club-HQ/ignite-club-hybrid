@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback, ReactNode } from "react";
 import { useQuery, keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { purgeClubScopedQueryCache } from "@/lib/clubScopeCachePurge";
@@ -806,9 +807,9 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
             const rows = await Promise.all(clubIds.map(async (clubId): Promise<ClubTheme | null> => {
               try {
                 const [profile, settings, sub] = await Promise.all([
-                  getLiveClubProfile(ctx, clubId),
-                  getLiveClubSettings(ctx, clubId),
-                  getLiveClubSubscription(ctx, clubId).catch(() => null),
+                  readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubProfile(scoped, clubId)),
+                  readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubSettings(scoped, clubId)),
+                  readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubSubscription(scoped, clubId)).catch(() => null),
                 ]);
                 const p = profile[0];
                 if (!p || p.deleted_at_ms.length) return null;
@@ -966,7 +967,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
           icp: async (ctx) => {
             await Promise.all(teamIds.map(async (teamId) => {
               try {
-                const team = await getLiveTeam(ctx, teamId);
+                const team = await readMembershipInScope(ctx, { teamId }, (scoped) => getLiveTeam(scoped, teamId));
                 const clubId = team[0]?.club_id;
                 if (clubId) ids.add(clubId);
               } catch {
@@ -1000,7 +1001,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
           icp: async (ctx) => {
             const rows = await Promise.all([...ids].map(async (clubId) => {
               try {
-                const profile = await getLiveClubProfile(ctx, clubId);
+                const profile = await readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubProfile(scoped, clubId));
                 const p = profile[0];
                 if (!p || p.deleted_at_ms.length) return null;
                 return { id: p.id, name: p.name, logo_url: p.logo_url[0] ?? null };

@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, X, Check, Loader2, Camera, Crown, ImagePlus, CheckCircle2, XCircle, Zap, Lock } from "lucide-react";
@@ -160,7 +161,7 @@ export function UploadPhotoSheet({
           icp: async (ctx) => {
             const ids = [...new Set((userRoles ?? []).map((r) => r.club_id).filter((id): id is string => !!id))];
             const rows = await Promise.all(ids.map(async (id) => {
-              const [profile, sub] = await Promise.all([getLiveClubProfile(ctx, id), getLiveClubSubscription(ctx, id)]);
+              const [profile, sub] = await Promise.all([readMembershipInScope(ctx, { clubId: id }, (scoped) => getLiveClubProfile(scoped, id)), readMembershipInScope(ctx, { clubId: id }, (scoped) => getLiveClubSubscription(scoped, id))]);
               const club = profile[0];
               return club && !club.deleted_at_ms.length ? {
                 id: club.id, name: club.name, is_pro: Boolean(sub?.is_pro),

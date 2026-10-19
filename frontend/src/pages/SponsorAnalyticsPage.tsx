@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -109,7 +110,7 @@ function IcpSponsorAnalyticsPage() {
             selectedClub === "all" ? (clubs ?? []) : (clubs ?? []).filter((c) => c.id === selectedClub);
           const rows: any[] = [];
           for (const club of targets) {
-            const list = await listLiveSponsors(ctx, club.id);
+            const list = await readMembershipInScope(ctx, { clubId: club.id }, (scoped) => listLiveSponsors(scoped, club.id));
             rows.push(
               ...list.map((s) => ({
                 id: s.id,

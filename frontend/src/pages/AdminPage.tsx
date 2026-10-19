@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { useNavigate } from "react-router-dom";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { useQuery } from "@tanstack/react-query";
@@ -61,9 +62,9 @@ function SupabaseAdminPage() {
     queryFn: async () => withFeatureBackend<boolean>("membership", {
       icp: async (ctx) => {
         const { getLiveTeam, getLiveClubSubscription } = await import("@/live/features/club");
-        const teams = await Promise.all(teamAdminCoachTeamIds.map((id) => getLiveTeam(ctx, id).catch(() => [] as const)));
+        const teams = await Promise.all(teamAdminCoachTeamIds.map((id) => readMembershipInScope(ctx, { teamId: id }, (scoped) => getLiveTeam(scoped, id)).catch(() => [] as const)));
         const clubIds = Array.from(new Set(teams.map((t: any) => t?.[0]?.club_id).filter(Boolean))) as string[];
-        const subs = await Promise.all(clubIds.map((id) => getLiveClubSubscription(ctx, id).catch(() => null)));
+        const subs = await Promise.all(clubIds.map((id) => readMembershipInScope(ctx, { clubId: id }, (scoped) => getLiveClubSubscription(scoped, id)).catch(() => null)));
         const nowMs = Date.now();
         return subs.some((s: any) => {
           if (!s) return false;

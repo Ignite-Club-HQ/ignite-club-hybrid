@@ -440,7 +440,7 @@ export function useTeamNamesByIds(teamIds?: string[] | null) {
           // list_teams requires a club_id; fetch each team individually.
           // Inefficient, but matches the deep-link use case documented above.
           const teams = await Promise.all(ids.map(id => getLiveTeam(ctx, id)));
-          return teams.map(t => t[0]).filter(Boolean).map(t => ({ id: t!.id, name: t!.name }));
+          return teams.flatMap(t => t[0] ? [{ id: t[0].id, name: t[0].name }] : []);
         }
       }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [row.id, row])).values()] });
     },
