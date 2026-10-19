@@ -29,8 +29,6 @@
 - ICP profile batches use get_profile for missing callers. Why: linked accounts retain original IDs.
 - ICP media uses uploader avatars; inbox previews use scope IDs; DM settings read/write ICP. Chat files encrypt/register before token creation. Why: silent no-ops lost device attachments.
 - Club setup reads active membership backend; saved palettes/logo count independently of entitlement; sponsor/theme saves invalidate it. Why: acknowledge free-club setup without Supabase rows in ICP.
-- IcpSignInScreen owns login presentation; AuthPage retains provider invocation and redirects to preserve identity, invite and session semantics.
-- Sign-in footers and profile policy links share legalLinks destinations; open separately to preserve drafts and invite URLs, and reuse destinations for internal legal pages.
 
 <!-- ic-skills:managed:start -->
 <!-- state: configured (on-demand) -->
