@@ -48,7 +48,7 @@ try {
  club.setPrincipal(victim); assert.deepEqual(await club.read_account_my_role_grants(),[]);
  events.setPrincipal(victim); assert.deepEqual(ok(await events.read_account_list_my_viewed_event_ids([])),[]);
  insights.setPrincipal(victim); ok(await insights.record_web_vital('LCP',12,'good','/local'));
- await denied(()=>league.read_account_verify_child_guardian(victim,'unknown').then(r=>r===false?{Err:'self only'}:{Ok:r}));
+ assert.equal(await league.read_account_verify_child_guardian(victim,'unknown'),false,'A human cannot invoke the self-only guardian helper');
  chat.setPrincipal(governor); const conversation=ok(await chat.create_conversation('club',[],[victim,governor]));
  chat.setPrincipal(victim); ok(await chat.send_message(conversation.id,'local private message','m1',[],[]));
  assert.equal(ok(await chat.read_account_list_messages_page(conversation.id,[],10)).messages.length,1);
