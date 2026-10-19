@@ -14,6 +14,7 @@ const live = vi.hoisted(() => ({ files: vi.fn().mockResolvedValue([]), teams: vi
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => supabaseMode ? p.supabase() : p.icp(live.context) }));
 vi.mock("@/live/features/vault", () => ({ listLiveVaultClubFiles: live.files }));
 vi.mock("@/live/features/club", () => ({ listLiveTeams: live.teams }));
+vi.mock("@/live/blobStoreUpload", () => ({ getLiveClubMediaBytes: vi.fn().mockResolvedValue({ finalized: 0, pending: 0 }) }));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type Call = { table: string; method: string; args: unknown[] };
@@ -169,5 +170,18 @@ describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () =>
     });
     expect(fake.calls).toEqual([]);
     expect(live.files).toHaveBeenCalledWith(live.context, "club-a", null, null);
+  });
+
+  it("uses the photo store's combined club media bytes as the authoritative club total", async () => {
+    const { getLiveClubMediaBytes } = await import("@/live/blobStoreUpload");
+    vi.mocked(getLiveClubMediaBytes).mockResolvedValue({ finalized: 5_000, pending: 20 });
+    await expect(fetchVaultStorageBreakdown("club-a", scriptedClient({}).client)).resolves.toMatchObject({ total: 5_020 });
+    expect(getLiveClubMediaBytes).toHaveBeenCalledWith(live.context.target, live.context.identity, "club-a");
+  });
+
+  it("falls back to vault-file bytes when the store predates the club-bytes query", async () => {
+    const { getLiveClubMediaBytes } = await import("@/live/blobStoreUpload");
+    vi.mocked(getLiveClubMediaBytes).mockResolvedValue({ finalized: 0, pending: 0 });
+    await expect(fetchVaultStorageBreakdown("club-a", scriptedClient({}).client)).resolves.toMatchObject({ total: 0 });
   });
 });
