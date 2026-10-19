@@ -1,4 +1,5 @@
 import { Principal } from '@icp-sdk/core/principal';
+import { accountAuthoritiesFromRegistry, type AccountRegistryBinding, type AccountRegistrySnapshot } from './accountAuthorityRegistry';
 
 type Result = { Ok: unknown } | { Err: string };
 export type AccountAuthorityGroup = { groupId: string; clubDomain: string };
@@ -18,4 +19,27 @@ export async function wireAccountGroupAuthorities(groups: readonly AccountAuthor
   const check = (r: Result) => { if ('Err' in r) throw new Error(r.Err); };
   for (const group of groups) check(await actors.club(group.clubDomain).set_identity_access_canister(identity));
   check(await actors.identity(identityId).set_club_authorities(clubs));
+}
+
+/** Local rehearsal only. Re-read the consensus registry before each setter;
+ * any concurrent placement change stops publishing the authority inventory.
+ * This is NOT all-domain revocation attestation or a production release gate. */
+export async function wireVerifiedLocalAccountAuthorities(binding: AccountRegistryBinding, identityId: string,
+  deps: { readRegistry(): Promise<AccountRegistrySnapshot>; actors: Actors }) {
+  if (binding.targetAlias !== 'local' || binding.deploymentId !== 'local') throw new Error('Account authority wiring remains local-only');
+  const groups = accountAuthoritiesFromRegistry(await deps.readRegistry(), binding);
+  const expected = JSON.stringify(groups);
+  const unchanged = async () => {
+    const current = accountAuthoritiesFromRegistry(await deps.readRegistry(), binding);
+    if (JSON.stringify(current) !== expected) throw new Error('Account authority inventory changed');
+  };
+  await wireAccountGroupAuthorities(groups, identityId, {
+    club: id => ({ set_identity_access_canister: async principal => {
+      await unchanged(); return deps.actors.club(id).set_identity_access_canister(principal);
+    } }),
+    identity: id => ({ set_club_authorities: async principals => {
+      await unchanged(); return deps.actors.identity(id).set_club_authorities(principals);
+    } }),
+  });
+  await unchanged();
 }
