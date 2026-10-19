@@ -2,6 +2,7 @@
 
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 
+- [ ] Fix screenshot-reported ICP frontend deployment guard failure in `clubMediaAllowance`: enforce Supabase-only entry and queued checks, verify guard scanner and upload regressions in both modes. Owner reruns frontend deploy after verified fix.
 - [x] Approved Batch 1 capacity/photo-move investigation: source review and public mainnet reads complete; primary store has 57 legacy blobs / 3,848,218 ciphertext bytes, 2 GiB capacity, stable writes off. Combined quota gaps and conditional original-key-preserving move feasibility documented in `docs/scaling-storage-and-photo-move-feasibility.md`; 46 existing safeguards pass in each backend mode. No application or live mutations.
 - [ ] Authorized live completeness evidence: exact quota mode, pending reservations, full group/store registry and artifact/key attestations require the GitHub-held operator identity; public readings do not establish completeness.
 - [ ] Capacity/accounting expansion and optional safe-photo-move implementation: follow the investigation's consolidated proposal only after separate approval. Current encrypted-move refusal remains unchanged; no re-encryption or live activation authorized.
