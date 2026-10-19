@@ -842,7 +842,7 @@ function SupabaseManageUsersPage() {
                 idempotencyKeyPrefix: `role-assign-${role}-${clubId || "none"}-${teamId || "none"}-${Date.now()}`,
               });
             },
-          }, clubId ? writeOnce({ clubId }) : { shared: "app" });
+          }, clubId ? writeOnce({ clubId }) : teamId ? writeOnce({ teamId }) : { shared: "app" });
         } catch (e) {
           throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
         }
@@ -929,7 +929,7 @@ function SupabaseManageUsersPage() {
                 idempotencyKeyPrefix: `role-remove-${role}-${clubId || "none"}-${teamId || "none"}-${Date.now()}`,
               });
             },
-          }, clubId ? writeOnce({ clubId }) : { shared: "app" });
+          }, clubId ? writeOnce({ clubId }) : teamId ? writeOnce({ teamId }) : { shared: "app" });
         } catch (e) {
           throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
         }

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { suggestLiveEoiTeams, allocateLiveEoiToTeam } from "@/live/features/competitions";
+import { writeEoiInScope } from "@/live/competitionRouting";
 
 export type EoiTeamSuggestion = {
   age_group: string;
@@ -96,7 +97,7 @@ export function useAllocateEoisBulk() {
         },
         icp: async (ctx) => {
           for (const id of submissionIds) {
-            await allocateLiveEoiToTeam(ctx, id, teamId);
+            await writeEoiInScope(ctx, id, scoped => allocateLiveEoiToTeam(scoped, id, teamId));
           }
         },
       }, { shared: "person" }),

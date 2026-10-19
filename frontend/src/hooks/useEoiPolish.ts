@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resendLiveEoiInvite, bulkResendLiveEoiInvites } from "@/live/features/competitions";
+import { writeEoiInScope } from "@/live/competitionRouting";
 
 /** Resend the magic-link invite for a given EOI submission. */
 export function useResendEoiInvite() {
@@ -59,7 +60,7 @@ export function useBulkResendEoiInvites() {
         },
         // Canister call is the bookkeeping half; email delivery stays on Supabase.
         icp: async (ctx) => {
-          await bulkResendLiveEoiInvites(ctx, submissionIds);
+          for (const id of submissionIds) await writeEoiInScope(ctx, id, scoped => resendLiveEoiInvite(scoped, id));
           let ok = 0;
           let fail = 0;
           for (const id of submissionIds) {

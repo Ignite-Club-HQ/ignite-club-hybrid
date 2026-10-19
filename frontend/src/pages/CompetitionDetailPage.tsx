@@ -1777,7 +1777,7 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
           setIcpClaimLink(`${window.location.origin}/claim-team?token=${token}`);
           toast({ title: "Shell team created", description: "Copy the claim link below to share it with the contact." });
         },
-      }, writeOnce({ competitionId }));
+      }, writeOnce({ clubId: organizerClubId ?? "" }));
     } catch (error: any) {
       setSaving(false);
       toast({ title: "Could not send invite", description: error?.message || "Unknown error", variant: "destructive" });
