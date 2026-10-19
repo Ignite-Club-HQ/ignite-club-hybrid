@@ -35,6 +35,7 @@ import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
+import Map "mo:core/Map";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
@@ -144,7 +145,7 @@ persistent actor class Main(governorInit : Principal) {
   // undecryptable. Read per call (system capability is only available
   // inside shared methods).
   func vetkdKeyId<system>() : ManagementCanister.VetKdKeyid {
-    let keyName = Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1";
+    let keyName = establishedVetkdKeyName ?? Runtime.trap("vetKD key name not established");
     { curve = #bls12_381_g2; name = keyName }
   };
 
@@ -152,6 +153,11 @@ persistent actor class Main(governorInit : Principal) {
   // may contain the separator (ids are UUIDs / "prefix:..." slugs).
   func ibeIdentity(pii_id : Text, field_id : Text) : Blob {
     Text.encodeUtf8(pii_id # "\u{1F}" # field_id)
+  };
+  // The shared photo identity is accessible ONLY through its membership
+  // relay. Generic records must never alias it, even with separator injection.
+  func reservedMediaIdentity(pii_id : Text, field_id : Text) : Bool {
+    Text.startsWith(pii_id, #text "clubmedia:") or Text.contains(pii_id, #char '\u{1F}') or Text.contains(field_id, #char '\u{1F}')
   };
 
   // ==================== State ====================
@@ -187,6 +193,16 @@ persistent actor class Main(governorInit : Principal) {
   // set_club_domain_canister; while unset, club grants never authorize.
   var club_domain_canister : ?Principal;
   var competition_domain_canister : ?Principal;
+  type ClubMediaAuthority = { authority : ?Principal; revision : Nat; move_id : Text };
+  var clubMediaAuthorities : Map.Map<Text, ClubMediaAuthority>;
+  var mediaAuthEpoch : Nat;
+  var establishedVetkdKeyName : ?Text;
+  // A legacy upgrade captures its existing environment key, so the operator
+  // must attest it matches the original deployment BEFORE that first upgrade.
+  // All subsequent upgrades ignore environment changes and preserve the key.
+  if (establishedVetkdKeyName == null) {
+    establishedVetkdKeyName := ?(Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1");
+  };
 
   // ==================== Helper Functions ====================
 
@@ -208,6 +224,7 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
+    mediaAuthEpoch += 1;
     transferFences := transferFences.filter(func(c) = c != club);
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
@@ -239,6 +256,7 @@ persistent actor class Main(governorInit : Principal) {
     let rootG = s.grants;
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
     if (s.grants.any(func(x) = not (x.club_id == c))
+        or s.records.any(func(x) = reservedMediaIdentity(x.pii_id, x.field_id))
         or s.records.any(func(x) = not (inG(x.pii_id)))
         or s.guardians.any(func(x) = not (x.children.any(inG)))) return #Err("Snapshot contains foreign records");
     if (s.records.any(func(e) = pii_records.any(func(x) = x.pii_id == e.pii_id and x.field_id == e.field_id and x.ciphertext != e.ciphertext))) return #Err("Snapshot id collides with another club");
@@ -439,6 +457,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (pii_ids.size() > 25) return #Err("Batch too large");
     if (transport_public_key.size() == 0) return #Err("Invalid transport key");
+    if (pii_ids.any(func(id) = reservedMediaIdentity(id, field_id))) return #Err("Reserved or invalid PII identity");
     let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
     let allowedCompetitions = await resolveAllowedCompetitions(caller, pii_ids, field_id);
     var out : [?Blob] = [];
@@ -475,30 +494,69 @@ persistent actor class Main(governorInit : Principal) {
   // errors.
   public query func club_media_lock_version() : async Nat { 1 };
 
+  func validMediaClub(club : Text) : Bool {
+    club.size() > 0 and club.size() <= 64 and not Text.contains(club, #char '\u{1F}') and not Text.contains(club, #char '/')
+  };
+  func mediaAuthority(club : Text) : ClubMediaAuthority {
+    clubMediaAuthorities.get(club) ?? ({ authority = null; revision = 0; move_id = "" })
+  };
+  // Consensus operator receipt, never browser membership evidence.
+  public shared ({ caller }) func read_club_media_authority(club : Text) : async { #Ok : ClubMediaAuthority; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not validMediaClub(club)) return #Err("Invalid club");
+    #Ok(mediaAuthority(club))
+  };
+  // Only changes authorization. The original canister continues deriving
+  // the original IBE identity; no key, ciphertext or PII grants are copied.
+  // The operator must independently prove destination/deployment ownership.
+  public shared ({ caller }) func set_club_media_authority(
+    club : Text, authority : ?Principal, move_id : Text, expected_revision : Nat
+  ) : async { #Ok : ClubMediaAuthority; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not validMediaClub(club) or move_id.size() == 0 or move_id.size() > 128) return #Err("Invalid media authority binding");
+    if (not isFenced(club)) return #Err("Club must be fenced before changing media authority");
+    switch (authority) { case (?p) { if (p.equal(Principal.anonymous())) return #Err("Invalid authority") }; case null {} };
+    let previous = mediaAuthority(club);
+    if (previous.revision != expected_revision) return #Err("Media authority revision changed");
+    let next = { authority; move_id; revision = previous.revision + 1 };
+    clubMediaAuthorities.add(club, next);
+    mediaAuthEpoch += 1;
+    #Ok(next)
+  };
+
   public shared ({ caller }) func get_club_media_vetkey(
     club_id : Text,
     transport_public_key : Blob
   ) : async { #Ok : Blob; #Err : Text } {
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
-    if (club_id.size() == 0 or club_id.size() > 64 or Text.contains(club_id, #char '\u{1F}')) return #Err("Invalid club");
-    if (transport_public_key.size() == 0) return #Err("Invalid transport key");
+    if (not validMediaClub(club_id)) return #Err("Invalid club");
+    if (transport_public_key.size() != 48) return #Err("Invalid transport key");
+    let binding = mediaAuthority(club_id);
+    let configured = club_domain_canister;
+    let epoch = mediaAuthEpoch;
+    let authority = switch (binding.authority) { case (?p) ?p; case null configured };
+    let unchanged = func() : Bool {
+      not isFenced(club_id) and mediaAuthEpoch == epoch and mediaAuthority(club_id) == binding and club_domain_canister == configured
+    };
     var allowed = isGovernor(caller);
     if (not allowed) {
-      switch (club_domain_canister) {
+      switch (authority) {
         case null {};
         case (?cid) {
-          let clubDomain : actor { is_club_member : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
-          try { allowed := await clubDomain.is_club_member(caller, club_id) } catch (_) {};
+          let clubDomain : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+          try { allowed := await (with timeout = 10) clubDomain.read_has_club_membership(caller, club_id) } catch (_) {};
         };
       };
     };
+    if (not unchanged()) return #Err("Media authority or transfer fence changed");
     let pii_id = "clubmedia:" # club_id;
     log_audit(caller, pii_id, "blob", "vetkey_derive", allowed, "Club media vetKey derivation");
     if (not allowed) return #Err("Not a member of this club");
     let encryptedKey = await ManagementCanister.vetKdDeriveKey(
       ibeIdentity(pii_id, "blob"), vetkdContext(), vetkdKeyId<system>(), transport_public_key
     );
+    if (not unchanged()) return #Err("Media authority or transfer fence changed");
     #Ok(encryptedKey)
   };
 
@@ -528,6 +586,7 @@ persistent actor class Main(governorInit : Principal) {
     if (pii_id == "" or field_id == "") {
       return #Err("Invalid pii_id or field_id");
     };
+    if (reservedMediaIdentity(pii_id, field_id)) return #Err("Reserved or invalid PII identity");
     if (domain_owner.equal(Principal.anonymous())) {
       return #Err("Invalid domain owner");
     };
@@ -700,6 +759,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor only");
     if (canister.equal(Principal.anonymous())) return #Err("Invalid canister");
     club_domain_canister := ?canister;
+    mediaAuthEpoch += 1;
     #Ok
   };
 

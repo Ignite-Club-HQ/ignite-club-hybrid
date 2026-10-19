@@ -26,6 +26,11 @@ export interface AuditRecord {
   'field_id' : string,
   'purpose' : string,
 }
+export interface ClubMediaAuthority {
+  'move_id' : string,
+  'authority' : [] | [Principal],
+  'revision' : bigint,
+}
 export interface EncryptedPii {
   'master_key_id' : string,
   'ciphertext' : Uint8Array,
@@ -112,6 +117,11 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_club_media_authority' : ActorMethod<
+    [string],
+    { 'Ok' : ClubMediaAuthority } |
+      { 'Err' : string }
+  >,
   'register_pii' : ActorMethod<
     [string, string, Uint8Array, Principal],
     { 'Ok' : EncryptedPii } |
@@ -145,6 +155,11 @@ export interface Main {
   'set_club_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_club_media_authority' : ActorMethod<
+    [string, [] | [Principal], string, bigint],
+    { 'Ok' : ClubMediaAuthority } |
       { 'Err' : string }
   >,
   'set_competition_domain_canister' : ActorMethod<
