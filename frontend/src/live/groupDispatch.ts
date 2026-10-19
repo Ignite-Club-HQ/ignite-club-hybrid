@@ -75,13 +75,13 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
     const found = [...new Set(await s.readEveryGroup(ENTITY_DOMAIN[kind], async ctx => { const c = await lookup(ctx, kind, id); return c ? [c] : []; }, 2))];
     if (found.length > 1) throw new Error(`${kind} claimed by more than one group`);
     const club = found[0] ?? null;
-    owners.set(key, club); if (club) persist(deps, principal);
     if (!club && ['competitionMatch', 'eoi', 'vaultFile', 'vaultFolder', 'notification', 'scheduledMessage'].includes(kind)) {
       const shared = await deps.context();
       const sharedClub = await lookup(shared, kind, id);
       if (!sharedClub) throw new Error(`${kind} not found or not authorized`);
       return null;
     }
+    owners.set(key, club); if (club) persist(deps, principal);
     return club;
   })();
   inflight.set(key, probe);
