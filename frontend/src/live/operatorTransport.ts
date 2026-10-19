@@ -15,8 +15,9 @@ export type OperatorIdentity = Ed25519KeyIdentity;
 export function loadOperatorIdentity(pemPath: string): OperatorIdentity {
   const pem = readFileSync(pemPath, 'utf8');
   const der = Buffer.from(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64');
-  // Raw 32-byte seed, or SEC1 v2 ("MC4CAQAwBQYDK2VwBCIEIC...") with the seed as the final 32 bytes.
-  const seed = der.length === 32 ? der : der.subarray(der.length - 32);
+  // Raw 32-byte seed; 64-byte secretKey (seed||public) keeps the seed half;
+  // SEC1 v2 ("MC4CAQAwBQYDK2VwBCIEIC...") carries the seed as the final 32 bytes.
+  const seed = der.length === 32 ? der : der.length === 64 ? der.subarray(0, 32) : der.subarray(der.length - 32);
   if (seed.length !== 32) throw new Error('Invalid operator key material');
   return Ed25519KeyIdentity.fromSecretKey(new Uint8Array(seed));
 }
