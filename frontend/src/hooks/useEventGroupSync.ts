@@ -102,11 +102,12 @@ export function useEventGroupSync(
           icp: ctx => import("@/live/features/events").then(api => api.getLiveEventGroup(ctx, actualGroupId)),
         }, { eventGroupId: actualGroupId });
         if (!row) return;
+        const changed = icpRevisionRef.current !== row.state_revision;
         icpRevisionRef.current = row.state_revision;
         const local = loadLocalState();
         const pitch = row.pitch_state_json[0] ? JSON.parse(row.pitch_state_json[0]) : null;
         const timer = row.timer_state_json[0] ? JSON.parse(row.timer_state_json[0]) : null;
-        if (pitch && (force || !local.pitchState)) {
+        if (pitch && (force || changed || !local.pitchState)) {
           const value = JSON.stringify({ ...pitch, teamId });
           localStorage.setItem(getPitchStateKeyForTeam(teamId), value);
           localStorage.setItem(PITCH_STATE_KEY, value);
@@ -186,7 +187,7 @@ export function useEventGroupSync(
         const { pitchState, timerState } = loadLocalState();
         if (!pitchState && !timerState) return;
         const hash = JSON.stringify({ pitchState, timerState });
-        if (hash === lastSyncedStateRef.current) return;
+        if (hash === lastSyncedStateRef.current) { await loadFromDatabase(true); return; }
         const revision = icpRevisionRef.current;
         const row = await withFeatureBackend("events", {
           supabase: async () => null,
