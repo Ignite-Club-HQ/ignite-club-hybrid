@@ -132,6 +132,7 @@ persistent actor class Main(governorInit : Principal) {
   // while the club_domain canister id is unset (set_club_domain_canister).
   type ClubDomainRef = actor {
     is_app_admin : shared query (Principal) -> async Bool;
+    read_account_is_app_admin : shared (Principal) -> async Bool;
     list_club_admins : shared query (Text) -> async [Principal];
     is_user_on_any_team : shared query ([Text], Principal) -> async Bool;
   };
@@ -619,7 +620,10 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubDomain) {
       case null { return #Err("club_domain canister not configured") };
       case (?cd) {
+        let configured = clubDomainCanister;
         let admins = await cd.list_club_admins(club_id);
+        await admitAccount(caller);
+        if (configured != clubDomainCanister or isFenced(club_id)) Runtime.trap("Club authorization changed");
         let isMember = caller.equal(member);
         let isAdmin = admins.any(func(p) = p.equal(caller));
         if (not isMember and not isAdmin and not isGovernor(caller)) return #Err("Not permitted");
@@ -679,7 +683,10 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubDomain) {
       case null { [] };
       case (?cd) {
+        let configured = clubDomainCanister;
         let admins = await cd.list_club_admins(club_id);
+        await admitAccount(caller);
+        if (configured != clubDomainCanister or isFenced(club_id)) Runtime.trap("Club authorization changed");
         if (not admins.any(func(p) = p.equal(caller)) and not isGovernor(caller)) return [];
         let prefix = clubAdminConversationId(club_id) # "-";
         var out : [{ id : Text; member : Principal }] = [];
@@ -987,7 +994,7 @@ persistent actor class Main(governorInit : Principal) {
       let clubDomain = await clubDomainRef();
       switch (clubDomain) {
         case null { return #Err("club_domain canister not configured") };
-        case (?cd) { if (not (await cd.is_app_admin(caller))) { return #Err("App admin required") } };
+        case (?cd) { if (not (if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller))) { return #Err("App admin required") } };
       };
     };
     let settings : PhotoReminderPolicy.Settings = { enabled = true; window_start_hours; window_end_hours; cooldown_days };
@@ -1004,7 +1011,7 @@ persistent actor class Main(governorInit : Principal) {
       switch (await clubDomainRef()) {
         case null { return #Err("club_domain canister not configured") };
         case (?cd) {
-          let allowed = try { await cd.is_app_admin(caller) } catch (_) { false };
+          let allowed = try { if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller) } catch (_) { false };
           if (not allowed) return #Err("App admin required");
         };
       };
@@ -1021,7 +1028,7 @@ persistent actor class Main(governorInit : Principal) {
       switch (await clubDomainRef()) {
         case null { return #Err("club_domain canister not configured") };
         case (?cd) {
-          let allowed = try { await cd.is_app_admin(caller) } catch (_) { false };
+          let allowed = try { if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller) } catch (_) { false };
           if (not allowed) return #Err("App admin required");
         };
       };
@@ -1234,7 +1241,7 @@ persistent actor class Main(governorInit : Principal) {
       switch (clubDomain) {
         case null { return #Err("club_domain canister not configured") };
         case (?cd) {
-          let admin = await cd.is_app_admin(caller);
+          let admin = if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller);
           if (not admin) return #Err("App admin required");
         };
       };
@@ -2676,7 +2683,7 @@ persistent actor class Main(governorInit : Principal) {
           case (?cd) {
             let admins = try { await cd.list_club_admins(club_id) } catch (_) { [] };
             if (admins.any(func(p : Principal) : Bool = p.equal(caller))) null else {
-              let appAdmin = try { await cd.is_app_admin(caller) } catch (_) { false };
+              let appAdmin = try { if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller) } catch (_) { false };
               if (appAdmin) null else ?e
             }
           };
@@ -2689,7 +2696,10 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let configured = clubDomainCanister;
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    await admitAccount(caller);
+    if (configured != clubDomainCanister or isFenced(club_id)) return #Err("Club authorization changed");
     let existing = defaultClubDmSettings(club_id);
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null existing };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
@@ -2701,7 +2711,10 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let configured = clubDomainCanister;
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    await admitAccount(caller);
+    if (configured != clubDomainCanister or isFenced(club_id)) return #Err("Club authorization changed");
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
     clubDmSettings := clubDmSettings.concat([{ current with club_id; allowed_roles }]);
@@ -2712,7 +2725,10 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let configured = clubDomainCanister;
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    await admitAccount(caller);
+    if (configured != clubDomainCanister or isFenced(club_id)) return #Err("Club authorization changed");
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
     clubDmSettings := clubDmSettings.concat([{ current with club_id; force_disable_previews }]);
@@ -2723,7 +2739,10 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let configured = clubDomainCanister;
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    await admitAccount(caller);
+    if (configured != clubDomainCanister or isFenced(club_id)) return #Err("Club authorization changed");
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
     clubDmSettings := clubDmSettings.concat([{ current with club_id; ai_catch_up_enabled }]);
@@ -2734,7 +2753,10 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let configured = clubDomainCanister;
     switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    await admitAccount(caller);
+    if (configured != clubDomainCanister or isFenced(club_id)) return #Err("Club authorization changed");
     var count : Nat32 = 0;
     for (m in clubMemberships.values()) {
       if (m.club_id == club_id) {
@@ -2963,7 +2985,9 @@ persistent actor class Main(governorInit : Principal) {
     };
     let transcript = buildRecapTranscript(scope_id, effectiveSince);
     if (transcript == "") return #Err("No new messages to recap");
-    await runRecapCompletion(transcript)
+    let result = await runRecapCompletion(transcript);
+    await admitAccount(caller);
+    switch (authorizeRecapCaller(caller, scope_id)) { case (?err) #Err(err); case null result }
   };
 
   // Variant for scopes whose message bodies are client-encrypted (PII), where
@@ -2979,7 +3003,9 @@ persistent actor class Main(governorInit : Principal) {
     };
     if (transcript == "") return #Err("No new messages to recap");
     if (not checkAndMarkRecapRateLimit(caller)) return #Err("Please wait a moment before requesting another recap");
-    await runRecapCompletion(truncateText(transcript, 6000))
+    let result = await runRecapCompletion(truncateText(transcript, 6000));
+    await admitAccount(caller);
+    switch (authorizeRecapCaller(caller, scope_id)) { case (?err) #Err(err); case null result }
   };
 
   // ===================== Presence (online count) =====================
@@ -3117,7 +3143,7 @@ persistent actor class Main(governorInit : Principal) {
       switch (await clubDomainRef()) {
         case null { return #Err("club_domain canister not configured") };
         case (?cd) {
-          let allowed = try { await cd.is_app_admin(caller) } catch (_) { false };
+          let allowed = try { if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller) } catch (_) { false };
           if (not allowed) return #Err("App admin required");
         };
       };

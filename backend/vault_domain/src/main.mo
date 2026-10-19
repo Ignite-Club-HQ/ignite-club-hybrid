@@ -131,7 +131,10 @@ persistent actor class Main(governorInit : Principal) {
     if (isFenced(club)) return false;
     switch (competitionId) {
       case (?id) {
+        let configured = competition_domain_canister;
         let access = await getCompetitionAccess(caller, id);
+        await admitAccount(caller);
+        if (isFenced(club) or configured != competition_domain_canister) return false;
         return switch (access) {
           case null { false };
           case (?value) { value.club_id == club and value.is_member and value.can_manage };
@@ -144,7 +147,9 @@ persistent actor class Main(governorInit : Principal) {
       case null { false };
       case (?cid) {
         let cd : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool; read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
-        try { if (accountAdmissionEnabled) await cd.read_has_club_staff_role(caller, club) else await cd.has_club_staff_role(caller, club) } catch (_) { false }
+        let allowed = try { if (accountAdmissionEnabled) await cd.read_has_club_staff_role(caller, club) else await cd.has_club_staff_role(caller, club) } catch (_) { false };
+        await admitAccount(caller);
+        allowed and club_domain_canister == ?cid and not isFenced(club)
       };
     }
   };
@@ -1051,6 +1056,7 @@ persistent actor class Main(governorInit : Principal) {
     // Bound authorization work; unbounded club reads remain a release blocker.
     if (candidates.size() > 200) Runtime.trap("Use bounded vault pages");
     for (file in candidates.values()) { if (await accountFileAccess(caller, file)) out := out.concat([file]) };
+    await admitAccount(caller);
     // Re-evaluate local permissions after the final remote await.
     out.filter(func(file) = files.find(func(f) = f.id == file.id) == ?file and not isFenced(file.club) and
       (switch (folders.find(func(f) = f.id == file.folder_id)) { case null file.folder_id == ""; case (?folder) canViewFolder(caller, folder) }))
