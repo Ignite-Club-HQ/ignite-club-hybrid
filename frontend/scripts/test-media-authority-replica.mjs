@@ -86,8 +86,10 @@ try {
     assert.equal(result[0].length, expected ? 1 : 0);
   };
   await guardianRead(true);
+  assert.deepEqual(await a.my_guardian_children(), [child.id]);
   source.actor.setPrincipal(member); ok(await source.actor.delete_own_child(child.id));
   await guardianRead(false); // stored mirror cannot outlive verified relationship
+  assert.deepEqual(await a.my_guardian_children(), []);
   // Deterministic suspended calls, not a timing-dependent Promise.all race.
   const deferred = pic.createDeferredActor(piiIdl, original.canisterId);
   deferred.setPrincipal(member);
