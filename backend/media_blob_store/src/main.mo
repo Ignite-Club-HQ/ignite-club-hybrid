@@ -172,7 +172,7 @@ persistent actor MediaBlobStore {
           let r = blobs[offset]; add(r.path, #blob, "", r.content_hash, r.bytes.size(), false);
           offset += 1; scanned += 1
         };
-        next := ?(if (offset < blobs.size()) { phase = #legacy; offset; after = "" } else { phase = #stable; offset = 0; after = "" })
+        next := if (offset < blobs.size()) ?{ phase = #legacy; offset; after = "" } else ?{ phase = #stable; offset = 0; after = "" }
       };
       case (#stable) {
         var after = cursor.after;
@@ -181,7 +181,7 @@ persistent actor MediaBlobStore {
           if (scanned >= MediaInventory.pageLimit) break;
           add(path, #blob, "", r.content_hash, r.slice.length, false); after := path; scanned += 1
         };
-        next := ?(if (scanned == MediaInventory.pageLimit) { phase = #stable; offset = 0; after } else { phase = #pending; offset = 0; after = "" })
+        next := if (scanned == MediaInventory.pageLimit) ?{ phase = #stable; offset = 0; after } else ?{ phase = #pending; offset = 0; after = "" }
       };
       case (#pending) {
         var offset = cursor.offset;
@@ -189,7 +189,7 @@ persistent actor MediaBlobStore {
           let r = pending_uploads[offset]; add(r.path, #pending, r.id, "", r.total_size.toNat(), true);
           offset += 1; scanned += 1
         };
-        next := ?(if (offset < pending_uploads.size()) { phase = #pending; offset; after = "" } else { phase = #journal; offset = 0; after = "" })
+        next := if (offset < pending_uploads.size()) ?{ phase = #pending; offset; after = "" } else ?{ phase = #journal; offset = 0; after = "" }
       };
       case (#journal) {
         var after = cursor.after;
