@@ -4,6 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubStoragePurchasedGb } from "@/live/features/promoCodes";
+import { listStoredClubMedia } from "./clubMediaAllowance";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -139,7 +140,7 @@ export async function fetchVaultStorageSubscription(
     const gb = await withFeatureBackend("membership", {
       supabase: async () => 0,
       icp: (ctx) => getLiveClubStoragePurchasedGb(ctx, clubId),
-    }, { clubId: clubId! }).catch(() => 0);
+    }, { clubId }).catch(() => 0);
     return { storage_purchased_gb: gb, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
   }
   const { data } = await client
@@ -195,30 +196,40 @@ export async function fetchVaultStorageBreakdown(
       },
     }, { clubId });
   }
-  const { data: photos } = await client
+  const { data: photos, error: photosError } = await client
     .from("photos")
     .select("file_size, team_id, mini_league_id")
     .eq("club_id", clubId)
     .is("deleted_at", null);
-  const { data: files } = await client
+  const { data: files, error: filesError } = await client
     .from("vault_files")
     .select("*")
     .eq("club_id", clubId)
     .is("deleted_at", null);
-  const { data: teams } = await client
+  const { data: teams, error: teamsError } = await client
     .from("teams")
     .select("id, name")
     .eq("club_id", clubId)
     .is("deleted_at", null);
-  const { data: miniLeagues } = await client
+  const { data: miniLeagues, error: leaguesError } = await client
     .from("mini_leagues")
     .select("id, name")
     .eq("club_id", clubId);
 
-  return calculateVaultStorageBreakdown({
+  if (photosError || filesError || teamsError || leaguesError) throw photosError || filesError || teamsError || leaguesError;
+  const objects = await listStoredClubMedia(clubId, client);
+  const physicalPhotos = objects.filter((object) => isVaultStorageImageFilename(object.path));
+  const physicalFiles = objects.filter((object) => !isVaultStorageImageFilename(object.path));
+  const breakdown = calculateVaultStorageBreakdown({
     photos: photos ?? [],
     files: files ?? [],
     teams: teams ?? [],
     miniLeagues: miniLeagues ?? [],
   });
+  return {
+    ...breakdown,
+    photos: physicalPhotos.reduce((sum, object) => sum + object.size, 0),
+    documents: physicalFiles.reduce((sum, object) => sum + object.size, 0),
+    total: objects.reduce((sum, object) => sum + object.size, 0),
+  };
 }
