@@ -1952,6 +1952,19 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_removal_media_registry' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'stores' : IDL.Vec(IDL.Principal),
+              'active' : IDL.Bool,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_season_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
