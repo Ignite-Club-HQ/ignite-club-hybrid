@@ -155,9 +155,9 @@ export default function LeaderboardPage() {
           supabase: () => [],
           icp: (ctx) =>
             scope === "team"
-              ? computeLiveTeamMemberLeaderboard(ctx, clubId, teamId!, windowKey)
+              ? computeLiveTeamMemberLeaderboard(ctx, clubId, teamId ?? "", windowKey)
               : getLiveLeaderboard(ctx, clubId, "User", windowKey, 50),
-        });
+        }, { clubId });
         const profiles = await withFeatureBackend("membership", {
           supabase: () => [],
           icp: (ctx) => listLiveProfilesByIds(ctx, entries.map((e) => e.subject_id)),
@@ -221,7 +221,7 @@ export default function LeaderboardPage() {
         const teams = await withFeatureBackend("points", {
           supabase: () => [],
           icp: (ctx) => computeLiveTeamLeaderboard(ctx, clubId, windowKey),
-        });
+        }, { clubId });
         return teams.map((t, i) => ({ rank: i + 1, team_id: t.team_id, team_name: t.team_name, points: t.points })) as TeamRow[];
       }
       const { data, error } = await supabase.rpc("get_teams_leaderboard", {

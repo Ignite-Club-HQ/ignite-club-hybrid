@@ -345,6 +345,7 @@ export function HomeRewardsSection({
             rewardName={latestPendingRedemption.club_rewards?.name || "Reward"}
             clubName={latestPendingRedemption.clubs?.name || "Club"}
             redemptionId={latestPendingRedemption.id}
+            clubId={latestPendingRedemption.club_id}
             qrCodeUrl={
               latestPendingRedemption.club_rewards?.qr_code_url || null
             }
