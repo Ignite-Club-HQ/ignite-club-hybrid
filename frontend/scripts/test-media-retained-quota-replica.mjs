@@ -18,9 +18,12 @@ const denied = r => assert.ok('Err' in r);
 const server = await PocketIcServer.start({binPath:'/tmp/pocket-ic'});
 try {
  const pic = await PocketIc.create(server.getUrl());
- const club = await pic.setupCanister({idlFactory:clubIdl,wasm:clubWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor]),environmentVariables:[{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'}]});
+ const oldClub = process.env.RETAINED_PRECHANGE_CLUB_WASM;
+ const oldStore = process.env.RETAINED_PRECHANGE_STORE_WASM;
+ assert.equal(Boolean(oldClub),Boolean(oldStore),'Old authority and stores must be tested together');
+ const club = await pic.setupCanister({idlFactory:clubIdl,wasm:oldClub || clubWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor]),environmentVariables:[{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'}]});
  const stores=[];
- for(let i=0;i<2;i++) stores.push(await pic.setupCanister({idlFactory,wasm,sender:governor,controllers:[governor],environmentVariables:[{name:'GOVERNOR_PRINCIPAL',value:governor.toText()},{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'}]}));
+ for(let i=0;i<2;i++) stores.push(await pic.setupCanister({idlFactory,wasm:oldStore || wasm,sender:governor,controllers:[governor],environmentVariables:[{name:'GOVERNOR_PRINCIPAL',value:governor.toText()},{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'}]}));
  const c=club.actor; c.setPrincipal(governor);
  ok(await c.create_club('c','Test Club','test-club',[],[]));
  ok(await c.add_role_grant(owner,'c','player',[]));
@@ -33,6 +36,14 @@ try {
  // Indexed + orphan/personal objects must all participate in exact totals.
  stores[1].actor.setPrincipal(governor); ok(await stores[1].actor.migrate_legacy_blob()); ok(await stores[1].actor.enable_stable_media_storage()); stores[1].actor.setPrincipal(owner);
  await upload(stores[1].actor,'users/u/orphan',[8]);
+ if(oldClub && oldStore) {
+   for(const store of stores) await pic.upgradeCanister({canisterId:store.canisterId,wasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+   await pic.upgradeCanister({canisterId:club.canisterId,wasm:clubWasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+   assert.equal((await stores[0].actor.health()).total_bytes,3n);
+   assert.equal((await stores[1].actor.health()).total_bytes,3n);
+   assert.equal((await stores[1].actor.stable_storage_status()).indexed_count,2n);
+   console.log('PASS: pinned pre-retained authority + legacy/indexed ciphertext survive additive migration into the new protocol.');
+ }
  ok(await c.start_media_quota_cutover()); ok(await c.start_media_retained_cutover());
  for(const store of stores) { store.actor.setPrincipal(governor); ok(await store.actor.freeze_media_quota()); ok(await store.actor.freeze_retained_media()); }
  denied(await c.activate_media_retained_quota());
