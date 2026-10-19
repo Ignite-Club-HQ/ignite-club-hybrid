@@ -295,6 +295,11 @@ type Main =
                          Err: text;
                          Ok: Conversation;
                        });
+   ensure_mini_league_chat: (club_id: text, league_id: text, name: text,
+    members: vec principal) -> (variant {
+                                  Err: text;
+                                  Ok: GroupSummary;
+                                });
    export_club_snapshot_page: (club: text, offset: nat, limit: nat) ->
     (variant {
        Err: text;
@@ -338,6 +343,11 @@ type Main =
     (variant {
        Err: text;
        Ok: vec GroupMetadata;
+     }) query;
+   get_mini_league_chat: (club_id: text, league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt GroupSummary;
      }) query;
    get_minimum_app_versions: () ->
     (variant {

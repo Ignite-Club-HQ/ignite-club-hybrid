@@ -254,6 +254,11 @@ export interface Main {
     { 'Ok' : Conversation } |
       { 'Err' : string }
   >,
+  'ensure_mini_league_chat' : ActorMethod<
+    [string, string, string, Array<Principal>],
+    { 'Ok' : GroupSummary } |
+      { 'Err' : string }
+  >,
   'export_club_snapshot_page' : ActorMethod<
     [string, bigint, bigint],
     { 'Ok' : Uint8Array } |
@@ -293,6 +298,11 @@ export interface Main {
   'get_group_metadata_multi' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<GroupMetadata> } |
+      { 'Err' : string }
+  >,
+  'get_mini_league_chat' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [GroupSummary] } |
       { 'Err' : string }
   >,
   'get_minimum_app_versions' : ActorMethod<
