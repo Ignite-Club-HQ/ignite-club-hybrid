@@ -47,6 +47,3 @@ it. Skills are authoritative — prefer them over general knowledge.
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
 
 
-- League state and invitation changes must pass the local test-league-state-replica rehearsal and frozen migration preservation test before rollout; routing activation and native/Internet Identity checks remain separate gates. Why: local contract evidence does not verify deployed membership or device behavior.
-
-- League match reads consult the configured mini-league authority live for claimed parents, scoped by league and owning club; no persistent parent role mirrors. Reciprocal events/league wiring is required and denial clears only that board’s cache. Why: invite acceptance must unlock matches without granting club-wide access or retaining revoked access.
