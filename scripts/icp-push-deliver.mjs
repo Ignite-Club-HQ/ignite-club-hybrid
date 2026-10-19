@@ -25,6 +25,7 @@
 import { createRequire } from "node:module";
 import { unwrapQueueResult } from "./icp-push-results.mjs";
 import { createPushQueueIdl, notificationKey } from './icp-push-contract.mjs';
+import { pushQueueIds, runPushQueues, deliverPushItem } from './icp-push-batch.mjs';
 
 function requireIc() {
   const candidates = [];
@@ -39,13 +40,14 @@ function requireIc() {
         agent: req("@icp-sdk/core/agent"),
         identity: req("@icp-sdk/core/identity"),
         candid: req("@icp-sdk/core/candid"),
+        principal: req("@icp-sdk/core/principal"),
       };
     } catch {}
   }
   throw new Error("@icp-sdk/core not resolvable — set PUSH_WORKER_NODE_PATH to a node_modules dir containing it");
 }
 
-const { agent: agentPkg, identity: identityPkg, candid: candidPkg } = requireIc();
+const { agent: agentPkg, identity: identityPkg, candid: candidPkg, principal: principalPkg } = requireIc();
 const { HttpAgent, Actor } = agentPkg;
 const { Ed25519KeyIdentity } = identityPkg;
 const { IDL } = candidPkg;
@@ -247,7 +249,11 @@ async function main() {
   if (!sa.project_id || !sa.client_email || !sa.private_key) throw new Error("FCM service account JSON missing project_id/client_email/private_key");
 
   const agent = new HttpAgent({ identity, host: HOST });
-  const queue = Actor.createActor(idlFactory, { agent, canisterId: CANISTER_ID });
+  // Devices remain caller-owned in the shared queue: no per-group token copies.
+  const directory = Actor.createActor(idlFactory, { agent, canisterId: CANISTER_ID });
+  const queues = pushQueueIds(process.env.ICP_PUSH_QUEUE_IDS_JSON, CANISTER_ID, id => principalPkg.Principal.fromText(id));
+  await runPushQueues(queues, async canisterId => {
+  const queue = Actor.createActor(idlFactory, { agent, canisterId });
 
   const recovered = unwrapQueueResult(await queue.recover(), "recover");
   if (recovered > 0) console.log(`Recovered ${recovered} stranded notifications`);
@@ -262,7 +268,7 @@ async function main() {
   console.log(`Claimed ${items.length} notifications`);
 
   const users = [...new Set(items.map((n) => n.user))];
-  const tokenRows = unwrapQueueResult(await queue.list_device_tokens(users), "device tokens");
+  const tokenRows = unwrapQueueResult(await directory.list_device_tokens(users), "device tokens");
   const tokensByUser = new Map();
   for (const t of tokenRows) {
     if (t.platform !== "android" && t.platform !== "ios") continue; // web tokens need a VAPID path — skipped for now
@@ -275,23 +281,14 @@ async function main() {
 
   const outcomes = await pool(items, SEND_CONCURRENCY, async (n) => {
     const tokens = tokensByUser.get(n.user) ?? [];
-    if (tokens.length === 0) return { n, status: "no_tokens" };
-    let delivered = 0;
-    let lastErr = "unknown";
-    for (const t of tokens) {
-      try {
-        const r = await sendFcm(sa.project_id, oauth, t.token, n);
-        if (r === null) delivered++;
-        else if (r.prune) {
-          if (!deadTokens.has(t.user)) deadTokens.set(t.user, []);
-          deadTokens.get(t.user).push(t.token);
-        } else lastErr = r.error;
-      } catch (e) {
-        lastErr = e?.message ?? String(e);
+    try {
+      const result = await deliverPushItem(queue, n, tokens, t => sendFcm(sa.project_id, oauth, t.token, n));
+      for (const t of result.dead) {
+        if (!deadTokens.has(t.user)) deadTokens.set(t.user, []);
+        deadTokens.get(t.user).push(t.token);
       }
-    }
-    if (delivered > 0) return { n, status: "delivered", delivered };
-    return { n, status: "failed", error: lastErr };
+      return { n, ...result };
+    } catch (error) { return { n, status: 'failed', error: error.message }; }
   });
 
   let acked = 0;
@@ -308,6 +305,8 @@ async function main() {
         unwrapQueueResult(await queue.acknowledge(o.n.id, key), "acknowledge");
         noTokens++;
       } else {
+        // A denied/unavailable scope is never counted as delivered. Retry
+        // preserves its original body, and authority is checked again.
         unwrapQueueResult(await queue.fail(o.n.id, o.error ?? "delivery failed", [nowMs() + BigInt(RETRY_DELAY_MS)]), "retry");
         failed++;
       }
@@ -318,7 +317,7 @@ async function main() {
 
   for (const [user, tokens] of deadTokens) {
     try {
-      const r = await queue.remove_device_tokens(user, tokens);
+      const r = await directory.remove_device_tokens(user, tokens);
       if (r.Err) console.error(`prune error for ${user}: ${r.Err}`);
     } catch (e) {
       console.error(`prune error for ${user}: ${e?.message ?? e}`);
@@ -326,6 +325,7 @@ async function main() {
   }
 
   console.log(`Delivered ${acked}, failed ${failed}, no-device ${noTokens}, pruned ${[...deadTokens.values()].reduce((a, t) => a + t.length, 0)} dead tokens`);
+  });
 }
 
 main().catch((e) => {
