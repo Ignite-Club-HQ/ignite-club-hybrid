@@ -61,7 +61,8 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   });
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
-export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest', id: string): Promise<string | null> {
+export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague', id: string): Promise<string | null> {
+  if (kind === 'miniLeague') return (await import('./miniLeagueOwner')).lookupMiniLeagueOwner(ctx, id);
   if (kind === 'roleRequest') return (await import('./roleRequestOwner')).lookupRoleRequestOwner(ctx, id);
   const d = await import('./domains');
   const unwrap = (r: { Ok: [] | [string] } | { Err: string }) => { if ('Err' in r) throw new Error(r.Err); return r.Ok[0] ?? null; };
@@ -90,5 +91,11 @@ export async function groupHoldsInvite(ctx: FeatureBackendContext, token: string
   for (const p of probes) {
     try { const r = await p(); if (r && !(Array.isArray(r) && r.length === 0)) return true; } catch { /* not this kind */ }
   }
-  return false;
+  const { connectLiveMiniLeagueDomain } = await import('./domains');
+  if (!ctx.target.canisterIds.mini_league_domain) return false;
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  const reply = await actor.get_join_link_by_token(token);
+  if ('Ok' in reply) return true;
+  if (reply.Err === 'Join link not found') return false;
+  throw new Error(reply.Err);
 }
