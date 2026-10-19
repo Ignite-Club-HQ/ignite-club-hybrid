@@ -1,3 +1,4 @@
+import AccountAdmission "../../shared/AccountAdmission";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -18,6 +19,19 @@ import SchedulePatch "schedulePatch";
 import UpdateReminderAccess "updateReminderAccess";
 
 persistent actor class Main(governorInit : Principal) {
+  // Opt-in local rehearsal only; production deploy scripts must never set these.
+  transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
+  transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
+    case (?id) ?Principal.fromText(id); case null null
+  };
+  transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  func admitAccount(subject : Principal) : async () {
+    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+  };
+  func denyLegacyAccountQuery() {
+    if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
+  };
+
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -147,21 +161,37 @@ persistent actor class Main(governorInit : Principal) {
     let n = fenceSnapshot(club).items.size(); fenceDrop(club); #Ok(n)
   };
 
-  func callerAccountId(caller : Principal) : async ?Text {
-    switch (identityAccessCanister) {
-      case null { null };
-      case (?id) {
-        let identityAccess = actor (Principal.toText(id)) : actor {
-          whoami : shared query () -> async { #Ok : { id : Text }; #Err : Text };
-        };
-        try {
-          switch (await identityAccess.whoami()) {
-            case (#Ok(account)) { ?account.id };
-            case (#Err(_)) { null };
-          };
-        } catch (_) { null };
+
+  func eligibleUsers(users : [Text]) : async [Text] {
+    if (not accountAdmissionEnabled) return users;
+    if (users.size() > 200) Runtime.trap("Admission batch exceeds 200");
+    var allowed : [Text] = [];
+    for (user in users.values()) {
+      // Isolate parsing in an async message so one malformed ID cannot abort a batch.
+      let subject = try { await async { ?Principal.fromText(user) } } catch (_) { null };
+      switch (subject) {
+        case null {};
+        case (?principal) { if (await accountAdmission.eligible(principal)) allowed := allowed.concat([user]) }
       };
     };
+    allowed
+  };
+
+  func callerAccountId(caller : Principal) : async ?Text {
+    // Resolve the supplied human, never remote whoami() (which sees this queue).
+    let configured = identityAccessCanister;
+    let gate = AccountAdmission.Gate(true, configured);
+    switch (await gate.account(caller)) {
+      case (?account) { if (configured == identityAccessCanister) ?account.id else null };
+      case null null
+    }
+  };
+  func ownsInbox(caller : Principal, user : Text) : async Bool {
+    // Current ICP rows use principal text; historical account-id rows require
+    // authoritative subject-bound resolution. No browser account assertion.
+    await admitAccount(caller);
+    if (user == caller.toText()) return true;
+    switch (await callerAccountId(caller)) { case (?id) id == user; case null false }
   };
 
   // Governor or club_domain app_admin grant. Fail-closed while
@@ -505,6 +535,7 @@ persistent actor class Main(governorInit : Principal) {
   // Latest durable schedule signal per club/team for the actual caller.
   // Kept separate from inbox pagination so old notifications cannot mask it.
   public query ({ caller }) func get_schedule_refreshes(clubs : [Text]) : async [{ club : Text; team : ?Text; key : Text }] {
+    denyLegacyAccountQuery();
     authenticated(caller);
     if (clubs.size() > 100) { return [] };
     let user = Principal.toText(caller);
@@ -523,12 +554,10 @@ persistent actor class Main(governorInit : Principal) {
   // ownership check awaits an inter-canister lookup.
 
   public shared ({ caller }) func list_inbox(user : Text, club : ?Text, limit : Nat16) : async Types.Results {
+    await admitAccount(caller);
     authenticated(caller);
     if (limit == 0 or limit > 500) { return #Err("Invalid page size") };
-    switch (await callerAccountId(caller)) {
-      case null { return #Err("Account lookup unavailable") };
-      case (?accountId) { if (accountId != user) { return #Err("Not your inbox") } };
-    };
+    if (not (await ownsInbox(caller, user))) return #Err("Not your inbox or account unavailable");
     var res : [Types.Notification] = [];
     for (item in items.values()) {
       let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
@@ -541,26 +570,18 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func mark_read(id : Text) : async Types.Result {
     authenticated(caller);
-    switch (findIndex(id)) {
-      case null { #Err("Unknown notification") };
-      case (?index) {
-        switch (await callerAccountId(caller)) {
-          case null { return #Err("Account lookup unavailable") };
-          case (?accountId) { if (items[index].user != accountId) { return #Err("Not your notification") } };
-        };
-        let updated : Types.Notification = { items[index] with read = true };
-        replace(index, updated);
-        #Ok(updated)
-      };
-    }
+    let captured = switch (get(id)) { case null return #Err("Unknown notification"); case (?n) n };
+    if (not (await ownsInbox(caller, captured.user))) return #Err("Not your notification");
+    let index = switch (findIndex(id)) { case null return #Err("Unknown notification"); case (?i) i };
+    if (items[index] != captured) return #Err("Notification changed");
+    let updated : Types.Notification = { items[index] with read = true };
+    replace(index, updated); #Ok(updated)
   };
 
   public shared ({ caller }) func mark_all_read(user : Text, club : ?Text) : async Types.ResultNat16 {
+    await admitAccount(caller);
     authenticated(caller);
-    switch (await callerAccountId(caller)) {
-      case null { return #Err("Account lookup unavailable") };
-      case (?accountId) { if (accountId != user) { return #Err("Not your inbox") } };
-    };
+    if (not (await ownsInbox(caller, user))) return #Err("Not your inbox or account unavailable");
     var marked : Nat16 = 0;
     var index = 0;
     for (item in items.values()) {
@@ -576,23 +597,15 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func delete_notification(id : Text) : async { #Ok; #Err : Text } {
     authenticated(caller);
-    switch (findIndex(id)) {
-      case null { #Err("Unknown notification") };
-      case (?index) {
-        switch (await callerAccountId(caller)) {
-          case null { return #Err("Account lookup unavailable") };
-          case (?accountId) { if (items[index].user != accountId) { return #Err("Not your notification") } };
-        };
-        items := Array.tabulate<Types.Notification>(items.size() - 1, func(position) {
-          if (position < index) { items[position] } else { items[position + 1] }
-        });
-        clearLease(id);
-        #Ok
-      };
-    }
+    let captured = switch (get(id)) { case null return #Err("Unknown notification"); case (?n) n };
+    if (not (await ownsInbox(caller, captured.user))) return #Err("Not your notification");
+    let index = switch (findIndex(id)) { case null return #Err("Unknown notification"); case (?i) i };
+    if (items[index] != captured) return #Err("Notification changed");
+    items := items.filter(func(item) = item.id != id); clearLease(id); #Ok
   };
 
   public shared ({ caller }) func clear_inbox(user : Text, club : ?Text) : async Types.ResultNat16 {
+    if (not (await ownsInbox(caller, user))) return #Err("Not your inbox");
     authenticated(caller);
     var kept : [Types.Notification] = [];
     var removed : Nat16 = 0;
@@ -612,17 +625,25 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func claim(now_ms : Nat64, limit : Nat16) : async Types.Results {
     worker(caller);
-    if (limit == 0 or limit > 100) { return #Err("Invalid batch size") };
-    var claimed : [Types.Notification] = [];
-    var index = 0;
+    if (limit == 0 or limit > 100) return #Err("Invalid batch size");
+    var candidates : [Types.Notification] = [];
     for (item in items.values()) {
-      if (claimed.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) {
-        let processing : Types.Notification = { item with status = #Processing; attempts = item.attempts + 1 };
-        replace(index, processing);
-        setLease(item.id, caller);
-        claimed := claimed.concat([processing]);
-      };
-      index += 1;
+      if (candidates.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) candidates := candidates.concat([item]);
+    };
+    let allowed = await eligibleUsers(candidates.map(func(n) = n.user));
+    worker(caller); // worker may have been revoked during admission
+    var claimed : [Types.Notification] = [];
+    for (candidate in candidates.values()) {
+      switch (findIndex(candidate.id)) {
+        case null {};
+        case (?index) {
+          let item = items[index];
+          if (item == candidate and item.status == #Pending and not isFenced(item.club) and allowed.any(func(u) = u == item.user)) {
+            let processing : Types.Notification = { item with status = #Processing; attempts = item.attempts + 1 };
+            replace(index, processing); setLease(item.id, caller); claimed := claimed.concat([processing]);
+          }
+        }
+      }
     };
     #Ok(claimed)
   };
@@ -667,16 +688,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func get_notification(id : Text) : async ?Types.Notification {
-    if (caller.equal(Principal.anonymous())) { return null };
-    switch (get(id)) {
-      case null { null };
-      case (?item) {
-        switch (await callerAccountId(caller)) {
-          case null { null };
-          case (?accountId) { if (item.user == accountId) { ?item } else { null } };
-        };
-      };
-    };
+    if (Principal.isAnonymous(caller)) return null;
+    let captured = switch (get(id)) { case null return null; case (?n) n };
+    if (not (await ownsInbox(caller, captured.user))) return null;
+    switch (get(id)) { case (?fresh) { if (fresh == captured) ?fresh else null }; case null null }
   };
 
   public shared ({ caller }) func recover() : async Types.ResultNat16 {
@@ -756,6 +771,7 @@ persistent actor class Main(governorInit : Principal) {
     recurrence : Types.Recurrence,
     recurrence_until_ms : ?Nat64,
   ) : async Types.ScheduledResult {
+    await admitAccount(caller);
     authenticated(caller);
     if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     if (not valid(id) or not valid(author) or (not valid(body) and image_url == null)) {
@@ -789,6 +805,7 @@ persistent actor class Main(governorInit : Principal) {
   // Caller-scoped per target: returns the author's scheduled messages,
   // optionally narrowed to a single target id (team/club/group/conversation).
   public query ({ caller }) func list_scheduled(author : Text, target : ?Text) : async Types.ScheduledResults {
+    denyLegacyAccountQuery();
     authenticated(caller);
     if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     if (not valid(author)) { return #Err("Invalid author") };
@@ -812,6 +829,7 @@ persistent actor class Main(governorInit : Principal) {
     recurrence : ?Types.Recurrence,
     recurrence_until_ms : ?Nat64,
   ) : async Types.ScheduledResult {
+    await admitAccount(caller);
     authenticated(caller);
     if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     switch (findScheduledIndex(id)) {
@@ -842,6 +860,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func cancel_scheduled(id : Text, author : Text) : async Types.ScheduledResult {
+    await admitAccount(caller);
     authenticated(caller);
     if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     switch (findScheduledIndex(id)) {
@@ -890,7 +909,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // Worker/governor guarded query for the timer worker to poll due work.
-  public query ({ caller }) func due_scheduled(now_ms : Nat64, limit : Nat16) : async Types.ScheduledResults {
+  public shared ({ caller }) func due_scheduled(now_ms : Nat64, limit : Nat16) : async Types.ScheduledResults {
     worker(caller);
     if (limit == 0 or limit > 200) { return #Err("Invalid batch size") };
     var res : [Types.ScheduledMessage] = [];
@@ -899,7 +918,9 @@ persistent actor class Main(governorInit : Principal) {
         res := res.concat([item]);
       };
     };
-    #Ok(res)
+    let allowed = await eligibleUsers(res.map(func(n) = n.author));
+    worker(caller);
+    #Ok(res.filter(func(n) = allowed.any(func(u) = u == n.author) and getScheduled(n.id) == ?n and not scheduledFenced(n.id)))
   };
 
 
@@ -969,6 +990,10 @@ persistent actor class Main(governorInit : Principal) {
       deliver_scheduled_message : shared (Principal, Text, Text, Text, ?{ kind : Text; ref_id : Text; url : ?Text }, ?Text) -> async { #Ok : { id : Text }; #Err : Text };
     } = actor (Principal.toText(messaging));
     for (item in due.values()) {
+      if (accountAdmissionEnabled) {
+        let allowed = await eligibleUsers([item.author]);
+        if (allowed.size() == 0 or getScheduled(item.id) != ?item or scheduledFenced(item.id) or messagingDomainCanister != ?messaging) continue;
+      };
       let slot = item.scheduled_for_ms;
       switch (scheduledConversation(item)) {
         case null { settleScheduled(item.id, slot, #Failed("No chat to post to")) };
@@ -1046,6 +1071,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_digest(source : Types.DigestSource, chat_scope_id : Text, since_ms : Nat64, limit : Nat16) : async Types.DigestResults {
+    denyLegacyAccountQuery();
     authenticated(caller);
     if (not valid(chat_scope_id)) { return #Err("Invalid chat scope") };
     if (limit == 0 or limit > 500) { return #Err("Invalid page size") };
@@ -1063,6 +1089,8 @@ persistent actor class Main(governorInit : Principal) {
   // ======================================================================
 
   public query ({ caller }) func get_preferences(user : Text) : async Types.Preferences {
+    denyLegacyAccountQuery();
+    if (user != caller.toText()) Runtime.trap("Not your preferences");
     authenticated(caller);
     switch (findPreference(user)) {
       case (?prefs) { prefs };
@@ -1071,6 +1099,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func upsert_preferences(user : Text, input : Types.PreferencesInput) : async Types.PreferencesResult {
+    if (not (await ownsInbox(caller, user))) return #Err("Not your preferences");
     authenticated(caller);
     if (not valid(user)) { return #Err("Invalid user") };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
@@ -1118,6 +1147,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_push_alert_settings() : async Types.PushAlertSettings {
+    denyLegacyAccountQuery();
     authenticated(caller);
     switch (push_settings) {
       case (?settings) { settings };
@@ -1126,6 +1156,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func upsert_push_alert_settings(input : Types.PushAlertSettingsInput) : async Types.PushAlertSettings {
+    await admitAccount(caller);
     governorOnly(caller);
     let updated : Types.PushAlertSettings = {
       input with
@@ -1175,13 +1206,17 @@ persistent actor class Main(governorInit : Principal) {
     if (not fromMessagingDomain and Principal.toText(caller) != sender) {
       return #Err("Sender must match caller");
     };
+    if (not fromMessagingDomain) await admitAccount(caller);
     let effective_mute_list = if (fromMessagingDomain) { mute_list } else { [] };
     if (chatMessageProcessed(message_id)) { return #Ok(0) };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    if (accountAdmissionEnabled and recipients.size() > 200) return #Err("Recipient admission batch exceeds 200");
+    let allowedRecipients = await eligibleUsers(recipients);
+    if (chatMessageProcessed(message_id)) return #Ok(0);
     var created : Nat16 = 0;
     for (recipient in recipients.values()) {
       let muted = effective_mute_list.any(func(m) = m == recipient);
-      if (valid(recipient) and recipient != sender and not muted and recipientAllowed(recipient, "message_chat")) {
+      if ((not accountAdmissionEnabled or allowedRecipients.any(func(u) = u == recipient)) and valid(recipient) and recipient != sender and not muted and recipientAllowed(recipient, "message_chat")) {
         let id = "chat-" # message_id # "-" # recipient;
         switch (get(id)) {
           case (?_) {};
@@ -1238,6 +1273,7 @@ persistent actor class Main(governorInit : Principal) {
   // ======================================================================
 
   public shared ({ caller }) func register_device_token(platform : Text, token : Text, p256dh : ?Text, auth : ?Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     authenticated(caller);
     if (not valid(platform) or not valid(token)) { return #Err("Invalid device token fields") };
     let user = Principal.toText(caller);
@@ -1262,6 +1298,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func register_device_version(platform : Text, app_version : ?Text, build_number : ?Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     authenticated(caller);
     if (platform != "ios" and platform != "android" and platform != "web") return #Err("Invalid platform");
     for (value in [app_version, build_number].values()) {
@@ -1276,6 +1313,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Version metadata is device-reported, not attestation. Never return push tokens.
   public shared ({ caller }) func get_update_reminder_audience(users : [Text], club : Text) : async { #Ok : [{ user : Text; platform : Text; app_version : ?Text; build_number : ?Text }]; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     if (users.size() > 500) return #Err("Too many recipients");
     switch (await authorizeUpdateReminder(caller, users, club)) { case (#Err(e)) { return #Err(e) }; case (#Ok) {} };
@@ -1283,11 +1321,13 @@ persistent actor class Main(governorInit : Principal) {
       device_tokens.any(func(t) = t.user == v.user and t.platform == v.platform)))
   };
 
-  public query ({ caller }) func list_device_tokens(users : [Text]) : async Types.DeviceTokensResult {
+  public shared ({ caller }) func list_device_tokens(users : [Text]) : async Types.DeviceTokensResult {
     worker(caller);
     if (users.size() > 100) { return #Err("Too many users") };
+    let allowed = await eligibleUsers(users);
+    worker(caller);
     #Ok(device_tokens.filter(func(entry : Types.DeviceToken) : Bool {
-      users.any(func(user : Text) : Bool = user == entry.user)
+      allowed.any(func(user : Text) : Bool = user == entry.user)
     }))
   };
 
@@ -1305,6 +1345,7 @@ persistent actor class Main(governorInit : Principal) {
   // App-admin gated (governor or club_domain app_admin). Backs
   // PushAnalyticsPage's health dashboard and "Cleanup Stale" button.
   public shared ({ caller }) func get_push_delivery_health(now_ms : Nat64) : async Types.PushDeliveryHealthResult {
+    await admitAccount(caller);
     switch (await appAdminOnly(caller)) {
       case (#Err(e)) { return #Err(e) };
       case (#Ok) {};
@@ -1343,6 +1384,7 @@ persistent actor class Main(governorInit : Principal) {
   // registrations — same intent as the Supabase cleanup-push-subscriptions
   // edge function). Returns the number removed.
   public shared ({ caller }) func cleanup_stale_device_tokens(now_ms : Nat64, max_age_ms : Nat64) : async Types.DeviceTokenCountResult {
+    await admitAccount(caller);
     switch (await appAdminOnly(caller)) {
       case (#Err(e)) { return #Err(e) };
       case (#Ok) {};
@@ -1473,5 +1515,69 @@ persistent actor class Main(governorInit : Principal) {
     };
 
     #ok(changed)
+  };
+
+  // Protected consensus reads for the opt-in local account-removal rehearsal.
+  public shared ({ caller }) func read_account_get_schedule_refreshes(clubs : [Text]) : async [{ club : Text; team : ?Text; key : Text }] {
+    await admitAccount(caller);
+    authenticated(caller);
+    if (clubs.size() > 100) { return [] };
+    let user = Principal.toText(caller);
+    var signals : [{ club : Text; team : ?Text; key : Text }] = [];
+    for (item in items.values()) {
+      if (item.user == user and item.kind == "schedule_refresh" and clubs.any(func(id) = id == item.club)) {
+        signals := signals.filter(func(s) = not (s.club == item.club and s.team == item.related_id));
+        signals := signals.concat([{ club = item.club; team = item.related_id; key = item.idempotency_key }]);
+      };
+    };
+    signals
+  };
+
+  public shared ({ caller }) func read_account_list_scheduled(author : Text, target : ?Text) : async Types.ScheduledResults {
+    await admitAccount(caller);
+    authenticated(caller);
+    if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
+    if (not valid(author)) { return #Err("Invalid author") };
+    var res : [Types.ScheduledMessage] = [];
+    for (item in scheduled.values()) {
+      let targetOk = switch (target) {
+        case (?t) { switch (scheduledTarget(item)) { case (?owned) { owned == t }; case null { false } } };
+        case null { true };
+      };
+      if (item.author == author and targetOk) { res := res.concat([item]) };
+    };
+    #Ok(res)
+  };
+
+  public shared ({ caller }) func read_account_get_digest(source : Types.DigestSource, chat_scope_id : Text, since_ms : Nat64, limit : Nat16) : async Types.DigestResults {
+    await admitAccount(caller);
+    authenticated(caller);
+    if (not valid(chat_scope_id)) { return #Err("Invalid chat scope") };
+    if (limit == 0 or limit > 500) { return #Err("Invalid page size") };
+    var res : [Types.DigestItem] = [];
+    for (item in digests.values()) {
+      if (res.size() < Nat16.toNat(limit) and item.message_type == source and item.chat_scope_id == chat_scope_id and item.message_created_at_ms >= since_ms) {
+        res := res.concat([item]);
+      };
+    };
+    #Ok(res)
+  };
+
+  public shared ({ caller }) func read_account_get_preferences(user : Text) : async Types.Preferences {
+    if (not (await ownsInbox(caller, user))) Runtime.trap("Not your preferences");
+    authenticated(caller);
+    switch (findPreference(user)) {
+      case (?prefs) { prefs };
+      case null { defaultPreferences(user) };
+    }
+  };
+
+  public shared ({ caller }) func read_account_get_push_alert_settings() : async Types.PushAlertSettings {
+    await admitAccount(caller);
+    authenticated(caller);
+    switch (push_settings) {
+      case (?settings) { settings };
+      case null { defaultPushAlertSettings() };
+    }
   };
 };

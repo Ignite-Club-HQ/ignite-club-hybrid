@@ -137,6 +137,12 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'read_account_audit_access' : IDL.Func(
+        [AuditFilter],
+        [IDL.Vec(AuditRecord)],
+        [],
+      ),
+    'read_account_my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], []),
     'read_club_media_authority' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubMediaAuthority, 'Err' : IDL.Text })],

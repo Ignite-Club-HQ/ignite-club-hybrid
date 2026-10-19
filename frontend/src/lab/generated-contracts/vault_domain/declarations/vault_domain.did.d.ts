@@ -175,6 +175,66 @@ export interface Main {
       { 'Err' : string }
   >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  'read_account_get_backup' : ActorMethod<
+    [string],
+    { 'Ok' : Backup } |
+      { 'Err' : string }
+  >,
+  'read_account_get_file' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [VaultFile] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_folder' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [VaultFolder] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_pinned_vault' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [PinnedVault] } |
+      { 'Err' : string }
+  >,
+  'read_account_list_backups' : ActorMethod<
+    [],
+    { 'Ok' : Array<BackupSummary> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_club_files' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_club_files_with_folder' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_files' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_files_with_folder' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_folders' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<VaultFolder> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_trashed_files' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_trashed_files_with_folder' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
   'read_club_media_references' : ActorMethod<
     [string, bigint, [] | [bigint]],
     { 'Ok' : Page } |

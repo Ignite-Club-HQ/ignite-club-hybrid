@@ -250,6 +250,7 @@ export const idlFactory = ({ IDL }) => {
         [EligibilityResult],
         [],
       ),
+    'read_service_account' : IDL.Func([IDL.Principal], [Result], []),
     'redeem_entitlement' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Text, IDL.Text],
         [Result_12],
@@ -306,6 +307,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_9], []),
+    'set_service_authorities' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
+        [Result_2],
+        [],
+      ),
     'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_16], []),
     'set_theme_preference' : IDL.Func([IDL.Opt(IDL.Text)], [Result_9], []),
     'whoami' : IDL.Func([], [Result], ['query']),

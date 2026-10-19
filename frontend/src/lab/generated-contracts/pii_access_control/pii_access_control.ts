@@ -170,6 +170,8 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_audit_access(filter: AuditFilter): Promise<Array<AuditRecord>>;
+    read_account_my_guardian_children(): Promise<Array<string>>;
     read_club_media_authority(club: string): Promise<{
         __kind__: "Ok";
         Ok: ClubMediaAuthority;
@@ -474,6 +476,14 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
         return from_candid_variant_n10(result);
+    }
+    async read_account_audit_access(arg0: AuditFilter): Promise<Array<AuditRecord>> {
+        const result = await this.actor.read_account_audit_access(to_candid_AuditFilter_n2(arg0));
+        return result;
+    }
+    async read_account_my_guardian_children(): Promise<Array<string>> {
+        const result = await this.actor.read_account_my_guardian_children();
+        return result;
     }
     async read_club_media_authority(arg0: string): Promise<{
         __kind__: "Ok";

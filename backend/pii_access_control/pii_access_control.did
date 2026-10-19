@@ -84,6 +84,8 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_account_audit_access: (filter: AuditFilter) -> (vec AuditRecord);
+   read_account_my_guardian_children: () -> (vec text);
    read_club_media_authority: (club: text) ->
     (variant {
        Err: text;

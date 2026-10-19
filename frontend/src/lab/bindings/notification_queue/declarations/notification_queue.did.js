@@ -234,11 +234,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'due_scheduled' : IDL.Func(
-        [IDL.Nat64, IDL.Nat16],
-        [ScheduledResults],
-        ['query'],
-      ),
+    'due_scheduled' : IDL.Func([IDL.Nat64, IDL.Nat16], [ScheduledResults], []),
     'enqueue' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [Result],
@@ -318,7 +314,7 @@ export const idlFactory = ({ IDL }) => {
     'list_device_tokens' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [DeviceTokensResult],
-        ['query'],
+        [],
       ),
     'list_inbox' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat16],
@@ -362,6 +358,35 @@ export const idlFactory = ({ IDL }) => {
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_digest' : IDL.Func(
+        [DigestSource, IDL.Text, IDL.Nat64, IDL.Nat16],
+        [DigestResults],
+        [],
+      ),
+    'read_account_get_preferences' : IDL.Func([IDL.Text], [Preferences], []),
+    'read_account_get_push_alert_settings' : IDL.Func(
+        [],
+        [PushAlertSettings],
+        [],
+      ),
+    'read_account_get_schedule_refreshes' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Vec(
+            IDL.Record({
+              'key' : IDL.Text,
+              'club' : IDL.Text,
+              'team' : IDL.Opt(IDL.Text),
+            })
+          ),
+        ],
+        [],
+      ),
+    'read_account_list_scheduled' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [ScheduledResults],
         [],
       ),
     'record_chat_notify_batch' : IDL.Func(

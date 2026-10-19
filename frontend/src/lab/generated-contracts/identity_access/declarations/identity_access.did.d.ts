@@ -284,6 +284,7 @@ export interface _SERVICE {
    * Local-rehearsal-only consensus evidence, never a resource grant.
    */
   'read_principal_eligibility' : ActorMethod<[Principal], EligibilityResult>,
+  'read_service_account' : ActorMethod<[Principal], Result>,
   /**
    * Caller-authenticated: redeems a signed attestation minted by the
    * session-free IAP verification endpoint after it confirms an Apple
@@ -372,6 +373,7 @@ export interface _SERVICE {
    * sign-in provisioning calls register_account first.
    */
   'set_profile' : ActorMethod<[string, [] | [string]], Result_9>,
+  'set_service_authorities' : ActorMethod<[Array<Principal>], Result_2>,
   /**
    * Sets (records) the caller's acceptance of the current terms/privacy
    * version. Monotonic per-account: a version lower than (or equal to) the

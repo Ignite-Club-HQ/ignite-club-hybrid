@@ -35,6 +35,8 @@ const MEM_LINK_LIFECYCLE: u8 = 5;
 const MEM_PRINCIPAL_DENIALS: u8 = 6;
 /// Account-level terminal erasure fence also covers previously unlinked IDs.
 const MEM_ERASED_ACCOUNTS: u8 = 7;
+// Service admission readers are separate from club unlink receivers.
+const MEM_SERVICE_AUTHORITIES: u8 = 8;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -340,7 +342,7 @@ fn principal_eligibility(subject: Principal) -> PrincipalEligibility {
 }
 fn authority_eligibilities(caller: Principal, subjects: Vec<Principal>) -> Outcome<Vec<PrincipalEligibility>> {
     if !account_group_rehearsal_enabled() { return Err("Cross-group eligibility not released".into()); }
-    if !link_lifecycle().authorities.contains(&caller) { return Err("Configured authority required".into()); }
+    if !link_lifecycle().authorities.contains(&caller) && !service_authorities().contains(&caller) { return Err("Configured authority required".into()); }
     if subjects.is_empty() || subjects.len() > 200 { return Err("Eligibility batch must contain 1 to 200 subjects".into()); }
     let mut distinct = subjects.clone(); distinct.sort(); distinct.dedup();
     if distinct.len() != subjects.len() { return Err("Duplicate eligibility subject".into()); }
@@ -355,6 +357,38 @@ fn read_principal_eligibility(subject: Principal) -> Outcome<PrincipalEligibilit
 #[ic_cdk::update]
 fn read_principal_eligibilities(subjects: Vec<Principal>) -> Outcome<Vec<PrincipalEligibility>> {
     authority_eligibilities(ic_cdk::api::msg_caller(), subjects)
+}
+
+fn service_authorities() -> Vec<Principal> {
+    SERVICE_AUTHORITIES.with(|m| if m.borrow().get().is_empty() { vec![] } else { decode(m.borrow().get()) })
+}
+fn validate_service_authorities(authorities: &[Principal]) -> Outcome<()> {
+    let mut unique = authorities.to_vec(); unique.sort(); unique.dedup();
+    if authorities.is_empty() || authorities.len() > 64 || unique.len() != authorities.len() ||
+        authorities.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister()) {
+        return Err("Complete bounded service reader inventory required".into());
+    }
+    Ok(())
+}
+#[ic_cdk::update]
+fn set_service_authorities(authorities: Vec<Principal>) -> Outcome<()> {
+    if !account_group_rehearsal_enabled() { return Err("Service admission not released".into()); }
+    require_governor(&state(), ic_cdk::api::msg_caller())?;
+    validate_service_authorities(&authorities)?;
+    if !link_lifecycle().pending.is_empty() { return Err("Unlink recovery pending".into()); }
+    if service_authorities().iter().any(|p| !authorities.contains(p)) { return Err("Cannot drop an existing service reader".into()); }
+    SERVICE_AUTHORITIES.with(|m| m.borrow_mut().set(encode(&authorities)));
+    Ok(())
+}
+fn service_account(caller: Principal, subject: Principal) -> Outcome<Account> {
+    if !account_group_rehearsal_enabled() { return Err("Service admission not released".into()); }
+    if !service_authorities().contains(&caller) { return Err("Configured service reader required".into()); }
+    account_for_write(subject)
+}
+/// Subject-bound consensus ownership read; never implicitly registers an account.
+#[ic_cdk::update]
+fn read_service_account(subject: Principal) -> Outcome<Account> {
+    service_account(ic_cdk::api::msg_caller(), subject)
 }
 
 fn unlink_targets(job: &UnlinkIntent) -> Outcome<Vec<Principal>> {
@@ -400,6 +434,8 @@ thread_local! {
         RefCell::new(StableBTreeMap::init(memory(MEM_PRINCIPAL_DENIALS)));
     static ERASED_ACCOUNTS: RefCell<StableBTreeMap<String, u64, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_ERASED_ACCOUNTS)));
+    static SERVICE_AUTHORITIES: RefCell<StableCell<Vec<u8>, Memory>> =
+        RefCell::new(StableCell::init(memory(MEM_SERVICE_AUTHORITIES), Vec::new()));
 }
 fn link_lifecycle() -> LinkLifecycle {
     LINK_LIFECYCLE.with(|s| if s.borrow().get().is_empty() { LinkLifecycle::default() } else { decode(s.borrow().get()) })
@@ -2086,6 +2122,21 @@ mod tests {
     #[test]
     fn eligibility_transport_remains_unreleased() {
         assert_eq!(authority_eligibilities(principal(98), vec![principal(99)]), Err("Cross-group eligibility not released".into()));
+    }
+    #[test]
+    fn service_readers_remain_separate_and_unreleased() {
+        assert_eq!(set_service_authorities(vec![principal(97)]), Err("Service admission not released".into()));
+        assert_eq!(service_account(principal(97), principal(98)), Err("Service admission not released".into()));
+        assert!(service_authorities().is_empty());
+    }
+    #[test]
+    fn service_inventory_rejects_duplicate_anonymous_and_over_capacity() {
+        assert!(validate_service_authorities(&[principal(97)]).is_ok());
+        assert!(validate_service_authorities(&[]).is_err());
+        assert!(validate_service_authorities(&[principal(97), principal(97)]).is_err());
+        assert!(validate_service_authorities(&[Principal::anonymous()]).is_err());
+        assert!(validate_service_authorities(&[Principal::management_canister()]).is_err());
+        assert!(validate_service_authorities(&(1..66).map(principal).collect::<Vec<_>>()).is_err());
     }
     #[test]
     fn erasure_blocks_all_current_identities_and_preserves_other_accounts() {
