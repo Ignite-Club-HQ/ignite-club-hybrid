@@ -1307,6 +1307,393 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_execute(input: string): Promise<Result__1>;
+    read_account_find_pending_invite_by_email_hash(club_id: string, hash: string): Promise<{
+        __kind__: "Ok";
+        Ok: PendingInviteEmailHash | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_free_usage_counters(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            teams: bigint;
+            members: bigint;
+            pending_invites: bigint;
+            news_posts: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_club_branding(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubBranding;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_club_general_settings(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubGeneralSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_club_invite_message_default(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: InviteMessageDefault | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_club_kind(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_club_roster(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            children: Array<Child>;
+            roles: Array<RoleGrant>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_current_season(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Season | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_guardian_relationships(child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<GuardianMeta>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_link(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Listing;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_my_accessibility_prefs(): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_my_theme_preference(): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_parent_invite(token: string): Promise<{
+        __kind__: "Ok";
+        Ok: ParentInvite;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_season_eoi_config(season_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_shell_team_by_token(token: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubTeam;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_team_invite(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamInvite;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_team_invite_link_by_token(token: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamInviteLink;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_team_pitch_notify(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: PitchNotifyFlags;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_team_player_positions(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamPlayerPosition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_team_player_positions_v2(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamPlayerPositionAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_team_welcome_email(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamWelcomeEmail | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_has_child_guardian(user: Principal, child_id: string): Promise<boolean>;
+    read_account_has_club_staff_role(user: Principal, club_id: string): Promise<boolean>;
+    read_account_invite_stats(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: InviteStats;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_is_app_admin(user: Principal): Promise<boolean>;
+    read_account_is_club_member(user: Principal, club_id: string): Promise<boolean>;
+    read_account_is_user_on_any_team(team_ids: Array<string>, user: Principal): Promise<boolean>;
+    read_account_list_accepted_invites(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AcceptedInvite>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_child_guardians(child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_children(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Child>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_class_enrolments(club_id: string, term_id: string | null, class_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClassEnrolment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_club_join_requests(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubJoinRequest>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_club_terms(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubTerm>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_links(club: string, admin_view: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: Listing;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_member_payments(club_id: string, payment_period: string, payment_type: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<MemberPayment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_my_children(): Promise<Array<Child>>;
+    read_account_list_my_personal_teams(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_my_removed_clubs(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubProfile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_news(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<NewsPost>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_news_multi(club_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<NewsPost>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_news_targets(club_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, string, string]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_online_presence(window_seconds: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, bigint]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_pending_invites_by_club(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PendingInvite>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_pitch_formations(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PitchFormation>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_promo_codes(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PromoCode>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_removed_members(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RemovedMember>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_role_grants(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AccountRole>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_role_requests(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RoleRequest>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_season_player_stats(season_id: string, team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SeasonPlayerStat>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_season_team_assignment(season_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SeasonTeamAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_season_team_summary(season_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SeasonTeamSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_seasons(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Season>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_team_captains(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamCaptain>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_team_creation_requests(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamCreationRequest>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_team_invites(club_id: string, team_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamInvite>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_team_role_grants(team: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AccountRole>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_user_club_roles(user: Principal, club_id: string): Promise<Array<[string, string | null]>>;
+    read_account_my_role_grants(): Promise<Array<RoleGrant>>;
+    read_account_profile_team_history(profile_id: string): Promise<Array<ProfileTeamHistoryEntry>>;
+    read_account_read_competition_team_access(team_id: string, user: Principal): Promise<{
+        can_manage: boolean;
+        is_member: boolean;
+        club_id?: string;
+    }>;
+    read_account_read_season_club(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_whoami(): Promise<{
+        __kind__: "Ok";
+        Ok: Account;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_club_media_references(club: string, offset: bigint, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Page;
@@ -4086,6 +4473,582 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.purge_expired_deletions();
         return from_candid_variant_n71(result);
     }
+    async read_account_execute(arg0: string): Promise<Result__1> {
+        const result = await this.actor.read_account_execute(arg0);
+        return from_candid_Result__1_n72(result);
+    }
+    async read_account_find_pending_invite_by_email_hash(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: PendingInviteEmailHash | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_find_pending_invite_by_email_hash(arg0, arg1);
+        return from_candid_variant_n110(result);
+    }
+    async read_account_free_usage_counters(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            teams: bigint;
+            members: bigint;
+            pending_invites: bigint;
+            news_posts: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_free_usage_counters(arg0);
+        return from_candid_variant_n112(result);
+    }
+    async read_account_get_club_branding(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubBranding;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_club_branding(arg0);
+        return from_candid_variant_n114(result);
+    }
+    async read_account_get_club_general_settings(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubGeneralSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_club_general_settings(arg0);
+        return from_candid_variant_n117(result);
+    }
+    async read_account_get_club_invite_message_default(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: InviteMessageDefault | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_club_invite_message_default(arg0);
+        return from_candid_variant_n119(result);
+    }
+    async read_account_get_club_kind(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_club_kind(arg0);
+        return from_candid_variant_n121(result);
+    }
+    async read_account_get_club_roster(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            children: Array<Child>;
+            roles: Array<RoleGrant>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_club_roster(arg0);
+        return from_candid_variant_n128(result);
+    }
+    async read_account_get_current_season(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Season | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_current_season(arg0);
+        return from_candid_variant_n138(result);
+    }
+    async read_account_get_guardian_relationships(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<GuardianMeta>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_guardian_relationships(arg0);
+        return from_candid_variant_n140(result);
+    }
+    async read_account_get_link(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Listing;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_link(arg0);
+        return from_candid_variant_n91(result);
+    }
+    async read_account_get_my_accessibility_prefs(): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_my_accessibility_prefs();
+        return from_candid_variant_n121(result);
+    }
+    async read_account_get_my_theme_preference(): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_my_theme_preference();
+        return from_candid_variant_n121(result);
+    }
+    async read_account_get_parent_invite(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: ParentInvite;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_parent_invite(arg0);
+        return from_candid_variant_n2(result);
+    }
+    async read_account_get_season_eoi_config(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_season_eoi_config(arg0);
+        return from_candid_variant_n121(result);
+    }
+    async read_account_get_shell_team_by_token(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubTeam;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_shell_team_by_token(arg0);
+        return from_candid_variant_n33(result);
+    }
+    async read_account_get_team_invite(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamInvite;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_team_invite(arg0);
+        return from_candid_variant_n11(result);
+    }
+    async read_account_get_team_invite_link_by_token(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamInviteLink;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_team_invite_link_by_token(arg0);
+        return from_candid_variant_n14(result);
+    }
+    async read_account_get_team_pitch_notify(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: PitchNotifyFlags;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_team_pitch_notify(arg0);
+        return from_candid_variant_n153(result);
+    }
+    async read_account_get_team_player_positions(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamPlayerPosition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_team_player_positions(arg0);
+        return from_candid_variant_n154(result);
+    }
+    async read_account_get_team_player_positions_v2(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamPlayerPositionAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_team_player_positions_v2(arg0);
+        return from_candid_variant_n155(result);
+    }
+    async read_account_get_team_welcome_email(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamWelcomeEmail | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_team_welcome_email(arg0);
+        return from_candid_variant_n166(result);
+    }
+    async read_account_has_child_guardian(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.read_account_has_child_guardian(arg0, arg1);
+        return result;
+    }
+    async read_account_has_club_staff_role(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.read_account_has_club_staff_role(arg0, arg1);
+        return result;
+    }
+    async read_account_invite_stats(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: InviteStats;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_invite_stats(arg0, arg1, arg2);
+        return from_candid_variant_n182(result);
+    }
+    async read_account_is_app_admin(arg0: Principal): Promise<boolean> {
+        const result = await this.actor.read_account_is_app_admin(arg0);
+        return result;
+    }
+    async read_account_is_club_member(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.read_account_is_club_member(arg0, arg1);
+        return result;
+    }
+    async read_account_is_user_on_any_team(arg0: Array<string>, arg1: Principal): Promise<boolean> {
+        const result = await this.actor.read_account_is_user_on_any_team(arg0, arg1);
+        return result;
+    }
+    async read_account_list_accepted_invites(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AcceptedInvite>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_accepted_invites(arg0, arg1, arg2);
+        return from_candid_variant_n183(result);
+    }
+    async read_account_list_child_guardians(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_child_guardians(arg0);
+        return from_candid_variant_n186(result);
+    }
+    async read_account_list_children(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Child>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_children();
+        return from_candid_variant_n187(result);
+    }
+    async read_account_list_class_enrolments(arg0: string, arg1: string | null, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClassEnrolment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_class_enrolments(arg0, to_candid_opt_n18(arg1), to_candid_opt_n18(arg2));
+        return from_candid_variant_n188(result);
+    }
+    async read_account_list_club_join_requests(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubJoinRequest>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_club_join_requests(arg0);
+        return from_candid_variant_n189(result);
+    }
+    async read_account_list_club_terms(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubTerm>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_club_terms(arg0);
+        return from_candid_variant_n191(result);
+    }
+    async read_account_list_links(arg0: string, arg1: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: Listing;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_links(arg0, arg1);
+        return from_candid_variant_n91(result);
+    }
+    async read_account_list_member_payments(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<MemberPayment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_member_payments(arg0, arg1, arg2);
+        return from_candid_variant_n192(result);
+    }
+    async read_account_list_my_children(): Promise<Array<Child>> {
+        const result = await this.actor.read_account_list_my_children();
+        return from_candid_vec_n86(result);
+    }
+    async read_account_list_my_personal_teams(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_my_personal_teams();
+        return from_candid_variant_n168(result);
+    }
+    async read_account_list_my_removed_clubs(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubProfile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_my_removed_clubs();
+        return from_candid_variant_n126(result);
+    }
+    async read_account_list_news(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<NewsPost>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_news(arg0);
+        return from_candid_variant_n196(result);
+    }
+    async read_account_list_news_multi(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<NewsPost>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_news_multi(arg0);
+        return from_candid_variant_n196(result);
+    }
+    async read_account_list_news_targets(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, string, string]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_news_targets(arg0);
+        return from_candid_variant_n198(result);
+    }
+    async read_account_list_online_presence(arg0: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, bigint]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_online_presence(arg0);
+        return from_candid_variant_n199(result);
+    }
+    async read_account_list_pending_invites_by_club(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PendingInvite>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_pending_invites_by_club(arg0);
+        return from_candid_variant_n200(result);
+    }
+    async read_account_list_pitch_formations(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PitchFormation>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_pitch_formations(arg0);
+        return from_candid_variant_n202(result);
+    }
+    async read_account_list_promo_codes(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PromoCode>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_promo_codes();
+        return from_candid_variant_n206(result);
+    }
+    async read_account_list_removed_members(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RemovedMember>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_removed_members(arg0);
+        return from_candid_variant_n208(result);
+    }
+    async read_account_list_role_grants(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AccountRole>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_role_grants(arg0);
+        return from_candid_variant_n209(result);
+    }
+    async read_account_list_role_requests(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RoleRequest>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_role_requests(arg0);
+        return from_candid_variant_n210(result);
+    }
+    async read_account_list_season_player_stats(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SeasonPlayerStat>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_season_player_stats(arg0, arg1);
+        return from_candid_variant_n212(result);
+    }
+    async read_account_list_season_team_assignment(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SeasonTeamAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_season_team_assignment(arg0);
+        return from_candid_variant_n213(result);
+    }
+    async read_account_list_season_team_summary(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SeasonTeamSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_season_team_summary(arg0);
+        return from_candid_variant_n214(result);
+    }
+    async read_account_list_seasons(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Season>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_seasons(arg0);
+        return from_candid_variant_n215(result);
+    }
+    async read_account_list_team_captains(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamCaptain>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_team_captains(arg0);
+        return from_candid_variant_n216(result);
+    }
+    async read_account_list_team_creation_requests(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamCreationRequest>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_team_creation_requests(arg0);
+        return from_candid_variant_n217(result);
+    }
+    async read_account_list_team_invites(arg0: string, arg1: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamInvite>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_team_invites(arg0, to_candid_opt_n18(arg1));
+        return from_candid_variant_n225(result);
+    }
+    async read_account_list_team_role_grants(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AccountRole>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_team_role_grants(arg0);
+        return from_candid_variant_n209(result);
+    }
+    async read_account_list_user_club_roles(arg0: Principal, arg1: string): Promise<Array<[string, string | null]>> {
+        const result = await this.actor.read_account_list_user_club_roles(arg0, arg1);
+        return from_candid_vec_n228(result);
+    }
+    async read_account_my_role_grants(): Promise<Array<RoleGrant>> {
+        const result = await this.actor.read_account_my_role_grants();
+        return from_candid_vec_n87(result);
+    }
+    async read_account_profile_team_history(arg0: string): Promise<Array<ProfileTeamHistoryEntry>> {
+        const result = await this.actor.read_account_profile_team_history(arg0);
+        return from_candid_vec_n246(result);
+    }
+    async read_account_read_competition_team_access(arg0: string, arg1: Principal): Promise<{
+        can_manage: boolean;
+        is_member: boolean;
+        club_id?: string;
+    }> {
+        const result = await this.actor.read_account_read_competition_team_access(arg0, arg1);
+        return from_candid_record_n249(result);
+    }
+    async read_account_read_season_club(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_read_season_club(arg0);
+        return from_candid_variant_n121(result);
+    }
+    async read_account_whoami(): Promise<{
+        __kind__: "Ok";
+        Ok: Account;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_whoami();
+        return from_candid_variant_n1(result);
+    }
     async read_club_media_references(arg0: string, arg1: bigint, arg2: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Page;
@@ -4093,8 +5056,8 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.read_club_media_references(arg0, arg1, to_candid_opt_n249(arg2));
-        return from_candid_variant_n250(result);
+        const result = await this.actor.read_club_media_references(arg0, arg1, to_candid_opt_n250(arg2));
+        return from_candid_variant_n251(result);
     }
     async read_competition_team_access(arg0: string, arg1: Principal): Promise<{
         can_manage: boolean;
@@ -4102,7 +5065,7 @@ export class Club_domain implements club_domainInterface {
         club_id?: string;
     }> {
         const result = await this.actor.read_competition_team_access(arg0, arg1);
-        return from_candid_record_n256(result);
+        return from_candid_record_n249(result);
     }
     async read_has_child_guardian(arg0: Principal, arg1: string): Promise<boolean> {
         const result = await this.actor.read_has_child_guardian(arg0, arg1);
@@ -5203,8 +6166,8 @@ function from_candid_NewsAttachment_n60(value: _NewsAttachment): NewsAttachment 
 function from_candid_NewsPost_n56(value: _NewsPost): NewsPost {
     return from_candid_record_n57(value);
 }
-function from_candid_Page_n251(value: _Page): Page {
-    return from_candid_record_n252(value);
+function from_candid_Page_n252(value: _Page): Page {
+    return from_candid_record_n253(value);
 }
 function from_candid_ParentInvite_n3(value: _ParentInvite): ParentInvite {
     return from_candid_record_n4(value);
@@ -5224,8 +6187,8 @@ function from_candid_Progress_n234(value: _Progress): Progress {
 function from_candid_PromoCode_n67(value: _PromoCode): PromoCode {
     return from_candid_record_n68(value);
 }
-function from_candid_Reference_n254(value: _Reference): Reference {
-    return from_candid_record_n255(value);
+function from_candid_Reference_n255(value: _Reference): Reference {
+    return from_candid_record_n256(value);
 }
 function from_candid_Reservation_n40(value: _Reservation): Reservation {
     return from_candid_record_n41(value);
@@ -5889,6 +6852,21 @@ function from_candid_record_n248(value: {
         season_status: value.season_status
     };
 }
+function from_candid_record_n249(value: {
+    can_manage: boolean;
+    is_member: boolean;
+    club_id: [] | [string];
+}): {
+    can_manage: boolean;
+    is_member: boolean;
+    club_id?: string;
+} {
+    return {
+        can_manage: value.can_manage,
+        is_member: value.is_member,
+        club_id: record_opt_to_undefined(from_candid_opt_n6(value.club_id))
+    };
+}
 function from_candid_record_n25(value: {
     id: string;
     status: string;
@@ -5916,7 +6894,7 @@ function from_candid_record_n25(value: {
         decided_by: record_opt_to_undefined(from_candid_opt_n5(value.decided_by))
     };
 }
-function from_candid_record_n252(value: {
+function from_candid_record_n253(value: {
     references: Array<_Reference>;
     next: [] | [bigint];
     scanned: bigint;
@@ -5928,13 +6906,13 @@ function from_candid_record_n252(value: {
     revision: bigint;
 } {
     return {
-        references: from_candid_vec_n253(value.references),
+        references: from_candid_vec_n254(value.references),
         next: record_opt_to_undefined(from_candid_opt_n236(value.next)),
         scanned: value.scanned,
         revision: value.revision
     };
 }
-function from_candid_record_n255(value: {
+function from_candid_record_n256(value: {
     url: string;
     path: [] | [string];
     content_hash: [] | [string];
@@ -5953,21 +6931,6 @@ function from_candid_record_n255(value: {
         content_hash: record_opt_to_undefined(from_candid_opt_n6(value.content_hash)),
         store: record_opt_to_undefined(from_candid_opt_n6(value.store)),
         resource_id: value.resource_id
-    };
-}
-function from_candid_record_n256(value: {
-    can_manage: boolean;
-    is_member: boolean;
-    club_id: [] | [string];
-}): {
-    can_manage: boolean;
-    is_member: boolean;
-    club_id?: string;
-} {
-    return {
-        can_manage: value.can_manage,
-        is_member: value.is_member,
-        club_id: record_opt_to_undefined(from_candid_opt_n6(value.club_id))
     };
 }
 function from_candid_record_n259(value: {
@@ -7998,7 +8961,7 @@ function from_candid_variant_n243(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n250(value: {
+function from_candid_variant_n251(value: {
     Ok: _Page;
 } | {
     Err: string;
@@ -8011,7 +8974,7 @@ function from_candid_variant_n250(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Page_n251(value.Ok)
+        Ok: from_candid_Page_n252(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -8847,8 +9810,8 @@ function from_candid_vec_n232(value: Array<[Principal, _Progress]>): Array<[Prin
 function from_candid_vec_n246(value: Array<_ProfileTeamHistoryEntry>): Array<ProfileTeamHistoryEntry> {
     return value.map((x)=>from_candid_ProfileTeamHistoryEntry_n247(x));
 }
-function from_candid_vec_n253(value: Array<_Reference>): Array<Reference> {
-    return value.map((x)=>from_candid_Reference_n254(x));
+function from_candid_vec_n254(value: Array<_Reference>): Array<Reference> {
+    return value.map((x)=>from_candid_Reference_n255(x));
 }
 function from_candid_vec_n59(value: Array<_NewsAttachment>): Array<NewsAttachment> {
     return value.map((x)=>from_candid_NewsAttachment_n60(x));
@@ -8922,7 +9885,7 @@ function to_candid_TeamSubscription_n291(value: TeamSubscription): _TeamSubscrip
 function to_candid_opt_n18(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n249(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n250(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_opt_n295(value: number | null): [] | [number] {

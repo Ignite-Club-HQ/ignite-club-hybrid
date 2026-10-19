@@ -202,6 +202,24 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'read_account_get_asset' : IDL.Func([IDL.Text], [IDL.Opt(Asset)], []),
+    'read_account_get_gallery_chat_card' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(GalleryChatCard)],
+        [],
+      ),
+    'read_account_list_assets' : IDL.Func([IDL.Text], [IDL.Vec(Asset)], []),
+    'read_account_list_comments' : IDL.Func([IDL.Text], [IDL.Vec(Comment)], []),
+    'read_account_list_gallery_chat_cards' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Vec(GalleryChatCard)],
+        [],
+      ),
+    'read_account_list_reactions' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(Reaction)],
+        [],
+      ),
     'read_club_media_references' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
         [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],

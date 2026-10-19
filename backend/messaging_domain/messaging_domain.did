@@ -582,6 +582,8 @@ type Main =
                            Ok: nat32;
                          });
    read_account_can_dm_user: (other: principal) -> (bool);
+   read_account_can_read_digest: (subject: principal, conversation_id:
+    text) -> (bool);
    read_account_dm_attachments_disabled: (user: principal) -> (bool);
    read_account_export_state: () -> (variant {
                                        Err: text;

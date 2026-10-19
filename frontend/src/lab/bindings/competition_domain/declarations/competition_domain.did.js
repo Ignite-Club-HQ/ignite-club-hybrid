@@ -668,6 +668,91 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'read_account_can_invite_players_to_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_account_competition_engagement_summary' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Int, IDL.Int],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(CompetitionEngagementSummary),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_chat_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ChatSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_my_pending_eois' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EoiSubmission), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_is_competition_admin' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_is_competition_invite_manager' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Bool],
+        [],
+      ),
+    'read_account_list_competition_broadcasts' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Broadcast), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_competitions' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_competitions_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_division_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(DivisionSetting), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_invites_by_invitee' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(CompetitionInvite), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_my_news_competitions' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_my_personal_competitions' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_official_chats' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(OfficialChat), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_public_competitions' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_read_token_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
     'read_competition_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],

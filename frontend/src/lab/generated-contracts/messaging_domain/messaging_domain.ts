@@ -698,6 +698,7 @@ export interface MainInterface {
         Err: string;
     }>;
     read_account_can_dm_user(other: Principal): Promise<boolean>;
+    read_account_can_read_digest(subject: Principal, conversation_id: string): Promise<boolean>;
     read_account_dm_attachments_disabled(user: Principal): Promise<boolean>;
     read_account_export_state(): Promise<{
         __kind__: "Ok";
@@ -2248,6 +2249,10 @@ export class Messaging_domain implements messaging_domainInterface {
     }
     async read_account_can_dm_user(arg0: Principal): Promise<boolean> {
         const result = await this.actor.read_account_can_dm_user(arg0);
+        return result;
+    }
+    async read_account_can_read_digest(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.read_account_can_read_digest(arg0, arg1);
         return result;
     }
     async read_account_dm_attachments_disabled(arg0: Principal): Promise<boolean> {

@@ -866,6 +866,378 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_check_event_membership(user_id: string, event_id: string): Promise<boolean>;
+    read_account_child_is_in_event_audience(child_id: string, event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_event_roster(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: EventRoster;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_execute(input: string): Promise<Result>;
+    read_account_get_active_game(team_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: ActiveGame | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_attendance(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventAttendance>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_coach_note(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: CoachNote | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_event_auto_reminder(event_id: string): Promise<{
+        hours_before: number;
+        sent: boolean;
+    } | null>;
+    read_account_get_event_child(event_id: string, child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Child;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_event_duty_team(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: EventDutyTeam | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_event_group(group_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: EventGroup | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_event_roster(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RosterEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_event_rosters(event_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RosterEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_event_sponsors(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<string>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_event_timer(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: EventTimer | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_event_view_count(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_game_result(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: GameResult | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_game_summary(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: GameSummary | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_group_edit_access(group_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_lineup_snapshot(event_id: string, team_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: LineupSnapshot | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_pitch_board_settings(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: PitchBoardSettings | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_player_stats_report(club_id: string, team_id: string | null, from_ms: bigint, to_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PlayerStatRow>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_playhq_config_status(): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            base_url?: string;
+            updated_at_ms?: bigint;
+            configured: boolean;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_playhq_team_sync(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: PlayHQTeamSync | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_push_reachable(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: boolean | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_reminder_log(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            sent_at_ms?: bigint;
+            recipients_count: number;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_rsvp_created_at(event_id: string, account_id: string): Promise<bigint | null>;
+    read_account_get_training_default(club_id: string, team_id: string, child_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_is_guardian_of(principal: Principal, child_id: string): Promise<boolean>;
+    read_account_is_paused(club_id: string, team_id: string, at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_is_reachable(account_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_is_team_member(principal: Principal, club_id: string, team_id: string): Promise<boolean>;
+    read_account_list_association_events(association_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AssociationEvent>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_child_team_assignments(club_id: string, team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ChildTeamAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_duties(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Duty>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_duties_multi(event_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Duty>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_event_duty_teams(event_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventDutyTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_event_groups(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventGroup>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_event_views(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventView>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_events(club_id: string | null, team_id: string | null): Promise<Array<Event>>;
+    read_account_list_events_for_duty_teams(team_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Event>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_events_multi(club_ids: Array<string>, team_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Event>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_favourite_event_titles(): Promise<Array<string>>;
+    read_account_list_game_player_stats(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<GamePlayerStat>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_group_duties(group_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventGroupDuty>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_group_players(group_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventGroupPlayer>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_match_captains(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<MatchCaptainAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_match_goalkeepers(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<MatchGoalkeeperAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_mini_league_rsvps(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<MiniLeagueRsvp>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_my_viewed_event_ids(event_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<string>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_open_duties(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<OpenDuty>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_reminders(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ReminderLog>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_saved_locations(): Promise<Array<SavedLocation>>;
+    read_account_list_series(club_id: string | null, team_id: string | null): Promise<Array<EventSeries>>;
+    read_account_list_series_occurrences(series_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<{
+            id: string;
+            deleted: boolean;
+            starts_at_ms: bigint;
+            ends_at_ms: bigint;
+        }>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_team_training_pauses(club_id: string, team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamTrainingPause>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_my_attendance(event_id: string | null): Promise<Array<EventAttendance>>;
+    read_account_my_child_rsvps(event_id: string | null, club_id: string | null): Promise<Array<RsvpWithChild>>;
+    read_account_my_child_team_assignments(child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ChildTeamAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_my_children(): Promise<Array<Child>>;
+    read_account_my_rsvps(): Promise<Array<Rsvp>>;
+    read_account_read_event_club(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_read_event_group_club(group_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     /**
      * / Location-only lookup for group routing: which club owns this event, if
      * / it lives in this canister. Viewers only; returns null when not held here.
@@ -2756,6 +3128,567 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.purge_my_data();
         return from_candid_variant_n43(result);
+    }
+    async read_account_check_event_membership(arg0: string, arg1: string): Promise<boolean> {
+        const result = await this.actor.read_account_check_event_membership(arg0, arg1);
+        return result;
+    }
+    async read_account_child_is_in_event_audience(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_child_is_in_event_audience(arg0, arg1);
+        return from_candid_variant_n24(result);
+    }
+    async read_account_event_roster(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: EventRoster;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_event_roster(arg0);
+        return from_candid_variant_n44(result);
+    }
+    async read_account_execute(arg0: string): Promise<Result> {
+        const result = await this.actor.read_account_execute(arg0);
+        return from_candid_Result_n51(result);
+    }
+    async read_account_get_active_game(arg0: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: ActiveGame | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_active_game(to_candid_opt_n3(arg0));
+        return from_candid_variant_n92(result);
+    }
+    async read_account_get_attendance(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventAttendance>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_attendance(arg0);
+        return from_candid_variant_n96(result);
+    }
+    async read_account_get_coach_note(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: CoachNote | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_coach_note(arg0);
+        return from_candid_variant_n97(result);
+    }
+    async read_account_get_event_auto_reminder(arg0: string): Promise<{
+        hours_before: number;
+        sent: boolean;
+    } | null> {
+        const result = await this.actor.read_account_get_event_auto_reminder(arg0);
+        return from_candid_opt_n99(result);
+    }
+    async read_account_get_event_child(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: Child;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_event_child(arg0, arg1);
+        return from_candid_variant_n20(result);
+    }
+    async read_account_get_event_duty_team(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: EventDutyTeam | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_event_duty_team(arg0);
+        return from_candid_variant_n100(result);
+    }
+    async read_account_get_event_group(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: EventGroup | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_event_group(arg0);
+        return from_candid_variant_n102(result);
+    }
+    async read_account_get_event_roster(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RosterEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_event_roster(arg0);
+        return from_candid_variant_n104(result);
+    }
+    async read_account_get_event_rosters(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RosterEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_event_rosters(arg0);
+        return from_candid_variant_n104(result);
+    }
+    async read_account_get_event_sponsors(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<string>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_event_sponsors(arg0);
+        return from_candid_variant_n30(result);
+    }
+    async read_account_get_event_timer(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: EventTimer | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_event_timer(arg0);
+        return from_candid_variant_n105(result);
+    }
+    async read_account_get_event_view_count(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_event_view_count(arg0);
+        return from_candid_variant_n43(result);
+    }
+    async read_account_get_game_result(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: GameResult | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_game_result(arg0);
+        return from_candid_variant_n110(result);
+    }
+    async read_account_get_game_summary(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: GameSummary | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_game_summary(arg0);
+        return from_candid_variant_n114(result);
+    }
+    async read_account_get_group_edit_access(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_group_edit_access(arg0);
+        return from_candid_variant_n24(result);
+    }
+    async read_account_get_lineup_snapshot(arg0: string, arg1: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: LineupSnapshot | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_lineup_snapshot(arg0, to_candid_opt_n3(arg1));
+        return from_candid_variant_n118(result);
+    }
+    async read_account_get_pitch_board_settings(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: PitchBoardSettings | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_pitch_board_settings(arg0);
+        return from_candid_variant_n120(result);
+    }
+    async read_account_get_player_stats_report(arg0: string, arg1: string | null, arg2: bigint, arg3: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PlayerStatRow>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_player_stats_report(arg0, to_candid_opt_n3(arg1), arg2, arg3);
+        return from_candid_variant_n124(result);
+    }
+    async read_account_get_playhq_config_status(): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            base_url?: string;
+            updated_at_ms?: bigint;
+            configured: boolean;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_playhq_config_status();
+        return from_candid_variant_n125(result);
+    }
+    async read_account_get_playhq_team_sync(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: PlayHQTeamSync | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_playhq_team_sync(arg0);
+        return from_candid_variant_n127(result);
+    }
+    async read_account_get_push_reachable(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: boolean | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_push_reachable(arg0);
+        return from_candid_variant_n131(result);
+    }
+    async read_account_get_reminder_log(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            sent_at_ms?: bigint;
+            recipients_count: number;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_reminder_log(arg0);
+        return from_candid_variant_n132(result);
+    }
+    async read_account_get_rsvp_created_at(arg0: string, arg1: string): Promise<bigint | null> {
+        const result = await this.actor.read_account_get_rsvp_created_at(arg0, arg1);
+        return from_candid_opt_n109(result);
+    }
+    async read_account_get_training_default(arg0: string, arg1: string, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_training_default(arg0, arg1, to_candid_opt_n3(arg2));
+        return from_candid_variant_n134(result);
+    }
+    async read_account_is_guardian_of(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.read_account_is_guardian_of(arg0, arg1);
+        return result;
+    }
+    async read_account_is_paused(arg0: string, arg1: string, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_is_paused(arg0, arg1, arg2);
+        return from_candid_variant_n24(result);
+    }
+    async read_account_is_reachable(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_is_reachable(arg0);
+        return from_candid_variant_n24(result);
+    }
+    async read_account_is_team_member(arg0: Principal, arg1: string, arg2: string): Promise<boolean> {
+        const result = await this.actor.read_account_is_team_member(arg0, arg1, arg2);
+        return result;
+    }
+    async read_account_list_association_events(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AssociationEvent>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_association_events(arg0);
+        return from_candid_variant_n141(result);
+    }
+    async read_account_list_child_team_assignments(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ChildTeamAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_child_team_assignments(arg0, arg1);
+        return from_candid_variant_n145(result);
+    }
+    async read_account_list_duties(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Duty>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_duties(arg0);
+        return from_candid_variant_n146(result);
+    }
+    async read_account_list_duties_multi(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Duty>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_duties_multi(arg0);
+        return from_candid_variant_n146(result);
+    }
+    async read_account_list_event_duty_teams(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventDutyTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_event_duty_teams(arg0);
+        return from_candid_variant_n147(result);
+    }
+    async read_account_list_event_groups(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventGroup>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_event_groups(arg0);
+        return from_candid_variant_n148(result);
+    }
+    async read_account_list_event_views(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventView>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_event_views(arg0);
+        return from_candid_variant_n149(result);
+    }
+    async read_account_list_events(arg0: string | null, arg1: string | null): Promise<Array<Event>> {
+        const result = await this.actor.read_account_list_events(to_candid_opt_n3(arg0), to_candid_opt_n3(arg1));
+        return from_candid_vec_n41(result);
+    }
+    async read_account_list_events_for_duty_teams(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Event>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_events_for_duty_teams(arg0);
+        return from_candid_variant_n150(result);
+    }
+    async read_account_list_events_multi(arg0: Array<string>, arg1: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Event>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_events_multi(arg0, arg1);
+        return from_candid_variant_n150(result);
+    }
+    async read_account_list_favourite_event_titles(): Promise<Array<string>> {
+        const result = await this.actor.read_account_list_favourite_event_titles();
+        return result;
+    }
+    async read_account_list_game_player_stats(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<GamePlayerStat>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_game_player_stats(arg0);
+        return from_candid_variant_n151(result);
+    }
+    async read_account_list_group_duties(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventGroupDuty>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_group_duties(arg0);
+        return from_candid_variant_n155(result);
+    }
+    async read_account_list_group_players(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EventGroupPlayer>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_group_players(arg0);
+        return from_candid_variant_n156(result);
+    }
+    async read_account_list_match_captains(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<MatchCaptainAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_match_captains(arg0);
+        return from_candid_variant_n157(result);
+    }
+    async read_account_list_match_goalkeepers(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<MatchGoalkeeperAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_match_goalkeepers(arg0);
+        return from_candid_variant_n158(result);
+    }
+    async read_account_list_mini_league_rsvps(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<MiniLeagueRsvp>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_mini_league_rsvps(arg0);
+        return from_candid_variant_n159(result);
+    }
+    async read_account_list_my_viewed_event_ids(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<string>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_my_viewed_event_ids(arg0);
+        return from_candid_variant_n30(result);
+    }
+    async read_account_list_open_duties(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<OpenDuty>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_open_duties(arg0);
+        return from_candid_variant_n160(result);
+    }
+    async read_account_list_reminders(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ReminderLog>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_reminders(arg0);
+        return from_candid_variant_n169(result);
+    }
+    async read_account_list_saved_locations(): Promise<Array<SavedLocation>> {
+        const result = await this.actor.read_account_list_saved_locations();
+        return result;
+    }
+    async read_account_list_series(arg0: string | null, arg1: string | null): Promise<Array<EventSeries>> {
+        const result = await this.actor.read_account_list_series(to_candid_opt_n3(arg0), to_candid_opt_n3(arg1));
+        return from_candid_vec_n70(result);
+    }
+    async read_account_list_series_occurrences(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<{
+            id: string;
+            deleted: boolean;
+            starts_at_ms: bigint;
+            ends_at_ms: bigint;
+        }>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_series_occurrences(arg0);
+        return from_candid_variant_n170(result);
+    }
+    async read_account_list_team_training_pauses(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamTrainingPause>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_team_training_pauses(arg0, arg1);
+        return from_candid_variant_n171(result);
+    }
+    async read_account_my_attendance(arg0: string | null): Promise<Array<EventAttendance>> {
+        const result = await this.actor.read_account_my_attendance(to_candid_opt_n3(arg0));
+        return result;
+    }
+    async read_account_my_child_rsvps(arg0: string | null, arg1: string | null): Promise<Array<RsvpWithChild>> {
+        const result = await this.actor.read_account_my_child_rsvps(to_candid_opt_n3(arg0), to_candid_opt_n3(arg1));
+        return from_candid_vec_n47(result);
+    }
+    async read_account_my_child_team_assignments(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ChildTeamAssignment>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_my_child_team_assignments(arg0);
+        return from_candid_variant_n145(result);
+    }
+    async read_account_my_children(): Promise<Array<Child>> {
+        const result = await this.actor.read_account_my_children();
+        return from_candid_vec_n72(result);
+    }
+    async read_account_my_rsvps(): Promise<Array<Rsvp>> {
+        const result = await this.actor.read_account_my_rsvps();
+        return from_candid_vec_n90(result);
+    }
+    async read_account_read_event_club(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_read_event_club(arg0);
+        return from_candid_variant_n134(result);
+    }
+    async read_account_read_event_group_club(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_read_event_group_club(arg0);
+        return from_candid_variant_n134(result);
     }
     async read_event_club(arg0: string): Promise<{
         __kind__: "Ok";

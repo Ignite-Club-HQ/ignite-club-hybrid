@@ -302,6 +302,81 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'read_account_get_child_points' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_child_points_all_clubs' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_child_points_batch' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_club_points_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubPointsSettings), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_engagement_streak' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_leaderboard' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Variant({ 'User' : IDL.Null, 'Child' : IDL.Null }),
+          IDL.Text,
+          IDL.Nat,
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Vec(LeaderboardEntry), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_user_points' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_user_points_all_clubs' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_points_history' : IDL.Func(
+        [IDL.Text, IDL.Opt(Subject), IDL.Nat, IDL.Nat],
+        [IDL.Variant({ 'Ok' : HistoryPage, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_redemptions' : IDL.Func(
+        [IDL.Text, IDL.Opt(Subject)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RewardRedemption), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_rewards' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubReward), 'Err' : IDL.Text })],
+        [],
+      ),
     'redeem_reward' : IDL.Func(
         [IDL.Text, Subject, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],

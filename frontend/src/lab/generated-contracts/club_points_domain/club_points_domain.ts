@@ -256,6 +256,83 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_get_child_points(club_id: string, child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_child_points_all_clubs(child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_child_points_batch(club_id: string, child_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_club_points_settings(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubPointsSettings | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_engagement_streak(club_id: string, user_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_leaderboard(club_id: string, subjectKind: Variant_User_Child, window: string, top_n: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<LeaderboardEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_user_points(club_id: string, user_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_user_points_all_clubs(user_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_points_history(club_id: string, subject: Subject | null, offset: bigint, limit: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: HistoryPage;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_redemptions(club_id: string, subject: Subject | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RewardRedemption>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_rewards(club_id: string, team_id: string | null, active_only: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubReward>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     redeem_reward(club_id: string, subject: Subject, reward_id: string, idempotency_key: string | null): Promise<{
         __kind__: "Ok";
         Ok: RewardRedemption;
@@ -686,6 +763,116 @@ export class Club_points_domain implements club_points_domainInterface {
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
         return from_candid_variant_n36(result);
+    }
+    async read_account_get_child_points(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_child_points(arg0, arg1);
+        return from_candid_variant_n27(result);
+    }
+    async read_account_get_child_points_all_clubs(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_child_points_all_clubs(arg0);
+        return from_candid_variant_n28(result);
+    }
+    async read_account_get_child_points_batch(arg0: string, arg1: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_child_points_batch(arg0, arg1);
+        return from_candid_variant_n28(result);
+    }
+    async read_account_get_club_points_settings(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubPointsSettings | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_club_points_settings(arg0);
+        return from_candid_variant_n29(result);
+    }
+    async read_account_get_engagement_streak(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_engagement_streak(arg0, arg1);
+        return from_candid_variant_n33(result);
+    }
+    async read_account_get_leaderboard(arg0: string, arg1: Variant_User_Child, arg2: string, arg3: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<LeaderboardEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_leaderboard(arg0, to_candid_variant_n34(arg1), arg2, arg3);
+        return from_candid_variant_n35(result);
+    }
+    async read_account_get_user_points(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_user_points(arg0, arg1);
+        return from_candid_variant_n27(result);
+    }
+    async read_account_get_user_points_all_clubs(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_user_points_all_clubs(arg0);
+        return from_candid_variant_n28(result);
+    }
+    async read_account_list_points_history(arg0: string, arg1: Subject | null, arg2: bigint, arg3: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: HistoryPage;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_points_history(arg0, to_candid_opt_n38(arg1), arg2, arg3);
+        return from_candid_variant_n39(result);
+    }
+    async read_account_list_redemptions(arg0: string, arg1: Subject | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<RewardRedemption>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_redemptions(arg0, to_candid_opt_n38(arg1));
+        return from_candid_variant_n42(result);
+    }
+    async read_account_list_rewards(arg0: string, arg1: string | null, arg2: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubReward>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_rewards(arg0, to_candid_opt_n10(arg1), arg2);
+        return from_candid_variant_n43(result);
     }
     async redeem_reward(arg0: string, arg1: Subject, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";

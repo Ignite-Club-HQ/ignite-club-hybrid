@@ -218,6 +218,61 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_account_get_child_points' : ActorMethod<
+    [string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'read_account_get_child_points_all_clubs' : ActorMethod<
+    [string],
+    { 'Ok' : Array<[string, number]> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_child_points_batch' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : Array<[string, number]> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_club_points_settings' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [ClubPointsSettings] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_engagement_streak' : ActorMethod<
+    [string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'read_account_get_leaderboard' : ActorMethod<
+    [string, { 'User' : null } | { 'Child' : null }, string, bigint],
+    { 'Ok' : Array<LeaderboardEntry> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_user_points' : ActorMethod<
+    [string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'read_account_get_user_points_all_clubs' : ActorMethod<
+    [string],
+    { 'Ok' : Array<[string, number]> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_points_history' : ActorMethod<
+    [string, [] | [Subject], bigint, bigint],
+    { 'Ok' : HistoryPage } |
+      { 'Err' : string }
+  >,
+  'read_account_list_redemptions' : ActorMethod<
+    [string, [] | [Subject]],
+    { 'Ok' : Array<RewardRedemption> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_rewards' : ActorMethod<
+    [string, [] | [string], boolean],
+    { 'Ok' : Array<ClubReward> } |
+      { 'Err' : string }
+  >,
   'redeem_reward' : ActorMethod<
     [string, Subject, string, [] | [string]],
     { 'Ok' : RewardRedemption } |

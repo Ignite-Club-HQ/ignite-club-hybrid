@@ -512,6 +512,7 @@ export interface Main {
   'purge_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
   'read_account_can_dm_user' : ActorMethod<[Principal], boolean>,
+  'read_account_can_read_digest' : ActorMethod<[Principal, string], boolean>,
   'read_account_dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
   'read_account_export_state' : ActorMethod<
     [],

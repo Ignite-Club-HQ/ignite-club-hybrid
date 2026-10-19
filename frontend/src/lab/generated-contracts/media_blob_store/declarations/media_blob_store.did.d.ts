@@ -158,6 +158,11 @@ export interface _SERVICE {
       'frozen' : boolean,
     }
   >,
+  'read_account_get_upload_outcome' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [FinalizedBlob] } |
+      { 'Err' : string }
+  >,
   'reconcile_upload_operations' : ActorMethod<
     [string],
     { 'Ok' : { 'attempted' : bigint, 'cursor' : string } } |

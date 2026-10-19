@@ -173,6 +173,12 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_get_asset(asset_id: string): Promise<Asset | null>;
+    read_account_get_gallery_chat_card(card_id: string): Promise<GalleryChatCard | null>;
+    read_account_list_assets(club_id: string): Promise<Array<Asset>>;
+    read_account_list_comments(asset_id: string): Promise<Array<Comment>>;
+    read_account_list_gallery_chat_cards(club_id: string, team_id: string): Promise<Array<GalleryChatCard>>;
+    read_account_list_reactions(asset_id: string): Promise<Array<Reaction>>;
     read_club_media_references(club: string, offset: bigint, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Page;
@@ -512,6 +518,30 @@ export class Media_metadata implements media_metadataInterface {
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
         return from_candid_variant_n23(result);
+    }
+    async read_account_get_asset(arg0: string): Promise<Asset | null> {
+        const result = await this.actor.read_account_get_asset(arg0);
+        return from_candid_opt_n20(result);
+    }
+    async read_account_get_gallery_chat_card(arg0: string): Promise<GalleryChatCard | null> {
+        const result = await this.actor.read_account_get_gallery_chat_card(arg0);
+        return from_candid_opt_n21(result);
+    }
+    async read_account_list_assets(arg0: string): Promise<Array<Asset>> {
+        const result = await this.actor.read_account_list_assets(arg0);
+        return from_candid_vec_n13(result);
+    }
+    async read_account_list_comments(arg0: string): Promise<Array<Comment>> {
+        const result = await this.actor.read_account_list_comments(arg0);
+        return result;
+    }
+    async read_account_list_gallery_chat_cards(arg0: string, arg1: string): Promise<Array<GalleryChatCard>> {
+        const result = await this.actor.read_account_list_gallery_chat_cards(arg0, arg1);
+        return from_candid_vec_n14(result);
+    }
+    async read_account_list_reactions(arg0: string): Promise<Array<Reaction>> {
+        const result = await this.actor.read_account_list_reactions(arg0);
+        return result;
     }
     async read_club_media_references(arg0: string, arg1: bigint, arg2: bigint | null): Promise<{
         __kind__: "Ok";

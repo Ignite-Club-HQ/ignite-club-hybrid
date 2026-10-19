@@ -789,6 +789,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_account_can_dm_user' : IDL.Func([IDL.Principal], [IDL.Bool], []),
+    'read_account_can_read_digest' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
     'read_account_dm_attachments_disabled' : IDL.Func(
         [IDL.Principal],
         [IDL.Bool],

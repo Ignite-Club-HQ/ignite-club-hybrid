@@ -1,3 +1,4 @@
+import AccountAdmission "../../shared/AccountAdmission";
 import MediaEvidence "../../shared/MediaEvidence";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
@@ -16,6 +17,18 @@ import Time "mo:core/Time";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
+  // Local rehearsal only. Eligibility never grants resource permissions.
+  transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
+  transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
+    case (?id) ?Principal.fromText(id); case null null
+  };
+  transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  func admitAccount(subject : Principal) : async () {
+    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+  };
+  func denyLegacyAccountQuery() {
+    if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
+  };
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -224,6 +237,7 @@ persistent actor class Main(governorInit : Principal) {
     visibility : Text,
     expires_at_ms : Nat64,
   ) : async { #Ok : Types.Asset; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(kind) or not validMime(mime) or not valid(checksum) or not validLong(storage_path, 512) or not valid(visibility)) return #Err("Invalid asset");
@@ -273,6 +287,7 @@ persistent actor class Main(governorInit : Principal) {
     caption : ?Text,
     album_id : ?Text,
   ) : async { #Ok : Types.Asset; #Err : Text } {
+    await admitAccount(caller);
     if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     func validOptLength(value : ?Text, max : Nat) : Bool {
@@ -305,6 +320,7 @@ persistent actor class Main(governorInit : Principal) {
   // canister only records where the bytes live. Passing null clears the
   // pointer and returns the asset to off-chain storage resolution.
   public shared ({ caller }) func set_blob_ref(asset_id : Text, blob_ref : ?Types.BlobRef) : async { #Ok : Types.Asset; #Err : Text } {
+    await admitAccount(caller);
     if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var found_idx : ?Nat = null;
@@ -335,6 +351,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func issue_capability(asset_id : Text, action : Text, purpose : Text, expires_at_ms : Nat64) : async { #Ok : Types.Capability; #Err : Text } {
+    await admitAccount(caller);
     if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validCapabilityAction(action) or not validPurpose(purpose) or expires_at_ms <= nowMs()) return #Err("Invalid or expired capability");
@@ -355,6 +372,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_asset(asset_id : Text) : async ?Types.Asset {
+    denyLegacyAccountQuery();
     for (a in assets.values()) {
       if (a.id == asset_id and not a.deleted and canView(caller, a)) return ?a;
     };
@@ -362,6 +380,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_asset(asset_id : Text) : async { #Ok : Types.Asset; #Err : Text } {
+    await admitAccount(caller);
     if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var found_idx : ?Nat = null;
@@ -387,6 +406,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : ?Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not validRoleAssignment(role, club_id, team_id)) return #Err("Invalid role assignment");
@@ -400,6 +420,7 @@ persistent actor class Main(governorInit : Principal) {
   // Team-level scoping is not modeled by this canister's Asset type yet; the
   // lab feed filters by club only, matching the source app's club-wide view.
   public query ({ caller }) func list_assets(club_id : Text) : async [Types.Asset] {
+    denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return [];
     Array.filter<Types.Asset>(assets, func(a) {
       not a.deleted and a.club_id == club_id and canView(caller, a)
@@ -407,6 +428,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func add_reaction(asset_id : Text, kind : Text, created_at_ms : Nat64) : async { #Ok : Types.Reaction; #Err : Text } {
+    await admitAccount(caller);
     if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validReactionKind(kind)) return #Err("Invalid reaction kind");
@@ -428,6 +450,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_reaction(asset_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     reactions := reactions.filter(func(r) = not (r.asset_id == asset_id and r.user.equal(caller)));
@@ -435,6 +458,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_reactions(asset_id : Text) : async [Types.Reaction] {
+    denyLegacyAccountQuery();
     var found : ?Types.Asset = null;
     for (a in assets.values()) { if (a.id == asset_id) { found := ?a } };
     switch (found) {
@@ -447,6 +471,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func add_comment(asset_id : Text, body : Text, created_at_ms : Nat64) : async { #Ok : Types.Comment; #Err : Text } {
+    await admitAccount(caller);
     if (assetFenced(asset_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validCommentBody(body)) return #Err("Invalid comment");
@@ -472,6 +497,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_comments(asset_id : Text) : async [Types.Comment] {
+    denyLegacyAccountQuery();
     var found : ?Types.Asset = null;
     for (a in assets.values()) { if (a.id == asset_id) { found := ?a } };
     switch (found) {
@@ -484,6 +510,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_comment(comment_id : Text) : async { #Ok : Types.Comment; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     var found_idx : ?Nat = null;
     var idx = 0;
@@ -539,6 +566,7 @@ persistent actor class Main(governorInit : Principal) {
     is_prompt : Bool,
     push_sent : Bool,
   ) : async { #Ok : Types.GalleryChatCard; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(team_id) or not valid(message_id)) return #Err("Invalid gallery chat card");
@@ -600,6 +628,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_gallery_chat_card(card_id : Text) : async ?Types.GalleryChatCard {
+    denyLegacyAccountQuery();
     for (c in galleryChatCards.values()) {
       if (c.id == card_id and isClubMember(caller, c.club_id)) return ?c;
     };
@@ -607,11 +636,13 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_gallery_chat_cards(club_id : Text, team_id : Text) : async [Types.GalleryChatCard] {
+    denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous()) or not isClubMember(caller, club_id)) return [];
     Array.filter<Types.GalleryChatCard>(galleryChatCards, func(c) = c.club_id == club_id and c.team_id == team_id)
   };
 
   public shared ({ caller }) func delete_gallery_chat_card(card_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     switch (findGalleryCardIndex(card_id)) {
       case null { #Err("Gallery chat card not found") };
@@ -739,5 +770,63 @@ persistent actor class Main(governorInit : Principal) {
       };
     } };
     #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < total) ?end else null; references = refs })
+  };
+
+
+  // Additive protected consensus reads; live UI rollout is a separate release gate.
+  public shared ({ caller }) func read_account_get_asset(asset_id : Text) : async ?Types.Asset {
+    await admitAccount(caller);
+    for (a in assets.values()) {
+      if (a.id == asset_id and not a.deleted and canView(caller, a)) return ?a;
+    };
+    null
+  };
+
+  public shared ({ caller }) func read_account_list_assets(club_id : Text) : async [Types.Asset] {
+    await admitAccount(caller);
+    if (caller.equal(Principal.anonymous())) return [];
+    Array.filter<Types.Asset>(assets, func(a) {
+      not a.deleted and a.club_id == club_id and canView(caller, a)
+    })
+  };
+
+  public shared ({ caller }) func read_account_list_reactions(asset_id : Text) : async [Types.Reaction] {
+    await admitAccount(caller);
+    var found : ?Types.Asset = null;
+    for (a in assets.values()) { if (a.id == asset_id) { found := ?a } };
+    switch (found) {
+      case null { [] };
+      case (?asset) {
+        if (not canView(caller, asset)) return [];
+        Array.filter<Types.Reaction>(reactions, func(r) = r.asset_id == asset_id)
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_comments(asset_id : Text) : async [Types.Comment] {
+    await admitAccount(caller);
+    var found : ?Types.Asset = null;
+    for (a in assets.values()) { if (a.id == asset_id) { found := ?a } };
+    switch (found) {
+      case null { [] };
+      case (?asset) {
+        if (not canView(caller, asset)) return [];
+        Array.filter<Types.Comment>(comments, func(c) = c.asset_id == asset_id and not c.deleted)
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_get_gallery_chat_card(card_id : Text) : async ?Types.GalleryChatCard {
+    await admitAccount(caller);
+    for (c in galleryChatCards.values()) {
+      if (c.id == card_id and isClubMember(caller, c.club_id)) return ?c;
+    };
+    null
+  };
+
+  public shared ({ caller }) func read_account_list_gallery_chat_cards(club_id : Text, team_id : Text) : async [Types.GalleryChatCard] {
+    await admitAccount(caller);
+    if (caller.equal(Principal.anonymous()) or not isClubMember(caller, club_id)) return [];
+    Array.filter<Types.GalleryChatCard>(galleryChatCards, func(c) = c.club_id == club_id and c.team_id == team_id)
   };
 }
