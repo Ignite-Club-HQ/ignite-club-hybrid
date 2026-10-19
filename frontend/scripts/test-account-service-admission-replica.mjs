@@ -270,8 +270,22 @@ try {
  await delayed.actor.hold_on(2n);
  const erasedPhotoKey=await deferred(piiIdl,services[1].canisterId,'get_club_media_vetkey',['club',TransportSecretKey.random().publicKeyBytes()]);
  await waitForHold(2);
+ const receiverRequest={account_id:account.id,generation:7n,inventory_digest:new Uint8Array(32).fill(7),subjects:[victim]};
+ // Test the receiver independently while an actual derived-key callback is held.
+ // The registry fixture separately tests real coordinator -> receiver transport.
+ pii.setPrincipal(identity.canisterId);
+ ok(await pii.prepare_account_removal(receiverRequest));
+ const heldDrain=ok(await pii.read_account_removal_drain(receiverRequest));
+ assert.ok(heldDrain.outstanding>0n,'Held key request must prevent a drained receipt');
+ ok(await pii.prepare_account_removal(receiverRequest));
+ assert.ok('Err' in await pii.prepare_account_removal({...receiverRequest,generation:8n}));
  id.setPrincipal(victim); ok(await id.erase_account(account.id));
  await delayed.actor.release(); await denied(erasedPhotoKey);
+ pii.setPrincipal(identity.canisterId);
+ assert.equal(ok(await pii.read_account_removal_drain(receiverRequest)).outstanding,0n,'Settled denied key must release its tracked hold');
+ await pic.upgradeCanister({canisterId:services[1].canisterId,wasm:process.env.PII_ACCESS_CONTROL_WASM,sender:governor,wasmMemoryPersistence:'keep',arg:IDL.encode([IDL.Principal],[governor])});
+ assert.equal(ok(await pii.read_account_removal_drain(receiverRequest)).outstanding,0n);
+ pii.setPrincipal(governor); assert.ok('err' in await pii.rekey_principal(victim,stranger,false));
  pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(extra[0].canisterId));
  pii.setPrincipal(victim); await denied(()=>pii.get_club_media_vetkey('club',TransportSecretKey.random().publicKeyBytes()));
  vault.setPrincipal(victim); await denied(()=>vault.read_account_list_club_files('club',[],[]));

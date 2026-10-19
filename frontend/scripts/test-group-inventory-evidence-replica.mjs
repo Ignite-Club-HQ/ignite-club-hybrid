@@ -31,8 +31,8 @@ try {
       environmentVariables: [{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'},{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()}], arg:IDL.encode([IDL.Principal],[governor]) });
     clubFixture.actor.setPrincipal(governor);
     const club = clubFixture.canisterId; clubs.push(club);
-    const store = await pic.setupCanister({idlFactory:blobIdl,wasm:'/tmp/media_blob_store-admission.wasm',sender:governor,controllers:[governor],
-      environmentVariables:[{name:'GOVERNOR_PRINCIPAL',value:governor.toText()}],arg:IDL.encode([IDL.Principal],[governor])});
+    const store = await pic.setupCanister({idlFactory:blobIdl,wasm:'/tmp/removal/media_blob_store.wasm',sender:governor,controllers:[governor],
+      environmentVariables:[{name:'GOVERNOR_PRINCIPAL',value:governor.toText()},{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'},{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()}],arg:IDL.encode([IDL.Principal],[governor])});
     ok(await clubFixture.actor.register_media_quota_store(store.canisterId)); mediaStores.push({store,clubFixture});
     supplemental.push({group_id:`g${n}`,domain:'media_blob_store',canister:store.canisterId,subnet});
     const mapped = domains.map((domain, i) => ({ domain, canister: i === 0 ? club : p(10 + n * 20 + i) })); mappedGroups.push(mapped);
@@ -116,11 +116,32 @@ try {
   supplemental.push({group_id:'g0',domain:'vault_domain',canister:p(99),subnet});
   ok(await actor.set_removal_supplemental_inventory(supplemental,history)); history=await revision();
   actor.setPrincipal(outsider); const removedAccount=ok(await actor.register_account()); actor.setPrincipal(governor);
+  const staged=[];
+  for (const {store} of mediaStores) {
+    store.actor.setPrincipal(outsider);
+    const upload=ok(await store.actor.begin_upload('clubs/local/gallery/staged.jpg','image/jpeg',1n,1));
+    ok(await store.actor.put_chunk(upload,0,new Uint8Array([42]))); staged.push(upload);
+  }
   history=await revision();
   const intent=ok(await actor.begin_account_removal(removedAccount.id,history));
   assert.equal(intent.generation,1n); assert.equal(intent.inventory_digest.length,32);
   assert.equal(intent.targets.length,30); // 26 domains + 3 stores + 1 legacy service
   assert.deepEqual(intent.subjects.map(p=>p.toText()),[outsider.toText()]);
+  // Real identity -> each actual receiver, not a supplied/browser receipt.
+  for (const [n,{store}] of mediaStores.entries()) {
+    const receipt=ok(await actor.advance_account_removal_receiver(removedAccount.id,store.canisterId));
+    assert.equal(receipt.outstanding,0n);
+    assert.equal(receipt.receiver.toText(),store.canisterId.toText());
+    assert.equal(receipt.request.generation,intent.generation);
+    store.actor.setPrincipal(outsider);
+    await assert.rejects(()=>store.actor.finalize_upload(staged[n]));
+    assert.equal((await store.actor.http_request({url:'/clubs/local/gallery/staged.jpg',method:'GET',headers:[],body:new Uint8Array()})).status_code,404);
+    await pic.upgradeCanister({canisterId:store.canisterId,wasm:'/tmp/removal/media_blob_store.wasm',sender:governor,wasmMemoryPersistence:'keep'});
+    await assert.rejects(()=>store.actor.begin_upload('after.jpg','image/jpeg',1n,1));
+    assert.deepEqual(ok(await actor.advance_account_removal_receiver(removedAccount.id,store.canisterId)),receipt);
+  }
+  denied(await actor.advance_account_removal_receiver(removedAccount.id,p(98)));
+  denied(await actor.advance_account_removal_receiver(removedAccount.id,third)); // missing receiver cannot fake drain
   actor.setPrincipal(outsider); denied(await actor.whoami()); denied(await actor.register_account()); actor.setPrincipal(governor);
   actor.setPrincipal(mappedGroups[0][1].canister); assert.ok('Denied' in ok(await actor.read_principal_eligibility(outsider)).decision); actor.setPrincipal(governor);
   // Registry drift/config changes cannot replace an already frozen job.
