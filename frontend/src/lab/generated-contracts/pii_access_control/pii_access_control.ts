@@ -147,7 +147,7 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -177,7 +177,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {

@@ -69,7 +69,7 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
-   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -89,7 +89,7 @@ type Main =
                                    Err: text;
                                    Ok: EncryptedPii;
                                  });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
