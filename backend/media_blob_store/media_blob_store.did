@@ -15,6 +15,14 @@ type StreamResponse =
    body: blob;
    token: opt StreamToken;
  };
+type Row = 
+ record {
+   bytes: nat;
+   club: opt text;
+   content_hash: text;
+   path: text;
+   revision: nat;
+ };
 type ResultUploadId = 
  variant {
    Err: text;
@@ -51,16 +59,28 @@ type Phase =
    legacy;
    pending;
  };
-type Page = 
+type Page__1 = 
  record {
    entries: vec Entry;
    fence_revision: opt nat;
    fenced: bool;
-   next: opt Cursor;
+   next: opt Cursor__1;
    quota_authority: opt principal;
    quota_shared: bool;
    revision: nat;
    scanned: nat;
+ };
+type Page = 
+ record {
+   authority: opt principal;
+   cursor: Cursor;
+   frozen: bool;
+   next: Cursor;
+   pending: nat;
+   revision: nat;
+   rows: vec Row;
+   total: nat;
+   total_bytes: nat;
  };
 type MediaUsage = 
  record {
@@ -129,28 +149,40 @@ type Entry =
    unsettled: bool;
    upload_id: text;
  };
-type Cursor = 
+type Cursor__1 = 
  record {
    after: text;
    offset: nat;
    phase: Phase;
  };
+type Cursor = 
+ record {
+   after: text;
+   offset: nat;
+   phase: variant {
+            done;
+            indexed;
+            legacy;
+          };
+ };
 service : {
   abort_upload: (upload_id: text) -> (Result);
   begin_upload: (path: text, mime: text, total_size: nat64, chunk_count:
    nat32) -> (ResultUploadId);
-  club_media_inventory_page: (club: text, cursor: Cursor, expected_revision:
-   opt nat) -> (variant {
-                  Err: text;
-                  Ok: Page;
-                });
+  club_media_inventory_page: (club: text, cursor: Cursor__1,
+   expected_revision: opt nat) -> (variant {
+                                     Err: text;
+                                     Ok: Page__1;
+                                   });
   /// Public: remaining cycles (shown in admin settings).
   cycles_balance: () -> (nat) query;
   delete_blob: (path: text) -> (Result);
+  enable_retained_media_quota: () -> (Result);
   enable_shared_media_quota: () -> (Result);
   enable_stable_media_storage: () -> (Result);
   finalize_upload: (upload_id: text) -> (ResultFinalized);
   freeze_media_quota: () -> (Result);
+  freeze_retained_media: () -> (Result);
   /// Authoritative per-club media byte count for the Pro allowance UI: the
   /// same finalized + in-flight figures the admission check enforces.
   get_club_media_bytes: (club_id: text) ->
@@ -214,6 +246,14 @@ service : {
       Err: text;
       Ok: Receipt;
     });
+  reconcile_retained_deletions: (cursor: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            attempted: nat;
+            cursor: text;
+          };
+    });
   reconcile_upload_operations: (cursor: text) ->
    (variant {
       Err: text;
@@ -227,6 +267,7 @@ service : {
       err: text;
       ok: nat;
     });
+  retained_snapshot_page: (cursor: Cursor) -> (Page);
   retire_upload_outcomes: (cursor: text) ->
    (variant {
       Err: text;

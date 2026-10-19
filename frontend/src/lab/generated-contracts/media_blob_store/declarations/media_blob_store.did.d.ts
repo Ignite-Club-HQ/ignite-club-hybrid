@@ -10,7 +10,18 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface Cursor { 'after' : string, 'offset' : bigint, 'phase' : Phase }
+export interface Cursor {
+  'after' : string,
+  'offset' : bigint,
+  'phase' : { 'done' : null } |
+    { 'legacy' : null } |
+    { 'indexed' : null },
+}
+export interface Cursor__1 {
+  'after' : string,
+  'offset' : bigint,
+  'phase' : Phase,
+}
 export interface Entry {
   'unsettled' : boolean,
   'kind' : { 'pending' : null } |
@@ -61,10 +72,21 @@ export interface MediaUsage {
   'bytes' : bigint,
 }
 export interface Page {
+  'total' : bigint,
+  'pending' : bigint,
+  'cursor' : Cursor,
+  'next' : Cursor,
+  'total_bytes' : bigint,
+  'rows' : Array<Row>,
+  'authority' : [] | [Principal],
+  'frozen' : boolean,
+  'revision' : bigint,
+}
+export interface Page__1 {
   'quota_shared' : boolean,
   'fence_revision' : [] | [bigint],
   'fenced' : boolean,
-  'next' : [] | [Cursor],
+  'next' : [] | [Cursor__1],
   'scanned' : bigint,
   'entries' : Array<Entry>,
   'quota_authority' : [] | [Principal],
@@ -92,6 +114,13 @@ export type ResultFinalized = { 'Ok' : FinalizedBlob } |
   { 'Err' : string };
 export type ResultUploadId = { 'Ok' : string } |
   { 'Err' : string };
+export interface Row {
+  'club' : [] | [string],
+  'path' : string,
+  'content_hash' : string,
+  'bytes' : bigint,
+  'revision' : bigint,
+}
 export interface StreamResponse {
   'token' : [] | [StreamToken],
   'body' : Uint8Array,
@@ -113,8 +142,8 @@ export interface _SERVICE {
     ResultUploadId
   >,
   'club_media_inventory_page' : ActorMethod<
-    [string, Cursor, [] | [bigint]],
-    { 'Ok' : Page } |
+    [string, Cursor__1, [] | [bigint]],
+    { 'Ok' : Page__1 } |
       { 'Err' : string }
   >,
   /**
@@ -122,10 +151,12 @@ export interface _SERVICE {
    */
   'cycles_balance' : ActorMethod<[], bigint>,
   'delete_blob' : ActorMethod<[string], Result>,
+  'enable_retained_media_quota' : ActorMethod<[], Result>,
   'enable_shared_media_quota' : ActorMethod<[], Result>,
   'enable_stable_media_storage' : ActorMethod<[], Result>,
   'finalize_upload' : ActorMethod<[string], ResultFinalized>,
   'freeze_media_quota' : ActorMethod<[], Result>,
+  'freeze_retained_media' : ActorMethod<[], Result>,
   /**
    * / Authoritative per-club media byte count for the Pro allowance UI: the
    * / same finalized + in-flight figures the admission check enforces.
@@ -192,6 +223,11 @@ export interface _SERVICE {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'reconcile_retained_deletions' : ActorMethod<
+    [string],
+    { 'Ok' : { 'attempted' : bigint, 'cursor' : string } } |
+      { 'Err' : string }
+  >,
   'reconcile_upload_operations' : ActorMethod<
     [string],
     { 'Ok' : { 'attempted' : bigint, 'cursor' : string } } |
@@ -202,6 +238,7 @@ export interface _SERVICE {
     { 'ok' : bigint } |
       { 'err' : string }
   >,
+  'retained_snapshot_page' : ActorMethod<[Cursor], Page>,
   'retire_upload_outcomes' : ActorMethod<
     [string],
     { 'Ok' : { 'cursor' : string, 'removed' : bigint } } |

@@ -1,5 +1,8 @@
 import Quota "../src/mediaRetainedQuota";
 import Principal "mo:core/Principal";
+import Map "mo:core/Map";
+import Text "mo:core/Text";
+import Nat "mo:core/Nat";
 let a = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
 let b = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
 func ok(result : Quota.Result) : Quota.Operation { switch (result) { case (#Ok(row)) row; case (#Err(_)) { assert false; loop {} } } };
@@ -48,3 +51,27 @@ ignore ok(Quota.reserve(aba, a, "recreate", "c", small.path, 7, true, 0));
 ignore ok(Quota.settle(aba, a, "recreate", true));
 denied(Quota.deleted(aba, a, "late", small));
 assert Quota.usage(aba, "c").finalized == 7;
+// Deletion preparation locks the exact object and reserves journal capacity
+// before the store physically removes ciphertext. Credit stays idempotent.
+let deletion = Quota.empty();
+assert Quota.register(deletion,a); assert Quota.baseline(deletion,small); assert Quota.seal(deletion,a);
+ignore ok(Quota.prepareDeleted(deletion,a,"prepared-delete",small));
+denied(Quota.reserve(deletion,a,"blocked-write","c",small.path,1,true,0));
+assert Quota.usage(deletion,"c").finalized == 7;
+ignore ok(Quota.deleted(deletion,a,"prepared-delete",small));
+ignore ok(Quota.deleted(deletion,a,"prepared-delete",small));
+assert Quota.usage(deletion,"c").finalized == 0;
+// Full journal denies deletion preparation before bytes are removed, while
+// an already-prepared receipt can still credit deletion at the hard cap.
+let full = Quota.empty();
+assert Quota.register(full,a); assert Quota.baseline(full,small); assert Quota.seal(full,a);
+let prepared = ok(Quota.prepareDeleted(full,a,"last-delete",small));
+var index = 0;
+while (full.operations.size() < Quota.maxEntries) {
+  full.operations.add("fixture-" # index.toText(), { prepared with token = "fixture-" # index.toText(); state = #released });
+  index += 1
+};
+denied(Quota.prepareDeleted(full,a,"cannot-allocate",small));
+assert Quota.usage(full,"c").finalized == 7;
+ignore ok(Quota.deleted(full,a,"last-delete",small));
+assert Quota.usage(full,"c").finalized == 0;

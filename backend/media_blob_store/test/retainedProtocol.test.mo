@@ -1,0 +1,10 @@
+import Protocol "../src/retainedProtocol";
+assert Protocol.club("clubs/c/vault/a") == ?"c";
+assert Protocol.club("clubs/c/chat/a") == ?"c";
+assert Protocol.club("clubs/c/photos/a") == ?"c";
+assert Protocol.club("clubs/c/logos/a") == ?"c";
+assert Protocol.club("users/u/a") == null;
+assert not Protocol.validPath("clubs/c");
+assert not Protocol.validPath("clubs//a");
+assert not Protocol.validPath("clubs/c\u{1f}x/a");
+assert not Protocol.validPath("");
