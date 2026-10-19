@@ -170,3 +170,16 @@ describe('mini-league entity routing', () => {
     expect(session.readClub).not.toHaveBeenCalled();
   });
 });
+
+describe('event group ownership', () => {
+  it('resolves unseen group clocks through events and pins the write once', async () => {
+    const { d, session } = deps(ON);
+    const lookup = vi.fn(async () => 'moved');
+    const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
+    const dispatcher = createClubDispatcher({ ...d, lookup, open: async () => ({ ...session, readEveryGroup }) } as never);
+    await dispatcher.writeFor('events', { eventGroupId: 'g' }, 'events_domain', 'cas', async () => 1, 1);
+    expect(lookup).toHaveBeenCalledWith({}, 'eventGroup', 'g');
+    expect(readEveryGroup).toHaveBeenCalledWith('events_domain', expect.any(Function), 2);
+    expect(session.writeClub).toHaveBeenCalledWith('moved', 'events_domain', 'cas', expect.any(Function), 1);
+  });
+});

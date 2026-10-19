@@ -88,7 +88,7 @@ module {
   public type PushReachability = { user : Principal; reachable : Bool; updated_at_ms : Nat64 };
 
   // ---- Event groups / players / duties (NEEDS-CANISTER #5) ----
-  public type EventGroup = { id : Text; event_id : Text; name : Text; created_at_ms : Nat64; team_letter : ?Text; colour : ?Text; team_b_colour : ?Text; display_order : Nat16; ability_band : ?Text; pitch_name : ?Text };
+  public type EventGroup = { timer_state_json : ?Text; pitch_state_json : ?Text; state_revision : Nat64; id : Text; event_id : Text; name : Text; created_at_ms : Nat64; team_letter : ?Text; colour : ?Text; team_b_colour : ?Text; display_order : Nat16; ability_band : ?Text; pitch_name : ?Text };
   // Players + per-group duties supplied to replace_event_groups when creating a group in the same atomic batch.
   public type GroupPlayerInput = { account_id : Text; team_letter : ?Text };
   public type GroupDutyInput = { duty : Text; account_id : ?Text };
@@ -96,7 +96,7 @@ module {
   public type EventGroupPlayer = { group_id : Text; account_id : Text; team_letter : ?Text };
   // account_id = null -> open duty within a group, same convention as
   // OpenDuty below.
-  public type EventGroupDuty = { group_id : Text; duty : Text; account_id : ?Text };
+  public type EventGroupDuty = { id : Text; group_id : Text; duty : Text; account_id : ?Text };
 
   // ---- Team training pauses (NEEDS-CANISTER #6) ----
   public type TeamTrainingPause = { id : Text; club_id : Text; team_id : Text; starts_at_ms : Nat64; ends_at_ms : Nat64; reason : Text; created_by : Principal; created_at_ms : Nat64 };

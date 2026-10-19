@@ -281,6 +281,20 @@ type Main =
        Err: text;
        Ok: PlayerGuardianStatus;
      }) query;
+   get_player_invite_preview: (token: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        opt
+         record {
+           club_id: text;
+           league_name: text;
+           mini_league_id: text;
+           player_name: opt text;
+           status: text;
+           token: text;
+         };
+     }) query;
    grant_role: ("principal": principal, role: text, club_id: text, team_id:
     opt text) -> (variant {
                     Err: text;

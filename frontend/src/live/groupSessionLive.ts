@@ -61,12 +61,13 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   });
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
-export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague' | 'competition', id: string): Promise<string | null> {
+export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague' | 'competition' | 'eventGroup', id: string): Promise<string | null> {
   if (kind === 'miniLeague') return (await import('./miniLeagueOwner')).lookupMiniLeagueOwner(ctx, id);
   if (kind === 'roleRequest') return (await import('./roleRequestOwner')).lookupRoleRequestOwner(ctx, id);
   const d = await import('./domains');
   const unwrap = (r: { Ok: [] | [string] } | { Err: string }) => { if ('Err' in r) throw new Error(r.Err); return r.Ok[0] ?? null; };
   if (kind === 'competition') return unwrap(await (await d.connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_competition_club(id));
+  if (kind === 'eventGroup') return unwrap(await (await d.connectLiveEventsDomain(ctx.target, ctx.identity)).actor.read_event_group_club(id));
   if (kind === 'event') return unwrap(await (await d.connectLiveEventsDomain(ctx.target, ctx.identity)).actor.read_event_club(id));
   if (kind === 'conversation') return unwrap(await (await d.connectLiveMessagingDomain(ctx.target, ctx.identity)).actor.read_conversation_club(id));
   if (kind === 'clubLink') {
@@ -95,6 +96,9 @@ export async function groupHoldsInvite(ctx: FeatureBackendContext, token: string
   const { connectLiveMiniLeagueDomain } = await import('./domains');
   if (!ctx.target.canisterIds.mini_league_domain) return false;
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  const preview = await actor.get_player_invite_preview(token);
+  if ('Err' in preview) throw new Error(preview.Err);
+  if (preview.Ok.length) return true;
   const reply = await actor.get_join_link_by_token(token);
   if ('Ok' in reply) return true;
   if (reply.Err === 'Join link not found') return false;

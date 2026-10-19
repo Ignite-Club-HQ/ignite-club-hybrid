@@ -16,9 +16,10 @@ import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { AddDutySheet } from "@/components/AddDutySheet";
 import { AssignDutySheet } from "@/components/AssignDutySheet";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { setLiveGroupDuty, removeLiveGroupDuty } from "@/live/features/events";
+import { saveLiveGroupDutySlot, removeLiveGroupDutySlot } from "@/live/features/events";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
 // Lazy load PitchBoard for performance
@@ -104,6 +105,21 @@ function SupabaseEventGroupPitchPage() {
   } = useQuery({
     queryKey: ["event-group", groupId],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) return withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async ctx => {
+          const api = await import("@/live/features/events");
+          const row = await api.getLiveEventGroup(ctx, groupId ?? "");
+          if (!row) return null;
+          const events = await api.listLiveEvents(ctx);
+          const event = events.find(e => e.id === row.event_id);
+          if (!event) throw new Error("Event not visible");
+          return { ...row, team_a_color: row.colour[0] ?? null, team_b_color: row.team_b_colour[0] ?? null,
+            timer_state: row.timer_state_json[0] ? JSON.parse(row.timer_state_json[0]) : null,
+            pitch_state: row.pitch_state_json[0] ? JSON.parse(row.pitch_state_json[0]) : null,
+            event: { id: event.id, title: event.title, event_date: new Date(Number(event.starts_at_ms)).toISOString(), start_time: new Date(Number(event.starts_at_ms)).toISOString(), end_time: null, mini_league_id: event.mini_league_id[0] ?? null } };
+        },
+      }, { eventGroupId: groupId ?? "" });
       const { data, error } = await supabase
         .from("event_groups")
         .select(`
@@ -123,6 +139,12 @@ function SupabaseEventGroupPitchPage() {
   const { data: players } = useQuery({
     queryKey: ["event-group-players-with-teams", groupId],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        if (!group?.event?.mini_league_id) throw new Error("League required");
+        const links = await withFeatureBackend("events", { supabase: async () => [], icp: ctx => import("@/live/features/events").then(api => api.listLiveGroupPlayers(ctx, groupId ?? "")) }, { eventId: eventId ?? "" });
+        const roster = await withFeatureBackend("mini_leagues", { supabase: async () => [], icp: ctx => import("@/live/features/miniLeagues").then(api => api.listLivePlayers(ctx, group.event.mini_league_id ?? "")) }, { miniLeagueId: group.event.mini_league_id });
+        return links.map(link => { const player = roster.find(p => p.id === link.account_id); if (!player) throw new Error("Group player missing from league roster"); return { id: player.id, name: player.name, ability_rating: player.ability_rating[0] ?? 3, team: (link.team_letter[0] ?? null) as "a" | "b" | null }; });
+      }
       const { data: groupPlayers, error: gpError } = await supabase
         .from("event_group_players")
         .select("player_id, team")
@@ -153,13 +175,20 @@ function SupabaseEventGroupPitchPage() {
         team: groupPlayers.find(gp => gp.player_id === p.id)?.team as "a" | "b" | null,
       })) as GroupPlayer[];
     },
-    enabled: !!groupId,
+    enabled: !!groupId && !!group?.event?.mini_league_id,
   });
 
   // Fetch group duties
   const { data: duties, isLoading: dutiesLoading } = useQuery({
     queryKey: ["event-group-duties", groupId],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) return withFeatureBackend("events", {
+        supabase: async () => [], icp: async ctx => {
+          const rows = await (await import("@/live/features/events")).listLiveGroupDuties(ctx, groupId ?? "");
+          const profiles = await withFeatureBackend("membership", { supabase: async () => [], icp: shared => import("@/live/features/identityAccessClient").then(api => api.listLiveProfilesByIds(shared, rows.flatMap(r => r.account_id))) }, { shared: "person" });
+          return rows.map(row => ({ id: row.id, name: row.duty, assigned_to: row.account_id[0] ?? null, status: row.account_id.length ? "confirmed" : "pending", points: 0, assignee: row.account_id[0] ? { display_name: profiles.find(p => p.account_id === row.account_id[0])?.display_name ?? "Member" } : null })) as GroupDuty[];
+        },
+      }, { eventId: eventId ?? "" });
       const { data, error } = await supabase
         .from("event_group_duties")
         .select("*, assignee:profiles!event_group_duties_assigned_to_fkey(display_name)")
@@ -193,7 +222,7 @@ function SupabaseEventGroupPitchPage() {
           return {
             minutes_per_half: league.minutes_per_half,
             club_id: league.club_id,
-            clubs: null as { sport: string | null } | null,
+            clubs: { sport: (await (await import("@/live/leagueReads")).readLeagueClub(ctx, league.club_id))?.sport ?? null },
           };
         },
       }, { miniLeagueId: group?.event?.mini_league_id ?? "" }),
@@ -204,6 +233,7 @@ function SupabaseEventGroupPitchPage() {
   const { data: hasProFootball, isLoading: proLoading } = useQuery({
     queryKey: ["club-pro-football", leagueSettings?.club_id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) return withFeatureBackend("membership", { supabase: async () => false, icp: ctx => import("@/live/features/proAccess").then(api => api.resolveLiveProFootballAccess(ctx, { clubId: leagueSettings?.club_id ?? "" })) }, { clubId: leagueSettings?.club_id ?? "" });
       const { data: appAdminRole } = await supabase
         .from("user_roles")
         .select("id")
@@ -231,6 +261,11 @@ function SupabaseEventGroupPitchPage() {
     queryKey: ["mini-league-edit-permission", user?.id, leagueSettings?.club_id, groupId],
     queryFn: async () => {
       if (!user || !leagueSettings?.club_id) return { canEdit: false, isSubsManager: false };
+      if (isFeatureRoutedToIcp("events")) return withFeatureBackend("events", { supabase: async () => ({ canEdit: false, isSubsManager: false }), icp: async ctx => {
+        const api = await import("@/live/features/events");
+        const [canEdit, duties] = await Promise.all([api.getLiveGroupEditAccess(ctx, groupId ?? ""), api.listLiveGroupDuties(ctx, groupId ?? "")]);
+        return { canEdit, isSubsManager: duties.some(d => d.duty === "Subs Manager" && d.account_id[0] === ctx.identity.getPrincipal().toText()) };
+      } }, { eventId: eventId ?? "" });
       
       const { data: roles } = await supabase
         .from("user_roles")
@@ -319,7 +354,7 @@ function SupabaseEventGroupPitchPage() {
         // mini_league_players.parent_user_id onto Supabase profiles and
         // club user_roles — no canister equivalent. ICP-routed sessions see
         // an empty assignee list rather than a partial/incorrect one.
-        icp: async () => [] as { id: string; display_name: string | null; avatar_url: string | null }[],
+        icp: async ctx => (await import("@/live/leagueReads")).readLeagueMembers(ctx, group?.event?.mini_league_id ?? ""),
       }, { miniLeagueId: group?.event?.mini_league_id ?? "" }),
     enabled: !!group?.event?.mini_league_id,
   });
@@ -333,7 +368,7 @@ function SupabaseEventGroupPitchPage() {
       const addedOnIcp = await withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
-          await setLiveGroupDuty(ctx, groupId!, name, null);
+          await saveLiveGroupDutySlot(ctx, groupId ?? "", crypto.randomUUID(), name, null);
           return true;
         },
       }, writeOnce({ eventId: eventId! }));
@@ -364,7 +399,7 @@ function SupabaseEventGroupPitchPage() {
         icp: async (ctx) => {
           const duty = duties?.find((candidate) => candidate.id === dutyId);
           if (!duty?.name) throw new Error("Duty not found");
-          await setLiveGroupDuty(ctx, groupId!, duty.name, assignedTo);
+          await saveLiveGroupDutySlot(ctx, groupId ?? "", duty.id, duty.name, assignedTo);
           return true;
         },
       }, writeOnce({ eventId: eventId! }));
@@ -393,7 +428,7 @@ function SupabaseEventGroupPitchPage() {
         const removedOnIcp = await withFeatureBackend("events", {
           supabase: () => false,
           icp: async (ctx) => {
-            await removeLiveGroupDuty(ctx, groupId!, duty.name);
+            await removeLiveGroupDutySlot(ctx, groupId ?? "", duty.id);
             return true;
           },
         }, writeOnce({ eventId: eventId! }));

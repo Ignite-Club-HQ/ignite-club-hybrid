@@ -1154,6 +1154,27 @@ export async function swapLiveGroupPlayers(
   );
 }
 
+export async function getLiveEventGroup(ctx: FeatureBackendContext, groupId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return (await unwrapCandid(actor.get_event_group(groupId), "Get event group"))[0] ?? null;
+}
+export async function getLiveGroupEditAccess(ctx: FeatureBackendContext, groupId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_group_edit_access(groupId), "Group edit access");
+}
+export async function syncLiveGroupState(ctx: FeatureBackendContext, groupId: string, revision: bigint, timer: unknown, pitch: unknown) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.sync_group_state(groupId, revision, candidOpt(timer == null ? null : JSON.stringify(timer)), candidOpt(pitch == null ? null : JSON.stringify(pitch))), "Sync group state");
+}
+export async function saveLiveGroupDutySlot(ctx: FeatureBackendContext, groupId: string, id: string, name: string, accountId: string | null) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.save_group_duty_slot(groupId, id, name, candidOpt(accountId)), "Save duty slot");
+}
+export async function removeLiveGroupDutySlot(ctx: FeatureBackendContext, groupId: string, id: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_group_duty_slot(groupId, id), "Remove duty slot");
+}
+
 export async function setLiveGroupDuty(
   ctx: FeatureBackendContext,
   groupId: string,

@@ -178,7 +178,7 @@ persistent actor class Main(governorInit : Principal) {
     if (caller.equal(Principal.anonymous())) return false;
     if (isLeagueAdmin(caller, league)) return true;
     if (isClubMember(caller, league.club_id)) return true;
-    players.any(func(p) = p.mini_league_id == league.id and p.claimed_by == ?caller)
+    players.any(func(p) = p.mini_league_id == league.id and (p.claimed_by == ?caller or p.parent_user_id == ?caller.toText()))
   };
   func findLeague(id : Text) : ?Types.MiniLeague { leagues.find(func(item) = item.id == id) };
   func requireLeagueAdmin(caller : Principal, id : Text) : { #Ok : Types.MiniLeague; #Err : Text } {
@@ -656,8 +656,8 @@ persistent actor class Main(governorInit : Principal) {
               case (?cid) guardians.filter(func(item) = item.child_id == cid).size();
               case null 0;
             };
-            let parentLinked = player.parent_user_id != null or childParent != null;
-            let pending = player.parent_user_id == null and (player.child_id == null or (childParent == null and guardianCount == 0));
+            let parentLinked = player.parent_user_id != null or player.claimed_by != null or childParent != null;
+            let pending = player.parent_user_id == null and player.claimed_by == null and (player.child_id == null or (childParent == null and guardianCount == 0));
             #Ok({ parent_linked = parentLinked; guardian_count = guardianCount; pending })
           };
         }
@@ -678,7 +678,7 @@ persistent actor class Main(governorInit : Principal) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) {
         switch (player_id) {
-          case (?pid) { if (findPlayer(pid) == null) return #Err("Player not found") };
+          case (?pid) { switch (findPlayer(pid)) { case null return #Err("Player not found"); case (?p) { if (p.mini_league_id != mini_league_id) return #Err("Player belongs to another league"); if (p.claimed_by != null or p.parent_user_id != null) return #Err("Player already linked") } } };
           case null {};
         };
         if (not validOpt(label_text, 256)) return #Err("Invalid invite");
@@ -686,6 +686,9 @@ persistent actor class Main(governorInit : Principal) {
           token = await randomToken("mli"); mini_league_id; player_id; label_text;
           status = "pending"; claimed_by = null; created_by = caller; created_at_ms = nowMs(); claimed_at_ms = null;
         };
+        if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
+        switch (requireLeagueAdmin(caller, mini_league_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+        switch (player_id) { case (?pid) { switch (findPlayer(pid)) { case null return #Err("Player not found"); case (?p) { if (p.mini_league_id != mini_league_id or p.claimed_by != null or p.parent_user_id != null) return #Err("Player no longer eligible") } } }; case null {} };
         invites := invites.concat([created]);
         #Ok(created)
       };
@@ -701,7 +704,11 @@ persistent actor class Main(governorInit : Principal) {
     switch (invites.find(func(item) = item.token == token)) {
       case null #Err("Invite not found");
       case (?invite) {
-        if (invite.status != "pending") return #Err("Invite already claimed");
+        if (leagueFenced(invite.mini_league_id)) return #Err("Club is temporarily locked for a transfer");
+        if (invite.status != "pending") {
+          if (invite.claimed_by == ?caller) switch (invite.player_id, findLeague(invite.mini_league_id)) { case (?pid, ?league) return #Ok({ mini_league_id = league.id; club_id = league.club_id; player_id = pid }); case _ {} };
+          return #Err("Invite already claimed")
+        };
         switch (findLeague(invite.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
@@ -710,6 +717,8 @@ persistent actor class Main(governorInit : Principal) {
                 switch (findPlayer(pid)) {
                   case null return #Err("Player not found");
                   case (?player) {
+                    if (player.mini_league_id != invite.mini_league_id) return #Err("Player belongs to another league");
+                    if (player.claimed_by != null or player.parent_user_id != null) return #Err("Player already linked");
                     players := players.map(func(item) = if (item.id == pid) { { item with claimed_by = ?caller; updated_at_ms = nowMs() } } else item);
                     pid
                   };
@@ -727,12 +736,20 @@ persistent actor class Main(governorInit : Principal) {
                 created.id
               };
             };
-            invites := invites.map(func(item) = if (item.token == token) { { item with status = "claimed"; claimed_by = ?caller; claimed_at_ms = ?nowMs() } } else item);
+            invites := invites.map(func(item) = if (item.token == token) { { item with status = "claimed"; player_id = ?playerId; claimed_by = ?caller; claimed_at_ms = ?nowMs() } } else item);
             #Ok({ mini_league_id = league.id; club_id = league.club_id; player_id = playerId })
           };
         }
       };
     }
+  };
+
+  // Bearer preview contains no parent/email/child identifier. Claim binds caller atomically.
+  public query func get_player_invite_preview(token : Text) : async { #Ok : ?{ token : Text; mini_league_id : Text; club_id : Text; league_name : Text; player_name : ?Text; status : Text }; #Err : Text } {
+    let invite = switch (invites.find(func(i) = i.token == token)) { case null return #Ok(null); case (?i) i };
+    let league = switch (findLeague(invite.mini_league_id)) { case null return #Ok(null); case (?l) l };
+    let name = switch (invite.player_id) { case (?id) switch (findPlayer(id)) { case (?p) ?p.name; case null null }; case null null };
+    #Ok(?{ token; mini_league_id = league.id; club_id = league.club_id; league_name = league.name; player_name = name; status = invite.status })
   };
 
   public query ({ caller }) func list_invites(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueInvite]; #Err : Text } {

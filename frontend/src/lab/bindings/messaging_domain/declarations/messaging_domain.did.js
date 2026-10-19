@@ -62,6 +62,17 @@ export const idlFactory = ({ IDL }) => {
     'sequence' : IDL.Nat64,
     'idempotency_key' : IDL.Text,
   });
+  const GroupSummary = IDL.Record({
+    'conversation_id' : IDL.Text,
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'team_id' : IDL.Opt(IDL.Text),
+    'description' : IDL.Opt(IDL.Text),
+    'is_member' : IDL.Bool,
+    'member_count' : IDL.Nat32,
+    'club_id' : IDL.Opt(IDL.Text),
+    'avatar' : IDL.Opt(IDL.Text),
+  });
   const ContentReport = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -232,17 +243,6 @@ export const idlFactory = ({ IDL }) => {
     'last_seen_ms' : IDL.Nat64,
     'user' : IDL.Principal,
     'platform' : IDL.Opt(IDL.Text),
-  });
-  const GroupSummary = IDL.Record({
-    'conversation_id' : IDL.Text,
-    'kind' : IDL.Text,
-    'name' : IDL.Text,
-    'team_id' : IDL.Opt(IDL.Text),
-    'description' : IDL.Opt(IDL.Text),
-    'is_member' : IDL.Bool,
-    'member_count' : IDL.Nat32,
-    'club_id' : IDL.Opt(IDL.Text),
-    'avatar' : IDL.Opt(IDL.Text),
   });
   const MessagePage = IDL.Record({
     'messages' : IDL.Vec(Message),
@@ -462,6 +462,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
         [],
       ),
+    'ensure_mini_league_chat' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : GroupSummary, 'Err' : IDL.Text })],
+        [],
+      ),
     'export_club_snapshot_page' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Nat],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
@@ -511,6 +516,11 @@ export const idlFactory = ({ IDL }) => {
     'get_group_metadata_multi' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_mini_league_chat' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(GroupSummary), 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_minimum_app_versions' : IDL.Func(

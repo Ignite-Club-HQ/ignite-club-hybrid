@@ -334,6 +334,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : PlayerGuardianStatus, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_player_invite_preview' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(
+              IDL.Record({
+                'status' : IDL.Text,
+                'token' : IDL.Text,
+                'mini_league_id' : IDL.Text,
+                'player_name' : IDL.Opt(IDL.Text),
+                'league_name' : IDL.Text,
+                'club_id' : IDL.Text,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

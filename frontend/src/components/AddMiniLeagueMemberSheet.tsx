@@ -27,8 +27,8 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { addLivePlayer } from "@/live/features/miniLeagues";
-import { createLivePendingInvite } from "@/live/features/club";
+import { addLivePlayer, createLiveInvite } from "@/live/features/miniLeagues";
+
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -98,7 +98,7 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
   };
 
   const [players, setPlayers] = useState<BulkPlayer[]>([createEmptyPlayer()]);
-  const [results, setResults] = useState<{ playerName: string; parentEmail: string; sent: boolean }[]>([]);
+  const [results, setResults] = useState<{ playerName: string; parentEmail: string; sent: boolean; inviteToken?: string }[]>([]);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [inviteByNameExpanded, setInviteByNameExpanded] = useState(false);
   const [activeSearch, setActiveSearch] = useState<{ rowId: string; field: "name" | "parentName" } | null>(null);
@@ -300,7 +300,7 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
       const invalidEmail = validPlayers.find((p) => !p.existingParentUserId && !emailRe.test(p.parentEmail.trim()));
       if (invalidEmail) throw new Error(`Enter a valid parent email for ${invalidEmail.name.trim()}`);
 
-      const addedResults: { playerName: string; parentEmail: string; sent: boolean }[] = [];
+      const addedResults: { playerName: string; parentEmail: string; sent: boolean; inviteToken?: string }[] = [];
 
       for (const player of validPlayers) {
         let childId = player.existingChildId;
@@ -430,7 +430,7 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
           // canister email-delivery channel, so `sent` is always false and
           // the invite link must be shared manually.
           icp: async (ctx) => {
-            await addLivePlayer(
+            const createdPlayer = await addLivePlayer(
               ctx,
               miniLeagueId,
               player.name.trim(),
@@ -440,16 +440,11 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
               null,
             );
 
-            if (player.parentEmail.trim() && !player.existingParentUserId) {
-              await createLivePendingInvite(ctx, {
-                kind: "club",
-                clubId,
-                email: player.parentEmail.trim().toLowerCase(),
-                role: "parent",
-              });
-            }
+            const invite = !player.existingParentUserId
+              ? await createLiveInvite(ctx, miniLeagueId, createdPlayer.id, player.parentName.trim() || null)
+              : null;
+            return { playerName: player.name.trim(), parentEmail: player.parentEmail.trim(), sent: false, inviteToken: invite?.token };
 
-            return { playerName: player.name.trim(), parentEmail: player.parentEmail.trim(), sent: false };
           },
         }, writeOnce({ clubId }));
 
@@ -623,6 +618,7 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
                             <p className="text-xs text-muted-foreground truncate">{result.parentEmail}</p>
                           )}
                         </div>
+                        {result.inviteToken && <Button variant="outline" size="sm" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/join/p/${result.inviteToken}`); toast({ title: "Invite link copied" }); } catch { toast({ title: "Couldn't copy invite", variant: "destructive" }); } }}>Copy link</Button>}
                         <Badge variant={result.parentEmail ? (result.sent ? "default" : "secondary") : "outline"}>
                           {result.parentEmail
                             ? (result.sent ? "Email sent" : "Invite pending")

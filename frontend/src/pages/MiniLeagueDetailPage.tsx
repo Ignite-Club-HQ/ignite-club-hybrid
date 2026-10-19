@@ -1,6 +1,6 @@
 import { useState, Suspense } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, isToday, parseISO, startOfDay, nextSaturday } from "date-fns";
 import {
   ArrowLeft,
@@ -32,6 +32,8 @@ const MiniLeagueSettingsDialog = lazyWithRetry(() => import("@/components/mini-l
 const ManageMiniLeagueAdminsSheet = lazyWithRetry(() => import("@/components/mini-league/ManageMiniLeagueAdminsSheet").then(m => ({ default: m.ManageMiniLeagueAdminsSheet })));
 import PendingInvitesList from "@/components/PendingInvitesList";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { toast } from "sonner";
+import { writeOnce } from "@/live/clubScope";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
@@ -52,6 +54,7 @@ export default function MiniLeagueDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [playersOpen, setPlayersOpen] = useState(false);
   const [addPlayersOpen, setAddPlayersOpen] = useState(false);
@@ -93,6 +96,7 @@ export default function MiniLeagueDetailPage() {
   const { data: leagueChatGroup } = useQuery({
     queryKey: ["mini-league-chat-group", id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("messaging")) return withFeatureBackend("messaging", { supabase: async () => null, icp: ctx => import("@/live/features/messaging").then(api => api.getLiveMiniLeagueChat(ctx, league?.club_id ?? "", id ?? "")) }, { clubId: league?.club_id ?? "" });
       const { data } = await supabase
         .from("chat_groups")
         .select("id")
@@ -100,7 +104,7 @@ export default function MiniLeagueDetailPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!id,
+    enabled: !!id && !!league?.club_id,
   });
 
   // Check Pro Football subscription for the league's club
@@ -384,6 +388,12 @@ export default function MiniLeagueDetailPage() {
     enabled: !!league?.club_id && !!id && !!canManageLeague && !isFeatureRoutedToIcp("membership"),
   });
 
+  const { data: namedPlayerInvites } = useQuery({
+    queryKey: ["mini-league-named-player-invites", id],
+    queryFn: () => withFeatureBackend("mini_leagues", { supabase: async () => [], icp: ctx => import("@/live/features/miniLeagues").then(api => api.listLiveInvites(ctx, id ?? "")) }, { miniLeagueId: id ?? "" }),
+    enabled: !!id && !!canManageLeague && isFeatureRoutedToIcp("mini_leagues"),
+  });
+
   const nonCancelledEvents = events?.filter(e => !e.is_cancelled) || [];
   const upcomingEvents = nonCancelledEvents.filter(e => new Date(e.event_date) >= startOfDay(new Date()));
   const pastEvents = nonCancelledEvents.filter(e => new Date(e.event_date) < startOfDay(new Date()));
@@ -578,6 +588,20 @@ export default function MiniLeagueDetailPage() {
         </CardContent>
       </Card>
 
+      {isFeatureRoutedToIcp("messaging") && !leagueChatGroup && isClubAdmin && <Button variant="outline" onClick={async () => {
+        try {
+          const created = await withFeatureBackend("messaging", { supabase: async () => null, icp: async ctx => {
+            const members = await (await import("@/live/leagueReads")).readLeagueMembers(ctx, id ?? "");
+            return (await import("@/live/features/messaging")).ensureLiveMiniLeagueChat(ctx, league?.club_id ?? "", id ?? "", league?.name ?? "League chat", members.map(m => m.id));
+          } }, writeOnce({ clubId: league?.club_id ?? "" }));
+          await queryClient.invalidateQueries({ queryKey: ["mini-league-chat-group", id] });
+          if (created) navigate(`/groups/${created.id}`);
+        } catch (error) { toast.error(error instanceof Error ? error.message : "Couldn't create league chat"); }
+      }}><MessageSquare className="h-4 w-4 mr-2" />Create league chat</Button>}
+      {namedPlayerInvites?.filter(i => i.status === "pending").map(invite => <div key={invite.token} className="flex items-center justify-between gap-2 border-b py-3">
+        <span>{invite.label_text[0] ?? "Player invitation"}</span>
+        <Button size="sm" variant="outline" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/join/p/${invite.token}`); toast.success("Invite link copied"); } catch { toast.error("Couldn't copy invite"); } }}>Copy link</Button>
+      </div>)}
       {/* League Chat — primary action */}
       {leagueChatGroup?.id && (
         <button

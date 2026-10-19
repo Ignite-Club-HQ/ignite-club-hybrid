@@ -247,15 +247,19 @@ persistent actor class Main(governorInit : Principal) {
     rsvps := rsvps.filter(func(r) = not evs.any(func(e) = e.id == r.event_id));
     series := series.filter(func(x) = not evs.any(func(e) = e.series_id == ?x.id));
     events := events.filter(func(e) = e.club_id != club);
+    let gids = eventGroups.filter(func(g) = evs.any(func(e) = e.id == g.event_id)).map(func(g) = g.id);
+    eventGroups := eventGroups.filter(func(g) = not gids.any(func(id) = id == g.id));
+    eventGroupPlayers := eventGroupPlayers.filter(func(p) = not gids.any(func(id) = id == p.group_id));
+    eventGroupDuties := eventGroupDuties.filter(func(d) = not gids.any(func(id) = id == d.group_id));
     #Ok(evs.size())
   };
-  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries] };
+  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty] };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before export");
     let evs = events.filter(func(e) = e.club_id == club);
     let snap : EventsSnapshot = { events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
-      series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)) };
+      series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)); groups = ?eventGroups.filter(func(g) = evs.any(func(e) = e.id == g.event_id)); group_players = ?eventGroupPlayers.filter(func(p) = eventGroups.any(func(g) = g.id == p.group_id and evs.any(func(e) = e.id == g.event_id))); group_duties = ?eventGroupDuties.filter(func(d) = eventGroups.any(func(g) = g.id == d.group_id and evs.any(func(e) = e.id == g.event_id))) };
     #Ok(to_candid (snap))
   };
   public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
@@ -265,6 +269,16 @@ persistent actor class Main(governorInit : Principal) {
     let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
     if (snap.events.any(func(e) = e.club_id != club) or snap.rsvps.any(func(r) = not snap.events.any(func(e) = e.id == r.event_id))) return #Err("Snapshot contains foreign records");
     if (snap.events.any(func(e) = events.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    let incomingGroups = snap.groups ?? [];
+    let incomingPlayers = snap.group_players ?? [];
+    let incomingDuties = snap.group_duties ?? [];
+    if (incomingGroups.any(func(g) = not snap.events.any(func(e) = e.id == g.event_id)) or incomingPlayers.any(func(p) = not incomingGroups.any(func(g) = g.id == p.group_id)) or incomingDuties.any(func(d) = not incomingGroups.any(func(g) = g.id == d.group_id))) return #Err("Snapshot contains foreign group records");
+    if (incomingGroups.any(func(g) = eventGroups.any(func(x) = x.id == g.id and not events.any(func(e) = e.id == x.event_id and e.club_id == club)))) return #Err("Group id collides with another club");
+    if (incomingDuties.any(func(d) = eventGroupDuties.any(func(x) = x.id == d.id and not events.any(func(e) = e.club_id == club and eventGroups.any(func(g) = g.id == x.group_id and g.event_id == e.id))))) return #Err("Duty id collides with another club");
+    let oldGroups = eventGroups.filter(func(g) = events.any(func(e) = e.id == g.event_id and e.club_id == club)).map(func(g) = g.id);
+    eventGroups := eventGroups.filter(func(g) = not oldGroups.any(func(id) = id == g.id)).concat(incomingGroups);
+    eventGroupPlayers := eventGroupPlayers.filter(func(p) = not oldGroups.any(func(id) = id == p.group_id)).concat(incomingPlayers);
+    eventGroupDuties := eventGroupDuties.filter(func(d) = not oldGroups.any(func(id) = id == d.group_id)).concat(incomingDuties);
     let ids = events.filter(func(e) = e.club_id == club).map(func(e) = e.id);
     rsvps := rsvps.filter(func(r) = not ids.any(func(i) = i == r.event_id)).concat(snap.rsvps);
     series := series.filter(func(x) = not snap.series.any(func(y) = y.id == x.id)).concat(snap.series);
@@ -1518,7 +1532,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(name)) return #Err("Invalid group name");
-    let value : Types.EventGroup = { id = "grp-" # event_id # "-" # Nat.toText(eventGroups.size()); event_id; name; created_at_ms = nowMs(); team_letter; colour; team_b_colour = null; display_order = Nat.toNat16(eventGroups.size()); ability_band; pitch_name };
+    let value : Types.EventGroup = { timer_state_json = null; pitch_state_json = null; state_revision = 0; id = "grp-" # event_id # "-" # Nat.toText(eventGroups.size()); event_id; name; created_at_ms = nowMs(); team_letter; colour; team_b_colour = null; display_order = Nat.toNat16(eventGroups.size()); ability_band; pitch_name };
     eventGroups := eventGroups.concat([value]);
     #Ok(value)
   };
@@ -1637,13 +1651,63 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // Location and permissions do not confer resource access: every read/write rechecks.
+  public query ({ caller }) func get_event_group(group_id : Text) : async { #Ok : ?Types.EventGroup; #Err : Text } {
+    let group = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Ok(null); case (?g) g };
+    let event = switch (events.find(func(e) = e.id == group.event_id)) { case null return #Ok(null); case (?e) e };
+    if (not canView(caller, event)) return #Err("Forbidden");
+    #Ok(?group)
+  };
+  public query ({ caller }) func read_event_group_club(group_id : Text) : async { #Ok : ?Text; #Err : Text } {
+    let group = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Ok(null); case (?g) g };
+    let event = switch (events.find(func(e) = e.id == group.event_id)) { case null return #Ok(null); case (?e) e };
+    #Ok(if (canView(caller, event)) ?event.club_id else null)
+  };
+  func canEditGroupState(caller : Principal, group : Types.EventGroup) : Bool {
+    let event = switch (events.find(func(e) = e.id == group.event_id)) { case null return false; case (?e) e };
+    if (not canView(caller, event)) return false;
+    manages(caller, event) or roleInEventScope(caller, event, ["league_admin", "coach"]) or eventGroupDuties.any(func(d) =
+      d.group_id == group.id and d.account_id == ?caller.toText() and (d.duty == "Referee" or d.duty == "Subs Manager"))
+  };
+  public query ({ caller }) func get_group_edit_access(group_id : Text) : async { #Ok : Bool; #Err : Text } {
+    let group = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Err("Group not found"); case (?g) g };
+    #Ok(canEditGroupState(caller, group))
+  };
+  // Exact revision CAS; no await between authorization and commit.
+  public shared ({ caller }) func sync_group_state(group_id : Text, expected_revision : Nat64, timer_json : ?Text, pitch_json : ?Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
+    let group = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Err("Group not found"); case (?g) g };
+    if (not canEditGroupState(caller, group)) return #Err("Forbidden");
+    if (group.state_revision != expected_revision) return #Err("State revision conflict");
+    if ((switch (timer_json) { case (?t) t.size() > 8192; case null false }) or (switch (pitch_json) { case (?t) t.size() > 262144; case null false })) return #Err("Match state too large");
+    let updated : Types.EventGroup = { group with timer_state_json = timer_json; pitch_state_json = pitch_json; state_revision = group.state_revision + 1 };
+    eventGroups := eventGroups.map(func(g) = if (g.id == group_id) updated else g);
+    #Ok(updated)
+  };
+  // An explicit slot id supports repeated names and exact reassignment/deletion.
+  public shared ({ caller }) func save_group_duty_slot(group_id : Text, slot_id : Text, duty : Text, account_id : ?Text) : async { #Ok : Types.EventGroupDuty; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
+    switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not valid(slot_id) or not valid(duty) or not validOptId(account_id)) return #Err("Invalid duty");
+    if (eventGroupDuties.any(func(d) = d.id == slot_id and d.group_id != group_id)) return #Err("Duty id belongs to another group");
+    let value : Types.EventGroupDuty = { id = slot_id; group_id; duty; account_id };
+    eventGroupDuties := eventGroupDuties.filter(func(d) = d.id != slot_id).concat([value]);
+    #Ok(value)
+  };
+  public shared ({ caller }) func remove_group_duty_slot(group_id : Text, slot_id : Text) : async { #Ok; #Err : Text } {
+    if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
+    switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    eventGroupDuties := eventGroupDuties.filter(func(d) = not (d.group_id == group_id and d.id == slot_id));
+    #Ok
+  };
+
   public shared ({ caller }) func set_group_duty(group_id : Text, duty : Text, account_id : ?Text) : async { #Ok : Types.EventGroupDuty; #Err : Text } {
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(duty)) return #Err("Invalid duty");
-    let value : Types.EventGroupDuty = { group_id; duty; account_id };
-    eventGroupDuties := eventGroupDuties.filter(func(item) = not (item.group_id == group_id and item.duty == duty));
+    let value : Types.EventGroupDuty = { id = "legacy:" # group_id # ":" # duty; group_id; duty; account_id };
+    eventGroupDuties := eventGroupDuties.filter(func(item) = item.id != "legacy:" # group_id # ":" # duty);
     eventGroupDuties := eventGroupDuties.concat([value]);
     #Ok(value)
   };
@@ -1652,7 +1716,7 @@ persistent actor class Main(governorInit : Principal) {
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
-    eventGroupDuties := eventGroupDuties.filter(func(item) = not (item.group_id == group_id and item.duty == duty));
+    eventGroupDuties := eventGroupDuties.filter(func(item) = item.id != "legacy:" # group_id # ":" # duty);
     #Ok
   };
 
@@ -1812,9 +1876,9 @@ persistent actor class Main(governorInit : Principal) {
     var index = 0;
     for (spec in groups.values()) {
       let id = "grp-" # event_id # "-" # Nat.toText(base + index);
-      newGroups := newGroups.concat([{ id; event_id; name = spec.name; created_at_ms = nowMs(); team_letter = null; colour = spec.team_a_colour; team_b_colour = spec.team_b_colour; display_order = spec.display_order; ability_band = spec.ability_band; pitch_name = spec.pitch_name }]);
+      newGroups := newGroups.concat([{ timer_state_json = null; pitch_state_json = null; state_revision = (0 : Nat64); id; event_id; name = spec.name; created_at_ms = nowMs(); team_letter = null; colour = spec.team_a_colour; team_b_colour = spec.team_b_colour; display_order = spec.display_order; ability_band = spec.ability_band; pitch_name = spec.pitch_name }]);
       newPlayers := newPlayers.concat(spec.players.map(func(p) : Types.EventGroupPlayer = { group_id = id; account_id = p.account_id; team_letter = p.team_letter }));
-      newDuties := newDuties.concat(spec.duties.map(func(d) : Types.EventGroupDuty = { group_id = id; duty = d.duty; account_id = d.account_id }));
+      for (d in spec.duties.values()) { newDuties := newDuties.concat([{ id = "batch:" # id # ":" # Nat.toText(newDuties.size()); group_id = id; duty = d.duty; account_id = d.account_id }]) };
       createdIds := createdIds.concat([id]);
       index += 1;
     };

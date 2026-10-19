@@ -184,6 +184,22 @@ export interface Main {
     { 'Ok' : PlayerGuardianStatus } |
       { 'Err' : string }
   >,
+  'get_player_invite_preview' : ActorMethod<
+    [string],
+    {
+        'Ok' : [] | [
+          {
+            'status' : string,
+            'token' : string,
+            'mini_league_id' : string,
+            'player_name' : [] | [string],
+            'league_name' : string,
+            'club_id' : string,
+          }
+        ]
+      } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |

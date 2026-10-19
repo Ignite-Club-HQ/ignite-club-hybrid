@@ -16,7 +16,7 @@ import {
   listLiveGroupPlayers,
   moveLiveGroupPlayer,
   swapLiveGroupPlayers,
-  setLiveGroupDuty,
+  saveLiveGroupDutySlot,
   listLiveGroupDuties,
   setLiveEventGroupAppearance,
   replaceLiveEventGroups,
@@ -339,7 +339,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             const assignedTo = d.account_id.length ? d.account_id[0] : null;
             const profile = assignedTo ? parentProfiles?.find((p) => p.id === assignedTo) : null;
             return {
-              id: `${group.id}:${d.duty}`,
+              id: d.id,
               group_id: group.id,
               name: d.duty,
               assigned_to: assignedTo,
@@ -489,7 +489,10 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         }
 
         if (dutyInserts.length > 0) {
-          await supabase.from("event_group_duties").insert(dutyInserts);
+          await withFeatureBackend("events", {
+            supabase: async () => { const { error } = await supabase.from("event_group_duties").insert(dutyInserts); if (error) throw error; },
+            icp: async ctx => { for (const duty of dutyInserts) await saveLiveGroupDutySlot(ctx, duty.group_id, crypto.randomUUID(), duty.name, duty.assigned_to); },
+          }, writeOnce({ eventId }));
         }
       },
       icp: async (ctx) => {
@@ -528,7 +531,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             if (assignedTo) {
               parentDutyCount.set(assignedTo, (parentDutyCount.get(assignedTo) || 0) + 1);
             }
-            await setLiveGroupDuty(ctx, matchIds[matchIdx], duty.duty, assignedTo);
+            await saveLiveGroupDutySlot(ctx, matchIds[matchIdx], crypto.randomUUID(), duty.duty, assignedTo);
           }
         }
       },
@@ -814,7 +817,10 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
       }
 
       if (dutyInserts.length > 0) {
-        await supabase.from("event_group_duties").insert(dutyInserts);
+        await withFeatureBackend("events", {
+            supabase: async () => { const { error } = await supabase.from("event_group_duties").insert(dutyInserts); if (error) throw error; },
+            icp: async ctx => { for (const duty of dutyInserts) await saveLiveGroupDutySlot(ctx, duty.group_id, crypto.randomUUID(), duty.name, duty.assigned_to); },
+          }, writeOnce({ eventId }));
       }
 
       return result.numCreated;

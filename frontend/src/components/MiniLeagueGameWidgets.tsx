@@ -106,16 +106,7 @@ export function MiniLeagueGameWidgets({ activeClubFilter }: MiniLeagueGameWidget
             isAppAdmin,
           };
         },
-        // Gated: membership resolution joins user_roles (club_admin/
-        // league_admin/coach/app_admin) and mini_league_players by Supabase
-        // uuid, with no canister equivalent. ICP-routed sessions see no
-        // memberships here rather than invented data.
-        icp: async () => ({
-          parentLeagueIds: [] as string[],
-          adminLeagueIds: [] as string[],
-          allLeagueIds: [] as string[],
-          isAppAdmin: false,
-        }),
+        icp: async ctx => (await import("@/live/leagueReads")).readLiveLeagueMemberships(ctx),
       }, { everyGroup: true, merge: (parts) => ({ parentLeagueIds: [...new Set(parts.flatMap(p => p.parentLeagueIds))], adminLeagueIds: [...new Set(parts.flatMap(p => p.adminLeagueIds))], allLeagueIds: [...new Set(parts.flatMap(p => p.allLeagueIds))], isAppAdmin: parts.some(p => p.isAppAdmin) }) }),
     enabled: !!user,
     staleTime: 30000,
@@ -281,12 +272,8 @@ export function MiniLeagueGameWidgets({ activeClubFilter }: MiniLeagueGameWidget
 
       return activeMatches;
         },
-        // Gated: active match resolution joins events/event_groups/
-        // event_group_players/event_group_duties with mini_league_players
-        // by Supabase uuid, and has no canister equivalent. ICP-routed
-        // sessions see no active matches here rather than invented data.
-        icp: async () => [] as ActiveMiniLeagueMatch[],
-      }, { shared: "person" }),
+        icp: async ctx => (await import("@/live/leagueReads")).readLiveLeagueMatches(ctx, userLeagueMemberships?.allLeagueIds ?? [], activeClubFilter),
+      }, { everyGroup: true, merge: parts => [...new Map(parts.flat().map(row => [row.id, row])).values()] }),
     enabled: !!user && !!userLeagueMemberships?.allLeagueIds?.length,
     refetchInterval: 5000, // Refresh every 5 seconds to get updated timer states
   });

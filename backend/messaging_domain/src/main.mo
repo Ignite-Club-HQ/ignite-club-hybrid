@@ -1741,6 +1741,32 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // A league tag locates an existing private group; it never grants membership.
+  public query ({ caller }) func get_mini_league_chat(club_id : Text, league_id : Text) : async { #Ok : ?Types.GroupSummary; #Err : Text } {
+    if (caller.equal(Principal.anonymous())) return #Err("Forbidden");
+    let matches = groupMetadata.filter(func(m) = not m.deleted and m.club_id == ?club_id and m.kind == "mini_league:" # league_id and m.members.any(func(p) = p.equal(caller)));
+    if (matches.size() > 1) return #Err("Conflicting league chats");
+    #Ok(if (matches.size() == 0) null else ?toGroupSummary(caller, matches[0]))
+  };
+  // Club administrators select the private audience, just as for ordinary group creation.
+  // Find-or-create is atomic and safe to resume; no cross-canister await.
+  public shared ({ caller }) func ensure_mini_league_chat(club_id : Text, league_id : Text, name : Text, members : [Principal]) : async { #Ok : Types.GroupSummary; #Err : Text } {
+    auth(caller);
+    if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
+    if (not isGovernor(caller) and not hasRole(caller, "club_admin", ?club_id, null)) return #Err("Club admin required");
+    if (not valid(club_id) or not valid(league_id) or not valid(name)) return #Err("Invalid league chat");
+    let found = groupMetadata.filter(func(m) = not m.deleted and m.club_id == ?club_id and m.kind == "mini_league:" # league_id);
+    if (found.size() > 1) return #Err("Conflicting league chats");
+    if (found.size() == 1) { if (not found[0].members.any(func(p) = p.equal(caller))) return #Err("Chat membership required"); return #Ok(toGroupSummary(caller, found[0])) };
+    if (members.size() == 0 or members.size() > GROUP_MEMBER_LIMIT or members.any(func(p) = p.equal(Principal.anonymous())) or not members.any(func(p) = p.equal(caller))) return #Err("Invalid chat audience");
+    let conversation : Types.Conversation = { id = "chat-" # club_id # "-" # Nat.toText(conversations.size() + 1); club_id; team_id = null; participants = members; next_sequence = 1 };
+    let meta : Types.GroupMetadata = { conversation_id = conversation.id; name; kind = "mini_league:" # league_id; club_id = ?club_id; team_id = null; members; created_at_ms = nowMs(); avatar = null; description = null; deleted = false; admin_only_posting = false; deleted_at_ms = null; deleted_by = null };
+    conversations := conversations.concat([conversation]);
+    groupMetadata := groupMetadata.concat([meta]);
+    groupRoles := groupRoles.concat(members.map(func(p) : Types.GroupRole = { conversation_id = conversation.id; user = p; role = if (p.equal(caller)) "admin" else "member" }));
+    #Ok(toGroupSummary(caller, meta))
+  };
+
   public query ({ caller }) func list_groups_by_club(club_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
     if (not valid(club_id)) return #Err("Invalid club id");
     if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
