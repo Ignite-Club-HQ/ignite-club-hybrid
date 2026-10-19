@@ -7,7 +7,7 @@ function world() {
   let saved = start();
   const adapter: ProvisionAdapter = {
     createCanister: vi.fn(async (_p, d) => ({ canisterId: `c-${d}`, subnetId: 's1' })),
-    install: vi.fn(async () => {}), healthy: vi.fn(async () => true),
+    install: vi.fn(async () => {}), configure: vi.fn(async () => {}), healthy: vi.fn(async () => true),
     readRegistryRevision: vi.fn(async () => 2n), registerGroup: vi.fn(async () => {}), enableGroup: vi.fn(async () => {}),
     save: vi.fn(async p => { saved = structuredClone(p); }),
   };

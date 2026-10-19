@@ -17,7 +17,7 @@ function provisionWorld(crashAt = -1, subnet = 's1') {
   let revision = 2n; let created = 0; const saved: Provision[] = []; const registry: string[] = []; const enabled: string[] = [];
   const a: ProvisionAdapter = {
     createCanister: async (_p, d) => { if (created === crashAt) { created++; throw new Error('Request timed out'); } created++; return { canisterId: `c-${d}`, subnetId: subnet }; },
-    install: async () => {}, healthy: async () => true,
+    install: async () => {}, configure: async () => {}, healthy: async () => true,
     readRegistryRevision: async () => revision,
     registerGroup: async p => { registry.push(p.groupId); revision++; }, enableGroup: async p => { enabled.push(p.groupId); },
     save: async p => { saved.push(structuredClone(p)); },

@@ -38,7 +38,7 @@ describe('recording a new group in the directory', () => {
       register_group_placement: vi.fn(async () => ({ Ok: ++rev })) };
     const adapter: ProvisionAdapter = {
       ...routerProvisionSteps(router as never, { secret_workload_identity: id(12) }, dep, limits, async () => {}, true),
-      createCanister: vi.fn(), install: vi.fn(), healthy: vi.fn(),
+      createCanister: vi.fn(), install: vi.fn(), configure: vi.fn(), healthy: vi.fn(),
       save: async p => { saved = structuredClone(p); },
     };
     await expect(runProvision(saved, adapter)).rejects.toThrow('temporarily refused');
@@ -57,7 +57,7 @@ describe('recording a new group in the directory', () => {
       register_group_placement: vi.fn() };
     const adapter: ProvisionAdapter = {
       ...routerProvisionSteps(router, { secret_workload_identity: id(12) }, dep, limits),
-      createCanister: vi.fn(), install: vi.fn(), healthy: vi.fn(),
+      createCanister: vi.fn(), install: vi.fn(), configure: vi.fn(), healthy: vi.fn(),
       save: async p => { saved = structuredClone(p); },
     };
     const result = await runProvision(saved, adapter);
