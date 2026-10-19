@@ -148,7 +148,7 @@ export default function ClubsPage() {
         await withFeatureBackend("membership", {
           supabase: async () => undefined,
           icp: async (ctx) => { await (await import("@/live/features/club")).deleteLiveClubPermanent(ctx, targetId); },
-        });
+        }, writeOnce({ clubId: targetId }));
       } catch (e) {
         error = { message: e instanceof Error ? e.message : "Unknown error" };
       }

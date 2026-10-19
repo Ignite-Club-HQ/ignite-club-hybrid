@@ -1125,7 +1125,7 @@ export default function ClubDetailPage() {
           // insert needed.
         },
         icp: async (ctx) => { await requestLiveRole(ctx, id!, selectedRole); },
-      });
+      }, writeOnce({ clubId: id! }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-request", id] });

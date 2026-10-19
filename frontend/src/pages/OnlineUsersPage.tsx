@@ -68,7 +68,7 @@ function IcpOnlineUsersPage() {
       const rows = await withFeatureBackend("membership", {
         supabase: async () => [],
         icp: (ctx) => listLiveOnlinePresence(ctx, ONLINE_WINDOW_SECONDS),
-      });
+      }, { shared: 'person' });
       if (rows.length === 0) return [];
       const profiles = await withFeatureBackend("membership", {
         supabase: async () => [],

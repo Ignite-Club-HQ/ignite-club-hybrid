@@ -43,7 +43,7 @@ async function isEventsStripEnabledForClub(candidateClubId: string): Promise<boo
       const settingsOpt = await getLiveClubSettings(ctx, candidateClubId);
       return !!settingsOpt[0]?.events_sponsor_strip_enabled;
     },
-  });
+  }, { clubId: candidateClubId });
 }
 
 const DISMISS_TTL_MS = 24 * 60 * 60 * 1000;

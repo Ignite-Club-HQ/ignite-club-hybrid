@@ -113,7 +113,7 @@ export default function InviteOtherParentSheet({
           const rows = await searchLiveProfiles(ctx, debouncedName, 6);
           return rows.filter(u => u.id !== user?.id);
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: open && debouncedName.length >= 2 && !selectedUser && (!teamIds[0] || !!scopeClubId),
   });

@@ -228,7 +228,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
             }
           }
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-roles", clubId] });

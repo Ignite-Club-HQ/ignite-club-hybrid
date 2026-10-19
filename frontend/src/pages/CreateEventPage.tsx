@@ -744,7 +744,7 @@ function SupabaseCreateEventPage() {
         // Duty assignment stays optional in ICP mode — the canister roster
         // has no display-name directory to pick from yet.
         icp: async () => [] as { id: string; display_name: string; avatar_url: string | null }[],
-      }),
+      }, { shared: 'person' }),
     enabled: !!clubId,
   });
 
@@ -798,7 +798,7 @@ function SupabaseCreateEventPage() {
             name: loc.location_label,
             isFavorite: true,
           })) as SavedLocation[],
-      }),
+      }, { shared: 'person' }),
     enabled: !!clubId,
   });
 
@@ -828,7 +828,7 @@ function SupabaseCreateEventPage() {
             created_at: "",
             user_id: "",
           })),
-      }),
+      }, { shared: 'person' }),
     enabled: !!user,
   });
 

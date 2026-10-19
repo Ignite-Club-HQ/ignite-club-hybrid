@@ -59,7 +59,7 @@ export function WelcomeEmailSettingsCard({
             const row = await getLiveTeamWelcomeEmail(ctx, scopeId);
             return row ? { id: null, enabled: row.enabled, subject: row.subject, message: row.message } : null;
           },
-        });
+        }, { teamId: scopeId });
       }
       return withFeatureBackend("competitions", {
         supabase: () => loadSupabaseSettings(),

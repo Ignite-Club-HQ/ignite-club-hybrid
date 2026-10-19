@@ -77,7 +77,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
         const branding = await withFeatureBackend("membership", {
           supabase: async () => null,
           icp: (ctx) => getLiveClubBranding(ctx, effectiveClubId),
-        });
+        }, { clubId: effectiveClubId });
 
         const clubName = branding?.name || "The Club";
         const clubLogoUrl = branding?.logo_url[0];
