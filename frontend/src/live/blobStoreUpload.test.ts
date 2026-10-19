@@ -49,3 +49,10 @@ describe("recoverable shared-quota uploads", () => {
     expect(mocks.finalize_upload).not.toHaveBeenCalled();
   });
 });
+describe("Pro vault allowance errors", () => {
+  it("maps a full vault to a friendly message", async () => {
+    const { freeLimitMessage } = await import("./blobStoreUpload");
+    expect(freeLimitMessage(new Error("Begin blob upload: VaultStorageFull"))).toMatch(/used all of its vault storage/);
+    expect(freeLimitMessage(new Error("VaultAllowanceUnavailable"))).toMatch(/couldn't check/);
+  });
+});
