@@ -19,7 +19,6 @@
 - Competition welcome settings live on competition_domain behind refreshed manager access; club-role mirrors fail closed. Why: no Supabase fallback or stale access.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: apply StatusBarBackdrop after SystemBars; keep its remaining CSS inset, no forced floor. Both Codemagic workflows run scripts/configure-android-status-bar.py; preserve keyboard handling. Why: native padding already reserves space.
-- Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
 - ICP images wait for restored auth, share account-scoped unlocks and retry after cooldown/foreground recovery. Why: avoid false startup failures and duplicate unlocks.
 - Documents use authorized/decrypted URLs, preserve extension/MIME and cache WebView blobs natively. Why: raw ICP URLs are ciphertext.
 - ICP rewards verify roles via governor-configured club_domain; catalog/settings reads refresh caller role mirrors first. Why: club creation needs no manual points-service grant.

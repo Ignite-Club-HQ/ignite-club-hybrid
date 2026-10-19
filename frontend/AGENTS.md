@@ -53,3 +53,4 @@
 - Retired URLs: App.tsx ParamRedirect, not 404.
 - Pending sends are QueryClient-scoped; settle temp IDs from server acknowledgements, not photo presence. Why: avoid duplicates after navigation.
 - Profile batches: get_profile for missing linked IDs.
+- Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
