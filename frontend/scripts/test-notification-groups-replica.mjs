@@ -31,7 +31,7 @@ try {
     ok(await queue.actor.grant_worker(worker));
     ok(await messaging.actor.set_club_domain_canister(club.canisterId));
     ok(await messaging.actor.set_notification_queue_canister(queue.canisterId));
-    const conversation = ok(await messaging.actor.create_conversation(id, ['team-' + id], [removed, retained]));
+    const conversation = ok(await messaging.actor.ensure_conversation(id, ['team-' + id], [removed, retained]));
     // Same IDs in distinct queues; canonical roster IDs dedupe on-chain.
     assert.equal(ok(await queue.actor.fan_out([removed.toText(), ' principal:' + removed.toText() + ' ', retained.toText()], id, 'photo_added', 'Private photo', 'photo', [])), 2);
     assert.equal(ok(await queue.actor.fan_out([removed.toText(), retained.toText()], id, 'photo_added', 'Private photo', 'photo', [])), 0);
