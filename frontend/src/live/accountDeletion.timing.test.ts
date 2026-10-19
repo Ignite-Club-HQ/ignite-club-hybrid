@@ -14,7 +14,7 @@ vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () =>
 vi.mock('./identityAccess', () => ({ connectLiveIdentityAccessClientWithIdentity: (...a: any[]) => seam.identity(...a) }));
 vi.mock('./domains', () => ({ connectLiveClubDomain: (...a: any[]) => seam.connect(...a) }));
 vi.mock('./groupSessionLive', () => ({ openLiveGroupReadSession: (...a: any[]) => seam.session(...a) }));
-import { eraseIcpAccountAsAdmin } from './adminAccountDeletion';
+import { eraseIcpAccountAsAdmin, cancelIcpAccountDeletion } from './adminAccountDeletion';
 import { GROUP_DOMAINS } from './groupRouting';
 const enabled=Boolean(process.env.IDENTITY_ACCESS_WASM && process.env.CLUB_DOMAIN_WASM && process.env.SHARD_ROUTER_WASM && process.env.POCKET_IC_BIN);
 const p=(n:number)=>Principal.fromUint8Array(Uint8Array.from([n,1]));
@@ -126,5 +126,49 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
     f.id.setPrincipal(governor);expect(await f.id.commit_account_deletion(f.account.id)).toHaveProperty('Err');
     f.router.actor.setPrincipal(governor);expect(await f.router.actor.record_group_health('new',1n,2n,f.revision)).toEqual({Err:'Deletion registry locked'});
     f.id.setPrincipal(user);expect(ok(await f.id.whoami()).id).toBe(f.account.id);
+  },60000);
+  it('cancel releases the reservation, preserves the account and memberships, and retries safely',async()=>{
+    const f=await fixture();f.id.setPrincipal(governor);ok(await f.id.prepare_account_deletion(f.account.id,f.revision));
+    f.router.actor.setPrincipal(governor);expect(await f.router.actor.record_group_health('new',1n,2n,f.revision)).toEqual({Err:'Deletion registry locked'});
+    await cancelIcpAccountDeletion({getPrincipal:()=>governor} as Identity,f.targets[0],f.account.id);
+    f.router.actor.setPrincipal(governor);ok(await f.router.actor.record_group_health('new',1n,2n,f.revision));
+    expect(await f.id.cancel_account_deletion(f.account.id)).toEqual({Err:'Missing deletion ticket'});
+    f.id.setPrincipal(user);expect(ok(await f.id.whoami()).id).toBe(f.account.id);
+    for(let i=0;i<2;i++)expect(await f.roles(i,user)).toHaveLength(1);
+    await eraseIcpAccountAsAdmin({getPrincipal:()=>governor} as Identity,f.targets[0],f.account.id);
+    for(let i=0;i<2;i++)expect(await f.roles(i,linked)).toEqual([]);
+  },60000);
+  it('refuses cancel after commit and recovers through settle',async()=>{
+    const f=await fixture();f.id.setPrincipal(governor);ok(await f.id.prepare_account_deletion(f.account.id,f.revision));
+    for(const c of f.clubs){c.actor.setPrincipal(governor);ok(await c.actor.erase_account_membership(f.account.id));}
+    f.id.setPrincipal(governor);ok(await f.id.commit_account_deletion(f.account.id));
+    expect(await f.id.cancel_account_deletion(f.account.id)).toEqual({Err:'Deletion already committed; settle instead'});
+    expect(await f.id.rebase_account_deletion(f.account.id)).toEqual({Err:'Deletion already committed; settle instead'});
+    ok(await f.id.settle_account_deletion(f.account.id));
+    f.router.actor.setPrincipal(governor);ok(await f.router.actor.record_group_health('new',1n,2n,f.revision));
+  },60000);
+  it('rebase retargets a repinned registry and the same commit then completes',async()=>{
+    const f=await fixture();f.id.setPrincipal(governor);ok(await f.id.prepare_account_deletion(f.account.id,f.revision));
+    const router2=await pic.setupCanister({idlFactory:routerIdl,wasm:process.env.SHARD_ROUTER_WASM,sender:governor,controllers:[governor],
+      arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor}])});
+    router2.actor.setPrincipal(governor);ok(await router2.actor.set_deletion_authority(f.shared.canisterId));
+    const subnet=p(91);let revision2=0n;
+    for(const [i,c] of f.clubs.entries()){
+      const g={id:i?'new':'legacy',target_alias:'mainnet',domains:GROUP_DOMAINS.map((domain,n)=>({domain,canister:domain==='club_domain'?c.canisterId:domain==='secret_workload_identity'?p(70):p(20+i*20+n)})),
+        accepting:true,max_clubs:100,assigned_clubs:0,heap_budget_bytes:1000000n,heap_bytes:0n,min_cycles:1n,cycles:1n,observed_at_ns:0n};
+      revision2=ok(await router2.actor.register_group(g,revision2));
+      revision2=ok(await router2.actor.register_group_placement({group_id:g.id,deployment_id:'boundary',deployment_revision:1n,host:'https://icp-api.io',network_kind:'public_mainnet',
+        primary_subnet:subnet,approved_subnets:[subnet],additional_subnets_enabled:false,domains:g.domains.map(d=>({...d,subnet}))},revision2));
+    }
+    f.id.setPrincipal(governor);const manifest=ok(await f.id.read_removal_history_manifest());
+    ok(await f.id.set_group_inventory_binding({registry:router2.canisterId,registry_revision:revision2,target_alias:'mainnet',deployment_id:'boundary',deployment_revision:1n,host:'https://icp-api.io',network_kind:'public_mainnet'},manifest.revision));
+    expect(await f.id.commit_account_deletion(f.account.id)).toHaveProperty('Err');
+    const rebased=ok(await f.id.rebase_account_deletion(f.account.id));
+    expect(rebased.binding.registry.toText()).toBe(router2.canisterId.toText());
+    f.router.actor.setPrincipal(governor);ok(await f.router.actor.record_group_health('new',1n,2n,f.revision));
+    router2.actor.setPrincipal(governor);expect(await router2.actor.record_group_health('new',1n,2n,revision2)).toEqual({Err:'Deletion registry locked'});
+    await eraseIcpAccountAsAdmin({getPrincipal:()=>governor} as Identity,f.targets[0],f.account.id);
+    for(let i=0;i<2;i++)expect(await f.roles(i,linked)).toEqual([]);
+    router2.actor.setPrincipal(governor);ok(await router2.actor.record_group_health('new',1n,2n,revision2));
   },60000);
 });
