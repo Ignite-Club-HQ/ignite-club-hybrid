@@ -13,6 +13,17 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it('resolves competition writes to the host club and never retries a mutation', async () => {
+    const { d, session } = deps(ON);
+    const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
+    const lookup = vi.fn(async () => 'moved');
+    const dispatch = createClubDispatcher({ ...d, lookup, open: async () => ({ ...session, readEveryGroup }) } as never);
+    await dispatch.writeFor('competitions', { competitionId: 'comp-a' }, 'competition_domain', 'once', async () => 'saved', 1);
+    expect(lookup).toHaveBeenCalledWith({}, 'competition', 'comp-a');
+    expect(readEveryGroup).toHaveBeenCalledWith('competition_domain', expect.any(Function), 2);
+    expect(session.writeClub).toHaveBeenCalledWith('moved', 'competition_domain', 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   it.each([
     ['mini_leagues', 'mini_league_domain'],
     ['points', 'club_points_domain'],
