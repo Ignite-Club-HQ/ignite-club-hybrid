@@ -13,7 +13,8 @@ const ok = r => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
 const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
-  const setup = async (idlFactory, wasm) => (await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) })).actor;
+  const ids = new Map();
+  const setup = async (idlFactory, wasm) => { const result = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) }); ids.set(result.actor, result.canisterId); return result.actor; };
   const events = await setup(eventsIdl, process.env.EVENTS_DOMAIN_WASM);
   const destination = await setup(eventsIdl, process.env.EVENTS_DOMAIN_WASM);
   const league = await setup(leagueIdl, process.env.MINI_LEAGUE_DOMAIN_WASM);
@@ -57,6 +58,47 @@ try {
   league.setPrincipal(stranger);
   assert.ok('Err' in await league.claim_invite(invite.token, 'Steal'));
   assert.ok('Err' in await league.link_mini_league_guardian('arbitrary-child', stranger));
+  // A named-invite claimant has no club-role mirror. Verify the real cross-domain path.
+  events.setPrincipal(governor);
+  ok(await events.set_transfer_fence('club-a', false));
+  league.setPrincipal(governor);
+  ok(await events.set_mini_league_domain_canister(ids.get(league)));
+  ok(await league.set_events_domain_canister(ids.get(events)));
+  const linked = ok(await events.create_event('club-a', [], 'Parent match', 'Round', 'mini_league', [], [], [], [a.id], 3000n, 4000n, [], false, [], []));
+  const board = ok(await events.create_event_group(linked.id, 'Parent pitch', [], [], [], []));
+  ok(await events.add_group_player(board.id, player.id, ['a']));
+  ok(await events.sync_group_state(board.id, 0n, ['{"elapsedSeconds":90}'], ['{"goals":[]}']));
+  const unrelated = ok(await events.create_event('club-a', [], 'Other league', 'Round', 'mini_league', [], [], [], [b.id], 3000n, 4000n, [], false, [], []));
+  events.setPrincipal(parent);
+  assert.equal(ok(await events.get_event_group(board.id))[0].timer_state_json[0], '{"elapsedSeconds":90}');
+  assert.equal(ok(await events.read_event_group_club(board.id))[0], 'club-a');
+  assert.equal(ok(await events.read_event_club(linked.id))[0], 'club-a');
+  assert.equal(ok(await events.list_event_groups(linked.id))[0].id, board.id);
+  assert.equal(ok(await events.list_group_players(board.id))[0].account_id, player.id);
+  assert.deepEqual(ok(await events.list_group_duties(board.id)), []);
+  assert.equal(ok(await events.get_group_edit_access(board.id)), false);
+  assert.ok('Err' in await events.sync_group_state(board.id, 1n, [], []));
+  const visible = ok(await events.list_events_multi(['club-a'], []));
+  assert.ok(visible.some(e => e.id === linked.id));
+  assert.ok(!visible.some(e => e.id === unrelated.id || e.id === event.id));
+  league.setPrincipal(stranger);
+  assert.equal(await league.can_read_league_matches(parent, a.id, 'club-a'), false);
+  events.setPrincipal(stranger);
+  assert.ok('Err' in await events.get_event_group(board.id));
+  assert.deepEqual(await events.list_events(['club-a'], []), []);
+  assert.ok('Err' in await events.set_mini_league_domain_canister(ids.get(league)));
+  // Authority unavailable and removed player both deny previously admitted parents.
+  events.setPrincipal(governor);
+  ok(await events.set_mini_league_domain_canister(ids.get(destination)));
+  events.setPrincipal(parent);
+  assert.ok('Err' in await events.get_event_group(board.id));
+  events.setPrincipal(governor);
+  ok(await events.set_mini_league_domain_canister(ids.get(league)));
+  league.setPrincipal(governor);
+  ok(await league.remove_player(player.id));
+  events.setPrincipal(parent);
+  assert.ok('Err' in await events.get_event_group(board.id));
+  assert.deepEqual(ok(await events.list_events_multi(['club-a'], [])), []);
   chat.setPrincipal(governor);
   const privateChat = ok(await chat.ensure_mini_league_chat('club-a', a.id, 'A chat', [governor, parent]));
   assert.equal(ok(await chat.ensure_mini_league_chat('club-a', a.id, 'A chat', [governor, parent])).conversation_id, privateChat.conversation_id);
@@ -65,5 +107,5 @@ try {
   chat.setPrincipal(stranger);
   assert.deepEqual(ok(await chat.get_mini_league_chat('club-a', a.id)), []);
   assert.ok('Err' in await chat.ensure_mini_league_chat('club-a', a.id, 'Steal', [stranger]));
-  console.log('PASS: independent duplicate-name duties, CAS clock, stranger denial, transfer clock/duty preservation, named invite ownership/replay, guardian denial and private league chat membership.');
+  console.log('PASS: independent duplicate-name duties, CAS clock, stranger denial, transfer clock/duty preservation, named invite ownership/replay, guardian denial private league chat membership, live claimed-parent match access, read-only spectators, foreign-league denial, authority failure and revocation.');
 } finally { await pic?.tearDown(); await server.stop(); }

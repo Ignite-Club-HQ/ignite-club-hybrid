@@ -71,6 +71,17 @@ export function useEventGroupSync(
     }
   }, [teamId]);
 
+  const clearCanisterState = useCallback(() => {
+    icpRevisionRef.current = null;
+    lastSyncedStateRef.current = null;
+    localStorage.removeItem(getPitchStateKeyForTeam(teamId));
+    localStorage.removeItem(getTeamTimerStorageKey(teamId));
+    for (const key of [PITCH_STATE_KEY, "pitch-board-timer-state"]) {
+      try { if (JSON.parse(localStorage.getItem(key) ?? "null")?.teamId === teamId) localStorage.removeItem(key); } catch { /* malformed global state is not this board's */ }
+    }
+    window.dispatchEvent(new CustomEvent("game-state-changed"));
+  }, [teamId]);
+
   /**
    * Broadcast a lightweight "state-changed" signal on the Realtime channel.
    * Other clients receive this and fetch the latest state from the DB.
@@ -101,7 +112,7 @@ export function useEventGroupSync(
           supabase: async () => null,
           icp: ctx => import("@/live/features/events").then(api => api.getLiveEventGroup(ctx, actualGroupId)),
         }, { eventGroupId: actualGroupId });
-        if (!row) return;
+        if (!row) { clearCanisterState(); return; }
         const changed = icpRevisionRef.current !== row.state_revision;
         icpRevisionRef.current = row.state_revision;
         const local = loadLocalState();
@@ -118,7 +129,7 @@ export function useEventGroupSync(
           localStorage.setItem("pitch-board-timer-state", value);
         }
         if (force) window.dispatchEvent(new CustomEvent("game-state-changed"));
-      } catch (error) { console.error("[EventGroupSync] Canister read failed", error); }
+      } catch (error) { clearCanisterState(); console.error("[EventGroupSync] Canister read failed", error); }
       return;
     }
 
@@ -174,7 +185,7 @@ export function useEventGroupSync(
     } catch (err) {
       console.error("[EventGroupSync] Load error:", err);
     }
-  }, [actualGroupId, loadLocalState, teamId]);
+  }, [actualGroupId, loadLocalState, teamId, clearCanisterState]);
 
   const syncToDatabase = useCallback(async () => {
     if (!actualGroupId) return;
