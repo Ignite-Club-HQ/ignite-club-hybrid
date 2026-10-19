@@ -1,14 +1,14 @@
 # Scaling activation boundary — local contract evidence
 
-19 October 2026. **Boundary verdict: FAIL — activation stays blocked.** No live changes.
+19 October 2026, updated after the approved bounded fixes. **Demonstrated entrypoint gaps: PASS locally — production activation stays blocked.** No live changes.
 
 ## Method
 
-`frontend/src/live/accountDeletion.boundary.test.ts` invokes the current self/admin deletion entrypoints, unchanged, against real PocketIC identity and two club canisters (legacy plus new). Both principals of a real linked account have roles in both groups. Actual `openGroupSession` validates a fixture registry and reads real indexed memberships.
+`frontend/src/live/accountDeletion.boundary.test.ts` invokes the updated self/admin deletion entrypoints against real PocketIC identity and two unchanged club canisters (legacy plus new). Both principals of a real linked account have roles in both groups. Actual `openGroupSession` validates a fixture registry and reads real indexed memberships.
 
 Connector seams wrap real actors; the registry transport is a deterministic fixture, not a deployed directory. Other service IDs and purge calls are explicitly stubbed. Outages stop a real club canister and inject an immediate connector failure instead of awaiting a stopped-canister timeout. This is not browser/native, complete inventory, production transport, photo/chat access or content-purge acceptance. Previously issued keys and downloaded plaintext cannot be revoked and are not claimed inaccessible.
 
-Identity uses its existing local-only authority flag. Club services are installed **without admission flags**; their existing setter is wired by temporarily setting its local environment flag, then removing it before business calls. Transient admission remains off. This fixture-only wiring is not production activation, receiver expansion or approval to publish the prototype. No runtime source, deployment or guard changed.
+Identity uses its existing local-only authority flag. Club services are installed **without admission flags**; their existing setter is wired by temporarily setting its local environment flag, then removing it before business calls. Transient admission remains off. This fixture-only wiring is not production activation, receiver expansion or approval to publish the prototype. Only frontend deletion/session orchestration changed; backend contracts, deployments and activation guards are unchanged.
 
 ## Results
 
@@ -19,22 +19,23 @@ Identity uses its existing local-only authority flag. Club services are installe
 | Registry drift during discovery prevents destructive actions | PASS |
 | Outage after first revocation preserves identity; retry includes the now-empty group and does not restore roles | PASS |
 | Interrupted unlink denies registration, completes on retry, preserves survivor roles; explicit relink alone restores no roles | PASS |
-| Registry changes after first revocation stop shared erasure | **FAIL** — session closes before writes; erasure proceeds without a subsequent registry check |
-| Administrator deletion revokes new-group linked roles before shared erasure | **FAIL** — legacy roles are revoked and shared identity erased, but both principals' new-group role grants remain readable |
+| Registry changes after first self revocation stop shared erasure | PASS — identity remains, first-group revocation persists, no purge or new-group revocation follows |
+| Administrator deletion revokes new-group linked roles before shared erasure | PASS — both principals lose roles in both groups before shared erasure; registration remains denied |
+| Registry changes after first admin revocation stop shared erasure | PASS — shared identity remains and previously revoked roles are not restored |
 
-The failed boundaries are `it.fails` assertions of **required safe behavior**, not tests endorsing unsafe behavior. Convert them to ordinary passing assertions when fixed. Five local cases pass and two reproduce expected failures; 25 existing deletion/session regressions pass (32 checks total). Existing purge-failure logs are intentional fixtures.
+Both previous expected failures are now ordinary passing assertions. Eight real local contract cases and 52 focused unit/regression cases pass (60 total, no expected failures). Additional checks cover complete admin inventory, authority outage/retry, missing authorities, same-revision authority substitution, registry drift during discovery replies and during personal-content purge. Existing purge-failure logs are intentional fixtures.
 
 Successful self-deletion checks prove fresh role and identity-registration denial in this service slice, not all-domain drain, key revocation, recovery safety or cached material removal. Ordinary club-removal photo/chat evidence remains separate and unchanged.
 
-## One bounded proposal — separate decision required
+## Implemented bounded fix and remaining contract limitation
 
-Give both existing deletion entrypoints the same complete legacy-plus-registered club authority inventory, valid through the destructive sequence. Admin deletion must revoke the selected account on every required authority, not just the selected target; missing/refused authorities or a changed registry must prevent shared erasure. Reuse current bounded discovery/revocation mechanisms and turn these two expected failures into passing tests.
+Both entrypoints now use `accountDeletionInventory`: legacy plus every registered group, deduplicated per authority, with session lifetime extending through deletion. Admin revokes the selected account through every club authority's existing `erase_account_membership`, not browser-supplied principal lists. Required authorities are validated before mutations. Full registry contents/revision and caller identity are checked before and after membership calls and before shared erasure; self deletion also checks around content purges. Registry-check failure propagates rather than becoming a tolerated purge failure. Retries rediscover all groups, including groups with no remaining membership.
 
-A browser-only revision reread cannot prove an atomic inventory/erasure binding. Check whether the existing backend contract can enforce it; otherwise stop for a separate narrow contract decision. Do not implicitly restart global drain, disable deletion or weaken guards. This evidence task includes no runtime fix.
+Existing `identity_access.erase_account` performs synchronous local authorization and erasure; it accepts no registry revision or club-revocation receipts. Frontend consensus rereads therefore cannot bind its commit atomically to the registry or prevent registry/account changes in the final check-to-commit window. Existing local-only removal-intent/receiver contracts are stronger preparation tools, not an available completed production erasure protocol, and were not invoked or released. The demonstrated orchestration bugs are fixed; atomic inventory/erasure binding, unsynchronized linked-account mirrors and all-domain direct-access/drain guarantees remain outside this proof and block activation. No global-drain expansion, deletion disabling or guard weakening was performed.
 
 ## Reproduce
 
-Compile the unchanged identity crate for `wasm32-unknown-unknown`, with output under `backend/identity_access/target`. From `frontend/`:
+Reuse the unchanged identity/club artifacts (or compile the identity crate for `wasm32-unknown-unknown` under its target directory). From `frontend/`:
 
 ```sh
 POCKET_IC_BIN=/path/to/pocket-ic \
@@ -43,7 +44,8 @@ CLUB_DOMAIN_WASM=/absolute/path/backend/club_domain/main.wasm \
 bunx vitest run --config vitest.legacy.config.mjs \
   src/live/accountDeletion.boundary.test.ts \
   src/live/accountData.erase.test.ts src/live/accountData.groups.test.ts \
-  src/live/adminAccountDeletion.test.ts src/live/groupSession.test.ts
+  src/live/adminAccountDeletion.test.ts src/live/groupSession.test.ts \
+  src/live/groupSessionWrite.test.ts src/live/groupSessionCrossGroup.test.ts
 ```
 
 PocketIC 14.0.0; executable must be named `pocket-ic`. Opt-in contract tests skip without local binary/artifact environment values. Existing club WASM reused; identity compiled from current source. No canisters deployed.
