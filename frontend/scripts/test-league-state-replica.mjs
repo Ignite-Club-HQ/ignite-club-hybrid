@@ -19,7 +19,7 @@ try {
   const league = await setup(leagueIdl, process.env.MINI_LEAGUE_DOMAIN_WASM);
   const chat = await setup(chatIdl, process.env.MESSAGING_DOMAIN_WASM);
   for (const a of [events, destination, league, chat]) a.setPrincipal(governor);
-  const event = ok(await events.create_event('club-a', [], 'Round', '', 'mini_league', [], [], [], [], 1000n, 2000n, [], false, [], []));
+  const event = ok(await events.create_event('club-a', [], 'Round', 'League round', 'mini_league', [], [], [], [], 1000n, 2000n, [], false, [], []));
   const group = ok(await events.create_event_group(event.id, 'Pitch A', [], [], [], []));
   const first = ok(await events.save_group_duty_slot(group.id, 'slot-a', 'Referee', [parent.toText()]));
   const second = ok(await events.save_group_duty_slot(group.id, 'slot-b', 'Referee', []));
