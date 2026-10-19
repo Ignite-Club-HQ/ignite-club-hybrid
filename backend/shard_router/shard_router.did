@@ -102,6 +102,7 @@ service : (Init) -> {
   assign : (AssignRequest) -> (Result_1);
   assign_domain : (AssignDomainRequest) -> (Result_2);
   assign_new_club_group : (text, text, nat64) -> (Result_3);
+  place_my_new_club : (text, text) -> (Result_3);
   begin_domain_migration : (text, text, principal, nat64) -> (Result_4);
   begin_migration : (text, principal, nat64) -> (Result_5);
   commit_domain_migration : (text, text, nat64) -> (Result_2);
