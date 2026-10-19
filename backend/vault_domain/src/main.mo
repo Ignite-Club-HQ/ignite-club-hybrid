@@ -1,3 +1,4 @@
+import MediaEvidence "../../shared/MediaEvidence";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -25,6 +26,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  var mediaEvidenceRevision : Nat;
   var folders : [Types.VaultFolder];
   var files : [Types.VaultFile];
   var roles : [Types.RoleGrant];
@@ -204,7 +206,9 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
+    mediaEvidenceRevision += 1;
     transferFences := transferFences.filter(func(c) = c != club);
+    mediaEvidenceRevision += 1;
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
   };
@@ -226,6 +230,7 @@ persistent actor class Main(governorInit : Principal) {
     if (snap.folders.any(func(f) = folders.any(func(x) = x.id == f.id and x.club != club))
         or snap.files.any(func(f) = files.any(func(x) = x.id == f.id and x.club != club))) return #Err("Snapshot id collides with another club");
     folders := folders.filter(func(f) = f.club != club).concat(snap.folders);
+    mediaEvidenceRevision += 1;
     files := files.filter(func(f) = f.club != club).concat(snap.files);
     #Ok(snap.folders.size() + snap.files.size())
   };
@@ -235,6 +240,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isFenced(club)) return #Err("Club must be fenced before purge");
     let before = folders.size() + files.size();
     folders := folders.filter(func(f) = f.club != club);
+    mediaEvidenceRevision += 1;
     files := files.filter(func(f) = f.club != club);
     #Ok(before - folders.size() - files.size())
   };
@@ -494,6 +500,7 @@ persistent actor class Main(governorInit : Principal) {
       competition_id;
       is_external_link; blob_ref;
     };
+    mediaEvidenceRevision += 1;
     files := files.concat([file]);
     #Ok(file)
   };
@@ -600,6 +607,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         let updated : Types.VaultFile = { file with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
+        mediaEvidenceRevision += 1;
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };
@@ -614,6 +622,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         let updated : Types.VaultFile = { file with deleted_at_ms = null; deleted_by = null };
+        mediaEvidenceRevision += 1;
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };
@@ -629,6 +638,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         let updated : Types.VaultFile = { file with name = name };
+        mediaEvidenceRevision += 1;
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };
@@ -648,6 +658,7 @@ persistent actor class Main(governorInit : Principal) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
         if (folder_id == "") {
           let updated : Types.VaultFile = { file with folder_id = "" };
+          mediaEvidenceRevision += 1;
           files := files.map(func(item) = if (item.id == id) { updated } else { item });
           return #Ok(updated);
         };
@@ -657,6 +668,7 @@ persistent actor class Main(governorInit : Principal) {
           case (?folder) {
             if (folder.club != file.club) return #Err("Target folder belongs to another club");
             let updated : Types.VaultFile = { file with folder_id = folder_id; team = folder.team };
+            mediaEvidenceRevision += 1;
             files := files.map(func(item) = if (item.id == id) { updated } else { item });
             #Ok(updated)
           };
@@ -675,6 +687,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("File not found") };
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
+        mediaEvidenceRevision += 1;
         files := files.filter(func(item) = item.id != id);
         #Ok
       };
@@ -840,6 +853,7 @@ persistent actor class Main(governorInit : Principal) {
         restored += missingFolders.size();
         restored += missingFiles.size();
         folders := folders.concat(missingFolders);
+        mediaEvidenceRevision += 1;
         files := files.concat(missingFiles);
         #Ok(restored)
       };
@@ -863,6 +877,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     var removed : Nat = 0;
     let keepFiles = files.filter(func(f : Types.VaultFile) : Bool = not f.uploaded_by.equal(caller));
+    mediaEvidenceRevision += 1;
     removed += files.size() - keepFiles.size(); files := keepFiles;
     let keepBackups = backups.filter(func(b : Types.Backup) : Bool = not b.created_by.equal(caller));
     removed += backups.size() - keepBackups.size(); backups := keepBackups;
@@ -935,6 +950,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not dry_run) {
       roles := newRoles;
       folders := newFolders;
+      mediaEvidenceRevision += 1;
       files := newFiles;
       pinned_vaults := newPinned;
       backups := newBackups;
@@ -942,4 +958,17 @@ persistent actor class Main(governorInit : Principal) {
 
     #ok(changed)
   };
-};
+}
+  public shared ({ caller }) func read_club_media_references(club : Text, offset : Nat, expected : ?Nat) : async { #Ok : MediaEvidence.Page; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before media inventory");
+    switch (expected) { case (?r) { if (r != mediaEvidenceRevision) return #Err("Media inventory revision changed") }; case null { if (offset != 0) return #Err("Revision required after first page") } };
+    let (start, end) = MediaEvidence.bounds(offset, files.size());
+    var refs : [MediaEvidence.Reference] = [];
+    for (i in Nat.range(start, end)) { let f = files[i]; if (f.club == club) {
+      let r = switch (f.blob_ref) { case (?b) { { resource_id = f.id; url = f.file_url; store = ?b.canister; path = ?b.path; content_hash = ?b.content_hash } }; case null { { resource_id = f.id; url = f.file_url; store = null; path = null; content_hash = null } } };
+      refs := refs.concat([r]);
+    } };
+    #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < files.size()) ?end else null; references = refs })
+  };
+}

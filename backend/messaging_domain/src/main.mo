@@ -1,3 +1,4 @@
+import MediaEvidence "../../shared/MediaEvidence";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -42,6 +43,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  var mediaEvidenceRevision : Nat;
   var transferFences : [Text];
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
@@ -276,7 +278,9 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
+    mediaEvidenceRevision += 1;
     transferFences := transferFences.filter(func(c) = c != club);
+    mediaEvidenceRevision += 1;
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
   };
@@ -299,10 +303,12 @@ persistent actor class Main(governorInit : Principal) {
     let page = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot page") };
     if (page.conversations.any(func(c) = c.club_id != club)) return #Err("Snapshot contains foreign records");
     if (page.conversations.any(func(c) = conversations.any(func(x) = x.id == c.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    mediaEvidenceRevision += 1;
     conversations := conversations.filter(func(c) = not page.conversations.any(func(y) = y.id == c.id)).concat(page.conversations);
     let known = func(id : Text) : Bool = conversations.any(func(c) = c.id == id and c.club_id == club);
     if (page.messages.any(func(m) = not known(m.conversation_id))) return #Err("Message for unknown conversation");
     // Idempotent per message id: re-importing a page never duplicates.
+    mediaEvidenceRevision += 1;
     messages := messages.filter(func(m) = not page.messages.any(func(y) = y.id == m.id)).concat(page.messages);
     #Ok(page.messages.size())
   };
@@ -312,7 +318,9 @@ persistent actor class Main(governorInit : Principal) {
     if (not isFenced(club)) return #Err("Club must be fenced before purge");
     let convs = conversations.filter(func(c) = c.club_id == club);
     let before = messages.size();
+    mediaEvidenceRevision += 1;
     messages := messages.filter(func(m) = not convs.any(func(c) = c.id == m.conversation_id));
+    mediaEvidenceRevision += 1;
     conversations := conversations.filter(func(c) = c.club_id != club);
     #Ok(before - messages.size())
   };
@@ -479,6 +487,7 @@ persistent actor class Main(governorInit : Principal) {
       participants;
       next_sequence = 1;
     };
+    mediaEvidenceRevision += 1;
     conversations := conversations.concat([conversation]);
     #Ok(conversation)
   };
@@ -515,11 +524,13 @@ persistent actor class Main(governorInit : Principal) {
           };
         };
         let updated : Types.Conversation = { conv with participants = merged };
+        mediaEvidenceRevision += 1;
         conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == i) { updated } else { conversations[pos] });
         #Ok(updated)
       };
       case null {
         let conversation : Types.Conversation = { id = conversationId; club_id; team_id; participants; next_sequence = 1 };
+        mediaEvidenceRevision += 1;
         conversations := conversations.concat([conversation]);
         #Ok(conversation)
       };
@@ -544,6 +555,7 @@ persistent actor class Main(governorInit : Principal) {
           participants = [];
           next_sequence = 1;
         };
+        mediaEvidenceRevision += 1;
         conversations := conversations.concat([conversation]);
         let meta : Types.GroupMetadata = {
           conversation_id = BROADCAST_CONVERSATION_ID;
@@ -601,6 +613,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (findConversationIndex(conversationId)) {
           case (?i) {
             let updated : Types.Conversation = { conversations[i] with participants };
+            mediaEvidenceRevision += 1;
             conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == i) { updated } else { conversations[pos] });
             #Ok(updated)
           };
@@ -612,6 +625,7 @@ persistent actor class Main(governorInit : Principal) {
               participants;
               next_sequence = 1;
             };
+            mediaEvidenceRevision += 1;
             conversations := conversations.concat([conversation]);
             let meta : Types.GroupMetadata = {
               conversation_id = conversationId;
@@ -710,6 +724,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (findConversationIndex(conversationId)) {
           case (?i) {
             let updated : Types.Conversation = { conversations[i] with participants };
+            mediaEvidenceRevision += 1;
             conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == i) { updated } else { conversations[pos] });
             #Ok(updated)
           };
@@ -721,6 +736,7 @@ persistent actor class Main(governorInit : Principal) {
               participants;
               next_sequence = 1;
             };
+            mediaEvidenceRevision += 1;
             conversations := conversations.concat([conversation]);
             let meta : Types.GroupMetadata = {
               conversation_id = conversationId;
@@ -794,9 +810,11 @@ persistent actor class Main(governorInit : Principal) {
       reply_to_id;
     };
     let updated_conv : Types.Conversation = { conv with next_sequence = seq + 1 };
+    mediaEvidenceRevision += 1;
     conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(position) {
       if (position == convIndex) updated_conv else conversations[position]
     });
+    mediaEvidenceRevision += 1;
     messages := messages.concat([msg]);
     for (participant in conv.participants.values()) {
       if (not participant.equal(sender)) {
@@ -857,7 +875,9 @@ persistent actor class Main(governorInit : Principal) {
     func isDoomedMessage(messageId : Text) : Bool { doomedMessageIds.any(func(d) = d == messageId) };
     let doomedPollIds = polls.filter(func(p) = inDoomed(p.conversation_id)).map(func(p) = p.id);
     func isDoomedPoll(pollId : Text) : Bool { doomedPollIds.any(func(d) = d == pollId) };
+    mediaEvidenceRevision += 1;
     conversations := conversations.filter(func(c) = not inDoomed(c.id));
+    mediaEvidenceRevision += 1;
     messages := messages.filter(func(m) = not inDoomed(m.conversation_id));
     receipts := receipts.filter(func(r) = not inDoomed(r.conversation_id));
     unread := unread.filter(func(u) = not inDoomed(u.conversation_id));
@@ -871,7 +891,9 @@ persistent actor class Main(governorInit : Principal) {
     mutePreferences := mutePreferences.filter(func(m) = not inDoomed(m.conversation_id));
     dmLinks := dmLinks.filter(func(l) = not inDoomed(l.conversation_id));
     forwardRecords := forwardRecords.filter(func(f) = not inDoomed(f.to_conversation_id) and not inDoomed(f.from_conversation_id));
+    mediaEvidenceRevision += 1;
     scheduledMessages := scheduledMessages.filter(func(s) = not inDoomed(s.conversation_id));
+    mediaEvidenceRevision += 1;
     attachmentMetadata := attachmentMetadata.filter(func(a) = not inDoomed(a.conversation_id));
     reactions := reactions.filter(func(r) = not isDoomedMessage(r.message_id));
     clubDmSettings := clubDmSettings.filter(func(s) = not inClub(s.club_id));
@@ -1315,6 +1337,7 @@ persistent actor class Main(governorInit : Principal) {
         };
         if (not is_team_message) return #Err("Team message required");
         let updated : Types.Message = { current with body; edited_at_ms = ?nowMs() };
+        mediaEvidenceRevision += 1;
         messages := Array.tabulate<Types.Message>(messages.size(), func(position) {
           if (position == i) updated else messages[position]
         });
@@ -1541,6 +1564,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?i) {
         let msg = messages[i];
         if (not msg.sender.equal(caller) and not canModerateTeamMessage(caller, msg)) return #Err("Message deletion forbidden");
+        mediaEvidenceRevision += 1;
         messages := Array.tabulate<Types.Message>(messages.size() - 1, func(pos) {
           if (pos < i) messages[pos] else messages[pos + 1]
         });
@@ -1578,6 +1602,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     var removed : Nat = 0;
     let keepMessages = messages.filter(func(m) = not m.sender.equal(caller));
+    mediaEvidenceRevision += 1;
     removed += messages.size() - keepMessages.size(); messages := keepMessages;
     let keepReceipts = receipts.filter(func(r) = not r.user.equal(caller));
     removed += receipts.size() - keepReceipts.size(); receipts := keepReceipts;
@@ -1589,6 +1614,7 @@ persistent actor class Main(governorInit : Principal) {
     removed += pollVotes.size() - keepVotes.size(); pollVotes := keepVotes;
     let keepConversations = conversations.filter(func(c) = c.participants.size() > 0 and (c.participants.size() > 1 or not c.participants[0].equal(caller)));
     removed += conversations.size() - keepConversations.size();
+    mediaEvidenceRevision += 1;
     conversations := keepConversations.map(func(c) = { c with participants = c.participants.filter(func(p) = not p.equal(caller)) });
     #Ok(Nat32.fromNat(removed))
   };
@@ -1761,6 +1787,7 @@ persistent actor class Main(governorInit : Principal) {
     if (members.size() == 0 or members.size() > GROUP_MEMBER_LIMIT or members.any(func(p) = p.equal(Principal.anonymous())) or not members.any(func(p) = p.equal(caller))) return #Err("Invalid chat audience");
     let conversation : Types.Conversation = { id = "chat-" # club_id # "-" # Nat.toText(conversations.size() + 1); club_id; team_id = null; participants = members; next_sequence = 1 };
     let meta : Types.GroupMetadata = { conversation_id = conversation.id; name; kind = "mini_league:" # league_id; club_id = ?club_id; team_id = null; members; created_at_ms = nowMs(); avatar = null; description = null; deleted = false; admin_only_posting = false; deleted_at_ms = null; deleted_by = null };
+    mediaEvidenceRevision += 1;
     conversations := conversations.concat([conversation]);
     groupMetadata := groupMetadata.concat([meta]);
     groupRoles := groupRoles.concat(members.map(func(p) : Types.GroupRole = { conversation_id = conversation.id; user = p; role = if (p.equal(caller)) "admin" else "member" }));
@@ -1850,6 +1877,7 @@ persistent actor class Main(governorInit : Principal) {
       id = "chat-" # club_id # "-" # Nat.toText(conversations.size() + 1);
       club_id; team_id; participants = members; next_sequence = 1;
     };
+    mediaEvidenceRevision += 1;
     conversations := conversations.concat([conversation]);
     let meta : Types.GroupMetadata = {
       conversation_id = conversation.id; name; kind; club_id = ?club_id; team_id; members;
@@ -1908,6 +1936,7 @@ persistent actor class Main(governorInit : Principal) {
         for (m in members.values()) {
           if (not newParticipants.any(func(p) = p.equal(m))) { newParticipants := newParticipants.concat([m]) };
         };
+        mediaEvidenceRevision += 1;
         conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == ci) { { conv with participants = newParticipants } } else { conversations[pos] });
         let updated : Types.GroupMetadata = { meta with members = newMembers };
         groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
@@ -1928,6 +1957,7 @@ persistent actor class Main(governorInit : Principal) {
     groupRoles := groupRoles.filter(func(r) = not (r.conversation_id == conversation_id and r.user.equal(member)));
     let conv = conversations[ci];
     let newParticipants = conv.participants.filter(func(p) = not p.equal(member));
+    mediaEvidenceRevision += 1;
     conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == ci) { { conv with participants = newParticipants } } else { conversations[pos] });
     updated
   };
@@ -2023,7 +2053,9 @@ persistent actor class Main(governorInit : Principal) {
         let messageIds = messages.filter(func(m) = m.conversation_id == conversation_id).map(func(m) = m.id);
         let pollIds = polls.filter(func(p) = p.conversation_id == conversation_id).map(func(p) = p.id);
         groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+        mediaEvidenceRevision += 1;
         conversations := conversations.filter(func(c) = c.id != conversation_id);
+        mediaEvidenceRevision += 1;
         messages := messages.filter(func(m) = m.conversation_id != conversation_id);
         receipts := receipts.filter(func(r) = r.conversation_id != conversation_id);
         unread := unread.filter(func(u) = u.conversation_id != conversation_id);
@@ -2034,7 +2066,9 @@ persistent actor class Main(governorInit : Principal) {
         mutePreferences := mutePreferences.filter(func(p) = p.conversation_id != conversation_id);
         dmLinks := dmLinks.filter(func(l) = l.conversation_id != conversation_id);
         forwardRecords := forwardRecords.filter(func(f) = f.to_conversation_id != conversation_id and f.from_conversation_id != conversation_id);
+        mediaEvidenceRevision += 1;
         scheduledMessages := scheduledMessages.filter(func(s) = s.conversation_id != conversation_id);
+        mediaEvidenceRevision += 1;
         attachmentMetadata := attachmentMetadata.filter(func(a) = a.conversation_id != conversation_id);
         reactions := reactions.filter(func(r) = not messageIds.any(func(id) = r.message_id == id));
         typingPings := typingPings.filter(func(t) = t.conversation_id != conversation_id);
@@ -2085,6 +2119,7 @@ persistent actor class Main(governorInit : Principal) {
         };
         let conv = conversations[ci];
         if (not conv.participants.any(func(p) = p.equal(user))) {
+          mediaEvidenceRevision += 1;
           conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == ci) { { conv with participants = conv.participants.concat([user]) } } else { conversations[pos] });
         };
       };
@@ -2161,6 +2196,7 @@ persistent actor class Main(governorInit : Principal) {
         };
         let conv = conversations[ci];
         if (not conv.participants.any(func(p) = p.equal(caller))) {
+          mediaEvidenceRevision += 1;
           conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == ci) { { conv with participants = conv.participants.concat([caller]) } } else { conversations[pos] });
         };
         #Ok
@@ -2342,6 +2378,7 @@ persistent actor class Main(governorInit : Principal) {
       id = "dm-" # Nat.toText(conversations.size() + 1);
       club_id = "dm"; team_id = null; participants = [loP, hiP]; next_sequence = 1;
     };
+    mediaEvidenceRevision += 1;
     conversations := conversations.concat([conversation]);
     dmLinks := dmLinks.concat([{ a = loP; b = hiP; conversation_id = conversation.id }]);
     #Ok(conversation)
@@ -2393,6 +2430,7 @@ persistent actor class Main(governorInit : Principal) {
       id = "sched-" # conversation_id # "-" # Nat.toText(scheduledMessages.size() + 1);
       conversation_id; sender = caller; body; scheduled_at_ms; replayed_at_ms = null; replayed_message_id = null;
     };
+    mediaEvidenceRevision += 1;
     scheduledMessages := scheduledMessages.concat([rec]);
     #Ok(rec)
   };
@@ -2416,6 +2454,7 @@ persistent actor class Main(governorInit : Principal) {
             ignore fanOutChatNotify(posted);
             ignore fanOutWsPokeForMessage(posted);
             let updated = { rec with replayed_at_ms = ?nowMs(); replayed_message_id = ?posted.id };
+            mediaEvidenceRevision += 1;
             scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (pos == i) updated else scheduledMessages[pos]);
             #Ok(updated)
           };
@@ -2438,6 +2477,7 @@ persistent actor class Main(governorInit : Principal) {
       id = "att-" # conversation_id # "-" # Nat.toText(attachmentMetadata.size() + 1);
       conversation_id; message_id; kind; ref_id; url; size_bytes; uploader = caller; created_at_ms = nowMs();
     };
+    mediaEvidenceRevision += 1;
     attachmentMetadata := attachmentMetadata.concat([rec]);
     #Ok(rec)
   };
@@ -2889,6 +2929,7 @@ persistent actor class Main(governorInit : Principal) {
           id = "dm-" # Nat.toText(conversations.size() + 1);
           club_id = "dm"; team_id = null; participants = [loP, hiP]; next_sequence = 1;
         };
+        mediaEvidenceRevision += 1;
         conversations := conversations.concat([conversation]);
         dmLinks := dmLinks.concat([{ a = loP; b = hiP; conversation_id = conversation.id }]);
         conv_id := ?conversation.id;
@@ -2933,6 +2974,7 @@ persistent actor class Main(governorInit : Principal) {
           id = "dm-" # Nat.toText(conversations.size() + 1);
           club_id = "dm"; team_id = null; participants = [loP, hiP]; next_sequence = 1;
         };
+        mediaEvidenceRevision += 1;
         conversations := conversations.concat([conversation]);
         dmLinks := dmLinks.concat([{ a = loP; b = hiP; conversation_id = conversation.id }]);
         conv_id := ?conversation.id;
@@ -3448,7 +3490,9 @@ persistent actor class Main(governorInit : Principal) {
 
     if (not dry_run) {
       if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
+      mediaEvidenceRevision += 1;
       if (convOld > 0) conversations := conversations.map(func(c) = if (c.participants.any(func(p) = p.equal(old))) ({ c with participants = Array.filterMap<Principal, Principal>(c.participants, func(p) = if (p.equal(old)) null else ?p).concat(if (c.participants.any(func(p) = p.equal(new))) [] else [new]) }) else c);
+      mediaEvidenceRevision += 1;
       if (msgOld > 0) messages := messages.map(func(m) = if (m.sender.equal(old)) ({ m with sender = new }) else m);
       if (receiptOld > 0) receipts := receipts.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
       if (unreadOld > 0) unread := unread.map(func(u) = if (u.user.equal(old)) ({ u with user = new }) else u);
@@ -3470,7 +3514,9 @@ persistent actor class Main(governorInit : Principal) {
       if (muteOld > 0) mutePreferences := mutePreferences.map(func(m) = if (m.user.equal(old)) ({ m with user = new }) else m);
       if (dmLinkOld > 0) dmLinks := dmLinks.map(func(d) = { d with a = (if (d.a.equal(old)) new else d.a); b = (if (d.b.equal(old)) new else d.b) });
       if (forwardOld > 0) forwardRecords := forwardRecords.map(func(f) = if (f.original_sender.equal(old)) ({ f with original_sender = new }) else f);
+      mediaEvidenceRevision += 1;
       if (schedOld > 0) scheduledMessages := scheduledMessages.map(func(s) = if (s.sender.equal(old)) ({ s with sender = new }) else s);
+      mediaEvidenceRevision += 1;
       if (attachOld > 0) attachmentMetadata := attachmentMetadata.map(func(a) = if (a.uploader.equal(old)) ({ a with uploader = new }) else a);
       if (reactOld > 0) reactions := reactions.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
       if (settingsOld > 0) userMessagingSettings := userMessagingSettings.map(func(u) = if (u.user.equal(old)) ({ u with user = new }) else u);
@@ -3494,4 +3540,18 @@ persistent actor class Main(governorInit : Principal) {
     #ok(changed)
   };
 
-};
+}
+  public shared ({ caller }) func read_club_media_references(club : Text, offset : Nat, expected : ?Nat) : async { #Ok : MediaEvidence.Page; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before media inventory");
+    switch (expected) { case (?r) { if (r != mediaEvidenceRevision) return #Err("Media inventory revision changed") }; case null { if (offset != 0) return #Err("Revision required after first page") } };
+    let (start, end) = MediaEvidence.bounds(offset, messages.size());
+    var refs : [MediaEvidence.Reference] = [];
+    for (i in Nat.range(start, end)) { let m = messages[i]; if (conversations.any(func(c) = c.id == m.conversation_id and c.club_id == club)) {
+      switch (m.attachment) { case (?a) { switch (a.url) { case (?url) { refs := refs.concat([{ resource_id = m.id; url; store = null; path = null; content_hash = null }]) }; case null {} } }; case null {} };
+    } };
+    // Scheduled bodies and independent attachment registrations are scanned
+    // separately by the reader; these cannot be silently omitted.
+    #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < messages.size()) ?end else null; references = refs })
+  };
+}
