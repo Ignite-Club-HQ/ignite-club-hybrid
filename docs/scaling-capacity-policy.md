@@ -20,3 +20,9 @@ All production group-opening/account-access release gates stay unchanged and OFF
 ## Evidence contract
 
 The input has `policy` (deploymentId, currentGroupId, primarySubnet, approvedSubnets, additionalSubnetsEnabled) and `groups`. Each group has its matching deployment/subnet, clubs, enabled, ready, cyclesHealthy, existing byte/growth fields, and `capacity`: deploymentId, observedAtMs, requiredResources, readings. Every reading supplies resource, finite nonnegative used, positive testedLimit and a nonempty evidence reference. Units must match within each resource; include every storage admission, heap, processing and club-count limit from the approved inventory. Evidence references are provenance labels, not cryptographic attestations. Only the trusted operator collector may publish this file. Current time is taken by the script, not accepted from input.
+## Live collector (batch 1)
+The scheduled workflow reads each service's real memory and fuel (anonymous `memory_stats`/`cycles_balance`),
+then `frontend/scripts/collect-group-capacity.ts` builds evidence against `deploy/groups/tested-limits.json`:
+`{ deploymentId, groupId, subnetId, clubCount, storageLimitBytes: { <service>: bytes }, extra?: [...] }`.
+Limits must come from load tests or app admission budgets (e.g. photo storage ~1.6 GB), never ICP headline memory.
+Missing readings/limits write no evidence; low fuel blocks with "Top up". Processing limits go in `extra` once load-tested.
