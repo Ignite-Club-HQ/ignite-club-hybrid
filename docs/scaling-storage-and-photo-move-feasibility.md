@@ -65,4 +65,50 @@ Four existing focused files ran unchanged in both Supabase and ICP test configur
 
 ## Live evidence
 
-Live readings and inaccessible fields are recorded below after bounded mainnet queries finish. Source findings above must not be presented as deployed facts.
+Anonymous HTTPS queries against the configured primary store completed at **22:47:16–22:47:51 UTC on 19 October 2026**, using installed project bindings. No signed update calls were made.
+
+| Reading | Live result |
+| --- | ---: |
+| Primary photo store | `jlaoy-dyaaa-aaaal-qxlpa-cai` |
+| Finalized objects | 57 |
+| Finalized ciphertext bytes | 3,848,218 (about 3.67 MiB) |
+| Configured capacity | 2,147,483,648 bytes (2 GiB) |
+| Accepting uploads | true |
+| Stable writes enabled | false |
+| Legacy objects / stable-indexed objects | 57 / 0 |
+| Stable allocator high-water bytes | 0 |
+| Heap / overall reported memory | 22,318,760 / 201,326,592 bytes |
+| Running fuel | 3,694,408,693,345 cycles |
+
+**Correction to earlier estimates:** the reported 201 MB is not stored photo payload. The configured primary store currently holds about 3.85 MB of ciphertext, approximately 0.22% of the source byte-only 80% admission threshold. That percentage excludes unknown pending reservations and other admission constraints; it is not a complete utilization reading.
+
+Public placement and router route tables returned empty pages at revision 0. Governor-only group enumeration returned Forbidden. These responses do not prove there are no clubs or additional stores.
+
+### Fields still requiring authorized evidence
+
+- Complete live group/store registry, global pending reservations and exact local/shared quota mode.
+- Deployed module hashes/settings tied to reviewed artifacts; sampled query compatibility does not prove all source logic is live.
+- Complete legacy provenance and original-key attestations for potential moves.
+- Signed consensus quota-cutover/store-registry reads: anonymous cutover status traps with Governor required. Anonymous `media_quota_ready=false` is caller-scoped and is not proof of global inactivity.
+
+Your deploy key is not available in this workspace. These fields require an operator-authenticated read through your stored GitHub deploy identity. No private key should be pasted into chat. Public reads have established the primary store's actual usage and storage format, but not complete production acceptance.
+
+## Consolidated implementation proposal — not yet authorized
+
+### First: reliable capacity and accounting
+
+Build a read-only signed evidence report for complete group/store inventory and quota status; keep the report separate from mutation workflows. Then add authoritative cross-store retained + reserved bytes, separate from monthly upload counts, covering all club-owned paths including branding. Baseline existing stores, journal reservations and deletion/replacement deltas, and block unverified stores. Reconcile allowed entitlement updates and remaining allowances before admitting clubs or increasing their capacity commitments. Investigate promo replay and expiry classification without silently changing commercial rules.
+
+### Second: expand the existing group safely
+
+Build/reuse a checkpointed same-store migration workflow for the 57 legacy objects, with verified read-back and recovery rehearsal. Test larger stable storage and realistic allocator pressure locally, then propose a separately approved mainnet test. Additional in-group stores can take future uploads without moving old photos, but only after cross-store accounting is proven. No 32 GiB activation is assumed.
+
+### Third: optional safe whole-club moves
+
+Implement the independently authorized original-key locator, full byte/reference move journal and post-cutover reclamation protocol listed above only after a separate move-specific plan explicitly replaces the current prohibition. Start with an isolated two-group rehearsal; prove fresh-device private-file access, denial and reused source slots before proposing mainnet acceptance. Original key canisters remain running; this is not full retirement of the source group. Re-encryption and automatic moves are not included.
+
+### Acceptance boundaries
+
+Use concrete tests for the 5 GiB plus add-ons boundary, cross-store concurrent reservations, free monthly limits, branding paths, retry/overwrite/delete accounting, entitlement changes, heap/index/allocator pressure and consistent recovery. Keep existing 70%/80% rules but evaluate true usable space and committed growth. Live larger-store activation, opening a group, and moving a club each require their own approval and existing scaling release gates.
+
+Batch 1's source investigation and public live reads are complete. Authorized production evidence remains blocked on the GitHub-held operator identity; implementation and policy changes remain blocked on separate approval.
