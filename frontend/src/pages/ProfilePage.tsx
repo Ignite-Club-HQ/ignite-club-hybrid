@@ -138,10 +138,11 @@ export default function ProfilePage() {
             const { liveMyRewardClubIds } = await import("@/lib/icpRewardsReads");
             const { isLiveClubPro } = await import("@/live/features/club");
             const ids = activeClubFilter ? [activeClubFilter] : await liveMyRewardClubIds(ctx);
-            const flags = await Promise.all(ids.map((id) => isLiveClubPro(ctx, id).catch(() => false)));
+            const { readMembershipInScope } = await import("@/live/membershipRouting");
+            const flags = await Promise.all(ids.map((id) => readMembershipInScope(ctx, { clubId: id }, scoped => isLiveClubPro(scoped, id))));
             return flags.some(Boolean);
           },
-        });
+        }, { shared: "person" });
       }
       if (activeClubFilter) {
         const { data: subscription } = await supabase
@@ -296,7 +297,7 @@ export default function ProfilePage() {
           const { liveMyPointsHistory } = await import("@/lib/icpRewardsReads");
           return liveMyPointsHistory(ctx, user!.id, activeClubFilter);
         },
-      });
+      }, { shared: "person" });
     },
     enabled: !!user,
   });

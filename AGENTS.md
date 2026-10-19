@@ -47,3 +47,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
+
+- Cross-club reward helpers split catalog/history/redemption reads by club using the points routing helper and membership metadata by resource; failed group reads propagate. Why: sharing a single context or swallowing errors hides moved-club rewards.

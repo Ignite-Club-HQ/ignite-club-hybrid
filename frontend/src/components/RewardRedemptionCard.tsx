@@ -241,7 +241,7 @@ export default function RewardRedemptionCard() {
           icp: async (ctx) => (await fetchLiveHomeChildren(ctx))
             .map((c) => ({ id: c.id, name: c.name ?? "Child", ignite_points: 0 }))
             .sort((a, b) => a.name.localeCompare(b.name)),
-        }, { shared: "person" }) as any;
+        }, { everyGroup: true, merge: (parts: Child[][]) => [...new Map(parts.flat().map(child => [child.id, child])).values()].sort((a, b) => a.name.localeCompare(b.name)) }) as any;
       }
       // Children where this user is the primary parent
       const ownedPromise = supabase
@@ -589,7 +589,7 @@ export default function RewardRedemptionCard() {
                 relatedId: redemption.id,
               });
             },
-          });
+          }, writeOnce({ clubId: redemption.club_id }));
         } catch (e) {
           console.error("[RewardRedemptionCard] Failed to notify club admins of claim:", e);
         }
