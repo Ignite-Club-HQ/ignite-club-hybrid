@@ -130,6 +130,7 @@ export interface ShardGroup {
   'max_clubs' : number,
   'observed_at_ns' : bigint,
   'accepting' : boolean,
+  'photo_store' : [] | [Principal],
   'heap_budget_bytes' : bigint,
   'cycles' : bigint,
   'assigned_clubs' : number,
@@ -137,7 +138,6 @@ export interface ShardGroup {
   'target_alias' : string,
   'min_cycles' : bigint,
   'heap_bytes' : bigint,
-  'photo_store' : [] | [Principal],
 }
 export interface _SERVICE {
   'abort_domain_migration' : ActorMethod<[string, string, bigint], Result>,
