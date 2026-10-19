@@ -56,3 +56,5 @@
 - Pending sends are QueryClient-scoped; settle temp IDs from server acknowledgements, not photo presence. Why: avoid duplicates after navigation.
 - Profile batches: get_profile for missing linked IDs.
 - Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
+
+- Provisioning persists mutation intents, individual install acknowledgements and closed/placement revision receipts through durable checkpoints; unresolved intents need exact reconciliation, not phase resets. Why: lost replies cannot duplicate canisters, repeat installs or open incomplete groups.
