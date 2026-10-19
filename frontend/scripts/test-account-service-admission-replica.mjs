@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
+import { DerivedPublicKey, EncryptedVetKey, TransportSecretKey, IbeCiphertext, IbeIdentity, IbeSeed } from '@icp-sdk/vetkeys';
+import { adaptLocalAccountReads } from '../src/live/accountReadAdapter.mjs';
+import { createPushQueueIdl, notificationKey } from '../../scripts/icp-push-contract.mjs';
 import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
 import { idlFactory as chatIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
 import { idlFactory as piiIdl } from '../src/lab/bindings/pii_access_control/declarations/pii_access_control.did.js';
@@ -15,11 +18,11 @@ const denied = async fn => { let blocked = false; try { const r = await fn(); bl
 const env = [{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}];
 const server = await PocketIcServer.start(); let pic;
 try {
- pic = await PocketIc.create(server.getUrl());
+ pic = await PocketIc.create(server.getUrl(), { fiduciary: { state: { type: 'new' } } });
  const identity = await pic.setupCanister({idlFactory:identityIdl,wasm:process.env.IDENTITY_ACCESS_WASM,sender:governor,controllers:[governor],environmentVariables:env,arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor}])});
  const services=[];
  for (const [name,idlFactory] of [['messaging_domain',chatIdl],['pii_access_control',piiIdl],['vault_domain',vaultIdl],['notification_queue',queueIdl]]) {
-  services.push(await pic.setupCanister({idlFactory,wasm:process.env[name.toUpperCase()+'_WASM'],sender:governor,controllers:[governor],environmentVariables:[...env,{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()}],arg:IDL.encode([IDL.Principal],[governor])}));
+  services.push(await pic.setupCanister({idlFactory,wasm:process.env[name.toUpperCase()+'_WASM'],sender:governor,controllers:[governor],environmentVariables:[...env,{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()},...(name==='pii_access_control'?[{name:'VETKD_KEY_NAME',value:'key_1'}]:[])],arg:IDL.encode([IDL.Principal],[governor])}));
  }
  const [chat,pii,vault,queue]=services.map(s=>s.actor), id=identity.actor;
  const extra=[];
@@ -125,6 +128,99 @@ try {
  const retried=ok(await blob.begin_upload('clubs/club/gallery/interrupted.jpg','image/jpeg',1n,1));
  ok(await blob.abort_upload(retried));
  console.log('Focused delayed callbacks passed: vault suspension, authority replacement, upload suspension; denied writes leave no pending row/reservation.');
+ // Reuse actual private rows and the same observed-hold fixture for reads.
+ vault.setPrincipal(governor); ok(await vault.set_club_domain_canister(delayed.canisterId));
+ vault.setPrincipal(victim);
+ ok(await vault.register_file('private-file','f','club',[],'Private file','https://example.invalid/private',1n,'text/plain',true,[],[],[]));
+ assert.equal(ok(await vault.read_account_get_folder('f'))[0].id,'f');
+ assert.equal(ok(await vault.read_account_get_file('private-file'))[0].id,'private-file');
+ assert.equal(ok(await vault.read_account_list_club_files('club',[],[])).length,1);
+ assert.deepEqual(ok(await vault.read_resource_club('folder','f')),['club']);
+ const suspendHeldRead=async(factory,canisterId,method,args,hold=1n)=>{
+  await delayed.actor.hold_on(hold);
+  const pending=await deferred(factory,canisterId,method,args);
+  await waitForHold(Number(hold));
+  id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
+  await delayed.actor.release(); await denied(pending);
+  ok(await id.set_account_status(account.id,{Active:null}));
+ };
+ for (const [method,args] of [
+  ['read_account_get_folder',['f']], ['read_account_get_file',['private-file']],
+  ['read_account_list_folders',['club',[],[]]], ['read_account_list_club_files',['club',[],[]]],
+  ['read_resource_club',['folder','f']]
+ ]) await suspendHeldRead(vaultIdl,services[2].canisterId,method,args);
+ // A stale discovery reply must not disclose location after a setter change.
+ await delayed.actor.hold_on(1n);
+ const staleLocation=await deferred(vaultIdl,services[2].canisterId,'read_resource_club',['folder','f']);
+ await waitForHold(1);
+ vault.setPrincipal(governor); ok(await vault.set_club_domain_canister(extra[0].canisterId));
+ await delayed.actor.release(); assert.deepEqual(ok(await staleLocation()),[]);
+ ok(await vault.set_club_domain_canister(delayed.canisterId));
+ // A permitting membership snapshot cannot cross a new resource fence.
+ await delayed.actor.hold_on(1n);
+ const fencedFiles=await deferred(vaultIdl,services[2].canisterId,'read_account_list_club_files',['club',[],[]]);
+ await waitForHold(1); ok(await vault.set_transfer_fence('club',true));
+ await delayed.actor.release(); assert.deepEqual(ok(await fencedFiles()),[]);
+ ok(await vault.set_transfer_fence('club',false));
+ vault.setPrincipal(victim); assert.equal(ok(await vault.read_account_list_club_files('club',[],[])).length,1);
+ // Real encryption/decryption positive control: key tests cannot pass merely
+ // because the transport key or local vetKD configuration is invalid.
+ pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(delayed.canisterId));
+ const verification=DerivedPublicKey.deserialize(Uint8Array.from(await pii.pii_vetkey_verification_key()));
+ const piiIdentity=new TextEncoder().encode('staff-private\u001fname');
+ const plaintext=new TextEncoder().encode('Local permission acceptance');
+ const cipher=IbeCiphertext.encrypt(verification,IbeIdentity.fromBytes(piiIdentity),plaintext,IbeSeed.random()).serialize();
+ ok(await pii.register_pii('staff-private','name',[...cipher],governor));
+ ok(await pii.grant_pii_read_club('staff-private','name','club'));
+ const readKey=async()=>{
+  pii.setPrincipal(victim); const transport=TransportSecretKey.random();
+  const result=ok(await pii.get_encrypted_pii_vetkeys_batch(['staff-private'],'name',transport.publicKeyBytes()));
+  assert.equal(result[0].length,1);
+  const key=EncryptedVetKey.deserialize(Uint8Array.from(result[0][0])).decryptAndVerify(transport,verification,piiIdentity);
+  assert.deepEqual(IbeCiphertext.deserialize(cipher).decrypt(key),plaintext);
+ };
+ await readKey();
+ pii.setPrincipal(victim); assert.equal(ok(await pii.get_encrypted_pii_batch(['staff-private'],'name','read','control')).length,1);
+ await suspendHeldRead(piiIdl,services[1].canisterId,'get_encrypted_pii_batch',[['staff-private'],'name','read','interrupted']);
+ // Hold the SECOND staff lookup, which occurs only after real key derivation.
+ await suspendHeldRead(piiIdl,services[1].canisterId,'get_encrypted_pii_vetkeys_batch',[['staff-private'],'name',TransportSecretKey.random().publicKeyBytes()],2n);
+ await readKey();
+ await delayed.actor.hold_on(2n);
+ const fencedKey=await deferred(piiIdl,services[1].canisterId,'get_encrypted_pii_vetkeys_batch',[['staff-private'],'name',TransportSecretKey.random().publicKeyBytes()]);
+ await waitForHold(2); pii.setPrincipal(governor); ok(await pii.set_transfer_fence('club',true));
+ await delayed.actor.release(); await denied(fencedKey);
+ ok(await pii.set_transfer_fence('club',false)); await readKey();
+ // Compatibility with a REAL delegated service caller, not a registered
+ // human pretending to be one: the vault asks club_domain for the human.
+ club.setPrincipal(governor); ok(await club.create_club('club','Local club','local-club',[],[]));
+ ok(await club.add_role_grant(victim,'club','player',[]));
+ vault.setPrincipal(governor); ok(await vault.set_club_domain_canister(extra[0].canisterId));
+ vault.setPrincipal(victim); assert.equal(ok(await vault.read_account_list_club_files('club',[],[])).length,1);
+ await denied(()=>club.read_has_club_membership(victim,'club'));
+ // Exercise the exact adapter used by dev-loopback app connectors with a
+ // real actor; legacy private queries are closed under this rehearsal.
+ const adaptedVault=adaptLocalAccountReads(vault,vaultIdl({IDL}),'http://localhost:4943');
+ assert.equal(ok(await adaptedVault.get_folder('f'))[0].id,'f');
+ assert.equal(ok(await adaptedVault.list_club_files('club',[],[])).length,1);
+ id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
+ await denied(()=>adaptedVault.get_folder('f'));
+ ok(await id.set_account_status(account.id,{Active:null}));
+ // Denied/malformed prefix cannot indefinitely hide a valid tail recipient.
+ queue.setPrincipal(governor); ok(await queue.enqueue('fair-tail',stranger.toText(),'club','event','tail','fair-tail'));
+ const workerQueue=pic.createActor(createPushQueueIdl,services[3].canisterId);
+ workerQueue.setPrincipal(governor);
+ let tailClaimed=false;
+ for(let round=0;round<8;round++) {
+  const claimed=ok(await workerQueue.claim(99999999999999n,1));
+  for(const item of claimed) {
+   if(item.id==='fair-tail') tailClaimed=true;
+   assert.equal(ok(await workerQueue.acknowledge(item.id,notificationKey(item))).status.Delivered,null);
+  }
+  if(tailClaimed) break;
+ }
+ assert.ok(tailClaimed,'Eligible tail must be reached despite malformed prefix');
+ assert.equal(ok(await workerQueue.list_device_tokens([victim.toText()])).length,1,'Worker contract must use consensus token reads');
+ console.log('Focused protected reads passed: five suspended vault read/discovery paths, stale discovery authority, fenced file batch, interrupted PII ciphertext, post-derivation suspension/fence, real-key decrypt controls and real vault-to-club delegation.');
  id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
  chat.setPrincipal(victim);
  for (const actor of [club,events,competition,league,points,media,insights,blob]) actor.setPrincipal(victim);

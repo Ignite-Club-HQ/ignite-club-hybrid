@@ -431,14 +431,14 @@ persistent actor class Main(governorInit : Principal) {
       case (?cid) { switch (await getCompetitionAccess(caller, cid)) { case (?a) if (not a.is_member or a.club_id != club) return #Ok(null); case null return #Err("Competition authority unavailable") } };
       case null {
         if (not isGovernor(caller)) {
-          let cid = switch (club_domain_canister) { case null return #Err("Club authority unavailable"); case (?c) c };
-          let authority : actor { is_club_member : shared query (Principal, Text) -> async Bool } = actor (cid.toText());
-          let member = try { await authority.is_club_member(caller, club) } catch (_) { return #Err("Club authority unavailable") };
-          if (not member) return #Ok(null);
+          if (not (await currentClubMember(caller, club))) return #Ok(null);
           switch (folder) { case (?f) if (not canViewFolder(caller, f)) return #Ok(null); case null switch (file) { case (?f) switch (folders.find(func(p) = p.id == f.folder_id)) { case (?p) if (not canViewFolder(caller, p)) return #Ok(null); case null {} }; case null {} } };
         }
       };
     };
+    if (isFenced(club)) return #Ok(null);
+    if (folder != null and folders.find(func(f) = f.id == id) != folder) return #Ok(null);
+    if (file != null and files.find(func(f) = f.id == id) != file) return #Ok(null);
     #Ok(?club)
   };
 
@@ -1037,10 +1037,14 @@ persistent actor class Main(governorInit : Principal) {
 
   func currentClubMember(caller : Principal, club : Text) : async Bool {
     let authority = club_domain_canister;
-    if (isGovernor(caller)) return true;
+    if (isGovernor(caller)) return not isFenced(club);
     let id = switch (authority) { case null return false; case (?id) id };
-    let service : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(id.toText());
-    let allowed = try { await (with timeout = 10) service.read_has_club_membership(caller, club) } catch (_) { false };
+    let service : actor { read_has_club_membership : shared (Principal, Text) -> async Bool; is_club_member : shared query (Principal, Text) -> async Bool } = actor(id.toText());
+    let allowed = try {
+      if (accountAdmissionEnabled) await (with timeout = 10) service.read_has_club_membership(caller, club)
+      else await (with timeout = 10) service.is_club_member(caller, club)
+    } catch (_) { false };
+    await admitAccount(caller);
     allowed and club_domain_canister == authority and not isFenced(club)
   };
   func accountFolderAccess(caller : Principal, folder : Types.VaultFolder) : async Bool {
@@ -1056,11 +1060,13 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
   func accountFiles(caller : Principal, candidates : [Types.VaultFile]) : async [Types.VaultFile] {
+    let authority = club_domain_canister;
     var out : [Types.VaultFile] = [];
     // Bound authorization work; unbounded club reads remain a release blocker.
     if (candidates.size() > 200) Runtime.trap("Use bounded vault pages");
     for (file in candidates.values()) { if (await accountFileAccess(caller, file)) out := out.concat([file]) };
     await admitAccount(caller);
+    if (authority != club_domain_canister) return [];
     // Re-evaluate local permissions after the final remote await.
     out.filter(func(file) = files.find(func(f) = f.id == file.id) == ?file and not isFenced(file.club) and
       (switch (folders.find(func(f) = f.id == file.folder_id)) { case null file.folder_id == ""; case (?folder) canViewFolder(caller, folder) }))
