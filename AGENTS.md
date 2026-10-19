@@ -24,11 +24,11 @@
 - Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
 - Pending sends are QueryClient-scoped; settle temp IDs from server acknowledgements, not photo presence. Why: avoid duplicates after navigation.
 - ICP images wait for restored auth, share account-scoped unlocks and retry after cooldown/foreground recovery. Why: avoid false startup failures and duplicate unlocks.
-- Documents resolve authorized/decrypted URLs, preserve extension/MIME and write WebView blobs to native cache, not HTTP downloaders. Why: raw ICP URLs contain ciphertext.
+- Documents use authorized/decrypted URLs, preserve extension/MIME and cache WebView blobs natively. Why: raw ICP URLs are ciphertext.
 - ICP rewards verify roles via governor-configured club_domain; catalog/settings reads refresh caller role mirrors first. Why: club creation needs no manual points-service grant.
-- ICP profile batches use get_profile for missing callers. Why: linked accounts retain original IDs.
+- ICP profile batches use get_profile for missing callers. Why: linked IDs persist.
 - ICP media uses uploader avatars; inbox previews use scope IDs; DM settings read/write ICP. Chat files encrypt/register before token creation. Why: silent no-ops lost device attachments.
-- Club setup reads active membership backend; saved palettes/logo count independently of entitlement; sponsor/theme saves invalidate it. Why: acknowledge free-club setup without Supabase rows in ICP.
+- Club setup uses active membership backend; palettes/logo count separately from entitlement; sponsor/theme saves invalidate it. Why: ICP free setup has no Supabase rows.
 
 <!-- ic-skills:managed:start -->
 <!-- state: configured (on-demand) -->
@@ -42,7 +42,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 - ICP frontend deploy: start mapped canisters before auto deploy; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets and balance access.
 - No client secrets; group routing opt-in, league/profile/host scopes split.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery needs exact inventory, stores stopped before authority, full restore and verified approved authority-first resume. Locked receipts persist intent/acks; interruption requires replay, disk failure retains locks. Raw snapshot hashes are not decoded ledger evidence. Why: prevent routing and ledger/file mismatch.
-- messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
+- messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
 
