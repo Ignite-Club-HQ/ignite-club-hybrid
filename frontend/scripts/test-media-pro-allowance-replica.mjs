@@ -23,7 +23,7 @@ let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
   const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: clubWasm, sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
-  const store = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
+  const store = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }, { name: 'IGNITE_MEDIA_LARGE_CAPACITY', value: '1' }] });
   const clubActor = club.actor;
   const actor = store.actor;
   clubActor.setPrincipal(governor);
@@ -36,6 +36,7 @@ try {
     plan: 'pro', team_limit: [], trial_ends_at_ms: [],
   }));
   ok(await actor.set_club_domain_canister(club.canisterId));
+  ok(await actor.enable_stable_media_storage()); // 32 GB large-capacity threshold needs stable writes
   actor.setPrincipal(owner);
 
   async function reserve(path, size) {
