@@ -892,6 +892,10 @@ persistent actor MediaBlobStore {
           case _ {};
         };
         pending_uploads := pending_uploads.filter(func(item) { item.id != upload_id });
+        // Removal enforcement after the atomic local write: a member removed
+        // mid-upload is denied here, while an authority outage stays retryable
+        // through the shared commit journal.
+        try { await requireUploadMembershipForCommit(caller, upload.path) } catch (e) { return #Err(Error.message(e)) };
         switch (quota_operations.get(upload_id)) {
           case (?op) {
             // Blob + result + intent commit atomically BEFORE the await.
