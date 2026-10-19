@@ -1769,6 +1769,9 @@ fn rekey_principal_core(
     new: Principal,
     dry_run: bool,
 ) -> Outcome<u64> {
+    if [old,new].iter().any(|p| find_account_by_principal(*p).is_some_and(|a| DELETION_TICKETS.with(|m|m.borrow().contains_key(&a.id)))) {
+        return Err("Deletion reservation pending".into());
+    }
     if removal_subject_fenced(old) || removal_subject_fenced(new) ||
         find_account_by_principal(old).is_some_and(|a| removal_intent(&a.id).is_some()) ||
         find_account_by_principal(new).is_some_and(|a| removal_intent(&a.id).is_some()) {

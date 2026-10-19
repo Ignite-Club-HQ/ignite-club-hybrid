@@ -624,6 +624,10 @@ fn authenticated() -> Outcome<()> {
 
 #[ic_cdk::init]
 fn init() {
+    // Capture install authority atomically; no first-call takeover window.
+    let mut meta = metadata();
+    meta.governor = Some(caller());
+    METADATA.with(|m| *m.borrow_mut() = meta);
     save_root();
 }
 
@@ -635,9 +639,10 @@ fn post_upgrade() {
 #[ic_cdk::update]
 fn initialize() -> Outcome<()> {
     authenticated()?;
+    if !ic_cdk::api::is_controller(&caller()) { return Err("Controller required".into()); }
     let mut meta = metadata();
     if meta.governor.is_some() {
-        return Err("Already initialized".into());
+        return if meta.governor == Some(caller()) { Ok(()) } else { Err("Already initialized".into()) };
     }
     meta.governor = Some(caller());
     meta.workers = vec![];

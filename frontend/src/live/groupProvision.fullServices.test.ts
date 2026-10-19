@@ -28,7 +28,10 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
       const service = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables,
         arg: IDL.encode(name === 'timer_jobs' ? [] : [IDL.Principal], name === 'timer_jobs' ? [] : [governor]) });
       service.actor.setPrincipal(governor); services.set(name, service);
-      if (name === 'timer_jobs') ok(await service.actor.initialize()); // Existing contract; release race is documented separately.
+      if (name === 'timer_jobs') {
+        service.actor.setPrincipal(outsider); expect(await service.actor.initialize()).toEqual({ Err: 'Controller required' });
+        service.actor.setPrincipal(governor); ok(await service.actor.initialize());
+      }
       return service;
     };
     for (const domain of PER_GROUP_DOMAINS) await install(domain);
@@ -89,6 +92,9 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     const league = ok(await actor('mini_league_domain', member).create_mini_league('new-club', 'League', [], [], 5, 3, 10, ['red', 'green'], true));
     expect(league.id).toBeTruthy();
     expect(await actor('mini_league_domain', outsider).create_mini_league('new-club', 'Denied', [], [], 5, 3, 10, ['red'], true)).toHaveProperty('Err');
+    ok(await actor('club_domain').remove_member('new-club', member));
+    expect(await actor('mini_league_domain', member).create_mini_league('new-club', 'Removed', [], [], 5, 3, 10, ['red'], true)).toHaveProperty('Err');
+    ok(await actor('club_domain').add_role_grant(member, 'new-club', 'club_admin', []));
     const media = actor('media_metadata', member);
     const asset = ok(await media.register_asset('new-club', 'photo', 'image/jpeg', 'checksum', 'clubs/new-club/gallery/one.jpg', 'private', 99999999999999n));
     expect((await media.get_asset(asset.id))[0].id).toBe(asset.id);

@@ -119,6 +119,7 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
     const f=await fixture();f.id.setPrincipal(user);const challenge=ok(await f.id.begin_link(stranger));
     f.id.setPrincipal(governor);ok(await f.id.prepare_account_deletion(f.account.id,f.revision));
     expect(await f.id.set_account_status(f.account.id,{Suspended:null})).toEqual({Err:'Deletion reservation pending'});
+    expect(await f.id.rekey_principal(user,stranger,false)).toEqual({Err:'Deletion reservation pending'});
     f.id.setPrincipal(user);expect(await f.id.begin_link(stranger)).toEqual({Err:'Deletion reservation pending'});
     expect(await f.id.revoke(linked,ok(await f.id.whoami()).version)).toEqual({Err:'Deletion reservation pending'});
     f.id.setPrincipal(stranger);expect(await f.id.accept_link(challenge.id)).toEqual({Err:'Deletion reservation pending'});
