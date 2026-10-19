@@ -1156,7 +1156,7 @@ export async function swapLiveGroupPlayers(
 
 export async function getLiveEventGroup(ctx: FeatureBackendContext, groupId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_event_group(groupId), "Get event group")[0] ?? null;
+  return (await unwrapCandid(actor.get_event_group(groupId), "Get event group"))[0] ?? null;
 }
 export async function getLiveGroupEditAccess(ctx: FeatureBackendContext, groupId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);

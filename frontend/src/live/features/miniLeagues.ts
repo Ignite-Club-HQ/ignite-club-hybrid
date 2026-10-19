@@ -582,5 +582,5 @@ export async function joinLiveMiniLeagueByToken(
 
 export async function getLivePlayerInvitePreview(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_player_invite_preview(token), "Player invite preview")[0] ?? null;
+  return (await unwrapCandid(actor.get_player_invite_preview(token), "Player invite preview"))[0] ?? null;
 }
