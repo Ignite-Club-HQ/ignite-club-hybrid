@@ -1355,9 +1355,22 @@ persistent actor class Main(governorInit : Principal) {
   // accepting parent links themselves as guardian (and family member, when
   // their identity is linked to an account) in one atomic call — the
   // canister equivalent of the Supabase parent-invite RPCs. NOTE: this
-  // trusts the admin-issued token as proof of the guardian relationship;
-  // a verified guardian-relationship check is a post-deploy roadmap item,
-  // matching the PII reader-grant stance.
+  // trusts an unguessable admin-issued token for the specific existing child,
+  // but revalidates child/team scope and issuer authority at acceptance.
+  func parentInviteScopeValid(club_id : Text, team_id : ?Text, child_id : Text) : Bool {
+    switch (acl.children.find(func(c) = c.id == child_id)) {
+      case null false;
+      case (?child) {
+        let inClub = child.club_id == ?club_id or child.teams.any(func(t) = teamInClub(t, club_id));
+        if (not inClub) return false;
+        switch (team_id) {
+          case null true;
+          case (?team) teamInClub(team, club_id) and child.teams.any(func(t) = t == team);
+        }
+      };
+    }
+  };
+
   public shared ({ caller }) func create_parent_invite(club_id : Text, team_id : ?Text, child_id : Text) : async { #Ok : Types.ParentInvite; #Err : Text } {
     if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -1369,9 +1382,16 @@ persistent actor class Main(governorInit : Principal) {
       };
       case null {};
     };
+    if (not parentInviteScopeValid(club_id, team_id, child_id)) return #Err("Referenced child not in invite scope");
+    let token = "inv-" # (await randomHex(16));
+    // Randomness is an async boundary: do not publish a token after removal,
+    // a transfer fence or a child/team change during that call.
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
+    if (isExcluded(caller, club_id) or not canManageTeam(caller, club_id, team_id)) return #Err("Team or club admin required");
+    if (not parentInviteScopeValid(club_id, team_id, child_id)) return #Err("Referenced child not in invite scope");
     let now = nowMs();
     let invite : Types.ParentInvite = {
-      id = "inv-" # club_id # "-" # Nat.toText(parentInvites.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
+      id = token;
       club_id; team_id; child_id;
       invited_by = caller;
       created_at_ms = now;
@@ -1388,6 +1408,16 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Invite not found") };
       case (?invite) {
         if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
+        if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
+        if (isExcluded(invite.invited_by, invite.club_id) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
+        if (not parentInviteScopeValid(invite.club_id, invite.team_id, invite.child_id)) return #Err("Referenced child not in invite scope");
+        switch (invite.accepted_by) {
+          case (?user) {
+            if (not user.equal(caller)) return #Err("Invite already accepted");
+            if (not acl.guardians.any(func(g) = g.child == invite.child_id and g.user.equal(caller))) return #Err("Guardian authorization changed");
+          };
+          case null {};
+        };
         #Ok(invite)
       };
     }
@@ -1398,9 +1428,19 @@ persistent actor class Main(governorInit : Principal) {
     switch (parentInvites.find(func(i) = i.id == token)) {
       case null { #Err("Invite not found") };
       case (?invite) {
-        if (invite.accepted_by != null) return #Err("Invite already accepted");
-        if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
+        if (isTransferFenced(invite.club_id)) return #Err("Club is temporarily locked for a transfer");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
+        if (isExcluded(invite.invited_by, invite.club_id) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
+        if (not parentInviteScopeValid(invite.club_id, invite.team_id, invite.child_id)) return #Err("Referenced child not in invite scope");
+        switch (invite.accepted_by) {
+          case (?user) {
+            if (not user.equal(caller)) return #Err("Invite already accepted");
+            if (not acl.guardians.any(func(g) = g.child == invite.child_id and g.user.equal(caller))) return #Err("Guardian authorization changed");
+            return #Ok(invite)
+          };
+          case null {};
+        };
+        if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
         // Ensure the child record exists and carries the invited team.
         switch (invite.team_id) {
           case (?team) {
@@ -3097,8 +3137,16 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func create_pending_invite(kind : Text, club_id : Text, team_id : ?Text, child_id : ?Text, email : Text, role : ?Text) : async { #Ok : { invite : Types.PendingInvite; payload : Types.InvitePayload }; #Err : Text } {
     auth(caller);
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
+    if (isExcluded(caller, club_id)) return #Err("Forbidden");
     if (kind != "team" and kind != "club" and kind != "guardian") return #Err("Invalid invite kind");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
+    if (kind == "guardian") {
+      switch (child_id) {
+        case null return #Err("Referenced child required");
+        case (?child) { if (not parentInviteScopeValid(club_id, team_id, child)) return #Err("Referenced child not in invite scope") };
+      }
+    };
     switch (team_id) {
       case (?team) {
         let directAccess = canManageTeam(caller, club_id, ?team);
@@ -3115,9 +3163,19 @@ persistent actor class Main(governorInit : Principal) {
       };
       case null { if (not isAdmin(caller, club_id)) return #Err("Club admin required") };
     };
+    let token = "pinv-" # (await randomHex(16));
+    if (kind == "guardian") {
+      if (not canManageTeam(caller, club_id, team_id)) return #Err("Invite authorization changed");
+      switch (child_id) {
+        case null return #Err("Referenced child required");
+        case (?child) { if (not parentInviteScopeValid(club_id, team_id, child)) return #Err("Referenced child not in invite scope") };
+      }
+    };
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
+    if (isExcluded(caller, club_id)) return #Err("Forbidden");
     let now = nowMs();
     let invite : Types.PendingInvite = {
-      id = "pinv-" # (await randomHex(16));
+      id = token;
       kind; club_id; team_id; child_id; email; role;
       invited_by = caller;
       created_at_ms = now;
@@ -3229,10 +3287,16 @@ persistent actor class Main(governorInit : Principal) {
     switch (pendingInvites.find(func(i) = i.id == id)) {
       case null { #Err("Invite not found") };
       case (?invite) {
+        if (isTransferFenced(invite.club_id)) return #Err("Club is temporarily locked for a transfer");
         if (invite.status == "accepted") return #Err("Invite already accepted");
         if (invite.status == "revoked") return #Err("Invite revoked");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
         if (invite.kind == "guardian") {
+          if (isExcluded(invite.invited_by, invite.club_id) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
+          switch (invite.child_id) {
+            case null return #Err("Referenced child required");
+            case (?child) { if (not parentInviteScopeValid(invite.club_id, invite.team_id, child)) return #Err("Referenced child not in invite scope") };
+          };
           switch (invite.child_id) {
             case (?childId) {
               switch (invite.team_id) {

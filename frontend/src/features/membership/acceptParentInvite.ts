@@ -71,9 +71,8 @@ export async function acceptParentTeamInvite(params: {
   inviteToken?: string | null;
 }): Promise<AcceptParentInviteResult> {
   // ICP branch: the club_domain canister mints token-based parent invites;
-  // acceptance atomically links the guardian. Documented risk: the canister
-  // trusts its admin-issued token as guardian proof — a secure guardian-
-  // relationship check is still pending, so do not expand authorization.
+  // acceptance atomically links the guardian after the canister verifies
+  // current issuer authority and the existing child's exact club/team scope.
   const icpResult = await withFeatureBackend("membership", {
     supabase: () => null as AcceptParentInviteResult | null,
     icp: async (ctx): Promise<AcceptParentInviteResult | null> => {
