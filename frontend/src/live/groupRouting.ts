@@ -13,6 +13,8 @@ export type GroupDescriptor = {
   id: string;
   targetAlias: string;
   domains: ReadonlyArray<{ domain: GroupDomain; canisterId: string }>;
+  /** The group's own photo store; absent means its clubs cannot upload (fail closed). */
+  photoStore?: string;
 };
 export type ClubAssignment = { clubId: string; groupId: string; revision: bigint };
 export type GroupRoutingTable = {

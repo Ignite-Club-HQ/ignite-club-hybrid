@@ -130,6 +130,7 @@ export interface ShardGroup {
   'max_clubs' : number,
   'observed_at_ns' : bigint,
   'accepting' : boolean,
+  'photo_store' : [] | [Principal],
   'heap_budget_bytes' : bigint,
   'cycles' : bigint,
   'assigned_clubs' : number,

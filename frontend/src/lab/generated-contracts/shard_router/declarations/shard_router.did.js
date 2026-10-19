@@ -94,6 +94,7 @@ export const idlFactory = ({ IDL }) => {
     'max_clubs' : IDL.Nat32,
     'observed_at_ns' : IDL.Nat64,
     'accepting' : IDL.Bool,
+    'photo_store' : IDL.Opt(IDL.Principal),
     'heap_budget_bytes' : IDL.Nat64,
     'cycles' : IDL.Nat64,
     'assigned_clubs' : IDL.Nat32,

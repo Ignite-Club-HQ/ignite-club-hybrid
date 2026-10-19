@@ -47,7 +47,7 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
     for(const c of clubs){c.actor.setPrincipal(linked);ok(await c.actor.sync_my_linked_account());}
     const subnet=p(90); let revision=0n;
     const groups=clubs.map((c,i)=>({id:i?'new':'legacy',target_alias:'mainnet',domains:GROUP_DOMAINS.map((domain,n)=>({domain,canister:domain==='club_domain'?c.canisterId:domain==='secret_workload_identity'?p(70):p(20+i*20+n)})),
-      accepting:true,max_clubs:100,assigned_clubs:0,heap_budget_bytes:1000000n,heap_bytes:0n,min_cycles:1n,cycles:1n,observed_at_ns:0n}));
+      accepting:true,max_clubs:100,assigned_clubs:0,heap_budget_bytes:1000000n,heap_bytes:0n,min_cycles:1n,cycles:1n,observed_at_ns:0n,photo_store:[]}));
     for(const g of groups){
       revision=ok(await router.actor.register_group(g,revision));
       revision=ok(await router.actor.register_group_placement({group_id:g.id,deployment_id:'boundary',deployment_revision:1n,host:'https://icp-api.io',network_kind:'public_mainnet',

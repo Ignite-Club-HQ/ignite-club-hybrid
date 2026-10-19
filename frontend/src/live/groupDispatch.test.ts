@@ -3,7 +3,7 @@ import { createClubDispatcher, clearGroupDispatchCache, clubDispatch } from './g
 import { OFF } from './groupActivation';
 import { GROUP_DOMAINS } from './groupRouting';
 
-const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n };
+const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n, removalWiring: { revision: 1n, groupIds: ["a"], checkedAtMs: 0 } };
 function deps(gates = OFF, principal = 'p1') {
   const session = { readClub: vi.fn(async () => 'group'), writeClub: vi.fn(async () => 'group'), isAssigned: (c: string) => c === 'moved', dispose: vi.fn() };
   const d = { gates: () => gates, legacy: vi.fn(async () => 'legacy') as never,

@@ -33,6 +33,10 @@ pub struct ShardGroup {
     pub min_cycles: u64,
     pub cycles: u64,
     pub observed_at_ns: u64,
+    /// The group's own photo store. Uploads for its clubs go only here, never
+    /// to a shared store (whose single club authority belongs to another group).
+    #[serde(default)]
+    pub photo_store: Option<Principal>,
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
@@ -64,6 +68,11 @@ pub fn validate(group: &ShardGroup) -> Result<(), String> {
         }
     }
     if names.len() != DOMAINS.len() { return Err("Incomplete shard group".into()); }
+    if let Some(store) = group.photo_store {
+        if store == Principal::anonymous() || store == Principal::management_canister() || principals.contains(&store) {
+            return Err("Invalid group photo store".into());
+        }
+    }
     Ok(())
 }
 
@@ -105,6 +114,27 @@ pub fn immutable_route(existing: Option<Principal>, requested: Principal) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn photo_store_must_be_distinct() {
+        let mut g = group("a", 0);
+        g.photo_store = Some(g.domains[0].canister);
+        assert!(validate(&g).is_err());
+        g.photo_store = Some(Principal::from_slice(&[99, 1]));
+        assert!(validate(&g).is_ok());
+        g.photo_store = Some(Principal::anonymous());
+        assert!(validate(&g).is_err());
+    }
+    #[test]
+    fn old_records_without_photo_store_still_decode() {
+        #[derive(Serialize)] struct Old { id: String, target_alias: String, domains: Vec<DomainCanister>, accepting: bool, max_clubs: u32,
+            assigned_clubs: u32, heap_budget_bytes: u64, heap_bytes: u64, min_cycles: u64, cycles: u64, observed_at_ns: u64 }
+        let g = group("a", 0);
+        let old = Old { id: g.id.clone(), target_alias: g.target_alias.clone(), domains: g.domains.clone(), accepting: g.accepting, max_clubs: g.max_clubs,
+            assigned_clubs: 0, heap_budget_bytes: g.heap_budget_bytes, heap_bytes: g.heap_bytes, min_cycles: g.min_cycles, cycles: g.cycles, observed_at_ns: 1 };
+        let mut bytes = Vec::new(); ciborium::into_writer(&old, &mut bytes).unwrap();
+        let back: ShardGroup = ciborium::from_reader(&bytes[..]).unwrap();
+        assert_eq!(back.photo_store, None);
+    }
     pub fn group(id: &str, assigned: u32) -> ShardGroup {
         ShardGroup {
             id: id.into(), target_alias: "mainnet".into(),
@@ -113,7 +143,7 @@ mod tests {
             }).collect(),
             accepting: true, max_clubs: 100, assigned_clubs: assigned,
             heap_budget_bytes: 3 * 1024 * 1024 * 1024, heap_bytes: 100,
-            min_cycles: 1_000_000_000_000, cycles: 2_000_000_000_000, observed_at_ns: 1,
+            min_cycles: 1_000_000_000_000, cycles: 2_000_000_000_000, observed_at_ns: 1, photo_store: None,
         }
     }
     #[test] fn complete_distinct_domains_required() {

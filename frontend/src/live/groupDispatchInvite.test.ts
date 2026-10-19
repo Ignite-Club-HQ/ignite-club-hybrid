@@ -3,7 +3,7 @@ import { createClubDispatcher, clearGroupDispatchCache } from './groupDispatch';
 import { OFF } from './groupActivation';
 import { GROUP_DOMAINS } from './groupRouting';
 
-const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n };
+const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n, removalWiring: { revision: 1n, groupIds: ["a"], checkedAtMs: 0 } };
 function world(groups: Record<string, string[]>, gates = ON) {
   const ctxs = Object.keys(groups).map(g => ({ group: g, identity: { getPrincipal: () => ({ toText: () => 'p1' }) } }));
   const s = { readClub: vi.fn(), writeClub: vi.fn(), isAssigned: () => false, dispose: vi.fn(),

@@ -29,9 +29,14 @@ export function routerGroupRecord(p: Provision, globals: { secret_workload_ident
     return { domain: d, canister: Principal.fromText(id) };
   });
   if (new Set(domains.map(d => d.canister.toText())).size !== domains.length) throw new Error('Duplicate group canister');
+  // A group opens only with its own installed photo store (never a shared one).
+  const photoStore = p.dedicatedBlobStore?.installed ? p.dedicatedBlobStore.canisterId : undefined;
+  if (accepting && !photoStore && dep.deploymentId !== 'local') throw new Error(`Group ${p.groupId} cannot open without its own photo store`);
+  if (photoStore && domains.some(d => d.canister.toText() === photoStore)) throw new Error('Photo store duplicates a group service');
   return {
     group: { id: p.groupId, target_alias: dep.targetAlias, domains, accepting, max_clubs: limits.maxClubs, assigned_clubs: 0,
-      heap_budget_bytes: limits.heapBudgetBytes, heap_bytes: 0n, min_cycles: limits.minCycles, cycles: 0n, observed_at_ns: 0n },
+      heap_budget_bytes: limits.heapBudgetBytes, heap_bytes: 0n, min_cycles: limits.minCycles, cycles: 0n, observed_at_ns: 0n,
+      photo_store: photoStore ? [Principal.fromText(photoStore)] : [] },
     placement: { group_id: p.groupId, deployment_id: dep.deploymentId, deployment_revision: dep.deploymentRevision, host: dep.host,
       network_kind: dep.networkKind, primary_subnet: Principal.fromText(dep.primarySubnet), approved_subnets: dep.approvedSubnets.map(s => Principal.fromText(s)),
       additional_subnets_enabled: dep.additionalSubnetsEnabled,

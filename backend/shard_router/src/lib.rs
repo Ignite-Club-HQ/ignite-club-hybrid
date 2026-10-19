@@ -811,7 +811,7 @@ mod tests {
         let group = ShardGroup {
             id: "test-group".into(), target_alias: "mainnet".into(), domains: vec![],
             accepting: true, max_clubs: 1, assigned_clubs: 0,
-            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1, photo_store: None,
         };
         GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
         let revision = current_revision();
@@ -829,7 +829,7 @@ mod tests {
         let group = ShardGroup {
             id: "self-group".into(), target_alias: "selftest".into(), domains: vec![],
             accepting: true, max_clubs: 100, assigned_clubs: 0,
-            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1, photo_store: None,
         };
         GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
         let user = Principal::from_slice(&[7; 29]);
@@ -848,7 +848,7 @@ mod tests {
         let group = ShardGroup {
             id: "host-group".into(), target_alias: "mainnet".into(), domains: vec![],
             accepting: true, max_clubs: 5, assigned_clubs: 0,
-            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1, photo_store: None,
         };
         GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
         let assigned = assign_group_record("host-club".into(), "mainnet".into(), current_revision(), 1).unwrap();

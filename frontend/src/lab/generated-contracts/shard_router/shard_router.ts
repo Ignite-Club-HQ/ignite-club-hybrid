@@ -194,6 +194,7 @@ export interface ShardGroup {
     max_clubs: number;
     observed_at_ns: bigint;
     accepting: boolean;
+    photo_store?: Principal;
     heap_budget_bytes: bigint;
     cycles: bigint;
     assigned_clubs: number;
@@ -306,7 +307,7 @@ export interface shard_routerInterface {
     set_deletion_authority(arg0: Principal): Promise<Result_16>;
     version(): Promise<bigint>;
 }
-import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DeletionLock as _DeletionLock, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, GroupRegistrySnapshot as _GroupRegistrySnapshot, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
+import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DeletionLock as _DeletionLock, DomainCanister as _DomainCanister, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, GroupPlacement as _GroupPlacement, GroupRegistrySnapshot as _GroupRegistrySnapshot, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
 export class Shard_router implements shard_routerInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result> {
@@ -378,8 +379,8 @@ export class Shard_router implements shard_routerInterface {
         return from_candid_Result_12_n30(result);
     }
     async list_routes(arg0: string | null, arg1: number): Promise<Result_13> {
-        const result = await this.actor.list_routes(to_candid_opt_n32(arg0), arg1);
-        return from_candid_Result_13_n33(result);
+        const result = await this.actor.list_routes(to_candid_opt_n36(arg0), arg1);
+        return from_candid_Result_13_n37(result);
     }
     async memory_stats(): Promise<MemoryStats> {
         const result = await this.actor.memory_stats();
@@ -391,7 +392,7 @@ export class Shard_router implements shard_routerInterface {
     }
     async read_group_registry(arg0: string): Promise<Result_14> {
         const result = await this.actor.read_group_registry(arg0);
-        return from_candid_Result_14_n38(result);
+        return from_candid_Result_14_n42(result);
     }
     async read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_4> {
         const result = await this.actor.read_hosted_club_assignment(arg0, arg1, arg2);
@@ -399,14 +400,14 @@ export class Shard_router implements shard_routerInterface {
     }
     async read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_15> {
         const result = await this.actor.read_my_group_assignments(arg0, arg1, arg2);
-        return from_candid_Result_15_n40(result);
+        return from_candid_Result_15_n46(result);
     }
     async record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result> {
         const result = await this.actor.record_group_health(arg0, arg1, arg2, arg3);
         return from_candid_Result_n1(result);
     }
     async register_group(arg0: ShardGroup, arg1: bigint): Promise<Result> {
-        const result = await this.actor.register_group(arg0, arg1);
+        const result = await this.actor.register_group(to_candid_ShardGroup_n48(arg0), arg1);
         return from_candid_Result_n1(result);
     }
     async register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result> {
@@ -415,19 +416,22 @@ export class Shard_router implements shard_routerInterface {
     }
     async release_deletion_lock(arg0: string, arg1: bigint): Promise<Result_16> {
         const result = await this.actor.release_deletion_lock(arg0, arg1);
-        return from_candid_Result_16_n42(result);
+        return from_candid_Result_16_n50(result);
     }
     async set_deletion_authority(arg0: Principal): Promise<Result_16> {
         const result = await this.actor.set_deletion_authority(arg0);
-        return from_candid_Result_16_n42(result);
+        return from_candid_Result_16_n50(result);
     }
     async version(): Promise<bigint> {
         const result = await this.actor.version();
         return result;
     }
 }
-function from_candid_Page_n35(value: _Page): Page {
-    return from_candid_record_n36(value);
+function from_candid_GroupRegistrySnapshot_n44(value: _GroupRegistrySnapshot): GroupRegistrySnapshot {
+    return from_candid_record_n45(value);
+}
+function from_candid_Page_n39(value: _Page): Page {
+    return from_candid_record_n40(value);
 }
 function from_candid_Result_10_n24(value: _Result_10): Result_10 {
     return from_candid_variant_n25(value);
@@ -438,17 +442,17 @@ function from_candid_Result_11_n27(value: _Result_11): Result_11 {
 function from_candid_Result_12_n30(value: _Result_12): Result_12 {
     return from_candid_variant_n31(value);
 }
-function from_candid_Result_13_n33(value: _Result_13): Result_13 {
-    return from_candid_variant_n34(value);
+function from_candid_Result_13_n37(value: _Result_13): Result_13 {
+    return from_candid_variant_n38(value);
 }
-function from_candid_Result_14_n38(value: _Result_14): Result_14 {
-    return from_candid_variant_n39(value);
-}
-function from_candid_Result_15_n40(value: _Result_15): Result_15 {
-    return from_candid_variant_n41(value);
-}
-function from_candid_Result_16_n42(value: _Result_16): Result_16 {
+function from_candid_Result_14_n42(value: _Result_14): Result_14 {
     return from_candid_variant_n43(value);
+}
+function from_candid_Result_15_n46(value: _Result_15): Result_15 {
+    return from_candid_variant_n47(value);
+}
+function from_candid_Result_16_n50(value: _Result_16): Result_16 {
+    return from_candid_variant_n51(value);
 }
 function from_candid_Result_1_n3(value: _Result_1): Result_1 {
     return from_candid_variant_n4(value);
@@ -480,6 +484,9 @@ function from_candid_Result_9_n21(value: _Result_9): Result_9 {
 function from_candid_Result_n1(value: _Result): Result {
     return from_candid_variant_n2(value);
 }
+function from_candid_ShardGroup_n33(value: _ShardGroup): ShardGroup {
+    return from_candid_record_n34(value);
+}
 function from_candid_opt_n17(value: [] | [_DomainMigration]): DomainMigration | null {
     return value.length === 0 ? null : value[0];
 }
@@ -495,10 +502,55 @@ function from_candid_opt_n26(value: [] | [_Migration]): Migration | null {
 function from_candid_opt_n29(value: [] | [_Route]): Route | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n37(value: [] | [string]): string | null {
+function from_candid_opt_n35(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n36(value: {
+function from_candid_opt_n41(value: [] | [string]): string | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n34(value: {
+    id: string;
+    max_clubs: number;
+    observed_at_ns: bigint;
+    accepting: boolean;
+    photo_store: [] | [Principal];
+    heap_budget_bytes: bigint;
+    cycles: bigint;
+    assigned_clubs: number;
+    domains: Array<_DomainCanister>;
+    target_alias: string;
+    min_cycles: bigint;
+    heap_bytes: bigint;
+}): {
+    id: string;
+    max_clubs: number;
+    observed_at_ns: bigint;
+    accepting: boolean;
+    photo_store?: Principal;
+    heap_budget_bytes: bigint;
+    cycles: bigint;
+    assigned_clubs: number;
+    domains: Array<DomainCanister>;
+    target_alias: string;
+    min_cycles: bigint;
+    heap_bytes: bigint;
+} {
+    return {
+        id: value.id,
+        max_clubs: value.max_clubs,
+        observed_at_ns: value.observed_at_ns,
+        accepting: value.accepting,
+        photo_store: record_opt_to_undefined(from_candid_opt_n35(value.photo_store)),
+        heap_budget_bytes: value.heap_budget_bytes,
+        cycles: value.cycles,
+        assigned_clubs: value.assigned_clubs,
+        domains: value.domains,
+        target_alias: value.target_alias,
+        min_cycles: value.min_cycles,
+        heap_bytes: value.heap_bytes
+    };
+}
+function from_candid_record_n40(value: {
     next: [] | [string];
     routes: Array<_Route>;
     revision: bigint;
@@ -508,8 +560,23 @@ function from_candid_record_n36(value: {
     revision: bigint;
 } {
     return {
-        next: record_opt_to_undefined(from_candid_opt_n37(value.next)),
+        next: record_opt_to_undefined(from_candid_opt_n41(value.next)),
         routes: value.routes,
+        revision: value.revision
+    };
+}
+function from_candid_record_n45(value: {
+    groups: Array<_ShardGroup>;
+    placements: Array<_GroupPlacement>;
+    revision: bigint;
+}): {
+    groups: Array<ShardGroup>;
+    placements: Array<GroupPlacement>;
+    revision: bigint;
+} {
+    return {
+        groups: from_candid_vec_n32(value.groups),
+        placements: value.placements,
         revision: value.revision
     };
 }
@@ -697,13 +764,13 @@ function from_candid_variant_n31(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_vec_n32(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n34(value: {
+function from_candid_variant_n38(value: {
     Ok: _Page;
 } | {
     Err: string;
@@ -716,26 +783,7 @@ function from_candid_variant_n34(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Page_n35(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n39(value: {
-    Ok: _GroupRegistrySnapshot;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: GroupRegistrySnapshot;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_Page_n39(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -760,7 +808,26 @@ function from_candid_variant_n4(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n41(value: {
+function from_candid_variant_n43(value: {
+    Ok: _GroupRegistrySnapshot;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: GroupRegistrySnapshot;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_GroupRegistrySnapshot_n44(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n47(value: {
     Ok: Array<_GroupAssignment>;
 } | {
     Err: string;
@@ -779,7 +846,7 @@ function from_candid_variant_n41(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n43(value: {
+function from_candid_variant_n51(value: {
     Ok: null;
 } | {
     Err: string;
@@ -836,8 +903,56 @@ function from_candid_variant_n8(value: {
         Err: value.Err
     } : value;
 }
-function to_candid_opt_n32(value: string | null): [] | [string] {
+function from_candid_vec_n32(value: Array<_ShardGroup>): Array<ShardGroup> {
+    return value.map((x)=>from_candid_ShardGroup_n33(x));
+}
+function to_candid_ShardGroup_n48(value: ShardGroup): _ShardGroup {
+    return to_candid_record_n49(value);
+}
+function to_candid_opt_n36(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_record_n49(value: {
+    id: string;
+    max_clubs: number;
+    observed_at_ns: bigint;
+    accepting: boolean;
+    photo_store?: Principal;
+    heap_budget_bytes: bigint;
+    cycles: bigint;
+    assigned_clubs: number;
+    domains: Array<DomainCanister>;
+    target_alias: string;
+    min_cycles: bigint;
+    heap_bytes: bigint;
+}): {
+    id: string;
+    max_clubs: number;
+    observed_at_ns: bigint;
+    accepting: boolean;
+    photo_store: [] | [Principal];
+    heap_budget_bytes: bigint;
+    cycles: bigint;
+    assigned_clubs: number;
+    domains: Array<_DomainCanister>;
+    target_alias: string;
+    min_cycles: bigint;
+    heap_bytes: bigint;
+} {
+    return {
+        id: value.id,
+        max_clubs: value.max_clubs,
+        observed_at_ns: value.observed_at_ns,
+        accepting: value.accepting,
+        photo_store: value.photo_store ? candid_some(value.photo_store) : candid_none(),
+        heap_budget_bytes: value.heap_budget_bytes,
+        cycles: value.cycles,
+        assigned_clubs: value.assigned_clubs,
+        domains: value.domains,
+        target_alias: value.target_alias,
+        min_cycles: value.min_cycles,
+        heap_bytes: value.heap_bytes
+    };
 }
 export interface CreateActorOptions {
     agent?: Agent;
