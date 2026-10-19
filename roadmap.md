@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] Current request: scaling section 2 — finish verified cross-group permissions/account lifecycle and older parent-invitation handling in a combined batch; test linked/removal/private-discovery cases. Routing remains off; encrypted-media moves remain prohibited. Signed-in mainnet/native acceptance is a separate external gate.
+
 - [x] CLOSED BY OWNER POLICY 19 Oct 2026: safe encrypted-media club moves (scaling section 1). The owner decided existing clubs holding photos are never moved, so the work is dropped, not paused: no re-encryption, no key-carrying transfers, no photo provenance attestation. The fail-closed gate stays as the policy — mediaTransferSafety refuses any club with encryptedObjects > 0, pending uploads or unverified shared quotas, and only fully inventoried media-free clubs pass. Consequences accepted: old groups run indefinitely, crowded groups are relieved by moving photo-free clubs or growing storage in place, and existing clubs cannot migrate to a second subnet or Cloud Engine without members re-uploading. Scaling routing stays off until sections 2-5 pass.
 
 - [x] Superseded by the policy above: "complete point 1" is withdrawn. Original-key/provenance attestation, frontend original-authority resolution and durable private competition-authority journal work are dropped, not deferred. Do not deploy or enable routing.
