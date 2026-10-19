@@ -42,13 +42,14 @@ export async function createOperatorTransport(options: OperatorTransportOptions)
   if (options.identity.getPrincipal().isAnonymous()) throw new Error('Authenticated operator identity required');
   const agent = await HttpAgent.create({ host: options.host, identity: options.identity, shouldFetchRootKey: Boolean(options.fetchRootKey) });
   const operator = options.identity.getPrincipal().toText();
-  const management = Actor.createActor(managementIdl, { agent, canisterId: 'aaaaa-aa' }) as unknown as {
+  // Management calls must carry the target canister as the effective id.
+  const management = (canisterId: string) => Actor.createActor(managementIdl, { agent, canisterId: Principal.fromText(canisterId) }) as unknown as {
     canister_status: (arg: { canister_id: Principal }) => Promise<{ settings: { controllers: Principal[] } }>;
   };
   return {
     async verifyGovernor(canisterId: string, governor: string) {
       if (governor !== operator) throw new Error('Transport identity does not match the required governor');
-      const status = await management.canister_status({ canister_id: Principal.fromText(canisterId) });
+      const status = await management(canisterId).canister_status({ canister_id: Principal.fromText(canisterId) });
       if (!status.settings.controllers.some(c => c.toText() === governor)) {
         throw new Error(`Operator does not control ${canisterId}`);
       }
