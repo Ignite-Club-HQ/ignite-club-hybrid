@@ -45,6 +45,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
-- Media moves use operator-only authenticated registries, journaled fences and bounded consensus metadata/storage pages; reconciliation never enables encrypted moves. Why: references miss orphan bytes and copied grants do not preserve original key authority.
+- Media moves: operator-only authenticated registries, journaled fences, bounded consensus pages; reconciliation never enables encrypted moves. Owner policy 2026-10-19: clubs holding encrypted media are never moved — keep the fail-closed gate, never build re-encryption; existing clubs stay put, only new clubs get group placement. Why: photo keys are tied to the creating group.
 
 
