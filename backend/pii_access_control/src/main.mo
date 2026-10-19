@@ -963,6 +963,10 @@ persistent actor class Main(governorInit : Principal) {
     let before = club_read_grants.size();
     mediaAuthEpoch += 1;
     club_read_grants := club_read_grants.filter(func(g) = g.club_id != club_id);
+    privateMediaAuthorities.remove(club_id);
+    // Permanent deletion is not a transfer: neither authority may survive
+    // identifier reuse. Existing owner records remain independently owned.
+    clubMediaAuthorities.remove(club_id);
     log_audit(caller, club_id, "*", "purge_club_grants", true, "Club read grants purged for deleted club");
     #Ok(Nat.toNat32(before - club_read_grants.size()))
   };
