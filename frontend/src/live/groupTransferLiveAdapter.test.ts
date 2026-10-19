@@ -14,6 +14,20 @@ function deps(sponsors: string[]) {
 }
 
 describe('live move adapter', () => {
+  it('wires recovery hooks without granting encrypted move permission', async () => {
+    const { d } = deps([]); const prepareCutover = vi.fn(); const beforeAbortUnlock = vi.fn(); const verifyReleased = vi.fn();
+    d.mediaKeyRecovery = { prepareCutover, beforeAbortUnlock, verifyReleased };
+    d.mediaInventory = async (fromGroup, toGroup, clubId) => ({ fromGroup, toGroup, clubId, complete: true, encryptedObjects: 1, pendingUploads: 0, sharedQuotaReady: true });
+    const a = liveTransferAdapter(d);
+    expect(a.prepareCutover).toBe(prepareCutover); expect(a.beforeAbortUnlock).toBe(beforeAbortUnlock);
+    await expect(a.verifyMedia?.('a','b','club')).rejects.toThrow('Encrypted media'); expect(prepareCutover).not.toHaveBeenCalled();
+  });
+  it('retains media locks when completed-key verification fails', async () => {
+    const { d } = deps([]); const release = vi.fn(); d.mediaPreparation = { release };
+    d.mediaKeyRecovery = { prepareCutover: vi.fn(), beforeAbortUnlock: vi.fn(), verifyReleased: async () => { throw new Error('authority drift'); } };
+    await expect(liveTransferAdapter(d).cleanupTerminal?.({ clubId:'club', fromGroup:'a', toGroup:'b', phase:'released', registryRevision:8n, log:['released'] })).rejects.toThrow('authority drift');
+    expect(release).not.toHaveBeenCalled();
+  });
   it('refuses moves without an authenticated media reader', async () => {
     const { d } = deps([]);
     await expect(liveTransferAdapter(d).verifyMedia?.('a', 'b', 'club')).rejects.toThrow('inventory reader required');
