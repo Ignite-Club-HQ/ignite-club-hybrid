@@ -1,0 +1,47 @@
+# Closed request queue only. No deploy secret or live mutation.
+name: Prepare group capacity (closed requests)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+permissions:
+  contents: write
+concurrency:
+  group: ignite-capacity-preparation-queue
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require verified capacity collector output
+        id: evidence
+        run: |
+          if test -f deploy/groups/capacity-evidence.json; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::Waiting for fresh complete tested-capacity evidence; no group created or opened.'
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.evidence.outputs.present == 'true'
+        with:
+          node-version: '22.12.0'
+      - name: Install frontend dependencies
+        if: steps.evidence.outputs.present == 'true'
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Prepare closed requests
+        if: steps.evidence.outputs.present == 'true'
+        working-directory: frontend
+        run: npx --yes tsx@4 scripts/prepare-group-capacity.ts ../deploy/groups/capacity-evidence.json ../deploy/groups/capacity-requests.json
+      - name: Save requests
+        if: steps.evidence.outputs.present == 'true'
+        run: |
+          git config user.name 'ignite-capacity'
+          git config user.email 'capacity@users.noreply.github.com'
+          git add deploy/groups/capacity-requests.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Queue closed capacity preparation'
+            git push
+          fi
