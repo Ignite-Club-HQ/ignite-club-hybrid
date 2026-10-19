@@ -19,7 +19,7 @@ try {
   pic = await PocketIc.create(server.getUrl(), { fiduciary: { state: { type: 'new' } } });
   const setup = (idlFactory, domain) => pic.setupCanister({ idlFactory,
     wasm: resolve(root, `backend/${domain}/.mops/.build/${domain}.wasm`),
-    sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
+    sender: governor, controllers: [governor], environmentVariables: domain === 'pii_access_control' ? [{ name: 'VETKD_KEY_NAME', value: 'key_1' }] : [], arg: IDL.encode([IDL.Principal], [governor]) });
   const source = await setup(clubIdl, 'club_domain');
   const target = await setup(clubIdl, 'club_domain');
   for (const c of [source, target]) {
