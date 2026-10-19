@@ -291,6 +291,7 @@ service : (Init) -> {
   begin_link : (principal) -> (Result_5);
   bind_external_site : (text, text, text) -> (Result_6);
   check_field_access : (text, text) -> (Result_7) query;
+  cancel_account_deletion : (text) -> (Result_2);
   commit_account_deletion : (text) -> (Result_2);
   // Public: remaining cycles (shown in admin settings).
   cycles_balance : () -> (nat) query;

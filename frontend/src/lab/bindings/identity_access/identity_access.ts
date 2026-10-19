@@ -554,6 +554,7 @@ export interface identity_accessInterface {
     memory_stats(): Promise<MemoryStats>;
     my_roles(): Promise<Result_13>;
     my_terms_acceptance(): Promise<Result_12>;
+    cancel_account_deletion(arg0: string): Promise<Result_2>;
     prepare_account_deletion(arg0: string, arg1: bigint): Promise<Result_14>;
     read_account_removal_intent(arg0: string): Promise<Result_4>;
     read_group_inventory_evidence(arg0: bigint): Promise<Result_15>;
@@ -692,6 +693,10 @@ export class Identity_access implements identity_accessInterface {
     async my_terms_acceptance(): Promise<Result_12> {
         const result = await this.actor.my_terms_acceptance();
         return from_candid_Result_12_n44(result);
+    }
+    async cancel_account_deletion(arg0: string): Promise<Result_2> {
+        const result = await this.actor.cancel_account_deletion(arg0);
+        return from_candid_Result_2_n3(result);
     }
     async prepare_account_deletion(arg0: string, arg1: bigint): Promise<Result_14> {
         const result = await this.actor.prepare_account_deletion(arg0, arg1);

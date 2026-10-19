@@ -340,6 +340,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_7],
         ['query'],
       ),
+    'cancel_account_deletion' : IDL.Func([IDL.Text], [Result_2], []),
     'commit_account_deletion' : IDL.Func([IDL.Text], [Result_2], []),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'erase_account' : IDL.Func([IDL.Text], [Result_2], []),

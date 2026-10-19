@@ -27,3 +27,15 @@ export async function eraseIcpAccountAsAdmin(identity: Identity, target: IcpTarg
     return { success: true, immediate: true };
   } finally { inventory?.dispose(); client.dispose(); }
 }
+
+/** Recovery for an interrupted pre-commit deletion: releases the router reservation and
+ *  drops the ticket, leaving the account untouched. Refuses once the commit has erased the
+ *  account (use the settle path instead) and is safe to retry after a lost reply. */
+export async function cancelIcpAccountDeletion(identity: Identity, target: IcpTargetConfig, accountId: string) {
+  const { connectLiveIdentityAccessClientWithIdentity } = await import("./identityAccess");
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  try {
+    await client.cancelAccountDeletion(accountId);
+    return { success: true };
+  } finally { client.dispose(); }
+}

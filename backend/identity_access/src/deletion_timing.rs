@@ -76,6 +76,28 @@ pub async fn commit_account_deletion(account_id: String) -> Outcome<()> {
     // Ticket is retained until explicit post-commit settlement, including reply loss.
     Ok(())
 }
+async fn release(t: &Ticket) -> Outcome<()> {
+    let response=ic_cdk::call::Call::bounded_wait(t.binding.registry,"release_deletion_lock")
+        .with_args(&(t.account.id.clone(),t.binding.registry_revision)).await.map_err(|_| "Deletion release outcome uncertain; retry exact ticket")?;
+    let result: Outcome<()>=response.candid().map_err(|_| "Invalid deletion lock release")?; result
+}
+fn recoverable(t: &Ticket) -> Outcome<()> {
+    if account_is_erased(&t.account.id) { return Err("Deletion already committed; settle instead".into()); }
+    if get_account(&t.account.id).as_ref()!=Some(&t.account) { return Err("Deletion account changed; reservation retained".into()); }
+    Ok(())
+}
+#[ic_cdk::update]
+pub async fn cancel_account_deletion(account_id: String) -> Outcome<()> {
+    if !account_group_rehearsal_enabled() { return Err("Bound deletion not released".into()); }
+    let caller=ic_cdk::api::msg_caller(); authorized(&account_id,caller)?;
+    let t=ticket(&account_id).ok_or("Missing deletion ticket")?;
+    recoverable(&t)?;
+    // Release is idempotent at the ticket's pinned revision; a stale ticket can never release a newer lock.
+    release(&t).await?;
+    // A commit interleaved after the release fails its final ticket check, so cancellation wins pre-commit.
+    if account_is_erased(&account_id) { return Err("Deletion committed during cancel; settle instead".into()); }
+    DELETION_TICKETS.with(|m|m.borrow_mut().remove(&account_id)); Ok(())
+}
 #[ic_cdk::update]
 pub async fn settle_account_deletion(account_id: String) -> Outcome<()> {
     if !account_group_rehearsal_enabled() { return Err("Bound deletion not released".into()); }

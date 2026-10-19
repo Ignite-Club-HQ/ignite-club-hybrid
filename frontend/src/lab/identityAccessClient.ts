@@ -30,6 +30,7 @@ export function createIdentityAccessClient(actor: _SERVICE) {
     prepareAccountDeletion: (accountId: string, revision: bigint) => call(() => actor.prepare_account_deletion(accountId, revision)),
     commitAccountDeletion: (accountId: string) => call(() => actor.commit_account_deletion(accountId)),
     settleAccountDeletion: (accountId: string) => call(() => actor.settle_account_deletion(accountId)),
+    cancelAccountDeletion: (accountId: string) => call(() => actor.cancel_account_deletion(accountId)),
     registerAccount: () => call(() => actor.register_account()),
     access: (club?: string, team?: string, child?: string) => call(() => actor.access(club ? [club] : [], team ? [team] : [], child ? [child] : [])),
     accessScoped: (siteId?: string, club?: string, team?: string, child?: string) => call(() => actor.access_scoped(siteId ? [siteId] : [], club ? [club] : [], team ? [team] : [], child ? [child] : [])),
