@@ -127,9 +127,9 @@ pub fn validate(snapshot: &Snapshot, b: &Binding, clubs: &[Principal], readers: 
     Ok(())
 }
 
-#[cfg(test)] mod tests {
+#[cfg(test)] pub(crate) mod tests {
     use super::*;
-    fn fixture() -> (Snapshot, Binding, Vec<Principal>) {
+    pub(crate) fn fixture() -> (Snapshot, Binding, Vec<Principal>) {
         let p = |i| Principal::from_slice(&[i, 1]);
         let b = Binding { registry: p(90), registry_revision: 4, target_alias: "local".into(), deployment_id: "replica".into(),
             deployment_revision: 1, host: "https://isolated.invalid".into(), network_kind: "public_mainnet".into() };
