@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] Current stage: durable photo-key abort restoration and opt-in move-runner recovery hooks; prove authority restoration precedes any abort unlock, interrupted changes replay safely, and encrypted-move rejection remains unchanged. No deployment or activation.
+
 - [x] Current request: original club-photo key service now supports governor-only fenced membership-authority revision CAS with retained abort tombstones, consensus destination membership and post-await authority/fence epoch checks. Reserved shared-photo identities and separator aliases cannot enter generic registration/import/key derivation. Added durable operator authorization journal with exact lost-response read-back. Real PocketIC IBE rehearsal verifies existing ciphertext before/after authority change and EOP upgrade, stale-source/stranger/removed-member denial, unavailable authority, CAS, abort and bystander isolation. 70 focused tests pass in each sign-in mode; Candid drift passes. Routing off, nothing deployed; this does NOT unblock encrypted moves.
 - [ ] Original-key continuation gates: production authenticated provenance/registry/metadata readers and integration into the full move state machine; verified abort restoration before unlock; deterministic in-flight fence/authority race and frozen-old-schema upgrade rehearsal; legacy key-name attestation before the first pinning upgrade; separate per-file/owner/guardian/staff permissions; actual signed-in/native encrypted move acceptance. Existing encrypted move guard remains unchanged.
 

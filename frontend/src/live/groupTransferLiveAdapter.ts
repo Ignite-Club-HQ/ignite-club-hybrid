@@ -59,6 +59,13 @@ export type LiveAdapterDeps = {
   /** Opt-in durable media preparation. Fence metadata domains before the
    * inventory callback scans blob stores. Failed checks retain all locks. */
   mediaPreparation?: { release(): Promise<void> };
+  /** Opt-in operator hooks backed by durable key journals and authenticated
+   * deployment/placement/provenance/fence readers. Not move permission. */
+  mediaKeyRecovery?: {
+    prepareCutover: NonNullable<TransferAdapter['prepareCutover']>;
+    beforeAbortUnlock: NonNullable<TransferAdapter['beforeAbortUnlock']>;
+    verifyReleased(t: import('./groupTransfer').Transfer): Promise<void>;
+  };
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
@@ -152,8 +159,11 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       if (target && target !== group) await fenceAll(target, club, false);
     },
     save: d.save,
+    prepareCutover: d.mediaKeyRecovery?.prepareCutover,
+    beforeAbortUnlock: d.mediaKeyRecovery?.beforeAbortUnlock,
     async cleanupTerminal(t) {
       if (t.phase !== 'released' && t.phase !== 'aborted') throw new Error('Durable terminal transfer required');
+      if (t.phase === 'released') await d.mediaKeyRecovery?.verifyReleased(t);
       await d.mediaPreparation?.release();
     },
   };
