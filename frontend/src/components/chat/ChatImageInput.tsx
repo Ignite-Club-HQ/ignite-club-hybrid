@@ -336,6 +336,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
 
       const { data } = supabase.storage.from("chat-attachments").getPublicUrl(fileName);
       publicUrl = data.publicUrl;
+      void queryClient.invalidateQueries({ queryKey: ["storage-breakdown", effectiveClubId] });
     }
 
     // Measure intrinsic dimensions (best-effort) and encode them into the URL
@@ -423,6 +424,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(path);
       const fileUrl = pub.publicUrl;
+      void queryClient.invalidateQueries({ queryKey: ["storage-breakdown", clubId] });
 
       // If we have club context, create vault_files row immediately so the file card is shareable.
       if (clubId && onAppendToken) {

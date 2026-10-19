@@ -176,12 +176,14 @@ export async function uploadVaultItem(
     // uploaders are gated upstream (isIcpMediaUploadUnavailable) until the
     // blob-store canister ID is configured, so this fallback is unreachable
     // for Internet Identity members in practice.
-    const { error: uploadError } = await uploadWithinClubMediaAllowance(clubId, options.file.size, () => client.storage
-      .from(storageBucket)
-      .upload(storagePath, options.file, { cacheControl: "31536000" }), client);
-    if (uploadError) {
+    try {
+      const { error: uploadError } = await uploadWithinClubMediaAllowance(clubId, options.file.size, () => client.storage
+        .from(storageBucket)
+        .upload(storagePath, options.file, { cacheControl: "31536000" }), client);
+      if (uploadError) throw uploadError;
+    } catch (error) {
       await dependencies.settleStorage(reservationId, false);
-      throw uploadError;
+      throw error;
     }
   }
 

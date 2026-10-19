@@ -221,8 +221,16 @@ export async function fetchVaultStorageBreakdown(
   const physicalPhotos = objects.filter((object) => isVaultStorageImageFilename(object.path));
   const physicalFiles = objects.filter((object) => !isVaultStorageImageFilename(object.path));
   const breakdown = calculateVaultStorageBreakdown({
-    photos: photos ?? [],
-    files: files ?? [],
+    photos: [],
+    files: objects.map(object => {
+      const parts = object.path.split("/");
+      return {
+        file_size: object.size,
+        name: object.path,
+        team_id: parts[2] === "teams" ? parts[3] ?? null : null,
+        mini_league_id: parts[2] === "mini-leagues" ? parts[3] ?? null : null,
+      };
+    }),
     teams: teams ?? [],
     miniLeagues: miniLeagues ?? [],
   });
