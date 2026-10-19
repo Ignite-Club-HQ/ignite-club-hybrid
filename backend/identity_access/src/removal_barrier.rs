@@ -5,6 +5,32 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Request {
+    pub account_id: String,
+    pub generation: u64,
+    pub inventory_digest: Vec<u8>,
+    pub subjects: Vec<Principal>,
+}
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Receipt {
+    pub request: Request,
+    pub receiver: Principal,
+    pub outstanding: candid::Nat,
+}
+impl Intent {
+    pub fn request(&self) -> Request {
+        Request { account_id: self.account_id.clone(), generation: self.generation,
+            inventory_digest: self.inventory_digest.clone(), subjects: self.subjects.clone() }
+    }
+    pub fn validate_receipt(&self, target: Principal, receipt: &Receipt) -> Result<(), String> {
+        if !self.targets.contains(&target) || receipt.receiver != target || receipt.request != self.request() {
+            return Err("Removal receipt binding mismatch".into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Intent {
     pub account_id: String,
     pub subjects: Vec<Principal>,
@@ -38,6 +64,31 @@ pub fn create(account: &super::Account, generation: u64, inventory: super::group
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn receiver_receipts_require_exact_generation_subjects_digest_and_target() {
+        let p = Principal::from_slice(&[1, 1]);
+        let q = Principal::from_slice(&[2, 1]);
+        let (snapshot, binding, clubs) = super::super::group_inventory::tests::fixture();
+        let inventory = super::super::group_inventory::RemovalInventory {
+            groups: super::super::group_inventory::Evidence { binding, history_revision: 0, snapshot },
+            supplemental: vec![], media: clubs.iter().map(|c| super::super::group_inventory::MediaEvidence {
+                club_authority: *c, registry: super::super::group_inventory::MediaRegistry { active: false, stores: vec![] }
+            }).collect()
+        };
+        let intent = Intent { account_id:"removed".into(), subjects:vec![p], generation:7, account_version:4,
+            inventory_digest:vec![1;32], inventory, targets:vec![q] };
+        let receipt = Receipt { request:intent.request(), receiver:q, outstanding:0u8.into() };
+        assert_eq!(intent.validate_receipt(q, &receipt), Ok(()));
+        let mut bad = receipt.clone(); bad.request.generation = 6;
+        assert!(intent.validate_receipt(q, &bad).is_err());
+        bad = receipt.clone(); bad.request.subjects = vec![q];
+        assert!(intent.validate_receipt(q, &bad).is_err());
+        bad = receipt.clone(); bad.request.inventory_digest[0] = 2;
+        assert!(intent.validate_receipt(q, &bad).is_err());
+        bad = receipt; bad.receiver = p;
+        assert!(intent.validate_receipt(q, &bad).is_err());
+        assert!(intent.validate_receipt(p, &bad).is_err());
+    }
     #[test]
     fn invalid_generation_subjects_and_digest_cannot_create_a_fence() {
         let account = super::super::Account { id: "removed".into(), principals: vec![Principal::anonymous()],
