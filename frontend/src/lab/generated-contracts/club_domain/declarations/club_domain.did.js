@@ -167,6 +167,27 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
   });
   const Result = IDL.Variant({ 'Ok' : Reservation, 'Err' : IDL.Text });
+  const Object = IDL.Record({
+    'club' : IDL.Text,
+    'path' : IDL.Text,
+    'store' : IDL.Principal,
+    'bytes' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Operation = IDL.Record({
+    'token' : IDL.Text,
+    'previous' : IDL.Opt(Object),
+    'club' : IDL.Text,
+    'path' : IDL.Text,
+    'state' : IDL.Variant({
+      'reserved' : IDL.Null,
+      'committed' : IDL.Null,
+      'released' : IDL.Null,
+    }),
+    'store' : IDL.Principal,
+    'bytes' : IDL.Nat,
+  });
+  const Result__1 = IDL.Variant({ 'Ok' : Operation, 'Err' : IDL.Text });
   const ClubSettings = IDL.Record({
     'logo_only_mode' : IDL.Bool,
     'invite_email_style' : IDL.Opt(IDL.Text),
@@ -266,7 +287,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Cell = IDL.Record({ 'value' : Value, 'name' : IDL.Text });
   const Row = IDL.Vec(Cell);
-  const Result__1 = IDL.Record({ 'hasMore' : IDL.Bool, 'rows' : IDL.Vec(Row) });
+  const Result__2 = IDL.Record({ 'hasMore' : IDL.Bool, 'rows' : IDL.Vec(Row) });
   const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
   const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
   const Exclusion = IDL.Record({ 'club' : IDL.Text, 'user' : IDL.Principal });
@@ -541,7 +562,7 @@ export const idlFactory = ({ IDL }) => {
     'done' : IDL.Bool,
     'offset' : IDL.Nat,
   });
-  const Operation = IDL.Variant({
+  const Operation__1 = IDL.Variant({
     'SetActive' : IDL.Record({ 'id' : IDL.Text, 'active' : IDL.Bool }),
     'Save' : IDL.Record({ 'id' : IDL.Opt(IDL.Text), 'draft' : Draft }),
     'Remove' : IDL.Record({ 'id' : IDL.Text }),
@@ -550,7 +571,7 @@ export const idlFactory = ({ IDL }) => {
   const Request__1 = IDL.Record({
     'request_id' : IDL.Text,
     'club' : IDL.Text,
-    'operation' : Operation,
+    'operation' : Operation__1,
     'expected_revision' : IDL.Nat64,
   });
   const Mutation = IDL.Record({
@@ -626,6 +647,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'activate_media_retained_quota' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'add_role_grant' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -686,6 +712,11 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'cancel_retained_media' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+        [Result__1],
+        [],
+      ),
     'canister_cycles' : IDL.Func([IDL.Principal], [IDL.Nat], []),
     'check_team_name_unique' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -703,6 +734,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'commit_media_quota' : IDL.Func([IDL.Text], [Result], []),
+    'commit_retained_media' : IDL.Func([IDL.Text], [Result__1], []),
     'create_child_for_parent_in_club' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
@@ -797,6 +829,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
         [],
       ),
+    'credit_deleted_retained_media' : IDL.Func(
+        [IDL.Text, Object],
+        [Result__1],
+        [],
+      ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_club_permanent' : IDL.Func(
         [IDL.Text],
@@ -863,7 +900,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'execute' : IDL.Func([IDL.Text], [Result__1], ['query']),
+    'execute' : IDL.Func([IDL.Text], [Result__2], ['query']),
     'export_acl' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : Config, 'Err' : IDL.Text })],
@@ -1175,6 +1212,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'import_media_quota_store' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_media_retained_store' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
@@ -1538,7 +1580,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
-    'read_account_execute' : IDL.Func([IDL.Text], [Result__1], []),
+    'read_account_execute' : IDL.Func([IDL.Text], [Result__2], []),
     'read_account_find_pending_invite_by_email_hash' : IDL.Func(
         [IDL.Text, IDL.Text],
         [
@@ -1911,6 +1953,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
         [],
       ),
+    'read_club_retained_media_bytes' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'pending' : IDL.Nat, 'finalized' : IDL.Nat }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_competition_team_access' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [
@@ -1950,6 +2002,7 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_media_retained_ready' : IDL.Func([], [IDL.Bool], []),
     'read_my_club_memberships' : IDL.Func(
         [IDL.Nat, IDL.Nat16],
         [
@@ -2092,6 +2145,11 @@ export const idlFactory = ({ IDL }) => {
     'reserve_media_quota' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Nat],
         [Result],
+        [],
+      ),
+    'reserve_retained_media' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat],
+        [Result__1],
         [],
       ),
     'resolve_invite_short_code' : IDL.Func(
@@ -2466,6 +2524,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'start_media_quota_cutover' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'start_media_retained_cutover' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

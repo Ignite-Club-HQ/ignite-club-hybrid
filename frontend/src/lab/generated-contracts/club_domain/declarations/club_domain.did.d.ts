@@ -263,6 +263,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'activate_media_retained_quota' : ActorMethod<
+    [],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'add_role_grant' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -322,6 +327,10 @@ export interface Main {
     [string, string, string, bigint, bigint],
     Result
   >,
+  'cancel_retained_media' : ActorMethod<
+    [string, string, string, bigint],
+    Result__1
+  >,
   /**
    * / Public: remaining cycles of any canister this canister controls
    * / (the frontend asset canister adds club_domain as a controller at deploy
@@ -344,6 +353,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'commit_media_quota' : ActorMethod<[string], Result>,
+  'commit_retained_media' : ActorMethod<[string], Result__1>,
   'create_child_for_parent_in_club' : ActorMethod<
     [string, Principal],
     { 'Ok' : Child } |
@@ -412,6 +422,7 @@ export interface Main {
     { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
+  'credit_deleted_retained_media' : ActorMethod<[string, Object], Result__1>,
   /**
    * / Public: remaining cycles (shown in admin settings).
    */
@@ -477,7 +488,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'erase_my_membership' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'execute' : ActorMethod<[string], Result__1>,
+  'execute' : ActorMethod<[string], Result__2>,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
   'export_club_snapshot' : ActorMethod<
     [string],
@@ -727,6 +738,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'import_media_quota_store' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_media_retained_store' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -1028,7 +1044,7 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
-  'read_account_execute' : ActorMethod<[string], Result__1>,
+  'read_account_execute' : ActorMethod<[string], Result__2>,
   'read_account_find_pending_invite_by_email_hash' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [PendingInviteEmailHash] } |
@@ -1332,6 +1348,11 @@ export interface Main {
     { 'Ok' : Page } |
       { 'Err' : string }
   >,
+  'read_club_retained_media_bytes' : ActorMethod<
+    [string],
+    { 'Ok' : { 'pending' : bigint, 'finalized' : bigint } } |
+      { 'Err' : string }
+  >,
   'read_competition_team_access' : ActorMethod<
     [string, Principal],
     { 'can_manage' : boolean, 'is_member' : boolean, 'club_id' : [] | [string] }
@@ -1344,6 +1365,7 @@ export interface Main {
     { 'Ok' : { 'stores' : Array<Principal>, 'active' : boolean } } |
       { 'Err' : string }
   >,
+  'read_media_retained_ready' : ActorMethod<[], boolean>,
   'read_my_club_memberships' : ActorMethod<
     [bigint, number],
     {
@@ -1476,6 +1498,7 @@ export interface Main {
     [string, string, string, bigint, bigint],
     Result
   >,
+  'reserve_retained_media' : ActorMethod<[string, string, bigint], Result__1>,
   'resolve_invite_short_code' : ActorMethod<
     [string],
     { 'Ok' : string } |
@@ -1844,6 +1867,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'start_media_retained_cutover' : ActorMethod<
+    [],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'sync_my_linked_account' : ActorMethod<
     [],
     { 'Ok' : null } |
@@ -1955,7 +1983,25 @@ export interface NewsPost {
   'attachments' : Array<NewsAttachment>,
   'target_competition_id' : [] | [string],
 }
-export type Operation = {
+export interface Object {
+  'club' : string,
+  'path' : string,
+  'store' : Principal,
+  'bytes' : bigint,
+  'revision' : bigint,
+}
+export interface Operation {
+  'token' : string,
+  'previous' : [] | [Object],
+  'club' : string,
+  'path' : string,
+  'state' : { 'reserved' : null } |
+    { 'committed' : null } |
+    { 'released' : null },
+  'store' : Principal,
+  'bytes' : bigint,
+}
+export type Operation__1 = {
     'SetActive' : { 'id' : string, 'active' : boolean }
   } |
   { 'Save' : { 'id' : [] | [string], 'draft' : Draft } } |
@@ -2073,7 +2119,7 @@ export interface Request {
 export interface Request__1 {
   'request_id' : string,
   'club' : string,
-  'operation' : Operation,
+  'operation' : Operation__1,
   'expected_revision' : bigint,
 }
 export interface Reservation {
@@ -2089,7 +2135,9 @@ export interface Reservation {
 }
 export type Result = { 'Ok' : Reservation } |
   { 'Err' : string };
-export interface Result__1 { 'hasMore' : boolean, 'rows' : Array<Row> }
+export type Result__1 = { 'Ok' : Operation } |
+  { 'Err' : string };
+export interface Result__2 { 'hasMore' : boolean, 'rows' : Array<Row> }
 export interface RoleGrant {
   'club' : [] | [string],
   'role' : string,
