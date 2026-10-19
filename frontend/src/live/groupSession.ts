@@ -16,6 +16,14 @@ export type GroupSessionTransport = {
   /** Group of a club the caller may not belong to (e.g. a competition host). Returns location only; destinations keep their own access rules. */
   readHostedAssignment?(clubId: string, revision: bigint): Promise<ClubAssignment>;
 };
+/** A group's clubs use only that group's photo store: shared stores answer to
+ * another group's club service and would refuse (or misjudge) its clubs. */
+export function groupCanisterIds<T extends Record<string, string | undefined>>(shared: T, group: GroupDescriptor): T {
+  const ids: Record<string, string | undefined> = Object.fromEntries(Object.entries(shared).filter(([k]) => !k.startsWith('media_blob_store')));
+  for (const d of group.domains) ids[d.domain] = d.canisterId;
+  if (group.photoStore) ids.media_blob_store = group.photoStore;
+  return ids as T;
+}
 export const APP_WIDE_INDEX_ERROR = /app-wide accounts/i;
 const MAX_CLUBS = 1000;
 const MAX_PAGES = 500;
@@ -45,9 +53,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const targetFor = (groupId: string) => {
     const group = routing.groups.get(groupId);
     if (!group) throw new Error('Unknown group');
-    return { ...context, target: { ...context.target, canisterIds: {
-      ...context.target.canisterIds, ...Object.fromEntries(group.domains.map(d => [d.domain, d.canisterId])),
-    } } };
+    return { ...context, target: { ...context.target, canisterIds: groupCanisterIds(context.target.canisterIds, group) } };
   };
   const clubs = new Set<string>();
   const claim = (club: string, groupId: string) => {

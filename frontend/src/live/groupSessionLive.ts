@@ -26,7 +26,7 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
         groups: snapshot.groups.map(g => ({ id: g.id, targetAlias: g.target_alias, domains: g.domains.map(d => {
           if (!(GROUP_DOMAINS as readonly string[]).includes(d.domain)) throw new Error('Unknown group domain');
           return { domain: d.domain as GroupDomain, canisterId: d.canister.toText() };
-        }) })),
+        }), photoStore: g.photo_store?.[0]?.toText() })),
         deployment: { id: first.deployment_id, alias: ctx.target.alias, networkKind: first.network_kind, host: first.host,
           revision: first.deployment_revision, enabled: true, additionalSubnetsEnabled: first.additional_subnets_enabled,
           primarySubnet: first.primary_subnet.toText(), approvedSubnets: first.approved_subnets.map(s => s.toText()) },
