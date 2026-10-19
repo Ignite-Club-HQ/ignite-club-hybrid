@@ -102,7 +102,7 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     // Post-deletion: every service denies the erased principal.
     club.actor.setPrincipal(governor);
     const grants = ok(await club.actor.list_role_grants('c1'));
-    expect(grants.some((g: any) => g.user.toText() === member.toText())).toBe(false);
+    expect(grants.some((g: any) => g.account_id === account.id)).toBe(false);
     vault.actor.setPrincipal(member);
     denied(await vault.actor.create_folder('f2', 'c1', [], [], 'Folder', [], [], [], 0, [], []));
     (await events).actor.setPrincipal(member);
