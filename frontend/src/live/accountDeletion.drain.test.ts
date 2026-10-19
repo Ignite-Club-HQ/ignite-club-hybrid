@@ -70,7 +70,7 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     vault.actor.setPrincipal(member);
     ok(await vault.actor.create_folder('f1', 'c1', [], [], 'Folder', [], [], [], 0, [], []));
     (await events).actor.setPrincipal(member);
-    ok(await (await events).actor.create_event('c1', [], 'Training', '', 'training', [], [], [], [], BigInt(Date.now() + 3_600_000), BigInt(Date.now() + 7_200_000), [], false, [], []));
+    ok(await (await events).actor.create_event('c1', [], 'Training', 'Weekly session', 'training', [], [], [], [], BigInt(Date.now() + 3_600_000), BigInt(Date.now() + 7_200_000), [], false, [], []));
     messaging.actor.setPrincipal(governor);
     const conversation = ok(await messaging.actor.create_conversation('c1', [], [member]));
     messaging.actor.setPrincipal(member);
@@ -94,7 +94,7 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     vault.actor.setPrincipal(member);
     denied(await vault.actor.create_folder('f2', 'c1', [], [], 'Folder', [], [], [], 0, [], []));
     (await events).actor.setPrincipal(member);
-    denied(await (await events).actor.create_event('c1', [], 'Training', '', 'training', [], [], [], [], BigInt(Date.now() + 3_600_000), BigInt(Date.now() + 7_200_000), [], false, [], []));
+    denied(await (await events).actor.create_event('c1', [], 'Training', 'Weekly session', 'training', [], [], [], [], BigInt(Date.now() + 3_600_000), BigInt(Date.now() + 7_200_000), [], false, [], []));
     messaging.actor.setPrincipal(member);
     denied(await messaging.actor.send_message(conversation.id, 'still here?', 'k2', [], []));
     media.actor.setPrincipal(member);
