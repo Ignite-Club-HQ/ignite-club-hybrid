@@ -38,8 +38,23 @@ try {
     groups.push({ id, club, pii, blob, read, start });
   }
   const [a, b] = groups;
+  const relayIdl = ({ IDL }) => IDL.Service({ hold: IDL.Func([], [], []), release: IDL.Func([], [], []), progress: IDL.Func([], [IDL.Bool], ['query']), read_has_club_membership: IDL.Func([IDL.Principal, IDL.Text], [IDL.Bool], []) });
+  const relay = await pic.setupCanister({ idlFactory: relayIdl, wasm: process.env.CLUB_REVOCATION_RELAY_WASM, sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [a.club.canisterId]) });
+  a.pii.actor.setPrincipal(governor); ok(await a.pii.actor.set_club_domain_canister(relay.canisterId));
+  await relay.actor.hold();
+  const transport = TransportSecretKey.random();
+  const signature = piiIdl({ IDL })._fields.find(([name]) => name === 'get_club_media_vetkey')?.[1];
+  assert.ok(signature);
+  const heldKey = await pic.client.submitCall({ canisterId: a.pii.canisterId, sender: removed, method: 'get_club_media_vetkey', payload: new Uint8Array(IDL.encode(signature.argTypes, [a.id, transport.publicKeyBytes()])) });
+  let observed = false;
+  for (let n = 0; n < 60; n++) { await pic.tick(1); if (await relay.actor.progress()) { observed = true; break; } }
+  assert.ok(observed, 'Real membership reply must be held before removal');
   const pending = await a.start(removed, 'interrupted');
   a.club.actor.setPrincipal(governor); ok(await a.club.actor.remove_member(a.id, removed));
+  await relay.actor.release();
+  const reply = await pic.client.awaitCall(heldKey);
+  assert.ok('Err' in IDL.decode(signature.retTypes, reply.body)[0], 'Stale permitting membership reply must not yield a fresh photo key');
+  a.pii.actor.setPrincipal(governor); ok(await a.pii.actor.set_club_domain_canister(a.club.canisterId));
   await deny(() => a.read(removed));
   a.blob.actor.setPrincipal(removed);
   await deny(() => a.blob.actor.put_chunk(pending, 0, new Uint8Array([1])));
