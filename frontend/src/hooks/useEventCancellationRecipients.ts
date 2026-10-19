@@ -45,26 +45,12 @@ export function useEventCancellationRecipients({
         }
 
         if (miniLeagueId) {
+          // A canister roster cannot establish the full push audience here.
+          // Keep the count unknown rather than count only the caller's roles.
           if (isFeatureRoutedToIcp("mini_leagues")) {
-            // Internet Identity users: count the league's parents from the
-            // canister plus the caller's own matching role grants (the
-            // canister only exposes the caller's grants, not a club-wide
-            // admin list).
-            const [players, grants] = await withFeatureBackend("mini_leagues", {
-              supabase: async () => [[] as any[], [] as any[]] as const,
-              icp: async (ctx) => {
-                const { listLivePlayers } = await import("@/live/features/miniLeagues");
-                return [await listLivePlayers(ctx, miniLeagueId), await myLiveRoleGrants(ctx)] as const;
-              },
-            });
-            const parentIds = new Set(
-              players.map((p: any) => p.parent_user_id?.[0]).filter(Boolean) as string[],
-            );
-            const adminCount = grants.filter(
-              (g) => g.club === clubId && ["club_admin", "league_admin", "coach"].includes(g.role),
-            ).length;
             if (!isCurrent()) return;
-            setMemberCount(parentIds.size + adminCount);
+            setMemberCount(null);
+            setRecipientLookupFailed(true);
             return;
           }
           const { data: league, error: leagueError } = await supabase
