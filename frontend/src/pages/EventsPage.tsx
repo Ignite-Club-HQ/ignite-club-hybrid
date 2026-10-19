@@ -1,3 +1,4 @@
+import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { mergeMemberships } from "@/live/membershipMerge";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
@@ -527,7 +528,7 @@ export default function EventsPage() {
             const leagues = await listMyLiveMiniLeagues(ctx);
             return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
           },
-        }),
+        }, { everyGroup: true, merge: (parts) => ({ data: [...new Map(parts.flatMap(p => p.data ?? []).map(r => [r.mini_league_id, r])).values()], error: null }) }),
         withFeatureBackend<{ data: { mini_league_id: string }[] | null; error: any }>("mini_leagues", {
           supabase: async () =>
             supabase
@@ -535,7 +536,7 @@ export default function EventsPage() {
               .select("mini_league_id")
               .eq("user_id", user!.id),
           icp: async () => ({ data: [] as { mini_league_id: string }[], error: null as any }),
-        }),
+        }, { shared: "person" }),
         leagueAdminClubIds.size > 0
           ? withFeatureBackend<{ data: { id: string }[] | null; error: any }>("mini_leagues", {
               supabase: async () =>
@@ -546,12 +547,12 @@ export default function EventsPage() {
               icp: async (ctx) => {
                 const leagues = (
                   await Promise.all(
-                    Array.from(leagueAdminClubIds).map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)),
+                    Array.from(leagueAdminClubIds).map((clubId) => readMiniLeagueInScope(ctx, { clubId }, scoped => listLiveMiniLeaguesByClub(scoped, clubId))),
                   )
                 ).flat();
                 return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
               },
-            })
+            }, { shared: "person" })
           : Promise.resolve({ data: [], error: null } as any),
       ]);
       diagLog("memberships:mini_leagues", {
@@ -681,14 +682,14 @@ export default function EventsPage() {
           return data || [];
         },
         icp: async (ctx) => {
-          const leagues = await Promise.all(ids.map((leagueId) => getLiveMiniLeague(ctx, leagueId).catch(() => null)));
+          const leagues = await Promise.all(ids.map((leagueId) => readMiniLeagueInScope(ctx, { miniLeagueId: leagueId }, scoped => getLiveMiniLeague(scoped, leagueId))));
           return leagues
             .filter((l): l is NonNullable<typeof l> => !!l)
             .filter((l) => !clubFilter || l.club_id === clubFilter)
             .map((l) => ({ id: l.id, name: l.name, club_id: l.club_id }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      });
+      }, { shared: "person" });
     },
     enabled: (!!user || useIcpLab) && !!userMemberships,
     staleTime: 30 * 60 * 1000,

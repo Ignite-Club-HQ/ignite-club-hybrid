@@ -312,7 +312,7 @@ function useChildrenForEvent(
           const players = await withFeatureBackend("mini_leagues", {
             supabase: async () => [] as never[],
             icp: (ctx) => listLivePlayers(ctx, miniLeagueId),
-          });
+          }, { miniLeagueId });
           const allowed = new Set(
             (players ?? []).map((p) => p.child_id[0]).filter((id): id is string => !!id),
           );

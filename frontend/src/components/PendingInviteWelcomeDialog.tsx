@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -567,7 +568,7 @@ export function PendingInviteWelcomeDialog() {
                   await acceptPendingLiveInvite(ctx, invite.id);
                   console.log("[InviteAutoAccept] Accepted mini-league invite via canister:", invite.id);
                 },
-              });
+              }, writeOnce({ inviteToken: invite.id }));
 
               continue; // Skip standard children flow
             }

@@ -582,7 +582,7 @@ function SupabaseCreateEventPage() {
         const leagues = await listLiveMiniLeaguesByClub(ctx, clubId);
         return (leagues as any[]).map((l) => ({ id: l.id, name: l.name }));
       },
-    });
+    }, { clubId });
 
   const { data: miniLeagues } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["club-mini-leagues", clubId],

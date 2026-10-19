@@ -1,3 +1,5 @@
+import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
+import { mergeMiniLeagueRows } from "@/live/miniLeagueRouting";
 import { mergeLists } from "@/live/featureRouter";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -470,11 +472,11 @@ export default function HomePage() {
               supabase: async () => supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr),
               icp: async (ctx) => {
                 const leagues = (
-                  await Promise.all(leagueAdminArr.map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)))
+                  await Promise.all(leagueAdminArr.map((clubId) => readMiniLeagueInScope(ctx, { clubId }, scoped => listLiveMiniLeaguesByClub(scoped, clubId))))
                 ).flat();
                 return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
               },
-            })
+            }, { shared: "person" })
           : Promise.resolve({ data: [] as { id: string }[], error: null as any }),
         // Filter out soft-deleted clubs from role-derived memberships. Without
         // this, deleting a club leaves orphan user_roles rows that still make
@@ -1412,7 +1414,7 @@ export default function HomePage() {
             clubs: { name: "Loading...", sport: null },
           })) as MiniLeague[];
         },
-      }),
+      }, { everyGroup: true, merge: mergeMiniLeagueRows }),
     enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
