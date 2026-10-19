@@ -194,6 +194,14 @@ export interface media_blob_storeInterface {
     enable_stable_media_storage(): Promise<Result>;
     finalize_upload(upload_id: string): Promise<ResultFinalized>;
     freeze_media_quota(): Promise<Result>;
+    /**
+     * / Authoritative per-club media byte count for the Pro allowance UI: the
+     * / same finalized + in-flight figures the admission check enforces.
+     */
+    get_club_media_bytes(club_id: string): Promise<{
+        pending: bigint;
+        finalized: bigint;
+    }>;
     get_club_media_usage(club_id: string): Promise<Array<MediaUsage>>;
     get_content_hash(path: string): Promise<string | null>;
     get_upload_outcome(upload_id: string): Promise<{
@@ -343,6 +351,13 @@ export class Media_blob_store implements media_blob_storeInterface {
     async freeze_media_quota(): Promise<Result> {
         const result = await this.actor.freeze_media_quota();
         return from_candid_Result_n1(result);
+    }
+    async get_club_media_bytes(arg0: string): Promise<{
+        pending: bigint;
+        finalized: bigint;
+    }> {
+        const result = await this.actor.get_club_media_bytes(arg0);
+        return result;
     }
     async get_club_media_usage(arg0: string): Promise<Array<MediaUsage>> {
         const result = await this.actor.get_club_media_usage(arg0);

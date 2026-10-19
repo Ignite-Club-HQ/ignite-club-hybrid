@@ -126,6 +126,14 @@ export interface _SERVICE {
   'enable_stable_media_storage' : ActorMethod<[], Result>,
   'finalize_upload' : ActorMethod<[string], ResultFinalized>,
   'freeze_media_quota' : ActorMethod<[], Result>,
+  /**
+   * / Authoritative per-club media byte count for the Pro allowance UI: the
+   * / same finalized + in-flight figures the admission check enforces.
+   */
+  'get_club_media_bytes' : ActorMethod<
+    [string],
+    { 'pending' : bigint, 'finalized' : bigint }
+  >,
   'get_club_media_usage' : ActorMethod<[string], Array<MediaUsage>>,
   'get_content_hash' : ActorMethod<[string], [] | [string]>,
   'get_upload_outcome' : ActorMethod<

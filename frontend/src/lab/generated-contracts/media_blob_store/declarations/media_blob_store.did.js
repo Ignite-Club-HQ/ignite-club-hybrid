@@ -137,6 +137,11 @@ export const idlFactory = ({ IDL }) => {
     'enable_stable_media_storage' : IDL.Func([], [Result], []),
     'finalize_upload' : IDL.Func([IDL.Text], [ResultFinalized], []),
     'freeze_media_quota' : IDL.Func([], [Result], []),
+    'get_club_media_bytes' : IDL.Func(
+        [IDL.Text],
+        [IDL.Record({ 'pending' : IDL.Nat, 'finalized' : IDL.Nat })],
+        ['query'],
+      ),
     'get_club_media_usage' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(MediaUsage)],
