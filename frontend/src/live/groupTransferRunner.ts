@@ -22,7 +22,9 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
   let t = start;
   const step = async (n: Transfer) => { await a.save(n); t = n; };
   if (!(await a.sameDeployment(t.fromGroup, t.toGroup))) throw new Error('Cross-deployment transfer needs a separately reviewed design');
-  if (t.phase === 'planned') await a.verifyMedia?.(t.fromGroup, t.toGroup, t.clubId);
+  // Resumed copies must revalidate evidence before importing anything. Keep
+  // locks on failed/ambiguous media checks, outside automatic abort cleanup.
+  if (['planned', 'fenced', 'copied'].includes(t.phase)) await a.verifyMedia?.(t.fromGroup, t.toGroup, t.clubId);
   try {
     if (t.phase === 'planned') { await a.setFence(t.fromGroup, t.clubId, true); await step(fence(t)); }
     if (t.phase === 'fenced') {
@@ -54,7 +56,8 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
     // verification must abort the move rather than be lost at cutover.
     const recheck = await Promise.all(TRANSFER_DOMAINS.map(d => a.digest(t.fromGroup, t.clubId, d)));
     for (const r of recheck) {
-      const v = t.sourceDigests!.find(x => x.domain === r.domain)!;
+      const v = t.sourceDigests?.find(x => x.domain === r.domain);
+      if (!v) throw new Error(`Missing source digest for ${r.domain}`);
       if (v.records !== r.records || v.digest !== r.digest) {
         await a.setFence(t.fromGroup, t.clubId, false);
         throw new Error(`Source changed during fence in ${r.domain}; transfer must be re-planned`);

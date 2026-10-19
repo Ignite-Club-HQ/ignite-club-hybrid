@@ -56,11 +56,15 @@ export type LiveAdapterDeps = {
   /** Authenticated complete inventory including chat/vault/article blobs and
    * pending operations; unavailable readers fail closed, including on resume. */
   mediaInventory?(fromGroup: string, toGroup: string, clubId: string): Promise<MediaTransferInventory>;
+  /** Opt-in durable media preparation. Fence metadata domains before the
+   * inventory callback scans blob stores. Failed checks retain all locks. */
+  mediaPreparation?: { release(): Promise<void> };
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
   const verifyMedia = async (from: string, to: string, club: string) => {
     if (!d.mediaInventory) throw new Error('Authenticated media inventory reader required; club move blocked');
+    if (d.mediaPreparation) await fenceAll(from, club, true);
     assertMediaTransferSafe(await d.mediaInventory(from, to, club), club, from, to);
   };
   const live = (domain: string) => (LIVE_DOMAINS as readonly string[]).includes(domain);
@@ -102,6 +106,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
         for (const dom of LIVE_DOMAINS) ok(await d.actors(target)[dom].purge_club_snapshot(club));
         await fenceAll(target, club, false);
       }
+      if (!on) await d.mediaPreparation?.release();
     },
     async exportPage(group, club, domain, cursor) {
       if (global(domain)) return { rows: [], next: null };
@@ -145,6 +150,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       await fenceAll(group, club, false);
       const target = await d.targetFor(club);
       if (target && target !== group) await fenceAll(target, club, false);
+      await d.mediaPreparation?.release();
     },
     save: d.save,
   };
