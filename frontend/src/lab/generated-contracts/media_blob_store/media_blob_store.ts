@@ -201,7 +201,7 @@ export interface media_blob_storeInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -230,6 +230,13 @@ export interface media_blob_storeInterface {
         offset: bigint;
         frozen: boolean;
     }>;
+    read_account_get_upload_outcome(upload_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: FinalizedBlob | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     reconcile_upload_operations(cursor: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -240,7 +247,7 @@ export interface media_blob_storeInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -390,6 +397,16 @@ export class Media_blob_store implements media_blob_storeInterface {
     }> {
         const result = await this.actor.quota_snapshot_page(arg0);
         return result;
+    }
+    async read_account_get_upload_outcome(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: FinalizedBlob | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_upload_outcome(arg0);
+        return from_candid_variant_n31(result);
     }
     async reconcile_upload_operations(arg0: string): Promise<{
         __kind__: "Ok";

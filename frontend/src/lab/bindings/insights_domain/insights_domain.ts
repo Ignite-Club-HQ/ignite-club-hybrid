@@ -318,6 +318,177 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_ad_event_summary(since_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AdEventSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_client_perf_aggregate(path: string, metric: string | null, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: ClientPerfAggregate;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_club_engagement_active_users(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EngagementDayPoint>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_club_engagement_benchmarks(club_id: string, since_ms: bigint, until_ms: bigint, prev_since_ms: bigint, prev_until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: EngagementBenchmarks;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_club_engagement_message_volume(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EngagementDayPoint>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_club_engagement_rsvp_completion_series(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EngagementDayPoint>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_club_engagement_sponsor_performance(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            clicks: Array<EngagementDayPoint>;
+            impressions: Array<EngagementDayPoint>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_club_engagement_total_unique_reach(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_club_engagement_totals(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: EngagementTotals;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_count_photos(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_benchmarks(metric_keys: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Benchmark>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_sponsor_benchmarks(sponsor_ids: Array<string>, since_period: string, until_period: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SponsorBenchmarkRow>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_sponsor_performance(sponsor_id: string, period: string): Promise<{
+        __kind__: "Ok";
+        Ok: SponsorPerformance;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_is_app_admin(): Promise<boolean>;
+    read_account_list_ad_settings(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AppAdSetting>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_admin_alerts(status: AlertStatus | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AdminAlert>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_ads(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AppAd>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_app_admins(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_audit_logs(actor_filter: Principal | null, action_type: string | null, table_name: string | null, offset: number, limit: number): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            total: number;
+            items: Array<AuditLog>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_feedback(status: FeedbackStatus | null, offset: number, limit: number): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            total: number;
+            items: Array<Feedback>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_memory_reports(limit: bigint): Promise<Array<{
+        at: bigint;
+        analysis_json: string;
+        source: string;
+        readings_json: string;
+    }>>;
+    read_account_list_user_activity(club_id: string | null, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<UserActivityEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_my_feedback(): Promise<Array<Feedback>>;
+    read_account_perf_aggregate(surface: string, source: string | null, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: PerfAggregate;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_photo_engagement_totals(photo_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PhotoEngagementTotal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     record_active_user(club_id: string, account_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1068,6 +1239,252 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
         return from_candid_variant_n10(result);
+    }
+    async read_account_ad_event_summary(arg0: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AdEventSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_ad_event_summary(arg0);
+        return from_candid_variant_n1(result);
+    }
+    async read_account_client_perf_aggregate(arg0: string, arg1: string | null, arg2: bigint, arg3: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: ClientPerfAggregate;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_client_perf_aggregate(arg0, to_candid_opt_n3(arg1), arg2, arg3);
+        return from_candid_variant_n4(result);
+    }
+    async read_account_club_engagement_active_users(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EngagementDayPoint>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_club_engagement_active_users(arg0, arg1, arg2);
+        return from_candid_variant_n5(result);
+    }
+    async read_account_club_engagement_benchmarks(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: EngagementBenchmarks;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_club_engagement_benchmarks(arg0, arg1, arg2, arg3, arg4);
+        return from_candid_variant_n6(result);
+    }
+    async read_account_club_engagement_message_volume(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EngagementDayPoint>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_club_engagement_message_volume(arg0, arg1, arg2);
+        return from_candid_variant_n5(result);
+    }
+    async read_account_club_engagement_rsvp_completion_series(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EngagementDayPoint>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_club_engagement_rsvp_completion_series(arg0, arg1, arg2);
+        return from_candid_variant_n5(result);
+    }
+    async read_account_club_engagement_sponsor_performance(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            clicks: Array<EngagementDayPoint>;
+            impressions: Array<EngagementDayPoint>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_club_engagement_sponsor_performance(arg0, arg1, arg2);
+        return from_candid_variant_n7(result);
+    }
+    async read_account_club_engagement_total_unique_reach(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_club_engagement_total_unique_reach(arg0, arg1, arg2);
+        return from_candid_variant_n8(result);
+    }
+    async read_account_club_engagement_totals(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: EngagementTotals;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_club_engagement_totals(arg0, arg1, arg2);
+        return from_candid_variant_n9(result);
+    }
+    async read_account_count_photos(arg0: string, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_count_photos(arg0, arg1, arg2);
+        return from_candid_variant_n10(result);
+    }
+    async read_account_get_benchmarks(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Benchmark>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_benchmarks(arg0);
+        return from_candid_variant_n26(result);
+    }
+    async read_account_get_sponsor_benchmarks(arg0: Array<string>, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SponsorBenchmarkRow>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_sponsor_benchmarks(arg0, arg1, arg2);
+        return from_candid_variant_n32(result);
+    }
+    async read_account_get_sponsor_performance(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: SponsorPerformance;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_sponsor_performance(arg0, arg1);
+        return from_candid_variant_n33(result);
+    }
+    async read_account_is_app_admin(): Promise<boolean> {
+        const result = await this.actor.read_account_is_app_admin();
+        return result;
+    }
+    async read_account_list_ad_settings(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AppAdSetting>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_ad_settings();
+        return from_candid_variant_n35(result);
+    }
+    async read_account_list_admin_alerts(arg0: AlertStatus | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AdminAlert>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_admin_alerts(to_candid_opt_n36(arg0));
+        return from_candid_variant_n39(result);
+    }
+    async read_account_list_ads(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AppAd>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_ads();
+        return from_candid_variant_n41(result);
+    }
+    async read_account_list_app_admins(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_app_admins();
+        return from_candid_variant_n42(result);
+    }
+    async read_account_list_audit_logs(arg0: Principal | null, arg1: string | null, arg2: string | null, arg3: number, arg4: number): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            total: number;
+            items: Array<AuditLog>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_audit_logs(to_candid_opt_n43(arg0), to_candid_opt_n3(arg1), to_candid_opt_n3(arg2), arg3, arg4);
+        return from_candid_variant_n44(result);
+    }
+    async read_account_list_feedback(arg0: FeedbackStatus | null, arg1: number, arg2: number): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            total: number;
+            items: Array<Feedback>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_feedback(to_candid_opt_n49(arg0), arg1, arg2);
+        return from_candid_variant_n52(result);
+    }
+    async read_account_list_memory_reports(arg0: bigint): Promise<Array<{
+        at: bigint;
+        analysis_json: string;
+        source: string;
+        readings_json: string;
+    }>> {
+        const result = await this.actor.read_account_list_memory_reports(arg0);
+        return result;
+    }
+    async read_account_list_user_activity(arg0: string | null, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<UserActivityEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_user_activity(to_candid_opt_n3(arg0), arg1, arg2);
+        return from_candid_variant_n59(result);
+    }
+    async read_account_my_feedback(): Promise<Array<Feedback>> {
+        const result = await this.actor.read_account_my_feedback();
+        return from_candid_vec_n54(result);
+    }
+    async read_account_perf_aggregate(arg0: string, arg1: string | null, arg2: bigint, arg3: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: PerfAggregate;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_perf_aggregate(arg0, to_candid_opt_n3(arg1), arg2, arg3);
+        return from_candid_variant_n63(result);
+    }
+    async read_account_photo_engagement_totals(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<PhotoEngagementTotal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_photo_engagement_totals(arg0);
+        return from_candid_variant_n64(result);
     }
     async record_active_user(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";

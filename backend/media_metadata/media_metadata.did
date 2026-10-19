@@ -120,6 +120,14 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_account_get_asset: (asset_id: text) -> (opt Asset);
+   read_account_get_gallery_chat_card: (card_id: text) ->
+    (opt GalleryChatCard);
+   read_account_list_assets: (club_id: text) -> (vec Asset);
+   read_account_list_comments: (asset_id: text) -> (vec Comment);
+   read_account_list_gallery_chat_cards: (club_id: text, team_id: text) ->
+    (vec GalleryChatCard);
+   read_account_list_reactions: (asset_id: text) -> (vec Reaction);
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;

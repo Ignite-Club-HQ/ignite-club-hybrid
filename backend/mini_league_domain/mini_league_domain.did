@@ -385,6 +385,116 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_account_can_read_league_matches: (viewer: principal, league_id: 
+    text, club_id: text) -> (bool);
+   read_account_filter_visible_leagues: (viewer: principal, candidates:
+    vec MiniLeague) -> (vec MiniLeague);
+   read_account_get_availability: (session_id: text, player_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt MiniLeagueSessionAvailability;
+     });
+   read_account_get_league_members: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 is_parent: bool;
+                 is_staff: bool;
+                 user_id: text;
+               };
+     });
+   read_account_get_mini_league: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeague;
+     });
+   read_account_get_mini_leagues: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeague;
+     });
+   read_account_get_my_league_access: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           can_delete: bool;
+           can_manage: bool;
+           id: text;
+           is_club_admin: bool;
+         };
+     });
+   read_account_get_news_audience: (mini_league_id: text, requester:
+    principal) -> (variant {
+                     Err: text;
+                     Ok: MiniLeagueNewsAudience;
+                   });
+   read_account_get_player_guardian_status: (player_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PlayerGuardianStatus;
+     });
+   read_account_list_admins: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueAdmin;
+     });
+   read_account_list_duties: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroupDuty;
+     });
+   read_account_list_group_players: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroupPlayer;
+     });
+   read_account_list_groups: (session_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroup;
+     });
+   read_account_list_invites: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueInvite;
+     });
+   read_account_list_mini_league_join_links: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueJoinLink;
+     });
+   read_account_list_mini_leagues_by_club: (club_id: text) ->
+    (vec MiniLeague);
+   read_account_list_mini_leagues_by_clubs: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeague;
+     });
+   read_account_list_players: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeaguePlayer;
+     });
+   read_account_list_session_availability: (session_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueSessionAvailability;
+     });
+   read_account_list_sessions: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueSession;
+     });
+   read_account_my_availability: () -> (vec MiniLeagueSessionAvailability);
+   read_account_my_leagues: () -> (vec MiniLeague);
+   read_account_verify_child_guardian: (user: principal, child: text) ->
+    (bool);
+   read_account_verify_league_access: (viewer: principal, league:
+    MiniLeague) -> (bool);
+   read_account_verify_player_access: (user: principal, player:
+    MiniLeaguePlayer) -> (bool);
    read_can_read_league_matches: (viewer: principal, league_id: text,
     club_id: text) -> (bool);
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->

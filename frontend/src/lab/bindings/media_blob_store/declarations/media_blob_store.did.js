@@ -192,6 +192,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_account_get_upload_outcome' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(FinalizedBlob), 'Err' : IDL.Text })],
+        [],
+      ),
     'reconcile_upload_operations' : IDL.Func(
         [IDL.Text],
         [

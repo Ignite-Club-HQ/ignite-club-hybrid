@@ -549,6 +549,106 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_can_invite_players_to_team(team_id: string): Promise<boolean>;
+    read_account_competition_engagement_summary(competition_ids: Array<string>, since_ms: bigint, until_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<CompetitionEngagementSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_chat_settings(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: ChatSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_my_pending_eois(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EoiSubmission>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_is_competition_admin(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_is_competition_invite_manager(team_id: string, requester: Principal): Promise<boolean>;
+    read_account_list_competition_broadcasts(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Broadcast>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_competitions(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_competitions_multi(club_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_division_settings(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<DivisionSetting>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_invites_by_invitee(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<CompetitionInvite>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_my_news_competitions(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_my_personal_competitions(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_official_chats(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<OfficialChat>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_public_competitions(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_read_token_club(token: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_competition_club(id: string): Promise<{
         __kind__: "Ok";
         Ok: string | null;
@@ -591,7 +691,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -1783,6 +1883,154 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
         return from_candid_variant_n64(result);
+    }
+    async read_account_can_invite_players_to_team(arg0: string): Promise<boolean> {
+        const result = await this.actor.read_account_can_invite_players_to_team(arg0);
+        return result;
+    }
+    async read_account_competition_engagement_summary(arg0: Array<string>, arg1: bigint, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<CompetitionEngagementSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_competition_engagement_summary(arg0, arg1, arg2);
+        return from_candid_variant_n21(result);
+    }
+    async read_account_get_chat_settings(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: ChatSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_chat_settings(arg0);
+        return from_candid_variant_n48(result);
+    }
+    async read_account_get_my_pending_eois(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EoiSubmission>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_my_pending_eois();
+        return from_candid_variant_n56(result);
+    }
+    async read_account_is_competition_admin(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_is_competition_admin(arg0);
+        return from_candid_variant_n49(result);
+    }
+    async read_account_is_competition_invite_manager(arg0: string, arg1: Principal): Promise<boolean> {
+        const result = await this.actor.read_account_is_competition_invite_manager(arg0, arg1);
+        return result;
+    }
+    async read_account_list_competition_broadcasts(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Broadcast>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_competition_broadcasts(arg0);
+        return from_candid_variant_n67(result);
+    }
+    async read_account_list_competitions(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_competitions(arg0);
+        return from_candid_variant_n71(result);
+    }
+    async read_account_list_competitions_multi(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_competitions_multi(arg0);
+        return from_candid_variant_n71(result);
+    }
+    async read_account_list_division_settings(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<DivisionSetting>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_division_settings(arg0);
+        return from_candid_variant_n72(result);
+    }
+    async read_account_list_invites_by_invitee(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<CompetitionInvite>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_invites_by_invitee();
+        return from_candid_variant_n68(result);
+    }
+    async read_account_list_my_news_competitions(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_my_news_competitions();
+        return from_candid_variant_n71(result);
+    }
+    async read_account_list_my_personal_competitions(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_my_personal_competitions();
+        return from_candid_variant_n71(result);
+    }
+    async read_account_list_official_chats(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<OfficialChat>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_official_chats(arg0);
+        return from_candid_variant_n75(result);
+    }
+    async read_account_list_public_competitions(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_public_competitions();
+        return from_candid_variant_n71(result);
+    }
+    async read_account_read_token_club(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_read_token_club(arg0);
+        return from_candid_variant_n77(result);
     }
     async read_competition_club(arg0: string): Promise<{
         __kind__: "Ok";

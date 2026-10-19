@@ -220,6 +220,74 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_account_get_child_points: (club_id: text, child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: int32;
+     });
+   read_account_get_child_points_all_clubs: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 int32;
+               };
+     });
+   read_account_get_child_points_batch: (club_id: text, child_ids:
+    vec text) -> (variant {
+                    Err: text;
+                    Ok: vec record {
+                              text;
+                              int32;
+                            };
+                  });
+   read_account_get_club_points_settings: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt ClubPointsSettings;
+     });
+   read_account_get_engagement_streak: (club_id: text, user_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   read_account_get_leaderboard: (club_id: text, subjectKind:
+    variant {
+      Child;
+      User;
+    }, window: text, top_n: nat) ->
+    (variant {
+       Err: text;
+       Ok: vec LeaderboardEntry;
+     });
+   read_account_get_user_points: (club_id: text, user_id: text) ->
+    (variant {
+       Err: text;
+       Ok: int32;
+     });
+   read_account_get_user_points_all_clubs: (user_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 int32;
+               };
+     });
+   read_account_list_points_history: (club_id: text, subject: opt Subject,
+    offset: nat, limit: nat) -> (variant {
+                                   Err: text;
+                                   Ok: HistoryPage;
+                                 });
+   read_account_list_redemptions: (club_id: text, subject: opt Subject) ->
+    (variant {
+       Err: text;
+       Ok: vec RewardRedemption;
+     });
+   read_account_list_rewards: (club_id: text, team_id: opt text, active_only:
+    bool) -> (variant {
+                Err: text;
+                Ok: vec ClubReward;
+              });
    redeem_reward: (club_id: text, subject: Subject, reward_id: text,
     idempotency_key: opt text) -> (variant {
                                      Err: text;

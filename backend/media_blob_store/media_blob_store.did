@@ -156,7 +156,7 @@ service : {
       memory_bytes: nat;
       stable_bytes: nat;
     }) query;
-  merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+  merge_principal: (old: principal, new: principal, dry_run: bool) ->
    (variant {
       err: text;
       ok: nat;
@@ -180,6 +180,11 @@ service : {
       rows: vec FreeUsageRow;
       total: nat;
     });
+  read_account_get_upload_outcome: (upload_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt FinalizedBlob;
+    });
   reconcile_upload_operations: (cursor: text) ->
    (variant {
       Err: text;
@@ -188,7 +193,7 @@ service : {
             cursor: text;
           };
     });
-  rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+  rekey_principal: (old: principal, new: principal, dry_run: bool) ->
    (variant {
       err: text;
       ok: nat;

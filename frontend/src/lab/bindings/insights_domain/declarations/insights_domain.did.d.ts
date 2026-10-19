@@ -321,6 +321,134 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_account_ad_event_summary' : ActorMethod<
+    [bigint],
+    { 'Ok' : Array<AdEventSummary> } |
+      { 'Err' : string }
+  >,
+  'read_account_client_perf_aggregate' : ActorMethod<
+    [string, [] | [string], bigint, bigint],
+    { 'Ok' : ClientPerfAggregate } |
+      { 'Err' : string }
+  >,
+  'read_account_club_engagement_active_users' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : Array<EngagementDayPoint> } |
+      { 'Err' : string }
+  >,
+  'read_account_club_engagement_benchmarks' : ActorMethod<
+    [string, bigint, bigint, bigint, bigint],
+    { 'Ok' : EngagementBenchmarks } |
+      { 'Err' : string }
+  >,
+  'read_account_club_engagement_message_volume' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : Array<EngagementDayPoint> } |
+      { 'Err' : string }
+  >,
+  'read_account_club_engagement_rsvp_completion_series' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : Array<EngagementDayPoint> } |
+      { 'Err' : string }
+  >,
+  'read_account_club_engagement_sponsor_performance' : ActorMethod<
+    [string, bigint, bigint],
+    {
+        'Ok' : {
+          'clicks' : Array<EngagementDayPoint>,
+          'impressions' : Array<EngagementDayPoint>,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'read_account_club_engagement_total_unique_reach' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'read_account_club_engagement_totals' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : EngagementTotals } |
+      { 'Err' : string }
+  >,
+  'read_account_count_photos' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'read_account_get_benchmarks' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Benchmark> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_sponsor_benchmarks' : ActorMethod<
+    [Array<string>, string, string],
+    { 'Ok' : Array<SponsorBenchmarkRow> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_sponsor_performance' : ActorMethod<
+    [string, string],
+    { 'Ok' : SponsorPerformance } |
+      { 'Err' : string }
+  >,
+  'read_account_is_app_admin' : ActorMethod<[], boolean>,
+  'read_account_list_ad_settings' : ActorMethod<
+    [],
+    { 'Ok' : Array<AppAdSetting> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_admin_alerts' : ActorMethod<
+    [[] | [AlertStatus]],
+    { 'Ok' : Array<AdminAlert> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_ads' : ActorMethod<
+    [],
+    { 'Ok' : Array<AppAd> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_app_admins' : ActorMethod<
+    [],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_audit_logs' : ActorMethod<
+    [[] | [Principal], [] | [string], [] | [string], number, number],
+    { 'Ok' : { 'total' : number, 'items' : Array<AuditLog> } } |
+      { 'Err' : string }
+  >,
+  'read_account_list_feedback' : ActorMethod<
+    [[] | [FeedbackStatus], number, number],
+    { 'Ok' : { 'total' : number, 'items' : Array<Feedback> } } |
+      { 'Err' : string }
+  >,
+  'read_account_list_memory_reports' : ActorMethod<
+    [bigint],
+    Array<
+      {
+        'at' : bigint,
+        'analysis_json' : string,
+        'source' : string,
+        'readings_json' : string,
+      }
+    >
+  >,
+  'read_account_list_user_activity' : ActorMethod<
+    [[] | [string], bigint, bigint],
+    { 'Ok' : Array<UserActivityEntry> } |
+      { 'Err' : string }
+  >,
+  'read_account_my_feedback' : ActorMethod<[], Array<Feedback>>,
+  'read_account_perf_aggregate' : ActorMethod<
+    [string, [] | [string], bigint, bigint],
+    { 'Ok' : PerfAggregate } |
+      { 'Err' : string }
+  >,
+  'read_account_photo_engagement_totals' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<PhotoEngagementTotal> } |
+      { 'Err' : string }
+  >,
   'record_active_user' : ActorMethod<
     [string, string],
     { 'Ok' : null } |

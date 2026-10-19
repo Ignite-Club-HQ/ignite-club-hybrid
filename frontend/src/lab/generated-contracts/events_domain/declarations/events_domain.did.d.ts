@@ -893,6 +893,304 @@ export interface Main {
       { 'Err' : string }
   >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  'read_account_check_event_membership' : ActorMethod<
+    [string, string],
+    boolean
+  >,
+  'read_account_child_is_in_event_audience' : ActorMethod<
+    [string, string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'read_account_event_roster' : ActorMethod<
+    [string],
+    { 'Ok' : EventRoster } |
+      { 'Err' : string }
+  >,
+  'read_account_execute' : ActorMethod<[string], Result>,
+  'read_account_get_active_game' : ActorMethod<
+    [[] | [string]],
+    { 'Ok' : [] | [ActiveGame] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_attendance' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventAttendance> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_coach_note' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [CoachNote] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_event_auto_reminder' : ActorMethod<
+    [string],
+    [] | [{ 'hours_before' : number, 'sent' : boolean }]
+  >,
+  'read_account_get_event_child' : ActorMethod<
+    [string, string],
+    { 'Ok' : Child } |
+      { 'Err' : string }
+  >,
+  'read_account_get_event_duty_team' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [EventDutyTeam] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_event_group' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [EventGroup] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_event_roster' : ActorMethod<
+    [string],
+    { 'Ok' : Array<RosterEntry> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_event_rosters' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<RosterEntry> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_event_sponsors' : ActorMethod<
+    [string],
+    { 'Ok' : Array<string> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_event_timer' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [EventTimer] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_event_view_count' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'read_account_get_game_result' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [GameResult] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_game_summary' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [GameSummary] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_group_edit_access' : ActorMethod<
+    [string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'read_account_get_lineup_snapshot' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : [] | [LineupSnapshot] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_pitch_board_settings' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [PitchBoardSettings] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_player_stats_report' : ActorMethod<
+    [string, [] | [string], bigint, bigint],
+    { 'Ok' : Array<PlayerStatRow> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_playhq_config_status' : ActorMethod<
+    [],
+    {
+        'Ok' : {
+          'base_url' : [] | [string],
+          'updated_at_ms' : [] | [bigint],
+          'configured' : boolean,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'read_account_get_playhq_team_sync' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [PlayHQTeamSync] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_push_reachable' : ActorMethod<
+    [Principal],
+    { 'Ok' : [] | [boolean] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_reminder_log' : ActorMethod<
+    [string],
+    { 'Ok' : { 'sent_at_ms' : [] | [bigint], 'recipients_count' : number } } |
+      { 'Err' : string }
+  >,
+  'read_account_get_rsvp_created_at' : ActorMethod<
+    [string, string],
+    [] | [bigint]
+  >,
+  'read_account_get_training_default' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_account_is_guardian_of' : ActorMethod<[Principal, string], boolean>,
+  'read_account_is_paused' : ActorMethod<
+    [string, string, bigint],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'read_account_is_reachable' : ActorMethod<
+    [string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'read_account_is_team_member' : ActorMethod<
+    [Principal, string, string],
+    boolean
+  >,
+  'read_account_list_association_events' : ActorMethod<
+    [string],
+    { 'Ok' : Array<AssociationEvent> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_child_team_assignments' : ActorMethod<
+    [string, string],
+    { 'Ok' : Array<ChildTeamAssignment> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_duties' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Duty> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_duties_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Duty> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_event_duty_teams' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<EventDutyTeam> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_event_groups' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventGroup> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_event_views' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventView> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_events' : ActorMethod<
+    [[] | [string], [] | [string]],
+    Array<Event>
+  >,
+  'read_account_list_events_for_duty_teams' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Event> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_events_multi' : ActorMethod<
+    [Array<string>, Array<string>],
+    { 'Ok' : Array<Event> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_favourite_event_titles' : ActorMethod<[], Array<string>>,
+  'read_account_list_game_player_stats' : ActorMethod<
+    [string],
+    { 'Ok' : Array<GamePlayerStat> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_group_duties' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventGroupDuty> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_group_players' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventGroupPlayer> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_match_captains' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MatchCaptainAssignment> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_match_goalkeepers' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MatchGoalkeeperAssignment> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_mini_league_rsvps' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueRsvp> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_my_viewed_event_ids' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<string> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_open_duties' : ActorMethod<
+    [string],
+    { 'Ok' : Array<OpenDuty> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_reminders' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ReminderLog> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_saved_locations' : ActorMethod<[], Array<SavedLocation>>,
+  'read_account_list_series' : ActorMethod<
+    [[] | [string], [] | [string]],
+    Array<EventSeries>
+  >,
+  'read_account_list_series_occurrences' : ActorMethod<
+    [string],
+    {
+        'Ok' : Array<
+          {
+            'id' : string,
+            'deleted' : boolean,
+            'starts_at_ms' : bigint,
+            'ends_at_ms' : bigint,
+          }
+        >
+      } |
+      { 'Err' : string }
+  >,
+  'read_account_list_team_training_pauses' : ActorMethod<
+    [string, string],
+    { 'Ok' : Array<TeamTrainingPause> } |
+      { 'Err' : string }
+  >,
+  'read_account_my_attendance' : ActorMethod<
+    [[] | [string]],
+    Array<EventAttendance>
+  >,
+  'read_account_my_child_rsvps' : ActorMethod<
+    [[] | [string], [] | [string]],
+    Array<RsvpWithChild>
+  >,
+  'read_account_my_child_team_assignments' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ChildTeamAssignment> } |
+      { 'Err' : string }
+  >,
+  'read_account_my_children' : ActorMethod<[], Array<Child>>,
+  'read_account_my_rsvps' : ActorMethod<[], Array<Rsvp>>,
+  'read_account_read_event_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_account_read_event_group_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   /**
    * / Location-only lookup for group routing: which club owns this event, if
    * / it lives in this canister. Viewers only; returns null when not held here.
