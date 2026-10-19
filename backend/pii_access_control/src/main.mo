@@ -197,6 +197,7 @@ persistent actor class Main(governorInit : Principal) {
   var clubMediaAuthorities : Map.Map<Text, ClubMediaAuthority>;
   var mediaAuthEpoch : Nat;
   var establishedVetkdKeyName : ?Text;
+  var privateMediaAuthorities : Map.Map<Text, { competition : ?Principal; revision : Nat; move_id : Text }>;
   // A legacy upgrade captures its existing environment key, so the operator
   // must attest it matches the original deployment BEFORE that first upgrade.
   // All subsequent upgrades ignore environment changes and preserve the key.
@@ -241,7 +242,9 @@ persistent actor class Main(governorInit : Principal) {
     let rootG = club_read_grants.filter(func(x) = x.club_id == c);
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
     mediaAuthEpoch += 1;
-    club_read_grants := club_read_grants.filter(func(x) = not (x.club_id == c));
+    // Existing private files still derive at this ORIGINAL key authority.
+    // Keep their grant, but evaluate staff at the destination authority.
+    club_read_grants := club_read_grants.filter(func(x) = x.club_id != c or (x.field_id == "blob" and mediaAuthority(c).authority != null));
   };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
@@ -347,21 +350,22 @@ persistent actor class Main(governorInit : Principal) {
   // authorized clubs, so a misconfigured deployment denies rather than
   // leaks.
   func clubsWhereStaff(caller : Principal, clubIds : [Text]) : async [Text] {
-    switch (club_domain_canister) {
-      case null { [] };
+    var ok : [Text] = [];
+    for (club_id in clubIds.values()) {
+      let authority = mediaAuthority(club_id).authority ?? club_domain_canister;
+      switch (authority) {
+      case null {};
       case (?cid) {
         let clubDomain : actor { read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
-        var ok : [Text] = [];
-        for (club_id in clubIds.values()) {
           try {
             if (not isFenced(club_id) and (await (with timeout = 10) clubDomain.read_has_club_staff_role(caller, club_id))) {
               ok := ok.concat([club_id]);
             };
           } catch (_) {};
-        };
-        ok
       };
-    }
+      };
+    };
+    ok
   };
 
   func canReadViaClub(r : PiiRecord, allowedClubs : [Text]) : Bool {
@@ -383,14 +387,26 @@ persistent actor class Main(governorInit : Principal) {
   func resolveAllowedCompetitions(caller : Principal, pii_ids : [Text], field_id : Text) : async [Text] {
     let competitionIds = competitionIdsForRecords(pii_ids, field_id);
     if (competitionIds.size() == 0 or competitionIds.size() > 25) return [];
-    switch (competition_domain_canister) {
-      case null { [] };
+    var allowed : [Text] = [];
+    for (competitionId in competitionIds.values()) {
+      // Path selects the authority ONLY for an already verified competition
+      // grant; it never creates an entitlement from a browser path.
+      let grant = competition_read_grants.find(func(g) = g.competition_id == competitionId and g.field_id == field_id and pii_ids.any(func(id) = id == g.pii_id));
+      let authority = switch (grant) {
+        case null competition_domain_canister;
+        case (?g) {
+          let parts = Text.split(g.pii_id, #char '/').toArray();
+          if (parts.size() >= 4 and parts[0] == "clubs" and parts[2] == "competitions" and parts[3] == competitionId) {
+            switch (privateMediaAuthorities.get(parts[1])) { case (?a) { a.competition ?? competition_domain_canister }; case null competition_domain_canister }
+          } else competition_domain_canister
+        };
+      };
+      switch (authority) {
+      case null {};
       case (?canister) {
         let competitionDomain : actor {
           get_vault_access : shared (Text, Principal) -> async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text };
         } = actor (Principal.toText(canister));
-        var allowed : [Text] = [];
-        for (competitionId in competitionIds.values()) {
           let result = try {
             await competitionDomain.get_vault_access(competitionId, caller)
           } catch (_) {
@@ -402,10 +418,10 @@ persistent actor class Main(governorInit : Principal) {
             };
             case (#Err(_)) {};
           };
-        };
-        allowed
       };
-    }
+      };
+    };
+    allowed
   };
 
   func canReadViaCompetition(r : PiiRecord, allowedCompetitions : [Text]) : Bool {
@@ -537,6 +553,19 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not validMediaClub(club)) return #Err("Invalid club");
     #Ok(mediaAuthority(club))
+  };
+  public shared ({ caller }) func read_private_media_authority(club : Text) : async { #Ok : { competition : ?Principal; revision : Nat; move_id : Text }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(privateMediaAuthorities.get(club) ?? ({ competition = null; revision = 0; move_id = "" }))
+  };
+  public shared ({ caller }) func set_private_media_authority(club : Text, competition : ?Principal, move_id : Text, expected : Nat) : async { #Ok : { competition : ?Principal; revision : Nat; move_id : Text }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not validMediaClub(club) or not isFenced(club) or move_id == "" or move_id.size() > 128) return #Err("Fenced valid private-media binding required");
+    switch (competition) { case (?p) { if (p.equal(Principal.anonymous())) return #Err("Invalid competition authority") }; case null {} };
+    let previous = privateMediaAuthorities.get(club) ?? ({ competition = null; revision = 0; move_id = "" });
+    if (previous.revision != expected) return #Err("Private media authority revision changed");
+    let next = { competition; move_id; revision = previous.revision + 1 };
+    privateMediaAuthorities.add(club, next); mediaAuthEpoch += 1; #Ok(next)
   };
   // Only changes authorization. The original canister continues deriving
   // the original IBE identity; no key, ciphertext or PII grants are copied.
