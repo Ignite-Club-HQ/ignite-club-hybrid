@@ -58,3 +58,4 @@
 - Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
 
 - Provisioning persists mutation intents, individual install acknowledgements and closed/placement revision receipts through durable checkpoints; unresolved intents need exact reconciliation, not phase resets. Why: lost replies cannot duplicate canisters, repeat installs or open incomplete groups.
+- Definite directory refusals preserve checked provisioning for revision-checked retries; transport loss retains unresolved intent. Combined scaling rehearsal uses the same real club/media/chat/queue instances across revocation and upgrades; it does not authorize production activation. Why: refusal differs from unknown commit, and isolated fixtures cannot prove service interaction.

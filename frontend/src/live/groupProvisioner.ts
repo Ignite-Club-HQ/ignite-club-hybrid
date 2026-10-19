@@ -18,6 +18,8 @@ export type Provision = {
   registration?: { closedRevision: bigint; placementRevision?: bigint };
 };
 export type ProvisionCheckpoint = (p: Provision) => Promise<void>;
+/** A directory returned a definite refusal: no mutation committed. */
+export class ProvisionRefusedError extends Error {}
 export type ProvisionAdapter = {
   createCanister(p: Provision, domain: GroupDomain): Promise<{ canisterId: string; subnetId: string }>;
   install(p: Provision, domain: GroupDomain, canisterId: string): Promise<void>;
@@ -100,6 +102,10 @@ export async function runProvision(start: Provision, a: ProvisionAdapter): Promi
     return p;
   } catch (e) {
     if (savingFailed) throw e; // never overwrite a durable unresolved intent after disk failure
+    if (e instanceof ProvisionRefusedError && p.phase === 'checked' && !p.pending) {
+      await checkpoint({ ...p, error: e.message });
+      throw e; // retry the checked record, still subject to registry revision CAS
+    }
     // Pre-registration failures stay unregistered; created canisters are kept for operator review.
     if (p.phase === 'registered' || p.registration) throw e; // keep acknowledged closed registration resumable
     await checkpoint({ ...p, phase: 'failed', error: e instanceof Error ? e.message : String(e) });
