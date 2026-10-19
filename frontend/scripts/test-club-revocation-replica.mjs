@@ -51,11 +51,17 @@ try {
   assert.equal(await a.club.actor.read_has_club_membership(retained, a.id), true);
   await a.read(retained); const kept = await a.start(retained, 'retained'); ok(await a.blob.actor.finalize_upload(kept));
   await b.read(removed); const other = await b.start(removed, 'other-club'); ok(await b.blob.actor.finalize_upload(other));
+  // An unavailable club authority denies fresh access, not a shared fallback.
+  await pic.stopCanister({ canisterId: a.club.canisterId, sender: governor });
+  await deny(() => a.read(retained)); await deny(() => a.start(retained, 'authority-outage'));
+  await b.read(removed);
+  await pic.startCanister({ canisterId: a.club.canisterId, sender: governor });
+  await a.read(retained);
   // Clearing the roster marker does not silently restore previously revoked roles.
   a.club.actor.setPrincipal(governor); ok(await a.club.actor.restore_member(a.id, removed));
   await deny(() => a.read(removed)); await deny(() => a.start(removed, 'marker-cleared'));
   // Upgrade persistence without snapshot rollback: cached keys are not revoked.
   await pic.upgradeCanister({ canisterId: a.club.canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] }, arg: IDL.encode([IDL.Principal], [governor]) });
   await deny(() => a.read(removed)); await a.read(retained); await b.read(removed);
-  console.log('PASS: actual two-group photo decrypt, club-only key/chunk/finalize/new-upload denial, pending upload interruption, original-human delegated denial, retained members, other-club uploads, marker restore and upgrade persistence. No live services or global account flags.');
+  console.log('PASS: actual two-group photo decrypt, club-only key/chunk/finalize/new-upload denial, pending upload interruption, original-human delegated denial, retained members, other-club uploads, authority outage, marker restore and upgrade persistence. No live services or global account flags.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }

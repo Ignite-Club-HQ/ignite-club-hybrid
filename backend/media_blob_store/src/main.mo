@@ -258,6 +258,7 @@ persistent actor MediaBlobStore {
     let ?authority = club_domain_canister else throw Error.reject("Club upload authority unavailable");
     let service : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(authority.toText());
     let member = try { await (with timeout = 10) service.read_has_club_membership(user, club) } catch (_) { false };
+    if (removalReceiver.denied(user) or mediaFenced(path)) throw Error.reject("Upload authorization fenced");
     if (club_domain_canister != ?authority or not member) throw Error.reject("Club membership required for upload");
   };
 
