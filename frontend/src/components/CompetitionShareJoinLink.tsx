@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useEffect, useRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Share2, Copy, Download, RefreshCw, Loader2 } from "lucide-react";
@@ -62,7 +63,7 @@ export function CompetitionShareJoinLink({
             const created = await createLiveCompetitionJoinLink(ctx, competitionId, "player", null);
             return created.token;
           },
-        });
+        }, writeOnce({ competitionId }));
         setToken(tok);
       } catch (err: any) {
         toast({ title: "Could not load link", description: err.message, variant: "destructive" });
@@ -133,7 +134,7 @@ export function CompetitionShareJoinLink({
           const rotated = await rotateLiveCompetitionJoinLink(ctx, competitionId);
           return rotated.token;
         },
-      });
+      }, writeOnce({ competitionId }));
       setToken(newToken);
       toast({ title: "New link generated" });
     } catch (err: any) {

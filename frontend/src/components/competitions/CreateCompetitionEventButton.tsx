@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { CalendarPlus, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -90,7 +91,7 @@ export function CreateCompetitionEventButton({
             endsAtMs: endsAt,
           });
         },
-      });
+      }, writeOnce({ competitionId }));
 
       toast({
         title: "Event created",
