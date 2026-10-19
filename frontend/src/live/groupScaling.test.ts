@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { placeNewClub, groupHealth, provisioningAlerts, GIB, type GroupCapacity, type PlacementPolicy } from './groupPlacement';
 import { planTransfer, fence, recordCopy, verify, cutover, release, abort, servingGroup, TRANSFER_DOMAINS } from './groupTransfer';
 import { groupWriteFeatures, NOTIFY_CHUNK } from './groupWriteFeatures';
+import { Principal } from '@icp-sdk/core/principal';
 
 const g = (groupId: string, o: Partial<GroupCapacity> = {}): GroupCapacity => ({ groupId, deploymentId: 'ic', subnetId: 's1', enabled: true, clubs: 10, maxDomainBytes: GIB, dailyGrowthBytes: 0, ...o });
 const policy: PlacementPolicy = { deploymentId: 'ic', primarySubnet: 's1', additionalSubnetsEnabled: false, approvedSubnets: ['s1', 's2'] };
@@ -57,11 +58,15 @@ describe('fenced club transfer', () => {
 describe('routed notifications', () => {
   it('chunks recipients with deterministic keys in the club group and reports queued counts', async () => {
     const calls: string[] = [];
-    const session = { writeClub: vi.fn(async (club: string, domain: string, key: string) => { calls.push(`${club}|${domain}|${key}`); return []; }) };
-    const ids = Array.from({ length: NOTIFY_CHUNK * 2 + 5 }, (_, i) => `u${i % (NOTIFY_CHUNK * 2 + 5)}`);
-    const r = await groupWriteFeatures(session as never).notifyClub('club-a', { userIds: [...ids, 'u0'], kind: 'k', body: 'b', keyPrefix: 'rem-1' });
+    const session = { writeClub: vi.fn(async (club: string, domain: string, key: string) => { calls.push(`${club}|${domain}|${key}`); return calls.length === 3 ? 5 : NOTIFY_CHUNK; }) };
+    const ids = Array.from({ length: NOTIFY_CHUNK * 2 + 5 }, (_, i) => Principal.fromUint8Array(new Uint8Array([i >> 8, i & 255, 1])).toText());
+    const r = await groupWriteFeatures(session as never).notifyClub('club-a', { userIds: [...ids, ` principal:${ids[0]} `, ' '], kind: 'k', body: 'b', keyPrefix: 'rem-1' });
     expect(r.queued).toBe(NOTIFY_CHUNK * 2 + 5);
     expect(calls).toEqual(['club-a|notification_queue|rem-1.0', 'club-a|notification_queue|rem-1.1', 'club-a|notification_queue|rem-1.2']);
-    await expect(groupWriteFeatures(session as never).notifyClub('club-a', { userIds: ['u'], kind: 'k', body: 'b', keyPrefix: '' })).rejects.toThrow('prefix');
+    await expect(groupWriteFeatures(session as never).notifyClub('club-a', { userIds: [ids[0]], kind: 'k', body: 'b', keyPrefix: '' })).rejects.toThrow('prefix');
+  });
+  it('reports only newly acknowledged queued rows, not attempted or duplicate recipients', async () => {
+    const session = { writeClub: vi.fn().mockResolvedValue(0) };
+    expect(await groupWriteFeatures(session as never).notifyClub('a', { userIds: ['aaaaa-aa'], kind: 'k', body: 'b', keyPrefix: 'retry' })).toEqual({ queued: 0 });
   });
 });

@@ -470,14 +470,23 @@ persistent actor class Main(governorInit : Principal) {
   // enqueuing a notification they opted out of. Recipients without a stored
   // preference row are fail-open (treated as allowed), matching the safe
   // defaults returned by get_preferences.
-  public shared ({ caller }) func fan_out(users : [Text], club : Text, kind : Text, body : Text, key_prefix : Text, related_id : ?Text) : async Types.ResultNat16 {
+  public shared ({ caller }) func fan_out(inputUsers : [Text], club : Text, kind : Text, body : Text, key_prefix : Text, related_id : ?Text) : async Types.ResultNat16 {
     let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
     if (not trustedService) await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
-    if (users.size() == 0 or users.size() > 500) { return #Err("Invalid recipient count") };
+    if (inputUsers.size() == 0 or inputUsers.size() > 500) { return #Err("Invalid recipient count") };
     if (not valid(club) or not valid(kind) or not valid(key_prefix)) { return #Err("Invalid fan-out fields") };
-    if (users.any(func(u) = not valid(u))) { return #Err("Invalid recipient") };
+    var users : [Text] = [];
+    for (raw in inputUsers.values()) {
+      let trimmed = Text.trim(raw, #predicate(func(c) = c == ' ' or c == '\n' or c == '\r' or c == '\t'));
+      let text = switch (Text.stripStart(trimmed, #text "principal:")) { case (?bare) bare; case null trimmed };
+      let parsed = try { await async { ?Principal.fromText(text) } } catch (_) { null };
+      let ?principal = parsed else return #Err("Invalid recipient");
+      if (Principal.isAnonymous(principal)) return #Err("Invalid recipient");
+      let user = principal.toText();
+      if (not users.any(func(u) = u == user)) users := users.concat([user]);
+    };
     if (UpdateReminderAccess.protectedKind(kind)) {
       switch (await authorizeUpdateReminder(caller, users, club)) {
         case (#Err(e)) { return #Err(e) };
@@ -637,7 +646,7 @@ persistent actor class Main(governorInit : Principal) {
     worker(caller);
     if (limit == 0 or limit > 100) return #Err("Invalid batch size");
     var candidates : [Types.Notification] = [];
-    if (accountAdmissionEnabled) {
+    do {
       // Advance even if admission denies every candidate; otherwise a denied
       // prefix can permanently starve an eligible notification behind it.
       let count = items.size();
@@ -649,10 +658,6 @@ persistent actor class Main(governorInit : Principal) {
         scanned += 1;
       };
       if (count > 0) rehearsalClaimCursor := (rehearsalClaimCursor + scanned) % count;
-    } else {
-      for (item in items.values()) {
-        if (candidates.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) candidates := candidates.concat([item]);
-      };
     };
     let allowed = await eligibleUsers(candidates.map(func(n) = n.user));
     worker(caller); // worker may have been revoked during admission
@@ -690,6 +695,40 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // Fresh private-delivery permission, separate from claim and shared devices.
+  // False is a definitive denial; Err is unavailable/changed evidence (retry).
+  public shared ({ caller }) func authorize_delivery(id : Text, key : Text) : async { #Ok : Bool; #Err : Text } {
+    worker(caller);
+    let captured = switch (get(id)) { case null return #Err("Unknown notification"); case (?n) n };
+    if (captured.status != #Processing or captured.idempotency_key != key or not ownsLease(id, caller)) return #Err("Notification lease required");
+    if (isFenced(captured.club)) return #Err("Notification scope locked");
+    let subject = try { await async { ?Principal.fromText(captured.user) } } catch (_) { null };
+    let ?user = subject else return #Err("Recipient identity unresolved");
+    if (Principal.isAnonymous(user)) return #Ok(false);
+    let cd = clubDomainCanister;
+    let md = messagingDomainCanister;
+    let allowed = try {
+      if (captured.kind == "message_chat") {
+        let ?authority = md else return #Err("Messaging authority unavailable");
+        let messaging : actor { read_account_can_read_digest : shared (Principal, Text) -> async Bool } = actor(authority.toText());
+        await (with timeout = 10) messaging.read_account_can_read_digest(user, captured.club)
+      } else if (captured.club == "" or captured.club == "global" or captured.club == "app" or captured.kind == "club_invite" or captured.kind == "team_invite" or captured.kind == "membership_removed" or captured.kind == "role_removed") {
+        true // App/personal and access-change notices do not grant club access.
+      } else {
+        let ?authority = cd else return #Err("Club authority unavailable");
+        let clubs : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(authority.toText());
+        await (with timeout = 10) clubs.read_has_club_membership(user, captured.club)
+      }
+    } catch (_) { return #Err("Delivery authority unavailable") };
+    worker(caller);
+    if (cd != clubDomainCanister or md != messagingDomainCanister or isFenced(captured.club)) return #Err("Delivery authority changed");
+    switch (get(id)) {
+      case (?fresh) { if (fresh != captured or not ownsLease(id, caller)) return #Err("Notification changed") };
+      case null return #Err("Notification removed")
+    };
+    #Ok(allowed and recipientAllowed(captured.user, captured.kind))
+  };
+
   public shared ({ caller }) func fail(id : Text, error : Text, retry_at_ms : ?Nat64) : async Types.Result {
     worker(caller);
     switch (findIndex(id)) {
@@ -700,7 +739,7 @@ persistent actor class Main(governorInit : Principal) {
         if (not ownsLease(id, caller)) { return #Err("Notification lease owner required") };
         let failed : Types.Notification = {
           item with
-          body = error;
+          // Preserve the original notification on retry; errors are worker logs.
           status = switch (retry_at_ms) { case (?_) { #Pending }; case null { #Failed } };
           next_attempt_ms = switch (retry_at_ms) { case (?time) { time }; case null { item.next_attempt_ms } };
         };
