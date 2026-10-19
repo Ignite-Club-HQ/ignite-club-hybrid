@@ -24,6 +24,8 @@ import QuotaOperation "quotaOperation";
 import StableBytes "stableBytes";
 import RetentionPage "retentionPage";
 import MediaInventory "mediaInventory";
+import RetainedProtocol "retainedProtocol";
+import RetainedQuota "../../club_domain/src/mediaRetainedQuota";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -155,6 +157,26 @@ persistent actor MediaBlobStore {
   var legacy_retention_cursor : Nat;
   var media_inventory_revision : Nat;
   var media_transfer_fences : Map.Map<Text, Nat>;
+  var retained_mode : { #local; #frozen; #active };
+  var retained_snapshot_revision : Nat;
+  var retained_revisions : Map.Map<Text, Nat>;
+  var retained_deletions : Map.Map<Text, RetainedProtocol.Deletion>;
+  transient let retainedRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL") == ?"1";
+  func retainedBlocked() : Bool { retained_mode == #frozen or (retained_mode == #active and not retainedRehearsal) };
+  func pathMutationPending(path : Text) : Bool {
+    if (retained_deletions.get(path) != null) return true;
+    for ((_, op) in quota_operations.entries()) { if (op.path == path and op.status != #committed and op.status != #aborted) return true };
+    false
+  };
+  type RetainedService = actor {
+    read_media_retained_ready : shared () -> async Bool;
+    reserve_retained_media : shared (Text, Text, Nat) -> async RetainedQuota.Result;
+    commit_retained_media : shared Text -> async RetainedQuota.Result;
+    cancel_retained_media : shared (Text, Text, Text, Nat) -> async RetainedQuota.Result;
+    credit_deleted_retained_media : shared (Text, RetainedQuota.Object) -> async RetainedQuota.Result;
+  };
+  func retainedService() : ?RetainedService { switch (club_domain_canister) { case (?id) ?(actor(id.toText()) : RetainedService); case null null } };
+
 
   func bumpInventory() { media_inventory_revision += 1 };
   func mediaFenced(path : Text) : Bool {
@@ -250,6 +272,95 @@ persistent actor MediaBlobStore {
     switch (club_domain_canister) { case (?id) { ?(actor(id.toText()) : QuotaService) }; case null null }
   };
 
+  // Freeze the entire store, not a filtered club inventory. Snapshot pages
+  // are direct consensus reads; no operator-supplied byte totals are accepted.
+  public shared ({ caller }) func freeze_retained_media() : async Result {
+    if (not isGovernor<system>(caller) or not retainedRehearsal) return #Err("Local retained rehearsal governor required");
+    if (retained_mode == #frozen) return #Ok;
+    if (retained_mode != #local or quota_mode != #frozen or pending_uploads.size() != 0 or retained_deletions.size() != 0) return #Err("Freeze monthly quota and drain mutations first");
+    for ((_, op) in quota_operations.entries()) { if (op.status != #committed and op.status != #aborted) return #Err("Unsettled upload journal") };
+    retained_mode := #frozen; retained_snapshot_revision := media_inventory_revision; #Ok
+  };
+  public shared ({ caller }) func retained_snapshot_page(cursor : RetainedProtocol.Cursor) : async RetainedProtocol.Page {
+    if (?caller != club_domain_canister and not isGovernor<system>(caller)) Runtime.trap("Retained authority required");
+    if (retained_mode != #frozen or media_inventory_revision != retained_snapshot_revision) Runtime.trap("Frozen retained snapshot required");
+    if (cursor.after.size() > 512) Runtime.trap("Invalid cursor");
+    var rows : [RetainedProtocol.Row] = [];
+    var next : RetainedProtocol.Cursor = { phase = #done; offset = 0; after = "" };
+    func add(path : Text, bytes : Nat, hash : Text) {
+      rows := rows.concat([{ path; bytes; club = RetainedProtocol.club(path); content_hash = hash; revision = retained_revisions.get(path) ?? 0 }])
+    };
+    switch (cursor.phase) {
+      case (#legacy) {
+        if (cursor.after != "" or cursor.offset > blobs.size()) Runtime.trap("Invalid legacy cursor");
+        var offset = cursor.offset;
+        while (offset < blobs.size() and rows.size() < 200) { let row = blobs[offset]; add(row.path, row.bytes.size(), row.content_hash); offset += 1 };
+        next := if (offset < blobs.size()) { phase = #legacy; offset; after = "" } else { phase = #indexed; offset = 0; after = "" }
+      };
+      case (#indexed) {
+        if (cursor.offset != 0) Runtime.trap("Invalid indexed cursor");
+        var after = cursor.after;
+        for ((path, row) in stable_blobs.entriesFrom(cursor.after)) {
+          if (path == cursor.after and cursor.after != "") continue;
+          if (rows.size() >= 200) break;
+          add(path, row.slice.length, row.content_hash); after := path
+        };
+        if (rows.size() == 200) next := { phase = #indexed; offset = 0; after }
+      };
+      case (#done) Runtime.trap("Terminal cursor has no page")
+    };
+    { frozen = true; pending = pending_uploads.size() + retained_deletions.size(); authority = club_domain_canister; revision = retained_snapshot_revision; total = blobs.size() + stable_blobs.size(); total_bytes = total_bytes.toNat(); cursor; next; rows }
+  };
+  public shared ({ caller }) func enable_retained_media_quota() : async Result {
+    if (not isGovernor<system>(caller) or not retainedRehearsal) return #Err("Local retained rehearsal governor required");
+    if (retained_mode == #active) return #Ok;
+    if (retained_mode != #frozen or quota_mode != #sharedQuota) return #Err("Frozen baseline and shared monthly quota required");
+    let ?service = retainedService() else return #Err("Retained authority unset");
+    let authority = club_domain_canister;
+    try {
+      if (not (await (with timeout = 10) service.read_media_retained_ready())) return #Err("All-store retained baseline inactive");
+      if (club_domain_canister != authority or retained_mode != #frozen or media_inventory_revision != retained_snapshot_revision) return #Err("Snapshot changed");
+      retained_mode := #active; bumpInventory(); #Ok
+    } catch (_) { #Err("Retained authority unavailable") }
+  };
+  func creditDeletion(path : Text) : async Result {
+    let ?receipt = retained_deletions.get(path) else return #Ok;
+    if (not retainedRehearsal or retained_mode != #active) return #Err("Retained accounting unavailable");
+    let ?service = retainedService() else return #Err("Retained authority unset");
+    let authority = club_domain_canister;
+    try {
+      switch (await (with timeout = 10) service.credit_deleted_retained_media(receipt.token, { store = Principal.fromActor(MediaBlobStore); path; club = receipt.club; bytes = receipt.bytes; revision = receipt.revision })) {
+        case (#Err(message)) #Err(message);
+        case (#Ok(op)) {
+          if (op.state != #committed or authority != club_domain_canister or retained_deletions.get(path) != ?receipt) return #Err("Deletion receipt changed");
+          retained_deletions.remove(path); bumpInventory(); #Ok
+        }
+      }
+    } catch (_) { #Err("Deletion credit outcome unknown; retry same path") }
+  };
+  // Physical deletion + receipt are atomic. The path remains locked until
+  // exact-revision credit is acknowledged, including after an upgrade.
+  func deleteRetained(path : Text) : async Result {
+    if (retainedBlocked()) return #Err("Retained store frozen or unavailable");
+    if (retained_deletions.get(path) != null) return await creditDeletion(path);
+    if (retained_mode != #active or RetainedProtocol.club(path) == null) { removeStored(path); return #Ok };
+    if (pathMutationPending(path)) return #Err("Upload mutation pending; retry delete after settlement");
+    let ?record = metadata(path) else return #Err("Unknown blob");
+    let ?club = RetainedProtocol.club(path) else return #Err("Club path required");
+    if (retained_deletions.size() >= 100_000) return #Err("Deletion ledger full");
+    next_upload_seq += 1;
+    let receipt : RetainedProtocol.Deletion = { token = "delete-" # next_upload_seq.toText(); path; club; bytes = record.length; revision = retained_revisions.get(path) ?? 0; owner = record.owner };
+    retained_deletions.add(path, receipt); removeStored(path);
+    await creditDeletion(path)
+  };
+  public shared ({ caller }) func reconcile_retained_deletions(cursor : Text) : async { #Ok : { cursor : Text; attempted : Nat }; #Err : Text } {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    var paths : [Text] = [];
+    for ((path, _) in retained_deletions.entriesFrom(cursor)) { if (path == cursor and cursor != "") continue; if (paths.size() >= 20) break; paths := paths.concat([path]) };
+    for (path in paths.values()) { ignore await creditDeletion(path) };
+    #Ok({ cursor = if (paths.size() == 20) paths[19] else ""; attempted = paths.size() })
+  };
+
   // Upload ownership alone is not club authorization. Re-evaluate the
   // original human against the owning club before each upload mutation.
   func requireUploadMembership(user : Principal, path : Text) : async () {
@@ -291,7 +402,6 @@ persistent actor MediaBlobStore {
     { frozen = quota_mode == #frozen; pending = pending_uploads.size(); total = quota_snapshot.size(); offset; rows = Array.tabulate<FreeUsageRow>(count, func(i) = quota_snapshot[offset + i]) }
   };
   public shared ({ caller }) func enable_shared_media_quota() : async Result {
-    bumpInventory();
     if (not isGovernor<system>(caller)) return #Err("Governor required");
     if (quota_mode == #sharedQuota) return #Ok;
     if (quota_mode != #frozen) return #Err("Freeze and import this store first");
@@ -299,7 +409,7 @@ persistent actor MediaBlobStore {
     try {
       if (not (await service.media_quota_ready())) return #Err("All-store quota import not activated");
       quota_mode := #sharedQuota;
-      bumpInventory();
+      if (retained_mode != #frozen) bumpInventory();
       #Ok
     } catch (_) { #Err("Quota authority unavailable") }
   };
@@ -366,7 +476,17 @@ persistent actor MediaBlobStore {
     let ?service = quotaService() else return #Err("Quota authority unset; retry begin");
     try {
       if (removalReceiver.denied(upload.owner)) { ignore await abortShared(upload.id); return #Err("Account removal fenced") };
-      let result = await service.reserve_media_quota(upload.id, op.club_id, op.category, op.bytes, op.cycle);
+      let authority = club_domain_canister;
+      if (retained_mode == #active) {
+        if (not retainedRehearsal) return #Err("Retained accounting unavailable");
+        let ?retained = retainedService() else return #Err("Retained authority unset");
+        switch (await (with timeout = 10) retained.reserve_retained_media(upload.id, op.path, op.bytes)) {
+          case (#Ok(r)) { if (r.state != #reserved) return #Err("Retained reservation settled") };
+          case (#Err(message)) { ignore await abortShared(upload.id); return #Err(message) }
+        };
+        if (authority != club_domain_canister) return #Err("Retained authority changed")
+      };
+      let result : QuotaResult = if (op.category == "branding") #Ok({ store = Principal.fromActor(MediaBlobStore); token = upload.id; club_id = op.club_id; category = op.category; bytes = op.bytes; cycle = op.cycle; status = #reserved }) else await (with timeout = 10) service.reserve_media_quota(upload.id, op.club_id, op.category, op.bytes, op.cycle);
       if (removalReceiver.denied(upload.owner)) { ignore await abortShared(upload.id); return #Err("Account removal fenced") };
       try { await requireUploadMembership(upload.owner, upload.path) } catch (_) {
         ignore await abortShared(upload.id); return #Err("Club membership changed")
@@ -401,7 +521,16 @@ persistent actor MediaBlobStore {
     // unreachable authority must leave the ciphertext stored but unpublished.
     try { await requireUploadMembershipForCommit(op.owner, op.path) } catch (e) { return #Err(Error.message(e)) };
     try {
-      switch (await service.commit_media_quota(id)) {
+      if (retained_mode == #active) {
+        if (not retainedRehearsal) return #Err("Retained accounting unavailable");
+        let ?retained = retainedService() else return #Err("Retained authority unset");
+        switch (await (with timeout = 10) retained.commit_retained_media(id)) {
+          case (#Ok(r)) { if (r.state != #committed) return #Err("Retained commit unsettled") };
+          case (#Err(message)) return #Err(message)
+        }
+      };
+      let monthly : QuotaResult = if (op.category == "branding") #Ok({ store = Principal.fromActor(MediaBlobStore); token = id; club_id = op.club_id; category = op.category; bytes = op.bytes; cycle = op.cycle; status = #committed }) else await (with timeout = 10) service.commit_media_quota(id);
+      switch (monthly) {
         case (#Ok(r)) {
           bumpInventory();
           if (r.status != #committed) return #Err("Quota not committed");
@@ -427,7 +556,16 @@ persistent actor MediaBlobStore {
       return #Err("Quota authority unset; retry abort")
     };
     try {
-      switch (await service.cancel_media_quota(id, op.club_id, op.category, op.bytes, op.cycle)) {
+      if (retained_mode == #active) {
+        if (not retainedRehearsal) return #Err("Retained accounting unavailable");
+        let ?retained = retainedService() else return #Err("Retained authority unset");
+        switch (await (with timeout = 10) retained.cancel_retained_media(id, op.club_id, op.path, op.bytes)) {
+          case (#Ok(r)) { if (r.state != #released) return #Err("Retained release unsettled") };
+          case (#Err(message)) return #Err(message)
+        }
+      };
+      let monthly : QuotaResult = if (op.category == "branding") #Ok({ store = Principal.fromActor(MediaBlobStore); token = id; club_id = op.club_id; category = op.category; bytes = op.bytes; cycle = op.cycle; status = #released }) else await (with timeout = 10) service.cancel_media_quota(id, op.club_id, op.category, op.bytes, op.cycle);
+      switch (monthly) {
         case (#Ok(r)) {
           bumpInventory();
           if (r.status != #released) return #Err("Reservation not released");
@@ -665,6 +803,7 @@ persistent actor MediaBlobStore {
   public shared ({ caller }) func migrate_legacy_blob() : async { #Ok : { remaining : Nat; copied_bytes : Nat }; #Err : Text } {
     if (not isGovernor<system>(caller)) return #Err("Governor required");
     if (media_transfer_fences.size() != 0) return #Err("Club media transfer in progress");
+    if (retained_mode == #frozen) return #Err("Retained snapshot frozen");
     bumpInventory();
     if (pending_uploads.size() != 0) return #Err("Drain uploads before migration");
     if (blobs.size() == 0) return #Ok({ remaining = 0; copied_bytes = 0 });
@@ -685,6 +824,7 @@ persistent actor MediaBlobStore {
   };
   public shared ({ caller }) func enable_stable_media_storage() : async Result {
     if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (retained_mode == #frozen) return #Err("Retained snapshot frozen");
     if (blobs.size() != 0 or pending_uploads.size() != 0) return #Err("Migrate legacy files and drain uploads first");
     stable_writes := true;
     #Ok
@@ -715,8 +855,9 @@ persistent actor MediaBlobStore {
     await admitAccount(caller);
     auth(caller);
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
+    if (retainedBlocked()) return #Err("Retained store frozen or unavailable");
     if (quota_mode == #frozen) return #Err("Uploads temporarily frozen for quota cutover");
-    if (path == "" or path.size() > 1_024 or mime.size() > 256) return #Err("Invalid path or MIME");
+    if ((retained_mode != #local and not RetainedProtocol.validPath(path)) or path == "" or path.size() > 1_024 or mime.size() > 256) return #Err("Invalid path or MIME");
     if (total_size > UploadPolicy.maxWireBytes) return #Err("FileTooLarge");
     if (not UploadPolicy.validDeclaration(total_size, chunk_count.toNat())) return #Err("Invalid chunk declaration");
     if (quota_mode == #sharedQuota) {
@@ -760,6 +901,7 @@ persistent actor MediaBlobStore {
         case _ {};
       };
     };
+    if (retainedBlocked()) return #Err("Retained store frozen or unavailable");
     if (quota_mode == #frozen) return #Err("Uploads temporarily frozen for quota cutover");
     switch (metadata(path)) {
       case (?existing) {
@@ -775,6 +917,7 @@ persistent actor MediaBlobStore {
     if (pending_uploads.size() >= UploadPolicy.maxPending) return #Err("StoreFull");
     if (pending_uploads.filter(func(item) { item.owner.equal(caller) }).size() >= UploadPolicy.maxPendingPerOwner) return #Err("Too many pending uploads");
     if (pending_uploads.any(func(item) { item.path == path })) return #Err("Upload already in progress for path");
+    if (retained_mode == #active and pathMutationPending(path)) return #Err("Path mutation pending");
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
     bumpInventory();
     next_upload_seq += 1;
@@ -790,7 +933,8 @@ persistent actor MediaBlobStore {
     };
     pending_uploads := pending_uploads.concat([upload]);
     if (quota_mode == #sharedQuota) {
-      switch (categoryForPath(path), clubIdFromPath(path)) {
+      let uploadCategory = if (retained_mode == #active and clubIdFromPath(path) != null) ?(categoryForPath(path) ?? "branding") else categoryForPath(path);
+      switch (uploadCategory, clubIdFromPath(path)) {
         case (?category, ?club_id) {
           if (quota_operations.size() >= 100_000) { pending_uploads := pending_uploads.filter(func(u) = u.id != id); return #Err("Upload outcome ledger full; retire terminal outcomes") };
           let op : QuotaOperation.Operation = { owner = caller; path; club_id; category; bytes = total_size.toNat(); cycle = currentCycle(); created_at = Time.now(); status = #reserving; result = null };
@@ -886,6 +1030,7 @@ persistent actor MediaBlobStore {
           blobs := blobs.concat([record]);
         };
         total_bytes += Nat.toNat64(assembled.size());
+        if (retained_mode == #active and RetainedProtocol.club(upload.path) != null) retained_revisions.add(upload.path, (retained_revisions.get(upload.path) ?? 0) + 1);
         if (not stable_writes) blob_uploaded_at := blob_uploaded_at.concat([(upload.path, Time.now())]);
         switch (categoryForPath(upload.path), clubIdFromPath(upload.path)) {
           case (?category, ?clubId) { recordUsage(clubId, category, upload.total_size) };
@@ -958,7 +1103,7 @@ persistent actor MediaBlobStore {
   public shared ({ caller }) func set_club_domain_canister(canister_id : Principal) : async Result {
     auth(caller);
     if (not isGovernor<system>(caller)) return #Err("Governor required");
-    if (quota_mode != #local and club_domain_canister != ?canister_id) return #Err("Quota authority immutable after freeze");
+    if ((quota_mode != #local or retained_mode != #local) and club_domain_canister != ?canister_id) return #Err("Quota authority immutable after freeze");
     if (media_transfer_fences.size() != 0) return #Err("Club media transfer in progress");
     bumpInventory();
     club_domain_canister := ?canister_id;
@@ -1000,6 +1145,14 @@ persistent actor MediaBlobStore {
     await admitAccount(caller);
     auth(caller);
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
+    if (retainedBlocked()) return #Err("Retained store frozen or unavailable");
+    switch (retained_deletions.get(path)) {
+      case (?receipt) {
+        if (not receipt.owner.equal(caller) and not isGovernor<system>(caller) and not (await isClubStaffForPath(caller, path))) return #Err("Owner, club staff, or governor required");
+        return await creditDeletion(path)
+      };
+      case null {}
+    };
     switch (metadata(path)) {
       case null { #Err("Unknown blob") };
       case (?record) {
@@ -1011,8 +1164,7 @@ persistent actor MediaBlobStore {
         // Authorization may yield; never apply stale accounting to a replacement.
         switch (metadata(path)) { case (?current) { if (current.content_hash != record.content_hash or current.owner != record.owner) return #Err("Blob changed; retry delete") }; case null return #Ok };
         if (mediaFenced(path)) return #Err("Club media frozen for transfer");
-        removeStored(path);
-        #Ok
+        await deleteRetained(path)
       };
     }
   
@@ -1070,7 +1222,7 @@ persistent actor MediaBlobStore {
   // Sharding: the app reads this to skip full stores and to show fullness in
   // Placement Settings. Public query — reveals only byte totals.
   public query func get_usage() : async Usage {
-    { total_bytes; capacity_limit_bytes = UploadPolicy.effectiveCapacityFor(capacity_limit_bytes, largeMode()); accepting_uploads = quota_mode != #frozen and canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
+    { total_bytes; capacity_limit_bytes = UploadPolicy.effectiveCapacityFor(capacity_limit_bytes, largeMode()); accepting_uploads = quota_mode != #frozen and not retainedBlocked() and canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
   };
 
   // Governor-only. Setting a limit at or below the current total closes the
@@ -1134,6 +1286,7 @@ persistent actor MediaBlobStore {
 
     if (not dry_run) {
       if (media_transfer_fences.size() != 0) return #err("Club media transfer in progress");
+      if (retained_mode == #frozen or retained_deletions.size() != 0) return #err("Retained snapshot or deletion pending");
       bumpInventory();
       blobs := newBlobs;
       pending_uploads := newPendingUploads;
@@ -1166,6 +1319,7 @@ persistent actor MediaBlobStore {
   };
 
   func sweepRetention() : async () {
+    if (retainedBlocked() or quota_mode == #frozen) return;
     // Indexed stable records: materialize one bounded page before any await.
     var page : [(Text, StoredRecord)] = [];
     for ((p, r) in stable_blobs.entriesFrom(retention_cursor)) {
@@ -1179,9 +1333,9 @@ persistent actor MediaBlobStore {
         switch (categoryForPath(p), clubIdFromPath(p)) {
           case (?_, ?club) {
             if ((await clubProStatus(club)) == ?false) {
-              if (mediaFenced(p)) continue;
+              if (mediaFenced(p) or retainedBlocked() or quota_mode == #frozen) continue;
               switch (stable_blobs.get(p)) {
-                case (?current) { if (current.content_hash == r.content_hash and current.uploaded_at == r.uploaded_at and Time.now() - current.uploaded_at > RETENTION_NS) removeStored(p) };
+                case (?current) { if (current.content_hash == r.content_hash and current.uploaded_at == r.uploaded_at and Time.now() - current.uploaded_at > RETENTION_NS) { ignore await deleteRetained(p) } };
                 case null {}
               }
             }
@@ -1221,7 +1375,7 @@ persistent actor MediaBlobStore {
     for (index in indices.values()) {
         let (clubId, paths) = clubs[index];
         if ((await clubProStatus(clubId)) == ?false) {
-          if (media_transfer_fences.get(clubId) != null) continue;
+          if (media_transfer_fences.get(clubId) != null or retainedBlocked() or quota_mode == #frozen) continue;
           let doomed = Map.empty<Text, ()>();
           for (p in paths.values()) {
             // A replacement during subscription lookup must not be deleted.
@@ -1230,12 +1384,14 @@ persistent actor MediaBlobStore {
               case null {}
             }
           };
-          var freed : Nat = 0;
-          if (doomed.size() > 0) bumpInventory();
-          for (b in blobs.values()) { if (Map.containsKey(doomed, Text.compare, b.path)) freed += b.bytes.size() };
-          blobs := blobs.filter(func(b) { not Map.containsKey(doomed, Text.compare, b.path) });
-          blob_uploaded_at := blob_uploaded_at.filter(func((p, _) : (Text, Int)) : Bool { not Map.containsKey(doomed, Text.compare, p) });
-          total_bytes := subBytes(total_bytes, freed);
+          let pathsToDelete = Iter.toArray(doomed.keys());
+          for (p in pathsToDelete.values()) {
+            if (retainedBlocked() or quota_mode == #frozen or mediaFenced(p)) break;
+            switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
+              case (?(_, stamp)) { if (Time.now() - stamp > RETENTION_NS) { ignore await deleteRetained(p) } };
+              case null {}
+            }
+          };
         };
     };
   };
@@ -1278,6 +1434,7 @@ persistent actor MediaBlobStore {
     for ((_, op) in quota_operations.entries()) {
       if (request.subjects.any(func(p) = p == op.owner) and op.status != #committed and op.status != #aborted) unresolved += 1
     };
+    for ((_, receipt) in retained_deletions.entries()) { if (request.subjects.any(func(p) = p == receipt.owner)) unresolved += 1 };
     removalReceiver.receipt(caller, request, Principal.fromActor(MediaBlobStore), unresolved)
   };
 };

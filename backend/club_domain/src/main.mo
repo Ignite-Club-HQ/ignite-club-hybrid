@@ -5522,7 +5522,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func read_club_retained_media_bytes(club_id : Text) : async { #Ok : { finalized : Nat; pending : Nat }; #Err : Text } {
     if (not retainedRehearsal or not mediaRetainedState.active) return #Err("Retained quota inactive");
-    if (not isGovernor(caller) and not mediaRetainedState.stores.any(func(p) = p == caller) and not hasClubMembership(caller, club_id)) return #Err("Club member required");
+    if (not isGovernor(caller) and not mediaRetainedState.stores.any(func(p) = p == caller) and not isMember(caller, club_id)) return #Err("Club member required");
     #Ok(MediaRetainedQuota.usage(mediaRetainedState.ledger, club_id))
   };
   public shared ({ caller }) func reserve_retained_media(token : Text, path : Text, bytes : Nat) : async MediaRetainedQuota.Result {
