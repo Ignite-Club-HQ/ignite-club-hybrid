@@ -17,6 +17,11 @@ export type TransferAdapter = {
   save(t: Transfer): Promise<void>;
   /** Cleanup only after terminal state is durable; replayable after a crash. */
   cleanupTerminal?(t: Transfer): Promise<void>;
+  /** Operator-only original-key authorization; after all abortable checks,
+   * before assignment CAS. Failure retains fences for explicit recovery. */
+  prepareCutover?(t: Transfer): Promise<void>;
+  /** Durable abort and verified key restoration must precede any unlock. */
+  beforeAbortUnlock?(t: Transfer): Promise<void>;
 };
 const MAX_PAGES = 100_000;
 
@@ -24,7 +29,12 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
   let t = start;
   const step = async (n: Transfer) => { await a.save(n); t = n; };
   if (!(await a.sameDeployment(t.fromGroup, t.toGroup))) throw new Error('Cross-deployment transfer needs a separately reviewed design');
-  if (t.phase === 'aborted') { await a.setFence(t.fromGroup, t.clubId, false); await a.cleanupTerminal?.(t); return t; }
+  const unlockAbort = async () => {
+    await a.beforeAbortUnlock?.(t);
+    await a.setFence(t.fromGroup, t.clubId, false);
+    await a.cleanupTerminal?.(t);
+  };
+  if (t.phase === 'aborted') { await unlockAbort(); return t; }
   if (t.phase === 'released') { await a.cleanupTerminal?.(t); return t; }
   // Resumed copies must revalidate evidence before importing anything. Keep
   // locks on failed/ambiguous media checks, outside automatic abort cleanup.
@@ -50,8 +60,7 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
   } catch (e) {
     if (['planned', 'fenced', 'copied'].includes(t.phase)) {
       await step(abort(t));
-      await a.setFence(t.fromGroup, t.clubId, false);
-      await a.cleanupTerminal?.(t);
+      await unlockAbort();
     }
     throw e;
   }
@@ -65,13 +74,13 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
       if (!v) throw new Error(`Missing source digest for ${r.domain}`);
       if (v.records !== r.records || v.digest !== r.digest) {
         await step(abort(t));
-        await a.setFence(t.fromGroup, t.clubId, false);
-        await a.cleanupTerminal?.(t);
+        await unlockAbort();
         throw new Error(`Source changed during fence in ${r.domain}; transfer must be re-planned`);
       }
     }
     const rev = await a.readRegistryRevision();
     const next = cutover(t, rev); // throws on concurrent change; club stays fenced for operator decision
+    await a.prepareCutover?.(t); // intentionally outside automatic abort region
     await a.swapAssignment(t.clubId, t.toGroup, rev);
     await step(next);
   }

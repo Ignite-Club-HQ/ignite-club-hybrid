@@ -59,6 +59,13 @@ export type LiveAdapterDeps = {
   /** Opt-in durable media preparation. Fence metadata domains before the
    * inventory callback scans blob stores. Failed checks retain all locks. */
   mediaPreparation?: { release(): Promise<void> };
+  /** Opt-in operator hooks backed by durable key journals and authenticated
+   * deployment/placement/provenance/fence readers. Not move permission. */
+  mediaKeyRecovery?: {
+    prepareCutover: NonNullable<TransferAdapter['prepareCutover']>;
+    beforeAbortUnlock: NonNullable<TransferAdapter['beforeAbortUnlock']>;
+    verifyReleased(t: import('./groupTransfer').Transfer): Promise<void>;
+  };
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
@@ -145,6 +152,10 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       const destination = await d.targetFor(club);
       if (!destination || destination === group) throw new Error('Persisted destination required before media-safe purge');
       await verifyMedia(group, destination, club);
+      // Key-state proof must precede irreversible purge AND either group's
+      // unlock, not merely the later terminal blob-fence release.
+      await d.mediaKeyRecovery?.verifyReleased({ clubId: club, fromGroup: group, toGroup: destination,
+        registryRevision: await d.readRegistryRevision(), phase: 'cutover', log: ['cutover'] });
       const a = d.actors(group);
       for (const dom of LIVE_DOMAINS) ok(await a[dom].purge_club_snapshot(club));
       await fenceAll(group, club, false);
@@ -152,8 +163,11 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       if (target && target !== group) await fenceAll(target, club, false);
     },
     save: d.save,
+    prepareCutover: d.mediaKeyRecovery?.prepareCutover,
+    beforeAbortUnlock: d.mediaKeyRecovery?.beforeAbortUnlock,
     async cleanupTerminal(t) {
       if (t.phase !== 'released' && t.phase !== 'aborted') throw new Error('Durable terminal transfer required');
+      if (t.phase === 'released') await d.mediaKeyRecovery?.verifyReleased(t);
       await d.mediaPreparation?.release();
     },
   };
