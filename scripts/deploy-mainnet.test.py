@@ -24,7 +24,7 @@ case "$*" in
   '--version') echo 'icp 1.7.0' ;;
   'identity principal') printf '%s\\n' "$TEST_GOVERNOR" ;;
   deploy*) if [ "$DEPLOYED" = 1 ]; then exit 0; else exit 42; fi ;;
-  canister\ call*) echo '(variant { Ok })' ;;
+  canister?call*) echo '(variant { Ok })' ;;
   *) exit 99 ;;
 esac
 ''')
