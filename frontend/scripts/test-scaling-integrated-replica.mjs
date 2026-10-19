@@ -66,6 +66,22 @@ try {
     assert.equal(await read(removed), true); assert.equal(await read(retained), true);
     const pendingUpload = await upload(removed, 'interrupted');
     const conversation = ok(await messaging.actor.ensure_conversation(id, ['team-' + id], [removed, retained]));
+    messaging.actor.setPrincipal(removed);
+    const beforeMessage = ok(await messaging.actor.send_message(conversation.id, 'before removal', 'before-removal', [], []));
+    const scheduled = ok(await messaging.actor.register_scheduled_message(conversation.id, 'scheduled before removal', 9999999999999n));
+    const dm = ok(await messaging.actor.get_or_create_dm(retained));
+    // Competition audience is not membership in its host club.
+    messaging.actor.setPrincipal(governor);
+    const competition = ok(await messaging.actor.create_group_with_roles(id, [], 'Competition officials', 'competition', [[governor, 'admin'], [removed, 'member']]));
+    ok(await messaging.actor.grant_competition_admin(competition.conversation_id, removed));
+    messaging.actor.setPrincipal(removed);
+    ok(await messaging.actor.send_message(competition.conversation_id, 'competition control', 'competition-before', [], []));
+    assert.equal(ok(await messaging.actor.list_messages_page(conversation.id, [], 10)).messages.some(m => m.id === beforeMessage.id), true);
+    messaging.actor.setPrincipal(governor);
+    // Clear control-send notifications before the four deterministic audience rows.
+    queue.actor.setPrincipal(worker);
+    for (const row of ok(await queue.actor.claim(100000n, 50))) ok(await queue.actor.acknowledge(row.id, row.idempotency_key));
+    queue.actor.setPrincipal(governor);
     // Same IDs in distinct queues; canonical roster IDs dedupe on-chain.
     assert.equal(ok(await queue.actor.fan_out([removed.toText(), ' principal:' + removed.toText() + ' ', retained.toText()], id, 'photo_added', 'Private photo', 'photo', [])), 2);
     assert.equal(ok(await queue.actor.fan_out([removed.toText(), retained.toText()], id, 'photo_added', 'Private photo', 'photo', [])), 0);
@@ -73,7 +89,7 @@ try {
     queue.actor.setPrincipal(worker);
     const claimed = ok(await queue.actor.claim(100000n, 50)); assert.equal(claimed.length, 4);
     for (const row of claimed) assert.equal(ok(await queue.actor.authorize_delivery(row.id, row.idempotency_key)), true);
-    groups.push({ id, club, queue, messaging, pii, blob, read, upload, pendingUpload, claimed, conversation });
+    groups.push({ id, club, queue, messaging, pii, blob, read, upload, pendingUpload, claimed, conversation, beforeMessage, scheduled, dm, competition });
   }
   const [a, b] = groups;
   a.club.actor.setPrincipal(governor); ok(await a.club.actor.remove_member(a.id, removed));
@@ -83,6 +99,36 @@ try {
     try { const result = await call(); denied = !!result && 'Err' in result; } catch { denied = true; }
     assert.equal(denied, true, 'Removed club operation must be denied');
   };
+  const assertChatRevoked = async group => {
+    const actor = group.messaging.actor; actor.setPrincipal(removed);
+    await deniedMutation(() => actor.send_message(group.conversation.id, 'blocked', 'blocked-direct', [], []));
+    await deniedMutation(() => actor.list_messages_page(group.conversation.id, [], 10));
+    await deniedMutation(() => actor.open_conversation(group.conversation.id, 10));
+    await deniedMutation(() => actor.search_messages(group.conversation.id, 'before', 10));
+    await deniedMutation(() => actor.read_account_list_messages_page(group.conversation.id, [], 10));
+    await deniedMutation(() => actor.toggle_reaction(group.beforeMessage.id, 'x'));
+    await deniedMutation(() => actor.update_message(group.beforeMessage.id, 'blocked edit'));
+    await deniedMutation(() => actor.forward_message(group.beforeMessage.id, group.dm.id));
+    const dmMessage = ok(await actor.send_message(group.dm.id, 'DM still works', 'dm-control', [], []));
+    await deniedMutation(() => actor.forward_message(dmMessage.id, group.conversation.id));
+    await deniedMutation(() => actor.register_scheduled_message(group.conversation.id, 'blocked schedule', 9999999999999n));
+    await deniedMutation(() => actor.replay_scheduled_message(group.scheduled.id));
+    await deniedMutation(() => actor.ensure_club_admin_thread(group.id, removed));
+    await deniedMutation(() => actor.create_conversation(group.id, [], [removed, retained]));
+    assert.equal(ok(await actor.recent_conversations(removed, 100)).some(c => c.conversation_id === group.conversation.id), false);
+    assert.equal(ok(await actor.list_messages_page(group.dm.id, [], 10)).messages.some(m => m.id === dmMessage.id), true);
+    const competitionMessage = ok(await actor.send_message(group.competition.conversation_id, 'competition still works', 'competition-control', [], []));
+    assert.equal(ok(await actor.list_messages_page(group.competition.conversation_id, [], 10)).messages.some(m => m.id === competitionMessage.id), true);
+    actor.setPrincipal(group.queue.canisterId);
+    await deniedMutation(() => actor.deliver_scheduled_message(removed, group.conversation.id, 'blocked delegated', 'blocked-delegated', [], []));
+    assert.equal(await actor.read_account_can_read_digest(removed, group.conversation.id), false);
+    assert.equal(await actor.read_account_can_read_digest(retained, group.conversation.id), true);
+    actor.setPrincipal(retained);
+    const page = ok(await actor.list_messages_page(group.conversation.id, [], 100));
+    assert.equal(page.messages.some(m => m.id === group.beforeMessage.id), true, 'Historical messages stay available to retained members');
+    assert.equal(page.messages.some(m => m.body.startsWith('blocked')), false, 'Denied writes leave no chat messages');
+  };
+  await assertChatRevoked(a);
   a.blob.actor.setPrincipal(removed);
   await deniedMutation(() => a.blob.actor.put_chunk(a.pendingUpload, 0, new Uint8Array([1])));
   await deniedMutation(() => a.blob.actor.finalize_upload(a.pendingUpload));
@@ -118,6 +164,9 @@ try {
   const chatDenied = await a.queue.actor.authorize_delivery(chatOutage.id, chatOutage.idempotency_key);
   assert.ok('Err' in chatDenied);
   const retried = ok(await a.queue.actor.fail(outage.id, 'Temporary outage', [0n])); assert.equal(retried.body, 'Preserve original body');
+  a.messaging.actor.setPrincipal(retained);
+  await deniedMutation(() => a.messaging.actor.send_message(a.conversation.id, 'outage blocked', 'outage-blocked', [], []));
+  await deniedMutation(() => a.messaging.actor.list_messages_page(a.conversation.id, [], 10));
   await pic.startCanister({ canisterId: a.club.canisterId, sender: governor });
   assert.equal(ok(await a.queue.actor.authorize_delivery(chatOutage.id, chatOutage.idempotency_key)), true);
   const reclaims = ok(await a.queue.actor.claim(100000n, 50)); assert.ok(reclaims.some(n => n.id === 'outage'));
@@ -142,6 +191,7 @@ try {
         arg: IDL.encode([IDL.Principal], [governor]) });
     }
   }
+  await assertChatRevoked(a);
   assert.equal(await a.read(removed), false); assert.equal(await a.read(retained), true);
   assert.equal(await b.read(removed), true);
   await deniedMutation(() => a.upload(removed, 'after-upgrade'));
