@@ -7,8 +7,9 @@ module {
   // Opt-in ceiling for stable-backed stores (IGNITE_MEDIA_LARGE_CAPACITY=1).
   // Off until a mainnet load test confirms cycles/latency at this size.
   public let largeCapacityCeiling : Nat64 = 34_359_738_368; // 32 GiB
-  // Pro vault allowance: 5 GiB per club plus purchased add-on GB.
-  public let proVaultBaseBytes : Nat = 5_368_709_120;
+  // Pro media allowance: 5 GiB per club across vault, gallery and chat combined,
+  // plus purchased add-on GB.
+  public let proMediaBaseBytes : Nat = 5_368_709_120;
   let gib : Nat = 1_073_741_824;
   public let heapBudget : Nat = 3_221_225_472;
   public let maxWireBytes : Nat64 = 10_551_296; // 10 MiB plaintext + encryption framing
@@ -32,10 +33,10 @@ module {
 
   public func threshold(configured : Nat64) : Nat { thresholdFor(configured, false) };
 
-  /// Pro vault: finalized + in-flight vault bytes for the club plus this
-  /// upload must fit within 5 GiB + purchased GB.
-  public func withinProVault(used : Nat, pending : Nat, requested : Nat, purchasedGb : Nat) : Bool {
-    used + pending + requested <= proVaultBaseBytes + purchasedGb * gib
+  /// Pro allowance: finalized + in-flight media bytes for the club (vault,
+  /// gallery and chat combined) plus this upload must fit within 5 GiB + purchased GB.
+  public func withinProMediaAllowance(used : Nat, pending : Nat, requested : Nat, purchasedGb : Nat) : Bool {
+    used + pending + requested <= proMediaBaseBytes + purchasedGb * gib
   };
 
   public func validDeclaration(size : Nat64, chunks : Nat) : Bool {
