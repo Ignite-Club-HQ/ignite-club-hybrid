@@ -35,7 +35,11 @@ async function resolveChatRoute(
   const suffix = messageId ? `?message=${messageId}` : "";
   try {
     const { getLiveGroupMetadata } = await import("@/live/features/messaging");
-    const meta = await getLiveGroupMetadata(ctx, conversationId);
+    const { withFeatureBackend } = await import('@/live/featureRouter');
+    const meta = await withFeatureBackend('messaging', {
+      supabase: async () => { throw new Error('ICP chat required'); },
+      icp: scoped => getLiveGroupMetadata(scoped, conversationId),
+    }, { conversationId });
     switch (meta?.kind) {
       case "team":
         return `/messages/${conversationId}${suffix}`;
@@ -106,7 +110,10 @@ export async function getIcpNotificationRoute(
       // upload sheet, matching the Supabase tap handler.
       try {
         const { listLiveEvents } = await import("@/live/features/events");
-        const events = (await listLiveEvents(ctx)) as Array<{ id?: string; team_id?: [] | [string] }>;
+        const { withFeatureBackend } = await import('@/live/featureRouter');
+        const events = (await withFeatureBackend('events', {
+          supabase: async () => [], icp: scoped => listLiveEvents(scoped),
+        }, { eventId: relatedId })) as Array<{ id?: string; team_id?: [] | [string] }>;
         const ev = (events ?? []).find((e) => e?.id === relatedId);
         const team = ev && Array.isArray(ev.team_id) && ev.team_id.length > 0 ? ev.team_id[0] : null;
         if (team) return `/media?team=${team}&event=${relatedId}&upload=1`;

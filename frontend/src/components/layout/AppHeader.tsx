@@ -1,4 +1,4 @@
-import { acrossVoid, acrossLists } from "@/live/featureScopes";
+import { acrossLists } from "@/live/featureScopes";
 import { writeOnce } from "@/live/clubScope";
 import { mergeLists } from "@/live/featureRouter";
 import { useState, useEffect, Suspense } from "react";
@@ -651,7 +651,7 @@ export function AppHeader() {
           icp: async (ctx) => {
             await markAllLiveNotificationsRead(ctx, user.id, activeClubFilter ?? null);
           },
-        }, acrossVoid);
+        }, { shared: 'person' });
         return;
       }
 
