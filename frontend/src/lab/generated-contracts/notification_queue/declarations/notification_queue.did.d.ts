@@ -57,6 +57,11 @@ export type DigestSource = { 'Club' : null } |
   { 'Team' : null };
 export interface Main {
   'acknowledge' : ActorMethod<[string, string], Result>,
+  'authorize_delivery' : ActorMethod<
+    [string, string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
   'cancel_scheduled' : ActorMethod<[string, string], ScheduledResult>,
   'claim' : ActorMethod<[bigint, number], Results>,
   'cleanup_stale_device_tokens' : ActorMethod<

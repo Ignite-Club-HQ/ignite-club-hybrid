@@ -220,6 +220,11 @@ export const idlFactory = ({ IDL }) => {
   });
   const Main = IDL.Service({
     'acknowledge' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
+    'authorize_delivery' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        [],
+      ),
     'cancel_scheduled' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'claim' : IDL.Func([IDL.Nat64, IDL.Nat16], [Results], []),
     'cleanup_stale_device_tokens' : IDL.Func(
