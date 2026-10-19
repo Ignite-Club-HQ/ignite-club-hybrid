@@ -28,7 +28,7 @@
 
 **Engineering still open:** governor-authenticated management transport, production installation arguments/environment and complete per-domain semantic health, shared-device worker integration, and actual all-domain install/configuration/read-back rehearsal. The configuration transport remains an explicit adapter boundary; stubbed control verification is not production permission. Missing local events/timer/router WASMs and PocketIC binary were not regenerated in this focused batch. Deployment access and real browser/Android/FCM sessions remain release prerequisites, not passing evidence.
 
-Production activation remains blocked by `routerProvisionSteps`' local-only account-authority callback. These changes do not supply a released authenticated management adapter, exclusive durable operator journal, complete per-domain install/configuration/health composition or semantic recovery transport.
+Production activation remains blocked by `routerProvisionSteps`' local-only account-authority callback. The local exclusive journal and configuration composition now exist, but these changes do not supply a released authenticated management adapter, complete per-domain installation/semantic-health acceptance or semantic recovery transport.
 
 The integrated rehearsal must verify full domain wiring, app reads/writes, notifications, club revocation and other-club continuity, and establish that paused account-erasure prototypes are outside the activated path. Local probes do not resolve that production dependency.
 
