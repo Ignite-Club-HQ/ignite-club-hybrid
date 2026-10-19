@@ -8,10 +8,11 @@ import { useSeasonTeamSummary, useSeasonPlayerStats } from "@/hooks/useSeasonAna
 
 interface Props {
   seasonId: string;
+  clubId: string;
 }
 
-export function SeasonAnalyticsCard({ seasonId }: Props) {
-  const { data: summary = [], isLoading, error } = useSeasonTeamSummary(seasonId);
+export function SeasonAnalyticsCard({ seasonId, clubId }: Props) {
+  const { data: summary = [], isLoading, error } = useSeasonTeamSummary(seasonId, true, clubId);
 
   if (error) {
     // Access denied or RPC error — hide silently (coach/admin only feature)
