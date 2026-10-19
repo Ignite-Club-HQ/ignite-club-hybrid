@@ -87,9 +87,9 @@ describe.skipIf(!enabled)('production operator transport (real signed calls)', (
 
     // Health read-back through the signed transport on every service.
     for (const [name, service] of services) {
-      const cycles = ok(await transport.call(service.canisterId.toText(), 'cycles_balance', []));
-      expect(BigInt(cycles as bigint), name).toBeGreaterThan(0n);
-      const stats = ok(await transport.call(service.canisterId.toText(), 'memory_stats', [])) as { memory_bytes: bigint };
+      const cycles = await transport.call(service.canisterId.toText(), 'cycles_balance', []);
+      expect(BigInt(cycles as unknown as bigint), name).toBeGreaterThan(0n);
+      const stats = await transport.call(service.canisterId.toText(), 'memory_stats', []) as unknown as { memory_bytes: bigint };
       expect(stats.memory_bytes, name).toBeGreaterThan(0n);
     }
 
