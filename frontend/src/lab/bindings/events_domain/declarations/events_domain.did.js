@@ -786,7 +786,7 @@ export const idlFactory = ({ IDL }) => {
     'get_event_group' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(EventGroup), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'get_event_roster' : IDL.Func(
         [IDL.Text],
@@ -826,7 +826,7 @@ export const idlFactory = ({ IDL }) => {
     'get_group_edit_access' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'get_lineup_snapshot' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
@@ -978,7 +978,7 @@ export const idlFactory = ({ IDL }) => {
     'list_event_groups' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(EventGroup), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'list_event_views' : IDL.Func(
         [IDL.Text],
@@ -988,7 +988,7 @@ export const idlFactory = ({ IDL }) => {
     'list_events' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Vec(Event)],
-        ['query'],
+        ['composite_query'],
       ),
     'list_events_for_duty_teams' : IDL.Func(
         [IDL.Vec(IDL.Text)],
@@ -998,7 +998,7 @@ export const idlFactory = ({ IDL }) => {
     'list_events_multi' : IDL.Func(
         [IDL.Vec(IDL.Text), IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(Event), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'list_favourite_event_titles' : IDL.Func(
         [],
@@ -1013,12 +1013,12 @@ export const idlFactory = ({ IDL }) => {
     'list_group_duties' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(EventGroupDuty), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'list_group_players' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(EventGroupPlayer), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'list_match_captains' : IDL.Func(
         [IDL.Text],
@@ -1169,12 +1169,12 @@ export const idlFactory = ({ IDL }) => {
     'read_event_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'read_event_group_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
-        ['query'],
+        ['composite_query'],
       ),
     'record_event_view' : IDL.Func(
         [IDL.Text],
@@ -1416,6 +1416,11 @@ export const idlFactory = ({ IDL }) => {
     'set_match_goalkeeper' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : MatchGoalkeeperAssignment, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_mini_league_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_mini_league_rsvp' : IDL.Func(

@@ -38,6 +38,7 @@ export interface Main {
     { 'Ok' : MiniLeagueGroupPlayer } |
       { 'Err' : string }
   >,
+  'can_read_league_matches' : ActorMethod<[Principal, string, string], boolean>,
   'cancel_session' : ActorMethod<
     [string],
     { 'Ok' : MiniLeagueSession } |
@@ -310,6 +311,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_events_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
