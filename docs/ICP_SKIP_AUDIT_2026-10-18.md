@@ -2,22 +2,30 @@
 
 ## Run identity
 
-- Branch/revision: `main` at `da37ae87` (`Hardened deployer grant flow`).
+- Branch/revision: `main` at `6817d959` (post-merge ICP fixes).
 - Command: `npm run test:recorded -- --backend-mode=icp ...` with Vitest `dot` and `json` reporters.
-- Collection: 606 files, 5,621 test cases.
-- Result: 4,883 passed, 1 failed, 735 skipped, 2 TODO.
-- Duration: 766.81 seconds.
+- Collection: 624 files, 5,742 test cases.
+- Result: 5,005 passed, 0 failed, 735 skipped, 2 TODO.
+- Duration: 769.62 seconds.
 - No unhandled errors were reported.
 
 ## What the 735 skips mean
 
-The 735 skips are not 735 known product failures. The case-level audit matched them to explicit test controls that disable Supabase-owned tests in ICP mode. Those controls include `runIf(supabaseMode)`, backend-mode variants such as `mode === "supabase"`, a conditional `supabaseIt = mockIcpMode ? it.skip : it` alias, and dynamic `!state.icpMode` gates. The skipped cases are spread across 95 files.
+The case-level audit matched all 735 skipped cases to an explicit condition that disables the test in ICP mode:
 
-Ten cases were initially missed by the automated matcher, but source inspection confirmed their explicit Supabase gates:
+- 461: `runIf(supabaseMode)`.
+- 82: `runIf(backendMocks.mode === "supabase")`.
+- 64: `runIf(!icpMode)`.
+- 46: `runIf(mocks.mode === "supabase")`.
+- 27: `runIf(mode === "supabase")`.
+- 20: `runIf(backendMode === "supabase")`.
+- 9: `runIf(liveMocks.mode === "supabase")`.
+- 7: `runIf(!state.icpMode)`.
+- 6: `runIf(process.env.IGNITE_TEST_BACKEND_MODE !== "icp")`.
+- 5: `runIf(icpMocks.mode === "supabase")`.
+- 8: a `supabaseIt = mockIcpMode ? it.skip : it` alias in `messageQueue.test.ts`.
 
-- Eight cases in `vaultExportRepository.test.ts`, under `describe.runIf(liveMocks.mode === "supabase")`.
-- The per-member reminder entry-point case in `AttendanceSection.test.tsx`, under `it.runIf(mocks.mode === "supabase")`.
-- The Supabase team metadata read case in `useTeamChatTeamData.test.tsx`, under `it.runIf(liveMocks.mode === "supabase")`.
+This confirms the skips are deliberate test-run decisions, not accidental unmarked skips. It does **not** prove that every skipped Supabase behavior has a matching positive ICP behavior test, nor that the corresponding product feature has full parity. That requires the coverage register and feature-level ICP tests below.
 
 The two TODO cases are separate from the 735 skips:
 
@@ -26,27 +34,22 @@ The two TODO cases are separate from the 735 skips:
 
 This audit establishes why the test runner skipped cases; it does **not** establish feature parity for the skipped behaviors. Each Supabase-owned behavior still needs a corresponding positive ICP test or an explicitly approved off-chain classification.
 
-## Failure
+## Latest Full-Run Failures
 
-The only failing assertion was:
+There were no failing tests in the full run on `6817d959`. The backup restore assertion that failed on `da37ae87` passed after the subsequent main updates.
 
-- File: `frontend/src/pages/IcpManageBackupsPage.test.tsx`.
-- Test: `ICP vault metadata backup administration restores missing metadata and deletes the selected snapshot`.
-- The test expects `restoreLiveVaultBackup` to be called; the page now calls `restoreLiveVaultBackupWithMedia`.
-- Isolated rerun: 6 passed, 1 failed. This is a stale test mock/assertion; it does not prove the production restore flow is broken.
-
-The full-run JSON also confirms these formerly failing tests pass on this revision:
+The full-run JSON confirms these previously failing tests pass on `6817d959`:
 
 - `EventsPage.icp-roster.test.tsx`, including ordinary-member public fixture visibility.
 - `WelcomeEmailSettingsCard.test.tsx`, including competition settings adapter coverage.
 - All 22 `icpFeatureParityGaps.test.ts` sentinels.
 
-## Saved artifacts
+## Saved Artifacts
 
-The full-run logs and JSON are in the ignored directory `frontend/.test-results/icp-full-da37ae87-20261018/`:
+The latest full-run logs and JSON are in the ignored directory `frontend/.test-results/icp-full-6817d959-20261018/`:
 
 - `icp.log`
 - `summary.json`
 - `vitest.json`
 
-The isolated backup test rerun is in `frontend/.test-results/icp-backups-recheck-da37ae87-20261018/`.
+The earlier `da37ae87` run and isolated backup rerun are retained in their correspondingly named result directories as historical diagnostics.
