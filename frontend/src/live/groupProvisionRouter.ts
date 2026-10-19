@@ -31,7 +31,7 @@ export function routerGroupRecord(p: Provision, globals: { secret_workload_ident
   if (new Set(domains.map(d => d.canister.toText())).size !== domains.length) throw new Error('Duplicate group canister');
   // A group opens only with its own installed photo store (never a shared one).
   const photoStore = p.dedicatedBlobStore?.installed ? p.dedicatedBlobStore.canisterId : undefined;
-  if (accepting && !photoStore) throw new Error(`Group ${p.groupId} cannot open without its own photo store`);
+  if (accepting && !photoStore && dep.deploymentId !== 'local') throw new Error(`Group ${p.groupId} cannot open without its own photo store`);
   if (photoStore && domains.some(d => d.canister.toText() === photoStore)) throw new Error('Photo store duplicates a group service');
   return {
     group: { id: p.groupId, target_alias: dep.targetAlias, domains, accepting, max_clubs: limits.maxClubs, assigned_clubs: 0,

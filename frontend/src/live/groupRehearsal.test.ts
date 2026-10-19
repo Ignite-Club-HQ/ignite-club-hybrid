@@ -90,7 +90,7 @@ describe('integrated scaling rehearsal', () => {
 
   it('activation stays off until every gate passes; inactive always routes legacy', () => {
     expect(chooseRoute(OFF, true)).toBe('legacy');
-    const almost = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, routedDomains: GROUP_DOMAINS, registryRevision: 4n, approvedRevision: 4n };
+    const almost = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, routedDomains: GROUP_DOMAINS, registryRevision: 4n, approvedRevision: 4n, removalWiring: { revision: 4n, groupIds: ["a"], checkedAtMs: 0 } };
     expect(activationStatus(almost).missing).toEqual(['mainnet verification']);
     expect(chooseRoute(almost, true)).toBe('legacy');
     expect(chooseRoute({ ...almost, mainnetVerified: true }, true)).toBe('group');
