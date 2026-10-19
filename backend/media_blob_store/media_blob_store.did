@@ -30,6 +30,25 @@ type Result =
    Err: text;
    Ok;
  };
+type Phase = 
+ variant {
+   done;
+   indexed;
+   journal;
+   legacy;
+   pending;
+ };
+type Page = 
+ record {
+   entries: vec Entry;
+   fence_revision: opt nat;
+   fenced: bool;
+   next: opt Cursor;
+   quota_authority: opt principal;
+   quota_shared: bool;
+   revision: nat;
+   scanned: nat;
+ };
 type MediaUsage = 
  record {
    bytes: nat64;
@@ -84,10 +103,34 @@ type FinalizedBlob =
    content_length: nat64;
    path: text;
  };
+type Entry = 
+ record {
+   content_hash: text;
+   content_length: nat;
+   kind: variant {
+           "blob";
+           journal;
+           pending;
+         };
+   path: text;
+   unsettled: bool;
+   upload_id: text;
+ };
+type Cursor = 
+ record {
+   after: text;
+   offset: nat;
+   phase: Phase;
+ };
 service : {
   abort_upload: (upload_id: text) -> (Result);
   begin_upload: (path: text, mime: text, total_size: nat64, chunk_count:
    nat32) -> (ResultUploadId);
+  club_media_inventory_page: (club: text, cursor: Cursor, expected_revision:
+   opt nat) -> (variant {
+                  Err: text;
+                  Ok: Page;
+                });
   /// Public: remaining cycles (shown in admin settings).
   cycles_balance: () -> (nat) query;
   delete_blob: (path: text) -> (Result);
@@ -113,7 +156,7 @@ service : {
       memory_bytes: nat;
       stable_bytes: nat;
     }) query;
-  merge_principal: (old: principal, new: principal, dry_run: bool) ->
+  merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
    (variant {
       err: text;
       ok: nat;
@@ -145,7 +188,7 @@ service : {
             cursor: text;
           };
     });
-  rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+  rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
    (variant {
       err: text;
       ok: nat;
@@ -160,6 +203,8 @@ service : {
     });
   set_capacity_limit: (limit_bytes: nat64) -> (Result);
   set_club_domain_canister: (canister_id: principal) -> (Result);
+  set_club_media_transfer_fence: (club: text, on: bool, expected: opt nat) ->
+   (Result);
   stable_storage_status: () ->
    (record {
       allocated_bytes: nat64;
