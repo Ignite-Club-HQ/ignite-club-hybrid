@@ -1222,6 +1222,8 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   prepare_deleted_retained_media: (token: text, entry: Object) ->
+    (Result__1);
    prepare_media_quota_reservation: (store: principal, token: text, club_id:
     text, category: text, bytes: nat) -> (Result);
    profile_team_history: (profile_id: text) ->
