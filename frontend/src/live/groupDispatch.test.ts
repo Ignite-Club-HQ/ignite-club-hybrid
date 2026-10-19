@@ -130,3 +130,32 @@ describe('membership entity routing', () => {
     expect(d.legacy).not.toHaveBeenCalled();
   });
 });
+
+describe('mini-league entity routing', () => {
+  it('discovers the league owner and saves once in that club group', async () => {
+    const { d, session } = deps(ON);
+    const s = { ...session, readEveryGroup: vi.fn(async (_domain, read) => read({} as never)) };
+    const lookup = vi.fn(async () => 'moved');
+    const dispatcher = createClubDispatcher({ ...d, open: async () => s, lookup } as never);
+    await dispatcher.writeFor('mini_leagues', { miniLeagueId: 'league-a' }, 'mini_league_domain', 'once', async () => 'saved', 1);
+    expect(lookup).toHaveBeenCalledWith(expect.anything(), 'miniLeague', 'league-a');
+    expect(s.readEveryGroup).toHaveBeenCalledWith('mini_league_domain', expect.any(Function), 2);
+    expect(session.writeClub).toHaveBeenCalledWith('moved', 'mini_league_domain', 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
+  it('does not dispatch after ownership discovery loses a group', async () => {
+    const { d, session } = deps(ON);
+    const s = { ...session, readEveryGroup: vi.fn(async () => { throw new Error('Group unavailable'); }) };
+    const dispatcher = createClubDispatcher({ ...d, open: async () => s, lookup: vi.fn() } as never);
+    await expect(dispatcher.readFor('mini_leagues', { miniLeagueId: 'league-a' }, 'mini_league_domain', async () => 1)).rejects.toThrow('Group unavailable');
+    expect(session.readClub).not.toHaveBeenCalled();
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
+  it('rejects conflicting league ownership', async () => {
+    const { d, session } = deps(ON);
+    const s = { ...session, readEveryGroup: vi.fn(async () => ['moved', 'other']) };
+    const dispatcher = createClubDispatcher({ ...d, open: async () => s, lookup: vi.fn() } as never);
+    await expect(dispatcher.readFor('mini_leagues', { miniLeagueId: 'league-a' }, 'mini_league_domain', async () => 1)).rejects.toThrow('more than one group');
+    expect(session.readClub).not.toHaveBeenCalled();
+  });
+});
