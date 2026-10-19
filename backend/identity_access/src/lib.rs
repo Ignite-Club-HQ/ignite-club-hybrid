@@ -9,6 +9,7 @@ use ic_stable_structures::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
+mod group_inventory;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
@@ -39,6 +40,8 @@ const MEM_ERASED_ACCOUNTS: u8 = 7;
 const MEM_SERVICE_AUTHORITIES: u8 = 8;
 // Recovery pagination revision, NOT an admission/removal fencing generation.
 const MEM_REMOVAL_HISTORY_REVISION: u8 = 9;
+// Pinned registry trust binding only; never a fencing generation or grant.
+const MEM_GROUP_INVENTORY_BINDING: u8 = 10;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -442,6 +445,53 @@ thread_local! {
         RefCell::new(StableCell::init(memory(MEM_SERVICE_AUTHORITIES), Vec::new()));
     static REMOVAL_HISTORY_REVISION: RefCell<StableCell<u64, Memory>> =
         RefCell::new(StableCell::init(memory(MEM_REMOVAL_HISTORY_REVISION), 0));
+    static GROUP_INVENTORY_BINDING: RefCell<StableCell<Vec<u8>, Memory>> =
+        RefCell::new(StableCell::init(memory(MEM_GROUP_INVENTORY_BINDING), Vec::new()));
+}
+fn group_inventory_binding() -> Option<group_inventory::Binding> {
+    GROUP_INVENTORY_BINDING.with(|m| if m.borrow().get().is_empty() { None } else { Some(decode(m.borrow().get())) })
+}
+fn store_group_inventory_binding(binding: group_inventory::Binding, expected_history_revision: u64) -> Outcome<()> {
+    group_inventory::validate_binding(&binding)?;
+    if removal_history_revision() != expected_history_revision { return Err("History revision changed".into()); }
+    if !link_lifecycle().pending.is_empty() { return Err("Unlink recovery pending".into()); }
+    if let Some(prior) = group_inventory_binding() {
+        let mut same = prior.clone(); same.registry_revision = binding.registry_revision;
+        if same != binding || binding.registry_revision < prior.registry_revision { return Err("Pinned registry binding cannot be substituted or rolled back".into()); }
+        if prior == binding { return Ok(()); }
+    }
+    bump_removal_history();
+    GROUP_INVENTORY_BINDING.with(|m| m.borrow_mut().set(encode(&binding)));
+    Ok(())
+}
+#[ic_cdk::update]
+fn set_group_inventory_binding(binding: group_inventory::Binding, expected_history_revision: u64) -> Outcome<()> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    store_group_inventory_binding(binding, expected_history_revision)
+}
+#[ic_cdk::update]
+async fn read_group_inventory_evidence(expected_history_revision: u64) -> Outcome<group_inventory::Evidence> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    let binding = group_inventory_binding().ok_or("Group inventory registry not pinned")?;
+    let revision = removal_history_revision();
+    if revision != expected_history_revision { return Err("History revision changed".into()); }
+    let clubs = link_lifecycle().authorities; let readers = service_authorities();
+    let mut snapshot = None;
+    // Reread the authoritative registry to reject a changed snapshot across
+    // async work. This is point-in-time evidence, NOT a held removal fence.
+    for _ in 0..2 {
+        let reply = ic_cdk::call::Call::bounded_wait(binding.registry, "read_group_registry")
+            .with_arg(&binding.target_alias).await.map_err(|_| "Group inventory registry unavailable".to_string())?;
+        let result: Outcome<group_inventory::Snapshot> = reply.candid().map_err(|_| "Invalid registry reply".to_string())?;
+        let current = result?;
+        if removal_history_revision() != revision || group_inventory_binding().as_ref() != Some(&binding) {
+            return Err("Group inventory binding or history changed during read".into());
+        }
+        group_inventory::validate(&current, &binding, &clubs, &readers)?;
+        if snapshot.as_ref().is_some_and(|prior| prior != &current) { return Err("Group inventory changed during read".into()); }
+        snapshot = Some(current);
+    }
+    Ok(group_inventory::Evidence { binding, history_revision: revision, snapshot: snapshot.ok_or("Missing registry snapshot")? })
 }
 fn removal_history_revision() -> u64 { REMOVAL_HISTORY_REVISION.with(|m| *m.borrow().get()) }
 fn bump_removal_history() {
