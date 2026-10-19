@@ -30,6 +30,8 @@ Reuse the delayed-authority fixture and twelve-service rehearsal. Cover the outs
 
 Build on existing durable denials and recovery receipts. Add server-verified complete service/group/media inventory, globally bound removal generations, admission fences and in-flight drain acknowledgements. Include pending writes, key requests, queued delivery and stale role mirrors. Preserve surviving identities and denial history through upgrades, restore, replay and history-capacity limits.
 
+Current local progress: server-side group/media inventory and durable identity preparation are implemented. Monotonic generations, exact immutable intents and indexed subject fences survive retries/upgrades and deny reconstructed account aliases/rekeys; pending erasure cannot complete without drain. Focused identity, registry-upgrade and existing encrypted-photo tests pass. **B is not complete:** next implement authenticated persistent receiver operation tracking/drain, apply it to every target, and verify history-complete coordinated recovery before releasing completion. The owner's requested live removal test follows these safety gates with attested production inventory, an authorized upgrade and a disposable signed-in account; do not use production rehearsal flags as a shortcut.
+
 **Done when:** a restarted, unacknowledged group already denies private reads, writes, delegated access and key issuance **before** unlink retry; outages, lost acknowledgements and concurrent retries cannot falsely complete removal. Full inventories are mandatory, never sampled. Already downloaded plaintext, issued keys and delivered notifications cannot be recalled.
 
 ### C. Connect the app without changing production behavior
