@@ -124,7 +124,7 @@ try {
   actor.setPrincipal(outsider); denied(await actor.whoami()); denied(await actor.register_account()); actor.setPrincipal(governor);
   actor.setPrincipal(mappedGroups[0][1].canister); assert.ok('Denied' in ok(await actor.read_principal_eligibility(outsider)).decision); actor.setPrincipal(governor);
   // Registry drift/config changes cannot replace an already frozen job.
-  denied(await actor.set_service_authorities([mappedGroups[0][1].canister],await revision()));
+  denied(await actor.set_service_authorities([mappedGroups[0][1].canister]));
   denied(await actor.set_removal_supplemental_inventory(supplemental,await revision()));
   assert.deepEqual(ok(await actor.begin_account_removal(removedAccount.id,0n)),intent);
   await pic.upgradeCanister({canisterId:identity.canisterId,wasm:identityWasm,sender:governor,wasmMemoryPersistence:'keep'});

@@ -2299,6 +2299,36 @@ fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
 mod tests {
     use super::*;
     #[test]
+    fn removal_intent_survives_restored_accounts_and_cannot_complete_without_receivers() {
+        let (snapshot,binding,clubs)=group_inventory::tests::fixture();
+        let p=|v| Principal::from_slice(&[v,1]);
+        let extra=vec![group_inventory::Supplemental {group_id:"g0".into(),domain:"media_blob_store".into(),canister:p(91),subnet:p(80)},
+            group_inventory::Supplemental {group_id:"g1".into(),domain:"media_blob_store".into(),canister:p(92),subnet:p(80)}];
+        let inventory=group_inventory::RemovalInventory {groups:group_inventory::Evidence {binding,history_revision:0,snapshot},supplemental:extra,
+            media:clubs.iter().enumerate().map(|(n,c)|group_inventory::MediaEvidence {club_authority:*c,
+                registry:group_inventory::MediaRegistry {active:false,stores:vec![p(91+n as u8)]}}).collect()};
+        let subject=principal(150); let restored_alias=principal(151);
+        let account=Account {id:"barrier-restored-account".into(),principals:vec![subject],version:5,status:AccountStatus::Active};
+        put_account(&account); index_principal(subject,&account.id);
+        let intent=persist_removal_intent(&account,inventory.clone(),p(90)).unwrap();
+        assert_eq!(intent.generation,1); assert_eq!(intent.targets.len(),28);
+        assert!(account_for(subject).is_err()); assert!(ensure_account(subject).is_err());
+        assert_eq!(principal_eligibility(subject).decision,EligibilityDecision::Denied);
+        let mut restored=account.clone(); restored.version=99; restored.principals=vec![restored_alias];
+        put_account(&restored); index_principal(restored_alias,&restored.id);
+        assert!(account_for(restored_alias).is_err());
+        assert_eq!(principal_eligibility(restored_alias).decision,EligibilityDecision::Denied);
+        let mut core=empty_core_state(principal(152));
+        assert_eq!(erase_account_core(&mut core,&restored),Err("Complete receiver drain required before erasure".into()));
+        assert!(rekey_principal_core(&mut core,restored_alias,principal(153),false).is_err());
+        assert_eq!(persist_removal_intent(&restored,inventory,p(90)).unwrap(),intent);
+        assert_eq!(REMOVAL_GENERATION.with(|m|*m.borrow().get()),1);
+        assert_eq!(decode::<removal_barrier::Intent>(&encode(&intent)),intent);
+        let other=Account {id:"barrier-bystander".into(),principals:vec![principal(154)],version:1,status:AccountStatus::Active};
+        put_account(&other); index_principal(other.principals[0],&other.id);
+        assert_eq!(account_for(other.principals[0]).unwrap(),other);
+    }
+    #[test]
     fn cross_group_account_lifecycle_is_off_outside_local_canisters() {
         assert!(!account_group_rehearsal_enabled());
         assert_eq!(set_club_authorities(vec![Principal::self_authenticating([125; 32])]), Err("Cross-group account lifecycle not released".into()));
