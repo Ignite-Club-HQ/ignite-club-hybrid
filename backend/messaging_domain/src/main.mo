@@ -4222,6 +4222,20 @@ persistent actor class Main(governorInit : Principal) {
     let configured = notificationQueueCanister;
     if (configured != ?caller) return false;
     await admitAccount(subject);
+    let conversation = conversations.find(func(c) = c.id == conversation_id);
+    switch (conversation) {
+      case (?c) {
+        let kind = inferConversationKind(c);
+        if (kind != "direct" and kind != "broadcast") {
+          let authority = clubDomainCanister;
+          let ?cd = authority else return false;
+          let clubs : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(cd.toText());
+          let member = try { await (with timeout = 10) clubs.read_has_club_membership(subject, c.club_id) } catch (_) { return false };
+          if (not member or authority != clubDomainCanister) return false;
+        }
+      };
+      case null { if (conversation_id != BROADCAST_CONVERSATION_ID) return false }
+    };
     configured == notificationQueueCanister and not convFenced(conversation_id) and canReadTeamMessages(subject, conversation_id)
   };
 }

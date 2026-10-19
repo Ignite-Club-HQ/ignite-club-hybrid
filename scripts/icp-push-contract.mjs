@@ -13,6 +13,7 @@ export function createPushQueueIdl({ IDL }) {
   return IDL.Service({
     recover: IDL.Func([], [resultNat16], []),
     claim: IDL.Func([IDL.Nat64, IDL.Nat16], [IDL.Variant({ Ok: IDL.Vec(notification), Err: IDL.Text })], []),
+    authorize_delivery: IDL.Func([IDL.Text, IDL.Text], [IDL.Variant({ Ok: IDL.Bool, Err: IDL.Text })], []),
     acknowledge: IDL.Func([IDL.Text, IDL.Text], [result], []),
     fail: IDL.Func([IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64)], [result], []),
     list_device_tokens: IDL.Func([IDL.Vec(IDL.Text)], [IDL.Variant({ Ok: IDL.Vec(token), Err: IDL.Text })], []),

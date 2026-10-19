@@ -1,6 +1,7 @@
 import { connectLiveNotificationQueue } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { unwrapCandid, unwrapCandidOpt } from "./candid";
+import { notificationRecipients } from '../notificationRecipients';
 
 /**
  * Notifications feature -> notification_queue canister.
@@ -61,7 +62,7 @@ export async function fanOutLiveNotifications(
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandid(
     actor.fan_out(
-      input.userIds,
+      notificationRecipients(input.userIds),
       input.clubId,
       input.kind,
       input.body,

@@ -690,6 +690,40 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // Fresh private-delivery permission, separate from claim and shared devices.
+  // False is a definitive denial; Err is unavailable/changed evidence (retry).
+  public shared ({ caller }) func authorize_delivery(id : Text, key : Text) : async { #Ok : Bool; #Err : Text } {
+    worker(caller);
+    let captured = switch (get(id)) { case null return #Err("Unknown notification"); case (?n) n };
+    if (captured.status != #Processing or captured.idempotency_key != key or not ownsLease(id, caller)) return #Err("Notification lease required");
+    if (isFenced(captured.club)) return #Err("Notification scope locked");
+    let subject = try { await async { ?Principal.fromText(captured.user) } } catch (_) { null };
+    let ?user = subject else return #Err("Recipient identity unresolved");
+    if (Principal.isAnonymous(user)) return #Ok(false);
+    let cd = clubDomainCanister;
+    let md = messagingDomainCanister;
+    let allowed = try {
+      if (captured.kind == "message_chat") {
+        let ?authority = md else return #Err("Messaging authority unavailable");
+        let messaging : actor { read_account_can_read_digest : shared (Principal, Text) -> async Bool } = actor(authority.toText());
+        await (with timeout = 10) messaging.read_account_can_read_digest(user, captured.club)
+      } else if (captured.club == "" or captured.club == "global" or captured.club == "app" or captured.kind == "club_invite" or captured.kind == "team_invite" or captured.kind == "membership_removed" or captured.kind == "role_removed") {
+        true // App/personal and access-change notices do not grant club access.
+      } else {
+        let ?authority = cd else return #Err("Club authority unavailable");
+        let clubs : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(authority.toText());
+        await (with timeout = 10) clubs.read_has_club_membership(user, captured.club)
+      }
+    } catch (_) { return #Err("Delivery authority unavailable") };
+    worker(caller);
+    if (cd != clubDomainCanister or md != messagingDomainCanister or isFenced(captured.club)) return #Err("Delivery authority changed");
+    switch (get(id)) {
+      case (?fresh) { if (fresh != captured or not ownsLease(id, caller)) return #Err("Notification changed") };
+      case null return #Err("Notification removed")
+    };
+    #Ok(allowed and recipientAllowed(captured.user, captured.kind))
+  };
+
   public shared ({ caller }) func fail(id : Text, error : Text, retry_at_ms : ?Nat64) : async Types.Result {
     worker(caller);
     switch (findIndex(id)) {
@@ -700,7 +734,7 @@ persistent actor class Main(governorInit : Principal) {
         if (not ownsLease(id, caller)) { return #Err("Notification lease owner required") };
         let failed : Types.Notification = {
           item with
-          body = error;
+          // Preserve the original notification on retry; errors are worker logs.
           status = switch (retry_at_ms) { case (?_) { #Pending }; case null { #Failed } };
           next_attempt_ms = switch (retry_at_ms) { case (?time) { time }; case null { item.next_attempt_ms } };
         };
