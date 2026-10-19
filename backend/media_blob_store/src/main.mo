@@ -528,9 +528,11 @@ persistent actor MediaBlobStore {
   transient let largeCapacityFlag = Runtime.envVar<system>("IGNITE_MEDIA_LARGE_CAPACITY") == ?"1";
   func largeMode() : Bool { largeCapacityFlag and stable_writes };
 
-  /// Finalized + in-flight bytes under clubs/<club>/vault/ (Pro allowance).
-  func clubVaultBytes(clubId : Text) : (Nat, Nat) {
-    let prefix = "clubs/" # clubId # "/vault/";
+  /// Finalized + in-flight bytes under clubs/<club>/ across all categories
+  /// (vault, gallery and chat combined). Branding-exempt assets also count:
+  /// the club allowance is measured against everything the club stores.
+  func clubMediaBytes(clubId : Text) : (Nat, Nat) {
+    let prefix = "clubs/" # clubId # "/";
     var used = 0;
     label scan for ((path, r) in stable_blobs.entriesFrom(prefix)) {
       if (not path.startsWith(#text prefix)) break scan;
@@ -542,12 +544,19 @@ persistent actor MediaBlobStore {
     (used, pending)
   };
 
-  func clubVaultPurchasedGb(clubId : Text) : async ?Nat {
+  func clubMediaPurchasedGb(clubId : Text) : async ?Nat {
     let ?cid = club_domain_canister else return null;
     let clubDomain : actor { get_club_storage_purchased : shared query Text -> async { #Ok : Nat32; #Err : Text } } = actor (Principal.toText(cid));
     try {
       switch (await clubDomain.get_club_storage_purchased(clubId)) { case (#Ok(gb)) ?gb.toNat(); case (#Err(_)) null }
     } catch (_) { null }
+  };
+
+  /// Authoritative per-club media byte count for the Pro allowance UI: the
+  /// same finalized + in-flight figures the admission check enforces.
+  public query func get_club_media_bytes(club_id : Text) : async { finalized : Nat; pending : Nat } {
+    let (finalized, pending) = clubMediaBytes(club_id);
+    { finalized; pending }
   };
 
   func reservedBytes() : Nat {
