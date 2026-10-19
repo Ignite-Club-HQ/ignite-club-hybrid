@@ -8,6 +8,7 @@ Owner-approved starting thresholds: prepare at 70%, roll new clubs over at 80% o
 - `groupPlacement` keeps the explicit current group below 80%, otherwise fills the most occupied eligible group. Only ready, approved/accepting, fueled, fresh groups in approved deployment/subnets qualify. No qualifying group returns a closed provisioning proposal, not permission to create a club.
 - The authoritative router independently fills the most club-utilized eligible group below 80% of its governor-configured club and conservative heap budgets; exact integer ratios avoid rounding. Existing retry/assignment, fuel, freshness and deletion-lock behavior remains unchanged. The router does not yet represent processing or blob admission budgets: these must not be claimed as authoritative complete-resource enforcement.
 - `prepare-group-capacity.yml` runs every 15 minutes (GitHub scheduling is best-effort), or manually. It reads `deploy/groups/capacity-evidence.json` and saves idempotent CLOSED preparation requests to `deploy/groups/capacity-requests.json`. A pending request or ready sibling suppresses duplicates. No deploy key, canister install, registration or enable path is reachable.
+- Notification: when a run newly queues a request, it opens a GitHub issue titled "Prepare new group requested (70% capacity reached)" and marks the run failed with a clear message, so the owner is emailed and sees the red badge. Runs that only re-check an already-queued request stay silent and green.
 
 ## Still blocked, not automatic live creation
 
