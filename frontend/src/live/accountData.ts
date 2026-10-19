@@ -86,42 +86,23 @@ export async function eraseMyIcpAccount(
     throw new Error(`Identity access canister is not configured for ICP target ${target.alias}.`);
   }
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  let inventory: Awaited<ReturnType<typeof import('./accountDeletionInventory').openAccountDeletionInventory>> | undefined;
   try {
     const account = await client.whoami();
-    const [{ activationStatus, SHIPPED_GATES }, domains] = await Promise.all([
-      import('./groupActivation'), import('./domains'),
+    const [{ openAccountDeletionInventory }, domains] = await Promise.all([
+      import('./accountDeletionInventory'), import('./domains'),
     ]);
-    // Capture the complete authoritative registry BEFORE removing membership.
-    // Registry failure prevents any erasure; browser-supplied group IDs and
-    // linked-principal lists are never accepted here.
-    let targets: IcpTargetConfig[] = [target];
-    if (activationStatus(SHIPPED_GATES).active) {
-      const { openLiveGroupReadSession } = await import('./groupSessionLive');
-      const session = await openLiveGroupReadSession({ target, identity });
-      try {
-        targets = [target, ...await session.readEveryGroup('club_domain', async ctx => [ctx.target], 64)];
-      } finally { session.dispose(); }
-    }
-    const uniqueTargets = (domain: 'club_domain' | 'vault_domain' | 'events_domain' | 'messaging_domain') => {
-      const seen = new Set<string>();
-      return targets.filter(t => {
-        const id = t.canisterIds?.[domain];
-        if (!id) throw new Error(`Account erasure requires ${domain} for every registered group`);
-        const key = JSON.stringify([t.host, t.networkKind, id]);
-        if (seen.has(key)) return false;
-        seen.add(key); return true;
-      });
-    };
-    // Validate every required participant before the first destructive call.
-    const revokeTargets = activationStatus(SHIPPED_GATES).active ? uniqueTargets('club_domain') : targets;
-    const purgeTargets = new Map((['vault_domain', 'events_domain', 'messaging_domain'] as const).map(domain =>
-      [domain, activationStatus(SHIPPED_GATES).active ? uniqueTargets(domain) : targets]));
+    inventory = await openAccountDeletionInventory(target, identity,
+      ['club_domain', 'vault_domain', 'events_domain', 'messaging_domain']);
     // Revoke the independent club authorization source before erasing the
     // identity profile. Partial failure is surfaced and safe to retry.
-    for (const t of revokeTargets) {
+    for (const t of inventory.targetsFor('club_domain')) {
+      await inventory.validate();
       const { actor } = await domains.connectLiveClubDomain(t, identity);
+      await inventory.validate();
       const revoked = await actor.erase_my_membership();
       if ("Err" in revoked) throw new Error(revoked.Err);
+      await inventory.validate();
     }
     // Purge the caller's own content on each domain before erasing the
     // identity. Failures are collected and disclosed, never silently dropped.
@@ -131,17 +112,22 @@ export async function eraseMyIcpAccount(
       ["events", "connectLiveEventsDomain", "events_domain"],
       ["messaging", "connectLiveMessagingDomain", "messaging_domain"],
     ] as const) {
-      for (const t of purgeTargets.get(domain) ?? []) {
+      for (const t of inventory.targetsFor(domain)) {
+      await inventory.validate();
       try {
         const domainActor = (await domains[connect](t, identity)).actor as { purge_my_data: () => Promise<{ Ok?: unknown; Err?: string }> };
+        await inventory.validate();
         const purged = await domainActor.purge_my_data();
         if ("Err" in purged) throw new Error(purged.Err);
       } catch (error) {
         console.error(`[account-erase] ${label} purge failed`, error);
         if (!purgeFailures.includes(label)) purgeFailures.push(label);
       }
+      // Registry failure must propagate, never become a tolerated purge failure.
+      await inventory.validate();
       }
     }
+    await inventory.validate();
     await client.eraseAccount(account.id);
     return {
       note:
@@ -153,6 +139,7 @@ export async function eraseMyIcpAccount(
           : ""),
     };
   } finally {
+    inventory?.dispose();
     client.dispose();
   }
 }

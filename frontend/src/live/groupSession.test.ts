@@ -21,6 +21,17 @@ function fixture() {
   return { ctx, registry, assignments, transport };
 }
 describe('integrated deployment-bound group read session', () => {
+  it('rejects same-revision authority substitution during deletion inventory validation', async () => {
+    const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
+    f.registry.groups[1].domains[0].canisterId = 'replacement-cai';
+    await expect(s.assertRegistryUnchanged()).rejects.toThrow('registry changed');
+  });
+  it('rejects a registry change while all-group discovery replies are in flight', async () => {
+    const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
+    await expect(s.readEveryGroup('club_domain', async () => {
+      f.registry.revision += 1n; return [];
+    })).rejects.toThrow('registry changed');
+  });
   it('discovers both groups then routes each full group context preserving duplicates and order', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
     expect(s.clubIds).toEqual(['club-a', 'club-b']);
