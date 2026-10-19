@@ -16,7 +16,7 @@ describe('pending email invitation discovery', () => {
     expect(await getLivePendingInvite(ctx, 'pinv-a')).toBeNull();
   });
   it('does not turn a failed canister call into absence', async () => {
-    state.preview.mockRejectedValue(new Error('Connection lost'));
+    state.preview.mockImplementation(() => { throw new Error('Connection lost'); });
     await expect(getLivePendingInvite(ctx, 'pinv-a')).rejects.toThrow('Connection lost');
   });
   it('does not turn an authorization error into absence', async () => {

@@ -51,9 +51,9 @@ try {
   assert.ok('Err' in await a.accept_parent_invite(removedIssuer));
   a.setPrincipal(owner);
   const fencedToken = ok(await a.create_parent_invite('club-a', ['team-a'], 'child-a')).id;
-  ok(await a.set_transfer_fence('club-a', true)); a.setPrincipal(parent);
+  ok(await a.freeze_club('club-a', 1n)); a.setPrincipal(parent);
   assert.ok('Err' in await a.accept_parent_invite(fencedToken));
-  a.setPrincipal(owner); ok(await a.set_transfer_fence('club-a', false));
+  a.setPrincipal(owner); ok(await a.unfreeze_club('club-a', 1n));
   await pic.upgradeCanister({ canisterId: groups[0].canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: owner,
     arg: IDL.encode([IDL.Principal], [owner]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   a.setPrincipal(parent); ok(await a.accept_parent_invite(fencedToken));
