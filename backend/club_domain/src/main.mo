@@ -4111,6 +4111,13 @@ persistent actor class Main(governorInit : Principal) {
     status == "draft" or status == "active" or status == "closed" or status == "archived"
   };
 
+  public query ({ caller }) func read_season_club(id : Text) : async { #Ok : ?Text; #Err : Text } {
+    auth(caller);
+    #Ok(switch (seasons.find(func(s) = s.id == id)) {
+      case null null;
+      case (?s) if (isAdmin(caller, s.club_id)) ?s.club_id else null;
+    })
+  };
   public query ({ caller }) func list_seasons(club_id : Text) : async { #Ok : [Types.Season]; #Err : Text } {
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
