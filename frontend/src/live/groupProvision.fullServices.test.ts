@@ -74,7 +74,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     const queue = actor('notification_queue', worker);
     const jobs = ok(await queue.claim(100000n, 50)); expect(jobs.length).toBeGreaterThan(0);
     for (const job of jobs) ok(await queue.acknowledge(job.id, job.idempotency_key));
-    expect(await actor('notification_queue', outsider).claim(100000n, 50)).toHaveProperty('Err');
+    await expect(actor('notification_queue', outsider).claim(100000n, 50)).rejects.toThrow();
     const pii = actor('pii_access_control', member);
     ok(await pii.register_pii('local-record', 'name', [1, 2, 3], member));
     expect(ok(await pii.get_encrypted_pii_batch(['local-record'], 'name', 'read', 'full-group')).length).toBe(1);
