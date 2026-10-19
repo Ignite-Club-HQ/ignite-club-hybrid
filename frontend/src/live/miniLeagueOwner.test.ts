@@ -20,7 +20,7 @@ describe('authorized league ownership', () => {
     await expect(lookupMiniLeagueOwner(context, 'league-a')).rejects.toThrow('Forbidden');
   });
   it('propagates transport loss instead of guessing the shared group', async () => {
-    get.mockRejectedValue(new Error('Network unavailable'));
+    get.mockImplementation(async () => { throw new Error('Network unavailable'); });
     await expect(lookupMiniLeagueOwner(context, 'league-a')).rejects.toThrow('Network unavailable');
   });
 });
