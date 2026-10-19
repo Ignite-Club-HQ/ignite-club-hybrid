@@ -307,7 +307,7 @@ function useChildrenForEvent(
               const children = await fetchLiveHomeChildren(ctx);
               return children.map((c) => ({ id: c.id, name: c.name ?? "" }));
             },
-          });
+          }, { shared: 'person' });
           if (merged.length === 0) return [];
           const players = await withFeatureBackend("mini_leagues", {
             supabase: async () => [] as never[],

@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, Plus, Trash2, Loader2, Search, Crown } from "lucide-react";
@@ -117,7 +118,7 @@ export default function ManageGuardiansDialog({
           } satisfies Guardian;
         });
       },
-    }),
+    }, { shared: 'person' }),
     enabled: open && !!childId,
   });
 
@@ -179,7 +180,7 @@ export default function ManageGuardiansDialog({
           });
           if (error) throw error;
         },
-      });
+      }, writeOnce({ shared: 'person' as const }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });
@@ -213,7 +214,7 @@ export default function ManageGuardiansDialog({
             .eq("id", guardianRecordId);
           if (error) throw error;
         },
-      });
+      }, writeOnce({ shared: 'person' as const }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });

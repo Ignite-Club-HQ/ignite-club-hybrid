@@ -99,7 +99,7 @@ export function MyTeamDutyTag({ event }: { event: { id: string; club_id: string;
         const rows = await getLiveTeam(ctx, dutyTeamId!);
         return rows[0]?.name ?? null;
       },
-    }),
+    }, { teamId: dutyTeamId! }),
   });
 
   if (!audience) return null;

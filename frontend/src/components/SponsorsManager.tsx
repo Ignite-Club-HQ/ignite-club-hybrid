@@ -315,7 +315,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
           if (error) throw error;
         },
         icp: (ctx) => deleteLiveSponsor(ctx, id),
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       invalidateSponsorQueries();

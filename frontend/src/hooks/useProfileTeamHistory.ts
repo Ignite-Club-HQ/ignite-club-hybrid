@@ -49,7 +49,7 @@ export function useProfileTeamHistory(profileId: string | undefined) {
             joined_at: new Date(Number(row.joined_at_ms)).toISOString(),
           }));
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: !!profileId,
     staleTime: 60_000,

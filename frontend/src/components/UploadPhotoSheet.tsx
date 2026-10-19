@@ -452,7 +452,7 @@ export function UploadPhotoSheet({
           const clubId = await withFeatureBackend("membership", {
             supabase: async () => null as string | null,
             icp: async (ctx) => (await getLiveTeam(ctx, defaultTeamId))[0]?.club_id ?? null,
-          });
+          }, { teamId: defaultTeamId! });
           if (!cancelled && clubId) setSelectedClubId((prev) => prev || clubId);
           return;
         }

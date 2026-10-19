@@ -319,7 +319,7 @@ function SupabaseClubEngagementAnalyticsPage({
             );
             return { isAdmin: isClubStaff, isCompAdmin: false };
           },
-        });
+        }, { clubId: clubId! });
       }
       const { data } = await supabase
         .from("user_roles")
@@ -373,7 +373,7 @@ function SupabaseClubEngagementAnalyticsPage({
               .filter((t) => !t.archived && t.deleted_at_ms.length === 0)
               .map((t) => ({ id: t.id, name: t.name, is_archived: false }))
               .sort((a, b) => a.name.localeCompare(b.name)),
-        });
+        }, { clubId: clubId! });
       }
       let q = supabase
         .from("teams")
@@ -551,7 +551,7 @@ function SupabaseClubEngagementAnalyticsPage({
             club_id: requireIcpClubId(),
           }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -581,7 +581,7 @@ function SupabaseClubEngagementAnalyticsPage({
             club_id: requireIcpClubId(),
           }));
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -612,7 +612,7 @@ function SupabaseClubEngagementAnalyticsPage({
           const accepted = Number(stats.accepted);
           return { total, accepted, rate: total ? Math.round((accepted / total) * 100) : 0 };
         },
-      });
+      }, { clubId: clubId! });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -847,7 +847,7 @@ function SupabaseClubEngagementAnalyticsPage({
             .filter((s) => s.is_active)
             .map((s) => ({ id: s.id, name: s.name, club_id: s.club_id }));
         },
-      }),
+      }, { clubId: clubId! }),
     enabled: queryReady && !!access?.isAdmin,
   });
 

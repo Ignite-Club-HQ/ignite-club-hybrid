@@ -87,7 +87,7 @@ export default function InviteOtherParentSheet({
           const team = teamOpt[0];
           return team ? (team.club_id as string | null) : null;
         },
-      });
+      }, { teamId: teamIds[0] });
     },
   });
 
