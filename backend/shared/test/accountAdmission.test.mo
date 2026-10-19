@@ -12,7 +12,7 @@ let account : Admission.Account = { id = "account"; principals = [subject]; vers
 assert Admission.owns(subject, account);
 assert not Admission.owns(other, account);
 assert not Admission.owns(subject, { account with status = #Suspended });
-let run = async {
+let _run = async {
   assert not (await Admission.Gate(true, null).eligible(subject));
   assert (await Admission.Gate(false, null).eligible(subject));
 };

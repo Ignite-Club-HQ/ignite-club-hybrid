@@ -36,10 +36,18 @@ Previously downloaded plaintext, already issued keys and delivered notifications
 
 Encrypted-media clubs remain immovable under the current owner policy. No routing activation or deployment is authorized by these results.
 
-## Next cross-service batch (not implemented)
+## Cross-service local admission batch (implemented, not released)
+
+- Shared `AccountAdmission` checks exact subject binding, active version evidence, anonymous/management rejection and authority failure. Service readers use a separate bounded, additive stable identity reader inventory, not the club unlink receiver list. Its setter and ownership reads remain production-disabled.
+- Chat has 40 compatible protected consensus reads; legacy private queries refuse in opt-in rehearsal mode. Human writes and scheduled `sendAs` admission precede local participant/admin alternatives. Vault has 12 protected consensus reads with live club membership, captured-record validation and a 200-candidate limit. No browser uses these prototype reads yet.
+- PII reads/key requests gate account admission before owner/reader/governor alternatives and recheck after derivation. Notifications use subject-bound account lookup instead of remote `whoami`, enforce inbox/preferences ownership, recheck captured inbox records, and exclude ineligible recipients at claim/device-token fetch and scheduled authors at dispatch. Malformed recipient IDs are isolated and denied; oversized chat admission batches explicitly refuse rather than report a silent zero.
+- Verification: 40 Rust tests, shared Motoko evidence assertions, four compiled service canisters and 17-contract binding drift pass. The real local service rehearsal seeds private chat/ciphertext/vault/inbox rows and covers erased/suspended/replaced subjects, direct reader/role shortcuts, worker recipient/device exclusion, malformed recipients, stopped identity authority and identity upgrade. Existing identity-local upgrade rehearsal remains a separate regression test.
+- This batch is not exhaustive authorization or globally atomic revocation. Production service admission flags are unset, deployment scripts unchanged, scaling off. No mainnet/native/hosted user acceptance was performed.
+
+### Remaining service and release work
 
 - Messaging: eligibility must precede participant, signed-in broadcast, admin and scheduled-author alternatives in `canAccessConversation`, `canReadTeamMessages`, `sendAs` and their siblings. Existing ordinary private queries cannot call consensus identity updates; add compatible protected update reads and close alternate query paths before release. Reload membership, blocks, authority and fences after awaits.
 - Private keys: gate owner/reader/governor, guardian, staff and competition alternatives before key issuance, and revalidate after derivation. Existing media epochs do not substitute for an identity-wide generation or drain barrier.
 - Vault: gate all role and competition shortcuts, and require membership for unrestricted-folder reads; preserve equivalent single/batch/discovery access and reload captured records after awaits.
-- Notifications: distinguish worker/service callers from human authors and recipients. `callerAccountId(caller)` currently calls remote `whoami` as the queue canister, not the supplied human; fix with an authoritative subject-bound read. Gate scheduled authors and claim-time recipients/device delivery, not just enqueue.
+- Notifications: preserve worker/service identity distinctions; subject-bound lookup and claim/device checks are now implemented locally. Legacy account-ID recipient mapping, observable unavailable-versus-denied results, fair bounded worker paging, all delegated audience alternatives and already-claimed delivery drain remain unfinished.
 - Completion still requires a complete server-verified service/media inventory, generation-bound admission fences and in-flight drain acknowledgements. Repeating eligibility checks or frontend preflight alone cannot make removal globally atomic. Authority outages must deny future private reads, writes and key issuance before removal retry; all unselected paths remain release blockers.
