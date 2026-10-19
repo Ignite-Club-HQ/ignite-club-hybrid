@@ -1014,7 +1014,13 @@ persistent actor class Main(governorInit : Principal) {
     var visible : [Types.Event] = [];
     for (event in events.values()) {
       if (not event.deleted and (club_id == null or club_id == ?event.club_id) and (team_id == null or team_id == event.team_id)) {
-        if (await* canViewMatch(caller, event)) visible := visible.concat([event]);
+        if (if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    }) visible := visible.concat([event]);
       };
     };
     visible
@@ -1024,7 +1030,13 @@ persistent actor class Main(governorInit : Principal) {
     var visible : [Types.Event] = [];
     for (event in events.values()) {
       if (not event.deleted and (club_ids.any(func(c) = c == event.club_id) or (switch (event.team_id) { case (?t) team_ids.any(func(id) = id == t); case null false }))) {
-        if (await* canViewMatch(caller, event)) visible := visible.concat([event]);
+        if (if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    }) visible := visible.concat([event]);
       };
     };
     #Ok(visible)
@@ -1461,7 +1473,13 @@ persistent actor class Main(governorInit : Principal) {
     if (Principal.isAnonymous(caller)) return #Err("Sign in required");
     switch (events.find(func(item) = item.id == event_id)) {
       case null { #Ok(null) };
-      case (?event) { if (not (await* canViewMatch(caller, event))) #Err("Forbidden") else #Ok(?event.club_id) };
+      case (?event) { if (not (if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    })) #Err("Forbidden") else #Ok(?event.club_id) };
     }
   };
 
@@ -1600,7 +1618,13 @@ persistent actor class Main(governorInit : Principal) {
   public composite query ({ caller }) func list_event_groups(event_id : Text) : async { #Ok : [Types.EventGroup]; #Err : Text } {
     switch (events.find(func(item) = item.id == event_id)) {
       case null { #Err("Event not found") };
-      case (?event) { if (not (await* canViewMatch(caller, event))) return #Err("Forbidden"); #Ok(eventGroups.filter(func(item) = item.event_id == event_id)) };
+      case (?event) { if (not (if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    })) return #Err("Forbidden"); #Ok(eventGroups.filter(func(item) = item.event_id == event_id)) };
     }
   };
 
@@ -1654,7 +1678,13 @@ persistent actor class Main(governorInit : Principal) {
       case (?group) {
         switch (events.find(func(item) = item.id == group.event_id)) {
           case null { #Err("Event not found") };
-          case (?event) { if (not (await* canViewMatch(caller, event))) return #Err("Forbidden"); #Ok(eventGroupPlayers.filter(func(item) = item.group_id == group_id)) };
+          case (?event) { if (not (if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    })) return #Err("Forbidden"); #Ok(eventGroupPlayers.filter(func(item) = item.group_id == group_id)) };
         };
       };
     }
@@ -1664,13 +1694,25 @@ persistent actor class Main(governorInit : Principal) {
   public composite query ({ caller }) func get_event_group(group_id : Text) : async { #Ok : ?Types.EventGroup; #Err : Text } {
     let group = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Ok(null); case (?g) g };
     let event = switch (events.find(func(e) = e.id == group.event_id)) { case null return #Ok(null); case (?e) e };
-    if (not (await* canViewMatch(caller, event))) return #Err("Forbidden");
+    if (not (if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    })) return #Err("Forbidden");
     #Ok(?group)
   };
   public composite query ({ caller }) func read_event_group_club(group_id : Text) : async { #Ok : ?Text; #Err : Text } {
     let group = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Ok(null); case (?g) g };
     let event = switch (events.find(func(e) = e.id == group.event_id)) { case null return #Ok(null); case (?e) e };
-    #Ok(if ((await* canViewMatch(caller, event))) ?event.club_id else null)
+    #Ok(if ((if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    })) ?event.club_id else null)
   };
   func canEditGroupState(caller : Principal, group : Types.EventGroup) : Bool {
     let event = switch (events.find(func(e) = e.id == group.event_id)) { case null return false; case (?e) e };
@@ -1680,7 +1722,13 @@ persistent actor class Main(governorInit : Principal) {
   public composite query ({ caller }) func get_group_edit_access(group_id : Text) : async { #Ok : Bool; #Err : Text } {
     let group = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Err("Group not found"); case (?g) g };
     let event = switch (events.find(func(e) = e.id == group.event_id)) { case null return #Err("Event not found"); case (?e) e };
-    #Ok((await* canViewMatch(caller, event)) and canEditGroupState(caller, group))
+    #Ok((if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    }) and canEditGroupState(caller, group))
   };
   // Exact revision CAS; no await between authorization and commit.
   public shared ({ caller }) func sync_group_state(group_id : Text, expected_revision : Nat64, timer_json : ?Text, pitch_json : ?Text) : async { #Ok : Types.EventGroup; #Err : Text } {
@@ -1740,7 +1788,13 @@ persistent actor class Main(governorInit : Principal) {
       case (?group) {
         switch (events.find(func(item) = item.id == group.event_id)) {
           case null { #Err("Event not found") };
-          case (?event) { if (not (await* canViewMatch(caller, event))) return #Err("Forbidden"); #Ok(eventGroupDuties.filter(func(item) = item.group_id == group_id)) };
+          case (?event) { if (not (if (Principal.isAnonymous(caller) or event.deleted) false else if (canView(caller, event)) true else switch (event.mini_league_id, miniLeagueDomainCanister) {
+      case (?leagueId, ?authority) {
+        let ml : actor { can_read_league_matches : shared query (Principal, Text, Text) -> async Bool } = actor (authority.toText());
+        try { await ml.can_read_league_matches(caller, leagueId, event.club_id) } catch (_) { false }
+      };
+      case _ false;
+    })) return #Err("Forbidden"); #Ok(eventGroupDuties.filter(func(item) = item.group_id == group_id)) };
         };
       };
     }
