@@ -42,7 +42,10 @@ describe('integrated scaling rehearsal', () => {
     const w = provisionWorld(4); let p = approveProvision(d, { operator: 'gov', proposalId: 'p1', deploymentId: 'ic', subnetId: 's1' }, 'c', 2n);
     p = await runProvision(p, w.a);
     expect(p.phase).toBe('failed'); expect(w.registry).toEqual([]);
-    const resumed = { ...w.saved.filter(s => s.phase === 'approved').at(-1)!, phase: 'approved' as const };
+    const receipt = w.saved.filter(s => s.phase === 'approved').at(-1);
+    if (!receipt) throw new Error('Missing provisioning receipt');
+    // This fixture failed before creation; an operator has proved no commit.
+    const resumed = { ...receipt, pending: undefined, phase: 'approved' as const };
     expect(Object.keys(resumed.canisters)).toHaveLength(4);
     const done = await runProvision(resumed, w.a);
     expect(done.phase).toBe('enabled'); expect(Object.keys(done.canisters)).toHaveLength(PER_GROUP_DOMAINS.length);
