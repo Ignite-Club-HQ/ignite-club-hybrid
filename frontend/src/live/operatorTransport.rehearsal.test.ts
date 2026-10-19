@@ -98,7 +98,7 @@ describe.skipIf(!enabled)('production operator transport (real signed calls)', (
     const eventsId = services.get('events_domain').canisterId.toText();
     const created = await transport.call(clubId, 'create_club', ['op-club', 'Operator club', 'op-club', [], []]); console.log('create_club result:', JSON.stringify(created, (k, v) => typeof v === 'bigint' ? v.toString() : v)); ok(created);
     const grant = await transport.call(clubId, 'add_role_grant', [governor, 'op-club', 'club_admin', []]); console.log('grant result:', JSON.stringify(grant, (k, v) => typeof v === 'bigint' ? v.toString() : v)); ok(grant);
-    const event = ok(await transport.call(eventsId, 'create_event', ['op-club', [], 'Training', 'Operator session', 'training', [], [], [], [], 2000000000000n, 2000003600000n, [], false, [], []])) as { id: string };
+    const rawEvent = await transport.call(eventsId, 'create_event', ['op-club', [], 'Training', 'Operator session', 'training', [], [], [], [], 2000000000000n, 2000003600000n, [], false, [], []]); console.log('event result:', JSON.stringify(rawEvent, (k, v) => typeof v === 'bigint' ? v.toString() : v)); const event = ok(rawEvent) as { id: string };
     const events = ok(await transport.call(eventsId, 'list_events', [['op-club'], []])) as { id: string }[];
     expect(events.some(e => e.id === event.id)).toBe(true);
 
