@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ active: true, dispatch: vi.fn() }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: state.active }) }));
-vi.mock('./featureRouter', () => ({ withFeatureBackend: state.dispatch }));
+vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: state.dispatch }));
 import { readContentInScope } from './contentRouting';
 describe('club content routing', () => {
   beforeEach(() => { state.active = true; state.dispatch.mockReset(); });
