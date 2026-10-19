@@ -195,7 +195,7 @@ export function useMissedNotificationSync(userId: string | undefined) {
             }));
           return { data, error: null };
         },
-      });
+      }, { everyGroup: true, merge: (parts: any[]) => ({ data: parts.flatMap(p => { if (p.error) throw p.error; return p.data ?? []; }), error: null }) });
 
       if (error) {
         console.error("[NotificationSync] Error fetching notifications:", error);

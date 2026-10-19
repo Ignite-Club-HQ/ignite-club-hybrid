@@ -1,3 +1,4 @@
+import { acrossLists } from "@/live/featureScopes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -44,7 +45,7 @@ export async function fetchVaultAppAdmin(
       const { isLiveAppAdmin } = await import("@/live/features/insights");
       return isLiveAppAdmin(ctx);
     },
-  });
+  }, { shared: "app" });
 }
 
 export async function fetchVaultUserRoles(
@@ -70,7 +71,7 @@ export async function fetchVaultUserRoles(
         team_id: grant.team[0] ?? null,
       }));
     },
-  });
+  }, acrossLists);
 }
 
 export async function fetchVaultAccessibleClubs(
@@ -100,7 +101,7 @@ export async function fetchVaultAccessibleClubs(
         storage_used_bytes: 0,
       }));
     },
-  });
+  }, acrossLists);
 }
 
 async function fetchVaultAccessibleClubsSupabase(
@@ -161,7 +162,7 @@ export async function fetchVaultClubHasPro(
       const { resolveLiveProAccess } = await import("@/live/features/proAccess");
       return resolveLiveProAccess(ctx, { clubId });
     },
-  });
+  }, { clubId });
 }
 
 export async function fetchVaultTeamHasPro(
@@ -184,7 +185,7 @@ export async function fetchVaultTeamHasPro(
       const team = await getLiveTeam(ctx, teamId).catch(() => null);
       return resolveLiveProAccess(ctx, { teamId, clubId: team?.club_id ?? null });
     },
-  });
+  }, { teamId });
 }
 
 export interface VaultCompetitionAccess {
@@ -220,7 +221,7 @@ export async function fetchVaultCompetitionAccess(
       const canManage = await isLiveCompetitionAdmin(ctx, competitionId).catch(() => false);
       return { isMember: true, canManage };
     },
-  });
+  }, { competitionId });
 }
 
 export async function fetchVaultAnyProAccess(
@@ -245,7 +246,7 @@ export async function fetchVaultAnyProAccess(
       if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
       return fetchIcpCallerIsPro(ctx);
     },
-  });
+  }, { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) });
 }
 
 async function fetchVaultAnyProAccessSupabase(

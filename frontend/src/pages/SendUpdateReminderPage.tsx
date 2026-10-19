@@ -1,3 +1,5 @@
+import { acrossLists } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -104,7 +106,7 @@ function IcpSendUpdateReminderPage() {
           }
           return out;
         },
-      }),
+      }, acrossLists),
   });
 
   const sendMutation = useMutation({
@@ -121,6 +123,11 @@ function IcpSendUpdateReminderPage() {
           let totalRecipients = 0;
           const prefix = `update-reminder-${Date.now()}`;
           for (const clubId of clubIds) {
+            totalRecipients += await withFeatureBackend("notifications", {
+              supabase: async () => { throw new Error("ICP-only page"); },
+              icp: async (scoped) => {
+            const ctx = scoped;
+            let queued = 0;
             // list_role_grants returns one row per (account, role, team) —
             // dedupe to unique account ids before fanning out so a member
             // with several roles in the same club is notified once.
@@ -146,12 +153,15 @@ function IcpSendUpdateReminderPage() {
                 body: body.trim(),
                 idempotencyKeyPrefix: `${prefix}-${clubId}-${i}`,
               });
-              totalRecipients += Number(created);
+              queued += Number(created);
             }
+            return queued;
+              },
+            }, writeOnce({ clubId }));
           }
           return totalRecipients;
         },
-      });
+      }, { shared: "app" });
     },
     onSuccess: (count) => {
       setLastResult(`Queued ${count} reminder${count === 1 ? "" : "s"}.`);

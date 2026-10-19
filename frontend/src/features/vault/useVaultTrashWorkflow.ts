@@ -77,7 +77,7 @@ async function fetchVaultTrashForClub(clubId: string, competitionId: string | nu
         .filter((file) => !competitionId || file.competition_id === competitionId);
       return partitionVaultTrashItems(mapped);
     },
-  });
+  }, competitionId ? { competitionId } : { clubId });
 }
 
 export function useVaultTrashWorkflow({

@@ -1018,6 +1018,10 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'read_competition_team_access' : ActorMethod<
+    [string, Principal],
+    { 'can_manage' : boolean, 'is_member' : boolean, 'club_id' : [] | [string] }
+  >,
   'read_has_club_membership' : ActorMethod<[Principal, string], boolean>,
   'read_my_club_memberships' : ActorMethod<
     [bigint, number],
@@ -1039,6 +1043,11 @@ export interface Main {
           'acl_revision' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'read_season_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
   'record_presence_heartbeat' : ActorMethod<
@@ -1363,6 +1372,11 @@ export interface Main {
       [] | [string],
     ],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_competition_authorities' : ActorMethod<
+    [Array<Principal>],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_competition_domain_canister' : ActorMethod<

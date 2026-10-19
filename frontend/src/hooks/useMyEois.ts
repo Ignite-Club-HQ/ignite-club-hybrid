@@ -1,3 +1,5 @@
+import { acrossLists } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -31,7 +33,7 @@ export function useMyPendingEois(enabled = true) {
           const subs = await getLiveMyPendingEois(ctx);
           return subs.map(mapLiveEoiSubmission) as EoiSubmission[];
         },
-      }),
+      }, acrossLists),
     enabled,
   });
 }
@@ -49,7 +51,7 @@ export function useConfirmEoi() {
           return data;
         },
         icp: async (ctx) => mapLiveEoiSubmission(await confirmLiveEoiPlacement(ctx, submissionId)),
-      }),
+      }, writeOnce({ eoiId: submissionId })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["my-pending-eois"] });
       qc.invalidateQueries({ queryKey: ["eoi-by-token"] });
@@ -72,7 +74,7 @@ export function useClaimEoi() {
           return data;
         },
         icp: async (ctx) => mapLiveEoiSubmission(await claimLiveEoiByToken(ctx, token)),
-      }),
+      }, { inviteToken: token }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["my-pending-eois"] });
       qc.invalidateQueries({ queryKey: ["eoi-by-token"] });
@@ -109,7 +111,7 @@ export function useUpdateMyEoi() {
           });
           await updateLiveEoiStatus(ctx, id, "preferences_completed");
         },
-      }),
+      }, writeOnce({ eoiId: id })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["my-pending-eois"] });
       qc.invalidateQueries({ queryKey: ["eoi-by-token"] });

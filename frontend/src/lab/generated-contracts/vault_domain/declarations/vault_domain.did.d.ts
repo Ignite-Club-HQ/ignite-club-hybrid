@@ -175,6 +175,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  'read_resource_club' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'register_file' : ActorMethod<
     [
       string,

@@ -71,6 +71,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  var competitionAuthorities : [Principal];
   // Preparation-only ledger. No upload activation API until legacy usage
   // import and recoverable store-side sagas exist; existing stores unchanged.
   var mediaQuotaLedger : MediaQuota.Ledger;
@@ -953,19 +954,38 @@ persistent actor class Main(governorInit : Principal) {
     })
   };
 
+  func trustedCompetition(caller : Principal) : Bool {
+    competitionAuthorities.any(func(p) = p.equal(caller)) or (switch (competitionDomainCanister) { case (?p) p.equal(caller); case null false })
+  };
+  public shared ({ caller }) func set_competition_authorities(ids : [Principal]) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (ids.size() > 64 or ids.any(func(p) = p.equal(Principal.anonymous()))) return #Err("Invalid authorities");
+    competitionAuthorities := ids; #Ok
+  };
+  func liveTeamClub(teamId : Text) : ?Text {
+    switch (teams.find(func(t) = t.id == teamId and t.deleted_at_ms == null)) {
+      case (?t) ?t.club_id;
+      case null switch (acl.teams.find(func(t) = t.id == teamId)) { case (?t) ?t.club; case null null };
+    }
+  };
+  public shared query ({ caller }) func read_competition_team_access(team_id : Text, user : Principal) : async { club_id : ?Text; is_member : Bool; can_manage : Bool } {
+    if (not trustedCompetition(caller) or user.equal(Principal.anonymous()) or team_id.size() > 128) return { club_id = null; is_member = false; can_manage = false };
+    switch (liveTeamClub(team_id)) {
+      case null ({ club_id = null; is_member = false; can_manage = false });
+      case (?club) {
+        let allowed = not isExcluded(user, club);
+        { club_id = ?club; is_member = allowed and (isOnTeam(user, team_id) or isAdmin(user, club));
+          can_manage = allowed and (isAdmin(user, club) or acl.roles.any(func(g) = g.user.equal(user) and g.club == ?club and g.team == ?team_id and (g.role == "team_admin" or g.role == "coach"))) }
+      };
+    }
+  };
   public shared query ({ caller }) func is_user_on_any_team(team_ids : [Text], user : Principal) : async Bool {
     if (user.equal(Principal.anonymous()) or team_ids.size() > 500) return false;
-    let isTrustedCaller = (switch (messagingDomainCanister) {
-      case (?canister) caller.equal(canister);
+    let trusted = trustedCompetition(caller) or (switch (messagingDomainCanister) { case (?p) p.equal(caller); case null false });
+    trusted and team_ids.any(func(teamId) = switch (liveTeamClub(teamId)) {
       case null false;
-    }) or (switch (competitionDomainCanister) {
-      case (?canister) caller.equal(canister);
-      case null false;
-    });
-    isTrustedCaller and team_ids.any(func(teamId) =
-      teamId != "" and teamId.size() <= 128 and
-      acl.teams.any(func(team) = team.id == teamId) and isOnTeam(user, teamId)
-    )
+      case (?club) not isExcluded(user, club) and isOnTeam(user, teamId);
+    })
   };
 
   func addNewsPrincipal(recipients : [Principal], user : Principal) : [Principal] {
@@ -4091,6 +4111,13 @@ persistent actor class Main(governorInit : Principal) {
     status == "draft" or status == "active" or status == "closed" or status == "archived"
   };
 
+  public query ({ caller }) func read_season_club(id : Text) : async { #Ok : ?Text; #Err : Text } {
+    auth(caller);
+    #Ok(switch (seasons.find(func(s) = s.id == id)) {
+      case null null;
+      case (?s) if (isAdmin(caller, s.club_id)) ?s.club_id else null;
+    })
+  };
   public query ({ caller }) func list_seasons(club_id : Text) : async { #Ok : [Types.Season]; #Err : Text } {
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");

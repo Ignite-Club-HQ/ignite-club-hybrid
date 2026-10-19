@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -194,7 +195,7 @@ export function DraftTeamBuilder({ clubId, seasonId, teams }: DraftTeamBuilderPr
             await addLiveSeasonTeamAssignment(ctx, seasonId, newTeamId, player.club_player_id);
           }
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["draft-builder-memberships", seasonId] });
       qc.invalidateQueries({ queryKey: ["season-team-player-counts", seasonId] });
@@ -220,7 +221,7 @@ export function DraftTeamBuilder({ clubId, seasonId, teams }: DraftTeamBuilderPr
         icp: async (ctx) => {
           await removeLiveSeasonTeamAssignment(ctx, seasonId, player.club_player_id);
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["draft-builder-memberships", seasonId] });
       qc.invalidateQueries({ queryKey: ["season-team-player-counts", seasonId] });

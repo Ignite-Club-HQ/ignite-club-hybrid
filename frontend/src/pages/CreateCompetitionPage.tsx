@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { mergeLists } from "@/live/featureRouter";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState } from "react";
@@ -225,7 +226,7 @@ function SupabaseCreateCompetitionPage() {
             const created = await createLivePersonalCompetition(ctx, trimmedName, trimmedSeason ?? "");
             return created.id;
           },
-        });
+        }, { shared: "person" });
         setSaving(false);
         toast({ title: "Competition created" });
         navigate(`/competitions/${newId}`);
@@ -300,7 +301,7 @@ function SupabaseCreateCompetitionPage() {
           );
           return created.id;
         },
-      });
+      }, writeOnce({ clubId: organizerClubId }));
       setSaving(false);
       toast({ title: "Competition created" });
       navigate(`/competitions/${newId}`);

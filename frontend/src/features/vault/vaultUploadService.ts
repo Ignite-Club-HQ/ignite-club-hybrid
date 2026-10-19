@@ -1,3 +1,5 @@
+import { vaultViewScope } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -149,7 +151,7 @@ export async function uploadVaultItem(
           options.view.type === "competition" ? options.view.competitionId : null,
         );
       },
-    });
+    }, writeOnce(vaultViewScope(options.view)));
     return;
   }
 

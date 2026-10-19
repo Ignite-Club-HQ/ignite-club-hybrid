@@ -527,6 +527,16 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_resource_club' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_token_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'record_match' : ActorMethod<
     [string, string, string],
     { 'Ok' : Match } |
@@ -633,6 +643,11 @@ export interface Main {
   >,
   'set_official_chat' : ActorMethod<
     [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_participant_club_authorities' : ActorMethod<
+    [Array<Principal>],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

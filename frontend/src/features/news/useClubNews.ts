@@ -1,3 +1,4 @@
+import { acrossLists } from "@/live/featureScopes";
 import { mergeLists } from "@/live/featureRouter";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -407,7 +408,7 @@ export function useNewsPublishableCompetitions() {
               }]),
           ).values()].filter((item) => clubs.length === 0 || clubIds.includes(item.organizer_club_id) || managed.some((entry: any) => entry.id === item.id));
         },
-      });
+      }, acrossLists);
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,

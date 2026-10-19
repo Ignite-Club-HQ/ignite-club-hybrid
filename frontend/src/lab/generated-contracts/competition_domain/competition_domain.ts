@@ -556,6 +556,20 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_resource_club(kind: string, id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_token_club(token: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     record_match(competition_id: string, home_team: string, away_team: string): Promise<{
         __kind__: "Ok";
         Ok: Match;
@@ -577,7 +591,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -698,6 +712,13 @@ export interface MainInterface {
         Err: string;
     }>;
     set_official_chat(competition_id: string, scope: string, conversation_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_participant_club_authorities(ids: Array<Principal>): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -1773,6 +1794,26 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.read_competition_club(arg0);
         return from_candid_variant_n77(result);
     }
+    async read_resource_club(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_resource_club(arg0, arg1);
+        return from_candid_variant_n77(result);
+    }
+    async read_token_club(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_token_club(arg0);
+        return from_candid_variant_n77(result);
+    }
     async record_match(arg0: string, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";
         Ok: Match;
@@ -1985,6 +2026,16 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_official_chat(arg0, arg1, arg2);
+        return from_candid_variant_n9(result);
+    }
+    async set_participant_club_authorities(arg0: Array<Principal>): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_participant_club_authorities(arg0);
         return from_candid_variant_n9(result);
     }
     async set_pii_access_control_canister(arg0: Principal): Promise<{

@@ -191,6 +191,11 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   read_resource_club: (kind: text, id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
    register_file: (id: text, folder_id: text, club: text, team: opt text,
     name: text, file_url: text, size: nat64, mime: text, is_external_link:
     bool, blob_ref: opt BlobRef, mini_league_id: opt text, competition_id:

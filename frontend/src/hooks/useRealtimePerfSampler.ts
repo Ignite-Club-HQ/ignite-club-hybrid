@@ -99,7 +99,7 @@ export function useRealtimePerfSampler(userId: string | undefined) {
             const { recordLivePerfSamplesBatch } = await import("@/live/features/insights");
             await recordLivePerfSamplesBatch(ctx, samples);
           },
-        });
+        }, { shared: "app" });
       } catch {
         // swallow; perf sampling must never crash the app
       }

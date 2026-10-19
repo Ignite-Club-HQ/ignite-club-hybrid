@@ -102,7 +102,7 @@ function IcpNotificationPreferencesPage() {
             users,
           };
         },
-      }),
+      }, { shared: "person" }),
     enabled: isAppAdmin,
   });
 

@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useEffect } from "react";
 import { Copy, Check, Code, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -61,7 +62,7 @@ export function EoiEmbedCard({ clubId, seasonId, seasonSlug, clubSlug }: EoiEmbe
           await setLiveSeasonEoiConfig(ctx, seasonId, JSON.stringify(config));
           return newToken;
         },
-      });
+      }, writeOnce({ clubId }));
       setWebhookToken(token);
     })();
   }, [seasonId]);

@@ -250,6 +250,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_resource_club(kind: string, id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     register_file(id: string, folder_id: string, club: string, team: string | null, name: string, file_url: string, size: bigint, mime: string, is_external_link: boolean, blob_ref: BlobRef | null, mini_league_id: string | null, competition_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -695,6 +702,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.purge_my_data();
         return from_candid_variant_n35(result);
     }
+    async read_resource_club(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_resource_club(arg0, arg1);
+        return from_candid_variant_n36(result);
+    }
     async register_file(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string, arg5: string, arg6: bigint, arg7: string, arg8: boolean, arg9: BlobRef | null, arg10: string | null, arg11: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -702,7 +719,7 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n15(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n36(arg9), to_candid_opt_n15(arg10), to_candid_opt_n15(arg11));
+        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n15(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n37(arg9), to_candid_opt_n15(arg10), to_candid_opt_n15(arg11));
         return from_candid_variant_n34(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
@@ -713,7 +730,7 @@ export class Vault_domain implements vault_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n37(result);
+        return from_candid_variant_n38(result);
     }
     async rename_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -773,7 +790,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n15(arg3), to_candid_opt_n15(arg4), to_candid_opt_n15(arg5), to_candid_opt_n15(arg6), arg7);
-        return from_candid_variant_n38(result);
+        return from_candid_variant_n39(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -1298,7 +1315,26 @@ function from_candid_variant_n35(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n37(value: {
+function from_candid_variant_n36(value: {
+    Ok: [] | [string];
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: string | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_opt_n8(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n38(value: {
     ok: bigint;
 } | {
     err: string;
@@ -1317,7 +1353,7 @@ function from_candid_variant_n37(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n38(value: {
+function from_candid_variant_n39(value: {
     Ok: _PinnedVault;
 } | {
     Err: string;
@@ -1348,7 +1384,7 @@ function from_candid_vec_n5(value: Array<_VaultFile>): Array<VaultFile> {
 function to_candid_opt_n15(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n36(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n37(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

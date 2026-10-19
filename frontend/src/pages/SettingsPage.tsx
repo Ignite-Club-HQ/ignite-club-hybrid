@@ -237,7 +237,7 @@ export default function SettingsPage() {
             email_pom_enabled: row.emailPomEnabled,
           });
         },
-      });
+      }, { shared: "person" });
     };
 
     loadPreferences();
@@ -400,7 +400,7 @@ export default function SettingsPage() {
           const result = await upsertLiveNotificationPreferences(ctx, principal, merged);
           icpPreferencesRef.current = result;
         },
-      });
+      }, { shared: "person" });
     } catch {
       setPreferences(preferences);
       toast({ title: "Failed to update preference", variant: "destructive" });
@@ -450,7 +450,7 @@ export default function SettingsPage() {
           const result = await upsertLiveNotificationPreferences(ctx, principal, merged);
           icpPreferencesRef.current = result;
         },
-      });
+      }, { shared: "person" });
     } catch (error) {
       setEmailPreferences(emailPreferences);
       toast({ title: "Failed to update email preference", variant: "destructive" });

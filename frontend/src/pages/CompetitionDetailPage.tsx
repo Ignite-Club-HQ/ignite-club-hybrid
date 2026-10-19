@@ -323,7 +323,7 @@ function SupabaseCompetitionDetailPage() {
           return !!data;
         },
         icp: async (ctx) => isLiveCompetitionAdmin(ctx, id!),
-      }),
+      }, { competitionId: id ?? "" }),
   });
 
   const organizerClubId = (competition as any)?.organizer_club_id ?? null;
@@ -391,7 +391,7 @@ function SupabaseCompetitionDetailPage() {
           const { getLiveCompetitionHideLadder } = await import("@/live/features/competitions");
           return getLiveCompetitionHideLadder(ctx, id!);
         },
-      });
+      }, { competitionId: id ?? "" });
     },
   });
 
@@ -1010,7 +1010,7 @@ function TeamsByDivision({
           if (!teamId) throw new Error("Team id is required to assign a division");
           await assignLiveDivision(ctx, competitionId, teamId, divisionId);
         },
-      });
+      }, writeOnce({ competitionId }));
     } catch (error: any) {
       setSavingId(null);
       toast({ title: "Could not move team", description: error?.message, variant: "destructive" });
@@ -1697,7 +1697,7 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
           const team = teams.find((t: any) => t.id === teamId);
           await registerLiveCompetitionTeam(ctx, competitionId, teamId, team?.club_id ?? "");
         },
-      });
+      }, writeOnce({ competitionId }));
     } catch (error: any) {
       setSaving(false);
       toast({ title: "Could not invite team", description: error?.message, variant: "destructive" });
@@ -1777,7 +1777,7 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
           setIcpClaimLink(`${window.location.origin}/claim-team?token=${token}`);
           toast({ title: "Shell team created", description: "Copy the claim link below to share it with the contact." });
         },
-      });
+      }, writeOnce({ clubId: organizerClubId ?? "" }));
     } catch (error: any) {
       setSaving(false);
       toast({ title: "Could not send invite", description: error?.message || "Unknown error", variant: "destructive" });

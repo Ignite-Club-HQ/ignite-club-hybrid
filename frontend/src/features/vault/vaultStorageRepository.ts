@@ -187,7 +187,7 @@ export async function fetchVaultStorageBreakdown(
           miniLeagues: [],
         });
       },
-    });
+    }, { clubId });
   }
   const { data: photos } = await client
     .from("photos")

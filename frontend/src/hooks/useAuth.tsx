@@ -372,7 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const inbox = await listLiveInbox(ctx, userId, null, 500);
           return (inbox as any[]).filter((n) => !n.read).length;
         },
-      }),
+      }, { everyGroup: true, merge: (parts: number[]) => parts.reduce((a, b) => a + b, 0) }),
       withFeatureBackend("messaging", {
         supabase: async () => fetchUnreadMessageCounts(userId),
         icp: async (ctx) => {

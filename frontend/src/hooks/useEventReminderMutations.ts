@@ -73,7 +73,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
           relatedId: id,
         });
       },
-    });
+    }, writeOnce({ eventId: event.id }));
   };
 
   const remindMutation = useMutation({

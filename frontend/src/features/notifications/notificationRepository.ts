@@ -1,3 +1,5 @@
+import { acrossLists, acrossVoid } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -72,7 +74,7 @@ export async function listNotifications(
         read: notification.read,
       }));
     },
-  });
+  }, acrossLists);
 }
 
 export async function markNotificationRead(
@@ -89,7 +91,7 @@ export async function markNotificationRead(
       await markLiveNotificationRead(ctx, notificationId);
       return notificationId;
     },
-  });
+  }, writeOnce({ notificationId }));
 }
 
 export async function markAllNotificationsRead(
@@ -107,7 +109,7 @@ export async function markAllNotificationsRead(
     icp: async (ctx) => {
       await markAllLiveNotificationsRead(ctx, userId, activeClubId);
     },
-  });
+  }, acrossVoid);
 }
 
 export async function deleteNotification(
@@ -124,7 +126,7 @@ export async function deleteNotification(
       await deleteLiveNotification(ctx, notificationId);
       return notificationId;
     },
-  });
+  }, writeOnce({ notificationId }));
 }
 
 export async function clearNotifications(
@@ -142,5 +144,5 @@ export async function clearNotifications(
     icp: async (ctx) => {
       await clearLiveInbox(ctx, userId, activeClubId);
     },
-  });
+  }, acrossVoid);
 }

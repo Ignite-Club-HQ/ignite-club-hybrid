@@ -1504,6 +1504,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
+    'read_competition_team_access' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [
+          IDL.Record({
+            'can_manage' : IDL.Bool,
+            'is_member' : IDL.Bool,
+            'club_id' : IDL.Opt(IDL.Text),
+          }),
+        ],
+        ['query'],
+      ),
     'read_has_club_membership' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
@@ -1536,6 +1547,11 @@ export const idlFactory = ({ IDL }) => {
           }),
         ],
         [],
+      ),
+    'read_season_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        ['query'],
       ),
     'record_presence_heartbeat' : IDL.Func(
         [],
@@ -1864,6 +1880,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Text),
         ],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_competition_authorities' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_competition_domain_canister' : IDL.Func(

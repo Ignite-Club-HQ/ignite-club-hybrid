@@ -380,6 +380,29 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // Location-only, fresh authority check. Includes trash and competition
+  // items so restore/share dispatch never guesses their owning club.
+  public shared ({ caller }) func read_resource_club(kind : Text, id : Text) : async { #Ok : ?Text; #Err : Text } {
+    auth(caller); if (not valid(id)) return #Err("Invalid id");
+    let folder = if (kind == "folder") folders.find(func(f) = f.id == id) else null;
+    let file = if (kind == "file") files.find(func(f) = f.id == id) else null;
+    let club = switch (folder) { case (?f) f.club; case null switch (file) { case (?f) f.club; case null return #Ok(null) } };
+    let competition = switch (folder) { case (?f) f.competition_id; case null switch (file) { case (?f) f.competition_id; case null null } };
+    switch (competition) {
+      case (?cid) { switch (await getCompetitionAccess(caller, cid)) { case (?a) if (not a.is_member or a.club_id != club) return #Ok(null); case null return #Err("Competition authority unavailable") } };
+      case null {
+        if (not isGovernor(caller)) {
+          let cid = switch (club_domain_canister) { case null return #Err("Club authority unavailable"); case (?c) c };
+          let authority : actor { is_club_member : shared query (Principal, Text) -> async Bool } = actor (cid.toText());
+          let member = try { await authority.is_club_member(caller, club) } catch (_) { return #Err("Club authority unavailable") };
+          if (not member) return #Ok(null);
+          switch (folder) { case (?f) if (not canViewFolder(caller, f)) return #Ok(null); case null switch (file) { case (?f) switch (folders.find(func(p) = p.id == f.folder_id)) { case (?p) if (not canViewFolder(caller, p)) return #Ok(null); case null {} }; case null {} } };
+        }
+      };
+    };
+    #Ok(?club)
+  };
+
   public shared ({ caller }) func list_competition_folders(competition_id : Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
     auth(caller);
     let access = switch (await getCompetitionAccess(caller, competition_id)) {

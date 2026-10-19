@@ -187,7 +187,7 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
           const s = await getLiveAdSetting(ctx, "media-header");
           return s ? { is_enabled: s.is_enabled } : null;
         },
-      }),
+      }, { shared: "app" }),
   });
   const freePlacementEnabled = !!placementSettings?.is_enabled;
 
@@ -219,7 +219,7 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
               headline: a.headline[0] ?? null,
             }),
           ),
-      }),
+      }, { shared: "app" }),
   });
 
   // Tier-weighted Pro playlist

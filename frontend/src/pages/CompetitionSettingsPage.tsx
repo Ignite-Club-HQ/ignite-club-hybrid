@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -732,7 +733,7 @@ function DivisionLadderVisibility({ competitionId }: { competitionId: string }) 
           const { getLiveCompetitionHideLadder } = await import("@/live/features/competitions");
           return getLiveCompetitionHideLadder(ctx, competitionId);
         },
-      });
+      }, { competitionId });
     },
   });
   const { data: divisions = [], isLoading } = useQuery({
@@ -776,7 +777,7 @@ function DivisionLadderVisibility({ competitionId }: { competitionId: string }) 
           const { setLiveCompetitionHideLadder } = await import("@/live/features/competitions");
           await setLiveCompetitionHideLadder(ctx, competitionId, hide);
         },
-      });
+      }, writeOnce({ competitionId }));
       qc.invalidateQueries({ queryKey: ["competition-hide-ladder", competitionId] });
       qc.invalidateQueries({ queryKey: ["competition-ladder", competitionId] });
       toast({ title: "Ladder visibility updated" });

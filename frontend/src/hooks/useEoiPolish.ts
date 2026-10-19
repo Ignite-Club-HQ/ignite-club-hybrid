@@ -1,8 +1,10 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resendLiveEoiInvite, bulkResendLiveEoiInvites } from "@/live/features/competitions";
+import { writeEoiInScope } from "@/live/competitionRouting";
 
 /** Resend the magic-link invite for a given EOI submission. */
 export function useResendEoiInvite() {
@@ -25,7 +27,7 @@ export function useResendEoiInvite() {
             body: { submission_id: submissionId },
           });
         },
-      }),
+      }, writeOnce({ eoiId: submissionId })),
     onSuccess: () => {
       toast.success("Invite resent");
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
@@ -58,7 +60,7 @@ export function useBulkResendEoiInvites() {
         },
         // Canister call is the bookkeeping half; email delivery stays on Supabase.
         icp: async (ctx) => {
-          await bulkResendLiveEoiInvites(ctx, submissionIds);
+          for (const id of submissionIds) await writeEoiInScope(ctx, id, scoped => resendLiveEoiInvite(scoped, id));
           let ok = 0;
           let fail = 0;
           for (const id of submissionIds) {
@@ -70,7 +72,7 @@ export function useBulkResendEoiInvites() {
           }
           return { ok, fail };
         },
-      }),
+      }, { shared: "person" }),
     onSuccess: ({ ok, fail }) => {
       if (fail === 0) toast.success(`Sent ${ok} reminder${ok === 1 ? "" : "s"}`);
       else toast.warning(`Sent ${ok}, failed ${fail}`);

@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -28,7 +29,7 @@ async function recordSponsorEvent(sponsorId: string, eventType: EventType, conte
       // user id, unlike the Supabase row).
       await recordLiveSponsorMetric(ctx, sponsorId, `${eventType}:${context}`, 1, null, clubId);
     },
-  });
+  }, clubId ? writeOnce({ clubId }) : { shared: "app" });
 }
 
 export function useSponsorAnalytics() {
