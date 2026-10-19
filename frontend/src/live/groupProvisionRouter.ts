@@ -5,7 +5,7 @@
  * services (workload identity) point at the shared canister, never a copy. */
 import { Principal } from '@icp-sdk/core/principal';
 import { GROUP_DOMAINS } from './groupRouting';
-import type { Provision, ProvisionCheckpoint } from './groupProvisioner';
+import { ProvisionRefusedError, type Provision, type ProvisionCheckpoint } from './groupProvisioner';
 
 type Res<T> = { Ok: T } | { Err: string };
 export type RouterActor = {
@@ -49,7 +49,7 @@ export function routerProvisionSteps(router: RouterActor, globals: { secret_work
       const mutate = async (kind: 'register' | 'placement', call: () => Promise<Res<bigint>>) => {
         p = { ...p, pending: { kind } }; await checkpoint(p);
         const result = await call();
-        if ('Err' in result) { p = { ...p, pending: undefined }; await checkpoint(p); throw new Error(`${kind}: ${result.Err}`); }
+        if ('Err' in result) { p = { ...p, pending: undefined }; await checkpoint(p); throw new ProvisionRefusedError(`${kind}: ${result.Err}`); }
         return result.Ok;
       };
       if (!p.registration) {

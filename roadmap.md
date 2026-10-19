@@ -15,6 +15,7 @@ Owner request: revisit the plan and simplify overengineered scope. Ordinary club
   - [x] Bounded provisioning safeguards: durable mutation intents, install and directory receipts; uncertain replay blocked; invalid groups rejected. 72 focused tests, real local management/directory reply-loss rehearsal, 45 recovery checks and six deploy checks pass. Evidence: `docs/scaling-stage-three-acceptance.md`. Nothing deployed or activated.
   - [ ] Integrated/release prerequisite: full domain install/configuration/health and governor checkpoint/management composition remain to verify; production enable remains blocked by local-only account-authority wiring. Semantic recovery evidence remains required before restore. Probe-domain tests do not close these dependencies.
 - [ ] 4. One integrated local rehearsal, then separately approved staged upgrades and signed-in browser/Android acceptance. Scaling activation is a distinct decision after the required gates pass.
+  - [ ] Current batch: run consolidated existing local acceptance, fix definite registration-refusal retry, and record remaining full-domain/live dependencies without weakening activation guards.
 
 Paused/separate scope: whole-account erasure receiver expansion, all-target personal purge/global drain and erased-account history-capacity/recovery development; media-free club-transfer execution and its extra acceptance; new subnet/Cloud Engine creation/capability work. Encrypted-media club moves remain prohibited. These are not completed by deferral and must not be enabled through the simplified rollout.
 

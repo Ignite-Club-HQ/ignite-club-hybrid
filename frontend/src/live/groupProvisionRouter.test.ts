@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { routerProvisionSteps } from './groupProvisionRouter';
-import { PER_GROUP_DOMAINS, type Provision } from './groupProvisioner';
+import { PER_GROUP_DOMAINS, runProvision, type Provision, type ProvisionAdapter } from './groupProvisioner';
 
 const P = 'aaaaa-aa'; const id = (n: number) => ['rrkah-fqaaa-aaaaa-aaaaq-cai', 'ryjl3-tyaaa-aaaaa-aaaba-cai', 'r7inp-6aaaa-aaaaa-aaabq-cai', 'rkp4c-7iaaa-aaaaa-aaaca-cai',
   'rno2w-sqaaa-aaaaa-aaacq-cai', 'renrk-eyaaa-aaaaa-aaada-cai', 'rdmx6-jaaaa-aaaaa-aaadq-cai', 'qoctq-giaaa-aaaaa-aaaea-cai', 'qjdve-lqaaa-aaaaa-aaaeq-cai',
@@ -29,6 +29,41 @@ describe('recording a new group in the directory', () => {
   it('a directory refusal stops the step', async () => {
     const router = { version: async () => 5n, register_group: async () => ({ Err: 'Revision conflict' }), register_group_placement: vi.fn() };
     await expect(routerProvisionSteps(router as never, { secret_workload_identity: id(12) }, dep, limits).registerGroup(prov)).rejects.toThrow('Revision conflict');
+    expect(router.register_group_placement).not.toHaveBeenCalled();
+  });
+  it('retries a definite registration refusal through the executor without recreating or reinstalling', async () => {
+    let rev = 5n; let refuse = true; let saved = prov;
+    const router = { version: async () => rev,
+      register_group: vi.fn(async () => refuse ? { Err: 'temporarily refused' } : { Ok: ++rev }),
+      register_group_placement: vi.fn(async () => ({ Ok: ++rev })) };
+    const adapter: ProvisionAdapter = {
+      ...routerProvisionSteps(router as never, { secret_workload_identity: id(12) }, dep, limits, async () => {}, true),
+      createCanister: vi.fn(), install: vi.fn(), healthy: vi.fn(),
+      save: async p => { saved = structuredClone(p); },
+    };
+    await expect(runProvision(saved, adapter)).rejects.toThrow('temporarily refused');
+    expect(saved.phase).toBe('checked'); expect(saved.pending).toBeUndefined();
+    expect(saved.registration).toBeUndefined(); expect(rev).toBe(5n);
+    refuse = false;
+    expect((await runProvision(saved, adapter)).phase).toBe('enabled');
+    expect(router.register_group).toHaveBeenCalledTimes(3);
+    expect(router.register_group_placement).toHaveBeenCalledTimes(1);
+    expect(adapter.createCanister).not.toHaveBeenCalled(); expect(adapter.install).not.toHaveBeenCalled();
+  });
+  it('fences a lost registration reply through the executor rather than treating it as refusal', async () => {
+    let saved = prov;
+    const router = { version: async () => 5n,
+      register_group: vi.fn(async () => { throw new Error('committed reply lost'); }),
+      register_group_placement: vi.fn() };
+    const adapter: ProvisionAdapter = {
+      ...routerProvisionSteps(router, { secret_workload_identity: id(12) }, dep, limits),
+      createCanister: vi.fn(), install: vi.fn(), healthy: vi.fn(),
+      save: async p => { saved = structuredClone(p); },
+    };
+    const result = await runProvision(saved, adapter);
+    expect(result.pending?.kind).toBe('register');
+    await expect(runProvision({ ...saved, phase: 'checked' }, adapter)).rejects.toThrow('Unresolved register');
+    expect(router.register_group).toHaveBeenCalledTimes(1);
     expect(router.register_group_placement).not.toHaveBeenCalled();
   });
   it('keeps production activation disabled even with a wiring callback', async () => {
