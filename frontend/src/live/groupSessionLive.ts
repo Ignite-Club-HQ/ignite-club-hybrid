@@ -4,6 +4,7 @@
 import type { FeatureBackendContext } from './featureRouter';
 import { openGroupSession, type GroupRegistry } from './groupSession';
 import { GROUP_DOMAINS, type GroupDomain } from './groupRouting';
+import type { EntityKind } from './groupDispatch';
 
 export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   const { connectLiveShardRouter, connectLiveClubDomain } = await import('./domains');
@@ -61,11 +62,32 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   });
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
-export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague' | 'competition' | 'eventGroup', id: string): Promise<string | null> {
+export async function lookupEntityClub(ctx: FeatureBackendContext, kind: EntityKind, id: string): Promise<string | null> {
   if (kind === 'miniLeague') return (await import('./miniLeagueOwner')).lookupMiniLeagueOwner(ctx, id);
   if (kind === 'roleRequest') return (await import('./roleRequestOwner')).lookupRoleRequestOwner(ctx, id);
   const d = await import('./domains');
   const unwrap = (r: { Ok: [] | [string] } | { Err: string }) => { if ('Err' in r) throw new Error(r.Err); return r.Ok[0] ?? null; };
+  if (kind === 'competitionMatch' || kind === 'eoi') return unwrap(await (await d.connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_resource_club(kind === 'competitionMatch' ? 'match' : 'eoi', id));
+  if (kind === 'vaultFile' || kind === 'vaultFolder') {
+    const v = await import('./features/vault');
+    const row = kind === 'vaultFile' ? await v.getLiveVaultFile(ctx, id) : await v.getLiveVaultFolder(ctx, id);
+    return row?.club || null;
+  }
+  if (kind === 'notification') {
+    const { actor } = await d.connectLiveNotificationQueue(ctx.target, ctx.identity);
+    const row = await actor.get_notification(id);
+    return row[0]?.club || null;
+  }
+  if (kind === 'scheduledMessage') {
+    const { listLiveScheduledMessages } = await import('./features/notifications');
+    const row = (await listLiveScheduledMessages(ctx, ctx.identity.getPrincipal().toText())).find(r => r.id === id);
+    return row?.clubId || null;
+  }
+  if (kind === 'season') {
+    const { actor } = await d.connectLiveClubDomain(ctx.target, ctx.identity);
+    const row = await actor.read_season_club(id);
+    return unwrap(row);
+  }
   if (kind === 'competition') return unwrap(await (await d.connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_competition_club(id));
   if (kind === 'eventGroup') return unwrap(await (await d.connectLiveEventsDomain(ctx.target, ctx.identity)).actor.read_event_group_club(id));
   if (kind === 'event') return unwrap(await (await d.connectLiveEventsDomain(ctx.target, ctx.identity)).actor.read_event_club(id));
@@ -83,6 +105,12 @@ export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event'
  * (pending invite, team invite link, shell-team claim token or short code).
  * Location only: the token itself is the invitee's proof, as on the shared canisters. */
 export async function groupHoldsInvite(ctx: FeatureBackendContext, token: string): Promise<boolean> {
+  if (ctx.target.canisterIds.competition_domain) {
+    const { connectLiveCompetitionDomain } = await import('./domains');
+    const reply = await (await connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_token_club(token);
+    if ('Err' in reply) throw new Error(reply.Err);
+    if (reply.Ok.length) return true;
+  }
   const c = await import('./features/club');
   const probes: Array<() => Promise<unknown>> = [
     () => c.getLivePendingInvite(ctx, token),
