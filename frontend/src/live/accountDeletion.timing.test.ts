@@ -167,7 +167,8 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
     expect(rebased.binding.registry.toText()).toBe(router2.canisterId.toText());
     f.router.actor.setPrincipal(governor);ok(await f.router.actor.record_group_health('new',1n,2n,f.revision));
     router2.actor.setPrincipal(governor);expect(await router2.actor.record_group_health('new',1n,2n,revision2)).toEqual({Err:'Deletion registry locked'});
-    await eraseIcpAccountAsAdmin({getPrincipal:()=>governor} as Identity,f.targets[0],f.account.id);
+    for(const c of f.clubs){c.actor.setPrincipal(governor);ok(await c.actor.erase_account_membership(f.account.id));}
+    f.id.setPrincipal(governor);ok(await f.id.commit_account_deletion(f.account.id));ok(await f.id.settle_account_deletion(f.account.id));
     for(let i=0;i<2;i++)expect(await f.roles(i,linked)).toEqual([]);
     router2.actor.setPrincipal(governor);ok(await router2.actor.record_group_health('new',1n,2n,revision2));
   },60000);
