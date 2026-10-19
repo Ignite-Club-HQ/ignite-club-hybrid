@@ -127,6 +127,8 @@ persistent actor class Main(governorInit : Principal) {
   // club on club_domain (same check pii_access_control uses). Fail-closed
   // while club_domain is unwired.
   func canWrite(caller : Principal, club : Text, team : ?Text, competitionId : ?Text) : async Bool {
+    await admitAccount(caller);
+    if (isFenced(club)) return false;
     switch (competitionId) {
       case (?id) {
         let access = await getCompetitionAccess(caller, id);
@@ -141,8 +143,8 @@ persistent actor class Main(governorInit : Principal) {
     switch (club_domain_canister) {
       case null { false };
       case (?cid) {
-        let cd : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
-        try { await cd.has_club_staff_role(caller, club) } catch (_) { false }
+        let cd : actor { read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+        try { await cd.read_has_club_staff_role(caller, club) } catch (_) { false }
       };
     }
   };
@@ -349,6 +351,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Folder not found") };
       case (?folder) {
         if (not (await canWrite(caller, folder.club, folder.team, folder.competition_id))) return #Err("Club or competition admin required");
+        if (folderFenced(id) or folders.find(func(f) = f.id == id) != ?folder) return #Err("Folder changed during authorization");
         let updated : Types.VaultFolder = { folder with name; restricted_roles; sort_order; description; color };
         folders := folders.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -366,6 +369,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Folder not found") };
       case (?folder) {
         if (not (await canWrite(caller, folder.club, folder.team, folder.competition_id))) return #Err("Club or competition admin required");
+        if (folderFenced(id) or folders.find(func(f) = f.id == id) != ?folder) return #Err("Folder changed during authorization");
         if (folders.any(func(item) = item.parent_id == ?id and item.deleted_at_ms == null)) return #Err("Folder has subfolders");
         if (files.any(func(item) = item.folder_id == id and item.deleted_at_ms == null)) return #Err("Folder has files");
         let updated : Types.VaultFolder = { folder with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
@@ -636,6 +640,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("File not found") };
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
+        if (fileFenced(id) or files.find(func(f) = f.id == id) != ?file) return #Err("File changed during authorization");
         let updated : Types.VaultFile = { file with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
         mediaEvidenceRevision += 1;
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
@@ -652,6 +657,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Trashed file not found") };
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
+        if (fileFenced(id) or files.find(func(f) = f.id == id) != ?file) return #Err("File changed during authorization");
         let updated : Types.VaultFile = { file with deleted_at_ms = null; deleted_by = null };
         mediaEvidenceRevision += 1;
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
@@ -669,6 +675,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("File not found") };
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
+        if (fileFenced(id) or files.find(func(f) = f.id == id) != ?file) return #Err("File changed during authorization");
         let updated : Types.VaultFile = { file with name = name };
         mediaEvidenceRevision += 1;
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
@@ -689,6 +696,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("File not found") };
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
+        if (fileFenced(id) or files.find(func(f) = f.id == id) != ?file) return #Err("File changed during authorization");
         if (folder_id == "") {
           let updated : Types.VaultFile = { file with folder_id = "" };
           mediaEvidenceRevision += 1;
@@ -700,6 +708,7 @@ persistent actor class Main(governorInit : Principal) {
           case null { #Err("Target folder not found") };
           case (?folder) {
             if (folder.club != file.club) return #Err("Target folder belongs to another club");
+            if (folder.competition_id != file.competition_id) return #Err("Target folder belongs to another vault scope");
             let updated : Types.VaultFile = { file with folder_id = folder_id; team = folder.team };
             mediaEvidenceRevision += 1;
             files := files.map(func(item) = if (item.id == id) { updated } else { item });
@@ -721,6 +730,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("File not found") };
       case (?file) {
         if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
+        if (fileFenced(id) or files.find(func(f) = f.id == id) != ?file) return #Err("File changed during authorization");
         mediaEvidenceRevision += 1;
         files := files.filter(func(item) = item.id != id);
         #Ok
@@ -1015,17 +1025,43 @@ persistent actor class Main(governorInit : Principal) {
     #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < files.size()) ?end else null; references = refs })
   };
 
+
+  func currentClubMember(caller : Principal, club : Text) : async Bool {
+    let authority = club_domain_canister;
+    if (isGovernor(caller)) return true;
+    let id = switch (authority) { case null return false; case (?id) id };
+    let service : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(id.toText());
+    let allowed = try { await (with timeout = 10) service.read_has_club_membership(caller, club) } catch (_) { false };
+    allowed and club_domain_canister == authority and not isFenced(club)
+  };
+  func accountFolderAccess(caller : Principal, folder : Types.VaultFolder) : async Bool {
+    if (not (await currentClubMember(caller, folder.club))) return false;
+    folders.find(func(f) = f.id == folder.id) == ?folder and canViewFolder(caller, folder)
+  };
+  func accountFileAccess(caller : Principal, file : Types.VaultFile) : async Bool {
+    if (not (await currentClubMember(caller, file.club))) return false;
+    if (files.find(func(f) = f.id == file.id) != ?file) return false;
+    switch (folders.find(func(f) = f.id == file.folder_id)) {
+      case null file.folder_id == "";
+      case (?folder) folder.club == file.club and folder.competition_id == file.competition_id and canViewFolder(caller, folder)
+    }
+  };
+  func accountFiles(caller : Principal, candidates : [Types.VaultFile]) : async [Types.VaultFile] {
+    var out : [Types.VaultFile] = [];
+    // Bound authorization work; unbounded club reads remain a release blocker.
+    if (candidates.size() > 200) Runtime.trap("Use bounded vault pages");
+    for (file in candidates.values()) { if (await accountFileAccess(caller, file)) out := out.concat([file]) };
+    // Re-evaluate local permissions after the final remote await.
+    out.filter(func(file) = files.find(func(f) = f.id == file.id) == ?file and not isFenced(file.club) and
+      (switch (folders.find(func(f) = f.id == file.folder_id)) { case null file.folder_id == ""; case (?folder) canViewFolder(caller, folder) }))
+  };
+
   // Protected consensus reads for the opt-in local account-removal rehearsal.
   public shared ({ caller }) func read_account_list_folders(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
-    await admitAccount(caller);
-    auth(caller);
-    #Ok(folders.filter(func(item) =
-      item.club == club and
-      item.competition_id == null and
-      item.deleted_at_ms == null and
-      (team == null or item.team == team or item.team == null) and
-      (mini_league_id == null or item.mini_league_id == mini_league_id) and
-      canViewFolder(caller, item)))
+    await admitAccount(caller); auth(caller);
+    if (not (await currentClubMember(caller, club))) return #Err("Club membership required");
+    #Ok(folders.filter(func(item) = item.club == club and item.competition_id == null and item.deleted_at_ms == null and
+      (team == null or item.team == team or item.team == null) and (mini_league_id == null or item.mini_league_id == mini_league_id) and canViewFolder(caller, item)))
   };
 
   public shared ({ caller }) func read_account_get_folder(id : Text) : async { #Ok : ?Types.VaultFolder; #Err : Text } {
@@ -1035,26 +1071,17 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Ok(null) };
       case (?folder) {
         if (folder.competition_id != null) return #Ok(null);
-        if (not canViewFolder(caller, folder)) return #Ok(null);
+        if (not (await accountFolderAccess(caller, folder))) return #Ok(null);
         #Ok(?folder)
       };
     }
   };
 
   public shared ({ caller }) func read_account_get_file(id : Text) : async { #Ok : ?Types.VaultFile; #Err : Text } {
-    await admitAccount(caller);
-    auth(caller);
-    switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
-      case null { #Ok(null) };
-      case (?file) {
-        if (file.competition_id != null) return #Ok(null);
-        switch (folders.find(func(item) = item.id == file.folder_id and item.deleted_at_ms == null)) {
-          case (?folder) { if (not canViewFolder(caller, folder)) return #Ok(null) };
-          case null {};
-        };
-        #Ok(?file)
-      };
-    }
+    await admitAccount(caller); auth(caller);
+    let file = switch (files.find(func(f) = f.id == id and f.deleted_at_ms == null and f.competition_id == null)) { case null return #Ok(null); case (?f) f };
+    if (not (await accountFileAccess(caller, file))) return #Ok(null);
+    #Ok(?file)
   };
 
   public shared ({ caller }) func read_account_list_files(folder_id : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
@@ -1066,9 +1093,9 @@ persistent actor class Main(governorInit : Principal) {
       };
       case null {};
     };
-    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null))
+    let visible = await accountFiles(caller, files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null));
+    #Ok(visible)
   };
-
   public shared ({ caller }) func read_account_list_files_with_folder(folder_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
@@ -1078,13 +1105,13 @@ persistent actor class Main(governorInit : Principal) {
       };
       case null {};
     };
-    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null).map(withFolderJoin))
+    let visible = await accountFiles(caller, files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null));
+    #Ok(visible.map(withFolderJoin))
   };
-
   public shared ({ caller }) func read_account_list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
-    #Ok(files.filter(func(item) =
+    let visible = await accountFiles(caller, files.filter(func(item) =
       item.club == club and
       item.competition_id == null and
       item.deleted_at_ms == null and
@@ -1093,13 +1120,13 @@ persistent actor class Main(governorInit : Principal) {
       (switch (folders.find(func(f) = f.id == item.folder_id)) {
         case null { true };
         case (?folder) { canViewFolder(caller, folder) };
-      })))
+      })));
+    #Ok(visible)
   };
-
   public shared ({ caller }) func read_account_list_club_files_with_folder(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
-    #Ok(files.filter(func(item) =
+    let visible = await accountFiles(caller, files.filter(func(item) =
       item.club == club and
       item.competition_id == null and
       item.deleted_at_ms == null and
@@ -1108,21 +1135,21 @@ persistent actor class Main(governorInit : Principal) {
       (switch (folders.find(func(f) = f.id == item.folder_id)) {
         case null { true };
         case (?folder) { canViewFolder(caller, folder) };
-      })).map(withFolderJoin))
+      })));
+    #Ok(visible.map(withFolderJoin))
   };
-
   public shared ({ caller }) func read_account_list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
-    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null))
+    let visible = await accountFiles(caller, files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null));
+    #Ok(visible)
   };
-
   public shared ({ caller }) func read_account_list_trashed_files_with_folder(club : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
-    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null).map(withFolderJoin))
+    let visible = await accountFiles(caller, files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null));
+    #Ok(visible.map(withFolderJoin))
   };
-
   public shared ({ caller }) func read_account_get_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok : ?Types.PinnedVault; #Err : Text } {
     await admitAccount(caller);
     auth(caller);

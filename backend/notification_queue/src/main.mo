@@ -161,6 +161,18 @@ persistent actor class Main(governorInit : Principal) {
     let n = fenceSnapshot(club).items.size(); fenceDrop(club); #Ok(n)
   };
 
+
+  func eligibleUsers(users : [Text]) : async [Text] {
+    if (not accountAdmissionEnabled) return users;
+    if (users.size() > 200) Runtime.trap("Admission batch exceeds 200");
+    var allowed : [Text] = [];
+    for (user in users.values()) {
+      let subject = Principal.fromText(user);
+      if (await accountAdmission.eligible(subject)) allowed := allowed.concat([user]);
+    };
+    allowed
+  };
+
   func callerAccountId(caller : Principal) : async ?Text {
     // Resolve the supplied human, never remote whoami() (which sees this queue).
     let configured = identityAccessCanister;
@@ -609,17 +621,25 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func claim(now_ms : Nat64, limit : Nat16) : async Types.Results {
     worker(caller);
-    if (limit == 0 or limit > 100) { return #Err("Invalid batch size") };
-    var claimed : [Types.Notification] = [];
-    var index = 0;
+    if (limit == 0 or limit > 100) return #Err("Invalid batch size");
+    var candidates : [Types.Notification] = [];
     for (item in items.values()) {
-      if (claimed.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) {
-        let processing : Types.Notification = { item with status = #Processing; attempts = item.attempts + 1 };
-        replace(index, processing);
-        setLease(item.id, caller);
-        claimed := claimed.concat([processing]);
-      };
-      index += 1;
+      if (candidates.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) candidates := candidates.concat([item]);
+    };
+    let allowed = await eligibleUsers(candidates.map(func(n) = n.user));
+    worker(caller); // worker may have been revoked during admission
+    var claimed : [Types.Notification] = [];
+    for (candidate in candidates.values()) {
+      switch (findIndex(candidate.id)) {
+        case null {};
+        case (?index) {
+          let item = items[index];
+          if (item == candidate and item.status == #Pending and not isFenced(item.club) and allowed.any(func(u) = u == item.user)) {
+            let processing : Types.Notification = { item with status = #Processing; attempts = item.attempts + 1 };
+            replace(index, processing); setLease(item.id, caller); claimed := claimed.concat([processing]);
+          }
+        }
+      }
     };
     #Ok(claimed)
   };
@@ -885,7 +905,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // Worker/governor guarded query for the timer worker to poll due work.
-  public query ({ caller }) func due_scheduled(now_ms : Nat64, limit : Nat16) : async Types.ScheduledResults {
+  public shared ({ caller }) func due_scheduled(now_ms : Nat64, limit : Nat16) : async Types.ScheduledResults {
     worker(caller);
     if (limit == 0 or limit > 200) { return #Err("Invalid batch size") };
     var res : [Types.ScheduledMessage] = [];
@@ -894,7 +914,9 @@ persistent actor class Main(governorInit : Principal) {
         res := res.concat([item]);
       };
     };
-    #Ok(res)
+    let allowed = await eligibleUsers(res.map(func(n) = n.author));
+    worker(caller);
+    #Ok(res.filter(func(n) = allowed.any(func(u) = u == n.author) and getScheduled(n.id) == ?n and not scheduledFenced(n.id)))
   };
 
 
@@ -964,6 +986,10 @@ persistent actor class Main(governorInit : Principal) {
       deliver_scheduled_message : shared (Principal, Text, Text, Text, ?{ kind : Text; ref_id : Text; url : ?Text }, ?Text) -> async { #Ok : { id : Text }; #Err : Text };
     } = actor (Principal.toText(messaging));
     for (item in due.values()) {
+      if (accountAdmissionEnabled) {
+        let allowed = await eligibleUsers([item.author]);
+        if (allowed.size() == 0 or getScheduled(item.id) != ?item or scheduledFenced(item.id) or messagingDomainCanister != ?messaging) continue;
+      };
       let slot = item.scheduled_for_ms;
       switch (scheduledConversation(item)) {
         case null { settleScheduled(item.id, slot, #Failed("No chat to post to")) };
@@ -1176,13 +1202,15 @@ persistent actor class Main(governorInit : Principal) {
     if (not fromMessagingDomain and Principal.toText(caller) != sender) {
       return #Err("Sender must match caller");
     };
+    if (not fromMessagingDomain) await admitAccount(caller);
     let effective_mute_list = if (fromMessagingDomain) { mute_list } else { [] };
     if (chatMessageProcessed(message_id)) { return #Ok(0) };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    let allowedRecipients = await eligibleUsers(if (recipients.size() <= 200) recipients else []);
     var created : Nat16 = 0;
     for (recipient in recipients.values()) {
       let muted = effective_mute_list.any(func(m) = m == recipient);
-      if (valid(recipient) and recipient != sender and not muted and recipientAllowed(recipient, "message_chat")) {
+      if ((not accountAdmissionEnabled or allowedRecipients.any(func(u) = u == recipient)) and valid(recipient) and recipient != sender and not muted and recipientAllowed(recipient, "message_chat")) {
         let id = "chat-" # message_id # "-" # recipient;
         switch (get(id)) {
           case (?_) {};
@@ -1287,11 +1315,13 @@ persistent actor class Main(governorInit : Principal) {
       device_tokens.any(func(t) = t.user == v.user and t.platform == v.platform)))
   };
 
-  public query ({ caller }) func list_device_tokens(users : [Text]) : async Types.DeviceTokensResult {
+  public shared ({ caller }) func list_device_tokens(users : [Text]) : async Types.DeviceTokensResult {
     worker(caller);
     if (users.size() > 100) { return #Err("Too many users") };
+    let allowed = await eligibleUsers(users);
+    worker(caller);
     #Ok(device_tokens.filter(func(entry : Types.DeviceToken) : Bool {
-      users.any(func(user : Text) : Bool = user == entry.user)
+      allowed.any(func(user : Text) : Bool = user == entry.user)
     }))
   };
 
