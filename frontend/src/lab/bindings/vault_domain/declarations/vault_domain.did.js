@@ -82,6 +82,19 @@ export const idlFactory = ({ IDL }) => {
     'folder_path' : IDL.Vec(IDL.Text),
     'file' : VaultFile,
   });
+  const Reference = IDL.Record({
+    'url' : IDL.Text,
+    'path' : IDL.Opt(IDL.Text),
+    'content_hash' : IDL.Opt(IDL.Text),
+    'store' : IDL.Opt(IDL.Text),
+    'resource_id' : IDL.Text,
+  });
+  const Page = IDL.Record({
+    'references' : IDL.Vec(Reference),
+    'next' : IDL.Opt(IDL.Nat),
+    'scanned' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
   const Main = IDL.Service({
     'clear_pinned_vault' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -260,6 +273,11 @@ export const idlFactory = ({ IDL }) => {
     'purge_my_data' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_club_media_references' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
         [],
       ),
     'read_resource_club' : IDL.Func(

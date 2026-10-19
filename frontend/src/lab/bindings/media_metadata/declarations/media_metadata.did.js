@@ -92,6 +92,19 @@ export const idlFactory = ({ IDL }) => {
     'reactions' : IDL.Vec(Reaction),
     'roles' : IDL.Vec(RoleGrant),
   });
+  const Reference = IDL.Record({
+    'url' : IDL.Text,
+    'path' : IDL.Opt(IDL.Text),
+    'content_hash' : IDL.Opt(IDL.Text),
+    'store' : IDL.Opt(IDL.Text),
+    'resource_id' : IDL.Text,
+  });
+  const Page = IDL.Record({
+    'references' : IDL.Vec(Reference),
+    'next' : IDL.Opt(IDL.Nat),
+    'scanned' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
   const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
@@ -187,6 +200,11 @@ export const idlFactory = ({ IDL }) => {
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_club_media_references' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
         [],
       ),
     'register_asset' : IDL.Func(

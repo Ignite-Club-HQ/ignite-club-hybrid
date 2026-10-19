@@ -1018,6 +1018,11 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'read_club_media_references' : ActorMethod<
+    [string, bigint, [] | [bigint]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
+  >,
   'read_competition_team_access' : ActorMethod<
     [string, Principal],
     { 'can_manage' : boolean, 'is_member' : boolean, 'club_id' : [] | [string] }
@@ -1627,6 +1632,12 @@ export type Operation = {
   { 'Save' : { 'id' : [] | [string], 'draft' : Draft } } |
   { 'Remove' : { 'id' : string } } |
   { 'Reorder' : { 'first' : string, 'second' : string } };
+export interface Page {
+  'references' : Array<Reference>,
+  'next' : [] | [bigint],
+  'scanned' : bigint,
+  'revision' : bigint,
+}
 export interface ParentInvite {
   'id' : string,
   'accepted_by' : [] | [Principal],
@@ -1705,6 +1716,13 @@ export interface PromoCode {
   'is_active' : boolean,
   'club_id' : [] | [string],
   'expires_at_ms' : [] | [bigint],
+}
+export interface Reference {
+  'url' : string,
+  'path' : [] | [string],
+  'content_hash' : [] | [string],
+  'store' : [] | [string],
+  'resource_id' : string,
 }
 export interface RemovedMember {
   'club' : string,

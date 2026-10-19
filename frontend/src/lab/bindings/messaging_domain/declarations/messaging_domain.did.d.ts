@@ -511,6 +511,11 @@ export interface Main {
   >,
   'purge_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  'read_club_media_references' : ActorMethod<
+    [string, bigint, [] | [bigint]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
+  >,
   /**
    * / Location-only lookup for group routing: which club owns this chat, if
    * / it lives in this canister. Participants only; null when not held here.
@@ -803,6 +808,12 @@ export interface OnlineUser {
   'user' : Principal,
   'platform' : [] | [string],
 }
+export interface Page {
+  'references' : Array<Reference>,
+  'next' : [] | [bigint],
+  'scanned' : bigint,
+  'revision' : bigint,
+}
 export interface PinnedMessage {
   'id' : string,
   'pinned_by' : Principal,
@@ -852,6 +863,13 @@ export interface RecentConversation {
   'conversation_id' : string,
   'kind' : string,
   'last_message_at_ms' : [] | [bigint],
+}
+export interface Reference {
+  'url' : string,
+  'path' : [] | [string],
+  'content_hash' : [] | [string],
+  'store' : [] | [string],
+  'resource_id' : string,
 }
 export interface RoleGrant {
   'role' : string,
