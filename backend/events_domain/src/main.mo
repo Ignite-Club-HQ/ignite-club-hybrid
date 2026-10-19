@@ -1739,7 +1739,8 @@ persistent actor class Main(governorInit : Principal) {
     // Reload after await: duties, fences and revision may change while verifying.
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     let current = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Err("Group not found"); case (?g) g };
-    if (current.event_id != event.id or not canEditGroupState(caller, current)) return #Err("Forbidden");
+    let currentEvent = switch (events.find(func(e) = e.id == current.event_id)) { case null return #Err("Event not found"); case (?e) e };
+    if (currentEvent.deleted or currentEvent.revision != event.revision or currentEvent.mini_league_id != event.mini_league_id or currentEvent.club_id != event.club_id or current.event_id != event.id or not canEditGroupState(caller, current)) return #Err("Forbidden");
     if (current.state_revision != expected_revision) return #Err("State revision conflict");
     if ((switch (timer_json) { case (?t) t.size() > 8192; case null false }) or (switch (pitch_json) { case (?t) t.size() > 262144; case null false })) return #Err("Match state too large");
     let updated : Types.EventGroup = { current with timer_state_json = timer_json; pitch_state_json = pitch_json; state_revision = current.state_revision + 1 };
