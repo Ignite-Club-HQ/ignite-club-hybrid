@@ -646,7 +646,7 @@ persistent actor class Main(governorInit : Principal) {
     worker(caller);
     if (limit == 0 or limit > 100) return #Err("Invalid batch size");
     var candidates : [Types.Notification] = [];
-    {
+    do {
       // Advance even if admission denies every candidate; otherwise a denied
       // prefix can permanently starve an eligible notification behind it.
       let count = items.size();
