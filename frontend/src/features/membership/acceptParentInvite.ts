@@ -106,7 +106,7 @@ export async function acceptParentTeamInvite(params: {
         clubId: invite?.club_id ?? null,
       };
     },
-  });
+  }, { inviteToken: params.inviteToken ?? '' });
   if (icpResult) return icpResult;
 
   const { data, error } = await supabase.rpc("accept_parent_team_invite" as any, {
@@ -175,5 +175,5 @@ export async function provisionInviteChildren(params: {
       // trigger race for this safety net to repair, so it has nothing to do.
       return [] as string[];
     },
-  });
+  }, { inviteToken: params.inviteId });
 }

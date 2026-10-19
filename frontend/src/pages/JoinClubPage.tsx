@@ -63,7 +63,7 @@ export default function JoinClubPage() {
         const name = profile[0]?.name;
         if (name && !cancelled) setIcpInviteClub({ name, logoUrl: profile[0]?.logo_url?.[0] ?? null });
       },
-    }).catch(() => {
+    }, { inviteToken: token! }).catch(() => {
       // Preview is best-effort; accepting still works without it.
     });
     return () => {
@@ -201,7 +201,7 @@ export default function JoinClubPage() {
             });
             return roleToAdd;
           },
-        });
+        }, { inviteToken: token! });
       }
       if (!invite || !user) throw new Error("Missing data");
 

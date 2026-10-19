@@ -100,7 +100,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
                 throw new Error("unreachable: already routed to icp");
               },
               icp: (ctx) => resendLivePendingInvite(ctx, invite.id),
-            });
+            }, { inviteToken: invite.id });
 
             // Resending on canister returns the invite record (or similar payload).
             // We use the same invite ID as the token for ICP pending invites.

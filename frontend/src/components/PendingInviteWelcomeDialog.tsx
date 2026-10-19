@@ -263,7 +263,7 @@ export function PendingInviteWelcomeDialog() {
                   );
                 }
               },
-            });
+            }, { inviteToken: invite.id });
             continue;
           }
 
