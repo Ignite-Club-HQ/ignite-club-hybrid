@@ -385,6 +385,9 @@ persistent actor MediaBlobStore {
     if (op.status == #committed) { let ?result = op.result else return #Err("Missing result"); return #Ok(result) };
     if (op.status != #committing) return #Err("Upload not ready to commit");
     let ?service = quotaService() else return #Err("Quota authority unset; retry finalize");
+    // Membership is checked here, after finalize's atomic local write: an
+    // unreachable authority must leave the ciphertext stored but unpublished.
+    try { await requireUploadMembership(op.owner, op.path) } catch (e) { return #Err(Error.message(e)) };
     try {
       switch (await service.commit_media_quota(id)) {
         case (#Ok(r)) {
@@ -830,7 +833,6 @@ persistent actor MediaBlobStore {
       case (null, ?op) op.path;
       case _ return #Err("Unknown upload")
     };
-    try { await requireUploadMembership(caller, path) } catch (e) { return #Err(Error.message(e)) };
     bumpInventory();
     switch (quota_operations.get(upload_id)) {
       case (?op) {
