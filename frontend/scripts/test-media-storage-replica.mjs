@@ -163,7 +163,7 @@ try {
   assert.ok('Err' in await actor.finalize_upload(recoveryId), 'failed authority call must not acknowledge publication');
   assert.ok('Err' in await actor.abort_upload(recoveryId), 'uncertain commit cannot refund its slot');
   await pic.startCanister({ canisterId: club.canisterId, sender: governor });
-  const recovered = ok(await actor.finalize_upload(recoveryId));
+  const recoveredRaw = await actor.finalize_upload(recoveryId); console.log("RECOVERED:", JSON.stringify(recoveredRaw, (_, v) => typeof v === "bigint" ? String(v) : v)); const recovered = ok(recoveredRaw);
   assert.deepEqual(ok(await actor.finalize_upload(recoveryId)), recovered);
   assert.deepEqual(await download(recoveryPath), Buffer.from([44]));
   assert.ok('Err' in await actor.abort_upload(recoveryId));
