@@ -298,6 +298,8 @@ try {
   await pic.upgradeCanister({canisterId,wasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
   receiver.setPrincipal(identity.canisterId);
   assert.equal(ok(await receiver.read_account_removal_drain(receiverRequest)).outstanding,0n);
+  receiver.setPrincipal(governor);
+  assert.ok('err' in await receiver.rekey_principal(victim,stranger,false));
  }
  pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(extra[0].canisterId));
  pii.setPrincipal(victim); await denied(()=>pii.get_club_media_vetkey('club',TransportSecretKey.random().publicKeyBytes()));

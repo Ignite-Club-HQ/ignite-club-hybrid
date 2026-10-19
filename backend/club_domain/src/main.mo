@@ -235,6 +235,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
     if (not isGovernor(caller)) return #err("Forbidden");
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Removed identity cannot be rekeyed or merged");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Anonymous principal not allowed");
     if (old.equal(new)) return #err("old and new must differ");
     if (old.equal(governor)) return #err("Cannot rekey the governor");
