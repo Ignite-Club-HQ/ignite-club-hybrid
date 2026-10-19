@@ -55,7 +55,7 @@ try {
   a.club.actor.setPrincipal(governor); ok(await a.club.actor.restore_member(a.id, removed));
   await deny(() => a.read(removed)); await deny(() => a.start(removed, 'marker-cleared'));
   // Upgrade persistence without snapshot rollback: cached keys are not revoked.
-  await pic.upgradeCanister({ canisterId: a.club.canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor, arg: IDL.encode([IDL.Principal], [governor]) });
+  await pic.upgradeCanister({ canisterId: a.club.canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] }, arg: IDL.encode([IDL.Principal], [governor]) });
   await deny(() => a.read(removed)); await a.read(retained); await b.read(removed);
   console.log('PASS: actual two-group photo decrypt, club-only key/chunk/finalize/new-upload denial, pending upload interruption, original-human delegated denial, retained members, other-club uploads, marker restore and upgrade persistence. No live services or global account flags.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
