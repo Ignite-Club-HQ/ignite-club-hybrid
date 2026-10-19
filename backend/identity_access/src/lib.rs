@@ -33,6 +33,8 @@ const MEM_ENTITLEMENTS: u8 = 4;
 const MEM_LINK_LIFECYCLE: u8 = 5;
 /// Durable unlink denials; separate from deletable account/profile state.
 const MEM_PRINCIPAL_DENIALS: u8 = 6;
+/// Account-level terminal erasure fence also covers previously unlinked IDs.
+const MEM_ERASED_ACCOUNTS: u8 = 7;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -252,36 +254,70 @@ struct UnlinkIntent {
     authorities: Vec<Principal>,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+enum DenialReason {
+    #[default]
+    Unlinked,
+    Erased,
+    Rekeyed,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PrincipalDenial {
     account_id: String,
     version: u64,
     #[serde(default)]
     reauthorized_version: Option<u64>,
+    #[serde(default)]
+    reason: DenialReason,
+    #[serde(default)]
+    rekey_destination: Option<Principal>,
 }
 fn principal_denial(principal: Principal) -> Option<PrincipalDenial> {
     PRINCIPAL_DENIALS.with(|m| m.borrow().get(&principal.to_text())).map(|bytes| decode(&bytes))
 }
 fn principal_is_denied(principal: Principal) -> bool {
-    principal_denial(principal).is_some_and(|d| d.reauthorized_version.is_none_or(|v| v <= d.version))
+    principal_denial(principal).is_some_and(|d| d.reason != DenialReason::Unlinked || d.reauthorized_version.is_none_or(|v| v <= d.version))
 }
 fn deny_unlinked_principal(principal: Principal, account_id: &str, version: u64) -> Outcome<()> {
-    if let Some(previous) = principal_denial(principal) {
-        if previous.account_id != account_id || previous.version > version { return Err("Principal denial generation conflict".into()); }
-    } else if PRINCIPAL_DENIALS.with(|m| m.borrow().len()) >= (MAX_ACCOUNTS * MAX_PRINCIPALS) as u64 {
-        return Err("Principal denial capacity reached".into());
+    deny_principals(&[principal], account_id, version, DenialReason::Unlinked)
+}
+/// Validate the whole operation before the first stable write. Returning Err
+/// does not roll back earlier writes on the IC, so partial denial is forbidden.
+fn deny_principals(subjects: &[Principal], account_id: &str, version: u64, reason: DenialReason) -> Outcome<()> {
+    if subjects.is_empty() || subjects.len() > MAX_PRINCIPALS { return Err("Invalid denial subjects".into()); }
+    let mut distinct = subjects.to_vec(); distinct.sort(); distinct.dedup();
+    if distinct.len() != subjects.len() || subjects.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister()) {
+        return Err("Invalid denial subjects".into());
     }
-    let denial = PrincipalDenial { account_id: account_id.to_string(), version, reauthorized_version: None };
-    PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(principal.to_text(), encode(&denial)));
+    let mut additions = 0;
+    for subject in subjects {
+        if let Some(previous) = principal_denial(*subject) {
+            if previous.account_id != account_id || previous.version > version ||
+                (previous.reason != DenialReason::Unlinked && reason != DenialReason::Erased && previous.reason != reason) {
+                return Err("Principal denial generation conflict".into());
+            }
+        } else { additions += 1; }
+    }
+    let size = PRINCIPAL_DENIALS.with(|m| m.borrow().len());
+    if size + additions > (MAX_ACCOUNTS * MAX_PRINCIPALS) as u64 { return Err("Principal denial capacity reached".into()); }
+    let denial = PrincipalDenial { account_id: account_id.to_string(), version, reauthorized_version: None, reason, rekey_destination: None };
+    for subject in subjects {
+        PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(subject.to_text(), encode(&denial)));
+    }
     Ok(())
 }
 /// Only a newer challenge from this account's surviving identity can restore
 /// identity eligibility. This does not restore deleted domain permissions.
 fn validate_denied_relink(principal: Principal, account_id: &str, version: u64) -> Outcome<()> {
+    if account_is_erased(account_id) { return Err("Erased account cannot be restored by linking".into()); }
     if let Some(denial) = principal_denial(principal) {
+        if denial.reason != DenialReason::Unlinked { return Err("Removed sign-in identity cannot be relinked".into()); }
         if denial.account_id != account_id || version <= denial.version { return Err("Fresh surviving-account relink required".into()); }
     }
     Ok(())
+}
+fn account_is_erased(account_id: &str) -> bool {
+    ERASED_ACCOUNTS.with(|m| m.borrow().contains_key(&account_id.to_string()))
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq)]
@@ -362,6 +398,8 @@ thread_local! {
         RefCell::new(StableCell::init(memory(MEM_LINK_LIFECYCLE), Vec::new()));
     static PRINCIPAL_DENIALS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_PRINCIPAL_DENIALS)));
+    static ERASED_ACCOUNTS: RefCell<StableBTreeMap<String, u64, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_ERASED_ACCOUNTS)));
 }
 fn link_lifecycle() -> LinkLifecycle {
     LINK_LIFECYCLE.with(|s| if s.borrow().get().is_empty() { LinkLifecycle::default() } else { decode(s.borrow().get()) })
@@ -533,6 +571,8 @@ fn account_for(principal: Principal) -> Outcome<Account> {
     authenticated(principal)?;
     if principal_is_denied(principal) { return Err("Identity revoked; surviving-account relink required".into()); }
     let account = find_account_by_principal(principal).ok_or("Unlinked identity")?;
+    if !account.principals.contains(&principal) { return Err("Stale principal account index".into()); }
+    if account_is_erased(&account.id) { return Err("Account erased".into()); }
     if let Some(denial) = principal_denial(principal) {
         if denial.account_id != account.id || denial.reauthorized_version.is_none_or(|v| account.version < v) {
             return Err("Revoked identity account generation mismatch".into());
@@ -1323,6 +1363,23 @@ fn erase_account(account_id: String) -> Outcome<()> {
     if account.principals.contains(&state.governor) {
         return Err("Governor account cannot be erased".into());
     }
+    erase_account_core(&mut state, &account)?;
+    store(&state);
+    Ok(())
+}
+
+fn erase_account_core(state: &mut CoreState, account: &Account) -> Outcome<()> {
+    let account_id = account.id.clone();
+    if account.principals.contains(&state.governor) { return Err("Governor account cannot be erased".into()); }
+    let version = account.version.checked_add(1).ok_or("Account version exhausted")?;
+    if account_is_erased(&account_id) { return Err("Account already erased".into()); }
+    if ERASED_ACCOUNTS.with(|m| m.borrow().len()) >= MAX_ACCOUNTS as u64 {
+        return Err("Erased account history capacity reached".into());
+    }
+    // Terminal history survives deletion of personal records and indexes.
+    // This is identity-local revocation, not a remote role-drain receipt.
+    deny_principals(&account.principals, &account_id, version, DenialReason::Erased)?;
+    ERASED_ACCOUNTS.with(|m| m.borrow_mut().insert(account_id.clone(), version));
     let erased_principals = account.principals.clone();
     remove_account(&account_id);
     for principal in &erased_principals {
@@ -1347,7 +1404,6 @@ fn erase_account(account_id: String) -> Outcome<()> {
     state.challenges.retain(|challenge| {
         challenge.account_id != account_id && !erased_principals.contains(&challenge.target)
     });
-    store(&state);
     Ok(())
 }
 
@@ -1381,7 +1437,15 @@ fn rekey_principal_core(
     if old == Principal::anonymous() || new == Principal::anonymous() {
         return Err("Anonymous principal not allowed".into());
     }
-    if principal_denial(old).is_some() || principal_denial(new).is_some() {
+    if let Some(previous) = principal_denial(old) {
+        if previous.reason == DenialReason::Rekeyed && previous.rekey_destination == Some(new) && principal_denial(new).is_none() &&
+            !account_is_erased(&previous.account_id) &&
+            find_account_by_principal(new).is_some_and(|a| a.id == previous.account_id && a.version >= previous.version && a.principals.contains(&new) && !a.principals.contains(&old)) {
+            return Ok(0);
+        }
+        return Err("Revoked identity cannot be rekeyed".into());
+    }
+    if principal_denial(new).is_some() {
         return Err("Revoked identity cannot be rekeyed".into());
     }
     if old == new {
@@ -1394,6 +1458,9 @@ fn rekey_principal_core(
         // Already moved (or never existed): nothing to do.
         return Ok(0);
     };
+    if !account.principals.contains(&old) { return Err("Stale principal account index".into()); }
+    if account_is_erased(&account.id) { return Err("Account erased".into()); }
+    let next_version = account.version.checked_add(1).ok_or("Account version exhausted")?;
     let mut changed: u64 = 0;
     // A bare account created for `new` at sign-in must go first.
     let bare = match find_account_by_principal(new) {
@@ -1413,6 +1480,13 @@ fn rekey_principal_core(
         }
         None => None,
     };
+    // All refusal checks precede the durable terminal denial and data moves.
+    if !dry_run {
+        deny_principals(&[old], &account.id, next_version, DenialReason::Rekeyed)?;
+        let mut denial = principal_denial(old).ok_or("Rekey denial missing")?;
+        denial.rekey_destination = Some(new);
+        PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(old.to_text(), encode(&denial)));
+    }
     if let Some(existing) = &bare {
         changed += 1;
         if !dry_run {
@@ -1429,7 +1503,7 @@ fn rekey_principal_core(
     if !dry_run {
         account.principals.retain(|p| *p != old && *p != new);
         account.principals.push(new);
-        account.version = account.version.saturating_add(1);
+        account.version = next_version;
         put_account(&account);
         deindex_principal(old);
         index_principal(new, &account.id);
@@ -2014,6 +2088,75 @@ mod tests {
         assert_eq!(authority_eligibilities(principal(98), vec![principal(99)]), Err("Cross-group eligibility not released".into()));
     }
     #[test]
+    fn erasure_blocks_all_current_identities_and_preserves_other_accounts() {
+        let a = principal(70); let b = principal(71); let survivor = principal(72);
+        let erased = Account { id: "erase-terminal".into(), principals: vec![a, b], version: 4, status: AccountStatus::Active };
+        let other = Account { id: "erase-bystander".into(), principals: vec![survivor], version: 9, status: AccountStatus::Active };
+        for account in [&erased, &other] { put_account(account); for p in &account.principals { index_principal(*p, &account.id); } }
+        let mut core = empty_core_state(principal(73));
+        erase_account_core(&mut core, &erased).unwrap();
+        assert!(get_account(&erased.id).is_none());
+        for p in [a, b] {
+            assert_eq!(principal_denial(p).unwrap().reason, DenialReason::Erased);
+            assert_eq!(principal_denial(p).unwrap().version, 5);
+            assert!(ensure_account(p).is_err());
+            assert!(validate_denied_relink(p, &erased.id, 100).is_err());
+            assert_eq!(principal_eligibility(p).decision, EligibilityDecision::Denied);
+        }
+        assert_eq!(account_for(survivor).unwrap(), other);
+    }
+    #[test]
+    fn erased_account_history_blocks_old_unlinked_and_restored_accounts() {
+        let current = principal(74); let old = principal(75);
+        let account = Account { id: "erase-historical".into(), principals: vec![current], version: 8, status: AccountStatus::Active };
+        put_account(&account); index_principal(current, &account.id);
+        deny_unlinked_principal(old, &account.id, 5).unwrap();
+        erase_account_core(&mut empty_core_state(principal(76)), &account).unwrap();
+        assert!(validate_denied_relink(old, &account.id, 99).is_err());
+        let restored = Account { id: account.id.clone(), principals: vec![old], version: 99, status: AccountStatus::Active };
+        put_account(&restored); index_principal(old, &restored.id);
+        let mut denial = principal_denial(old).unwrap(); denial.reauthorized_version = Some(99);
+        PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(old.to_text(), encode(&denial)));
+        assert!(account_for(old).is_err());
+        assert!(ensure_account(old).is_err());
+        assert_eq!(principal_eligibility(old).decision, EligibilityDecision::Denied);
+    }
+    #[test]
+    fn denied_batch_conflict_does_not_partially_erase_an_account() {
+        let first = principal(77); let conflict = principal(78);
+        let account = Account { id: "erase-conflict".into(), principals: vec![first, conflict], version: 3, status: AccountStatus::Active };
+        put_account(&account); index_principal(first, &account.id);
+        deny_unlinked_principal(conflict, "different-account", 3).unwrap();
+        assert!(erase_account_core(&mut empty_core_state(principal(79)), &account).is_err());
+        assert!(principal_denial(first).is_none());
+        assert!(!account_is_erased(&account.id));
+        assert_eq!(get_account(&account.id).unwrap(), account);
+    }
+    #[test]
+    fn exhausted_versions_refuse_erasure_and_rekey_without_mutation() {
+        let user = principal(80); let replacement = principal(81);
+        let account = Account { id: "version-exhausted".into(), principals: vec![user], version: u64::MAX, status: AccountStatus::Active };
+        put_account(&account); index_principal(user, &account.id);
+        let mut core = empty_core_state(principal(82));
+        assert!(erase_account_core(&mut core, &account).is_err());
+        for dry in [true, false] { assert!(rekey_principal_core(&mut core, user, replacement, dry).is_err()); }
+        assert!(principal_denial(user).is_none());
+        assert_eq!(get_account(&account.id).unwrap(), account);
+    }
+    #[test]
+    fn legacy_denial_cbor_defaults_to_relinkable_unlink_only() {
+        #[derive(Serialize)]
+        struct OldDenial { account_id: String, version: u64, reauthorized_version: Option<u64> }
+        let decoded: PrincipalDenial = decode(&encode(&OldDenial { account_id: "old-schema".into(), version: 3, reauthorized_version: None }));
+        assert_eq!(decoded.reason, DenialReason::Unlinked);
+        assert_eq!(decoded.version, 3);
+        for reason in [DenialReason::Erased, DenialReason::Rekeyed] {
+            let terminal = PrincipalDenial { account_id: "terminal".into(), version: 4, reauthorized_version: Some(99), reason: reason.clone(), rekey_destination: None };
+            let restored: PrincipalDenial = decode(&encode(&terminal));
+            assert_eq!(restored.reason, reason);
+        }
+    }
+    #[test]
     fn unlink_recovery_uses_the_persisted_targets_not_a_new_registry() {
         let a = principal(110); let b = principal(111);
         let original = UnlinkIntent { account_id: "frozen".into(), principal: b, version: 4, acknowledged: vec![a], authorities: vec![a, b] };
@@ -2068,6 +2211,30 @@ mod tests {
         }
     }
     #[test]
+    fn stale_restored_index_cannot_grant_access_or_rekey() {
+        let stale = principal(83); let member = principal(84); let target = principal(85);
+        let account = Account { id: "stale-index".into(), principals: vec![member], version: 7, status: AccountStatus::Active };
+        put_account(&account); index_principal(stale, &account.id); index_principal(member, &account.id);
+        assert!(account_for(stale).is_err());
+        assert!(ensure_account(stale).is_err());
+        assert_eq!(principal_eligibility(stale).decision, EligibilityDecision::Denied);
+        assert!(rekey_principal_core(&mut empty_core_state(principal(86)), stale, target, false).is_err());
+        assert!(principal_denial(stale).is_none());
+        assert_eq!(get_account(&account.id).unwrap(), account);
+    }
+    #[test]
+    fn rekey_replay_requires_exact_destination_and_non_erased_account() {
+        let old = principal(87); let target = principal(88); let alias = principal(89);
+        let account = Account { id: "exact-rekey".into(), principals: vec![old, alias], version: 3, status: AccountStatus::Active };
+        put_account(&account); index_principal(old, &account.id); index_principal(alias, &account.id);
+        let mut core = empty_core_state(principal(90));
+        rekey_principal_core(&mut core, old, target, false).unwrap();
+        assert_eq!(rekey_principal_core(&mut core, old, target, false), Ok(0));
+        assert!(rekey_principal_core(&mut core, old, alias, false).is_err());
+        ERASED_ACCOUNTS.with(|m| m.borrow_mut().insert(account.id.clone(), 5));
+        assert!(rekey_principal_core(&mut core, old, target, false).is_err());
+    }
+    #[test]
     fn rekey_moves_account_to_new_principal_and_drops_bare_account() {
         let governor = principal(1);
         let old = principal(40);
@@ -2103,6 +2270,7 @@ mod tests {
 
         // Dry run reports changes but writes nothing.
         assert_eq!(rekey_principal_core(&mut state, old, new, true), Ok(3));
+        assert!(principal_denial(old).is_none());
         assert_eq!(find_account_by_principal(old).map(|a| a.id), Some(old_id.clone()));
 
         assert_eq!(rekey_principal_core(&mut state, old, new, false), Ok(3));
@@ -2115,6 +2283,12 @@ mod tests {
         assert!(state.roles.iter().any(|g| g.account_id == old_id && g.role == "app_admin"));
         assert!(get_entitlement(&key).is_none());
         assert_eq!(get_entitlement(&entitlement_key(new, "pro", "")).map(|e| e.principal), Some(new));
+        assert_eq!(principal_denial(old).unwrap().reason, DenialReason::Rekeyed);
+        assert_eq!(principal_denial(old).unwrap().version, 4);
+        assert!(ensure_account(old).is_err());
+        assert!(validate_denied_relink(old, &moved.id, 99).is_err());
+        assert_eq!(principal_eligibility(new).decision, EligibilityDecision::Eligible);
+        assert_eq!(principal_eligibility(old).decision, EligibilityDecision::Denied);
         // Second run is a no-op.
         assert_eq!(rekey_principal_core(&mut state, old, new, false), Ok(0));
     }
