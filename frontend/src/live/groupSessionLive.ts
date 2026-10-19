@@ -61,11 +61,12 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   });
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
-export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague', id: string): Promise<string | null> {
+export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague' | 'competition', id: string): Promise<string | null> {
   if (kind === 'miniLeague') return (await import('./miniLeagueOwner')).lookupMiniLeagueOwner(ctx, id);
   if (kind === 'roleRequest') return (await import('./roleRequestOwner')).lookupRoleRequestOwner(ctx, id);
   const d = await import('./domains');
   const unwrap = (r: { Ok: [] | [string] } | { Err: string }) => { if ('Err' in r) throw new Error(r.Err); return r.Ok[0] ?? null; };
+  if (kind === 'competition') return unwrap(await (await d.connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_competition_club(id));
   if (kind === 'event') return unwrap(await (await d.connectLiveEventsDomain(ctx.target, ctx.identity)).actor.read_event_club(id));
   if (kind === 'conversation') return unwrap(await (await d.connectLiveMessagingDomain(ctx.target, ctx.identity)).actor.read_conversation_club(id));
   if (kind === 'clubLink') {

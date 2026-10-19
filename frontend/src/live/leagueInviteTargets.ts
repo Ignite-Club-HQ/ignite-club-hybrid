@@ -14,7 +14,7 @@ export async function readLiveInviteTargets(ctx: FeatureBackendContext) {
     }, { everyGroup: true, merge: mergeMiniLeagueRows }),
     withFeatureBackend('competitions', {
       supabase: async () => { throw new Error('Internet Identity required'); },
-      icp: async scoped => (await import('./features/competitions')).listLivePublishableCompetitions(scoped),
+      icp: async scoped => (await import('./features/competitions')).listLiveMyNewsCompetitions(scoped),
     }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map(row => [row.id, row])).values()] }),
   ]);
   const teamIds = [...new Set(grants.flatMap(g => g.team))];

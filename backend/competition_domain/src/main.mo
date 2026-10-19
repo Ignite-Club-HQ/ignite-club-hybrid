@@ -448,6 +448,19 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(competitions.filter(func(item) = mine.any(func(id) = id == item.id)))
   };
 
+  // Location only. Hidden competitions are never discoverable to strangers;
+  // the resource methods still independently authorize reads and writes.
+  public query ({ caller }) func read_competition_club(id : Text) : async { #Ok : ?Text; #Err : Text } {
+    auth(caller);
+    switch (competitions.find(func(c) = c.id == id)) {
+      case null #Ok(null);
+      case (?c) {
+        let visible = (c.visibility == "public" and c.status != "archived") or canManageCompetition(caller, id) or roles.any(func(r) = r.competition_id == id and r.user.equal(caller));
+        if (not visible or c.club_id == "") #Ok(null) else #Ok(?c.club_id)
+      };
+    }
+  };
+
   // Competition settings (name, description, status, visibility, ladder
   // scoring). Season stays create-only. Mirrors the Supabase
   // CompetitionSettingsPage update.
