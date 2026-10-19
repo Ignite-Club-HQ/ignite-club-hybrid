@@ -57,3 +57,21 @@ bunx vitest run --no-file-parallelism --config vitest.legacy.config.mjs \
   src/live/accountData.groups.test.ts src/live/groupSession.test.ts \
   src/live/groupSessionWrite.test.ts src/live/groupSessionCrossGroup.test.ts
 ```
+## Live release wiring (19 October 2026, third batch)
+
+The protocol now has its own release gate. `bound_deletion_released()` in
+identity_access accepts the local rehearsal flag (tests unchanged) or the
+production canister environment variable `IGNITE_BOUND_DELETION_RELEASE=1`.
+The four deletion-timing endpoints use this gate; every other
+rehearsal-gated feature (cross-group eligibility, service admission, history
+access, authority setters, identity revocation) still requires the rehearsal
+flag and stays closed in production. A new PocketIC case proves the release
+flag alone opens prepare/commit/cancel/settle (they reach their real
+precondition checks) while a flag-less canister still answers "Bound deletion
+not released".
+
+Validation: **9 timing + 8 boundary PocketIC tests**, **53 identity Rust
+tests** pass; identity_access WASM compiles. The mainnet release step is
+documented in `docs/icp-deployment-runbook.md`. Still open before new groups
+open live: all-service admission/drain proof, production operator
+composition, and signed-in browser/Android/push acceptance.
