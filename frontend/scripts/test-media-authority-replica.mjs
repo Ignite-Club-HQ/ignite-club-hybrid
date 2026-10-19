@@ -34,7 +34,8 @@ try {
   const a = original.actor; a.setPrincipal(governor);
   ok(await a.set_club_domain_canister(source.canisterId));
   const identity = new TextEncoder().encode('clubmedia:moving\u001fblob');
-  const verification = DerivedPublicKey.deserialize(Uint8Array.from(await a.pii_vetkey_verification_key()));
+  const verificationBytes = Uint8Array.from(await a.pii_vetkey_verification_key());
+  const verification = DerivedPublicKey.deserialize(verificationBytes);
   const plaintext = new TextEncoder().encode('Existing encrypted club photo');
   const ciphertext = IbeCiphertext.encrypt(verification, IbeIdentity.fromBytes(identity), plaintext, IbeSeed.random()).serialize();
   const decrypt = async user => {
@@ -49,6 +50,11 @@ try {
     assert.ok('Err' in result);
   };
   await decrypt(member); await decrypt(stale); await denied(stranger);
+  a.setPrincipal(stranger);
+  assert.ok('Err' in await a.register_pii('clubmedia:moving', 'blob', [1], stranger), 'generic records cannot capture the shared photo identity');
+  assert.ok('Err' in await a.register_pii('clubmedia:moving\u001fblob', '', [1], stranger));
+  assert.ok('Err' in await a.register_pii('ordinary\u001falias', 'blob', [1], stranger));
+  assert.ok('Err' in await a.get_encrypted_pii_vetkeys_batch(['clubmedia:moving'], 'blob', TransportSecretKey.random().publicKeyBytes()), 'generic relay cannot derive the shared photo key');
   a.setPrincipal(member);
   assert.ok('Err' in await a.set_club_media_authority('moving', [target.canisterId], 'move-1', 0n));
   assert.ok('Err' in await a.read_club_media_authority('moving'));
@@ -68,7 +74,7 @@ try {
     wasm: resolve(root, 'backend/pii_access_control/.mops/.build/pii_access_control.wasm'), sender: governor,
     arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   a.setPrincipal(governor); assert.deepEqual(ok(await a.read_club_media_authority('moving')), receipt);
-  assert.deepEqual(Uint8Array.from(await a.pii_vetkey_verification_key()), verification.serialize());
+  assert.deepEqual(Uint8Array.from(await a.pii_vetkey_verification_key()), verificationBytes);
   await decrypt(member); await denied(stale);
   target.actor.setPrincipal(governor); ok(await target.actor.remove_member('moving', member));
   await denied(member); // source still has this member; no stale fallback

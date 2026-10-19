@@ -154,6 +154,11 @@ persistent actor class Main(governorInit : Principal) {
   func ibeIdentity(pii_id : Text, field_id : Text) : Blob {
     Text.encodeUtf8(pii_id # "\u{1F}" # field_id)
   };
+  // The shared photo identity is accessible ONLY through its membership
+  // relay. Generic records must never alias it, even with separator injection.
+  func reservedMediaIdentity(pii_id : Text, field_id : Text) : Bool {
+    Text.startsWith(pii_id, #text "clubmedia:") or Text.contains(pii_id, #char '\u{1F}') or Text.contains(field_id, #char '\u{1F}')
+  };
 
   // ==================== State ====================
 
@@ -244,6 +249,7 @@ persistent actor class Main(governorInit : Principal) {
     let rootG = s.grants;
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
     if (s.grants.any(func(x) = not (x.club_id == c))
+        or s.records.any(func(x) = reservedMediaIdentity(x.pii_id, x.field_id))
         or s.records.any(func(x) = not (inG(x.pii_id)))
         or s.guardians.any(func(x) = not (x.children.any(inG)))) return #Err("Snapshot contains foreign records");
     if (s.records.any(func(e) = pii_records.any(func(x) = x.pii_id == e.pii_id and x.field_id == e.field_id and x.ciphertext != e.ciphertext))) return #Err("Snapshot id collides with another club");
@@ -444,6 +450,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (pii_ids.size() > 25) return #Err("Batch too large");
     if (transport_public_key.size() == 0) return #Err("Invalid transport key");
+    if (pii_ids.any(func(id) = reservedMediaIdentity(id, field_id))) return #Err("Reserved or invalid PII identity");
     let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
     let allowedCompetitions = await resolveAllowedCompetitions(caller, pii_ids, field_id);
     var out : [?Blob] = [];
@@ -572,6 +579,7 @@ persistent actor class Main(governorInit : Principal) {
     if (pii_id == "" or field_id == "") {
       return #Err("Invalid pii_id or field_id");
     };
+    if (reservedMediaIdentity(pii_id, field_id)) return #Err("Reserved or invalid PII identity");
     if (domain_owner.equal(Principal.anonymous())) {
       return #Err("Invalid domain owner");
     };
