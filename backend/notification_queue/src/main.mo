@@ -75,6 +75,8 @@ persistent actor class Main(governorInit : Principal) {
   var device_tokens : [Types.DeviceToken];
   var deviceVersions : [{ user : Text; platform : Text; app_version : ?Text; build_number : ?Text }];
   var transferFences : [Text];
+  // Local-only bounded polling experiment; resets on upgrade, never authority.
+  transient var rehearsalClaimCursor : Nat = 0;
 
   public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
     governorOnly(caller);
@@ -635,8 +637,22 @@ persistent actor class Main(governorInit : Principal) {
     worker(caller);
     if (limit == 0 or limit > 100) return #Err("Invalid batch size");
     var candidates : [Types.Notification] = [];
-    for (item in items.values()) {
-      if (candidates.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) candidates := candidates.concat([item]);
+    if (accountAdmissionEnabled) {
+      // Advance even if admission denies every candidate; otherwise a denied
+      // prefix can permanently starve an eligible notification behind it.
+      let count = items.size();
+      var scanned = 0;
+      while (scanned < Nat.min(count, 200) and candidates.size() < Nat16.toNat(limit)) {
+        let index = (rehearsalClaimCursor + scanned) % count;
+        let item = items[index];
+        if (item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) candidates := candidates.concat([item]);
+        scanned += 1;
+      };
+      if (count > 0) rehearsalClaimCursor := (rehearsalClaimCursor + scanned) % count;
+    } else {
+      for (item in items.values()) {
+        if (candidates.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) candidates := candidates.concat([item]);
+      };
     };
     let allowed = await eligibleUsers(candidates.map(func(n) = n.user));
     worker(caller); // worker may have been revoked during admission

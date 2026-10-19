@@ -4,6 +4,7 @@ import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
 import { DerivedPublicKey, EncryptedVetKey, TransportSecretKey, IbeCiphertext, IbeIdentity, IbeSeed } from '@icp-sdk/vetkeys';
+import { adaptLocalAccountReads } from '../src/live/accountReadAdapter.mjs';
 import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
 import { idlFactory as chatIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
 import { idlFactory as piiIdl } from '../src/lab/bindings/pii_access_control/declarations/pii_access_control.did.js';
@@ -195,6 +196,26 @@ try {
  vault.setPrincipal(governor); ok(await vault.set_club_domain_canister(extra[0].canisterId));
  vault.setPrincipal(victim); assert.equal(ok(await vault.read_account_list_club_files('club',[],[])).length,1);
  await denied(()=>club.read_has_club_membership(victim,'club'));
+ // Exercise the exact adapter used by dev-loopback app connectors with a
+ // real actor; legacy private queries are closed under this rehearsal.
+ const adaptedVault=adaptLocalAccountReads(vault,vaultIdl({IDL}),'http://localhost:4943');
+ assert.equal(ok(await adaptedVault.get_folder('f'))[0].id,'f');
+ assert.equal(ok(await adaptedVault.list_club_files('club',[],[])).length,1);
+ id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
+ await denied(()=>adaptedVault.get_folder('f'));
+ ok(await id.set_account_status(account.id,{Active:null}));
+ // Denied/malformed prefix cannot indefinitely hide a valid tail recipient.
+ queue.setPrincipal(governor); ok(await queue.enqueue('fair-tail',stranger.toText(),'club','event','tail','fair-tail'));
+ let tailClaimed=false;
+ for(let round=0;round<8;round++) {
+  const claimed=ok(await queue.claim(99999999999999n,1));
+  for(const item of claimed) {
+   if(item.id==='fair-tail') tailClaimed=true;
+   ok(await queue.acknowledge(item.id,item.idempotency_key[0]??''));
+  }
+  if(tailClaimed) break;
+ }
+ assert.ok(tailClaimed,'Eligible tail must be reached despite malformed prefix');
  console.log('Focused protected reads passed: five suspended vault read/discovery paths, stale discovery authority, fenced file batch, interrupted PII ciphertext, post-derivation suspension/fence, real-key decrypt controls and real vault-to-club delegation.');
  id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
  chat.setPrincipal(victim);
