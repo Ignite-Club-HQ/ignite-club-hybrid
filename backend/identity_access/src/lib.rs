@@ -264,6 +264,18 @@ fn unlink_targets(job: &UnlinkIntent) -> Outcome<Vec<Principal>> {
     Ok(job.authorities.clone())
 }
 
+/// Previous local-only release stored one inventory and prohibited every
+/// configuration change while pending jobs existed. Its persisted inventory
+/// is therefore the historical target snapshot, not a newly supplied list.
+/// Reject invalid acknowledgements before upgrading any legacy jobs.
+fn migrate_legacy_unlink_targets(mut lifecycle: LinkLifecycle) -> Outcome<LinkLifecycle> {
+    for job in &mut lifecycle.pending {
+        if job.authorities.is_empty() { job.authorities = lifecycle.authorities.clone(); }
+        unlink_targets(job)?;
+    }
+    Ok(lifecycle)
+}
+
 thread_local! {
     static MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
     static STATE: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(MEM_STATE), Vec::new()));
@@ -672,6 +684,8 @@ fn post_upgrade() {
         let migrated = migrate_legacy_state(legacy);
         store(&migrated);
     }
+    let lifecycle = migrate_legacy_unlink_targets(link_lifecycle()).expect("Invalid historical unlink inventory; upgrade refused");
+    store_link_lifecycle(&lifecycle);
 }
 
 #[ic_cdk::query]
@@ -1019,6 +1033,7 @@ async fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account>
     for authority in unlink_targets(&frozen)? {
         let latest = link_lifecycle();
         let job = latest.pending.iter().find(|job| job.account_id == current.id).ok_or("Unlink already completed; reload account")?;
+        if job.principal != principal || job.version != expected_version || job.authorities != frozen.authorities { return Err("Unlink recovery changed".into()); }
         if job.acknowledged.contains(&authority) { continue; }
         let response = ic_cdk::call::Call::bounded_wait(authority, "revoke_linked_principal")
             .with_args(&(current.id.clone(), principal, expected_version)).await
@@ -1855,6 +1870,25 @@ mod tests {
         assert_eq!(unlink_targets(&job), Err("Foreign unlink acknowledgement".into()));
         job.acknowledged.clear(); job.authorities = vec![a, a];
         assert_eq!(unlink_targets(&job), Err("Invalid unlink authority snapshot".into()));
+    }
+    #[test]
+    fn genuine_legacy_pending_cbor_migrates_using_its_frozen_inventory() {
+        #[derive(Serialize)]
+        struct OldIntent { account_id: String, principal: Principal, version: u64, acknowledged: Vec<Principal> }
+        #[derive(Serialize)]
+        struct OldLifecycle { authorities: Vec<Principal>, pending: Vec<OldIntent> }
+        let a = principal(114); let b = principal(115);
+        let old = OldLifecycle { authorities: vec![a, b], pending: vec![OldIntent {
+            account_id: "old".into(), principal: b, version: 7, acknowledged: vec![a],
+        }] };
+        let decoded: LinkLifecycle = decode(&encode(&old));
+        assert!(decoded.pending[0].authorities.is_empty());
+        let migrated = migrate_legacy_unlink_targets(decoded).unwrap();
+        assert_eq!(unlink_targets(&migrated.pending[0]).unwrap(), vec![a, b]);
+        assert_eq!(migrated.pending[0].acknowledged, vec![a]);
+        let mut invalid = migrated;
+        invalid.pending[0].authorities.clear(); invalid.authorities.clear();
+        assert!(migrate_legacy_unlink_targets(invalid).is_err());
     }
     fn empty_core_state(governor: Principal) -> CoreState {
         CoreState {
