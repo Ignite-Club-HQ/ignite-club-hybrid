@@ -16,7 +16,7 @@ try {
   pic = await PocketIc.create(server.getUrl());
   const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: process.env.IDENTITY_ACCESS_WASM,
     sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
-  for (const subject of [governor, primary, linked, stranger]) {
+  for (const subject of [governor, primary, stranger]) {
     identity.actor.setPrincipal(subject); ok(await identity.actor.register_account());
   }
   const groups = [];
