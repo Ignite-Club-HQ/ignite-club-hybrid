@@ -21,9 +21,31 @@ export async function eraseIcpAccountAsAdmin(identity: Identity, target: IcpTarg
     }
     await inventory.validate();
     if (inventory.revision !== undefined) {
-      await client.commitAccountDeletion(accountId);
+      try {
+        await client.commitAccountDeletion(accountId);
+      } catch (error) {
+        // Registry drift after membership erasure: rebase the retained ticket to the
+        // current pinned binding once, then retry the exact same commit. Any other
+        // failure keeps the reservation for explicit recovery.
+        if (!/changed|drift|revision/i.test(String(error))) throw error;
+        await client.rebaseAccountDeletion(accountId);
+        await inventory.validate();
+        await client.commitAccountDeletion(accountId);
+      }
       await client.settleAccountDeletion(accountId);
     } else await client.eraseAccount(accountId);
     return { success: true, immediate: true };
   } finally { inventory?.dispose(); client.dispose(); }
+}
+
+/** Recovery for an interrupted pre-commit deletion: releases the router reservation and
+ *  drops the ticket, leaving the account untouched. Refuses once the commit has erased the
+ *  account (use the settle path instead) and is safe to retry after a lost reply. */
+export async function cancelIcpAccountDeletion(identity: Identity, target: IcpTargetConfig, accountId: string) {
+  const { connectLiveIdentityAccessClientWithIdentity } = await import("./identityAccess");
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  try {
+    await client.cancelAccountDeletion(accountId);
+    return { success: true };
+  } finally { client.dispose(); }
 }
