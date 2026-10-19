@@ -67,6 +67,8 @@ try {
   await privateRead(member, true); await privateRead(stale, false); await privateRead(stranger, false);
   a.setPrincipal(stranger);
   assert.ok('Err' in await a.add_guardian_relationship(stranger, privatePath), 'self-claimed guardian cannot unlock private files');
+  assert.ok('Err' in await a.register_pii(privatePath, 'blob', [1], stranger), 'a different caller cannot overwrite the original owner record');
+  await privateRead(member, true);
   a.setPrincipal(member); ok(await a.grant_pii_read(privatePath, 'blob', stale));
   await privateRead(stale, true);
   a.setPrincipal(member); ok(await a.revoke_pii_read(privatePath, 'blob', stale));

@@ -626,6 +626,12 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller) and not caller.equal(domain_owner)) {
       return #Err("Domain owner authorization required");
     };
+    switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
+      case (?existing) {
+        if (not isGovernor(caller) and not caller.equal(existing.domain_owner)) return #Err("Existing domain owner authorization required");
+      };
+      case null {};
+    };
 
     let now = now_ns();
 
