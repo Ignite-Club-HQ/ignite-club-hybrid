@@ -96,6 +96,9 @@ export async function groupHoldsInvite(ctx: FeatureBackendContext, token: string
   const { connectLiveMiniLeagueDomain } = await import('./domains');
   if (!ctx.target.canisterIds.mini_league_domain) return false;
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  const preview = await actor.get_player_invite_preview(token);
+  if ('Err' in preview) throw new Error(preview.Err);
+  if (preview.Ok.length) return true;
   const reply = await actor.get_join_link_by_token(token);
   if ('Ok' in reply) return true;
   if (reply.Err === 'Join link not found') return false;
