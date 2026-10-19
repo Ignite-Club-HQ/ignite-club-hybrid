@@ -64,6 +64,23 @@ describe('club-scoped dispatcher', () => {
 });
 
 describe('entity scopes', () => {
+  it('routes a foreign-host invitation once without granting host membership', async () => {
+    const { d, session } = deps(ON);
+    const readHosted = vi.fn(async (_club, _domain, action) => action({ target: 'foreign' }));
+    const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
+    const action = vi.fn(async () => 'accepted');
+    const dispatcher = createClubDispatcher({ ...d, lookup: async () => 'foreign-host', open: async () => ({ ...session, readHosted, readEveryGroup }) } as never);
+    expect(await dispatcher.writeFor('competitions', { competitionId: 'cup' }, 'competition_domain', 'once', action, 3)).toBe('accepted');
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(session.writeClub).not.toHaveBeenCalled();
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
+  it('does not cache a denied EOI as permission to fall back on a later request', async () => {
+    const { d, session } = deps(ON);
+    const dispatcher = createClubDispatcher({ ...d, lookup: async () => null, open: async () => ({ ...session, readEveryGroup: async () => [] }) } as never);
+    for (let i = 0; i < 2; i++) await expect(dispatcher.writeFor('competitions', { eoiId: 'private' }, 'competition_domain', 'once', async () => 'bad', 1)).rejects.toThrow('not authorized');
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   function world(claims: Record<string, string[]>) {
     const { d, session } = deps(ON);
     const s2 = { ...session, readEveryGroup: vi.fn(async (_d: string, r: (ctx: never) => Promise<string[]>) => (await Promise.all(Object.keys(claims).map(g => r(g as never)))).flat()) };

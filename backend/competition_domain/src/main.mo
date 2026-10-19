@@ -488,6 +488,12 @@ persistent actor class Main(governorInit : Principal) {
     for (teamId in teams.values()) { if ((await teamAccess(user, teamId)).is_member) return true };
     false
   };
+  func invitedManager(user : Principal, id : Text) : async Bool {
+    let invitations = entries.filter(func(e) = e.competition_id == id and e.status == "invited");
+    if (invitations.size() > 500) return false;
+    for (e in invitations.values()) { if ((await teamAccess(user, e.team_id)).can_manage) return true };
+    false
+  };
   public shared ({ caller }) func read_resource_club(kind : Text, id : Text) : async { #Ok : ?Text; #Err : Text } {
     auth(caller); if (not valid(id)) return #Err("Invalid id");
     if (kind == "eoi") {
@@ -498,7 +504,7 @@ persistent actor class Main(governorInit : Principal) {
     };
     let cid = if (kind == "match") switch (matches.find(func(m) = m.id == id)) { case null return #Ok(null); case (?m) m.competition_id } else id;
     await syncForCompetition(caller, cid);
-    if (not (await participantVisible(caller, cid))) return #Ok(null);
+    if (not (await participantVisible(caller, cid)) and not (await invitedManager(caller, cid))) return #Ok(null);
     #Ok(switch (competitions.find(func(c) = c.id == cid)) { case null null; case (?c) if (c.club_id == "") null else ?c.club_id })
   };
   public query ({ caller }) func read_token_club(token : Text) : async { #Ok : ?Text; #Err : Text } {
@@ -509,7 +515,7 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func read_competition_club(id : Text) : async { #Ok : ?Text; #Err : Text } {
     auth(caller); await syncForCompetition(caller, id);
-    if (not (await participantVisible(caller, id))) return #Ok(null);
+    if (not (await participantVisible(caller, id)) and not (await invitedManager(caller, id))) return #Ok(null);
     #Ok(switch (competitions.find(func(c) = c.id == id)) { case null null; case (?c) if (c.club_id == "") null else ?c.club_id })
   };
 

@@ -43,6 +43,8 @@ try {
   denied(await c.list_matches(competition));
   assert.deepEqual(ok(await c.read_resource_club('competition', competition)), []);
   c.setPrincipal(parent);
+  assert.deepEqual(ok(await c.read_competition_club(competition)), ['host']);
+  denied(await c.list_matches(competition)); // invited is not yet a participant
   assert.equal(ok(await c.respond_to_entry_invite(competition, away, true)).club_id, 'guest');
   assert.deepEqual(ok(await c.read_competition_club(competition)), ['host']);
   assert.deepEqual(ok(await c.list_matches(competition)), []);
