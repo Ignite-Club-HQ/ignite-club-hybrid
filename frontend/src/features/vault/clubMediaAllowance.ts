@@ -2,14 +2,22 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveClubProAccess } from "@/lib/proEntitlement";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export const CLUB_MEDIA_BASE_BYTES = 5 * 1024 ** 3;
 type Client = SupabaseClient<Database>;
 export type StoredClubMedia = { path: string; bucket: string; size: number };
 
+function assertSupabaseMediaAllowancePath(): void {
+  if (isFeatureRoutedToIcp("vault")) {
+    throw new Error("Club storage must be checked through its Internet Computer photo store.");
+  }
+}
+
 // Count physical objects, not gallery/vault mirrors or forwarded message URLs.
 // Storage listing is paged and errors never masquerade as zero usage.
 export async function listStoredClubMedia(clubId: string, client: Client = supabase): Promise<StoredClubMedia[]> {
+  assertSupabaseMediaAllowancePath();
   const objects: StoredClubMedia[] = [];
   for (const bucket of ["photos", "chat-attachments", "competition-vault"]) {
     const folders = [`clubs/${clubId}`];
@@ -60,9 +68,11 @@ export async function uploadWithinClubMediaAllowance<T>(
   upload: () => Promise<T>,
   client: Client = supabase,
 ): Promise<T> {
+  assertSupabaseMediaAllowancePath();
   if (!clubId) return upload(); // Personal/competition-only chats have no club pot.
   const previous = uploads.get(clubId) ?? Promise.resolve();
   const current = previous.catch(() => undefined).then(async () => {
+    assertSupabaseMediaAllowancePath();
     const { data: sub, error } = await client.from("club_subscriptions")
       .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, expires_at, is_trial, trial_ends_at, storage_purchased_gb")
       .eq("club_id", clubId).maybeSingle();
@@ -72,6 +82,7 @@ export async function uploadWithinClubMediaAllowance<T>(
       const objects = await listStoredClubMedia(clubId, client);
       assertClubMediaFits(objects.reduce((sum, object) => sum + object.size, 0), bytes, Number(sub?.storage_purchased_gb ?? 0));
     }
+    assertSupabaseMediaAllowancePath();
     return upload();
   });
   uploads.set(clubId, current);

@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+const routing = vi.hoisted(() => ({ icp: false }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => routing.icp }));
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { assertClubMediaFits, clubMediaLimit, listStoredClubMedia, uploadWithinClubMediaAllowance } from "./clubMediaAllowance";
@@ -17,6 +19,23 @@ function fakeClient(options: { error?: unknown; used?: number; purchased?: numbe
 }
 
 describe("Combined club media allowance", () => {
+  beforeEach(() => { routing.icp = false; });
+  it("never lists Supabase media when storage is routed to ICP", async () => {
+    routing.icp = true;
+    const fake = fakeClient();
+    await expect(listStoredClubMedia("club-a", fake.client)).rejects.toThrow("Internet Computer");
+    expect(fake.list).not.toHaveBeenCalled();
+  });
+  it("never queries or uploads through Supabase in ICP mode, including personal uploads", async () => {
+    routing.icp = true;
+    const from = vi.fn();
+    const client = { from } as unknown as Client;
+    const upload = vi.fn();
+    await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, client)).rejects.toThrow("Internet Computer");
+    await expect(uploadWithinClubMediaAllowance(null, 1, upload, client)).rejects.toThrow("Internet Computer");
+    expect(from).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
   it("allows exactly 5 GiB combined and refuses one byte more", () => {
     expect(clubMediaLimit(0)).toBe(5_368_709_120);
     expect(() => assertClubMediaFits(3 * gib, 2 * gib, 0)).not.toThrow();
