@@ -10,6 +10,7 @@
 
 - [x] Capacity policy foundation (owner approved 20 October Adelaide): 70% closed preparation request queue and 80% fill-first placement; fresh complete tested-resource evidence, approved-ready/fuel/subnet checks, immutable assignments and activation guards retained. 43 focused frontend + 22 router tests pass; real CLI rerun/read-back produces one closed request. Preview build OK. Evidence and limitations: `docs/scaling-capacity-policy.md`. No live changes.
 - [x] Live capacity collector: scheduled workflow reads real per-service memory/fuel, builds evidence against owner `deploy/groups/tested-limits.json`, queues CLOSED requests at 70%; 4 collector tests pass.
+- [x] 70% owner notification: newly queued requests open a GitHub issue "Prepare new group requested (70% capacity reached)" and fail the run for an email/red-badge alert; re-checks of an already-queued request stay silent and green (`scripts/capacity-alert.mjs`, 5 tests).
 - [ ] Owner: commit `deploy/groups/tested-limits.json` (tested storage limits; processing limits after load test).
 - [x] Closed-group installer: `install-new-group.yml` + `install-group-closed.ts` create (cycles-ledger dedup), install (module-hash idempotent, never overwrite), configure and health-check 12 services, stop before registration. Not yet run on mainnet.
 - [x] Release-path review: new groups get their own photo store (configuring against the live shared store would repoint its single club authority and break group-1 uploads/quotas/staff deletes).
