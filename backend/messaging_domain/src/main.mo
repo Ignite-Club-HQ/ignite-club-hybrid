@@ -1609,11 +1609,11 @@ persistent actor class Main(governorInit : Principal) {
   // when the caller may read messages but not pins (anonymous / no
   // conversation access); clients then fall back to list_pinned_messages.
   public shared ({ caller }) func open_conversation(conversation_id : Text, limit : Nat16) : async {
-    await* requireChatAccess(caller, conversation_id);
     #Ok : { page : Types.MessagePage; reactions : [Types.Reaction]; pins : ?[Types.PinnedMessage] };
     #Err : Text;
   } {
     denyLegacyAccountQuery();
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let latest = conversationLatestSequence(conversation_id);
@@ -3970,11 +3970,11 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func read_account_open_conversation(conversation_id : Text, limit : Nat16) : async {
-    await* requireChatAccess(caller, conversation_id);
     #Ok : { page : Types.MessagePage; reactions : [Types.Reaction]; pins : ?[Types.PinnedMessage] };
     #Err : Text;
   } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let latest = conversationLatestSequence(conversation_id);
