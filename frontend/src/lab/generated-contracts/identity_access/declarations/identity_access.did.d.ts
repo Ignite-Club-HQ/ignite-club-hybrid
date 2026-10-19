@@ -232,29 +232,31 @@ export type Result_12 = { 'Ok' : [] | [TermsAcceptance] } |
   { 'Err' : string };
 export type Result_13 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
-export type Result_14 = { 'Ok' : Evidence } |
+export type Result_14 = { 'Ok' : Ticket } |
   { 'Err' : string };
-export type Result_15 = { 'Ok' : Array<PrincipalEligibility> } |
+export type Result_15 = { 'Ok' : Evidence } |
   { 'Err' : string };
-export type Result_16 = { 'Ok' : PrincipalEligibility } |
+export type Result_16 = { 'Ok' : Array<PrincipalEligibility> } |
   { 'Err' : string };
-export type Result_17 = { 'Ok' : RemovalHistoryManifest } |
+export type Result_17 = { 'Ok' : PrincipalEligibility } |
   { 'Err' : string };
-export type Result_18 = { 'Ok' : RemovalHistoryPage } |
+export type Result_18 = { 'Ok' : RemovalHistoryManifest } |
   { 'Err' : string };
-export type Result_19 = { 'Ok' : RemovalInventory } |
+export type Result_19 = { 'Ok' : RemovalHistoryPage } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_20 = { 'Ok' : Entitlement } |
+export type Result_20 = { 'Ok' : RemovalInventory } |
   { 'Err' : string };
-export type Result_21 = { 'Ok' : bigint } |
+export type Result_21 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_22 = { 'Ok' : Array<ProfileSearchResult> } |
+export type Result_22 = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_23 = { 'Ok' : PrivacyConsent } |
+export type Result_23 = { 'Ok' : Array<ProfileSearchResult> } |
   { 'Err' : string };
-export type Result_24 = { 'Ok' : TermsAcceptance } |
+export type Result_24 = { 'Ok' : PrivacyConsent } |
+  { 'Err' : string };
+export type Result_25 = { 'Ok' : TermsAcceptance } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : Receipt } |
   { 'Err' : string };
@@ -339,6 +341,7 @@ export interface TermsAcceptance {
   'terms_version' : number,
   'accepted_at_ms' : bigint,
 }
+export interface Ticket { 'binding' : Binding, 'account' : Account }
 export interface UnlinkIntent {
   'account_id' : string,
   'principal' : Principal,
@@ -370,6 +373,7 @@ export interface _SERVICE {
   'begin_link' : ActorMethod<[Principal], Result_5>,
   'bind_external_site' : ActorMethod<[string, string, string], Result_6>,
   'check_field_access' : ActorMethod<[string, string], Result_7>,
+  'commit_account_deletion' : ActorMethod<[string], Result_2>,
   /**
    * Public: remaining cycles (shown in admin settings).
    */
@@ -424,29 +428,30 @@ export interface _SERVICE {
    * users).
    */
   'my_terms_acceptance' : ActorMethod<[], Result_12>,
+  'prepare_account_deletion' : ActorMethod<[string, bigint], Result_14>,
   'read_account_removal_intent' : ActorMethod<[string], Result_4>,
-  'read_group_inventory_evidence' : ActorMethod<[bigint], Result_14>,
+  'read_group_inventory_evidence' : ActorMethod<[bigint], Result_15>,
   /**
    * Only configured canisters may ask for another caller's links. No browser
    * supplies an account id or a principal list; the index is authoritative.
    */
   'read_linked_account' : ActorMethod<[Principal], Result>,
-  'read_principal_eligibilities' : ActorMethod<[Array<Principal>], Result_15>,
+  'read_principal_eligibilities' : ActorMethod<[Array<Principal>], Result_16>,
   /**
    * Consensus reads; never create an account or grant resource permissions.
    * Versions are account-scoped evidence, NOT globally atomic access tokens.
    */
-  'read_principal_eligibility' : ActorMethod<[Principal], Result_16>,
+  'read_principal_eligibility' : ActorMethod<[Principal], Result_17>,
   /**
    * Local-only consensus recovery evidence. Reader lists/club receipts are NOT
    * a complete deployment inventory or an in-flight drain acknowledgement.
    */
-  'read_removal_history_manifest' : ActorMethod<[], Result_17>,
+  'read_removal_history_manifest' : ActorMethod<[], Result_18>,
   'read_removal_history_page' : ActorMethod<
     [bigint, RemovalHistoryCursor, number],
-    Result_18
+    Result_19
   >,
-  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_19>,
+  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_20>,
   /**
    * Subject-bound consensus ownership read; never implicitly registers an account.
    */
@@ -466,7 +471,7 @@ export interface _SERVICE {
    */
   'redeem_entitlement' : ActorMethod<
     [string, string, bigint, string, string],
-    Result_20
+    Result_21
   >,
   'register_account' : ActorMethod<[], Result>,
   /**
@@ -479,7 +484,7 @@ export interface _SERVICE {
    * number of records changed (or that would change when `dry_run`).
    * Any NEW stored principal / principal-text field must be added here.
    */
-  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_21>,
+  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_22>,
   /**
    * Governor-only: revokes a verifier principal.
    */
@@ -507,7 +512,7 @@ export interface _SERVICE {
    * can grant roles without a second lookup. Profiles without an account or
    * with a blank name are skipped.
    */
-  'search_profiles' : ActorMethod<[string, number], Result_22>,
+  'search_profiles' : ActorMethod<[string, number], Result_23>,
   /**
    * Admin-gated (governor or an account holding the `app_admin` role):
    * suspends or reactivates an account. `Suspended` accounts are rejected by
@@ -535,7 +540,7 @@ export interface _SERVICE {
    */
   'set_entitlement' : ActorMethod<
     [Principal, string, string, bigint, string],
-    Result_20
+    Result_21
   >,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_2>,
   'set_exclusion_scoped' : ActorMethod<
@@ -544,7 +549,7 @@ export interface _SERVICE {
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
   'set_group_inventory_binding' : ActorMethod<[Binding, bigint], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_23>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_24>,
   /**
    * Sets (or replaces) the caller's profile. The account must already exist —
    * sign-in provisioning calls register_account first.
@@ -561,13 +566,14 @@ export interface _SERVICE {
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_24>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_25>,
   /**
    * Sets (or clears) the caller's UI theme preference, so it follows the
    * account across devices. Creates a blank profile entry if the caller has
    * never called `set_profile`.
    */
   'set_theme_preference' : ActorMethod<[[] | [string]], Result_11>,
+  'settle_account_deletion' : ActorMethod<[string], Result_2>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

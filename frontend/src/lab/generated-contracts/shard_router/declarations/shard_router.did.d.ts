@@ -26,6 +26,7 @@ export interface AssignRequest {
   'club_id' : string,
 }
 export interface AssignResult { 'revision' : bigint, 'route' : Route }
+export interface DeletionLock { 'account_id' : string, 'revision' : bigint }
 export interface DomainCanister { 'domain' : string, 'canister' : Principal }
 export interface DomainMigration {
   'destination' : Principal,
@@ -87,35 +88,37 @@ export interface Page {
 }
 export type Result = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_1 = { 'Ok' : AssignResult } |
+export type Result_1 = { 'Ok' : DeletionLock } |
   { 'Err' : string };
-export type Result_10 = { 'Ok' : [] | [Route] } |
+export type Result_10 = { 'Ok' : [] | [Migration] } |
   { 'Err' : string };
-export type Result_11 = { 'Ok' : Array<ShardGroup> } |
+export type Result_11 = { 'Ok' : [] | [Route] } |
   { 'Err' : string };
-export type Result_12 = { 'Ok' : Page } |
+export type Result_12 = { 'Ok' : Array<ShardGroup> } |
   { 'Err' : string };
-export type Result_13 = { 'Ok' : GroupRegistrySnapshot } |
+export type Result_13 = { 'Ok' : Page } |
   { 'Err' : string };
-export type Result_14 = { 'Ok' : Array<GroupAssignment> } |
+export type Result_14 = { 'Ok' : GroupRegistrySnapshot } |
   { 'Err' : string };
-export type Result_15 = { 'Ok' : GroupAssignment } |
+export type Result_15 = { 'Ok' : Array<GroupAssignment> } |
   { 'Err' : string };
-export type Result_2 = { 'Ok' : AssignDomainResult } |
+export type Result_16 = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_3 = { 'Ok' : GroupAssignment } |
+export type Result_2 = { 'Ok' : AssignResult } |
   { 'Err' : string };
-export type Result_4 = { 'Ok' : DomainMigration } |
+export type Result_3 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
-export type Result_5 = { 'Ok' : Migration } |
+export type Result_4 = { 'Ok' : GroupAssignment } |
   { 'Err' : string };
-export type Result_6 = { 'Ok' : [] | [DomainMigration] } |
+export type Result_5 = { 'Ok' : DomainMigration } |
   { 'Err' : string };
-export type Result_7 = { 'Ok' : [] | [DomainRoute] } |
+export type Result_6 = { 'Ok' : Migration } |
   { 'Err' : string };
-export type Result_8 = { 'Ok' : [] | [GroupAssignment] } |
+export type Result_7 = { 'Ok' : [] | [DomainMigration] } |
   { 'Err' : string };
-export type Result_9 = { 'Ok' : [] | [Migration] } |
+export type Result_8 = { 'Ok' : [] | [DomainRoute] } |
+  { 'Err' : string };
+export type Result_9 = { 'Ok' : [] | [GroupAssignment] } |
   { 'Err' : string };
 export interface Route {
   'shard' : Principal,
@@ -138,44 +141,51 @@ export interface ShardGroup {
 export interface _SERVICE {
   'abort_domain_migration' : ActorMethod<[string, string, bigint], Result>,
   'abort_migration' : ActorMethod<[string, bigint], Result>,
-  'assign' : ActorMethod<[AssignRequest], Result_1>,
-  'assign_domain' : ActorMethod<[AssignDomainRequest], Result_2>,
-  'assign_new_club_group' : ActorMethod<[string, string, bigint], Result_3>,
+  'acquire_deletion_lock' : ActorMethod<[string, bigint], Result_1>,
+  'assign' : ActorMethod<[AssignRequest], Result_2>,
+  'assign_domain' : ActorMethod<[AssignDomainRequest], Result_3>,
+  'assign_new_club_group' : ActorMethod<[string, string, bigint], Result_4>,
   'begin_domain_migration' : ActorMethod<
     [string, string, Principal, bigint],
-    Result_4
+    Result_5
   >,
-  'begin_migration' : ActorMethod<[string, Principal, bigint], Result_5>,
-  'commit_domain_migration' : ActorMethod<[string, string, bigint], Result_2>,
-  'commit_migration' : ActorMethod<[string, bigint], Result_1>,
+  'begin_migration' : ActorMethod<[string, Principal, bigint], Result_6>,
+  'commit_domain_migration' : ActorMethod<[string, string, bigint], Result_3>,
+  'commit_migration' : ActorMethod<[string, bigint], Result_2>,
   /**
    * Public: remaining cycles (shown in admin settings).
    */
   'cycles_balance' : ActorMethod<[], bigint>,
-  'get_domain_migration' : ActorMethod<[string, string], Result_6>,
-  'get_domain_route' : ActorMethod<[string, string], Result_7>,
-  'get_group_assignment' : ActorMethod<[string], Result_8>,
-  'get_migration' : ActorMethod<[string], Result_9>,
-  'get_route' : ActorMethod<[string], Result_10>,
-  'list_groups' : ActorMethod<[], Result_11>,
-  'list_routes' : ActorMethod<[[] | [string], number], Result_12>,
+  'get_domain_migration' : ActorMethod<[string, string], Result_7>,
+  'get_domain_route' : ActorMethod<[string, string], Result_8>,
+  'get_group_assignment' : ActorMethod<[string], Result_9>,
+  'get_migration' : ActorMethod<[string], Result_10>,
+  'get_route' : ActorMethod<[string], Result_11>,
+  'list_groups' : ActorMethod<[], Result_12>,
+  'list_routes' : ActorMethod<[[] | [string], number], Result_13>,
   /**
    * Public: live memory reading for the admin health page.
    */
   'memory_stats' : ActorMethod<[], MemoryStats>,
-  'place_my_new_club' : ActorMethod<[string, string], Result_3>,
-  'read_group_registry' : ActorMethod<[string], Result_13>,
+  /**
+   * Any signed-in user creating a club asks for its group here; the router picks
+   * the healthiest accepting group. Capped per principal; retries are free.
+   */
+  'place_my_new_club' : ActorMethod<[string, string], Result_4>,
+  'read_group_registry' : ActorMethod<[string], Result_14>,
   'read_hosted_club_assignment' : ActorMethod<
     [string, string, bigint],
-    Result_15
+    Result_4
   >,
   'read_my_group_assignments' : ActorMethod<
     [Array<string>, string, bigint],
-    Result_14
+    Result_15
   >,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,
+  'release_deletion_lock' : ActorMethod<[string, bigint], Result_16>,
+  'set_deletion_authority' : ActorMethod<[Principal], Result_16>,
   'version' : ActorMethod<[], bigint>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

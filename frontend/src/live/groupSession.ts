@@ -132,6 +132,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     dispose() { disposed = true; },
     /** Checks the full captured registry without rediscovering revoked memberships. */
     assertRegistryUnchanged,
+    deletionRegistryRevision: registry.revision,
     async readClub<T>(clubId: string, domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       await revalidate([clubId]);

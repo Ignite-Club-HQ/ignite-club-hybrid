@@ -1477,6 +1477,7 @@ type Main =
            text;
            opt text;
          });
+   read_account_membership_erased: (principals: vec principal) -> (bool);
    read_account_my_role_grants: () -> (vec RoleGrant);
    read_account_profile_team_history: (profile_id: text) ->
     (vec ProfileTeamHistoryEntry);

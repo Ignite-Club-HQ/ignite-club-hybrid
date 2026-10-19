@@ -14,7 +14,7 @@
 - Read each directory's AGENTS.md before changing frontend/, backend/ or scripts/.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule updates: omit to keep; empty image/zero end-date clears. Monthly recurrence clamps in UTC. Why: Candid compatibility.
-- Self/admin erasure share retained group inventory; drift blocks erasure (not an atomic fence). Gallery copies decrypt under club keys. Why: prevent residual access.
+- Self/admin erasure retains inventory; local timing uses persistent router locks through commit. Gallery copies decrypt under club keys. Why: prevent access leaks.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
 - Competition welcome settings live on competition_domain behind refreshed manager access; club-role mirrors fail closed. Why: no Supabase fallback or stale access.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.

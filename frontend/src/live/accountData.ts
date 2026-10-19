@@ -94,6 +94,7 @@ export async function eraseMyIcpAccount(
     ]);
     inventory = await openAccountDeletionInventory(target, identity,
       ['club_domain', 'vault_domain', 'events_domain', 'messaging_domain']);
+    if (inventory.revision !== undefined) await client.prepareAccountDeletion(account.id, inventory.revision);
     // Revoke the independent club authorization source before erasing the
     // identity profile. Partial failure is surfaced and safe to retry.
     for (const t of inventory.targetsFor('club_domain')) {
@@ -128,7 +129,10 @@ export async function eraseMyIcpAccount(
       }
     }
     await inventory.validate();
-    await client.eraseAccount(account.id);
+    if (inventory.revision !== undefined) {
+      await client.commitAccountDeletion(account.id);
+      await client.settleAccountDeletion(account.id);
+    } else await client.eraseAccount(account.id);
     return {
       note:
         "Your identity_access account has been erased and club/team role access revoked. " +
