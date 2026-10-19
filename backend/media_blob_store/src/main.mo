@@ -912,13 +912,6 @@ persistent actor MediaBlobStore {
     }
   
     } finally { removalReceiver.leave(caller) };
-  mediaFenced(path)) return #Err("Club media frozen for transfer");
-        removeStored(path);
-        #Ok
-      };
-    }
-  
-    } finally { removalReceiver.leave(caller) };
   };
 
   // Serves ciphertext only — see the module header. No authorization here:
@@ -1154,12 +1147,6 @@ persistent actor MediaBlobStore {
       case (?op) {
         if (not op.owner.equal(caller)) return #Err("Not the upload owner");
         if (op.status == #committed) #Ok(op.result) else #Err("Upload not committed; retry finalize or abort")
-      };
-      case null #Err("Unknown upload")
-    }
-  
-    } finally { removalReceiver.leave(caller) };
-  result) else #Err("Upload not committed; retry finalize or abort")
       };
       case null #Err("Unknown upload")
     }

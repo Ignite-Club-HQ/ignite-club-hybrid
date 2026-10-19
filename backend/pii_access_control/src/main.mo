@@ -741,13 +741,6 @@ persistent actor class Main(governorInit : Principal) = this {
     })
   
     } finally { removalReceiver.leave(caller) };
-      field_id = field_id;
-      ciphertext = ciphertext;
-      nonce = [];
-      master_key_id = vetkeySchemeId();
-    })
-  
-    } finally { removalReceiver.leave(caller) };
   };
 
   // Batch read of encrypted PII fields. The canister returns ciphertext only
@@ -987,12 +980,6 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
-  caller, pii_id, field_id, "grant_read_competition", true, "Competition vault grant created");
-        #Ok
-      };
-    }
-  
-    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func revoke_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
@@ -1114,15 +1101,6 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok({
           shredded_at = now;
           key_destroyed = true;
-        })
-      };
-      case null {
-        #Err("PII record not found")
-      };
-    }
-  
-    } finally { removalReceiver.leave(caller) };
-           key_destroyed = true;
         })
       };
       case null {
@@ -1294,12 +1272,6 @@ persistent actor class Main(governorInit : Principal) = this {
     var out : [Text] = [];
     for (child in candidates.values()) {
       let allowed = try { await service.read_has_child_guardian(caller, child) } catch (_) { false };
-      if (allowed and club_domain_canister == ?id) out := out.concat([child]);
-    };
-    out
-  
-    } finally { removalReceiver.leave(caller) };
-  ld) } catch (_) { false };
       if (allowed and club_domain_canister == ?id) out := out.concat([child]);
     };
     out
