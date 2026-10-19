@@ -57,7 +57,7 @@ try {
 
   // Aborting the reservation releases it; a finalized chat photo then counts.
   ok(await actor.abort_upload(giant));
-  const chat = ok(await actor.begin_upload('clubs/club-pro/chat/messages/2.jpg', 'image/jpeg', 1_000n, 1));
+  const chatRaw = await actor.begin_upload('clubs/club-pro/chat/messages/2.jpg', 'image/jpeg', 1_000n, 1); console.log('CHAT-BEGIN:', JSON.stringify(chatRaw, (_, v) => typeof v === 'bigint' ? String(v) : v)); const chat = chatRaw.Ok ?? (() => { throw new Error('begin failed'); })();
   ok(await actor.put_chunk(chat, 0, new Uint8Array(1_000)));
   ok(await actor.finalize_upload(chat));
   bytes = await actor.get_club_media_bytes('club-pro');
