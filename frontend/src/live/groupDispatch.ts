@@ -12,6 +12,7 @@ import { activationStatus, chooseRoute, SHIPPED_GATES, type ActivationGates } fr
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
   isAssigned(c: string): boolean; dispose(): void;
+  createInGroup?<T>(g: string, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   readEveryGroup<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]> };
 /** What a call is about. Non-club scopes are resolved to their owning club. */
 export type EntityScope = { clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string };
@@ -30,6 +31,8 @@ export type DispatchDeps = {
   /** Does this group hold the invite token? (invitees aren't members yet) */
   holdsInvite?: (ctx: FeatureBackendContext, token: string) => Promise<boolean>;
   store?: OwnerStore;
+  /** Ask the global directory to place a new club; returns its group id. */
+  placeNewClub?: (ctx: FeatureBackendContext, clubId: string) => Promise<string>;
 };
 export const MAX_DEVICE_OWNERS = 2000;
 const owners = new Map<string, string | null>(); // kind:id -> club (null = shared canisters)
@@ -120,6 +123,18 @@ export function createClubDispatcher(deps: DispatchDeps) {
       try { return hits[0] ? await fn(hits[0]) : await deps.legacy(feature, '', fn); }
       finally { cached?.session.then(x => x.dispose(), () => {}); cached = null; }
     },
+    /** Creating a club/association: the global directory picks the group
+     * (healthiest with room), then the club is created there, once. If no
+     * group is placed the call fails rather than silently using shared. */
+    forNewClub: async <T>(feature: FeatureArea, clubId: string, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
+      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
+      if (!deps.placeNewClub) throw new Error('Club placement unavailable');
+      const { ctx, s } = await sessionFor(deps);
+      if (!s.createInGroup) throw new Error('Club placement unavailable');
+      const groupId = await deps.placeNewClub(ctx, clubId);
+      try { return await s.createInGroup(groupId, 'club_domain', fn); }
+      finally { cached?.session.then(x => x.dispose(), () => {}); cached = null; }
+    },
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
       const { s } = await sessionFor(deps);
@@ -147,6 +162,13 @@ export const clubDispatch = createClubDispatcher({
   open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx),
   lookup: async (ctx, kind, id) => (await import('./groupSessionLive')).lookupEntityClub(ctx, kind, id),
   holdsInvite: async (ctx, token) => (await import('./groupSessionLive')).groupHoldsInvite(ctx, token),
+  placeNewClub: async (ctx, clubId) => {
+    const { connectLiveShardRouter } = await import('./domains');
+    const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
+    const reply = await actor.place_my_new_club(clubId, ctx.target.alias);
+    if ('Err' in reply) throw new Error(reply.Err);
+    return reply.Ok.group_id;
+  },
   store: {
     load: p => JSON.parse(localStorage.getItem(`ignite.groupOwners.${p}`) ?? '{}'),
     save: (p, o) => localStorage.setItem(`ignite.groupOwners.${p}`, JSON.stringify(o)),
