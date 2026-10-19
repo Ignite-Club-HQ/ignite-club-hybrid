@@ -145,7 +145,7 @@ persistent actor class Main(governorInit : Principal) {
   // undecryptable. Read per call (system capability is only available
   // inside shared methods).
   func vetkdKeyId<system>() : ManagementCanister.VetKdKeyid {
-    let keyName = Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1";
+    let keyName = establishedVetkdKeyName ?? Runtime.trap("vetKD key name not established");
     { curve = #bls12_381_g2; name = keyName }
   };
 
@@ -196,6 +196,13 @@ persistent actor class Main(governorInit : Principal) {
   type ClubMediaAuthority = { authority : ?Principal; revision : Nat; move_id : Text };
   var clubMediaAuthorities : Map.Map<Text, ClubMediaAuthority>;
   var mediaAuthEpoch : Nat;
+  var establishedVetkdKeyName : ?Text;
+  // A legacy upgrade captures its existing environment key, so the operator
+  // must attest it matches the original deployment BEFORE that first upgrade.
+  // All subsequent upgrades ignore environment changes and preserve the key.
+  if (establishedVetkdKeyName == null) {
+    establishedVetkdKeyName := ?(Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1");
+  };
 
   // ==================== Helper Functions ====================
 

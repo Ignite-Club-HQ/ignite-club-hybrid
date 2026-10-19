@@ -5,7 +5,8 @@ module {
   public func migration(_ : {}) : {
     var clubMediaAuthorities : Map.Map<Text, { authority : ?Principal; revision : Nat; move_id : Text }>;
     var mediaAuthEpoch : Nat;
+    var establishedVetkdKeyName : ?Text;
   } {
-    { var clubMediaAuthorities = Map.empty<Text, { authority : ?Principal; revision : Nat; move_id : Text }>(); var mediaAuthEpoch = 0 }
+    { var clubMediaAuthorities = Map.empty<Text, { authority : ?Principal; revision : Nat; move_id : Text }>(); var mediaAuthEpoch = 0; var establishedVetkdKeyName = null }
   };
 }

@@ -35,8 +35,8 @@ describe('original media key authority journal', () => {
     await expect(f.run()).rejects.toThrow('changed'); expect(f.d.set).toHaveBeenCalledTimes(1);
   });
   it('retains acknowledged remote state if final persistence fails and recovers without replaying CAS', async () => {
-    const f = fixture(); f.d.save.mockImplementationOnce(async r => { await fixtureSave(r); });
-    async function fixtureSave(r: MediaKeyReceipt) { f.d.save.mockReset(); f.d.load = async () => structuredClone(r); f.d.save.mockRejectedValueOnce(new Error('disk')); }
+    const f = fixture(); const save = f.d.save.getMockImplementation();
+    f.d.save.mockImplementationOnce(async r => { if (save) await save(r); }).mockRejectedValueOnce(new Error('disk'));
     await expect(f.run()).rejects.toThrow('disk');
     await f.run(); expect(f.d.set).toHaveBeenCalledTimes(1);
   });
