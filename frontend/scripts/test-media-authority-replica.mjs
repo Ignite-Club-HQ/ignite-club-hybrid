@@ -104,6 +104,14 @@ try {
   ok(await a.set_transfer_fence('moving', false));
   assert.ok('Err' in await pendingShared(), 'even a fence acquired and released during an await invalidates the key');
   await decrypt(member);
+  const pendingAuthority = await deferred.get_club_media_vetkey('moving', TransportSecretKey.random().publicKeyBytes());
+  await pic.tick(1);
+  a.setPrincipal(governor); ok(await a.set_transfer_fence('moving', true));
+  const raceAuthority = ok(await a.set_club_media_authority('moving', [target.canisterId], 'race-forward', 0n));
+  const raceRestore = ok(await a.set_club_media_authority('moving', [], 'race-restore', raceAuthority.revision));
+  ok(await a.set_transfer_fence('moving', false));
+  assert.ok('Err' in await pendingAuthority(), 'authority changed and restored during an await still invalidates the key');
+  assert.equal(raceRestore.revision, 2n); await decrypt(member);
   a.setPrincipal(stranger);
   assert.ok('Err' in await a.register_pii('clubmedia:moving', 'blob', [1], stranger), 'generic records cannot capture the shared photo identity');
   assert.ok('Err' in await a.register_pii('clubmedia:moving\u001fblob', '', [1], stranger));
@@ -116,8 +124,8 @@ try {
   assert.ok('Err' in await a.set_club_media_authority('moving', [target.canisterId], 'move-1', 0n), 'must be fenced');
   ok(await a.set_transfer_fence('moving', true));
   assert.ok('Err' in await a.set_club_media_authority('moving', [Principal.anonymous()], 'move-1', 0n));
-  const receipt = ok(await a.set_club_media_authority('moving', [target.canisterId], 'move-1', 0n));
-  assert.equal(receipt.revision, 1n);
+  const receipt = ok(await a.set_club_media_authority('moving', [target.canisterId], 'move-1', raceRestore.revision));
+  assert.equal(receipt.revision, 3n);
   assert.ok('Err' in await a.set_club_media_authority('moving', [target.canisterId], 'move-1', 0n));
   await denied(member);
   a.setPrincipal(governor); ok(await a.set_transfer_fence('moving', false));
@@ -144,7 +152,7 @@ try {
   ok(await a.set_transfer_fence('moving', false)); await denied(stale);
   a.setPrincipal(governor); ok(await a.set_transfer_fence('moving', true));
   const aborted = ok(await a.set_club_media_authority('moving', [], 'abort-2', broken.revision));
-  assert.equal(aborted.revision, 3n);
+  assert.equal(aborted.revision, 5n);
   assert.ok('Err' in await a.set_club_media_authority('moving', [target.canisterId], 'old-replay', 0n));
   ok(await a.set_transfer_fence('moving', false)); await decrypt(stale);
   console.log('PASS: original ciphertext decrypts before/after authority change and EOP upgrade; destination removal, stale source, stranger, fences, CAS, unavailable authority, abort tombstone and bystander checks pass. Not live-move acceptance.');
