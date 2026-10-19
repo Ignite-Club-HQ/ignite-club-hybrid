@@ -533,6 +533,7 @@ persistent actor class Main(governorInit : Principal) {
             let freshClubs = await resolveAllowedClubs(caller, [pii_id], field_id);
             let freshCompetitions = await resolveAllowedCompetitions(caller, [pii_id], field_id);
             let freshDirect = await directRead(caller, r);
+            await admitAccount(caller);
             if (epoch != mediaAuthEpoch or not (freshDirect or canReadViaClub(r, freshClubs) or canReadViaCompetition(r, freshCompetitions)))
               return #Err("PII authorization changed");
             out := out.concat([?encryptedKey]);
@@ -546,6 +547,8 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
+    await admitAccount(caller);
+    if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     #Ok(out)
   };
 
@@ -761,6 +764,8 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
+    await admitAccount(caller);
+    if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     #Ok(out)
   };
 

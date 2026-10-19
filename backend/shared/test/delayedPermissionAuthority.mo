@@ -24,4 +24,12 @@ persistent actor DelayedPermissionAuthority {
     await delay();
     #Ok(?{ is_pro = false; admin_pro_override = false; is_pro_football = false; admin_pro_football_override = false; is_trial = false })
   };
+  public shared func read_has_club_membership(_subject : Principal, _club : Text) : async Bool {
+    await delay();
+    true
+  };
+  public shared func read_has_club_staff_role(_subject : Principal, _club : Text) : async Bool {
+    await delay();
+    true
+  };
 }
