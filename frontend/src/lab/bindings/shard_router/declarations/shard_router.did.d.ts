@@ -137,6 +137,7 @@ export interface ShardGroup {
   'target_alias' : string,
   'min_cycles' : bigint,
   'heap_bytes' : bigint,
+  'photo_store' : [] | [Principal],
 }
 export interface _SERVICE {
   'abort_domain_migration' : ActorMethod<[string, string, bigint], Result>,
