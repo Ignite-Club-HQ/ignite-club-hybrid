@@ -19,6 +19,8 @@ Runner: `frontend/scripts/test-account-service-admission-replica.mjs`, real comp
 | Chat member/private page and digest | Real message read; admitted digest | Stranger, suspension, erasure, replacement, outage and upgrade | Existing local evidence |
 | Notification recipient/device | Actual inbox/device registration | Ineligible recipients excluded at claim/device fetch; malformed recipient isolated | Existing local evidence; already-claimed drain open |
 | Eight additional domains | Actual competition/league/media and 7-point balance | Selected suspended/erased/outage methods | Existing selected coverage, not exhaustive |
+| Local app domain protected-read adapter | Exact single/batch vault results through actual actor; legitimate writes retain original methods | Suspension denial; no fallback/retry; remote/published actors unchanged | Verified locally for selected vault reads, not two-group app acceptance |
+| Worker contract / queue fairness | Actual claim and full-key acknowledgement return Delivered; actual consensus token lookup | Eligible tail reached behind denied/malformed prefix; scan capped at 200 in rehearsal | Verified locally; canonical aliases, multi-group devices and claimed-delivery drain open |
 
 ## Still open — do not mark A complete
 
@@ -31,3 +33,5 @@ Runner: `frontend/scripts/test-account-service-admission-replica.mjs`, real comp
 ## Latest bounded validation
 
 19 October 2026: changed vault/PII canisters and delayed fixture compile; expanded real twelve-service runner passes. Only those three artifacts were rebuilt; unchanged service builds reused. No interface changes or bindings regenerated. No deployment, live-data change, global-revocation claim or signed-in/native acceptance.
+
+Additional C/D subchecks: rebuilt only notification_queue after its rehearsal scheduling change; reused the twelve-service runner for actual adapter read-back/denial, worker claim→acknowledge and token reads. Focused tests validate the worker subset against canonical generated Candid, the full string key, adapter rejection/no-fallback, and unchanged remote/published actors. No canister interface or migration changes; published notification polling unchanged. Worker delivery code was corrected locally but no hosted push provider/device delivery was exercised.
