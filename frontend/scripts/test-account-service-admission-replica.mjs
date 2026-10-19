@@ -83,12 +83,19 @@ try {
   assert.fail('Permission callback did not reach its observed hold point');
  };
  vault.setPrincipal(governor); ok(await vault.set_competition_domain_canister(delayed.canisterId));
- const dv=pic.createDeferredActor(vaultIdl,services[2].canisterId); dv.setPrincipal(victim);
+ // The installed deferred actor uses an async Promise executor that loses
+ // rejects on trapped callbacks. Use its underlying bounded submit/await API.
+ const deferred=async(factory,canisterId,method,args)=>{
+  const signature=factory({IDL})._fields.find(([name])=>name===method)?.[1];
+  assert.ok(signature,'Test method must exist in the actual contract');
+  const message=await pic.client.submitCall({canisterId,sender:victim,method,payload:new Uint8Array(IDL.encode(signature.argTypes,args))});
+  return async()=>{const response=await pic.client.awaitCall(message);return IDL.decode(signature.retTypes,response.body)[0];};
+ };
  const folderArgs=name=>[name,'club',[],[],name,[],[],['competition'],0,[],[]];
  // Positive control: exact same delegated permission actually creates a row.
  vault.setPrincipal(victim); ok(await vault.create_folder(...folderArgs('control')));
  await delayed.actor.hold_on(2n);
- const interruptedFolder=await dv.create_folder(...folderArgs('interrupted'));
+ const interruptedFolder=await deferred(vaultIdl,services[2].canisterId,'create_folder',folderArgs('interrupted'));
  await waitForHold(2);
  id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
  await delayed.actor.release(); await denied(interruptedFolder);
@@ -97,7 +104,7 @@ try {
  assert.equal(ok(await vault.create_folder(...folderArgs('interrupted'))).id,'interrupted','Denied callback must not have inserted the folder');
  // Replacing the authority invalidates the old otherwise-permitting reply.
  await delayed.actor.hold_on(2n);
- const replacedFolder=await dv.create_folder(...folderArgs('replaced'));
+ const replacedFolder=await deferred(vaultIdl,services[2].canisterId,'create_folder',folderArgs('replaced'));
  await waitForHold(2);
  vault.setPrincipal(governor); ok(await vault.set_competition_domain_canister(extra[2].canisterId));
  await delayed.actor.release(); await denied(replacedFolder);
@@ -108,9 +115,9 @@ try {
  blob.setPrincipal(governor); ok(await blob.set_club_domain_canister(delayed.canisterId));
  blob.setPrincipal(victim); const controlUpload=ok(await blob.begin_upload('clubs/club/gallery/control.jpg','image/jpeg',1n,1));
  ok(await blob.abort_upload(controlUpload));
- const db=pic.createDeferredActor((await import('../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js')).idlFactory,extra[7].canisterId); db.setPrincipal(victim);
+ const blobFactory=(await import('../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js')).idlFactory;
  await delayed.actor.hold_on(1n);
- const interruptedUpload=await db.begin_upload('clubs/club/gallery/interrupted.jpg','image/jpeg',1n,1);
+ const interruptedUpload=await deferred(blobFactory,extra[7].canisterId,'begin_upload',['clubs/club/gallery/interrupted.jpg','image/jpeg',1n,1]);
  await waitForHold(1);
  ok(await id.set_account_status(account.id,{Suspended:null}));
  await delayed.actor.release(); await denied(interruptedUpload);
