@@ -1310,6 +1310,7 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (not canAccessConversation(caller, conversation_id) or convFenced(conversation_id)) return #Err("Conversation authorization changed");
     await* requireChatAccess(caller, conversation_id);
+    if (not canAccessConversation(caller, conversation_id) or convFenced(conversation_id)) return #Err("Conversation authorization changed");
     // DM blocking: refuse to post when either party has blocked the other.
     for (c in conversations.values()) {
       if (c.id == conversation_id and c.club_id == "dm") {
@@ -1867,7 +1868,6 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func is_competition_admin(conversation_id : Text) : async Bool {
-    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     isCompetitionAdminFor(caller, conversation_id)
   };
@@ -2612,9 +2612,11 @@ persistent actor class Main(governorInit : Principal) {
             for (m in messages.values()) {
               if (m.conversation_id == to_conversation_id and m.idempotency_key == key) { return #Ok(m) };
             };
-            let posted = postMessage(ci, caller, orig.body, key, orig.attachment, null);
-            ignore fanOutChatNotify(posted);
-            ignore fanOutWsPokeForMessage(posted);
+            await* requireMessageChatAccess(caller, message_id);
+            if (not canReadTeamMessages(caller, orig.conversation_id)) return #Err("Source conversation access forbidden");
+            let posted = switch (await* sendAs(caller, to_conversation_id, orig.body, key, orig.attachment, null)) {
+              case (#Err(e)) return #Err(e); case (#Ok(m)) m;
+            };
             forwardRecords := forwardRecords.concat([{ message_id = posted.id; to_conversation_id; from_conversation_id = orig.conversation_id; from_message_id = orig.id; original_sender = orig.sender }]);
             #Ok(posted)
           };
@@ -2668,12 +2670,12 @@ persistent actor class Main(governorInit : Principal) {
         switch (findConversationIndex(rec.conversation_id)) {
           case null { #Err("Conversation not found") };
           case (?ci) {
-            let posted = postMessage(ci, rec.sender, rec.body, "sched-" # rec.id, null, null);
-            ignore fanOutChatNotify(posted);
-            ignore fanOutWsPokeForMessage(posted);
+            let posted = switch (await* sendAs(rec.sender, rec.conversation_id, rec.body, "sched-" # rec.id, null, null)) {
+              case (#Err(e)) return #Err(e); case (#Ok(m)) m;
+            };
             let updated = { rec with replayed_at_ms = ?nowMs(); replayed_message_id = ?posted.id };
             mediaEvidenceRevision += 1;
-            scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (pos == i) updated else scheduledMessages[pos]);
+            scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (scheduledMessages[pos].id == id) updated else scheduledMessages[pos]);
             #Ok(updated)
           };
         }
@@ -4057,7 +4059,6 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_is_competition_admin(conversation_id : Text) : async Bool {
     await admitAccount(caller);
-    await* requireChatAccess(caller, conversation_id);
     isCompetitionAdminFor(caller, conversation_id)
   };
 
@@ -4381,27 +4382,12 @@ persistent actor class Main(governorInit : Principal) {
     blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user))
   };
 
-  // Original-human digest authorization; only the configured queue delegates.
+  // Trusted delegation checks the original human, never the queue's identity.
   public shared ({ caller }) func read_account_can_read_digest(subject : Principal, conversation_id : Text) : async Bool {
-    await* requireChatAccess(caller, conversation_id);
     let configured = notificationQueueCanister;
     if (configured != ?caller) return false;
     await admitAccount(subject);
-    let conversation = conversations.find(func(c) = c.id == conversation_id);
-    switch (conversation) {
-      case (?c) {
-        let kind = inferConversationKind(c);
-        if (kind != "direct" and kind != "broadcast") {
-          let authority = clubDomainCanister;
-          let ?cd = authority else throw Error.reject("Club delivery authority unavailable");
-          let clubs : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(cd.toText());
-          let member = await (with timeout = 10) clubs.read_has_club_membership(subject, c.club_id);
-          if (authority != clubDomainCanister) throw Error.reject("Club delivery authority changed");
-          if (not member) return false;
-        }
-      };
-      case null { if (conversation_id != BROADCAST_CONVERSATION_ID) return false }
-    };
+    try { await* requireChatAccess(subject, conversation_id) } catch (_) { return false };
     configured == notificationQueueCanister and not convFenced(conversation_id) and canReadTeamMessages(subject, conversation_id)
   };
 }
