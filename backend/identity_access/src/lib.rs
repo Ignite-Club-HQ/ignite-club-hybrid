@@ -460,6 +460,7 @@ fn account_id(principal: Principal) -> String {
 fn ensure_account(principal: Principal) -> Outcome<String> {
     authenticated(principal)?;
     if let Some(account) = find_account_by_principal(principal) {
+        account_for(principal)?;
         return Ok(account.id);
     }
     if account_count() >= MAX_ACCOUNTS as u64 {

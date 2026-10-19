@@ -416,6 +416,7 @@ persistent actor class Main(governorInit : Principal) {
 
   func isExcluded(caller : Principal, club : Text) : Bool {
     acl.exclusions.any(func(exclusion) = exclusion.user.equal(caller) and exclusion.club == club)
+    or removedMembers.any(func(member) = member.user == caller and member.club == club)
   };
 
   // A parent or guardian of a child assigned to one of the club's teams is
@@ -462,7 +463,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func isAdmin(caller : Principal, club : Text) : Bool {
-    isGovernor(caller) or acl.roles.any(func(grant) = grant.user.equal(caller) and (grant.role == "club_admin" or grant.role == "app_admin") and (grant.club == ?club or grant.club == null))
+    isGovernor(caller) or (not isExcluded(caller, club) and acl.roles.any(func(grant) = grant.user.equal(caller) and (grant.role == "club_admin" or grant.role == "app_admin") and (grant.club == ?club or grant.club == null)))
   };
 
   func nowNs() : Nat64 { Nat.toNat64(Int.abs(Time.now())) };
@@ -540,8 +541,8 @@ persistent actor class Main(governorInit : Principal) {
         or account.principals.any(Principal.isAnonymous)) return #Err("Invalid linked account");
     if (accounts.any(func(a) = a.id == account.id and a.version > account.version)) return #Err("Stale linked account");
     // A linked identity cannot bypass a removal recorded for another alias.
-    var exclusions = acl.exclusions;
-    for (e in acl.exclusions.values()) if (account.principals.any(func(p) = p == e.user)) {
+    var exclusions = acl.exclusions.concat(removedMembers.map(func(m) = { club = m.club; user = m.user }));
+    for (e in exclusions.values()) if (account.principals.any(func(p) = p == e.user)) {
       for (p in account.principals.values()) if (not exclusions.any(func(x) = x.club == e.club and x.user == p)) exclusions := exclusions.concat([{ club = e.club; user = p }]);
     };
     acl := { acl with exclusions };
@@ -2495,7 +2496,7 @@ persistent actor class Main(governorInit : Principal) {
   // Same public boolean scope as is_club_member, through consensus and with
   // locally verified linked identities. No roster, names or account IDs.
   public shared func read_has_club_membership(user : Principal, club_id : Text) : async Bool {
-    if (user.equal(Principal.anonymous())) return false;
+    if (user.equal(Principal.anonymous()) or isExcluded(user, club_id)) return false;
     let principals = switch (accountFor(user)) { case (?a) a.principals; case null [user] };
     principals.any(func(p) = isMember(p, club_id))
   };

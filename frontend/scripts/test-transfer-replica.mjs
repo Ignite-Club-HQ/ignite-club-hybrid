@@ -23,6 +23,8 @@ import { runTransfer } from '../src/live/groupTransferRunner.ts';
 import { approveProvision, runProvision, PER_GROUP_DOMAINS } from '../src/live/groupProvisioner.ts';
 import { routerProvisionSteps } from '../src/live/groupProvisionRouter.ts';
 import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
+import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
+import { wireAccountGroupAuthorities } from '../src/live/accountGroupAuthorities.ts';
 import { liveTransferAdapter } from '../src/live/groupTransferLiveAdapter.ts';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -36,10 +38,11 @@ const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
   const groups = { a: {}, b: {} };
+  const canisterIdsA = {};
   const argFor = c => c === 'timer_jobs' ? IDL.encode([], []) : IDL.encode([IDL.Principal], [governor]);
   for (const c of Object.keys(idls)) {
     const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], arg: argFor(c) });
-    f.actor.setPrincipal(governor); groups.a[c] = f.actor;
+    f.actor.setPrincipal(governor); groups.a[c] = f.actor; canisterIdsA[c] = f.canisterId.toText();
     if (c === 'timer_jobs') ok(await f.actor.initialize());
   }
   // Group B is built by the production provisioner on real canisters, with a crash mid-build.
@@ -48,9 +51,18 @@ try {
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   const router = routerF.actor; router.setPrincipal(governor);
   const globalWid = (await pic.createCanister({ sender: governor, controllers: [governor], targetSubnetId: Principal.fromText(appSubnet) })).toText();
+  const identityFixture = await pic.setupCanister({ idlFactory: identityIdl,
+    wasm: process.env.IDENTITY_ACCESS_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/identity_access.wasm'), sender: governor, controllers: [governor],
+    arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
+  identityFixture.actor.setPrincipal(governor);
+  const authorityActors = {
+    club: id => { const actor = pic.createActor(clubIdl, Principal.fromText(id)); actor.setPrincipal(governor); return actor; },
+    identity: () => identityFixture.actor,
+  };
   const routerSteps = routerProvisionSteps(router, { secret_workload_identity: globalWid },
     { targetAlias: 'local', deploymentId: 'local', deploymentRevision: 1n, host: 'https://icp-api.io', networkKind: 'public_mainnet', primarySubnet: appSubnet, approvedSubnets: [appSubnet], additionalSubnetsEnabled: false },
-    { maxClubs: 500, heapBudgetBytes: 3n * 1024n ** 3n, minCycles: 1_000_000_000n });
+    { maxClubs: 500, heapBudgetBytes: 3n * 1024n ** 3n, minCycles: 1_000_000_000n },
+    async p => wireAccountGroupAuthorities([{ groupId: 'a', clubDomain: canisterIdsA.club_domain }, { groupId: p.groupId, clubDomain: p.canisters.club_domain }], identityFixture.canisterId.toText(), authorityActors));
   let creates = 0; let provSaved = null;
   const provAdapter = {
     createCanister: async (_p, d) => {
