@@ -15,9 +15,9 @@ type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendC
   createInGroup?<T>(g: string, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   readEveryGroup<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]> };
 /** What a call is about. Non-club scopes are resolved to their owning club. */
-export type EntityScope = { clubId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string };
-export type EntityLookup = (ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague', id: string) => Promise<string | null>;
-const ENTITY_DOMAIN = { event: 'events_domain', conversation: 'messaging_domain', team: 'club_domain', clubLink: 'club_domain', roleRequest: 'club_domain', miniLeague: 'mini_league_domain' } as const;
+export type EntityScope = { clubId: string } | { competitionId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string };
+export type EntityLookup = (ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest' | 'miniLeague' | 'competition', id: string) => Promise<string | null>;
+const ENTITY_DOMAIN = { event: 'events_domain', conversation: 'messaging_domain', team: 'club_domain', clubLink: 'club_domain', roleRequest: 'club_domain', miniLeague: 'mini_league_domain', competition: 'competition_domain' } as const;
 /** Device store for entity→club answers (an event/chat never changes club, so
  * positive answers are safe to keep; "not in any group" stays memory-only
  * because the club may move later). Scoped per principal. */
@@ -63,7 +63,7 @@ async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendCont
  * Answers are remembered (device + memory) and concurrent asks share one probe. */
 async function resolveClub(deps: DispatchDeps, s: Session, principal: string, scope: EntityScope): Promise<string | null> {
   if ('clubId' in scope) return scope.clubId;
-  const [kind, id] = 'miniLeagueId' in scope ? ['miniLeague', scope.miniLeagueId] as const : 'eventId' in scope ? ['event', scope.eventId] as const : 'conversationId' in scope ? ['conversation', scope.conversationId] as const : 'clubLinkId' in scope ? ['clubLink', scope.clubLinkId] as const : 'roleRequestId' in scope ? ['roleRequest', scope.roleRequestId] as const : ['team', scope.teamId] as const;
+  const [kind, id] = 'competitionId' in scope ? ['competition', scope.competitionId] as const : 'miniLeagueId' in scope ? ['miniLeague', scope.miniLeagueId] as const : 'eventId' in scope ? ['event', scope.eventId] as const : 'conversationId' in scope ? ['conversation', scope.conversationId] as const : 'clubLinkId' in scope ? ['clubLink', scope.clubLinkId] as const : 'roleRequestId' in scope ? ['roleRequest', scope.roleRequestId] as const : ['team', scope.teamId] as const;
   const key = `${kind}:${id}`;
   if (owners.has(key)) return owners.get(key) ?? null;
   const pending = inflight.get(key); if (pending) return pending;

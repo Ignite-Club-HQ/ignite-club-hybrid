@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crown, Loader2, Search, ShieldPlus, UserMinus, X } from "lucide-react";
@@ -103,7 +104,7 @@ export function CompetitionAdminsCard({
             profile: names.get(g.user.toText()) ? { display_name: names.get(g.user.toText()) ?? null, avatar_url: null } : null,
           })) as RoleRow[];
         },
-      }),
+      }, { competitionId }),
   });
 
   const existingUserIds = useMemo(() => new Set(roles.map((r) => r.user_id)), [roles]);
@@ -138,7 +139,7 @@ export function CompetitionAdminsCard({
             .filter((p) => !existingUserIds.has(p.id))
             .map((p) => ({ id: p.id, display_name: p.display_name as string | null, avatar_url: null as string | null, masked_email: null as string | null }));
         },
-      }),
+      }, { shared: "person" }),
   });
 
   const addByPrincipal = () => {
@@ -191,7 +192,7 @@ export function CompetitionAdminsCard({
             console.error("[CompetitionAdminsCard] Failed to notify new competition admin:", e);
           }
         },
-      });
+      }, writeOnce({ competitionId }));
       return target;
     },
     onSuccess: (target) => {
@@ -215,7 +216,7 @@ export function CompetitionAdminsCard({
           if (error) throw error;
         },
         icp: (ctx) => removeLiveCompetitionRole(ctx, competitionId, Principal.fromText(row.user_id), row.role),
-      });
+      }, writeOnce({ competitionId }));
       return row;
     },
     onSuccess: (row) => {

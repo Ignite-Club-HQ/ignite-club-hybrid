@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Link2, Loader2, Mail, QrCode, Share2, UserRoundCheck } from "lucide-react";
@@ -66,7 +67,7 @@ export function CompetitionOfficialJoinLinksCard({
       icp: async (ctx) => (await listLiveCompetitionJoinLinks(ctx, competitionId))
         .filter((link) => !link.revoked && link.team_id.length === 0 && roles.some((item) => item.id === link.role))
         .map((link) => ({ id: `${link.competition_id}:${link.role}`, token: link.token, role: link.role as OfficialRole })),
-    }),
+    }, { competitionId }),
   });
   const activeLink = links.find((link) => link.role === role) ?? null;
   const joinUrl = activeLink ? `${window.location.origin}/competitions/officials/join?token=${encodeURIComponent(activeLink.token)}` : "";
@@ -85,7 +86,7 @@ export function CompetitionOfficialJoinLinksCard({
           return data as OfficialLink;
         },
         icp: async (ctx) => createLiveCompetitionOfficialLink(ctx, competitionId, role, token),
-      });
+      }, writeOnce({ competitionId }));
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey });
@@ -105,7 +106,7 @@ export function CompetitionOfficialJoinLinksCard({
         if (error) throw error;
       },
       icp: async (ctx) => revokeLiveCompetitionOfficialLink(ctx, competitionId, role),
-    }),
+    }, writeOnce({ competitionId })),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey });
       setShowQr(false);
@@ -159,7 +160,7 @@ export function CompetitionOfficialJoinLinksCard({
               ctx, competitionId, role, secrets.token, secrets.emailHash, secrets.codeHash,
             );
           },
-        });
+        }, writeOnce({ competitionId }));
         inviteCreated = true;
 
         // Best-effort: register the pending welcome email on-chain so the
@@ -176,7 +177,7 @@ export function CompetitionOfficialJoinLinksCard({
               console.error("[welcome-email] competition job registration failed", welcomeError);
             }
           },
-        });
+        }, writeOnce({ competitionId }));
 
         const { error } = await supabase.functions.invoke("send-email", {
           body: {
@@ -194,7 +195,7 @@ export function CompetitionOfficialJoinLinksCard({
               if (error) throw error;
             },
             icp: async (ctx) => revokeLiveCompetitionOfficialEmailInvite(ctx, secrets.token),
-          }).catch(() => undefined);
+          }, writeOnce({ competitionId })).catch(() => undefined);
         }
         throw error;
       }

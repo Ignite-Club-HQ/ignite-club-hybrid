@@ -394,6 +394,46 @@ persistent actor class Main(governorInit : Principal) {
     leagues.filter(func(item) = canViewLeague(caller, item))
   };
 
+  // UI permissions use the same authoritative checks as league mutations.
+  // This is caller-scoped, not an arbitrary-user permission oracle.
+  public query ({ caller }) func get_my_league_access(ids : [Text]) : async { #Ok : [{ id : Text; can_manage : Bool; can_delete : Bool; is_club_admin : Bool }]; #Err : Text } {
+    if (ids.size() > 200) return #Err("Too many ids");
+    #Ok(leagues.filter(func(l) = ids.any(func(id) = id == l.id) and canViewLeague(caller, l)).map(func(l) = {
+      id = l.id; can_manage = isLeagueAdmin(caller, l); can_delete = isLeagueAdmin(caller, l); is_club_admin = isClubAdmin(caller, l.club_id)
+    }))
+  };
+
+  // Same visibility as list_players; never expose unrelated club members.
+  // Parent/guardian links and scoped admins travel in the league snapshot.
+  public query ({ caller }) func get_league_members(id : Text) : async { #Ok : [{ user_id : Text; is_staff : Bool; is_parent : Bool }]; #Err : Text } {
+    let league = switch (findLeague(id)) { case null return #Err("Mini-league not found"); case (?l) l };
+    if (not canViewLeague(caller, league)) return #Err("Forbidden");
+    var parentIds : [Text] = [];
+    var staffIds : [Text] = [league.created_by.toText()];
+    let add = func(ids : [Text], id : Text) : [Text] {
+      if (id == "" or ids.any(func(x) = x == id)) ids else ids.concat([id])
+    };
+    for (p in players.values()) {
+      if (p.mini_league_id == id) {
+        switch (p.parent_user_id) { case (?u) parentIds := add(parentIds, u); case null {} };
+        switch (p.claimed_by) { case (?u) parentIds := add(parentIds, u.toText()); case null {} };
+        switch (p.child_id) {
+          case (?child) {
+            for (g in guardians.values()) { if (g.child_id == child) parentIds := add(parentIds, g.guardian_user_id.toText()) };
+          };
+          case null {};
+        };
+        if (parentIds.size() > 500) return #Err("League member list exceeds 500");
+      };
+    };
+    for (a in admins.values()) { if (a.mini_league_id == id) staffIds := add(staffIds, a.user_id.toText()) };
+    for (r in roles.values()) { if (r.club_id == league.club_id and (r.role == "league_admin" or r.role == "club_admin") and r.team_id == null) staffIds := add(staffIds, r.user.toText()) };
+    var all = parentIds;
+    for (u in staffIds.values()) { all := add(all, u) };
+    if (all.size() > 500) return #Err("League member list exceeds 500");
+    #Ok(all.map(func(u) = { user_id = u; is_staff = staffIds.any(func(x) = x == u); is_parent = parentIds.any(func(x) = x == u) }))
+  };
+
   // Public: unauthenticated directory listing for the home page "browse
   // mini-leagues" picker. No PII (created_by/admin lists excluded) — just
   // enough to resolve a name/club for active leagues.

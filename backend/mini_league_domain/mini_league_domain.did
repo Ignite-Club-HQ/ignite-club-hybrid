@@ -241,6 +241,15 @@ type Main =
        Err: text;
        Ok: MiniLeagueJoinLink;
      }) query;
+   get_league_members: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 is_parent: bool;
+                 is_staff: bool;
+                 user_id: text;
+               };
+     }) query;
    get_mini_league: (id: text) -> (variant {
                                      Err: text;
                                      Ok: MiniLeague;
@@ -249,6 +258,18 @@ type Main =
     (variant {
        Err: text;
        Ok: vec MiniLeague;
+     }) query;
+   get_my_league_access: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           can_delete: bool;
+           can_manage: bool;
+           id: text;
+           is_club_admin: bool;
+         };
      }) query;
    get_news_audience: (mini_league_id: text, requester: principal) ->
     (variant {

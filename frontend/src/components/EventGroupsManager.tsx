@@ -162,11 +162,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
                 .in("id", playerIds);
               return data;
             },
-            // Gated: looking up player names/ratings for an arbitrary subset
-            // of ids has no canister equivalent (the canister only lists all
-            // players for a mini league or a group, not a filtered id set).
-            // ICP-routed sessions see empty names rather than invented data.
-            icp: async () => [] as { id: string; name: string; ability_rating: number | null }[],
+            icp: async (ctx) => (await listLivePlayers(ctx, miniLeagueId))
+              .filter(p => playerIds.includes(p.id))
+              .map(p => ({ id: p.id, name: p.name, ability_rating: p.ability_rating[0] ?? null })),
           }, { miniLeagueId });
 
           players = (playersData || []).map(p => ({
@@ -188,7 +186,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
       icp: async (ctx) => {
         const [rawGroups, players] = await Promise.all([
           listLiveEventGroups(ctx, eventId),
-          listLivePlayers(ctx, miniLeagueId),
+          (await import("@/live/miniLeagueRouting")).readMiniLeagueInScope(ctx, { miniLeagueId }, scoped => listLivePlayers(scoped, miniLeagueId)),
         ]);
         const playerInfo = new Map(players.map((p) => [p.id, p]));
         const groupsWithPlayers: EventGroup[] = await Promise.all(
@@ -236,11 +234,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
           if (error) throw error;
           return data as unknown as { id: string; name: string; team_size: number; min_players_per_side: number; minutes_per_half: number; bib_colors: string[] | null; show_matches_to_members: boolean; club_id: string | null; clubs: { sport: string | null } | null };
         },
-        // Wired: the canister's MiniLeague record matches these fields 1:1.
-        // `clubs.sport` has no canister equivalent (no club join), so the
-        // pitch board sport gate defaults to unsupported rather than guessing.
         icp: async (ctx) => {
           const league = await getLiveMiniLeague(ctx, miniLeagueId);
+          const club = await (await import("@/live/leagueReads")).readLeagueClub(ctx, league.club_id);
           return {
             id: league.id,
             name: league.name,
@@ -250,7 +246,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             bib_colors: league.bib_colors,
             show_matches_to_members: league.show_matches_to_members,
             club_id: league.club_id,
-            clubs: null as { sport: string | null } | null,
+            clubs: club ? { sport: club.sport[0] ?? null } : null,
           };
         },
       }, { miniLeagueId }),

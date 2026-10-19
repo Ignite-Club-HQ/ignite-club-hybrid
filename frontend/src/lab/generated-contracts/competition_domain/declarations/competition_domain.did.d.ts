@@ -522,6 +522,11 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_competition_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'record_match' : ActorMethod<
     [string, string, string],
     { 'Ok' : Match } |

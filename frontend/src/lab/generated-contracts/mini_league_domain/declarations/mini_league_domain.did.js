@@ -281,6 +281,22 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MiniLeagueJoinLink, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_league_members' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'user_id' : IDL.Text,
+                'is_parent' : IDL.Bool,
+                'is_staff' : IDL.Bool,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_mini_league' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : MiniLeague, 'Err' : IDL.Text })],
@@ -289,6 +305,23 @@ export const idlFactory = ({ IDL }) => {
     'get_mini_leagues' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeague), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_my_league_access' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'id' : IDL.Text,
+                'can_manage' : IDL.Bool,
+                'is_club_admin' : IDL.Bool,
+                'can_delete' : IDL.Bool,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'get_news_audience' : IDL.Func(
