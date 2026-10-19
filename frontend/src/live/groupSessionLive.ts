@@ -69,3 +69,20 @@ export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event'
   const { getLiveTeam } = await import('./features/club');
   return (await getLiveTeam(ctx, id))[0]?.club_id ?? null;
 }
+
+/** True when this group's club_domain recognises an invite token or id
+ * (pending invite, team invite link, shell-team claim token or short code).
+ * Location only: the token itself is the invitee's proof, as on the shared canisters. */
+export async function groupHoldsInvite(ctx: FeatureBackendContext, token: string): Promise<boolean> {
+  const c = await import('./features/club');
+  const probes: Array<() => Promise<unknown>> = [
+    () => c.getLivePendingInvite(ctx, token),
+    () => c.getLiveTeamInviteLinkByToken(ctx, token),
+    () => c.getLiveShellTeamByToken(ctx, token),
+    () => c.resolveLiveInviteShortCode(ctx, token),
+  ];
+  for (const p of probes) {
+    try { const r = await p(); if (r && !(Array.isArray(r) && r.length === 0)) return true; } catch { /* not this kind */ }
+  }
+  return false;
+}
