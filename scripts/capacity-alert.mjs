@@ -5,6 +5,7 @@
  * Exits 0 always (the caller decides whether to alert). Missing/unreadable files fail closed.
  */
 import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 export function summarizeAlert(prevRequests, nextRequests) {
   const prevIds = new Set(prevRequests.map((r) => r.id));
