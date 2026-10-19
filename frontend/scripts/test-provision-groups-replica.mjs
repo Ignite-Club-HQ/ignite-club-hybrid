@@ -47,6 +47,7 @@ try {
       assert.equal(installed.has(domain), false, 'acknowledged install never repeated');
       await pic.installCode({ canisterId: Principal.fromText(id), wasm, arg, sender: governor }); installed.add(domain);
     },
+    configure: async () => {}, // Probes have no domain settings; not full configuration evidence.
     healthy: async (_p, _domain, id) => {
       const actor = pic.createActor(idlFactory, Principal.fromText(id)); actor.setPrincipal(governor);
       return typeof await actor.version() === 'bigint';

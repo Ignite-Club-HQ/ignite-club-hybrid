@@ -8,11 +8,12 @@ import { GROUP_DOMAINS, type GroupDomain } from './groupRouting';
 import type { PlacementDecision } from './groupPlacement';
 
 export const PER_GROUP_DOMAINS = GROUP_DOMAINS.filter(d => d !== 'secret_workload_identity') as GroupDomain[];
-export type ProvisionPhase = 'approved' | 'created' | 'installed' | 'checked' | 'registered' | 'enabled' | 'failed';
+export type ProvisionPhase = 'approved' | 'created' | 'installed' | 'configured' | 'checked' | 'registered' | 'enabled' | 'failed';
 export type Provision = {
   id: string; groupId: string; deploymentId: string; subnetId: string; phase: ProvisionPhase;
   canisters: Partial<Record<GroupDomain, string>>; expectedRevision: bigint; error?: string;
-  pending?: { kind: 'create' | 'install' | 'register' | 'placement' | 'enable'; domain?: GroupDomain };
+  pending?: { kind: 'create' | 'install' | 'configure' | 'register' | 'placement' | 'enable'; domain?: GroupDomain; operation?: string };
+  configuration?: { binding: string; completed: string[] };
   installedDomains?: GroupDomain[];
   observedSubnets?: Partial<Record<GroupDomain, string>>;
   registration?: { closedRevision: bigint; placementRevision?: bigint };
@@ -23,6 +24,7 @@ export class ProvisionRefusedError extends Error {}
 export type ProvisionAdapter = {
   createCanister(p: Provision, domain: GroupDomain): Promise<{ canisterId: string; subnetId: string }>;
   install(p: Provision, domain: GroupDomain, canisterId: string): Promise<void>;
+  configure(p: Provision, checkpoint: ProvisionCheckpoint): Promise<void>;
   healthy(p: Provision, domain: GroupDomain, canisterId: string): Promise<boolean>;
   readRegistryRevision(): Promise<bigint>;
   registerGroup(p: Provision, checkpoint: ProvisionCheckpoint): Promise<void>; // router CAS, closed before placement
@@ -39,7 +41,7 @@ export function approveProvision(d: PlacementDecision, a: OperatorApproval, grou
   return { id: a.proposalId, groupId, deploymentId: d.deploymentId, subnetId: d.subnetId, phase: 'approved', canisters: {}, expectedRevision: revision };
 }
 
-export async function runProvision(start: Provision, a: ProvisionAdapter): Promise<Provision> {
+export async function runProvision(start: Provision, a: ProvisionAdapter, options: { stopAfterRegistration?: boolean } = {}): Promise<Provision> {
   let p = start;
   const step = async (n: Provision) => { await a.save(n); p = n; };
   if (p.phase === 'failed' || p.phase === 'enabled') return p;
@@ -87,6 +89,11 @@ export async function runProvision(start: Provision, a: ProvisionAdapter): Promi
       await checkpoint({ ...p, phase: 'installed' });
     }
     if (p.phase === 'installed') {
+      if (typeof a.configure !== 'function') throw new Error('Complete domain configuration required');
+      await a.configure(p, checkpoint);
+      await checkpoint({ ...p, phase: 'configured' });
+    }
+    if (p.phase === 'configured') {
       for (const d of PER_GROUP_DOMAINS) {
         const id = p.canisters[d];
         if (!id || !(await a.healthy(p, d, id))) throw new Error(`${d} failed health check`);
@@ -98,7 +105,7 @@ export async function runProvision(start: Provision, a: ProvisionAdapter): Promi
       if ((await a.readRegistryRevision()) !== revision) throw new Error('Registry changed since approval; re-approve');
       await a.registerGroup(p, checkpoint); await checkpoint({ ...p, phase: 'registered' });
     }
-    if (p.phase === 'registered') { await a.enableGroup(p, checkpoint); await checkpoint({ ...p, pending: undefined, phase: 'enabled' }); }
+    if (p.phase === 'registered' && !options.stopAfterRegistration) { await a.enableGroup(p, checkpoint); await checkpoint({ ...p, pending: undefined, phase: 'enabled' }); }
     return p;
   } catch (e) {
     if (savingFailed) throw e; // never overwrite a durable unresolved intent after disk failure
