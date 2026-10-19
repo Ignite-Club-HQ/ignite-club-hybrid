@@ -4,7 +4,8 @@ module {
   // revisions after an abort so old acknowledgements cannot be reused.
   public func migration(_ : {}) : {
     var clubMediaAuthorities : Map.Map<Text, { authority : ?Principal; revision : Nat; move_id : Text }>;
+    var mediaAuthEpoch : Nat;
   } {
-    { var clubMediaAuthorities = Map.empty<Text, { authority : ?Principal; revision : Nat; move_id : Text }>() }
+    { var clubMediaAuthorities = Map.empty<Text, { authority : ?Principal; revision : Nat; move_id : Text }>(); var mediaAuthEpoch = 0 }
   };
 }

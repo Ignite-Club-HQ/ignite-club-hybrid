@@ -190,6 +190,7 @@ persistent actor class Main(governorInit : Principal) {
   var competition_domain_canister : ?Principal;
   type ClubMediaAuthority = { authority : ?Principal; revision : Nat; move_id : Text };
   var clubMediaAuthorities : Map.Map<Text, ClubMediaAuthority>;
+  var mediaAuthEpoch : Nat;
 
   // ==================== Helper Functions ====================
 
@@ -211,6 +212,7 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
+    mediaAuthEpoch += 1;
     transferFences := transferFences.filter(func(c) = c != club);
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
@@ -504,6 +506,7 @@ persistent actor class Main(governorInit : Principal) {
     if (previous.revision != expected_revision) return #Err("Media authority revision changed");
     let next = { authority; move_id; revision = previous.revision + 1 };
     clubMediaAuthorities.add(club, next);
+    mediaAuthEpoch += 1;
     #Ok(next)
   };
 
@@ -517,9 +520,10 @@ persistent actor class Main(governorInit : Principal) {
     if (transport_public_key.size() != 48) return #Err("Invalid transport key");
     let binding = mediaAuthority(club_id);
     let configured = club_domain_canister;
+    let epoch = mediaAuthEpoch;
     let authority = switch (binding.authority) { case (?p) ?p; case null configured };
     let unchanged = func() : Bool {
-      not isFenced(club_id) and mediaAuthority(club_id) == binding and club_domain_canister == configured
+      not isFenced(club_id) and mediaAuthEpoch == epoch and mediaAuthority(club_id) == binding and club_domain_canister == configured
     };
     var allowed = isGovernor(caller);
     if (not allowed) {
@@ -740,6 +744,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor only");
     if (canister.equal(Principal.anonymous())) return #Err("Invalid canister");
     club_domain_canister := ?canister;
+    mediaAuthEpoch += 1;
     #Ok
   };
 
