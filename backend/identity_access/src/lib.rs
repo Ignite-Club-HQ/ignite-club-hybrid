@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 mod group_inventory;
 mod removal_barrier;
+mod deletion_timing;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
@@ -50,6 +51,7 @@ const MEM_REMOVAL_GENERATION: u8 = 12;
 const MEM_REMOVAL_INTENTS: u8 = 13;
 const MEM_REMOVAL_SUBJECTS: u8 = 14;
 const MEM_REMOVAL_RECEIPTS: u8 = 15;
+const MEM_DELETION_TICKETS: u8 = 16;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -464,6 +466,7 @@ thread_local! {
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_INTENTS)));
     static REMOVAL_SUBJECTS: RefCell<StableBTreeMap<String, String, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_SUBJECTS)));
+    static DELETION_TICKETS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(MEM_DELETION_TICKETS)));
     static REMOVAL_RECEIPTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_RECEIPTS)));
 }
@@ -1674,6 +1677,7 @@ fn my_terms_acceptance() -> Outcome<Option<TermsAcceptance>> {
 
 #[ic_cdk::update]
 fn erase_account(account_id: String) -> Outcome<()> {
+    if group_inventory_binding().is_some() { return Err("Bound deletion required".into()); }
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     let caller_account = account_for(caller)?;

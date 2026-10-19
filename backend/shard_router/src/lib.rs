@@ -17,6 +17,43 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
 const MAX_CLUB_ID_BYTES: usize = 64;
 const MAX_PAGE: u16 = 100;
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeletionLock { pub account_id: String, pub revision: u64 }
+fn registry_writable() -> Outcome<()> {
+    if DELETION_LOCKS.with(|m| m.borrow().len()) > 0 { return Err("Deletion registry locked".into()); }
+    Ok(())
+}
+fn deletion_authority() -> Option<Principal> {
+    DELETION_AUTHORITY.with(|m| { let b=m.borrow().get().clone(); if b.is_empty() {None} else {Some(Principal::from_slice(&b))} })
+}
+#[ic_cdk::update]
+fn set_deletion_authority(authority: Principal) -> Outcome<()> {
+    require_governor()?; registry_writable()?; validate_shard(authority)?;
+    if deletion_authority().is_some_and(|p| p != authority) { return Err("Deletion authority immutable".into()); }
+    DELETION_AUTHORITY.with(|m| m.borrow_mut().set(authority.as_slice().to_vec())); Ok(())
+}
+#[ic_cdk::update]
+fn acquire_deletion_lock(account_id: String, expected_revision: u64) -> Outcome<DeletionLock> {
+    if deletion_authority() != Some(caller()) { return Err("Deletion authority required".into()); }
+    if account_id.is_empty() || account_id.len()>128 { return Err("Invalid account id".into()); }
+    if current_revision()!=expected_revision { return Err("Deletion registry revision changed".into()); }
+    let lock=DeletionLock { account_id:account_id.clone(), revision:expected_revision };
+    if let Some(bytes)=DELETION_LOCKS.with(|m| m.borrow().get(&account_id)) {
+        if decode::<DeletionLock>(&bytes)!=lock { return Err("Deletion lock conflict".into()); }
+        return Ok(lock);
+    }
+    if DELETION_LOCKS.with(|m| m.borrow().len())>=10000 { return Err("Deletion lock capacity".into()); }
+    DELETION_LOCKS.with(|m| m.borrow_mut().insert(account_id,encode(&lock))); Ok(lock)
+}
+#[ic_cdk::update]
+fn release_deletion_lock(account_id: String, expected_revision: u64) -> Outcome<()> {
+    if deletion_authority()!=Some(caller()) { return Err("Deletion authority required".into()); }
+    if let Some(bytes)=DELETION_LOCKS.with(|m| m.borrow().get(&account_id)) {
+        if decode::<DeletionLock>(&bytes).revision!=expected_revision { return Err("Deletion lock conflict".into()); }
+        DELETION_LOCKS.with(|m| m.borrow_mut().remove(&account_id));
+    }
+    Ok(())
+}
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Route {
@@ -117,6 +154,9 @@ thread_local! {
     static GROUP_ASSIGNMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(7)));
     // Additive partition; never reuse IDs belonging to existing deployments.
     static GROUP_PLACEMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(8)));
+    // Additive permanent partitions: no expiry or governor unlock bypass.
+    static DELETION_AUTHORITY: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(10), Vec::new()));
+    static DELETION_LOCKS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(11)));
     // Per-principal count of self-service new-club placements (abuse cap).
     static PLACERS: RefCell<StableBTreeMap<Vec<u8>, u64, Memory>> = RefCell::new(StableBTreeMap::init(memory(9)));
 }
@@ -287,7 +327,7 @@ fn list_routes(start_after: Option<String>, limit: u16) -> Outcome<Page> {
 
 #[ic_cdk::update]
 fn assign(request: AssignRequest) -> Outcome<AssignResult> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&request.club_id)?;
     if group_assignment_for(&request.club_id).is_some() { return Err("Club has an immutable group assignment".into()); }
     validate_shard(request.shard)?;
@@ -325,7 +365,7 @@ fn begin_migration(
     destination: Principal,
     expected_route_revision: u64,
 ) -> Outcome<Migration> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     if group_assignment_for(&club_id).is_some() { return Err("Group migration requires verified group-wide copy and cutover".into()); }
     validate_shard(destination)?;
@@ -360,7 +400,7 @@ fn begin_migration(
 
 #[ic_cdk::update]
 fn commit_migration(club_id: String, expected_migration_revision: u64) -> Outcome<AssignResult> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     let migration = migration_for(&club_id).ok_or("No migration in progress")?;
     if migration.migration_revision != expected_migration_revision {
@@ -389,7 +429,7 @@ fn commit_migration(club_id: String, expected_migration_revision: u64) -> Outcom
 
 #[ic_cdk::update]
 fn abort_migration(club_id: String, expected_migration_revision: u64) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     let migration = migration_for(&club_id).ok_or("No migration in progress")?;
     if migration.migration_revision != expected_migration_revision {
@@ -411,7 +451,7 @@ fn get_migration(club_id: String) -> Outcome<Option<Migration>> {
 
 #[ic_cdk::update]
 fn assign_domain(request: AssignDomainRequest) -> Outcome<AssignDomainResult> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&request.club_id)?;
     if group_assignment_for(&request.club_id).is_some() { return Err("Club has an immutable group assignment".into()); }
     validate_club_id(&request.domain)?;
@@ -449,7 +489,7 @@ fn begin_domain_migration(
     destination: Principal,
     expected_route_revision: u64,
 ) -> Outcome<DomainMigration> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     if group_assignment_for(&club_id).is_some() { return Err("Group migration requires verified group-wide copy and cutover".into()); }
     validate_club_id(&domain)?;
@@ -487,7 +527,7 @@ fn commit_domain_migration(
     domain: String,
     expected_migration_revision: u64,
 ) -> Outcome<AssignDomainResult> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     validate_club_id(&domain)?;
     let migration =
@@ -520,7 +560,7 @@ fn abort_domain_migration(
     domain: String,
     expected_migration_revision: u64,
 ) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     validate_club_id(&domain)?;
     let migration =
@@ -563,7 +603,7 @@ pub struct GroupRegistrySnapshot { pub revision: u64, pub groups: Vec<ShardGroup
 
 #[ic_cdk::update]
 fn register_group_placement(placement: GroupPlacement, expected_revision: u64) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     if current_revision() != expected_revision { return Err("Revision conflict".into()); }
     let group = group_for(&placement.group_id).ok_or("Unknown group")?;
     discovery::validate(&placement, &group)?;
@@ -637,7 +677,7 @@ fn hosted_assignment(club_id: &str, target_alias: &str, expected_revision: u64, 
 
 #[ic_cdk::update]
 fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     let mut group = group;
     if current_revision() != expected_revision { return Err("Revision conflict".into()); }
     let prior = group_for(&group.id);
@@ -666,7 +706,7 @@ fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
 
 #[ic_cdk::update]
 fn record_group_health(group_id: String, heap_bytes: u64, cycles: u64, expected_revision: u64) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     if current_revision() != expected_revision { return Err("Revision conflict".into()); }
     let mut group = group_for(&group_id).ok_or("Unknown group")?;
     // Report the largest heap and smallest cycle balance across ALL group
@@ -693,7 +733,7 @@ fn get_group_assignment(club_id: String) -> Outcome<Option<GroupAssignment>> {
 
 #[ic_cdk::update]
 fn assign_new_club_group(club_id: String, target_alias: String, expected_revision: u64) -> Outcome<GroupAssignment> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     assign_group_record(club_id, target_alias, expected_revision, ic_cdk::api::time())
 }
 
@@ -705,6 +745,7 @@ fn place_my_new_club(club_id: String, target_alias: String) -> Outcome<GroupAssi
 }
 
 fn assign_group_record(club_id: String, target_alias: String, expected_revision: u64, now: u64) -> Outcome<GroupAssignment> {
+    registry_writable()?;
     validate_club_id(&club_id)?;
     // Retrying an acknowledged assignment never consumes a second slot.
     if let Some(assignment) = group_assignment_for(&club_id) {
