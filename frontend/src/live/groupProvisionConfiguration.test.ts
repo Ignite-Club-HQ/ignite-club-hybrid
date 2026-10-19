@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Principal } from '@icp-sdk/core/principal';
+import { IDL } from '@icp-sdk/core/candid';
 import { configureProvisionGroup, groupConfigurationPlan } from './groupProvisionConfiguration';
 import { PER_GROUP_DOMAINS, runProvision, type Provision, type ProvisionAdapter } from './groupProvisioner';
 
@@ -15,6 +16,18 @@ const world = () => {
 };
 
 describe('closed-group reciprocal configuration', () => {
+  it('every planned setting has the exact update signature in current domain contracts', async () => {
+    const contracts = import.meta.glob('./../lab/bindings/*/declarations/*.did.js');
+    for (const operation of groupConfigurationPlan(initial(), globals)) {
+      const load = contracts[`./../lab/bindings/${operation.domain}/declarations/${operation.domain}.did.js`];
+      if (!load) throw new Error(`Missing contract ${operation.domain}`);
+      const module = await load() as { idlFactory(input: { IDL: typeof IDL }): IDL.ServiceClass };
+      const method = module.idlFactory({ IDL })._fields.find(([name]) => name === operation.method)?.[1];
+      if (!method) throw new Error(`Missing method ${operation.domain}.${operation.method}`);
+      expect(method.annotations).not.toContain('query');
+      expect(() => IDL.encode(method.argTypes, operation.args)).not.toThrow();
+    }
+  });
   it('wires club/chat/PII/competition/league and queue ownership without prototype identity admission', async () => {
     const p = initial(), plan = groupConfigurationPlan(p, globals);
     const find = (domain: string, method: string) => plan.find(op => op.domain === domain && op.method === method);
