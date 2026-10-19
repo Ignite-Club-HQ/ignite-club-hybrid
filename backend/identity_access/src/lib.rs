@@ -48,6 +48,7 @@ const MEM_SUPPLEMENTAL_INVENTORY: u8 = 11;
 // Persistent removal generation and frozen intents. Never erase on retry.
 const MEM_REMOVAL_GENERATION: u8 = 12;
 const MEM_REMOVAL_INTENTS: u8 = 13;
+const MEM_REMOVAL_SUBJECTS: u8 = 14;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -386,6 +387,7 @@ fn validate_service_authorities(authorities: &[Principal]) -> Outcome<()> {
 fn set_service_authorities(authorities: Vec<Principal>) -> Outcome<()> {
     if !account_group_rehearsal_enabled() { return Err("Service admission not released".into()); }
     require_governor(&state(), ic_cdk::api::msg_caller())?;
+    if removal_pending() { return Err("Removal barrier pending".into()); }
     validate_service_authorities(&authorities)?;
     if !link_lifecycle().pending.is_empty() { return Err("Unlink recovery pending".into()); }
     if service_authorities().iter().any(|p| !authorities.contains(p)) { return Err("Cannot drop an existing service reader".into()); }
@@ -459,14 +461,14 @@ thread_local! {
         RefCell::new(StableCell::init(memory(MEM_REMOVAL_GENERATION), 0));
     static REMOVAL_INTENTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_INTENTS)));
+    static REMOVAL_SUBJECTS: RefCell<StableBTreeMap<String, String, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_SUBJECTS)));
 }
 fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {
     REMOVAL_INTENTS.with(|m| m.borrow().get(&account_id.to_string())).map(|bytes| decode(&bytes))
 }
 fn removal_subject_fenced(subject: Principal) -> bool {
-    // Bounded to the existing 10,000-account ceiling; an indexed subject map
-    // is required before activation. This local slice prioritizes no bypass.
-    REMOVAL_INTENTS.with(|m| m.borrow().iter().any(|entry| decode::<removal_barrier::Intent>(&entry.value()).subjects.contains(&subject)))
+    REMOVAL_SUBJECTS.with(|m| m.borrow().contains_key(&subject.to_text()))
 }
 fn removal_pending() -> bool { REMOVAL_INTENTS.with(|m| !m.borrow().is_empty()) }
 fn persist_removal_intent(account: &Account, inventory: group_inventory::RemovalInventory, identity: Principal) -> Outcome<removal_barrier::Intent> {
@@ -483,6 +485,10 @@ fn persist_removal_intent(account: &Account, inventory: group_inventory::Removal
     bump_removal_history();
     REMOVAL_GENERATION.with(|m| m.borrow_mut().set(generation));
     REMOVAL_INTENTS.with(|m| m.borrow_mut().insert(account.id.clone(), encode(&intent)));
+    REMOVAL_SUBJECTS.with(|m| {
+        let mut map = m.borrow_mut();
+        for subject in &intent.subjects { map.insert(subject.to_text(), intent.account_id.clone()); }
+    });
     Ok(intent)
 }
 #[ic_cdk::update]
@@ -1728,6 +1734,11 @@ fn rekey_principal_core(
     new: Principal,
     dry_run: bool,
 ) -> Outcome<u64> {
+    if removal_subject_fenced(old) || removal_subject_fenced(new) ||
+        find_account_by_principal(old).is_some_and(|a| removal_intent(&a.id).is_some()) ||
+        find_account_by_principal(new).is_some_and(|a| removal_intent(&a.id).is_some()) {
+        return Err("Removal barrier pending".into());
+    }
     if old == Principal::anonymous() || new == Principal::anonymous() {
         return Err("Anonymous principal not allowed".into());
     }
