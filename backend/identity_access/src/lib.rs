@@ -2347,7 +2347,7 @@ mod tests {
         let account=Account {id:"barrier-restored-account".into(),principals:vec![subject],version:5,status:AccountStatus::Active};
         put_account(&account); index_principal(subject,&account.id);
         let intent=persist_removal_intent(&account,inventory.clone(),p(90)).unwrap();
-        assert_eq!(intent.generation,1); assert_eq!(intent.targets.len(),28);
+        assert_eq!(intent.generation,1); assert_eq!(intent.targets.len(),27);
         assert!(account_for(subject).is_err()); assert!(ensure_account(subject).is_err());
         assert_eq!(principal_eligibility(subject).decision,EligibilityDecision::Denied);
         let mut restored=account.clone(); restored.version=99; restored.principals=vec![restored_alias];

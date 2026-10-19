@@ -106,7 +106,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     await expect(blob.actor.begin_upload('clubs/new-club/gallery/denied.jpg', 'image/jpeg', 3n, 1)).rejects.toThrow();
     for (const [name, service] of services) {
       expect(await service.actor.cycles_balance(), name).toBeGreaterThan(0n);
-      const stats = await service.actor.memory_stats(); expect(stats.memory_bytes, name).toBeGreaterThan(0n);
+      let stats; try { stats = await service.actor.memory_stats(); } catch (e) { throw Error(`${name} health: ${String(e)}`); } expect(stats.memory_bytes, name).toBeGreaterThan(0n);
     }
     expect(saved.phase).toBe('installed'); expect(saved.registration).toBeUndefined(); // Never enabled/registered by a health test.
   }, 120000);
