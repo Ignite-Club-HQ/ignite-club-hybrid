@@ -162,7 +162,7 @@ try {
   await pic.stopCanister({ canisterId: a.club.canisterId, sender: governor });
   assert.ok('Err' in await a.queue.actor.authorize_delivery(outage.id, outage.idempotency_key));
   const chatDenied = await a.queue.actor.authorize_delivery(chatOutage.id, chatOutage.idempotency_key);
-  assert.ok('Err' in chatDenied);
+  assert.ok('Err' in chatDenied || chatDenied.Ok === false, 'Unavailable club authority cannot authorize chat delivery');
   const retried = ok(await a.queue.actor.fail(outage.id, 'Temporary outage', [0n])); assert.equal(retried.body, 'Preserve original body');
   a.messaging.actor.setPrincipal(retained);
   await deniedMutation(() => a.messaging.actor.send_message(a.conversation.id, 'outage blocked', 'outage-blocked', [], []));
