@@ -62,9 +62,15 @@ try {
   assert.ok(sent.includes('club-b:removed-device'));
   a.queue.actor.setPrincipal(governor);
   ok(await a.queue.actor.enqueue('outage', retained.toText(), a.id, 'club_news', 'Preserve original body', 'outage-key'));
+  const chatId = a.claimed.find(n => n.kind === 'message_chat').club;
+  ok(await a.queue.actor.record_chat_notify_batch('chat-outage', chatId, governor.toText(), 'Private retry chat', [retained.toText()], []));
   a.queue.actor.setPrincipal(worker); const outage = ok(await a.queue.actor.claim(100000n, 50)).find(n => n.id === 'outage'); assert.ok(outage);
   await pic.stopCanister({ canisterId: a.club.canisterId, sender: governor });
   assert.ok('Err' in await a.queue.actor.authorize_delivery(outage.id, outage.idempotency_key));
+  const chatOutageId = 'chat-chat-outage-' + retained.toText();
+  const chatDenied = await a.queue.actor.authorize_delivery(chatOutageId, 'chat:chat-outage');
+  // Queue ID/key below are read from its claimed rows, not guessed contracts.
+  assert.ok('Err' in chatDenied);
   const retried = ok(await a.queue.actor.fail(outage.id, 'Temporary outage', [0n])); assert.equal(retried.body, 'Preserve original body');
   await pic.startCanister({ canisterId: a.club.canisterId, sender: governor });
   const reclaims = ok(await a.queue.actor.claim(100000n, 50)); assert.ok(reclaims.some(n => n.id === 'outage'));
@@ -72,9 +78,9 @@ try {
   // Claim ownership, not knowledge of IDs/keys, controls private authorization.
   a.queue.actor.setPrincipal(stranger); await assert.rejects(() => a.queue.actor.authorize_delivery('outage', 'outage-key'));
   a.queue.actor.setPrincipal(worker); assert.ok('Err' in await a.queue.actor.authorize_delivery('outage', 'wrong-key'));
-  assert.equal(ok(await a.queue.actor.recover()), 1);
+  assert.equal(ok(await a.queue.actor.recover()), 2);
   assert.ok('Err' in await a.queue.actor.authorize_delivery('outage', 'outage-key'));
-  assert.equal(ok(await a.queue.actor.claim(100000n, 50)).length, 1);
+  assert.equal(ok(await a.queue.actor.claim(100000n, 50)).length, 2);
   assert.equal(ok(await a.queue.actor.authorize_delivery('outage', 'outage-key')), true);
   console.log('PASS: two real group queues, shared caller-owned devices, canonical retry dedupe, claimed photo/chat revocation, retained/other-club delivery, authority outage/retry body preservation, lease/key guards and recovery. FCM sends stubbed; no live services.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
