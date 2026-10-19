@@ -43,6 +43,11 @@ const cyclesIdl = ({ IDL }) =>
     ),
   });
 
+const usageIdl = ({ IDL }) =>
+  IDL.Service({
+    usage_stats: IDL.Func([], [IDL.Record({ accounts: IDL.Nat, clubs: IDL.Nat, news_posts: IDL.Nat, teams: IDL.Nat })], ["query"]),
+  });
+
 const proxyIdl = ({ IDL }) =>
   IDL.Service({ canister_cycles: IDL.Func([IDL.Principal], [IDL.Nat], []) });
 
@@ -126,6 +131,18 @@ export async function main() {
   }
   rows.push(frontend);
 
+  // Live club count from club_domain's public usage_stats (counts only, no PII).
+  let clubCount = null;
+  if (ids.club_domain) {
+    try {
+      const usage = Actor.createActor(usageIdl, { agent, canisterId: Principal.fromText(ids.club_domain) });
+      const stats = await usage.usage_stats();
+      if (typeof stats.clubs === "bigint") clubCount = Number(stats.clubs);
+    } catch {
+      // Unreadable: the capacity job falls back to the recorded count.
+    }
+  }
+
   let problems = 0;
   console.log("Canister health — live fuel and memory read from each service");
   console.log("=".repeat(88));
@@ -138,6 +155,7 @@ export async function main() {
     if (note) console.log(`::warning::${r.key}: ${note}`);
   }
   console.log("=".repeat(88));
+  console.log(`Clubs on ICP: ${clubCount ?? "could not read"}`);
   console.log(
     problems === 0
       ? "All canisters look healthy."
@@ -153,6 +171,7 @@ export async function main() {
           name: r.key,
           memory_mb: r.memoryMB == null ? null : Math.round(r.memoryMB),
           cycles_t: r.cyclesT,
+          ...(r.key === "club_domain" && clubCount != null ? { clubs: clubCount } : {}),
         })),
       ),
     );
