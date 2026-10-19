@@ -35,7 +35,7 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets/access.
-- No client secrets; opt-in routing; checkpoint provisioning. Retained ledger/growth stay local-only until authenticated baseline/mutation wiring: monthly quotas are not retained bytes. Local tests never authorize activation.
+- No client secrets; opt-in routing; checkpoint provisioning. Retained protocol/growth stay local-only; monthly quotas differ from retained bytes. Live expansion needs signed inventory, capacity proof and approval.
 - II paths enforce club scope; uploads verify membership to prevent revocation bypass.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.

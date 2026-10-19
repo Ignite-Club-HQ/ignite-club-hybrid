@@ -93,6 +93,25 @@ try {
  await pic.startCanister({canisterId:club.canisterId,sender:governor}); ok(await a.finalize_upload(interrupted)); ok(await a.finalize_upload(interrupted));
  assert.deepEqual(ok(await c.read_club_retained_media_bytes('c')),{finalized:12n,pending:0n});
  // Free monthly limits remain shared across stores, not refunded by deletion.
+ // Recover both stores and both authority ledgers from one stopped checkpoint.
+ const snapshotType=IDL.Record({id:IDL.Vec(IDL.Nat8),taken_at_timestamp:IDL.Nat64,total_size:IDL.Nat64});
+ const snapshots=[]; const participants=[...stores,club];
+ const expected=ok(await c.read_club_retained_media_bytes('c'));
+ for(const participant of participants) await pic.stopCanister({canisterId:participant.canisterId,sender:governor});
+ for(const participant of participants) {
+   const reply=await pic.updateCall({canisterId:Principal.managementCanister(),method:'take_canister_snapshot',sender:governor,arg:IDL.encode([IDL.Record({canister_id:IDL.Principal,replace_snapshot:IDL.Opt(IDL.Vec(IDL.Nat8))})],[{canister_id:participant.canisterId,replace_snapshot:[]}])});
+   const [snapshot]=IDL.decode([snapshotType],reply); snapshots.push({canisterId:participant.canisterId,snapshotId:snapshot.id});
+ }
+ for(const participant of [...participants].reverse()) await pic.startCanister({canisterId:participant.canisterId,sender:governor});
+ await upload(b,'clubs/c/vault/after-checkpoint',[7,8]); ok(await a.delete_blob('clubs/c/photos/new'));
+ assert.notDeepEqual(ok(await c.read_club_retained_media_bytes('c')),expected);
+ for(const participant of participants) await pic.stopCanister({canisterId:participant.canisterId,sender:governor});
+ for(const snapshot of snapshots) await pic.updateCall({canisterId:Principal.managementCanister(),method:'load_canister_snapshot',sender:governor,arg:IDL.encode([IDL.Record({canister_id:IDL.Principal,snapshot_id:IDL.Vec(IDL.Nat8),sender_canister_version:IDL.Opt(IDL.Nat64)})],[{canister_id:snapshot.canisterId,snapshot_id:snapshot.snapshotId,sender_canister_version:[]}])});
+ for(const participant of [...participants].reverse()) await pic.startCanister({canisterId:participant.canisterId,sender:governor});
+ assert.deepEqual(ok(await c.read_club_retained_media_bytes('c')),expected);
+ assert.deepEqual(await b.get_content_hash('clubs/c/vault/after-checkpoint'),[]);
+ assert.ok((await a.get_content_hash('clubs/c/photos/new')).length);
+ console.log('PASS: coordinated controller snapshots restore both stores and retained/monthly ledgers before authority-first resume.');
  ok(await c.save_club_subscription({...subscription,is_pro:false,plan:'free'}));
  await pic.advanceTime(31*86_400_000); await pic.tick();
  for(let i=0;i<10;i++) await upload(i%2?a:b,`clubs/c/chat/free-${i}`,[1]);
