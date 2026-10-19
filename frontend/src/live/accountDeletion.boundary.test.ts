@@ -71,12 +71,12 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
     for (const c of clubs) { c.actor.setPrincipal(linked); ok(await c.actor.sync_my_linked_account()); }
     const targets = clubs.map((c, i) => ({ alias: 'mainnet', provider: 'icp', deploymentClass: 'public_subnet',
       host: 'https://icp-api.io', networkKind: 'public_mainnet',
-      canisterIds: Object.fromEntries([...GROUP_DOMAINS.map(d => [d, c.canisterId.toText()]),
+      canisterIds: Object.fromEntries([...GROUP_DOMAINS.map((d, n) => [d, d === 'club_domain' ? c.canisterId.toText() : `stub-${i}-${n}-cai`]),
         ['identity_access', shared.canisterId.toText()]]) } as IcpTargetConfig));
     const deployment = { id: 'boundary', alias: 'mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet',
       revision: 1n, enabled: true, additionalSubnetsEnabled: false, primarySubnet: 'local', approvedSubnets: ['local'] };
     const groups = clubs.map((c, i) => ({ id: i ? 'new' : 'legacy', targetAlias: 'mainnet',
-      domains: GROUP_DOMAINS.map(domain => ({ domain, canisterId: c.canisterId.toText() })) }));
+      domains: GROUP_DOMAINS.map(domain => ({ domain, canisterId: targets[i].canisterIds[domain] })) }));
     const registry = { revision: 1n, deployment, groups, bindings: groups.map(g => ({ groupId: g.id,
       deploymentId: deployment.id, deploymentRevision: 1n, domains: g.domains.map(d => ({ ...d, subnetId: 'local' })) })) } as GroupRegistry;
     const identity = { getPrincipal: () => primary } as Identity;
