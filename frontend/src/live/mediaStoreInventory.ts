@@ -2,7 +2,7 @@
  * by the deployment inventory adapter, never inferred from browser config.
  * Blob paths cover all club upload categories, including unreferenced objects.
  * This is storage evidence, not metadata reconciliation or move permission. */
-type Phase = { legacy: null } | { stable: null } | { pending: null } | { journal: null } | { done: null };
+type Phase = { legacy: null } | { indexed: null } | { pending: null } | { journal: null } | { done: null };
 type Cursor = { phase: Phase; offset: bigint; after: string };
 type Entry = {
   kind: { blob: null } | { pending: null } | { journal: null };

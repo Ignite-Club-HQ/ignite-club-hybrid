@@ -1,5 +1,5 @@
 module {
-  public type Phase = { #legacy; #stable; #pending; #journal; #done };
+  public type Phase = { #legacy; #indexed; #pending; #journal; #done };
   public type Cursor = { phase : Phase; offset : Nat; after : Text };
   public type Entry = {
     kind : { #blob; #pending; #journal };
