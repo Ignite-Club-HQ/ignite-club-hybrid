@@ -42,7 +42,7 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters before auto deploy; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets and balance access.
-- Static clients cannot hold secrets. Group sessions: opt-in reads only.
+- No client secrets; group routing opt-in, league/profile/host scopes split.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery needs exact inventory, stores stopped before authority, full restore and verified approved authority-first resume. Locked receipts persist intent/acks; interruption requires replay, disk failure retains locks. Raw snapshot hashes are not decoded ledger evidence. Why: prevent routing and ledger/file mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw. Season placements use membership routing. Why: avoid silent failures; keep export authorization.
 
