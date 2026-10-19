@@ -301,6 +301,7 @@ try {
   receiver.setPrincipal(governor);
   assert.ok('err' in await receiver.rekey_principal(victim,stranger,false));
  }
+ club.setPrincipal(victim);
  pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(extra[0].canisterId));
  pii.setPrincipal(victim); await denied(()=>pii.get_club_media_vetkey('club',TransportSecretKey.random().publicKeyBytes()));
  vault.setPrincipal(victim); await denied(()=>vault.read_account_list_club_files('club',[],[]));
