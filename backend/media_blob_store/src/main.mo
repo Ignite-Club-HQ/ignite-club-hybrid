@@ -262,6 +262,18 @@ persistent actor MediaBlobStore {
     if (club_domain_canister != ?authority or not member) throw Error.reject("Club membership required for upload");
   };
 
+  // Commit-time variant: enforces membership and removal denial but not the
+  // media-transfer fence, so fenced stores can still settle in-flight commits.
+  func requireUploadMembershipForCommit(user : Principal, path : Text) : async () {
+    let ?club = clubIdFromPath(path) else return;
+    if (isGovernor<system>(user)) return;
+    let ?authority = club_domain_canister else throw Error.reject("Club upload authority unavailable");
+    let service : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(authority.toText());
+    let member = try { await (with timeout = 10) service.read_has_club_membership(user, club) } catch (_) { false };
+    if (removalReceiver.denied(user)) throw Error.reject("Account removal fenced");
+    if (club_domain_canister != ?authority or not member) throw Error.reject("Club membership required for upload");
+  };
+
   // Freeze is irreversible to local enforcement. Reads remain available.
   // No upload can slip past a subscription await: begin rechecks this mode.
   public shared ({ caller }) func freeze_media_quota() : async Result {
@@ -387,7 +399,7 @@ persistent actor MediaBlobStore {
     let ?service = quotaService() else return #Err("Quota authority unset; retry finalize");
     // Membership is checked here, after finalize's atomic local write: an
     // unreachable authority must leave the ciphertext stored but unpublished.
-    try { await requireUploadMembership(op.owner, op.path) } catch (e) { return #Err(Error.message(e)) };
+    try { await requireUploadMembershipForCommit(op.owner, op.path) } catch (e) { return #Err(Error.message(e)) };
     try {
       let _dbg = Debug.print("DBG commitShared " # id); switch (await service.commit_media_quota(id)) {
         case (#Ok(r)) {
