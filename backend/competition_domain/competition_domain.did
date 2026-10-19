@@ -467,6 +467,11 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_competition_club: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) query;
    record_match: (competition_id: text, home_team: text, away_team: text) ->
     (variant {
        Err: text;
