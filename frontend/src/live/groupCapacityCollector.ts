@@ -27,7 +27,7 @@ export function collectGroupCapacity(rows: HealthRow[], limits: TestedLimits, no
   });
   if (!readings.length) problems.push('no tested limits configured');
   const live = byName.get('club_domain')?.clubs;
-  const clubCount = Number.isInteger(live) && live! >= 0 ? live! : limits.clubCount;
+  const clubCount = live !== undefined && Number.isInteger(live) && live >= 0 ? live : limits.clubCount;
   if (!Number.isInteger(clubCount) || clubCount < 0) problems.push('club count required');
   const all = [...readings, ...(limits.extra ?? [])];
   const fuelRows = rows.filter(r => limits.storageLimitBytes[r.name] !== undefined);

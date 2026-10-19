@@ -733,9 +733,9 @@ persistent actor MediaBlobStore {
     // the next photo store. Existing blobs stay readable forever.
     if (not canReserve(total_size)) return #Err("StoreFull");
     if (quota_mode == #local and not isGovernor<system>(caller)) {
-      let isPro = switch (clubIdFromPath(path), categoryForPath(path)) {
-        case (?clubId, ?_) { await clubIsPro(clubId) };
-        case _ { false };
+      let isPro = switch (clubIdFromPath(path)) {
+        case (?clubId) { await clubIsPro(clubId) };
+        case null { false };
       };
       // Pro media allowance (5 GiB + purchased) across vault, gallery and
       // chat combined, so one Pro club cannot crowd out the whole store.
