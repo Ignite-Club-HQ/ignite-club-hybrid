@@ -54,7 +54,7 @@ try {
   assert.ok('Err' in await service.read_principal_eligibility(primary));
   service.setPrincipal(groups[0].canisterId);
   assert.ok('Eligible' in ok(await service.read_principal_eligibility(linked)).decision);
-  assert.ok('Denied' in ok(await service.read_principal_eligibility(stranger)).decision);
+  assert.ok('Denied' in ok(await service.read_principal_eligibility(Principal.fromUint8Array(Uint8Array.from([99, 1])))).decision);
   assert.ok('Err' in await service.read_principal_eligibilities([]));
   assert.ok('Err' in await service.read_principal_eligibilities([linked, linked]));
   assert.ok('Err' in await service.read_principal_eligibilities(Array(201).fill(linked)));
