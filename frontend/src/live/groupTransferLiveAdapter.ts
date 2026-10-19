@@ -56,11 +56,15 @@ export type LiveAdapterDeps = {
   /** Authenticated complete inventory including chat/vault/article blobs and
    * pending operations; unavailable readers fail closed, including on resume. */
   mediaInventory?(fromGroup: string, toGroup: string, clubId: string): Promise<MediaTransferInventory>;
+  /** Opt-in durable media preparation. Fence metadata domains before the
+   * inventory callback scans blob stores. Failed checks retain all locks. */
+  mediaPreparation?: { release(): Promise<void> };
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
   const verifyMedia = async (from: string, to: string, club: string) => {
     if (!d.mediaInventory) throw new Error('Authenticated media inventory reader required; club move blocked');
+    if (d.mediaPreparation) await fenceAll(from, club, true);
     assertMediaTransferSafe(await d.mediaInventory(from, to, club), club, from, to);
   };
   const live = (domain: string) => (LIVE_DOMAINS as readonly string[]).includes(domain);
@@ -90,7 +94,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     sameDeployment: d.sameDeployment,
     verifyMedia,
     async setFence(group, club, on) {
-      await fenceAll(group, club, on);
+      if (on) await fenceAll(group, club, true);
       if (on) { // locked first, so no new sponsor-only count can land after the fold
         const sponsors = await d.clubSponsorIds(group, club);
         for (let i = 0; i < sponsors.length; i += 500)
@@ -102,6 +106,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
         for (const dom of LIVE_DOMAINS) ok(await d.actors(target)[dom].purge_club_snapshot(club));
         await fenceAll(target, club, false);
       }
+      if (!on) await fenceAll(group, club, false); // target cleanup precedes source unlock
     },
     async exportPage(group, club, domain, cursor) {
       if (global(domain)) return { rows: [], next: null };
@@ -147,5 +152,9 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       if (target && target !== group) await fenceAll(target, club, false);
     },
     save: d.save,
+    async cleanupTerminal(t) {
+      if (t.phase !== 'released' && t.phase !== 'aborted') throw new Error('Durable terminal transfer required');
+      await d.mediaPreparation?.release();
+    },
   };
 }

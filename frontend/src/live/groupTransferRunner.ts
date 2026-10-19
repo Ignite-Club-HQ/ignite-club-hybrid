@@ -15,6 +15,8 @@ export type TransferAdapter = {
   swapAssignment(clubId: string, toGroup: string, expectedRevision: bigint): Promise<void>;
   purgeSource(group: string, clubId: string): Promise<void>;
   save(t: Transfer): Promise<void>;
+  /** Cleanup only after terminal state is durable; replayable after a crash. */
+  cleanupTerminal?(t: Transfer): Promise<void>;
 };
 const MAX_PAGES = 100_000;
 
@@ -22,7 +24,11 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
   let t = start;
   const step = async (n: Transfer) => { await a.save(n); t = n; };
   if (!(await a.sameDeployment(t.fromGroup, t.toGroup))) throw new Error('Cross-deployment transfer needs a separately reviewed design');
-  if (t.phase === 'planned') await a.verifyMedia?.(t.fromGroup, t.toGroup, t.clubId);
+  if (t.phase === 'aborted') { await a.setFence(t.fromGroup, t.clubId, false); await a.cleanupTerminal?.(t); return t; }
+  if (t.phase === 'released') { await a.cleanupTerminal?.(t); return t; }
+  // Resumed copies must revalidate evidence before importing anything. Keep
+  // locks on failed/ambiguous media checks, outside automatic abort cleanup.
+  if (['planned', 'fenced', 'copied'].includes(t.phase)) await a.verifyMedia?.(t.fromGroup, t.toGroup, t.clubId);
   try {
     if (t.phase === 'planned') { await a.setFence(t.fromGroup, t.clubId, true); await step(fence(t)); }
     if (t.phase === 'fenced') {
@@ -43,8 +49,9 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
     if (t.phase === 'copied') await step(verify(t));
   } catch (e) {
     if (['planned', 'fenced', 'copied'].includes(t.phase)) {
-      await a.setFence(t.fromGroup, t.clubId, false);
       await step(abort(t));
+      await a.setFence(t.fromGroup, t.clubId, false);
+      await a.cleanupTerminal?.(t);
     }
     throw e;
   }
@@ -54,9 +61,12 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
     // verification must abort the move rather than be lost at cutover.
     const recheck = await Promise.all(TRANSFER_DOMAINS.map(d => a.digest(t.fromGroup, t.clubId, d)));
     for (const r of recheck) {
-      const v = t.sourceDigests!.find(x => x.domain === r.domain)!;
+      const v = t.sourceDigests?.find(x => x.domain === r.domain);
+      if (!v) throw new Error(`Missing source digest for ${r.domain}`);
       if (v.records !== r.records || v.digest !== r.digest) {
+        await step(abort(t));
         await a.setFence(t.fromGroup, t.clubId, false);
+        await a.cleanupTerminal?.(t);
         throw new Error(`Source changed during fence in ${r.domain}; transfer must be re-planned`);
       }
     }
@@ -66,5 +76,6 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
     await step(next);
   }
   if (t.phase === 'cutover') { await a.purgeSource(t.fromGroup, t.clubId); await step(release(t)); }
+  if (t.phase === 'released') await a.cleanupTerminal?.(t);
   return t;
 }

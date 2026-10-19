@@ -40,3 +40,4 @@
 
 - Event-group sync clears the current board’s cached state on denied/missing canister reads, leaves other boards and transient-failure caches intact, and never writes for spectators. Why: revoked league access must not retain a stale board or wipe unrelated matches.
 - Media reconciliation binds ciphertext references and club/per-file identities to original store authorities; missing provenance remains unresolved and reports never authorize encrypted moves. Why: location and copied grants cannot prove key continuity.
+- Operator media preparation journals all store fence intents before mutation, acknowledges exact CAS revisions, and retains locks on ambiguous acquisition or evidence failures; release requires a verified completed/aborted move and unchanged complete registry. Why: restarting cannot safely adopt another operator's fence or unlock an uncertain transfer.
