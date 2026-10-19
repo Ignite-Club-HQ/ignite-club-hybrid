@@ -1,0 +1,142 @@
+import Map "mo:core/Map";
+import Text "mo:core/Text";
+import Principal "mo:core/Principal";
+
+// Retained bytes are independent of monthly upload counts. This ledger is
+// deliberately separate from mediaQuota and cannot activate production itself.
+module {
+  public let baseBytes : Nat = 5_368_709_120;
+  public let gib : Nat = 1_073_741_824;
+  public let maxEntries : Nat = 100_000;
+  public type Object = { store : Principal; path : Text; club : Text; bytes : Nat; revision : Nat };
+  public type Operation = {
+    store : Principal; token : Text; path : Text; club : Text; bytes : Nat;
+    previous : ?Object; state : { #reserved; #committed; #released };
+  };
+  public type Ledger = {
+    objects : Map.Map<Text, Object>; operations : Map.Map<Text, Operation>;
+    locks : Map.Map<Text, Text>; totals : Map.Map<Text, Nat>; pending : Map.Map<Text, Nat>;
+    stores : Map.Map<Text, Bool>;
+  };
+  public type Result = { #Ok : Operation; #Err : Text };
+  public func empty() : Ledger {
+    { objects = Map.empty(); operations = Map.empty(); locks = Map.empty();
+      totals = Map.empty(); pending = Map.empty(); stores = Map.empty() }
+  };
+  func key(store : Principal, id : Text) : Text { store.toText() # "\u{1f}" # id };
+  func valid(id : Text) : Bool { id.size() > 0 and id.size() <= 512 and not Text.contains(id, #char '\u{1f}') };
+  func amount(rows : Map.Map<Text, Nat>, club : Text) : Nat { rows.get(club) ?? 0 };
+  public func usage(ledger : Ledger, club : Text) : { finalized : Nat; pending : Nat } {
+    { finalized = amount(ledger.totals, club); pending = amount(ledger.pending, club) }
+  };
+  public func register(ledger : Ledger, store : Principal) : Bool {
+    if (store.isAnonymous() or store.toText() == "aaaaa-aa") return false;
+    let id = store.toText();
+    if (ledger.stores.get(id) != null) return true;
+    if (ledger.stores.size() >= 64) return false;
+    ledger.stores.add(id, false); true
+  };
+  // Only a frozen/drained, authenticated exact inventory may call baseline.
+  // Conflicting repeat pages fail, instead of adding retained bytes twice.
+  public func baseline(ledger : Ledger, object : Object) : Bool {
+    if (ledger.stores.get(object.store.toText()) != ?false or not valid(object.club) or not valid(object.path)) return false;
+    let id = key(object.store, object.path);
+    switch (ledger.objects.get(id)) {
+      case (?saved) return saved == object;
+      case null {};
+    };
+    if (ledger.objects.size() >= maxEntries) return false;
+    ledger.objects.add(id, object);
+    ledger.totals.add(object.club, amount(ledger.totals, object.club) + object.bytes); true
+  };
+  // Caller must prove end-of-inventory, hashes and no concurrent mutations.
+  // No inferred readiness from an empty page or a frontend-configured store.
+  public func seal(ledger : Ledger, store : Principal) : Bool {
+    if (ledger.stores.get(store.toText()) == null) return false;
+    ledger.stores.add(store.toText(), true); true
+  };
+  public func ready(ledger : Ledger) : Bool {
+    if (ledger.stores.size() == 0) return false;
+    for ((_, complete) in ledger.stores.entries()) { if (not complete) return false };
+    true
+  };
+  public func reserve(ledger : Ledger, store : Principal, token : Text, club : Text, path : Text, bytes : Nat, pro : Bool, purchasedGb : Nat) : Result {
+    if (not ready(ledger) or ledger.stores.get(store.toText()) != ?true) return #Err("Retained inventory incomplete");
+    if (not valid(token) or not valid(club) or not valid(path) or bytes > 10_551_296) return #Err("Invalid reservation");
+    let operationId = key(store, token);
+    switch (ledger.operations.get(operationId)) {
+      case (?saved) {
+        if (saved.path != path or saved.club != club or saved.bytes != bytes) return #Err("Token conflict");
+        return #Ok(saved)
+      };
+      case null {};
+    };
+    let objectId = key(store, path);
+    if (ledger.locks.get(objectId) != null) return #Err("Object mutation pending");
+    let previous = ledger.objects.get(objectId);
+    switch (previous) { case (?saved) { if (saved.club != club) return #Err("Storage owner conflict") }; case null {} };
+    if (ledger.operations.size() >= maxEntries or (previous == null and ledger.objects.size() + ledger.locks.size() >= maxEntries)) return #Err("Retained ledger full");
+    let held = amount(ledger.pending, club);
+    // Conservative reservation: old and new bytes coexist until commit. No
+    // refund before the store has durably published the replacement.
+    if (pro and amount(ledger.totals, club) + held + bytes > baseBytes + purchasedGb * gib) return #Err("StorageAllowanceFull");
+    let op : Operation = { store; token; club; path; bytes; previous; state = #reserved };
+    ledger.pending.add(club, held + bytes);
+    ledger.operations.add(operationId, op); ledger.locks.add(objectId, operationId);
+    #Ok(op)
+  };
+  public func settle(ledger : Ledger, store : Principal, token : Text, commit : Bool) : Result {
+    let id = key(store, token);
+    let op = ledger.operations.get(id) ?? (return #Err("Unknown reservation"));
+    if (op.state == #committed) { if (commit) return #Ok(op) else return #Err("Already committed") };
+    if (op.state == #released) { if (not commit) return #Ok(op) else return #Err("Already released") };
+    let objectId = key(store, op.path);
+    let held = amount(ledger.pending, op.club);
+    let used = amount(ledger.totals, op.club);
+    let oldBytes = switch (op.previous) { case (?previous) previous.bytes; case null 0 };
+    if (held < op.bytes or used < oldBytes or ledger.locks.get(objectId) != ?id or ledger.objects.get(objectId) != op.previous) return #Err("Retained accounting mismatch");
+    let updated = { op with state = if (commit) #committed else #released };
+    if (commit) {
+      let revision = switch (op.previous) { case (?previous) previous.revision + 1; case null 1 };
+      ledger.objects.add(objectId, { store; path = op.path; club = op.club; bytes = op.bytes; revision });
+      ledger.totals.add(op.club, used - oldBytes + op.bytes)
+    };
+    ledger.pending.add(op.club, held - op.bytes); ledger.locks.remove(objectId);
+    ledger.operations.add(id, updated); #Ok(updated)
+  };
+  // A delayed reserve after an acknowledged abort must not resurrect capacity.
+  public func cancel(ledger : Ledger, store : Principal, token : Text, club : Text, path : Text, bytes : Nat) : Result {
+    let id = key(store, token);
+    switch (ledger.operations.get(id)) {
+      case (?saved) {
+        if (saved.club != club or saved.path != path or saved.bytes != bytes) return #Err("Token conflict");
+        settle(ledger, store, token, false)
+      };
+      case null {
+        if (ledger.stores.get(store.toText()) == null or not valid(token) or not valid(club) or not valid(path) or bytes > 10_551_296 or ledger.operations.size() >= maxEntries) return #Err("Invalid cancellation");
+        let saved : Operation = { store; token; club; path; bytes; previous = null; state = #released };
+        ledger.operations.add(id, saved); #Ok(saved)
+      };
+    }
+  };
+  // Idempotent exact revision deletion credit. A late receipt must never
+  // remove a newer replacement or refund its bytes. Journal is not retired.
+  public func deleted(ledger : Ledger, store : Principal, token : Text, object : Object) : Result {
+    if (not ready(ledger) or ledger.stores.get(store.toText()) != ?true or object.store != store or not valid(token)) return #Err("Invalid deletion");
+    let id = key(store, token);
+    switch (ledger.operations.get(id)) {
+      case (?saved) {
+        if (saved.path != object.path or saved.club != object.club or saved.previous != ?object or saved.bytes != 0 or saved.state != #committed) return #Err("Token conflict");
+        return #Ok(saved)
+      };
+      case null {};
+    };
+    let objectId = key(store, object.path);
+    let used = amount(ledger.totals, object.club);
+    if (ledger.objects.get(objectId) != ?object or ledger.locks.get(objectId) != null or used < object.bytes) return #Err("Deletion revision mismatch");
+    if (ledger.operations.size() >= maxEntries) return #Err("Retained ledger full");
+    let saved : Operation = { store; token; path = object.path; club = object.club; bytes = 0; previous = ?object; state = #committed };
+    ledger.objects.remove(objectId); ledger.totals.add(object.club, used - object.bytes);
+    ledger.operations.add(id, saved); #Ok(saved)
+  };
+}

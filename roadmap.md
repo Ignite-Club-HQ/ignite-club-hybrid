@@ -2,6 +2,8 @@
 
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 
+- [ ] Approved same-group storage work: implement retained cross-store accounting foundations and growth-reservation gates; fix local branding admission coverage; extend large-storage tests and verify existing migration/shard preparation. No live activation, encrypted moves, or new payment methods.
+- [ ] Production shared retained-ledger rollout: requires complete operator-authenticated store inventory, frozen/drained baseline and deployment acceptance; keep additional-store activation blocked pending proof.
 - [x] Fix screenshot-reported ICP frontend deployment guard failure in `clubMediaAllowance`: Supabase-only entry and queued/pre-upload checks enforced; unchanged guard scanner passes, 51 Supabase and 33 ICP regression tests pass (mode-specific skips), preview build OK. Owner must start a new frontend deploy run on the updated branch; live deployment not verified here.
 - [x] Approved Batch 1 capacity/photo-move investigation: source review and public mainnet reads complete; primary store has 57 legacy blobs / 3,848,218 ciphertext bytes, 2 GiB capacity, stable writes off. Combined quota gaps and conditional original-key-preserving move feasibility documented in `docs/scaling-storage-and-photo-move-feasibility.md`; 46 existing safeguards pass in each backend mode. No application or live mutations.
 - [ ] Authorized live completeness evidence: exact quota mode, pending reservations, full group/store registry and artifact/key attestations require the GitHub-held operator identity; public readings do not establish completeness.
