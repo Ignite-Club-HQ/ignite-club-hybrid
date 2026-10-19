@@ -53,9 +53,18 @@ function record_opt_to_undefined<T>(arg: T | null): T | undefined {
 }
 export interface Account {
     id: string;
+    /**
+     * `#[serde(default)]` keeps accounts stored before this field existed
+     * decodable as `Active`.
+     */
     status: AccountStatus;
     version: bigint;
     principals: Array<Principal>;
+}
+export interface MemoryStats {
+    memory_bytes: bigint;
+    stable_bytes: bigint;
+    heap_bytes: bigint;
 }
 export type Result_2 = {
     __kind__: "Ok";
@@ -64,9 +73,16 @@ export type Result_2 = {
     __kind__: "Err";
     Err: string;
 };
-export type Result_13 = {
+export type Result_17 = {
     __kind__: "Ok";
     Ok: bigint;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_13 = {
+    __kind__: "Ok";
+    Ok: PrincipalEligibility;
 } | {
     __kind__: "Err";
     Err: string;
@@ -110,13 +126,6 @@ export interface Profile {
      */
     theme_preference?: string;
 }
-export type Result_16 = {
-    __kind__: "Ok";
-    Ok: TermsAcceptance;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export interface PrivacyConsent {
     account_id: string;
     updated_at_ns: bigint;
@@ -126,6 +135,13 @@ export interface PrivacyConsent {
 export type Result_1 = {
     __kind__: "Ok";
     Ok: Access;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_16 = {
+    __kind__: "Ok";
+    Ok: Entitlement;
 } | {
     __kind__: "Err";
     Err: string;
@@ -144,6 +160,14 @@ export type Result_11 = {
     __kind__: "Err";
     Err: string;
 };
+export interface RemovalHistoryManifest {
+    erased_accounts: bigint;
+    pending_intents: bigint;
+    principal_denials: bigint;
+    service_readers: Array<Principal>;
+    revision: bigint;
+    club_authorities: Array<Principal>;
+}
 export type Result_4 = {
     __kind__: "Ok";
     Ok: ExternalSiteBinding;
@@ -158,14 +182,27 @@ export interface RoleGrant {
     team?: string;
     site_id?: string;
 }
+export type RemovalHistoryCursor = {
+    __kind__: "ErasedAccounts";
+    ErasedAccounts: string | null;
+} | {
+    __kind__: "Done";
+    Done: null;
+} | {
+    __kind__: "PendingIntents";
+    PendingIntents: bigint;
+} | {
+    __kind__: "PrincipalDenials";
+    PrincipalDenials: string | null;
+};
 export interface TermsAcceptance {
     account_id: string;
     terms_version: number;
     accepted_at_ms: bigint;
 }
-export type EligibilityBatchResult = {
+export type Result_19 = {
     __kind__: "Ok";
-    Ok: Array<PrincipalEligibility>;
+    Ok: PrivacyConsent;
 } | {
     __kind__: "Err";
     Err: string;
@@ -182,6 +219,13 @@ export interface ProfileSearchResult {
     avatar_ref?: string;
     display_name: string;
 }
+export interface RemovalHistoryPage {
+    pending: Array<UnlinkIntent>;
+    denials: Array<[string, PrincipalDenial]>;
+    erased: Array<[string, bigint]>;
+    next: RemovalHistoryCursor;
+    revision: bigint;
+}
 export interface ExternalSiteBinding {
     account_id: string;
     external_user_id: string;
@@ -190,7 +234,7 @@ export interface ExternalSiteBinding {
 }
 export type Result_14 = {
     __kind__: "Ok";
-    Ok: Array<ProfileSearchResult>;
+    Ok: RemovalHistoryManifest;
 } | {
     __kind__: "Err";
     Err: string;
@@ -248,6 +292,13 @@ export interface State {
     terms_acceptances: Array<TermsAcceptance>;
     next_challenge: bigint;
 }
+export interface UnlinkIntent {
+    account_id: string;
+    principal: Principal;
+    acknowledged: Array<Principal>;
+    version: bigint;
+    authorities: Array<Principal>;
+}
 export type Result_6 = {
     __kind__: "Ok";
     Ok: State;
@@ -257,11 +308,18 @@ export type Result_6 = {
 };
 export type Result_12 = {
     __kind__: "Ok";
-    Ok: Entitlement;
+    Ok: Array<PrincipalEligibility>;
 } | {
     __kind__: "Err";
     Err: string;
 };
+export interface PrincipalDenial {
+    account_id: string;
+    reauthorized_version?: bigint;
+    rekey_destination?: Principal;
+    version: bigint;
+    reason: DenialReason;
+}
 export type Result_9 = {
     __kind__: "Ok";
     Ok: Profile;
@@ -279,9 +337,9 @@ export interface PrincipalEligibility {
     subject: Principal;
     denied_through_version?: bigint;
 }
-export type EligibilityResult = {
+export type Result_18 = {
     __kind__: "Ok";
-    Ok: PrincipalEligibility;
+    Ok: Array<ProfileSearchResult>;
 } | {
     __kind__: "Err";
     Err: string;
@@ -309,7 +367,7 @@ export type Result_10 = {
 };
 export type Result_15 = {
     __kind__: "Ok";
-    Ok: PrivacyConsent;
+    Ok: RemovalHistoryPage;
 } | {
     __kind__: "Err";
     Err: string;
@@ -328,9 +386,21 @@ export type Result_8 = {
     __kind__: "Err";
     Err: string;
 };
+export type Result_20 = {
+    __kind__: "Ok";
+    Ok: TermsAcceptance;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export enum AccountStatus {
     Active = "Active",
     Suspended = "Suspended"
+}
+export enum DenialReason {
+    Erased = "Erased",
+    Rekeyed = "Rekeyed",
+    Unlinked = "Unlinked"
 }
 export enum EligibilityDecision {
     Eligible = "Eligible",
@@ -356,41 +426,39 @@ export interface identity_accessInterface {
     grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2>;
     grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2>;
     is_pro(arg0: Principal): Promise<Result_5>;
-    memory_stats(): Promise<{
-        memory_bytes: bigint;
-        stable_bytes: bigint;
-        heap_bytes: bigint;
-    }>;
+    memory_stats(): Promise<MemoryStats>;
     my_roles(): Promise<Result_11>;
     my_terms_acceptance(): Promise<Result_10>;
     read_linked_account(arg0: Principal): Promise<Result>;
-    read_principal_eligibilities(arg0: Array<Principal>): Promise<EligibilityBatchResult>;
-    read_principal_eligibility(arg0: Principal): Promise<EligibilityResult>;
+    read_principal_eligibilities(arg0: Array<Principal>): Promise<Result_12>;
+    read_principal_eligibility(arg0: Principal): Promise<Result_13>;
+    read_removal_history_manifest(): Promise<Result_14>;
+    read_removal_history_page(arg0: bigint, arg1: RemovalHistoryCursor, arg2: number): Promise<Result_15>;
     read_service_account(arg0: Principal): Promise<Result>;
-    redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12>;
+    redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_16>;
     register_account(): Promise<Result>;
-    rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_13>;
+    rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_17>;
     remove_verifier(arg0: Principal): Promise<Result_2>;
     revoke(arg0: Principal, arg1: bigint): Promise<Result>;
     revoke_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2>;
     revoke_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2>;
-    search_profiles(arg0: string, arg1: number): Promise<Result_14>;
+    search_profiles(arg0: string, arg1: number): Promise<Result_18>;
     set_account_status(arg0: string, arg1: AccountStatus): Promise<Result>;
     set_attestation_secret(arg0: Uint8Array): Promise<Result_2>;
     set_club_authorities(arg0: Array<Principal>): Promise<Result_2>;
     set_club_switcher_hint_seen(): Promise<Result_9>;
-    set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_12>;
+    set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_16>;
     set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_2>;
     set_exclusion_scoped(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<Result_2>;
     set_family(arg0: string, arg1: string): Promise<Result_2>;
-    set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_15>;
+    set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_19>;
     set_profile(arg0: string, arg1: string | null): Promise<Result_9>;
     set_service_authorities(arg0: Array<Principal>): Promise<Result_2>;
-    set_terms_acceptance(arg0: number): Promise<Result_16>;
+    set_terms_acceptance(arg0: number): Promise<Result_20>;
     set_theme_preference(arg0: string | null): Promise<Result_9>;
     whoami(): Promise<Result>;
 }
-import type { Access as _Access, Account as _Account, AccountStatus as _AccountStatus, EligibilityBatchResult as _EligibilityBatchResult, EligibilityDecision as _EligibilityDecision, EligibilityResult as _EligibilityResult, Entitlement as _Entitlement, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, LinkChallenge as _LinkChallenge, PrincipalEligibility as _PrincipalEligibility, PrivacyConsent as _PrivacyConsent, Profile as _Profile, ProfileSearchResult as _ProfileSearchResult, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance } from "./declarations/identity_access.did";
+import type { Access as _Access, Account as _Account, AccountStatus as _AccountStatus, DenialReason as _DenialReason, EligibilityDecision as _EligibilityDecision, Entitlement as _Entitlement, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, LinkChallenge as _LinkChallenge, PrincipalDenial as _PrincipalDenial, PrincipalEligibility as _PrincipalEligibility, PrivacyConsent as _PrivacyConsent, Profile as _Profile, ProfileSearchResult as _ProfileSearchResult, RemovalHistoryCursor as _RemovalHistoryCursor, RemovalHistoryManifest as _RemovalHistoryManifest, RemovalHistoryPage as _RemovalHistoryPage, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_17 as _Result_17, Result_18 as _Result_18, Result_19 as _Result_19, Result_2 as _Result_2, Result_20 as _Result_20, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance, UnlinkIntent as _UnlinkIntent } from "./declarations/identity_access.did";
 export class Identity_access implements identity_accessInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async accept_link(arg0: bigint): Promise<Result> {
@@ -469,11 +537,7 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.is_pro(arg0);
         return from_candid_Result_5_n16(result);
     }
-    async memory_stats(): Promise<{
-        memory_bytes: bigint;
-        stable_bytes: bigint;
-        heap_bytes: bigint;
-    }> {
+    async memory_stats(): Promise<MemoryStats> {
         const result = await this.actor.memory_stats();
         return result;
     }
@@ -489,29 +553,37 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.read_linked_account(arg0);
         return from_candid_Result_n1(result);
     }
-    async read_principal_eligibilities(arg0: Array<Principal>): Promise<EligibilityBatchResult> {
+    async read_principal_eligibilities(arg0: Array<Principal>): Promise<Result_12> {
         const result = await this.actor.read_principal_eligibilities(arg0);
-        return from_candid_EligibilityBatchResult_n45(result);
+        return from_candid_Result_12_n45(result);
     }
-    async read_principal_eligibility(arg0: Principal): Promise<EligibilityResult> {
+    async read_principal_eligibility(arg0: Principal): Promise<Result_13> {
         const result = await this.actor.read_principal_eligibility(arg0);
-        return from_candid_EligibilityResult_n52(result);
+        return from_candid_Result_13_n52(result);
+    }
+    async read_removal_history_manifest(): Promise<Result_14> {
+        const result = await this.actor.read_removal_history_manifest();
+        return from_candid_Result_14_n54(result);
+    }
+    async read_removal_history_page(arg0: bigint, arg1: RemovalHistoryCursor, arg2: number): Promise<Result_15> {
+        const result = await this.actor.read_removal_history_page(arg0, to_candid_RemovalHistoryCursor_n56(arg1), arg2);
+        return from_candid_Result_15_n58(result);
     }
     async read_service_account(arg0: Principal): Promise<Result> {
         const result = await this.actor.read_service_account(arg0);
         return from_candid_Result_n1(result);
     }
-    async redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12> {
+    async redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_16> {
         const result = await this.actor.redeem_entitlement(arg0, arg1, arg2, arg3, arg4);
-        return from_candid_Result_12_n54(result);
+        return from_candid_Result_16_n71(result);
     }
     async register_account(): Promise<Result> {
         const result = await this.actor.register_account();
         return from_candid_Result_n1(result);
     }
-    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_13> {
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_17> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_Result_13_n56(result);
+        return from_candid_Result_17_n73(result);
     }
     async remove_verifier(arg0: Principal): Promise<Result_2> {
         const result = await this.actor.remove_verifier(arg0);
@@ -529,12 +601,12 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.revoke_role_scoped(arg0, arg1, to_candid_opt_n7(arg2), to_candid_opt_n7(arg3), to_candid_opt_n7(arg4));
         return from_candid_Result_2_n10(result);
     }
-    async search_profiles(arg0: string, arg1: number): Promise<Result_14> {
+    async search_profiles(arg0: string, arg1: number): Promise<Result_18> {
         const result = await this.actor.search_profiles(arg0, arg1);
-        return from_candid_Result_14_n58(result);
+        return from_candid_Result_18_n75(result);
     }
     async set_account_status(arg0: string, arg1: AccountStatus): Promise<Result> {
-        const result = await this.actor.set_account_status(arg0, to_candid_AccountStatus_n63(arg1));
+        const result = await this.actor.set_account_status(arg0, to_candid_AccountStatus_n80(arg1));
         return from_candid_Result_n1(result);
     }
     async set_attestation_secret(arg0: Uint8Array): Promise<Result_2> {
@@ -549,9 +621,9 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.set_club_switcher_hint_seen();
         return from_candid_Result_9_n38(result);
     }
-    async set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_12> {
+    async set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_16> {
         const result = await this.actor.set_entitlement(arg0, arg1, arg2, arg3, arg4);
-        return from_candid_Result_12_n54(result);
+        return from_candid_Result_16_n71(result);
     }
     async set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_2> {
         const result = await this.actor.set_exclusion(arg0, arg1, to_candid_opt_n7(arg2));
@@ -565,9 +637,9 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.set_family(arg0, arg1);
         return from_candid_Result_2_n10(result);
     }
-    async set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_15> {
+    async set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_19> {
         const result = await this.actor.set_privacy_consent(arg0, arg1, arg2);
-        return from_candid_Result_15_n65(result);
+        return from_candid_Result_19_n82(result);
     }
     async set_profile(arg0: string, arg1: string | null): Promise<Result_9> {
         const result = await this.actor.set_profile(arg0, to_candid_opt_n7(arg1));
@@ -577,9 +649,9 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.set_service_authorities(arg0);
         return from_candid_Result_2_n10(result);
     }
-    async set_terms_acceptance(arg0: number): Promise<Result_16> {
+    async set_terms_acceptance(arg0: number): Promise<Result_20> {
         const result = await this.actor.set_terms_acceptance(arg0);
-        return from_candid_Result_16_n67(result);
+        return from_candid_Result_20_n84(result);
     }
     async set_theme_preference(arg0: string | null): Promise<Result_9> {
         const result = await this.actor.set_theme_preference(to_candid_opt_n7(arg0));
@@ -596,26 +668,32 @@ function from_candid_AccountStatus_n5(value: _AccountStatus): AccountStatus {
 function from_candid_Account_n3(value: _Account): Account {
     return from_candid_record_n4(value);
 }
-function from_candid_EligibilityBatchResult_n45(value: _EligibilityBatchResult): EligibilityBatchResult {
-    return from_candid_variant_n46(value);
+function from_candid_DenialReason_n67(value: _DenialReason): DenialReason {
+    return from_candid_variant_n68(value);
 }
 function from_candid_EligibilityDecision_n50(value: _EligibilityDecision): EligibilityDecision {
     return from_candid_variant_n51(value);
 }
-function from_candid_EligibilityResult_n52(value: _EligibilityResult): EligibilityResult {
-    return from_candid_variant_n53(value);
-}
 function from_candid_Exclusion_n24(value: _Exclusion): Exclusion {
     return from_candid_record_n25(value);
+}
+function from_candid_PrincipalDenial_n64(value: _PrincipalDenial): PrincipalDenial {
+    return from_candid_record_n65(value);
 }
 function from_candid_PrincipalEligibility_n48(value: _PrincipalEligibility): PrincipalEligibility {
     return from_candid_record_n49(value);
 }
-function from_candid_ProfileSearchResult_n61(value: _ProfileSearchResult): ProfileSearchResult {
-    return from_candid_record_n62(value);
+function from_candid_ProfileSearchResult_n78(value: _ProfileSearchResult): ProfileSearchResult {
+    return from_candid_record_n79(value);
 }
 function from_candid_Profile_n28(value: _Profile): Profile {
     return from_candid_record_n29(value);
+}
+function from_candid_RemovalHistoryCursor_n69(value: _RemovalHistoryCursor): RemovalHistoryCursor {
+    return from_candid_variant_n70(value);
+}
+function from_candid_RemovalHistoryPage_n60(value: _RemovalHistoryPage): RemovalHistoryPage {
+    return from_candid_record_n61(value);
 }
 function from_candid_Result_10_n40(value: _Result_10): Result_10 {
     return from_candid_variant_n41(value);
@@ -623,23 +701,35 @@ function from_candid_Result_10_n40(value: _Result_10): Result_10 {
 function from_candid_Result_11_n43(value: _Result_11): Result_11 {
     return from_candid_variant_n44(value);
 }
-function from_candid_Result_12_n54(value: _Result_12): Result_12 {
+function from_candid_Result_12_n45(value: _Result_12): Result_12 {
+    return from_candid_variant_n46(value);
+}
+function from_candid_Result_13_n52(value: _Result_13): Result_13 {
+    return from_candid_variant_n53(value);
+}
+function from_candid_Result_14_n54(value: _Result_14): Result_14 {
     return from_candid_variant_n55(value);
 }
-function from_candid_Result_13_n56(value: _Result_13): Result_13 {
-    return from_candid_variant_n57(value);
-}
-function from_candid_Result_14_n58(value: _Result_14): Result_14 {
+function from_candid_Result_15_n58(value: _Result_15): Result_15 {
     return from_candid_variant_n59(value);
 }
-function from_candid_Result_15_n65(value: _Result_15): Result_15 {
-    return from_candid_variant_n66(value);
+function from_candid_Result_16_n71(value: _Result_16): Result_16 {
+    return from_candid_variant_n72(value);
 }
-function from_candid_Result_16_n67(value: _Result_16): Result_16 {
-    return from_candid_variant_n68(value);
+function from_candid_Result_17_n73(value: _Result_17): Result_17 {
+    return from_candid_variant_n74(value);
+}
+function from_candid_Result_18_n75(value: _Result_18): Result_18 {
+    return from_candid_variant_n76(value);
+}
+function from_candid_Result_19_n82(value: _Result_19): Result_19 {
+    return from_candid_variant_n83(value);
 }
 function from_candid_Result_1_n8(value: _Result_1): Result_1 {
     return from_candid_variant_n9(value);
+}
+function from_candid_Result_20_n84(value: _Result_20): Result_20 {
+    return from_candid_variant_n85(value);
 }
 function from_candid_Result_2_n10(value: _Result_2): Result_2 {
     return from_candid_variant_n11(value);
@@ -681,6 +771,9 @@ function from_candid_opt_n30(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n42(value: [] | [_TermsAcceptance]): TermsAcceptance | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n66(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n21(value: {
@@ -833,7 +926,49 @@ function from_candid_record_n49(value: {
         denied_through_version: record_opt_to_undefined(from_candid_opt_n30(value.denied_through_version))
     };
 }
-function from_candid_record_n62(value: {
+function from_candid_record_n61(value: {
+    pending: Array<_UnlinkIntent>;
+    denials: Array<[string, _PrincipalDenial]>;
+    erased: Array<[string, bigint]>;
+    next: _RemovalHistoryCursor;
+    revision: bigint;
+}): {
+    pending: Array<UnlinkIntent>;
+    denials: Array<[string, PrincipalDenial]>;
+    erased: Array<[string, bigint]>;
+    next: RemovalHistoryCursor;
+    revision: bigint;
+} {
+    return {
+        pending: value.pending,
+        denials: from_candid_vec_n62(value.denials),
+        erased: value.erased,
+        next: from_candid_RemovalHistoryCursor_n69(value.next),
+        revision: value.revision
+    };
+}
+function from_candid_record_n65(value: {
+    account_id: string;
+    reauthorized_version: [] | [bigint];
+    rekey_destination: [] | [Principal];
+    version: bigint;
+    reason: _DenialReason;
+}): {
+    account_id: string;
+    reauthorized_version?: bigint;
+    rekey_destination?: Principal;
+    version: bigint;
+    reason: DenialReason;
+} {
+    return {
+        account_id: value.account_id,
+        reauthorized_version: record_opt_to_undefined(from_candid_opt_n30(value.reauthorized_version)),
+        rekey_destination: record_opt_to_undefined(from_candid_opt_n66(value.rekey_destination)),
+        version: value.version,
+        reason: from_candid_DenialReason_n67(value.reason)
+    };
+}
+function from_candid_record_n79(value: {
     account_id: string;
     principal: Principal;
     avatar_ref: [] | [string];
@@ -850,6 +985,12 @@ function from_candid_record_n62(value: {
         avatar_ref: record_opt_to_undefined(from_candid_opt_n26(value.avatar_ref)),
         display_name: value.display_name
     };
+}
+function from_candid_tuple_n63(value: [string, _PrincipalDenial]): [string, PrincipalDenial] {
+    return [
+        value[0],
+        from_candid_PrincipalDenial_n64(value[1])
+    ];
 }
 function from_candid_variant_n11(value: {
     Ok: null;
@@ -1106,6 +1247,95 @@ function from_candid_variant_n53(value: {
     } : value;
 }
 function from_candid_variant_n55(value: {
+    Ok: _RemovalHistoryManifest;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: RemovalHistoryManifest;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n59(value: {
+    Ok: _RemovalHistoryPage;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: RemovalHistoryPage;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_RemovalHistoryPage_n60(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n6(value: {
+    Active: null;
+} | {
+    Suspended: null;
+}): AccountStatus {
+    return "Active" in value ? AccountStatus.Active : "Suspended" in value ? AccountStatus.Suspended : value;
+}
+function from_candid_variant_n68(value: {
+    Erased: null;
+} | {
+    Rekeyed: null;
+} | {
+    Unlinked: null;
+}): DenialReason {
+    return "Erased" in value ? DenialReason.Erased : "Rekeyed" in value ? DenialReason.Rekeyed : "Unlinked" in value ? DenialReason.Unlinked : value;
+}
+function from_candid_variant_n70(value: {
+    ErasedAccounts: [] | [string];
+} | {
+    Done: null;
+} | {
+    PendingIntents: bigint;
+} | {
+    PrincipalDenials: [] | [string];
+}): {
+    __kind__: "ErasedAccounts";
+    ErasedAccounts: string | null;
+} | {
+    __kind__: "Done";
+    Done: null;
+} | {
+    __kind__: "PendingIntents";
+    PendingIntents: bigint;
+} | {
+    __kind__: "PrincipalDenials";
+    PrincipalDenials: string | null;
+} {
+    return "ErasedAccounts" in value ? {
+        __kind__: "ErasedAccounts",
+        ErasedAccounts: from_candid_opt_n26(value.ErasedAccounts)
+    } : "Done" in value ? {
+        __kind__: "Done",
+        Done: value.Done
+    } : "PendingIntents" in value ? {
+        __kind__: "PendingIntents",
+        PendingIntents: value.PendingIntents
+    } : "PrincipalDenials" in value ? {
+        __kind__: "PrincipalDenials",
+        PrincipalDenials: from_candid_opt_n26(value.PrincipalDenials)
+    } : value;
+}
+function from_candid_variant_n72(value: {
     Ok: _Entitlement;
 } | {
     Err: string;
@@ -1124,7 +1354,7 @@ function from_candid_variant_n55(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n57(value: {
+function from_candid_variant_n74(value: {
     Ok: bigint;
 } | {
     Err: string;
@@ -1143,7 +1373,7 @@ function from_candid_variant_n57(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n59(value: {
+function from_candid_variant_n76(value: {
     Ok: Array<_ProfileSearchResult>;
 } | {
     Err: string;
@@ -1156,20 +1386,13 @@ function from_candid_variant_n59(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n60(value.Ok)
+        Ok: from_candid_vec_n77(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n6(value: {
-    Active: null;
-} | {
-    Suspended: null;
-}): AccountStatus {
-    return "Active" in value ? AccountStatus.Active : "Suspended" in value ? AccountStatus.Suspended : value;
-}
-function from_candid_variant_n66(value: {
+function from_candid_variant_n83(value: {
     Ok: _PrivacyConsent;
 } | {
     Err: string;
@@ -1188,7 +1411,7 @@ function from_candid_variant_n66(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n68(value: {
+function from_candid_variant_n85(value: {
     Ok: _TermsAcceptance;
 } | {
     Err: string;
@@ -1241,16 +1464,53 @@ function from_candid_vec_n31(value: Array<_RoleGrant>): Array<RoleGrant> {
 function from_candid_vec_n47(value: Array<_PrincipalEligibility>): Array<PrincipalEligibility> {
     return value.map((x)=>from_candid_PrincipalEligibility_n48(x));
 }
-function from_candid_vec_n60(value: Array<_ProfileSearchResult>): Array<ProfileSearchResult> {
-    return value.map((x)=>from_candid_ProfileSearchResult_n61(x));
+function from_candid_vec_n62(value: Array<[string, _PrincipalDenial]>): Array<[string, PrincipalDenial]> {
+    return value.map((x)=>from_candid_tuple_n63(x));
 }
-function to_candid_AccountStatus_n63(value: AccountStatus): _AccountStatus {
-    return to_candid_variant_n64(value);
+function from_candid_vec_n77(value: Array<_ProfileSearchResult>): Array<ProfileSearchResult> {
+    return value.map((x)=>from_candid_ProfileSearchResult_n78(x));
+}
+function to_candid_AccountStatus_n80(value: AccountStatus): _AccountStatus {
+    return to_candid_variant_n81(value);
+}
+function to_candid_RemovalHistoryCursor_n56(value: RemovalHistoryCursor): _RemovalHistoryCursor {
+    return to_candid_variant_n57(value);
 }
 function to_candid_opt_n7(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_variant_n64(value: AccountStatus): {
+function to_candid_variant_n57(value: {
+    __kind__: "ErasedAccounts";
+    ErasedAccounts: string | null;
+} | {
+    __kind__: "Done";
+    Done: null;
+} | {
+    __kind__: "PendingIntents";
+    PendingIntents: bigint;
+} | {
+    __kind__: "PrincipalDenials";
+    PrincipalDenials: string | null;
+}): {
+    ErasedAccounts: [] | [string];
+} | {
+    Done: null;
+} | {
+    PendingIntents: bigint;
+} | {
+    PrincipalDenials: [] | [string];
+} {
+    return value.__kind__ === "ErasedAccounts" ? {
+        ErasedAccounts: value.ErasedAccounts ? candid_some(value.ErasedAccounts) : candid_none()
+    } : value.__kind__ === "Done" ? {
+        Done: value.Done
+    } : value.__kind__ === "PendingIntents" ? {
+        PendingIntents: value.PendingIntents
+    } : value.__kind__ === "PrincipalDenials" ? {
+        PrincipalDenials: value.PrincipalDenials ? candid_some(value.PrincipalDenials) : candid_none()
+    } : value;
+}
+function to_candid_variant_n81(value: AccountStatus): {
     Active: null;
 } | {
     Suspended: null;
