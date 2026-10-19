@@ -227,12 +227,19 @@ type Reservation =
    store: principal;
    token: text;
  };
-type Request = 
+type Request__1 = 
  record {
    club: text;
    expected_revision: nat64;
    operation: Operation;
    request_id: text;
+ };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
  };
 type RemovedMember = 
  record {
@@ -240,6 +247,20 @@ type RemovedMember =
    removed_at_ms: nat64;
    removed_by: principal;
    user: principal;
+ };
+type Reference = 
+ record {
+   content_hash: opt text;
+   path: opt text;
+   resource_id: text;
+   store: opt text;
+   url: text;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
  };
 type PromoCode = 
  record {
@@ -327,6 +348,13 @@ type ParentInvite =
    id: text;
    invited_by: principal;
    team_id: opt text;
+ };
+type Page = 
+ record {
+   next: opt nat;
+   references: vec Reference;
+   revision: nat;
+   scanned: nat;
  };
 type Operation = 
  variant {
@@ -852,6 +880,7 @@ type Main =
        Err: text;
        Ok: WelcomeEmailJob;
      }) query;
+   has_child_guardian: (user: principal, child_id: text) -> (bool) query;
    has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
    http_request: (request: HttpRequest) -> (HttpResponse) query;
    import_club_snapshot: (club: text, snapshot: blob) ->
@@ -1144,11 +1173,15 @@ type Main =
                              Err: text;
                              Ok: SeasonTeamAssignment;
                            });
-   mutate: (req: Request) -> (variant {
-                                Err: text;
-                                Ok: Mutation;
-                              });
+   mutate: (req: Request__1) -> (variant {
+                                   Err: text;
+                                   Ok: Mutation;
+                                 });
    my_role_grants: () -> (vec RoleGrant) query;
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    prepare_media_quota_reservation: (store: principal, token: text, club_id:
     text, category: text, bytes: nat) -> (Result);
    profile_team_history: (profile_id: text) ->
@@ -1165,13 +1198,331 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
+   read_account_execute: (input: text) -> (Result__1);
+   read_account_find_pending_invite_by_email_hash: (club_id: text, hash:
+    text) -> (variant {
+                Err: text;
+                Ok: opt PendingInviteEmailHash;
+              });
+   read_account_free_usage_counters: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          members: nat;
+          news_posts: nat;
+          pending_invites: nat;
+          teams: nat;
+        };
+     });
+   read_account_get_club_branding: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubBranding;
+     });
+   read_account_get_club_general_settings: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubGeneralSettings;
+     });
+   read_account_get_club_invite_message_default: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt InviteMessageDefault;
+     });
+   read_account_get_club_kind: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_get_club_roster: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             children: vec Child;
+             roles: vec RoleGrant;
+           };
+     });
+   read_account_get_current_season: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt Season;
+     });
+   read_account_get_guardian_relationships: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec GuardianMeta;
+     });
+   read_account_get_link: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok: Listing;
+                                         });
+   read_account_get_my_accessibility_prefs: () ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_get_my_theme_preference: () ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_get_parent_invite: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: ParentInvite;
+     });
+   read_account_get_season_eoi_config: (season_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_get_shell_team_by_token: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubTeam;
+     });
+   read_account_get_team_invite: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamInvite;
+     });
+   read_account_get_team_invite_link_by_token: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamInviteLink;
+     });
+   read_account_get_team_pitch_notify: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PitchNotifyFlags;
+     });
+   read_account_get_team_player_positions: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamPlayerPosition;
+     });
+   read_account_get_team_player_positions_v2: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamPlayerPositionAssignment;
+     });
+   read_account_get_team_welcome_email: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt TeamWelcomeEmail;
+     });
+   read_account_has_child_guardian: (user: principal, child_id: text) ->
+    (bool);
+   read_account_has_club_staff_role: (user: principal, club_id: text) ->
+    (bool);
+   read_account_invite_stats: (club_id: text, since_ms: nat64, until_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: InviteStats;
+               });
+   read_account_is_app_admin: (user: principal) -> (bool);
+   read_account_is_club_member: (user: principal, club_id: text) -> (bool);
+   read_account_is_user_on_any_team: (team_ids: vec text, user: principal) ->
+    (bool);
+   read_account_list_accepted_invites: (club_id: text, since_ms: nat64,
+    until_ms: nat64) -> (variant {
+                           Err: text;
+                           Ok: vec AcceptedInvite;
+                         });
+   read_account_list_child_guardians: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     });
+   read_account_list_children: () -> (variant {
+                                        Err: text;
+                                        Ok: vec Child;
+                                      });
+   read_account_list_class_enrolments: (club_id: text, term_id: opt text,
+    class_id: opt text) -> (variant {
+                              Err: text;
+                              Ok: vec ClassEnrolment;
+                            });
+   read_account_list_club_join_requests: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubJoinRequest;
+     });
+   read_account_list_club_terms: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTerm;
+     });
+   read_account_list_links: (club: text, admin_view: bool) ->
+    (variant {
+       Err: text;
+       Ok: Listing;
+     });
+   read_account_list_member_payments: (club_id: text, payment_period: 
+    text, payment_type: text) -> (variant {
+                                    Err: text;
+                                    Ok: vec MemberPayment;
+                                  });
+   read_account_list_my_children: () -> (vec Child);
+   read_account_list_my_personal_teams: () ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTeam;
+     });
+   read_account_list_my_removed_clubs: () ->
+    (variant {
+       Err: text;
+       Ok: vec ClubProfile;
+     });
+   read_account_list_news: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec NewsPost;
+     });
+   read_account_list_news_multi: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec NewsPost;
+     });
+   read_account_list_news_targets: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 text;
+                 text;
+               };
+     });
+   read_account_list_online_presence: (window_seconds: nat) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 int;
+               };
+     });
+   read_account_list_pending_invites_by_club: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec PendingInvite;
+     });
+   read_account_list_pitch_formations: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec PitchFormation;
+     });
+   read_account_list_promo_codes: () ->
+    (variant {
+       Err: text;
+       Ok: vec PromoCode;
+     });
+   read_account_list_removed_members: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec RemovedMember;
+     });
+   read_account_list_role_grants: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec AccountRole;
+     });
+   read_account_list_role_requests: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec RoleRequest;
+     });
+   read_account_list_season_player_stats: (season_id: text, team_id: 
+    text) -> (variant {
+                Err: text;
+                Ok: vec SeasonPlayerStat;
+              });
+   read_account_list_season_team_assignment: (season_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec SeasonTeamAssignment;
+     });
+   read_account_list_season_team_summary: (season_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec SeasonTeamSummary;
+     });
+   read_account_list_seasons: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Season;
+     });
+   read_account_list_team_captains: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamCaptain;
+     });
+   read_account_list_team_creation_requests: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamCreationRequest;
+     });
+   read_account_list_team_invites: (club_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamInvite;
+     });
+   read_account_list_team_role_grants: (team: text) ->
+    (variant {
+       Err: text;
+       Ok: vec AccountRole;
+     });
+   read_account_list_user_club_roles: (user: principal, club_id: text) ->
+    (vec record {
+           text;
+           opt text;
+         });
+   read_account_my_role_grants: () -> (vec RoleGrant);
+   read_account_profile_team_history: (profile_id: text) ->
+    (vec ProfileTeamHistoryEntry);
+   read_account_read_competition_team_access: (team_id: text, user:
+    principal) ->
+    (record {
+       can_manage: bool;
+       club_id: opt text;
+       is_member: bool;
+     });
+   read_account_read_season_club: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   read_account_whoami: () -> (variant {
+                                 Err: text;
+                                 Ok: Account;
+                               });
+   read_club_media_references: (club: text, offset: nat, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: Page;
+                 });
    read_competition_team_access: (team_id: text, user: principal) ->
     (record {
        can_manage: bool;
        club_id: opt text;
        is_member: bool;
      }) query;
+   read_has_child_guardian: (user: principal, child_id: text) -> (bool);
    read_has_club_membership: (user: principal, club_id: text) -> (bool);
+   read_has_club_staff_role: (user: principal, club_id: text) -> (bool);
+   read_media_quota_store_registry: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             active: bool;
+             stores: vec principal;
+           };
+     });
    read_my_club_memberships: (offset: nat, limit: nat16) ->
     (variant {
        Err: text;
@@ -1188,6 +1539,14 @@ type Main =
              acl_revision: nat64;
              clubs: vec text;
              next: opt text;
+           };
+     });
+   read_removal_media_registry: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             active: bool;
+             stores: vec principal;
            };
      });
    read_season_club: (id: text) -> (variant {
@@ -1319,6 +1678,11 @@ type Main =
        Err: text;
        Ok: Account;
      });
+   revoke_linked_principal: (account_id: text, user: principal, version:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok;
+               });
    revoke_pending_invite: (id: text) -> (variant {
                                            Err: text;
                                            Ok;
@@ -1510,6 +1874,10 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   set_identity_access_canister: (id: principal) -> (variant {
+                                                       Err: text;
+                                                       Ok;
+                                                     });
    set_messaging_domain_canister: (id: principal) ->
     (variant {
        Err: text;
@@ -1618,6 +1986,10 @@ type Main =
                                        Err: text;
                                        Ok;
                                      });
+   sync_my_linked_account: () -> (variant {
+                                    Err: text;
+                                    Ok;
+                                  });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;

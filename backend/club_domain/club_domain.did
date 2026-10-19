@@ -227,12 +227,19 @@ type Reservation =
    store: principal;
    token: text;
  };
-type Request = 
+type Request__1 = 
  record {
    club: text;
    expected_revision: nat64;
    operation: Operation;
    request_id: text;
+ };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
  };
 type RemovedMember = 
  record {
@@ -248,6 +255,12 @@ type Reference =
    resource_id: text;
    store: opt text;
    url: text;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
  };
 type PromoCode = 
  record {
@@ -1160,11 +1173,15 @@ type Main =
                              Err: text;
                              Ok: SeasonTeamAssignment;
                            });
-   mutate: (req: Request) -> (variant {
-                                Err: text;
-                                Ok: Mutation;
-                              });
+   mutate: (req: Request__1) -> (variant {
+                                   Err: text;
+                                   Ok: Mutation;
+                                 });
    my_role_grants: () -> (vec RoleGrant) query;
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    prepare_media_quota_reservation: (store: principal, token: text, club_id:
     text, category: text, bytes: nat) -> (Result);
    profile_team_history: (profile_id: text) ->
@@ -1474,6 +1491,11 @@ type Main =
     (variant {
        Err: text;
        Ok: opt text;
+     });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
      });
    read_account_whoami: () -> (variant {
                                  Err: text;
