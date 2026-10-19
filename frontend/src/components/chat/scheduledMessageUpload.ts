@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { uploadWithinClubMediaAllowance } from "@/features/vault/clubMediaAllowance";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { compressImage as compressImageFile } from "@/lib/imageCompression";
@@ -74,6 +75,11 @@ export async function uploadScheduledImage(
     }
     publicUrl = blobUpload.url;
   } else {
+    if (target.teamId && !target.clubId) {
+      const { data: team, error } = await supabase.from("teams").select("club_id").eq("id", target.teamId).maybeSingle();
+      if (error || !team?.club_id) throw new Error("Could not check this team's club storage. Please try again.");
+      target = { ...target, clubId: team.club_id };
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
@@ -86,9 +92,9 @@ export async function uploadScheduledImage(
       path = `general/${user.id}/scheduled-${ts}.${ext}`;
     }
 
-    const { error } = await supabase.storage
+    const { error } = await uploadWithinClubMediaAllowance(target.clubId, toUpload.size, () => supabase.storage
       .from("chat-attachments")
-      .upload(path, toUpload, { contentType, upsert: false, cacheControl: "31536000" });
+      .upload(path, toUpload, { contentType, upsert: false, cacheControl: "31536000" }));
     if (error) throw new Error(error.message || "Upload failed");
 
     const { data } = supabase.storage.from("chat-attachments").getPublicUrl(path);

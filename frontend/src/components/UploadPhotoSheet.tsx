@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadWithinClubMediaAllowance } from "@/features/vault/clubMediaAllowance";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -551,9 +552,9 @@ export function UploadPhotoSheet({
       return saved;
     }
 
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await uploadWithinClubMediaAllowance(clubId, file.size, () => supabase.storage
       .from("photos")
-      .upload(storagePath, file, { cacheControl: "31536000" });
+      .upload(storagePath, file, { cacheControl: "31536000" }));
     if (uploadError) throw uploadError;
     const storageUrl = `${"REDACTED_LAB_VALUE"}/storage/v1/object/public/photos/${storagePath}`;
 

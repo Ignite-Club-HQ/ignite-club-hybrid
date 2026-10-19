@@ -5,6 +5,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { deleteLiveAsset, listLiveAssets, registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
 import { parseIcpBlobUrl } from "@/live/mediaStorage";
 import { sha256Hex } from "@/live/blobStoreProtocol";
+import { uploadWithinClubMediaAllowance } from "@/features/vault/clubMediaAllowance";
 
 /**
  * Publish a chat-attached image to the team / club media gallery.
@@ -68,7 +69,13 @@ export async function publishChatImageToGallery(
 async function publishChatImageToGallerySupabase(
   args: PublishChatImageArgs,
 ): Promise<PublishChatImageResult> {
-  const { imageUrl, uploaderId, teamId, clubId, caption, albumId } = args;
+  const { imageUrl, uploaderId, teamId, caption, albumId } = args;
+  let clubId = args.clubId;
+  if (!clubId && teamId) {
+    const { data: team, error } = await supabase.from("teams").select("club_id").eq("id", teamId).maybeSingle();
+    if (error || !team?.club_id) throw new Error("Could not check this team's club storage. Please try again.");
+    clubId = team.club_id;
+  }
 
   // 1. Idempotency — has this exact image already been published by this user?
   // Fail-closed: if the lookup errors (RLS, connectivity, server), we cannot
@@ -113,13 +120,13 @@ async function publishChatImageToGallerySupabase(
       : `teams/${teamId}/${uploaderId}/${timestamp}-${randomSuffix}.${ext}`
     : `clubs/${clubId}/${uploaderId}/${timestamp}-${randomSuffix}.${ext}`;
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await uploadWithinClubMediaAllowance(clubId, blob.size, () => supabase.storage
     .from(PHOTOS_BUCKET)
     .upload(storagePath, blob, {
       contentType: blob.type || `image/${ext}`,
       upsert: false,
       cacheControl: "31536000",
-    });
+    }));
   if (uploadError) {
     console.error("[publishChatImageToGallery] upload failed", uploadError);
     throw new Error("Could not save image to the gallery");
