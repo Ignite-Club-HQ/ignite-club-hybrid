@@ -6,6 +6,7 @@ import { abort, cutover, fence, recordCopy, release, verify, TRANSFER_DOMAINS, t
 
 export type TransferAdapter = {
   sameDeployment(from: string, to: string): Promise<boolean>;
+  verifyMedia?(from: string, to: string, clubId: string): Promise<void>;
   setFence(group: string, clubId: string, fenced: boolean): Promise<void>;
   exportPage(group: string, clubId: string, domain: string, cursor: string | null): Promise<{ rows: Uint8Array[]; next: string | null }>;
   importPage(group: string, clubId: string, domain: string, rows: Uint8Array[], pageIndex: number): Promise<void>;
@@ -21,6 +22,7 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
   let t = start;
   const step = async (n: Transfer) => { await a.save(n); t = n; };
   if (!(await a.sameDeployment(t.fromGroup, t.toGroup))) throw new Error('Cross-deployment transfer needs a separately reviewed design');
+  if (t.phase === 'planned') await a.verifyMedia?.(t.fromGroup, t.toGroup, t.clubId);
   try {
     if (t.phase === 'planned') { await a.setFence(t.fromGroup, t.clubId, true); await step(fence(t)); }
     if (t.phase === 'fenced') {
@@ -47,6 +49,7 @@ export async function runTransfer(start: Transfer, a: TransferAdapter): Promise<
     throw e;
   }
   if (t.phase === 'verified') {
+    await a.verifyMedia?.(t.fromGroup, t.toGroup, t.clubId);
     // Re-digest the fenced source: a write that slipped past the fence after
     // verification must abort the move rather than be lost at cutover.
     const recheck = await Promise.all(TRANSFER_DOMAINS.map(d => a.digest(t.fromGroup, t.clubId, d)));

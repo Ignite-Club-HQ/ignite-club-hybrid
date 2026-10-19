@@ -20,6 +20,21 @@ function adapter(o: Partial<TransferAdapter> = {}) {
   return { a, saved, fences };
 }
 describe('transfer runner', () => {
+  it('checks media before locking, copying or changing assignment', async () => {
+    const { a, fences } = adapter({ verifyMedia: async () => { throw new Error('Encrypted media'); } });
+    await expect(runTransfer(planTransfer('club', 'a', 'b', 7n), a)).rejects.toThrow('Encrypted media');
+    expect(fences).toEqual([]);
+    expect(a.swapAssignment).not.toHaveBeenCalled();
+  });
+  it('rechecks media after interrupted verification before cutover', async () => {
+    const { a, saved } = adapter();
+    await runTransfer(planTransfer('club', 'a', 'b', 7n), { ...a, readRegistryRevision: async () => { throw new Error('crash'); } }).catch(() => {});
+    const verified = saved.at(-1);
+    if (!verified) throw new Error('Missing persisted transfer');
+    await expect(runTransfer(verified, { ...a, verifyMedia: async () => { throw new Error('quota unavailable'); } })).rejects.toThrow('quota unavailable');
+    expect(a.swapAssignment).not.toHaveBeenCalled();
+    expect(a.purgeSource).not.toHaveBeenCalled();
+  });
   it('copies every domain, verifies, swaps with CAS and purges source last', async () => {
     const { a, saved, fences } = adapter();
     const t = await runTransfer(planTransfer('club', 'a', 'b', 7n), a);

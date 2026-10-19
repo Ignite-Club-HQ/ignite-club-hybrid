@@ -87,14 +87,11 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     return !(probe.length === terminal.length && probe.every((b, i) => b === terminal[i]));
   };
   return {
-    async sameDeployment(from, to) { return d.sameDeployment(from, to); },
+    sameDeployment: d.sameDeployment,
+    verifyMedia,
     async setFence(group, club, on) {
       await fenceAll(group, club, on);
       if (on) { // locked first, so no new sponsor-only count can land after the fold
-        const target = await d.targetFor(club);
-        // Initial move destination is checked by the runner's preflight below;
-        // fenced resumes are checked again before assignment and purge.
-        if (target && target !== group) await verifyMedia(group, target, club);
         const sponsors = await d.clubSponsorIds(group, club);
         for (let i = 0; i < sponsors.length; i += 500)
           ok(await d.actors(group).insights_domain.claim_legacy_sponsor_metrics(club, sponsors.slice(i, i + 500)));
@@ -138,13 +135,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       return { domain, records: all.length, digest: await sha256Hex(all) };
     },
     readRegistryRevision: d.readRegistryRevision,
-    async swapAssignment(club, to, revision) {
-      if (!d.mediaInventory) throw new Error('Authenticated media inventory reader required; club move blocked');
-      const inventory = await d.mediaInventory('', to, club);
-      assertMediaTransferSafe(inventory, club, inventory.fromGroup, to);
-      if (!inventory.fromGroup || inventory.fromGroup === to) throw new Error('Invalid source media inventory');
-      await d.swapAssignment(club, to, revision);
-    },
+    swapAssignment: d.swapAssignment,
     async purgeSource(group, club) {
       const destination = await d.targetFor(club);
       if (!destination || destination === group) throw new Error('Persisted destination required before media-safe purge');
