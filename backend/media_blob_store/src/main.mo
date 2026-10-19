@@ -693,7 +693,6 @@ persistent actor MediaBlobStore {
     if (path == "" or path.size() > 1_024 or mime.size() > 256) return #Err("Invalid path or MIME");
     if (total_size > UploadPolicy.maxWireBytes) return #Err("FileTooLarge");
     if (not UploadPolicy.validDeclaration(total_size, chunk_count.toNat())) return #Err("Invalid chunk declaration");
-    await requireUploadMembership(caller, path);
     if (quota_mode == #sharedQuota) {
       switch (pending_uploads.find(func(u) = u.path == path)) {
         case (?upload) {
