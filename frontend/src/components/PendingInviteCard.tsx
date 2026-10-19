@@ -175,7 +175,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
       withFeatureBackend("membership", {
         supabase: async () => null,
         icp: (ctx) => createLiveInviteShortCode(ctx, invite.id),
-      }),
+      }, { inviteToken: invite.id }),
     enabled: !!invite.id && isIcp,
     staleTime: 1000 * 60 * 5,
   });
@@ -233,7 +233,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
         icp: async (ctx) => {
           await moveLivePendingInviteTeam(ctx, invite.id, selectedMoveTeamId);
         },
-      });
+      }, { inviteToken: invite.id });
     },
     onSuccess: () => {
       const targetTeam = clubTeams.find((t) => t.id === selectedMoveTeamId);
@@ -331,7 +331,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
         icp: async (ctx) => {
           await revokeLivePendingInvite(ctx, invite.id);
         },
-      });
+      }, { inviteToken: invite.id });
     },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["pending-invites"] });
@@ -381,7 +381,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
           await setLivePendingInviteLabel(ctx, invite.id, editName.trim());
           await updateLivePendingInviteRole(ctx, invite.id, editRole);
         },
-      });
+      }, { inviteToken: invite.id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pending-invites"] });

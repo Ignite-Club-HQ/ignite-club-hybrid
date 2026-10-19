@@ -19,5 +19,5 @@ export async function acceptIcpInviteAndWelcome(inviteId: string): Promise<void>
         console.error("[welcome-email] ICP delivery request failed", error);
       }
     },
-  });
+  }, { inviteToken: inviteId });
 }
