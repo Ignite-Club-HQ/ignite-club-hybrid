@@ -2594,7 +2594,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func forward_message(message_id : Text, to_conversation_id : Text) : async { #Ok : Types.Message; #Err : Text } {
     await admitAccount(caller);
-    await* requireChatAccess(caller, conversation_id);
+    await* requireMessageChatAccess(caller, message_id);
     if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     await* requireChatAccess(caller, to_conversation_id);
