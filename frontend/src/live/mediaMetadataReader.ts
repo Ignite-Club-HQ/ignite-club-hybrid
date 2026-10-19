@@ -57,11 +57,15 @@ export async function readCompleteMediaMetadata(storage: StoredClubInventory, d:
       offset = p.next[0];
     }
     if (revision === undefined) throw new Error('Missing metadata revision');
-    unwrap(await actor.read_club_media_references(storage.clubId, 0n, [revision]));
+    const confirm = unwrap(await actor.read_club_media_references(storage.clubId, 0n, [revision]));
+    if (confirm.revision !== revision) throw new Error('Media metadata changed during confirmation');
     domains.push({ domain, revision: revision.toString(), fenced: true });
   }
   const provenance = await d.readProvenance();
-  for (const domain of domains) unwrap(await d.actors[domain.domain].read_club_media_references(storage.clubId, 0n, [BigInt(domain.revision)]));
+  for (const domain of domains) {
+    const p = unwrap(await d.actors[domain.domain].read_club_media_references(storage.clubId, 0n, [BigInt(domain.revision)]));
+    if (p.revision.toString() !== domain.revision) throw new Error('Media metadata changed after provenance reads');
+  }
   return { deploymentId: storage.deploymentId, registryRevision: storage.registryRevision, clubId: storage.clubId,
     complete: true, domains, references, provenance };
 }

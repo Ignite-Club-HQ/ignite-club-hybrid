@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { readCompleteMediaMetadata, type MediaReferencePage } from './mediaMetadataReader';
 import type { StoredClubInventory } from './mediaStoreInventory';
 const storage: StoredClubInventory = { deploymentId: 'd', registryRevision: '7', clubId: 'c', pendingUploads: 0, encryptedObjects: 1,
-  stores: [{ canisterId: 's-cai', quotaAuthority: 'q', revision: 1n, fenceRevision: 2n,
+  stores: [{ canisterId: 's-cai', revision: 1n, fenceRevision: 2n,
     entries: [{ kind: { blob: null }, path: 'clubs/c/p', content_hash: 'a'.repeat(64), content_length: 12n, unsettled: false, upload_id: '' }] }] };
 function fixture() {
   const page: MediaReferencePage = { revision: 2n, scanned: 1n, next: [], references: [] };
