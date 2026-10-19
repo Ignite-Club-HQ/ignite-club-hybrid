@@ -631,7 +631,7 @@ export default function CreateTeamPage() {
           // Verify account-id mapping against the deployed club_domain.
           icp: (ctx) =>
             addLiveRoleGrant(ctx, Principal.fromText(adminAssignment.userId!), clubId!, "team_admin", team.id),
-        });
+        }, writeOnce({ clubId: clubId! }));
       } catch (error) {
         roleError = error;
       }
@@ -769,7 +769,7 @@ export default function CreateTeamPage() {
             if (error) throw error;
           },
           icp: (ctx) => addLiveRoleGrant(ctx, ctx.identity.getPrincipal(), clubId!, "team_admin", team.id),
-        });
+        }, writeOnce({ clubId: clubId! }));
       } catch (error) {
         roleError = error;
       }

@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Mail } from "lucide-react";
@@ -59,7 +60,7 @@ export function WelcomeEmailSettingsCard({
             const row = await getLiveTeamWelcomeEmail(ctx, scopeId);
             return row ? { id: null, enabled: row.enabled, subject: row.subject, message: row.message } : null;
           },
-        });
+        }, { teamId: scopeId });
       }
       return withFeatureBackend("competitions", {
         supabase: () => loadSupabaseSettings(),
@@ -99,7 +100,7 @@ export function WelcomeEmailSettingsCard({
             await setLiveTeamWelcomeEmail(ctx, scopeId, { enabled, subject: values.subject, message: values.message });
             return true;
           },
-        });
+        }, writeOnce({ teamId: scopeId }));
         if (handled) return;
       } else {
         const handled = await withFeatureBackend("competitions", {

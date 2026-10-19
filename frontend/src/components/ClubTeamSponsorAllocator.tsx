@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -148,7 +149,7 @@ export function ClubTeamSponsorAllocator({ clubId }: ClubTeamSponsorAllocatorPro
         icp: async (ctx) => {
           await setLiveTeamSponsorAllocation(ctx, sponsorId, teamId, allocated);
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-team-sponsor-allocations", clubId] });
       queryClient.invalidateQueries({ queryKey: ["team-sponsor-allocations"] });

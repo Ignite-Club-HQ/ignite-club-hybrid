@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -355,7 +356,7 @@ export default function PlacementAdminSettingsPage() {
         icp: async (ctx) => {
           await setLiveAppSetting(ctx, GIPHY_API_KEY_CONFIG_KEY, trimmed);
         },
-      });
+      }, writeOnce({ shared: 'app' as const }));
     },
     onSuccess: () => {
       setGiphyTouched(false);
@@ -415,7 +416,7 @@ export default function PlacementAdminSettingsPage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("Sign in to save routing."); },
           icp: async (ctx) => { await setLiveAppSetting(ctx, BACKEND_ROUTING_CONFIG_KEY, stamped); },
-        });
+        }, writeOnce({ shared: 'app' as const }));
         icpRoutingSaveRef.current = true;
         return config;
       }

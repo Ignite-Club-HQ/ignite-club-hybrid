@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 /* eslint-disable @typescript-eslint/no-explicit-any -- untyped Candid/Supabase payloads at this boundary */
 import type { ClubLink, ClubLinkDraft, ClubLinksService } from "@/lab/ClubLinksService";
 import { withFeatureBackend } from "../featureRouter";
@@ -61,7 +62,7 @@ export const liveClubLinksService: ClubLinksService = {
       return (data ?? []) as any;
     },
     icp: async (ctx) => (await icpListing(ctx, clubId, true)).links,
-  }),
+  }, { clubId }),
   listVisible: (clubId) => withFeatureBackend("membership", {
     supabase: async () => {
       const { data, error } = await supabase.from("club_links").select("*").eq("club_id", clubId).eq("is_active", true).order("sort_order");
@@ -69,7 +70,7 @@ export const liveClubLinksService: ClubLinksService = {
       return (data ?? []) as any;
     },
     icp: async (ctx) => (await icpListing(ctx, clubId, false)).links,
-  }),
+  }, { clubId }),
   get: (id) => withFeatureBackend("membership", {
     supabase: async () => {
       const { data, error } = await supabase.from("club_links").select("*").eq("id", id).single();
@@ -97,7 +98,7 @@ export const liveClubLinksService: ClubLinksService = {
       const m = await icpMutate(ctx, clubId, { Save: { id: draft.id ? [draft.id] : [], draft: draftOf(draft) } });
       return toLink(m.link[0], m.revision);
     },
-  }),
+  }, writeOnce({ clubId })),
   remove: (id) => withFeatureBackend("membership", {
     supabase: async () => {
       const { error } = await supabase.from("club_links").delete().eq("id", id);
@@ -122,5 +123,5 @@ export const liveClubLinksService: ClubLinksService = {
       await supabase.from("club_links").update({ sort_order: a.sort_order }).eq("id", b.id);
     },
     icp: async (ctx) => { await icpMutate(ctx, clubId, { Reorder: { first, second } }); },
-  }),
+  }, writeOnce({ clubId })),
 };

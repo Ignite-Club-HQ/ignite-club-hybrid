@@ -1031,7 +1031,7 @@ export default function HomePage() {
           return mergeHomeUserChildren(owned as any, guardianLinks as any);
         },
         icp: (ctx) => fetchLiveHomeChildren(ctx),
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,

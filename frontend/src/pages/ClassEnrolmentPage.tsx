@@ -200,7 +200,7 @@ function SupabaseClassEnrolmentPage() {
              parent_id: user!.id,
           }));
         },
-      });
+      }, { shared: 'person' });
     },
     enabled: !!user && hasChildClasses,
   });

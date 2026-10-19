@@ -292,7 +292,7 @@ function SupabaseClubAdminChatPage() {
             const profile: any = await getLiveClubProfile(ctx, icpClubId);
             return profile ? { id: icpClubId, name: profile.name ?? null, logo_url: null } : null;
           },
-        });
+        }, { clubId: icpClubId! });
       }
 
       const clubId = conversation?.club_id;
