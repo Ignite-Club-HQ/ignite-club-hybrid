@@ -21,6 +21,8 @@
 
 ## Smallest next step
 
+**Bounded follow-up completed:** `docs/scaling-activation-boundary-rehearsal.md` records five passing local contract cases and two reproduced release blockers: admin deletion leaves new-group linked roles; mid-removal registry drift does not stop shared erasure. Registry/purge limits are explicit. No runtime fixes or activation authorized.
+
 One **local contract rehearsal**, using the existing fixtures and a legacy group plus one new group, focused only on the existing shared-account boundary:
 
 1. Exercise real self-deletion and administrator deletion through their current entry points; verify discovery includes both groups and linked principals, and distinguish denied fresh access from cached/downloaded material.
