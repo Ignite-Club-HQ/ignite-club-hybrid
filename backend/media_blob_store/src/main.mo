@@ -295,7 +295,7 @@ persistent actor MediaBlobStore {
         if (cursor.after != "" or cursor.offset > blobs.size()) Runtime.trap("Invalid legacy cursor");
         var offset = cursor.offset;
         while (offset < blobs.size() and rows.size() < 200) { let row = blobs[offset]; add(row.path, row.bytes.size(), row.content_hash); offset += 1 };
-        next := if (offset < blobs.size()) { phase = #legacy; offset; after = "" } else { phase = #indexed; offset = 0; after = "" }
+        next := if (offset < blobs.size()) ({ phase = #legacy; offset; after = "" }) else ({ phase = #indexed; offset = 0; after = "" })
       };
       case (#indexed) {
         if (cursor.offset != 0) Runtime.trap("Invalid indexed cursor");
@@ -552,7 +552,7 @@ persistent actor MediaBlobStore {
     let ?service = quotaService() else {
       // Leave the upload retryable: an unset authority must not dead-end it.
       let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
-      if (latest.status == #aborting) quota_operations.add(id, { latest with status = #uploading });
+      if (latest.status == #aborting and retained_mode != #active) quota_operations.add(id, { latest with status = #uploading });
       return #Err("Quota authority unset; retry abort")
     };
     try {
@@ -580,7 +580,7 @@ persistent actor MediaBlobStore {
       // Unknown outcome: the reservation may or may not be released. Keep the
       // upload retryable instead of dead-ending it in #aborting.
       let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
-      if (latest.status == #aborting) quota_operations.add(id, { latest with status = #uploading });
+      if (latest.status == #aborting and retained_mode != #active) quota_operations.add(id, { latest with status = #uploading });
       #Err("Quota release outcome unknown; retry abort")
     }
   };
