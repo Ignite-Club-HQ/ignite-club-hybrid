@@ -36,7 +36,7 @@ function scriptedClient(script: Record<string, unknown[]>) {
       Promise.resolve(take()).then(resolve, reject);
     return query;
   };
-  return { client: { from } as unknown as IgniteSupabaseClient, calls };
+  return { client: { from, storage: { from: () => ({ list: async () => ({ data: [], error: null }) }) } } as unknown as IgniteSupabaseClient, calls };
 }
 
 describe("Vault storage accounting", () => {

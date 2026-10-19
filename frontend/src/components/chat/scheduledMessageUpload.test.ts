@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/features/vault/clubMediaAllowance", () => ({ uploadWithinClubMediaAllowance: (_club: unknown, _bytes: unknown, upload: () => Promise<unknown>) => upload() }));
 
 const { upload, getPublicUrl, compressImage, measureImageDimensions, appendDimensionsToUrl, setCachedImageAspectRatio } = vi.hoisted(() => ({
   upload: vi.fn(), getPublicUrl: vi.fn(), compressImage: vi.fn(),

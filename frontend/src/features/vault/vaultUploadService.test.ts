@@ -15,6 +15,7 @@ const uploadMocks = vi.hoisted(() => ({
   registerFile: vi.fn(),
 }));
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
+vi.mock("./clubMediaAllowance", () => ({ uploadWithinClubMediaAllowance: (_club: unknown, _bytes: unknown, upload: () => Promise<unknown>) => upload() }));
 const icpContext = { identity: {}, target: { alias: "test" } };
 
 vi.mock("@/live/loadBackendRouting", () => ({

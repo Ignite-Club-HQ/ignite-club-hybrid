@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+vi.mock("@/features/vault/clubMediaAllowance", () => ({ uploadWithinClubMediaAllowance: (_club: unknown, _bytes: unknown, upload: () => Promise<unknown>) => upload() }));
 
 const liveMocks = vi.hoisted(() => ({
   backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
