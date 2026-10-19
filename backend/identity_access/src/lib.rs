@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 mod group_inventory;
+mod removal_barrier;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
@@ -44,6 +45,9 @@ const MEM_REMOVAL_HISTORY_REVISION: u8 = 9;
 const MEM_GROUP_INVENTORY_BINDING: u8 = 10;
 // Operator-pinned supplemental placements; not a removal generation.
 const MEM_SUPPLEMENTAL_INVENTORY: u8 = 11;
+// Persistent removal generation and frozen intents. Never erase on retry.
+const MEM_REMOVAL_GENERATION: u8 = 12;
+const MEM_REMOVAL_INTENTS: u8 = 13;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -285,7 +289,7 @@ fn principal_denial(principal: Principal) -> Option<PrincipalDenial> {
     PRINCIPAL_DENIALS.with(|m| m.borrow().get(&principal.to_text())).map(|bytes| decode(&bytes))
 }
 fn principal_is_denied(principal: Principal) -> bool {
-    principal_denial(principal).is_some_and(|d| d.reason != DenialReason::Unlinked || d.reauthorized_version.is_none_or(|v| v <= d.version))
+    removal_subject_fenced(principal) || principal_denial(principal).is_some_and(|d| d.reason != DenialReason::Unlinked || d.reauthorized_version.is_none_or(|v| v <= d.version))
 }
 fn deny_unlinked_principal(principal: Principal, account_id: &str, version: u64) -> Outcome<()> {
     deny_principals(&[principal], account_id, version, DenialReason::Unlinked)
@@ -451,11 +455,60 @@ thread_local! {
         RefCell::new(StableCell::init(memory(MEM_GROUP_INVENTORY_BINDING), Vec::new()));
     static SUPPLEMENTAL_INVENTORY: RefCell<StableCell<Vec<u8>, Memory>> =
         RefCell::new(StableCell::init(memory(MEM_SUPPLEMENTAL_INVENTORY), Vec::new()));
+    static REMOVAL_GENERATION: RefCell<StableCell<u64, Memory>> =
+        RefCell::new(StableCell::init(memory(MEM_REMOVAL_GENERATION), 0));
+    static REMOVAL_INTENTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_INTENTS)));
+}
+fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {
+    REMOVAL_INTENTS.with(|m| m.borrow().get(&account_id.to_string())).map(|bytes| decode(&bytes))
+}
+fn removal_subject_fenced(subject: Principal) -> bool {
+    // Bounded to the existing 10,000-account ceiling; an indexed subject map
+    // is required before activation. This local slice prioritizes no bypass.
+    REMOVAL_INTENTS.with(|m| m.borrow().iter().any(|entry| decode::<removal_barrier::Intent>(&entry.value()).subjects.contains(&subject)))
+}
+fn removal_pending() -> bool { REMOVAL_INTENTS.with(|m| !m.borrow().is_empty()) }
+fn persist_removal_intent(account: &Account, inventory: group_inventory::RemovalInventory, identity: Principal) -> Outcome<removal_barrier::Intent> {
+    if let Some(intent) = removal_intent(&account.id) { return Ok(intent); }
+    if REMOVAL_INTENTS.with(|m| m.borrow().len()) >= MAX_ACCOUNTS as u64 { return Err("Removal intent capacity reached".into()); }
+    if account_is_erased(&account.id) || account.principals.iter().any(|p| principal_is_denied(*p)) {
+        return Err("Account already revoked".into());
+    }
+    let generation = REMOVAL_GENERATION.with(|m| m.borrow().get().checked_add(1)).ok_or("Removal generation exhausted")?;
+    let digest = Sha256::digest(encode(&inventory)).to_vec();
+    let intent = removal_barrier::create(account, generation, inventory, digest, identity)?;
+    // No awaits or fallible validation after the first write. A trap rolls
+    // the whole message back; an Err must never leave a partially written fence.
+    bump_removal_history();
+    REMOVAL_GENERATION.with(|m| m.borrow_mut().set(generation));
+    REMOVAL_INTENTS.with(|m| m.borrow_mut().insert(account.id.clone(), encode(&intent)));
+    Ok(intent)
+}
+#[ic_cdk::update]
+async fn begin_account_removal(account_id: String, expected_history_revision: u64) -> Outcome<removal_barrier::Intent> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    // Unknown outcomes retry the original immutable intent, not today's registry.
+    if let Some(intent) = removal_intent(&account_id) { return Ok(intent); }
+    let account = get_account(&account_id).ok_or("Unknown account")?;
+    if account.principals.contains(&state().governor) { return Err("Governor account cannot be erased".into()); }
+    if link_lifecycle().pending.iter().any(|job| job.account_id == account_id) { return Err("Unlink recovery pending".into()); }
+    let inventory = read_removal_inventory_evidence(expected_history_revision).await?;
+    if removal_history_revision() != expected_history_revision || get_account(&account_id).as_ref() != Some(&account) {
+        return Err("Account or inventory changed during removal preparation".into());
+    }
+    persist_removal_intent(&account, inventory, ic_cdk::api::canister_self())
+}
+#[ic_cdk::update]
+fn read_account_removal_intent(account_id: String) -> Outcome<removal_barrier::Intent> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    removal_intent(&account_id).ok_or("Removal intent missing".into())
 }
 fn group_inventory_binding() -> Option<group_inventory::Binding> {
     GROUP_INVENTORY_BINDING.with(|m| if m.borrow().get().is_empty() { None } else { Some(decode(m.borrow().get())) })
 }
 fn store_group_inventory_binding(binding: group_inventory::Binding, expected_history_revision: u64) -> Outcome<()> {
+    if removal_pending() { return Err("Removal barrier pending".into()); }
     group_inventory::validate_binding(&binding)?;
     if removal_history_revision() != expected_history_revision { return Err("History revision changed".into()); }
     if !link_lifecycle().pending.is_empty() { return Err("Unlink recovery pending".into()); }
@@ -504,6 +557,7 @@ fn supplemental_inventory() -> Vec<group_inventory::Supplemental> {
 #[ic_cdk::update]
 fn set_removal_supplemental_inventory(entries: Vec<group_inventory::Supplemental>, expected_history_revision: u64) -> Outcome<()> {
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    if removal_pending() { return Err("Removal barrier pending".into()); }
     if removal_history_revision() != expected_history_revision || !link_lifecycle().pending.is_empty() { return Err("History changed or unlink pending".into()); }
     if group_inventory_binding().is_none() || entries.is_empty() || entries.len() > 256 { return Err("Pinned bounded supplemental inventory required".into()); }
     let mut unique = std::collections::BTreeSet::new();
@@ -662,6 +716,7 @@ fn account_group_rehearsal_enabled() -> bool {
 fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {
     if !account_group_rehearsal_enabled() { return Err("Cross-group account lifecycle not released".into()); }
     require_governor(&state(), ic_cdk::api::msg_caller())?;
+    if removal_pending() { return Err("Removal barrier pending".into()); }
     if authorities.is_empty() || authorities.len() > 64 || authorities.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister()) {
         return Err("Complete bounded club authority inventory required".into());
     }
@@ -808,6 +863,7 @@ fn account_for(principal: Principal) -> Outcome<Account> {
     let account = find_account_by_principal(principal).ok_or("Unlinked identity")?;
     if !account.principals.contains(&principal) { return Err("Stale principal account index".into()); }
     if account_is_erased(&account.id) { return Err("Account erased".into()); }
+    if removal_intent(&account.id).is_some() { return Err("Account removal pending".into()); }
     if let Some(denial) = principal_denial(principal) {
         if denial.account_id != account.id || denial.reauthorized_version.is_none_or(|v| account.version < v) {
             return Err("Revoked identity account generation mismatch".into());
@@ -1605,6 +1661,7 @@ fn erase_account(account_id: String) -> Outcome<()> {
 }
 
 fn erase_account_core(state: &mut CoreState, account: &Account) -> Outcome<()> {
+    if removal_intent(&account.id).is_some() { return Err("Complete receiver drain required before erasure".into()); }
     let account_id = account.id.clone();
     if account.principals.contains(&state.governor) { return Err("Governor account cannot be erased".into()); }
     let version = account.version.checked_add(1).ok_or("Account version exhausted")?;
