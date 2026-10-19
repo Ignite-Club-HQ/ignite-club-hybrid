@@ -13,7 +13,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const wasm = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
 const owner = Principal.fromUint8Array(new Uint8Array([2, 1]));
-const ok = r => { assert.ok('Ok' in r); return r.Ok; };
+const ok = r => { assert.ok('Ok' in r, JSON.stringify(r, (_, v) => typeof v === 'bigint' ? String(v) : v)); return r.Ok; };
 const start = { phase: { legacy: null }, offset: 0n, after: '' };
 const server = await PocketIcServer.start(); let pic;
 try {
