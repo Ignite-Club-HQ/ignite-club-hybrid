@@ -42,7 +42,7 @@ try {
   }
 
   // The full allowance fits in a single gallery reservation (pending only; no bytes transferred).
-  const giant = ok(await reserve('clubs/club-pro/photos/giant.jpg', ALLOWANCE - 1n));
+  const giantRaw = await reserve('clubs/club-pro/photos/giant.jpg', ALLOWANCE - 1n); console.log('GIANT:', JSON.stringify(giantRaw, (_, v) => typeof v === 'bigint' ? String(v) : v)); const giant = ok(giantRaw);
   let bytes = await actor.get_club_media_bytes('club-pro');
   assert.equal(bytes.pending, ALLOWANCE - 1n);
   assert.equal(bytes.finalized, 0n);
