@@ -21,7 +21,16 @@ async function loadClubs(): Promise<ClubRow[]> {
     supabase: async () => [],
     icp: async (ctx) => {
       const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-      const clubs = await unwrapCandid(actor.list_clubs([], 100), "List clubs");
+      const clubs = [] as Awaited<ReturnType<typeof actor.list_clubs>> extends { Ok: infer Rows } ? Rows : never;
+      let cursor: [] | [string] = [];
+      for (let page = 0; page < 40; page++) {
+        const batch = await unwrapCandid(actor.list_clubs(cursor, 100), "List clubs");
+        clubs.push(...batch);
+        if (batch.length < 100) break;
+        const last = batch.at(-1);
+        if (!last || page === 39) throw new Error('Club directory exceeds page budget');
+        cursor = [last.id];
+      }
       const live = clubs.filter((c) => c.deleted_at_ms.length === 0);
       const subs = await unwrapCandid(
         actor.get_club_subscriptions(live.map((c) => c.id)),
@@ -33,7 +42,7 @@ async function loadClubs(): Promise<ClubRow[]> {
         return { id: c.id, name: c.name, pro: Boolean(s?.is_pro || s?.admin_pro_override) };
       });
     },
-  });
+  }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [row.id, row])).values()].sort((a, b) => a.name.localeCompare(b.name)) });
 }
 
 function blankSubscription(clubId: string): LiveClubSubscription {
