@@ -75,6 +75,7 @@ persistent actor class Main(governorInit : Principal) {
   var mediaEvidenceRevision : Nat;
   var competitionAuthorities : [Principal];
   var identityAccessCanister : ?Principal;
+  var identityUnlinkReceipts : [(Text, Principal, Nat64)];
   // Preparation-only ledger. No upload activation API until legacy usage
   // import and recoverable store-side sagas exist; existing stores unchanged.
   var mediaQuotaLedger : MediaQuota.Ledger;
@@ -523,6 +524,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_identity_access_canister(id : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid identity authority required");
+    if (identityUnlinkReceipts.size() > 0 and identityAccessCanister != ?id) return #Err("Cannot replace identity authority after unlink");
     identityAccessCanister := ?id; membershipEpoch += 1; #Ok
   };
   type LinkedAccount = { id : Text; principals : [Principal]; version : Nat64; status : { #Active; #Suspended } };
@@ -537,6 +539,12 @@ persistent actor class Main(governorInit : Principal) {
     if (account.status != #Active or account.principals.size() == 0 or account.principals.size() > 8 or not account.principals.any(func(p) = p == caller)
         or account.principals.any(Principal.isAnonymous)) return #Err("Invalid linked account");
     if (accounts.any(func(a) = a.id == account.id and a.version > account.version)) return #Err("Stale linked account");
+    // A linked identity cannot bypass a removal recorded for another alias.
+    var exclusions = acl.exclusions;
+    for (e in acl.exclusions.values()) if (account.principals.any(func(p) = p == e.user)) {
+      for (p in account.principals.values()) if (not exclusions.any(func(x) = x.club == e.club and x.user == p)) exclusions := exclusions.concat([{ club = e.club; user = p }]);
+    };
+    acl := { acl with exclusions };
     // Drop obsolete local aliases instead of trusting old local link challenges.
     accounts := accounts.filter(func(a) = a.id != account.id and not a.principals.any(func(p) = account.principals.any(func(q) = p == q)))
       .concat([{ id = account.id; version = account.version; principals = account.principals; legacy_subject = caller }]);
@@ -545,15 +553,19 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func revoke_linked_principal(account_id : Text, user : Principal, version : Nat64) : async { #Ok; #Err : Text } {
     if (identityAccessCanister != ?caller or Principal.isAnonymous(caller)) return #Err("Identity authority required");
     if (Principal.isAnonymous(user) or user == governor) return #Err("Cannot revoke identity");
+    if (identityUnlinkReceipts.any(func(r) = r.0 == account_id and r.1 == user and r.2 >= version)) return #Ok;
     switch (accounts.find(func(a) = a.id == account_id)) {
       case (?a) { if (a.version > version) return #Err("Account version conflict") };
       case null {};
     };
-    let erased = eraseMembership([user], "principal:" # user.toText());
-    switch (erased) { case (#Err(e)) return #Err(e); case _ {} };
-    acl := { acl with guardians = acl.guardians.filter(func(g) = g.user != user);
+    if (identityUnlinkReceipts.size() >= 100000) return #Err("Identity unlink ledger full");
+    // Unlink is NOT permanent account erasure. Remove this principal's
+    // authority, preserving account-owned rows and other people's roles.
+    acl := { acl with roles = acl.roles.filter(func(r) = r.user != user);
+      guardians = acl.guardians.filter(func(g) = g.user != user);
       children = acl.children.map(func(c) = if (c.parent == ?user) ({ c with parent = null }) else c) };
     accounts := accounts.map(func(a) = { a with principals = a.principals.filter(func(p) = p != user) });
+    identityUnlinkReceipts := identityUnlinkReceipts.filter(func(r) = not (r.0 == account_id and r.1 == user)).concat([(account_id, user, version)]);
     membershipEpoch += 1; #Ok
   };
 
@@ -2563,7 +2575,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Unlinked identity") };
       case (?account) {
         let childIds = accountFamilies.filter(func(link) = link.account_id == account.id).map(func(link) = link.child_id);
-        #Ok(acl.children.filter(func(child) = childIds.any(func(id) = id == child.id)))
+        #Ok(acl.children.filter(func(child) = childIds.any(func(id) = id == child.id) and currentChildGuardian(caller, child.id)))
       };
     }
   };

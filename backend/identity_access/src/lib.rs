@@ -283,6 +283,7 @@ fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {
     if sorted.len() != authorities.len() { return Err("Duplicate club authority".into()); }
     let mut lifecycle = link_lifecycle();
     if !lifecycle.pending.is_empty() { return Err("Unlink recovery pending".into()); }
+    if lifecycle.authorities.iter().any(|p| !authorities.contains(p)) { return Err("Cannot drop an existing club authority".into()); }
     lifecycle.authorities = authorities; store_link_lifecycle(&lifecycle); Ok(())
 }
 
@@ -417,7 +418,11 @@ fn authenticated(principal: Principal) -> Outcome<()> {
 }
 fn account_for(principal: Principal) -> Outcome<Account> {
     authenticated(principal)?;
-    find_account_by_principal(principal).ok_or("Unlinked identity".into())
+    let account = find_account_by_principal(principal).ok_or("Unlinked identity")?;
+    if link_lifecycle().pending.iter().any(|job| job.account_id == account.id && job.principal == principal) {
+        return Err("Identity revocation pending".into());
+    }
+    Ok(account)
 }
 /// Caller-authenticated self-service writes (profile, theme preference,
 /// coach-mark dismissal, link challenges, consent, terms acceptance, self
@@ -960,7 +965,9 @@ fn accept_link(id: u64) -> Outcome<Account> {
 #[ic_cdk::update]
 async fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
     let caller = ic_cdk::api::msg_caller();
+    // A self-unlink may only be resumed by a surviving sign-in identity.
     let current = account_for_write(caller)?;
+    if principal == caller { return Err("Use a surviving identity to revoke this sign-in".into()); }
     if !current.principals.contains(&principal) || current.principals.len() == 1 {
         return Err("Cannot revoke missing or last identity".into());
     }
@@ -1165,6 +1172,7 @@ fn erase_account(account_id: String) -> Outcome<()> {
         return Err("Forbidden".into());
     }
     let account = get_account(&account_id).ok_or("Unknown account")?;
+    if link_lifecycle().pending.iter().any(|job| job.account_id == account_id) { return Err("Unlink recovery pending".into()); }
     if account.principals.contains(&state.governor) {
         return Err("Governor account cannot be erased".into());
     }
@@ -1209,6 +1217,7 @@ fn rekey_principal(old: Principal, new: Principal, dry_run: bool) -> Outcome<u64
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
+    if !link_lifecycle().pending.is_empty() { return Err("Unlink recovery pending".into()); }
     let changed = rekey_principal_core(&mut state, old, new, dry_run)?;
     if !dry_run {
         store(&state);
@@ -1759,6 +1768,29 @@ fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pending_unlink_does_not_expose_revoked_identity_to_group_sync() {
+        let a = Principal::self_authenticating([120; 32]);
+        let b = Principal::self_authenticating([121; 32]);
+        let account = Account { id: "unlink-filter".into(), principals: vec![a, b], version: 4, status: AccountStatus::Active };
+        let lifecycle = LinkLifecycle { authorities: vec![a], pending: vec![UnlinkIntent { account_id: account.id.clone(), principal: b, version: 4, acknowledged: vec![] }] };
+        let restored: LinkLifecycle = decode(&encode(&lifecycle));
+        assert_eq!(effective_account(account, &restored).principals, vec![a]);
+        assert_eq!(restored.pending[0].version, 4);
+        assert!(restored.pending[0].acknowledged.is_empty());
+    }
+    #[test]
+    fn pending_unlink_blocks_private_shared_account_access() {
+        let user = Principal::self_authenticating([122; 32]);
+        let keeper = Principal::self_authenticating([123; 32]);
+        let account = Account { id: "unlink-private".into(), principals: vec![user, keeper], version: 8, status: AccountStatus::Active };
+        put_account(&account); index_principal(user, &account.id); index_principal(keeper, &account.id);
+        store_link_lifecycle(&LinkLifecycle { authorities: vec![keeper], pending: vec![UnlinkIntent { account_id: account.id.clone(), principal: user, version: 8, acknowledged: vec![keeper] }] });
+        assert_eq!(account_for(user), Err("Identity revocation pending".into()));
+        assert_eq!(account_for(keeper).unwrap().id, account.id);
+        assert_eq!(link_lifecycle().pending[0].acknowledged, vec![keeper]);
+        store_link_lifecycle(&LinkLifecycle::default());
+    }
     fn principal(value: u8) -> Principal {
         Principal::self_authenticating([value; 32])
     }
