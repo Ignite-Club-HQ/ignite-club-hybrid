@@ -4711,6 +4711,12 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) Runtime.trap("Governor required");
     { active = mediaQuotaCutover.active; started = mediaQuotaCutover.started; stores = mediaQuotaStores.map(func(p) = (p, MediaQuotaCutover.progress(mediaQuotaCutover, p))) }
   };
+  // Complete operator inventory through consensus, not an uncertified query
+  // or the browser's configured primary blob store. Bounded by 64 stores.
+  public shared ({ caller }) func read_media_quota_store_registry() : async { #Ok : { active : Bool; stores : [Principal] }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok({ active = mediaQuotaCutover.active; stores = mediaQuotaStores })
+  };
   public shared ({ caller }) func reserve_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
     if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
     // Old-cycle retries are allowed only for an existing immutable token.

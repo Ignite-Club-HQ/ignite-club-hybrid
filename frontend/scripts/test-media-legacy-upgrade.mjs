@@ -33,7 +33,9 @@ try {
     sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   club.actor.setPrincipal(governor); ok(await club.actor.create_club('legacy', 'Legacy', 'legacy', [], []));
   ok(await club.actor.add_role_grant(member, 'legacy', 'player', []));
-  for (const name of ['key_1', 'test_key_1']) {
+  // PocketIC's fiduciary subnet exposes key_1 only; test_key_1 matching is
+  // covered by the attestation rule tests, not claimed as a replica rehearsal.
+  for (const name of ['key_1']) {
     const old = await pic.setupCanister({ idlFactory: piiIdl, wasm: legacyWasm, sender: governor, controllers: [governor],
       arg: IDL.encode([IDL.Principal], [governor]), environmentVariables: [{ name: 'VETKD_KEY_NAME', value: name }] });
     const a = old.actor; a.setPrincipal(governor); ok(await a.set_club_domain_canister(club.canisterId));
@@ -54,5 +56,5 @@ try {
     const key = EncryptedVetKey.deserialize(Uint8Array.from(relay)).decryptAndVerify(transport, verification, identity);
     assert.deepEqual(IbeCiphertext.deserialize(ciphertext).decrypt(key), plain);
   }
-  console.log(`PASS: frozen old schema ${manifest.commit} upgrades with both actual key names, preserves stored PII and decrypts pre-upgrade ciphertext. Not mainnet attestation.`);
+  console.log(`PASS: frozen old schema ${manifest.commit} upgrades with key_1, preserves stored PII and decrypts pre-upgrade ciphertext. PocketIC does not expose test_key_1; not mainnet attestation.`);
 } finally { if (pic) await pic.tearDown(); await server.stop(); }

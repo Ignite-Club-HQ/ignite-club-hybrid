@@ -26,10 +26,12 @@ export async function attestOriginalMediaKey(binding: { deploymentId: string; ca
     if (hex(reply.public_key) === original) matches.push(name);
   }
   if (matches.length !== 1) throw new Error('Original vetKD key name is ambiguous or unknown; upgrade blocked');
+  const keyName = matches[0];
+  if (!keyName) throw new Error('Original vetKD key name missing');
   if (await d.readModuleHash() !== moduleHash || hex(await d.originalVerificationKey()) !== original)
     throw new Error('Original canister changed during key attestation; upgrade blocked');
   const receipt: MediaKeyAttestation = { deploymentId: binding.deploymentId, canisterId: binding.canister.toText(),
-    moduleHash, keyName: matches[0], context: 'ignite-pii-v1', publicKeyHex: original };
+    moduleHash, keyName, context: 'ignite-pii-v1', publicKeyHex: original };
   await d.save(receipt);
   return receipt;
 }
