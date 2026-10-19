@@ -38,6 +38,31 @@ function checkPage(p: Page, store: StoreInventoryBinding, revision?: bigint, fen
   if (revision !== undefined && p.revision !== revision) throw new Error('Media inventory changed');
   if (fence !== undefined && p.fence_revision[0] !== fence) throw new Error('Media fence changed');
 }
+const phases = ['legacy', 'indexed', 'pending', 'journal', 'done'];
+function phaseIndex(c: Cursor) {
+  const keys = Object.keys(c.phase);
+  const index = phases.indexOf(keys[0]);
+  if (keys.length !== 1 || index < 0 || c.offset < 0n || c.after.length > 1024 ||
+      ((index === 0 || index === 2) && c.after !== '') ||
+      ((index === 1 || index === 3 || index === 4) && c.offset !== 0n) ||
+      (index === 4 && c.after !== '')) throw new Error('Invalid media inventory cursor');
+  return index;
+}
+function checkProgress(cursor: Cursor, page: Page) {
+  const index = phaseIndex(cursor); const next = page.next[0];
+  if (index === 4) {
+    if (next || page.entries.length || page.scanned !== 0n) throw new Error('Invalid terminal media inventory');
+    return;
+  }
+  if (!next) throw new Error('Premature media inventory completion');
+  const nextIndex = phaseIndex(next);
+  if (nextIndex !== index && nextIndex !== index + 1) throw new Error('Media inventory skipped a phase');
+  if (nextIndex === index) {
+    if (page.scanned !== 200n ||
+        ((index === 0 || index === 2) && next.offset !== cursor.offset + page.scanned) ||
+        ((index === 1 || index === 3) && next.after <= cursor.after)) throw new Error('Media inventory cursor stalled');
+  } else if (next.offset !== 0n || next.after !== '') throw new Error('Invalid media phase start');
+}
 /** Keep every store fenced until the transfer has safely completed or aborted.
  * Reject all partial scans. Final consensus re-reads bind all stores and registry
  * to the same fenced interval; controllers must remain exclusively fenced. */
@@ -59,6 +84,7 @@ export async function readFencedClubStoreInventory(
       seen.add(key);
       const page = unwrap(await store.actor.club_media_inventory_page(clubId, cursor, revision === undefined ? [] : [revision]));
       checkPage(page, store, revision, fenceRevision);
+      checkProgress(cursor, page);
       revision = page.revision; fenceRevision = page.fence_revision[0];
       for (const entry of page.entries) {
         if (!entry.path.startsWith(`clubs/${clubId}/`) || entry.content_length < 0n ||
@@ -85,7 +111,9 @@ export async function readFencedClubStoreInventory(
   await Promise.all(stores.map(async result => {
     const binding = registry.stores.find(s => s.canisterId === result.canisterId);
     if (!binding) throw new Error('Missing inventory store');
-    checkPage(unwrap(await binding.actor.club_media_inventory_page(clubId, end, [result.revision])), binding, result.revision, result.fenceRevision);
+    const terminal = unwrap(await binding.actor.club_media_inventory_page(clubId, end, [result.revision]));
+    checkPage(terminal, binding, result.revision, result.fenceRevision);
+    checkProgress(end, terminal);
   }));
   return { deploymentId, registryRevision: registry.revision, clubId, stores,
     encryptedObjects: stores.reduce((n, s) => n + s.entries.filter(e => 'blob' in e.kind).length, 0),

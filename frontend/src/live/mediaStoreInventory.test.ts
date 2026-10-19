@@ -8,7 +8,12 @@ function fixture() {
       { kind: { pending: null }, path: 'clubs/c/vault/file', upload_id: 'pending-1', content_hash: '', content_length: 8n, unsettled: true },
       { kind: { journal: null }, path: 'clubs/c/vault/file', upload_id: 'pending-1', content_hash: '', content_length: 8n, unsettled: true },
     ] };
-  const call = vi.fn(async (_club, cursor, _revision) => ({ Ok: 'done' in cursor.phase ? { ...page, entries: [], scanned: 0n } : page }));
+  const call = vi.fn(async (_club, cursor, _revision) => {
+    const phases = ['legacy', 'indexed', 'pending', 'journal', 'done'];
+    const index = phases.indexOf(Object.keys(cursor.phase)[0]);
+    return { Ok: { ...page, entries: index === 0 ? page.entries : [], scanned: index === 0 ? page.scanned : 0n,
+      next: index === 4 ? [] : [{ phase: { [phases[index + 1]]: null }, offset: 0n, after: '' }] } };
+  });
   const registry: StoreInventoryRegistry = { deploymentId: 'd', revision: 'r1', complete: true,
     stores: [{ canisterId: 'store-a', quotaAuthority: 'quota', actor: { club_media_inventory_page: call } as MediaInventoryActor }] };
   return { page, call, registry, read: vi.fn(async () => registry) };
@@ -26,7 +31,7 @@ describe('fenced media store inventory', () => {
     const result = await readFencedClubStoreInventory('c', 'd', f.read);
     expect(result.encryptedObjects).toBe(2); expect(result.pendingUploads).toBe(2);
   });
-  it.each(['incomplete', 'deployment', 'duplicate', 'authority', 'unfenced', 'oversized', 'foreign', 'hash', 'registry-change', 'page-change', 'denied', 'stalled'])('rejects %s evidence', async fault => {
+  it.each(['incomplete', 'deployment', 'duplicate', 'authority', 'unfenced', 'oversized', 'foreign', 'hash', 'registry-change', 'page-change', 'denied', 'stalled', 'premature', 'skipped', 'terminal-data'])('rejects %s evidence', async fault => {
     const f = fixture();
     if (fault === 'incomplete') f.registry.complete = false;
     if (fault === 'deployment') f.registry.deploymentId = 'other';
@@ -40,6 +45,16 @@ describe('fenced media store inventory', () => {
     if (fault === 'page-change') f.call.mockImplementationOnce(async () => ({ Ok: f.page })).mockImplementationOnce(async () => ({ Ok: { ...f.page, revision: 5n } }));
     if (fault === 'denied') f.call.mockImplementation(async () => ({ Err: 'Governor required' }) as never);
     if (fault === 'stalled') f.call.mockImplementation(async () => ({ Ok: { ...f.page, next: [{ phase: { legacy: null }, offset: 0n, after: '' }] } }) as never);
+    if (fault === 'premature') f.call.mockImplementation(async () => ({ Ok: f.page }));
+    if (fault === 'skipped') f.call.mockImplementation(async () => ({ Ok: { ...f.page, next: [{ phase: { done: null }, offset: 0n, after: '' }] } }) as never);
+    if (fault === 'terminal-data') {
+      const real = f.call.getMockImplementation();
+      f.call.mockImplementation(async (club, cursor, revision) => {
+        if ('done' in cursor.phase) return { Ok: f.page };
+        if (!real) throw new Error('Missing fixture implementation');
+        return real(club, cursor, revision);
+      });
+    }
     await expect(readFencedClubStoreInventory('c', 'd', f.read)).rejects.toThrow();
   });
 });

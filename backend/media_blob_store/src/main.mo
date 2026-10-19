@@ -159,6 +159,14 @@ persistent actor MediaBlobStore {
     if (not isGovernor<system>(caller)) return #Err("Governor required");
     if (club == "" or club.size() > 128 or club.contains(#char '/')) return #Err("Invalid club id");
     switch (expected_revision) { case (?r) { if (r != media_inventory_revision) return #Err("Media inventory changed; restart scan") }; case null {} };
+    if (cursor.after.size() > 1_024) return #Err("Invalid media cursor");
+    switch (cursor.phase) {
+      case (#legacy) { if (cursor.after != "" or cursor.offset > blobs.size()) return #Err("Invalid legacy cursor") };
+      case (#pending) { if (cursor.after != "" or cursor.offset > pending_uploads.size()) return #Err("Invalid pending cursor") };
+      case (#indexed) { if (cursor.offset != 0) return #Err("Invalid indexed cursor") };
+      case (#journal) { if (cursor.offset != 0) return #Err("Invalid journal cursor") };
+      case (#done) { if (cursor.offset != 0 or cursor.after != "") return #Err("Invalid terminal cursor") }
+    };
     var entries : [MediaInventory.Entry] = [];
     var scanned = 0;
     var next : ?MediaInventory.Cursor = null;
@@ -200,7 +208,7 @@ persistent actor MediaBlobStore {
           if (unsettled) add(r.path, #journal, id, "", r.bytes, true);
           after := id; scanned += 1
         };
-        if (scanned == MediaInventory.pageLimit) next := ?{ phase = #journal; offset = 0; after }
+        next := if (scanned == MediaInventory.pageLimit) ?{ phase = #journal; offset = 0; after } else ?{ phase = #done; offset = 0; after = "" }
       };
       case (#done) {}
     };
