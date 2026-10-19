@@ -30,7 +30,6 @@ persistent actor class Main(governorInit : Principal) {
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
   };
-
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -2076,6 +2075,7 @@ persistent actor class Main(governorInit : Principal) {
     #ok(changed)
   };
 
+
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_list_official_chats(competition_id : Text) : async { #Ok : [Types.OfficialChat]; #Err : Text } {
     await admitAccount(caller);
@@ -2083,14 +2083,14 @@ persistent actor class Main(governorInit : Principal) {
     let hasRole = roles.any(func(r) = r.user.equal(caller) and r.competition_id == competition_id);
     if (not canManageCompetition(caller, competition_id) and not hasRole) return #Err("Forbidden");
     #Ok(officialChats.filter(func(c) = c.competition_id == competition_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_my_personal_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     let mine = personalCompetitionOwners.filter(func(pair) = pair.1.equal(caller)).map(func(pair) = pair.0);
     #Ok(competitions.filter(func(item) = mine.any(func(id) = id == item.id)))
-  }
+  };
 
   public shared ({ caller }) func read_account_read_token_club(token : Text) : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
@@ -2098,7 +2098,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (eoiSubmissions.find(func(e) = e.claim_token == token and (e.parent_user_id == null or e.parent_user_id == ?caller))) { case (?e) return #Ok(?e.club_id); case null {} };
     let cid = switch (competitionJoinLinks.find(func(l) = l.token == token and not l.revoked)) { case (?l) ?l.competition_id; case null switch (roleLinks.find(func(l) = l.token == token and not l.revoked)) { case (?l) ?l.competition_id; case null switch (competitionOfficialEmailInvites.find(func(i) = i.token == token)) { case (?i) ?i.competition_id; case null null } } };
     #Ok(switch (cid) { case null null; case (?id) switch (competitions.find(func(c) = c.id == id)) { case null null; case (?c) if (c.club_id == "") null else ?c.club_id } })
-  }
+  };
 
   public shared ({ caller }) func read_account_can_invite_players_to_team(team_id : Text) : async Bool {
     await admitAccount(caller);
@@ -2109,7 +2109,7 @@ persistent actor class Main(governorInit : Principal) {
       (entry.status == "accepted" or entry.status == "registered") and
       canManageCompetition(caller, entry.competition_id)
     )
-  }
+  };
 
   public shared ({ caller }) func read_account_is_competition_invite_manager(team_id : Text, requester : Principal) : async Bool {
     await admitAccount(requester);
@@ -2124,37 +2124,37 @@ persistent actor class Main(governorInit : Principal) {
         )
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_competitions(club_id : Text) : async { #Ok : [Types.Competition]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(competitions.filter(func(item) = item.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_competitions_multi(club_ids : [Text]) : async { #Ok : [Types.Competition]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(competitions.filter(func(item) = club_ids.any(func(id) = id == item.club_id)))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_public_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(competitions.filter(func(item) = item.visibility == "public" and item.status != "archived"))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_my_news_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(competitions.filter(func(item) = canManageCompetition(caller, item.id)))
-  }
+  };
 
   public shared ({ caller }) func read_account_is_competition_admin(competition_id : Text) : async { #Ok : Bool; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(canManageCompetition(caller, competition_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_chat_settings(competition_id : Text) : async { #Ok : Types.ChatSettings; #Err : Text } {
     await admitAccount(caller);
@@ -2163,13 +2163,13 @@ persistent actor class Main(governorInit : Principal) {
       case (?settings) #Ok(settings);
       case null #Ok({ competition_id; chat_enabled = true; admins_only = false; revision = 0 : Nat64 });
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_invites_by_invitee() : async { #Ok : [Types.CompetitionInvite]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(competitionInvites.filter(func(item) = item.invitee.equal(caller)))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_my_pending_eois() : async { #Ok : [Types.EoiSubmission]; #Err : Text } {
     await admitAccount(caller);
@@ -2179,7 +2179,7 @@ persistent actor class Main(governorInit : Principal) {
         item.status == "submitted" or item.status == "preferences_completed" or item.status == "allocated"
       )
     }))
-  }
+  };
 
   public shared ({ caller }) func read_account_competition_engagement_summary(competition_ids : [Text], since_ms : Int, until_ms : Int) : async { #Ok : [Types.CompetitionEngagementSummary]; #Err : Text } {
     await admitAccount(caller);
@@ -2194,17 +2194,17 @@ persistent actor class Main(governorInit : Principal) {
       // Supabase by design (send-competition-broadcast edge function).
       { competition_id = cid; active_teams = compEntries.size(); total_matches = compMatches.size(); results_entered = completed.size(); broadcasts = 0 }
     }))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_division_settings(competition_id : Text) : async { #Ok : [Types.DivisionSetting]; #Err : Text } {
     await admitAccount(caller);
     ignore caller;
     #Ok(divisionSettings.filter(func(item) = item.competition_id == competition_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_competition_broadcasts(competition_id : Text) : async { #Ok : [Types.Broadcast]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
-  }
+  };
 };

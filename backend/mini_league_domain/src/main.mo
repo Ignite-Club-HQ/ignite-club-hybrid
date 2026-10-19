@@ -27,7 +27,6 @@ persistent actor class Main(governorInit : Principal) = this {
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
   };
-
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -1519,6 +1518,7 @@ persistent actor class Main(governorInit : Principal) = this {
     #ok(changed)
   };
 
+
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_verify_child_guardian(user : Principal, child : Text) : async Bool {
     await admitAccount(user);
@@ -1527,7 +1527,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let domain : actor { has_child_guardian : shared query (Principal, Text) -> async Bool } = actor(id.toText());
     let allowed = try { await domain.has_child_guardian(user, child) } catch (_) { false };
     allowed and clubDomainCanister == ?id
-  }
+  };
 
   public shared ({ caller }) func read_account_verify_player_access(user : Principal, player : Types.MiniLeaguePlayer) : async Bool {
     await admitAccount(user);
@@ -1536,7 +1536,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?child) await this.read_account_verify_child_guardian(user, child);
       case null player.claimed_by == ?user or player.parent_user_id == ?user.toText();
     }
-  }
+  };
 
   public shared ({ caller = origin }) func read_account_verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
     await admitAccount(viewer);
@@ -1548,7 +1548,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (p.mini_league_id == league.id and (await this.read_account_verify_player_access(caller, p))) return true;
     };
     false
-  }
+  };
 
   public shared ({ caller = origin }) func read_account_filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
     await admitAccount(viewer);
@@ -1557,7 +1557,7 @@ persistent actor class Main(governorInit : Principal) = this {
     var out : [Types.MiniLeague] = [];
     for (league in candidates.values()) if (await this.read_account_verify_league_access(caller, league)) out := out.concat([league]);
     out
-  }
+  };
 
   public shared ({ caller }) func read_account_can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
     await admitAccount(viewer);
@@ -1566,7 +1566,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case null false;
       case (?league) league.club_id == club_id and league.status == "active" and (await this.read_account_verify_league_access(viewer, league));
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
     await admitAccount(caller);
@@ -1574,12 +1574,12 @@ persistent actor class Main(governorInit : Principal) = this {
       case null #Err("Mini-league not found");
       case (?league) { if (not (await this.read_account_verify_league_access(caller, league))) #Err("Forbidden") else #Ok(league) };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_mini_leagues_by_club(club_id : Text) : async [Types.MiniLeague] {
     await admitAccount(caller);
     await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = item.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_news_audience(mini_league_id : Text, requester : Principal) : async { #Ok : Types.MiniLeagueNewsAudience; #Err : Text } {
     await admitAccount(requester);
@@ -1625,24 +1625,24 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok({ club_id = league.club_id; recipients })
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_mini_leagues(ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
     await admitAccount(caller);
     if (ids.size() > 300) return #Err("Too many ids");
     #Ok(await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = ids.any(func(i) = i == item.id))))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_mini_leagues_by_clubs(club_ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
     await admitAccount(caller);
     if (club_ids.size() > 200) return #Err("Too many ids");
     #Ok(await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id))))
-  }
+  };
 
   public shared ({ caller }) func read_account_my_leagues() : async [Types.MiniLeague] {
     await admitAccount(caller);
     await this.read_account_filter_visible_leagues(caller, leagues)
-  }
+  };
 
   public shared ({ caller }) func read_account_get_my_league_access(ids : [Text]) : async { #Ok : [{ id : Text; can_manage : Bool; can_delete : Bool; is_club_admin : Bool }]; #Err : Text } {
     await admitAccount(caller);
@@ -1650,7 +1650,7 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok((await this.read_account_filter_visible_leagues(caller, leagues.filter(func(l) = ids.any(func(id) = id == l.id)))).map(func(l) = {
       id = l.id; can_manage = isLeagueAdmin(caller, l); can_delete = isLeagueAdmin(caller, l); is_club_admin = isClubAdmin(caller, l.club_id)
     }))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_league_members(id : Text) : async { #Ok : [{ user_id : Text; is_staff : Bool; is_parent : Bool }]; #Err : Text } {
     await admitAccount(caller);
@@ -1680,7 +1680,7 @@ persistent actor class Main(governorInit : Principal) = this {
     for (u in staffIds.values()) { all := add(all, u) };
     if (all.size() > 500) return #Err("League member list exceeds 500");
     #Ok(all.map(func(u) = { user_id = u; is_staff = staffIds.any(func(x) = x == u); is_parent = parentIds.any(func(x) = x == u) }))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_sessions(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueSession]; #Err : Text } {
     await admitAccount(caller);
@@ -1691,7 +1691,7 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(sessions.filter(func(item) = item.mini_league_id == mini_league_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_players(mini_league_id : Text) : async { #Ok : [Types.MiniLeaguePlayer]; #Err : Text } {
     await admitAccount(caller);
@@ -1702,7 +1702,7 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(players.filter(func(item) = item.mini_league_id == mini_league_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_player_guardian_status(player_id : Text) : async { #Ok : Types.PlayerGuardianStatus; #Err : Text } {
     await admitAccount(caller);
@@ -1731,7 +1731,7 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_invites(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueInvite]; #Err : Text } {
     await admitAccount(caller);
@@ -1739,7 +1739,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(invites.filter(func(item) = item.mini_league_id == mini_league_id));
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_group_players(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupPlayer]; #Err : Text } {
     await admitAccount(caller);
@@ -1760,7 +1760,7 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_groups(session_id : Text) : async { #Ok : [Types.MiniLeagueGroup]; #Err : Text } {
     await admitAccount(caller);
@@ -1776,7 +1776,7 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_duties(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupDuty]; #Err : Text } {
     await admitAccount(caller);
@@ -1797,7 +1797,7 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_availability(session_id : Text, player_id : Text) : async { #Ok : ?Types.MiniLeagueSessionAvailability; #Err : Text } {
     await admitAccount(caller);
@@ -1813,7 +1813,7 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_session_availability(session_id : Text) : async { #Ok : [Types.MiniLeagueSessionAvailability]; #Err : Text } {
     await admitAccount(caller);
@@ -1829,14 +1829,14 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_my_availability() : async [Types.MiniLeagueSessionAvailability] {
     await admitAccount(caller);
     var myPlayerIds : [Text] = [];
     for (p in players.values()) if (await this.read_account_verify_player_access(caller, p)) myPlayerIds := myPlayerIds.concat([p.id]);
     availability.filter(func(item) = myPlayerIds.any(func(pid) = pid == item.player_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_admins(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueAdmin]; #Err : Text } {
     await admitAccount(caller);
@@ -1844,7 +1844,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(admins.filter(func(item) = item.mini_league_id == mini_league_id));
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_mini_league_join_links(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueJoinLink]; #Err : Text } {
     await admitAccount(caller);
@@ -1852,5 +1852,5 @@ persistent actor class Main(governorInit : Principal) = this {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(joinLinks.filter(func(item) = item.mini_league_id == mini_league_id));
     }
-  }
-}
+  };
+};

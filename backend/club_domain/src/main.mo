@@ -41,7 +41,6 @@ persistent actor class Main(governorInit : Principal) {
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
   };
-
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -5662,13 +5661,14 @@ persistent actor class Main(governorInit : Principal) {
     #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < newsPosts.size()) ?end else null; references = refs })
   };
 
+
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_get_club_invite_message_default(club_id : Text) : async { #Ok : ?Types.InviteMessageDefault; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     #Ok(inviteMessageDefaults.find(func(item) = item.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_team_welcome_email(team_id : Text) : async { #Ok : ?Types.TeamWelcomeEmail; #Err : Text } {
     await admitAccount(caller);
@@ -5680,14 +5680,14 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(teamWelcomeEmails.find(func(item) = item.team_id == team_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_my_personal_teams() : async { #Ok : [Types.ClubTeam]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     let mine = personalTeamOwners.filter(func(pair) = pair.1.equal(caller)).map(func(pair) = pair.0);
     #Ok(teams.filter(func(t) = mine.any(func(id) = id == t.id)))
-  }
+  };
 
   public shared ({ caller }) func read_account_read_competition_team_access(team_id : Text, user : Principal) : async { club_id : ?Text; is_member : Bool; can_manage : Bool } {
     await admitAccount(user);
@@ -5700,7 +5700,7 @@ persistent actor class Main(governorInit : Principal) {
           can_manage = allowed and (isAdmin(user, club) or acl.roles.any(func(g) = g.user.equal(user) and g.club == ?club and g.team == ?team_id and (g.role == "team_admin" or g.role == "coach"))) }
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_is_user_on_any_team(team_ids : [Text], user : Principal) : async Bool {
     await admitAccount(user);
@@ -5710,7 +5710,7 @@ persistent actor class Main(governorInit : Principal) {
       case null false;
       case (?club) not isExcluded(user, club) and isOnTeam(user, teamId);
     })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_news_targets(club_ids : [Text]) : async { #Ok : [(Text, Text, Text)]; #Err : Text } {
     await admitAccount(caller);
@@ -5719,13 +5719,13 @@ persistent actor class Main(governorInit : Principal) {
     let visible = club_ids.filter(func(club) = isMember(caller, club) or isAdmin(caller, club));
     #Ok(newsTargets.filter(func(t) = newsPosts.any(func(p) =
       p.id == t.0 and visible.any(func(club) = club == p.club_id) and canSeeNewsPost(caller, p))))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_news(club_id : Text) : async { #Ok : [Types.NewsPost]; #Err : Text } {
     await admitAccount(caller);
     if (not isMember(caller, club_id) and not isAdmin(caller, club_id) and not newsAudienceRecipients.any(func(item) = item.user.equal(caller) and newsPosts.any(func(post) = post.id == item.news_id and post.club_id == club_id))) return #Err("Forbidden");
     #Ok(newsPosts.filter(func(p) = p.club_id == club_id and canSeeNewsPost(caller, p)))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_news_multi(club_ids : [Text]) : async { #Ok : [Types.NewsPost]; #Err : Text } {
     await admitAccount(caller);
@@ -5734,7 +5734,7 @@ persistent actor class Main(governorInit : Principal) {
     let visible = club_ids.filter(func(club) = isMember(caller, club) or isAdmin(caller, club) or newsAudienceRecipients.any(func(item) = item.user.equal(caller) and newsPosts.any(func(post) = post.id == item.news_id and post.club_id == club)));
     #Ok(newsPosts.filter(func(p) =
       visible.any(func(club) = club == p.club_id) and canSeeNewsPost(caller, p)))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_parent_invite(token : Text) : async { #Ok : Types.ParentInvite; #Err : Text } {
     await admitAccount(caller);
@@ -5756,7 +5756,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(invite)
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_season_eoi_config(season_id : Text) : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
@@ -5768,7 +5768,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(switch (seasonEoiConfig.find(func((k, _)) = k == season_id)) { case (?(_, v)) ?v; case null null });
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_season_team_assignment(season_id : Text) : async { #Ok : [Types.SeasonTeamAssignment]; #Err : Text } {
     await admitAccount(caller);
@@ -5780,14 +5780,14 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(seasonTeamAssignments.filter(func(a) = a.season_id == season_id));
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_club_kind(club_id : Text) : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     #Ok(switch (clubKinds.find(func((k, _)) = k == club_id)) { case (?(_, v)) ?v; case null null })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_class_enrolments(club_id : Text, term_id : ?Text, class_id : ?Text) : async { #Ok : [Types.ClassEnrolment]; #Err : Text } {
     await admitAccount(caller);
@@ -5798,7 +5798,7 @@ persistent actor class Main(governorInit : Principal) {
       and (switch (term_id) { case (?t) e.term_id == t; case null true })
       and (switch (class_id) { case (?c) e.class_id == c; case null true })
     ))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_club_general_settings(club_id : Text) : async { #Ok : Types.ClubGeneralSettings; #Err : Text } {
     await admitAccount(caller);
@@ -5814,7 +5814,7 @@ persistent actor class Main(governorInit : Principal) {
         events_sponsor_strip_enabled = true;
       });
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_free_usage_counters(club_id : Text) : async { #Ok : { teams : Nat; members : Nat; news_posts : Nat; pending_invites : Nat }; #Err : Text } {
     await admitAccount(caller);
@@ -5833,7 +5833,7 @@ persistent actor class Main(governorInit : Principal) {
       news_posts = newsPosts.filter(func(p) = p.club_id == club_id).size();
       pending_invites = pendingInvites.filter(func(i) = i.club_id == club_id and i.status != "revoked" and i.status != "accepted").size();
     })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_links(club : Text, admin_view : Bool) : async { #Ok : Types.Listing; #Err : Text } {
     await admitAccount(caller);
@@ -5846,7 +5846,7 @@ persistent actor class Main(governorInit : Principal) {
       let filtered = listing.links.filter(func(link) = link.draft.is_active);
       #Ok({ links = filtered; revision = listing.revision })
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_link(id : Text) : async { #Ok : Types.Listing; #Err : Text } {
     await admitAccount(caller);
@@ -5860,7 +5860,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok({ links = [link]; revision = listing.revision })
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_execute(input : Text) : async Oql.Result {
     await admitAccount(caller);
@@ -5871,7 +5871,7 @@ persistent actor class Main(governorInit : Principal) {
     } else {
       Oql.run<Types.ClubTeam>(request, teams, func(team) = team.deleted_at_ms == null and (isMember(caller, team.club_id) or isAdmin(caller, team.club_id)), OqlClubs.teamRow)
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_whoami() : async { #Ok : Types.Account; #Err : Text } {
     await admitAccount(caller);
@@ -5880,13 +5880,13 @@ persistent actor class Main(governorInit : Principal) {
       case (?account) { #Ok(account) };
       case null { #Err("Unlinked identity") };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_role_grants(club : Text) : async { #Ok : [Types.AccountRole]; #Err : Text } {
     await admitAccount(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     #Ok(accountRoles.filter(func(grant) = grant.club == ?club or grant.club == null))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_team_role_grants(team : Text) : async { #Ok : [Types.AccountRole]; #Err : Text } {
     await admitAccount(caller);
@@ -5907,40 +5907,40 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(accountRoles.filter(func(grant) = grant.team == ?team))
       };
     };
-  }
+  };
 
   public shared ({ caller }) func read_account_my_role_grants() : async [Types.RoleGrant] {
     await admitAccount(caller);
     auth(caller);
     acl.roles.filter(func(grant) = grant.user.equal(caller))
-  }
+  };
 
   public shared func read_account_has_club_staff_role(user : Principal, club_id : Text) : async Bool {
     await admitAccount(user);
     if (user.equal(Principal.anonymous())) return false;
     acl.roles.any(func(grant) = grant.user.equal(user) and grant.club == ?club_id)
-  }
+  };
 
   public shared func read_account_is_club_member(user : Principal, club_id : Text) : async Bool {
     await admitAccount(user);
     if (user.equal(Principal.anonymous())) return false;
     isMember(user, club_id)
-  }
+  };
 
   public shared func read_account_has_child_guardian(user : Principal, child_id : Text) : async Bool {
-    await admitAccount(user); currentChildGuardian(user, child_id) }
+    await admitAccount(user); currentChildGuardian(user, child_id) };
 
   public shared func read_account_list_user_club_roles(user : Principal, club_id : Text) : async [(Text, ?Text)] {
     await admitAccount(user);
     if (user.equal(Principal.anonymous())) return [];
     acl.roles.filter(func(grant) = grant.user.equal(user) and grant.club == ?club_id).map(func(grant) = (grant.role, grant.team))
-  }
+  };
 
   public shared func read_account_is_app_admin(user : Principal) : async Bool {
     await admitAccount(user);
     if (user.equal(Principal.anonymous())) return false;
     acl.roles.any(func(grant) = grant.user.equal(user) and grant.role == "app_admin")
-  }
+  };
 
   public shared ({ caller }) func read_account_get_club_roster(club_id : Text) : async { #Ok : { children : [Types.Child]; roles : [Types.RoleGrant] }; #Err : Text } {
     await admitAccount(caller);
@@ -5951,7 +5951,7 @@ persistent actor class Main(governorInit : Principal) {
       children = acl.children.filter(func(c) = c.club_id == ?club_id);
       roles = acl.roles.filter(func(g) = g.club == ?club_id);
     })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_children() : async { #Ok : [Types.Child]; #Err : Text } {
     await admitAccount(caller);
@@ -5963,32 +5963,32 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(acl.children.filter(func(child) = childIds.any(func(id) = id == child.id) and currentChildGuardian(caller, child.id)))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_removed_members(club : Text) : async { #Ok : [Types.RemovedMember]; #Err : Text } {
     await admitAccount(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     #Ok(removedMembers.filter(func(m) = m.club == club))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_role_requests(club : Text) : async { #Ok : [Types.RoleRequest]; #Err : Text } {
     await admitAccount(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     #Ok(roleRequests.filter(func(r) = r.club == club))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_my_removed_clubs() : async { #Ok : [Types.ClubProfile]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     let cutoff : Nat64 = nowMs() - 30 * 24 * 60 * 60 * 1000;
     #Ok(profiles.filter(func(p) = switch (p.deleted_at_ms) { case (?d) d >= cutoff and isAdmin(caller, p.id); case null false }))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_team_invites(club_id : Text, team_id : ?Text) : async { #Ok : [Types.TeamInvite]; #Err : Text } {
     await admitAccount(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(teamInvites.filter(func(i) = i.club_id == club_id and (team_id == null or team_id == ?i.team_id)))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_team_invite(id : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
     await admitAccount(caller);
@@ -6000,7 +6000,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(invite)
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_shell_team_by_token(token : Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
     await admitAccount(caller);
@@ -6012,7 +6012,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(team)
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_team_invite_link_by_token(token : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
     await admitAccount(caller);
@@ -6024,31 +6024,31 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(link)
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_pending_invites_by_club(club_id : Text) : async { #Ok : [Types.PendingInvite]; #Err : Text } {
     await admitAccount(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(pendingInvites.filter(func(i) = i.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_find_pending_invite_by_email_hash(club_id : Text, hash : Text) : async { #Ok : ?Types.PendingInviteEmailHash; #Err : Text } {
     await admitAccount(caller);
     if (not acl.roles.any(func(grant) = grant.user.equal(caller) and grant.club == ?club_id)) return #Err("Club staff required");
     #Ok(pendingInviteEmailHashes.find(func(h) = h.club_id == club_id and h.hash == hash))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_guardian_relationships(child_id : Text) : async { #Ok : [Types.GuardianMeta]; #Err : Text } {
     await admitAccount(caller);
     if (not (acl.guardians.any(func(g) = g.child == child_id and g.user.equal(caller)) or canManageChild(caller, child_id))) return #Err("Forbidden");
     #Ok(guardianMeta.filter(func(m) = m.child_id == child_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_my_children() : async [Types.Child] {
     await admitAccount(caller);
     auth(caller);
     acl.children.filter(func(c) = isChildGuardian(caller, c))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_child_guardians(child_id : Text) : async { #Ok : [Principal]; #Err : Text } {
     await admitAccount(caller);
@@ -6060,13 +6060,13 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(acl.guardians.filter(func(g) = g.child == child_id).map(func(g) = g.user))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_team_creation_requests(club_id : Text) : async { #Ok : [Types.TeamCreationRequest]; #Err : Text } {
     await admitAccount(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(teamCreationRequests.filter(func(r) = r.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_team_player_positions(team_id : Text) : async { #Ok : [Types.TeamPlayerPosition]; #Err : Text } {
     await admitAccount(caller);
@@ -6077,7 +6077,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(teamPlayerPositions.filter(func(p) = p.team_id == team_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_team_player_positions_v2(team_id : Text) : async { #Ok : [Types.TeamPlayerPositionAssignment]; #Err : Text } {
     await admitAccount(caller);
@@ -6088,7 +6088,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(teamPlayerPositionAssignments.filter(func(a) = a.team_id == team_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_team_captains(team_id : Text) : async { #Ok : [Types.TeamCaptain]; #Err : Text } {
     await admitAccount(caller);
@@ -6099,13 +6099,13 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(teamCaptains.filter(func(c) = c.team_id == team_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_club_join_requests(club_id : Text) : async { #Ok : [Types.ClubJoinRequest]; #Err : Text } {
     await admitAccount(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(clubJoinRequests.filter(func(r) = r.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_my_theme_preference() : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
@@ -6114,7 +6114,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?entry) #Ok(?entry.1);
       case null #Ok(null);
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_my_accessibility_prefs() : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
@@ -6123,7 +6123,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?entry) #Ok(?entry.1);
       case null #Ok(null);
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_online_presence(window_seconds : Nat) : async { #Ok : [(Text, Int)]; #Err : Text } {
     await admitAccount(caller);
@@ -6131,7 +6131,7 @@ persistent actor class Main(governorInit : Principal) {
     let nowMs : Int = Time.now() / 1_000_000;
     let cutoff : Int = nowMs - (window_seconds * 1000);
     #Ok(presenceLastSeen.filter(func(entry) = entry.1 >= cutoff));
-  }
+  };
 
   public shared ({ caller }) func read_account_get_club_branding(club_id : Text) : async { #Ok : Types.ClubBranding; #Err : Text } {
     await admitAccount(caller);
@@ -6143,14 +6143,14 @@ persistent actor class Main(governorInit : Principal) {
     };
     let s = currentSettingsFor(club_id);
     #Ok({ name = profile.name; logo_url = profile.logo_url; contact_email = s.contact_email })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_club_terms(club_id : Text) : async { #Ok : [Types.ClubTerm]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     #Ok(clubTerms.filter(func(t) = t.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_read_season_club(id : Text) : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
@@ -6159,21 +6159,21 @@ persistent actor class Main(governorInit : Principal) {
       case null null;
       case (?s) if (isAdmin(caller, s.club_id)) ?s.club_id else null;
     })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_seasons(club_id : Text) : async { #Ok : [Types.Season]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     #Ok(seasons.filter(func(s) = s.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_current_season(club_id : Text) : async { #Ok : ?Types.Season; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     if (not isMember(caller, club_id)) return #Err("Club membership required");
     #Ok(seasons.find(func(s) = s.club_id == club_id and s.status == "active"))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_season_team_summary(season_id : Text) : async { #Ok : [Types.SeasonTeamSummary]; #Err : Text } {
     await admitAccount(caller);
@@ -6186,7 +6186,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(seasonTeamSummaries.filter(func(r) = r.season_id == season_id));
       };
     };
-  }
+  };
 
   public shared ({ caller }) func read_account_list_season_player_stats(season_id : Text, team_id : Text) : async { #Ok : [Types.SeasonPlayerStat]; #Err : Text } {
     await admitAccount(caller);
@@ -6199,7 +6199,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(seasonPlayerStats.filter(func(r) = r.season_id == season_id and r.team_id == team_id));
       };
     };
-  }
+  };
 
   public shared ({ caller }) func read_account_profile_team_history(profile_id : Text) : async [Types.ProfileTeamHistoryEntry] {
     await admitAccount(caller);
@@ -6226,7 +6226,7 @@ persistent actor class Main(governorInit : Principal) {
         joined_at_ms = 0;
       }
     })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_accepted_invites(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.AcceptedInvite]; #Err : Text } {
     await admitAccount(caller);
@@ -6241,7 +6241,7 @@ persistent actor class Main(governorInit : Principal) {
         accepted_at_ms = switch (i.accepted_at_ms) { case (?ts) ts; case null 0 };
       }
     }))
-  }
+  };
 
   public shared ({ caller }) func read_account_invite_stats(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.InviteStats; #Err : Text } {
     await admitAccount(caller);
@@ -6249,7 +6249,7 @@ persistent actor class Main(governorInit : Principal) {
     let inRange = pendingInvites.filter(func(i) = i.club_id == club_id and i.created_at_ms >= since_ms and i.created_at_ms <= until_ms);
     let accepted = inRange.filter(func(i) = i.accepted_at_ms != null).size();
     #Ok({ total = inRange.size(); accepted })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_member_payments(club_id : Text, payment_period : Text, payment_type : Text) : async { #Ok : [Types.MemberPayment]; #Err : Text } {
     await admitAccount(caller);
@@ -6258,20 +6258,20 @@ persistent actor class Main(governorInit : Principal) {
     if (isAdmin(caller, club_id)) return #Ok(scoped);
     let callerId = Principal.toText(caller);
     #Ok(scoped.filter(func(p) = p.user_id == callerId))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_promo_codes() : async { #Ok : [Types.PromoCode]; #Err : Text } {
     await admitAccount(caller);
     if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Platform admin required");
     #Ok(promoCodes)
-  }
+  };
 
   public shared ({ caller }) func read_account_list_pitch_formations(team_id : Text) : async { #Ok : [PitchFormation]; #Err : Text } {
     await admitAccount(caller);
     let club = switch (teamClub(team_id)) { case (?c) c; case null return #Err("Team not found") };
     if (not (isMember(caller, club) or isGovernor(caller))) return #Err("Team member required");
     #Ok(pitchFormations.filter(func(f) = f.team_id == team_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_team_pitch_notify(team_id : Text) : async { #Ok : PitchNotifyFlags; #Err : Text } {
     await admitAccount(caller);
@@ -6281,5 +6281,5 @@ persistent actor class Main(governorInit : Principal) {
       case (?f) #Ok(f);
       case null #Ok({ team_id; coach = true; team_admin = true; subs_manager = true });
     }
-  }
+  };
 }

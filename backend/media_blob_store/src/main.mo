@@ -56,7 +56,6 @@ persistent actor MediaBlobStore {
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
   };
-
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -1105,6 +1104,7 @@ persistent actor MediaBlobStore {
   transient let _retentionTimer = Timer.recurringTimer<system>(#seconds(86_400), sweepRetention);
 
 
+
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_get_upload_outcome(upload_id : Text) : async { #Ok : ?FinalizedBlob; #Err : Text } {
     await admitAccount(caller);
@@ -1115,5 +1115,5 @@ persistent actor MediaBlobStore {
       };
       case null #Err("Unknown upload")
     }
-  }
+  };
 };

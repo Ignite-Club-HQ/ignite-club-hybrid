@@ -28,7 +28,6 @@ persistent actor class Main(governorInit : Principal) {
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
   };
-
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -872,6 +871,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
 
+
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_get_engagement_streak(club_id : Text, user_id : Text) : async { #Ok : Nat32; #Err : Text } {
     await admitAccount(caller);
@@ -896,25 +896,25 @@ persistent actor class Main(governorInit : Principal) {
       cursor -= 1;
     };
     #Ok(streak)
-  }
+  };
 
   public shared ({ caller }) func read_account_get_club_points_settings(club_id : Text) : async { #Ok : ?Types.ClubPointsSettings; #Err : Text } {
     await admitAccount(caller);
     if (not isClubMember(caller, club_id)) return #Err("Club membership required");
     #Ok(clubPointsSettings.find(func(item) = item.club_id == club_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_user_points(club_id : Text, user_id : Text) : async { #Ok : Int32; #Err : Text } {
     await admitAccount(caller);
     if (not canReadSubject(caller, club_id, #User(user_id))) return #Err("Forbidden");
     #Ok(findUserPoints(club_id, user_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_child_points(club_id : Text, child_id : Text) : async { #Ok : Int32; #Err : Text } {
     await admitAccount(caller);
     if (not canReadSubject(caller, club_id, #Child(child_id))) return #Err("Forbidden");
     #Ok(findChildPoints(club_id, child_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_user_points_all_clubs(user_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
     await admitAccount(caller);
@@ -922,7 +922,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(userClubPoints
       .filter(func(item) = item.user_id == user_id and canReadSubject(caller, item.club_id, #User(user_id)))
       .map(func(item) = (item.club_id, item.points)))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_child_points_all_clubs(child_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
     await admitAccount(caller);
@@ -930,7 +930,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(childClubPoints
       .filter(func(item) = item.child_id == child_id and canReadSubject(caller, item.club_id, #Child(child_id)))
       .map(func(item) = (item.club_id, item.points)))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_child_points_batch(club_id : Text, child_ids : [Text]) : async { #Ok : [(Text, Int32)]; #Err : Text } {
     await admitAccount(caller);
@@ -939,7 +939,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(childClubPoints
       .filter(func(item) = item.club_id == club_id and child_ids.any(func(id) = id == item.child_id) and canReadSubject(caller, club_id, #Child(item.child_id)))
       .map(func(item) = (item.child_id, item.points)))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_leaderboard(club_id : Text, subjectKind : { #User; #Child }, window : Text, top_n : Nat) : async { #Ok : [LeaderboardEntry]; #Err : Text } {
     await admitAccount(caller);
@@ -968,7 +968,7 @@ persistent actor class Main(governorInit : Principal) {
     entries := entries.sort(func(a, b) = Int32.compare(b.points, a.points));
     let limit = Nat.min(top_n, entries.size());
     #Ok(Array.tabulate<LeaderboardEntry>(limit, func(i) = entries[i]))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_points_history(club_id : Text, subject : ?Types.Subject, offset : Nat, limit : Nat) : async { #Ok : HistoryPage; #Err : Text } {
     await admitAccount(caller);
@@ -991,7 +991,7 @@ persistent actor class Main(governorInit : Principal) {
     if (offset >= total) return #Ok({ items = []; total });
     let count = Nat.min(limit, total - offset);
     #Ok({ items = Array.tabulate<Types.PointsHistoryEntry>(count, func(i) = sorted[offset + i]); total })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_rewards(club_id : Text, team_id : ?Text, active_only : Bool) : async { #Ok : [Types.ClubReward]; #Err : Text } {
     await admitAccount(caller);
@@ -1001,7 +1001,7 @@ persistent actor class Main(governorInit : Principal) {
         and (team_id == null or item.team_id == null or item.team_id == team_id)
         and (not active_only or item.is_active)
     ))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_redemptions(club_id : Text, subject : ?Types.Subject) : async { #Ok : [Types.RewardRedemption]; #Err : Text } {
     await admitAccount(caller);
@@ -1019,5 +1019,5 @@ persistent actor class Main(governorInit : Principal) {
         }
       )
     ))
-  }
+  };
 };

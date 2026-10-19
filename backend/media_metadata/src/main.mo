@@ -29,7 +29,6 @@ persistent actor class Main(governorInit : Principal) {
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
   };
-
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -773,6 +772,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < total) ?end else null; references = refs })
   };
 
+
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_get_asset(asset_id : Text) : async ?Types.Asset {
     await admitAccount(caller);
@@ -780,7 +780,7 @@ persistent actor class Main(governorInit : Principal) {
       if (a.id == asset_id and not a.deleted and canView(caller, a)) return ?a;
     };
     null
-  }
+  };
 
   public shared ({ caller }) func read_account_list_assets(club_id : Text) : async [Types.Asset] {
     await admitAccount(caller);
@@ -788,7 +788,7 @@ persistent actor class Main(governorInit : Principal) {
     Array.filter<Types.Asset>(assets, func(a) {
       not a.deleted and a.club_id == club_id and canView(caller, a)
     })
-  }
+  };
 
   public shared ({ caller }) func read_account_list_reactions(asset_id : Text) : async [Types.Reaction] {
     await admitAccount(caller);
@@ -801,7 +801,7 @@ persistent actor class Main(governorInit : Principal) {
         Array.filter<Types.Reaction>(reactions, func(r) = r.asset_id == asset_id)
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_comments(asset_id : Text) : async [Types.Comment] {
     await admitAccount(caller);
@@ -814,7 +814,7 @@ persistent actor class Main(governorInit : Principal) {
         Array.filter<Types.Comment>(comments, func(c) = c.asset_id == asset_id and not c.deleted)
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_gallery_chat_card(card_id : Text) : async ?Types.GalleryChatCard {
     await admitAccount(caller);
@@ -822,11 +822,11 @@ persistent actor class Main(governorInit : Principal) {
       if (c.id == card_id and isClubMember(caller, c.club_id)) return ?c;
     };
     null
-  }
+  };
 
   public shared ({ caller }) func read_account_list_gallery_chat_cards(club_id : Text, team_id : Text) : async [Types.GalleryChatCard] {
     await admitAccount(caller);
     if (caller.equal(Principal.anonymous()) or not isClubMember(caller, club_id)) return [];
     Array.filter<Types.GalleryChatCard>(galleryChatCards, func(c) = c.club_id == club_id and c.team_id == team_id)
-  }
+  };
 }

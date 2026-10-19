@@ -35,7 +35,6 @@ persistent actor class Main(governorInit : Principal) {
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
   };
-
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
 
@@ -498,7 +497,7 @@ persistent actor class Main(governorInit : Principal) {
     starts_at_ms : Nat64,
     ends_at_ms : Nat64,
   ) : async { #Ok : [Text]; #Err : Text } {
-    await admitAccount(requester);
+    await admitAccount(creator);
     auth(caller);
     switch (competitionDomainCanister) {
       case null return #Err("competition_domain canister not configured");
@@ -3319,8 +3318,8 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public query ({ caller }) func get_event_auto_reminder(event_id : Text) : async ?{
-    denyLegacyAccountQuery(); hours_before : Nat16; sent : Bool } {
+  public query ({ caller }) func get_event_auto_reminder(event_id : Text) : async ?{ hours_before : Nat16; sent : Bool } {
+    denyLegacyAccountQuery();
     switch (events.find(func(e) = e.id == event_id)) {
       case null null;
       case (?event) {
@@ -3689,13 +3688,14 @@ persistent actor class Main(governorInit : Principal) {
   };
 
 
+
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_execute(input : Text) : async Oql.Result {
     await admitAccount(caller);
     auth(caller);
     let request = Oql.parse(input, [OqlEvents.entity]);
     Oql.run<Types.Event>(request, events, func(event) = not event.deleted and canView(caller, event), OqlEvents.row)
-  }
+  };
 
   public shared ({ caller }) func read_account_list_association_events(association_id : Text) : async { #Ok : [Types.AssociationEvent]; #Err : Text } {
     await admitAccount(caller);
@@ -3703,7 +3703,7 @@ persistent actor class Main(governorInit : Principal) {
     let allowed = isGovernor(caller) or hasBulkAccess(caller) or hasRole(caller, "club_admin", association_id, null);
     if (not allowed) return #Err("Association admin required");
     #Ok(associationEvents.filter(func(a) = a.association_id == association_id and not a.deleted))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_event_child(event_id : Text, child_id : Text) : async { #Ok : Types.Child; #Err : Text } {
     await admitAccount(caller);
@@ -3717,7 +3717,7 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
-  }
+  };
 
   public shared ({ caller }) func read_account_list_series(club_id : ?Text, team_id : ?Text) : async [Types.EventSeries] {
     await admitAccount(caller);
@@ -3727,7 +3727,7 @@ persistent actor class Main(governorInit : Principal) {
         and (club_id == null or club_id == ?item.club_id)
         and (team_id == null or team_id == item.team_id)
     )
-  }
+  };
 
   public shared ({ caller }) func read_account_list_series_occurrences(series_id : Text) : async { #Ok : [{ id : Text; starts_at_ms : Nat64; ends_at_ms : Nat64; deleted : Bool }]; #Err : Text } {
     await admitAccount(caller);
@@ -3740,7 +3740,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(sorted.map(func(e) = { id = e.id; starts_at_ms = e.starts_at_ms; ends_at_ms = e.ends_at_ms; deleted = e.deleted }));
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_lineup_snapshot(event_id : Text, team_id : ?Text) : async { #Ok : ?Types.LineupSnapshot; #Err : Text } {
     await admitAccount(caller);
@@ -3751,13 +3751,13 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(lineupSnapshots.find(func(item) = item.event_id == event_id and item.team_id == team_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_event_sponsors(event_id : Text) : async { #Ok : [Text]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     switch (eventSponsors.find(func((id, _)) = id == event_id)) { case (?(_, ids)) #Ok(ids); case null #Ok([]) };
-  }
+  };
 
   public shared ({ caller }) func read_account_get_event_timer(event_id : Text) : async { #Ok : ?Types.EventTimer; #Err : Text } {
     await admitAccount(caller);
@@ -3769,7 +3769,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(eventTimers.find(func(item) = item.event_id == event_id))
       };
     };
-  }
+  };
 
   public shared ({ caller }) func read_account_get_event_roster(event_id : Text) : async { #Ok : [Types.RosterEntry]; #Err : Text } {
     await admitAccount(caller);
@@ -3780,7 +3780,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(roster.filter(func(item) = item.event_id == event_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_events(club_id : ?Text, team_id : ?Text) : async [Types.Event] {
     await admitAccount(caller);
@@ -3797,7 +3797,7 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     visible
-  }
+  };
 
   public shared ({ caller }) func read_account_list_events_multi(club_ids : [Text], team_ids : [Text]) : async { #Ok : [Types.Event]; #Err : Text } {
     await admitAccount(caller);
@@ -3815,7 +3815,7 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok(visible)
-  }
+  };
 
   public shared ({ caller }) func read_account_list_events_for_duty_teams(team_ids : [Text]) : async { #Ok : [Types.Event]; #Err : Text } {
     await admitAccount(caller);
@@ -3824,41 +3824,41 @@ persistent actor class Main(governorInit : Principal) {
       not event.deleted and canView(caller, event) and
       eventDutyTeams.any(func(assignment) = assignment.event_id == event.id and team_ids.any(func(id) = id == assignment.team_id))
     ))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_event_rosters(event_ids : [Text]) : async { #Ok : [Types.RosterEntry]; #Err : Text } {
     await admitAccount(caller);
     if (event_ids.size() > 300) return #Err("Too many ids");
     let ok = visibleEventIds(caller, event_ids);
     #Ok(roster.filter(func(item) = ok.any(func(i) = i == item.event_id)))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_duties_multi(event_ids : [Text]) : async { #Ok : [Types.Duty]; #Err : Text } {
     await admitAccount(caller);
     if (event_ids.size() > 300) return #Err("Too many ids");
     let ok = visibleEventIds(caller, event_ids);
     #Ok(duties.filter(func(item) = ok.any(func(i) = i == item.event_id)))
-  }
+  };
 
   public shared ({ caller }) func read_account_my_rsvps() : async [Types.Rsvp] {
     await admitAccount(caller);
     auth(caller);
     let accountId = Principal.toText(caller);
     rsvps.filter(func(item) = item.account_id == accountId)
-  }
+  };
 
   public shared ({ caller }) func read_account_get_attendance(event_id : Text) : async { #Ok : [Types.EventAttendance]; #Err : Text } {
     await admitAccount(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     #Ok(eventAttendance.filter(func(item) = item.event_id == event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_my_attendance(event_id : ?Text) : async [Types.EventAttendance] {
     await admitAccount(caller);
     auth(caller);
     let accountId = Principal.toText(caller);
     eventAttendance.filter(func(item) = item.subject_id == accountId and (event_id == null or event_id == ?item.event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_event_roster(event_id : Text) : async { #Ok : Types.EventRoster; #Err : Text } {
     await admitAccount(caller);
@@ -3873,7 +3873,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok({ rsvps = enriched; guests = eventGuests.filter(func(item) = item.event_id == event_id) })
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_my_child_rsvps(event_id : ?Text, club_id : ?Text) : async [Types.RsvpWithChild] {
     await admitAccount(caller);
@@ -3888,7 +3888,7 @@ persistent actor class Main(governorInit : Principal) {
       let child = switch (item.child_id) { case (?cid) children.find(func(c) = c.id == cid); case null null };
       { rsvp = item; child }
     })
-  }
+  };
 
   public shared ({ caller }) func read_account_child_is_in_event_audience(child_id : Text, event_id : Text) : async { #Ok : Bool; #Err : Text } {
     await admitAccount(caller);
@@ -3901,7 +3901,7 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(hasRsvp or guardianIsMember)
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_rsvp_created_at(event_id : Text, account_id : Text) : async ?Nat64 {
     await admitAccount(caller);
@@ -3910,21 +3910,21 @@ persistent actor class Main(governorInit : Principal) {
       case null null;
       case (?item) ?item.created_at_ms;
     };
-  }
+  };
 
   public shared ({ caller }) func read_account_list_favourite_event_titles() : async [Text] {
     await admitAccount(caller);
     auth(caller);
     let me = callerAccountId(caller);
     favouriteEventTitles.filter(func(item) = item.account_id == me).map(func(item) = item.title);
-  }
+  };
 
   public shared ({ caller }) func read_account_list_saved_locations() : async [Types.SavedLocation] {
     await admitAccount(caller);
     auth(caller);
     let me = callerAccountId(caller);
     savedLocations.filter(func(item) = item.account_id == me);
-  }
+  };
 
   public shared ({ caller }) func read_account_get_training_default(club_id : Text, team_id : Text, child_id : ?Text) : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
@@ -3935,13 +3935,13 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Ok(null) };
       case (?item) { #Ok(?item.default_rsvp) };
     };
-  }
+  };
 
   public shared ({ caller }) func read_account_get_coach_note(event_id : Text) : async { #Ok : ?Types.CoachNote; #Err : Text } {
     await admitAccount(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     #Ok(coachNotes.find(func(item) = item.event_id == event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_read_event_club(event_id : Text) : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
@@ -3956,7 +3956,7 @@ persistent actor class Main(governorInit : Principal) {
       case _ false;
     })) #Err("Forbidden") else #Ok(?event.club_id) };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_event_view_count(event_id : Text) : async { #Ok : Nat32; #Err : Text } {
     await admitAccount(caller);
@@ -3967,19 +3967,19 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(Nat.toNat32(eventViews.filter(func(item) = item.event_id == event_id).size()))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_reminders(event_id : Text) : async { #Ok : [Types.ReminderLog]; #Err : Text } {
     await admitAccount(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     #Ok(reminderLogs.filter(func(item) = item.event_id == event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_push_reachable(principal : Principal) : async { #Ok : ?Bool; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(switch (pushReachability.find(func(item) = item.user.equal(principal))) { case (?item) ?item.reachable; case null null })
-  }
+  };
 
   public shared ({ caller }) func read_account_get_reminder_log(event_id : Text) : async { #Ok : { sent_at_ms : ?Nat64; recipients_count : Nat32 }; #Err : Text } {
     await admitAccount(caller);
@@ -3995,13 +3995,13 @@ persistent actor class Main(governorInit : Principal) {
         #Ok({ sent_at_ms = ?latest; recipients_count = Nat.toNat32(batch.size()) });
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_is_reachable(account_id : Text) : async { #Ok : Bool; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(pushReachability.any(func(item) = Principal.toText(item.user) == account_id and item.reachable))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_event_groups(event_id : Text) : async { #Ok : [Types.EventGroup]; #Err : Text } {
     await admitAccount(caller);
@@ -4015,7 +4015,7 @@ persistent actor class Main(governorInit : Principal) {
       case _ false;
     })) return #Err("Forbidden"); #Ok(eventGroups.filter(func(item) = item.event_id == event_id)) };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_group_players(group_id : Text) : async { #Ok : [Types.EventGroupPlayer]; #Err : Text } {
     await admitAccount(caller);
@@ -4034,7 +4034,7 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_event_group(group_id : Text) : async { #Ok : ?Types.EventGroup; #Err : Text } {
     await admitAccount(caller);
@@ -4048,7 +4048,7 @@ persistent actor class Main(governorInit : Principal) {
       case _ false;
     })) return #Err("Forbidden");
     #Ok(?group)
-  }
+  };
 
   public shared ({ caller }) func read_account_read_event_group_club(group_id : Text) : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
@@ -4061,7 +4061,7 @@ persistent actor class Main(governorInit : Principal) {
       };
       case _ false;
     })) ?event.club_id else null)
-  }
+  };
 
   public shared ({ caller }) func read_account_get_group_edit_access(group_id : Text) : async { #Ok : Bool; #Err : Text } {
     await admitAccount(caller);
@@ -4074,7 +4074,7 @@ persistent actor class Main(governorInit : Principal) {
       };
       case _ false;
     }) and canEditGroupState(caller, group))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_group_duties(group_id : Text) : async { #Ok : [Types.EventGroupDuty]; #Err : Text } {
     await admitAccount(caller);
@@ -4093,29 +4093,29 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_team_training_pauses(club_id : Text, team_id : Text) : async { #Ok : [Types.TeamTrainingPause]; #Err : Text } {
     await admitAccount(caller);
     if (not isClubMember(caller, club_id) and not managesTeam(caller, club_id, team_id)) return #Err("Forbidden");
     #Ok(teamTrainingPauses.filter(func(item) = item.club_id == club_id and item.team_id == team_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_is_paused(club_id : Text, team_id : Text, at_ms : Nat64) : async { #Ok : Bool; #Err : Text } {
     await admitAccount(caller);
     if (not isClubMember(caller, club_id) and not managesTeam(caller, club_id, team_id)) return #Err("Forbidden");
     #Ok(teamTrainingPauses.any(func(item) = item.club_id == club_id and item.team_id == team_id and item.starts_at_ms <= at_ms and at_ms <= item.ends_at_ms))
-  }
+  };
 
   public shared ({ caller }) func read_account_is_team_member(principal : Principal, club_id : Text, team_id : Text) : async Bool {
     await admitAccount(caller);
     roles.any(func(grant) = grant.user.equal(principal) and grant.club_id == club_id and (grant.team_id == ?team_id or grant.team_id == null))
-  }
+  };
 
   public shared ({ caller }) func read_account_is_guardian_of(principal : Principal, child_id : Text) : async Bool {
     await admitAccount(caller);
     childGuardians.any(func(item) = item.child_id == child_id and item.guardian_id == Principal.toText(principal))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_open_duties(event_id : Text) : async { #Ok : [Types.OpenDuty]; #Err : Text } {
     await admitAccount(caller);
@@ -4123,7 +4123,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Event not found") };
       case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(openDuties.filter(func(item) = item.event_id == event_id)) };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_duties(event_id : Text) : async { #Ok : [Types.Duty]; #Err : Text } {
     await admitAccount(caller);
@@ -4131,7 +4131,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Event not found") };
       case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(duties.filter(func(item) = item.event_id == event_id)) };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_my_children() : async [Types.Child] {
     await admitAccount(caller);
@@ -4139,13 +4139,13 @@ persistent actor class Main(governorInit : Principal) {
     let callerId = Principal.toText(caller);
     let guardedIds = childGuardians.filter(func(g) = g.guardian_id == callerId).map(func(g) = g.child_id);
     children.filter(func(c) = (c.parent_id == ?callerId) or guardedIds.any(func(id) = id == c.id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_child_team_assignments(club_id : Text, team_id : Text) : async { #Ok : [Types.ChildTeamAssignment]; #Err : Text } {
     await admitAccount(caller);
     if (not isClubMember(caller, club_id)) return #Err("Forbidden");
     #Ok(childTeamAssignments.filter(func(item) = item.club_id == club_id and item.team_id == team_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_my_child_team_assignments(child_id : Text) : async { #Ok : [Types.ChildTeamAssignment]; #Err : Text } {
     await admitAccount(caller);
@@ -4155,7 +4155,7 @@ persistent actor class Main(governorInit : Principal) {
       or children.any(func(c) = c.id == child_id and c.parent_id == ?callerId);
     if (not isMyChild and not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Forbidden");
     #Ok(childTeamAssignments.filter(func(item) = item.child_id == child_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_mini_league_rsvps(event_id : Text) : async { #Ok : [Types.MiniLeagueRsvp]; #Err : Text } {
     await admitAccount(caller);
@@ -4163,43 +4163,43 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Event not found") };
       case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(miniLeagueRsvps.filter(func(item) = item.event_id == event_id)) };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_pitch_board_settings(team_id : Text) : async { #Ok : ?Types.PitchBoardSettings; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(pitchBoardSettings.find(func(item) = item.team_id == team_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_game_summary(event_id : Text) : async { #Ok : ?Types.GameSummary; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(gameSummaries.find(func(item) = item.event_id == event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_game_player_stats(event_id : Text) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_game_result(event_id : Text) : async { #Ok : ?Types.GameResult; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_match_captains(event_id : Text) : async { #Ok : [Types.MatchCaptainAssignment]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(matchCaptainAssignments.filter(func(item) = item.event_id == event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_match_goalkeepers(event_id : Text) : async { #Ok : [Types.MatchGoalkeeperAssignment]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(matchGoalkeeperAssignments.filter(func(item) = item.event_id == event_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_player_stats_report(club_id : Text, team_id : ?Text, from_ms : Nat64, to_ms : Nat64) : async { #Ok : [Types.PlayerStatRow]; #Err : Text } {
     await admitAccount(caller);
@@ -4235,13 +4235,13 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok(rows)
-  }
+  };
 
   public shared ({ caller }) func read_account_get_active_game(team_id : ?Text) : async { #Ok : ?Types.ActiveGame; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(activeGames.find(func(item) = item.is_active and (switch (team_id) { case (?t) item.team_id == ?t; case null item.user_id.equal(caller) and item.team_id == null })))
-  }
+  };
 
   public shared ({ caller }) func read_account_list_event_views(event_id : Text) : async { #Ok : [Types.EventView]; #Err : Text } {
     await admitAccount(caller);
@@ -4249,13 +4249,13 @@ persistent actor class Main(governorInit : Principal) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(eventViews.filter(func(item) = item.event_id == event_id));
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_my_viewed_event_ids(event_ids : [Text]) : async { #Ok : [Text]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(event_ids.filter(func(id) = eventViews.any(func(item) = item.event_id == id and item.viewer.equal(caller))))
-  }
+  };
 
   public shared ({ caller = _ }) func read_account_check_event_membership(user_id : Text, event_id : Text) : async Bool {
     await admitAccount(_);
@@ -4271,7 +4271,7 @@ persistent actor class Main(governorInit : Principal) {
     let hasDuty = duties.any(func(item) = item.event_id == event_id and item.account_id == user_id);
     if (hasDuty) return true;
     false
-  }
+  };
 
   public shared ({ caller }) func read_account_get_playhq_config_status() : async { #Ok : { configured : Bool; base_url : ?Text; updated_at_ms : ?Nat64 }; #Err : Text } {
     await admitAccount(caller);
@@ -4280,13 +4280,13 @@ persistent actor class Main(governorInit : Principal) {
       case null #Ok({ configured = false; base_url = null; updated_at_ms = null });
       case (?c) #Ok({ configured = true; base_url = ?c.base_url; updated_at_ms = ?c.updated_at_ms });
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_get_playhq_team_sync(team_id : Text) : async { #Ok : ?Types.PlayHQTeamSync; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     #Ok(playhqTeamSyncs.find(func(s) = s.team_id == team_id))
-  }
+  };
 
   public shared ({ caller }) func read_account_get_event_duty_team(event_id : Text) : async { #Ok : ?Types.EventDutyTeam; #Err : Text } {
     await admitAccount(caller);
@@ -4297,15 +4297,26 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(eventDutyTeams.find(func(item) = item.event_id == event_id))
       };
     }
-  }
+  };
 
   public shared ({ caller }) func read_account_list_event_duty_teams(event_ids : [Text]) : async { #Ok : [Types.EventDutyTeam]; #Err : Text } {
     await admitAccount(caller);
     if (event_ids.size() > 300) return #Err("Too many event ids");
     let visibleIds = visibleEventIds(caller, event_ids);
     #Ok(eventDutyTeams.filter(func(item) = visibleIds.any(func(id) = id == item.event_id)))
-  }
+  };
 
-  public shared ({ caller }) func read_account_get_event_auto_reminder(event_id : Text) : async ?{
-    await admitAccount(caller); hours_before : Nat16; sent : Bool }
+  public shared ({ caller }) func read_account_get_event_auto_reminder(event_id : Text) : async ?{ hours_before : Nat16; sent : Bool } {
+    await admitAccount(caller);
+    switch (events.find(func(e) = e.id == event_id)) {
+      case null null;
+      case (?event) {
+        if (not canView(caller, event)) return null;
+        switch (autoReminders.find(func(r) = r.event_id == event_id)) {
+          case null null;
+          case (?r) ?{ hours_before = r.hours_before; sent = r.sent };
+        }
+      };
+    }
+  };
 };
