@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -159,7 +160,7 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
             );
           }
         },
-      }),
+      }, writeOnce({ clubId: league.club_id })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", league.id] });
       toast.success(`${mockPlayerCount} test players added`);
@@ -193,7 +194,7 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
           }
           return testPlayers.length;
         },
-      }),
+      }, writeOnce({ clubId: league.club_id })),
     onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", league.id] });
       if (count === 0) {
@@ -293,7 +294,7 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
             showMatchesToMembers: editShowMatchesToMembers,
           });
         },
-      }),
+      }, writeOnce({ clubId: league.club_id })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league", league.id] });
       onOpenChange(false);
@@ -312,7 +313,7 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
         icp: async (ctx) => {
           await deleteLiveMiniLeague(ctx, league.id);
         },
-      }),
+      }, writeOnce({ clubId: league.club_id })),
     onSuccess: () => {
       toast.success("Mini League deleted");
       navigate("/mini-leagues");
@@ -368,7 +369,7 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
           );
           return created.id;
         },
-      }),
+      }, writeOnce({ clubId: league.club_id })),
     onSuccess: (newId) => {
       queryClient.invalidateQueries({ queryKey: ["mini-leagues"] });
       onOpenChange(false);

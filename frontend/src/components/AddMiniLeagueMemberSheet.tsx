@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useEffect, useRef, Suspense, type CSSProperties } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -450,7 +451,7 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
 
             return { playerName: player.name.trim(), parentEmail: player.parentEmail.trim(), sent: false };
           },
-        });
+        }, writeOnce({ clubId }));
 
         addedResults.push(addedResult);
       }

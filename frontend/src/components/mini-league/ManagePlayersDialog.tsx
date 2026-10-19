@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useRef, useCallback, Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Users, Trash2, Loader2, Star, CheckSquare, Pencil, Check, X, UserRound, GripVertical, UserPlus, MoreVertical, Plus, RotateCcw } from "lucide-react";
@@ -208,7 +209,7 @@ export function ManagePlayersDialog({
             }))
             .sort((a, b) => b.ability_rating - a.ability_rating);
         },
-      }),
+      }, { clubId }),
     enabled: !!miniLeagueId && open,
   });
 
@@ -258,7 +259,7 @@ export function ManagePlayersDialog({
           );
           return lists.flat();
         },
-      });
+      }, { clubId });
       const guardianIds = [...new Set((gRows || []).map(g => g.guardian_id))];
       if (guardianIds.length === 0) return [];
       const { data: profs } = await selectCachedProfilesByIds(guardianIds);
@@ -318,7 +319,7 @@ export function ManagePlayersDialog({
           );
           return new Map(entries);
         },
-      }),
+      }, { clubId }),
     enabled: open && playerIdsForIcpPending.length > 0,
   });
 
@@ -372,7 +373,7 @@ export function ManagePlayersDialog({
               profiles: null,
             }));
         },
-      }),
+      }, { clubId }),
     enabled: !!clubId && !!miniLeagueId && open,
   });
 
@@ -384,7 +385,7 @@ export function ManagePlayersDialog({
       withFeatureBackend("mini_leagues", {
         supabase: async () => [],
         icp: async (ctx) => listLiveRemovedMembers(ctx, clubId),
-      }),
+      }, { clubId }),
     enabled: !!clubId && open && isFeatureRoutedToIcp("mini_leagues"),
   });
 
@@ -395,7 +396,7 @@ export function ManagePlayersDialog({
           throw new Error("Restoring players isn't available on this backend.");
         },
         icp: async (ctx) => restoreLiveMember(ctx, clubId, user),
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-removed-members", clubId] });
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
@@ -452,7 +453,7 @@ export function ManagePlayersDialog({
             await removeLivePlayer(ctx, playerId);
           }
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["mini-league-removed-members", clubId] });
@@ -506,7 +507,7 @@ export function ManagePlayersDialog({
             }
           }
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["mini-league-removed-members", clubId] });
@@ -546,7 +547,7 @@ export function ManagePlayersDialog({
           const dbValue = newRating >= 1 && newRating <= 5 ? newRating : null;
           await updateLivePlayer(ctx, playerId, player.name, dbValue, player.notes);
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
     },
@@ -582,7 +583,7 @@ export function ManagePlayersDialog({
             player.notes,
           );
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       setEditingPlayerId(null);

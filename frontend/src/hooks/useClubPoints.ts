@@ -1,3 +1,4 @@
+import { mergeClubPointBalances } from "@/live/pointsMerge";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -32,7 +33,7 @@ export function useUserClubPoints(userId: string | null | undefined, clubId: str
           return data?.points ?? 0;
         },
         icp: (ctx) => getLiveUserPoints(ctx, clubId, userId),
-      });
+      }, { clubId });
     },
     enabled: !!userId && !!clubId,
     staleTime: 1000 * 30,
@@ -62,7 +63,7 @@ export function useChildClubPoints(childId: string | null | undefined, clubId: s
           return data?.points ?? 0;
         },
         icp: (ctx) => getLiveChildPoints(ctx, clubId, childId),
-      });
+      }, { clubId });
     },
     enabled: !!childId && !!clubId,
     staleTime: 1000 * 30,
@@ -91,7 +92,7 @@ export function useAllUserClubPoints(userId: string | null | undefined) {
           const rows = await getLiveUserPointsAllClubs(ctx, userId);
           return rows.map((r) => ({ club_id: r.clubId, points: r.points }));
         },
-      });
+      }, { everyGroup: true, merge: mergeClubPointBalances });
     },
     enabled: !!userId,
     staleTime: 1000 * 30,
@@ -132,7 +133,7 @@ export function useChildrenClubPoints(
           }
           return map;
         },
-      });
+      }, { clubId });
     },
     enabled: !!clubId && ids.length > 0,
     staleTime: 1000 * 30,
@@ -160,7 +161,7 @@ export function useAllChildClubPoints(childId: string | null | undefined) {
           const rows = await getLiveChildPointsAllClubs(ctx, childId);
           return rows.map((r) => ({ club_id: r.clubId, points: r.points }));
         },
-      });
+      }, { everyGroup: true, merge: mergeClubPointBalances });
     },
     enabled: !!childId,
     staleTime: 1000 * 30,

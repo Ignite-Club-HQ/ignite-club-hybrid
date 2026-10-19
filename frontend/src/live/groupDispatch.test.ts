@@ -13,6 +13,16 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it.each([
+    ['mini_leagues', 'mini_league_domain'],
+    ['points', 'club_points_domain'],
+  ] as const)('routes %s saves once to the club group', async (feature, domain) => {
+    const { d, session } = deps(ON);
+    const dispatcher = createClubDispatcher(d);
+    expect(await dispatcher.write(feature, 'moved', domain, 'once', async () => 'saved', 1)).toBe('group');
+    expect(session.writeClub).toHaveBeenCalledWith('moved', domain, 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   it('switched off: always the shared canisters, never opens a group session', async () => {
     const { d } = deps(); const x = createClubDispatcher(d);
     expect(await x.read('events', 'moved', 'events_domain', async () => 'r')).toBe('legacy');
