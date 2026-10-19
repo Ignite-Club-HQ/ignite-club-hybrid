@@ -130,6 +130,24 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : IDL.Vec(RoleGrant),
     'Err' : IDL.Text,
   });
+  const EligibilityDecision = IDL.Variant({
+    'Eligible' : IDL.Null,
+    'Denied' : IDL.Null,
+  });
+  const PrincipalEligibility = IDL.Record({
+    'account_version' : IDL.Opt(IDL.Nat64),
+    'decision' : EligibilityDecision,
+    'subject' : IDL.Principal,
+    'denied_through_version' : IDL.Opt(IDL.Nat64),
+  });
+  const EligibilityBatchResult = IDL.Variant({
+    'Ok' : IDL.Vec(PrincipalEligibility),
+    'Err' : IDL.Text,
+  });
+  const EligibilityResult = IDL.Variant({
+    'Ok' : PrincipalEligibility,
+    'Err' : IDL.Text,
+  });
   const Result_12 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
   const Result_13 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
   const ProfileSearchResult = IDL.Record({
@@ -222,6 +240,16 @@ export const idlFactory = ({ IDL }) => {
     'my_roles' : IDL.Func([], [Result_11], ['query']),
     'my_terms_acceptance' : IDL.Func([], [Result_10], ['query']),
     'read_linked_account' : IDL.Func([IDL.Principal], [Result], []),
+    'read_principal_eligibilities' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
+        [EligibilityBatchResult],
+        [],
+      ),
+    'read_principal_eligibility' : IDL.Func(
+        [IDL.Principal],
+        [EligibilityResult],
+        [],
+      ),
     'redeem_entitlement' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Text, IDL.Text],
         [Result_12],

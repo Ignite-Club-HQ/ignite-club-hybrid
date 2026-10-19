@@ -44,6 +44,13 @@ try {
     group.actor.setPrincipal(stranger); assert.ok('Err' in await group.actor.revoke_linked_principal(account.id, linked, 1n));
   }
   service.setPrincipal(stranger); assert.ok('Err' in await service.read_linked_account(primary));
+  assert.ok('Err' in await service.read_principal_eligibility(primary));
+  service.setPrincipal(groups[0].canisterId);
+  assert.ok('Eligible' in ok(await service.read_principal_eligibility(linked)).decision);
+  assert.ok('Denied' in ok(await service.read_principal_eligibility(stranger)).decision);
+  assert.ok('Err' in await service.read_principal_eligibilities([]));
+  assert.ok('Err' in await service.read_principal_eligibilities([linked, linked]));
+  assert.ok('Err' in await service.read_principal_eligibilities(Array(201).fill(linked)));
   // Stop the remote authority so sync cannot finish before local removal.
   // One tick alone does not establish an async pause on same-subnet actors.
   await pic.stopCanister({ canisterId: identity.canisterId, sender: governor });
@@ -62,6 +69,11 @@ try {
   await pic.stopCanister({ canisterId: groups[1].canisterId, sender: governor });
   assert.ok('Err' in await service.revoke(linked, 1n));
   service.setPrincipal(linked); assert.ok('Err' in await service.whoami());
+  assert.ok('Err' in await service.register_account(), 'pending denial blocks registration');
+  service.setPrincipal(groups[0].canisterId);
+  const pendingEligibility = ok(await service.read_principal_eligibility(linked));
+  assert.ok('Denied' in pendingEligibility.decision);
+  assert.equal(pendingEligibility.denied_through_version[0], 1n);
   service.setPrincipal(governor); assert.ok('Err' in await service.set_club_authorities(groups.map(g => g.canisterId)));
   await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: process.env.IDENTITY_ACCESS_WASM, sender: governor,
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
@@ -72,6 +84,10 @@ try {
   assert.ok('Err' in await groups[0].actor.sync_my_linked_account(), 'durable unlink receipt rejects stale identity snapshot after upgrade');
   service.setPrincipal(primary); const revoked = ok(await service.revoke(linked, 1n));
   assert.equal(revoked.version, 2n); assert.deepEqual(revoked.principals.map(p => p.toText()), [primary.toText()]);
+  service.setPrincipal(linked); assert.ok('Err' in await service.register_account(), 'completed denial survives deindexing');
+  service.setPrincipal(governor); assert.ok('Err' in await service.begin_link(linked), 'unrelated account cannot restore revoked identity');
+  assert.ok('Err' in await service.rekey_principal(primary, linked, true));
+  assert.ok('Err' in await service.rekey_principal(primary, linked, false));
   for (const [index, group] of groups.entries()) {
     group.actor.setPrincipal(linked);
     assert.ok('Err' in await group.actor.sync_my_linked_account());
@@ -84,7 +100,15 @@ try {
   // delayed acknowledgement from destructively executing a second time.
   service.setPrincipal(primary); const next = ok(await service.begin_link(linked));
   service.setPrincipal(linked); ok(await service.accept_link(next.id));
+  assert.ok('Err' in await service.accept_link(next.id), 'accepted relink cannot replay');
+  service.setPrincipal(groups[0].canisterId);
+  const relinkedEligibility = ok(await service.read_principal_eligibility(linked));
+  assert.ok('Eligible' in relinkedEligibility.decision);
+  assert.equal(relinkedEligibility.denied_through_version[0], 1n, 'explicit relink retains denial history');
+  assert.equal(relinkedEligibility.account_version[0], 3n);
   for (const group of groups) {
+    group.actor.setPrincipal(linked);
+    assert.deepEqual(await group.actor.my_role_grants(), [], 'relink alone does not restore deleted domain grants');
     group.actor.setPrincipal(governor); ok(await group.actor.add_role_grant(linked, group === groups[0] ? 'club-a' : 'club-b', 'coach', []));
     group.actor.setPrincipal(identity.canisterId); ok(await group.actor.revoke_linked_principal(account.id, linked, 1n));
     group.actor.setPrincipal(linked); ok(await group.actor.sync_my_linked_account());
@@ -102,9 +126,17 @@ try {
   const final = ok(await service.whoami());
   assert.equal(final.version, 4n);
   assert.deepEqual(final.principals.map(p => p.toText()), [primary.toText()]);
+  await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: process.env.IDENTITY_ACCESS_WASM, sender: governor,
+    arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
+  service.setPrincipal(linked);
+  assert.ok('Err' in await service.register_account(), 'completed denial persists across identity upgrade');
+  service.setPrincipal(groups[0].canisterId);
+  const persistedEligibility = ok(await service.read_principal_eligibility(linked));
+  assert.ok('Denied' in persistedEligibility.decision);
+  assert.equal(persistedEligibility.denied_through_version[0], 3n);
   for (const group of groups) {
     group.actor.setPrincipal(linked); assert.deepEqual(await group.actor.my_role_grants(), []);
     assert.ok('Err' in await group.actor.sync_my_linked_account());
   }
-  console.log('PASS: gated two-group unlink, stale snapshot and suspended-sync denial, receiver/identity upgrade persistence, outage/retry, survivor preservation, re-link/old replay and concurrent removal. This does NOT prove untouched-group or other-domain revocation.');
+  console.log('PASS: gated two-group recovery, durable registration/rekey/unrelated-link denial, bounded authorized consensus eligibility, retained history and explicit newer survivor relink without role restoration, upgrades and concurrent removal. This does NOT prove untouched-group or other-domain revocation.');
 } finally { await pic?.tearDown(); await server.stop(); }
