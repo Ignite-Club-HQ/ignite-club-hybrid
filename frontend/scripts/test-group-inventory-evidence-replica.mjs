@@ -109,8 +109,8 @@ try {
   denied(await actor.read_group_inventory_evidence(history)); history = await revision();
   assert.equal(ok(await actor.read_removal_inventory_evidence(history)).groups.binding.registry.toText(), router.canisterId.toText());
   // A missing service reader (including media) cannot silently disappear.
-  ok(await actor.set_service_authorities([mappedGroups[0][1].canister, mappedGroups[1][1].canister, p(99)]));
-  history = await revision(); denied(await actor.read_group_inventory_evidence(history));
+  ok(await actor.set_service_authorities([mappedGroups[0][1].canister, mappedGroups[1][1].canister,...mediaStores.map(s=>s.store.canisterId), p(99)]));
+  history = await revision(); denied(await actor.read_removal_inventory_evidence(history));
   const production = await pic.setupCanister({ idlFactory: identityIdl, wasm: identityWasm, sender: governor, controllers: [governor], arg: args });
   production.actor.setPrincipal(governor); denied(await production.actor.set_group_inventory_binding(binding, 0n));
   denied(await production.actor.read_group_inventory_evidence(0n));
