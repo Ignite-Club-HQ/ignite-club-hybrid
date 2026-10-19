@@ -971,7 +971,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared query ({ caller }) func read_competition_team_access(team_id : Text, user : Principal) : async { club_id : ?Text; is_member : Bool; can_manage : Bool } {
     if (not trustedCompetition(caller) or user.equal(Principal.anonymous()) or team_id.size() > 128) return { club_id = null; is_member = false; can_manage = false };
     switch (liveTeamClub(team_id)) {
-      case null { club_id = null; is_member = false; can_manage = false };
+      case null ({ club_id = null; is_member = false; can_manage = false });
       case (?club) {
         let allowed = not isExcluded(user, club);
         { club_id = ?club; is_member = allowed and (isOnTeam(user, team_id) or isAdmin(user, club));

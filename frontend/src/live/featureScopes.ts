@@ -6,7 +6,7 @@ export function vaultViewScope(view: { type: string; clubId?: string; teamId?: s
   if (view.miniLeagueId) return { miniLeagueId: view.miniLeagueId };
   if (view.clubId) return { clubId: view.clubId };
   if (view.teamId) return { teamId: view.teamId };
-  throw new Error('Vault scope required');
+  return { shared: 'person' };
 }
 export function scheduleTargetScope(target: { chat_type: string; club_id?: string | null; team_id?: string | null; group_id?: string | null; conversation_id?: string | null; pro_club_id?: string | null }): ClubScope {
   if (target.chat_type === 'direct' || target.chat_type === 'broadcast') return { shared: 'person' };
