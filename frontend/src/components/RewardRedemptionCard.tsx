@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trophy, Gift, Loader2, CheckCircle2, ChevronRight, Star, Users, QrCode, Building2, Flame, HelpCircle, ChevronsUpDown } from "lucide-react";
@@ -507,7 +508,7 @@ export default function RewardRedemptionCard() {
           // (sponsor name / club branding are display-only joins with no
           // canister field) — skipped on this branch.
         },
-      });
+      }, writeOnce({ clubId: reward.club_id }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-redemptions"] });
@@ -549,7 +550,7 @@ export default function RewardRedemptionCard() {
         icp: async (ctx) => {
           await fulfillLiveRedemption(ctx, redemption.id);
         },
-      });
+      }, writeOnce({ clubId: redemption.club_id }));
 
       // Get claimer's name
       const { data: claimerProfile } = await selectCachedProfileById(user!.id);
@@ -680,7 +681,7 @@ export default function RewardRedemptionCard() {
           supabase: async () => [],
           icp: async (ctx) =>
             (await getLiveChildPointsBatch(ctx, contextClubId, childIds)).map((r) => ({ child_id: r.childId, points: r.points })),
-        });
+        }, { clubId: contextClubId });
       }
       const { data } = await supabase
         .from("child_club_points")

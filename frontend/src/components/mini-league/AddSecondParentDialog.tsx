@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -143,7 +144,7 @@ export function AddSecondParentDialog({
         await grantLiveClubChildNameRead(ctx, child.id, clubId);
         return child.id;
       },
-    });
+    }, writeOnce({ clubId }));
 
   // Link an existing user directly as a guardian (no email invite)
   const linkExistingMutation = useMutation({
@@ -215,7 +216,7 @@ export function AddSecondParentDialog({
             relatedId: resolvedChildId,
           });
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["child_guardians"] });
@@ -245,7 +246,7 @@ export function AddSecondParentDialog({
           });
           return false;
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: (sent) => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
