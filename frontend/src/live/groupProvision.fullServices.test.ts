@@ -114,7 +114,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
       const encryptedKey = ok(await actor('pii_access_control', member).get_club_media_vetkey('new-club', transport.publicKeyBytes()));
       const key = EncryptedVetKey.deserialize(Uint8Array.from(encryptedKey)).decryptAndVerify(transport, verification, mediaIdentity);
       const response = await blob.actor.http_request({ url: '/clubs/new-club/gallery/one.jpg', method: 'GET', headers: [], body: [] });
-      expect(IbeCiphertext.deserialize(Uint8Array.from(response.body)).decrypt(key)).toEqual(plain);
+      expect(Array.from(IbeCiphertext.deserialize(Uint8Array.from(response.body)).decrypt(key))).toEqual(Array.from(plain));
     };
     await decryptPhoto();
     expect((await blob.actor.http_request({ url: '/clubs/new-club/gallery/one.jpg', method: 'GET', headers: [], body: [] })).status_code).toBe(200);
