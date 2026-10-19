@@ -1530,6 +1530,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Bool],
         [],
       ),
+    'read_media_quota_store_registry' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'stores' : IDL.Vec(IDL.Principal),
+              'active' : IDL.Bool,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_my_club_memberships' : IDL.Func(
         [IDL.Nat, IDL.Nat16],
         [

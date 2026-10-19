@@ -1174,6 +1174,14 @@ type Main =
    read_has_child_guardian: (user: principal, child_id: text) -> (bool);
    read_has_club_membership: (user: principal, club_id: text) -> (bool);
    read_has_club_staff_role: (user: principal, club_id: text) -> (bool);
+   read_media_quota_store_registry: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             active: bool;
+             stores: vec principal;
+           };
+     });
    read_my_club_memberships: (offset: nat, limit: nat16) ->
     (variant {
        Err: text;

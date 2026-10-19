@@ -1025,6 +1025,11 @@ export interface Main {
   'read_has_child_guardian' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_membership' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
+  'read_media_quota_store_registry' : ActorMethod<
+    [],
+    { 'Ok' : { 'stores' : Array<Principal>, 'active' : boolean } } |
+      { 'Err' : string }
+  >,
   'read_my_club_memberships' : ActorMethod<
     [bigint, number],
     {
