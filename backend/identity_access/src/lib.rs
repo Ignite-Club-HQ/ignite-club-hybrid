@@ -37,6 +37,8 @@ const MEM_PRINCIPAL_DENIALS: u8 = 6;
 const MEM_ERASED_ACCOUNTS: u8 = 7;
 // Service admission readers are separate from club unlink receivers.
 const MEM_SERVICE_AUTHORITIES: u8 = 8;
+// Recovery pagination revision, NOT an admission/removal fencing generation.
+const MEM_REMOVAL_HISTORY_REVISION: u8 = 9;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -239,12 +241,12 @@ pub struct Access {
 }
 
 /// Independent additive cell: old schema-5 blobs and account maps remain unchanged.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, CandidType, Serialize, Deserialize)]
 struct LinkLifecycle {
     authorities: Vec<Principal>,
     pending: Vec<UnlinkIntent>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 struct UnlinkIntent {
     account_id: String,
     principal: Principal,
@@ -256,14 +258,14 @@ struct UnlinkIntent {
     authorities: Vec<Principal>,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 enum DenialReason {
     #[default]
     Unlinked,
     Erased,
     Rekeyed,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 struct PrincipalDenial {
     account_id: String,
     version: u64,
@@ -303,6 +305,7 @@ fn deny_principals(subjects: &[Principal], account_id: &str, version: u64, reaso
     let size = PRINCIPAL_DENIALS.with(|m| m.borrow().len());
     if size + additions > (MAX_ACCOUNTS * MAX_PRINCIPALS) as u64 { return Err("Principal denial capacity reached".into()); }
     let denial = PrincipalDenial { account_id: account_id.to_string(), version, reauthorized_version: None, reason, rekey_destination: None };
+    bump_removal_history();
     for subject in subjects {
         PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(subject.to_text(), encode(&denial)));
     }
@@ -377,6 +380,7 @@ fn set_service_authorities(authorities: Vec<Principal>) -> Outcome<()> {
     validate_service_authorities(&authorities)?;
     if !link_lifecycle().pending.is_empty() { return Err("Unlink recovery pending".into()); }
     if service_authorities().iter().any(|p| !authorities.contains(p)) { return Err("Cannot drop an existing service reader".into()); }
+    bump_removal_history();
     SERVICE_AUTHORITIES.with(|m| m.borrow_mut().set(encode(&authorities)));
     Ok(())
 }
@@ -436,12 +440,108 @@ thread_local! {
         RefCell::new(StableBTreeMap::init(memory(MEM_ERASED_ACCOUNTS)));
     static SERVICE_AUTHORITIES: RefCell<StableCell<Vec<u8>, Memory>> =
         RefCell::new(StableCell::init(memory(MEM_SERVICE_AUTHORITIES), Vec::new()));
+    static REMOVAL_HISTORY_REVISION: RefCell<StableCell<u64, Memory>> =
+        RefCell::new(StableCell::init(memory(MEM_REMOVAL_HISTORY_REVISION), 0));
+}
+fn removal_history_revision() -> u64 { REMOVAL_HISTORY_REVISION.with(|m| *m.borrow().get()) }
+fn bump_removal_history() {
+    let next = removal_history_revision().checked_add(1).expect("Removal history revision exhausted");
+    REMOVAL_HISTORY_REVISION.with(|m| m.borrow_mut().set(next));
 }
 fn link_lifecycle() -> LinkLifecycle {
     LINK_LIFECYCLE.with(|s| if s.borrow().get().is_empty() { LinkLifecycle::default() } else { decode(s.borrow().get()) })
 }
 fn store_link_lifecycle(value: &LinkLifecycle) {
+    bump_removal_history();
     LINK_LIFECYCLE.with(|s| s.borrow_mut().set(encode(value)));
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+struct RemovalHistoryManifest {
+    revision: u64,
+    principal_denials: u64,
+    erased_accounts: u64,
+    pending_intents: u64,
+    club_authorities: Vec<Principal>,
+    service_readers: Vec<Principal>,
+}
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+enum RemovalHistoryCursor { PrincipalDenials(Option<String>), ErasedAccounts(Option<String>), PendingIntents(u64), Done }
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+struct RemovalHistoryPage {
+    revision: u64,
+    denials: Vec<(String, PrincipalDenial)>,
+    erased: Vec<(String, u64)>,
+    pending: Vec<UnlinkIntent>,
+    next: RemovalHistoryCursor,
+}
+fn history_access(enabled: bool, governor: Principal, caller: Principal) -> Outcome<()> {
+    if !enabled { return Err("Removal history recovery not released".into()); }
+    if caller == Principal::anonymous() || caller != governor { return Err("Governor required".into()); }
+    Ok(())
+}
+fn history_manifest() -> RemovalHistoryManifest {
+    let lifecycle = link_lifecycle();
+    RemovalHistoryManifest {
+        revision: removal_history_revision(),
+        principal_denials: PRINCIPAL_DENIALS.with(|m| m.borrow().len()),
+        erased_accounts: ERASED_ACCOUNTS.with(|m| m.borrow().len()),
+        pending_intents: lifecycle.pending.len() as u64,
+        club_authorities: lifecycle.authorities,
+        service_readers: service_authorities(),
+    }
+}
+/// Local-only consensus recovery evidence. Reader lists/club receipts are NOT
+/// a complete deployment inventory or an in-flight drain acknowledgement.
+#[ic_cdk::update]
+fn read_removal_history_manifest() -> Outcome<RemovalHistoryManifest> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    Ok(history_manifest())
+}
+fn history_page(revision: u64, cursor: RemovalHistoryCursor, limit: u16) -> Outcome<RemovalHistoryPage> {
+    if limit == 0 || limit > 200 { return Err("Invalid history page size".into()); }
+    if revision != removal_history_revision() { return Err("Removal history changed; restart export".into()); }
+    let mut page = RemovalHistoryPage { revision, denials: vec![], erased: vec![], pending: vec![], next: RemovalHistoryCursor::Done };
+    let bound = limit as usize;
+    match cursor {
+        RemovalHistoryCursor::PrincipalDenials(after) => {
+            if after.as_ref().is_some_and(|s| s.len() > 256) { return Err("Invalid history key cursor".into()); }
+            page.denials = PRINCIPAL_DENIALS.with(|m| {
+                use std::ops::Bound::{Excluded, Unbounded};
+                let map = m.borrow();
+                let range = (after.map(Excluded).unwrap_or(Unbounded), Unbounded);
+                map.range(range).take(bound).map(|e| (e.key().clone(), decode(&e.value()))).collect()
+            });
+            page.next = if page.denials.len() == bound {
+                RemovalHistoryCursor::PrincipalDenials(page.denials.last().map(|e| e.0.clone()))
+            } else { RemovalHistoryCursor::ErasedAccounts(None) };
+        }
+        RemovalHistoryCursor::ErasedAccounts(after) => {
+            if after.as_ref().is_some_and(|s| s.len() > 256) { return Err("Invalid history key cursor".into()); }
+            page.erased = ERASED_ACCOUNTS.with(|m| {
+                use std::ops::Bound::{Excluded, Unbounded};
+                let map = m.borrow();
+                let range = (after.map(Excluded).unwrap_or(Unbounded), Unbounded);
+                map.range(range).take(bound).map(|e| (e.key().clone(), e.value())).collect()
+            });
+            page.next = if page.erased.len() == bound {
+                RemovalHistoryCursor::ErasedAccounts(page.erased.last().map(|e| e.0.clone()))
+            } else { RemovalHistoryCursor::PendingIntents(0) };
+        }
+        RemovalHistoryCursor::PendingIntents(offset) => {
+            let lifecycle = link_lifecycle();
+            if offset > lifecycle.pending.len() as u64 { return Err("Invalid pending intent cursor".into()); }
+            page.pending = lifecycle.pending.into_iter().skip(offset as usize).take(bound).collect();
+            if page.pending.len() == bound { page.next = RemovalHistoryCursor::PendingIntents(offset + page.pending.len() as u64); }
+        }
+        RemovalHistoryCursor::Done => {}
+    }
+    Ok(page)
+}
+#[ic_cdk::update]
+fn read_removal_history_page(revision: u64, cursor: RemovalHistoryCursor, limit: u16) -> Outcome<RemovalHistoryPage> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    history_page(revision, cursor, limit)
 }
 fn effective_account(mut account: Account, lifecycle: &LinkLifecycle) -> Account {
     account.principals.retain(|p| !principal_is_denied(*p) && !lifecycle.pending.iter().any(|job| job.account_id == account.id && job.principal == *p));
@@ -1167,6 +1267,7 @@ fn accept_link(id: u64) -> Outcome<Account> {
     store(&state);
     if let Some(mut denial) = principal_denial(caller) {
         denial.reauthorized_version = Some(account.version);
+        bump_removal_history();
         PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(caller.to_text(), encode(&denial)));
     }
     Ok(account)
@@ -1415,6 +1516,7 @@ fn erase_account_core(state: &mut CoreState, account: &Account) -> Outcome<()> {
     // Terminal history survives deletion of personal records and indexes.
     // This is identity-local revocation, not a remote role-drain receipt.
     deny_principals(&account.principals, &account_id, version, DenialReason::Erased)?;
+    bump_removal_history();
     ERASED_ACCOUNTS.with(|m| m.borrow_mut().insert(account_id.clone(), version));
     let erased_principals = account.principals.clone();
     remove_account(&account_id);
@@ -1521,6 +1623,7 @@ fn rekey_principal_core(
         deny_principals(&[old], &account.id, next_version, DenialReason::Rekeyed)?;
         let mut denial = principal_denial(old).ok_or("Rekey denial missing")?;
         denial.rekey_destination = Some(new);
+        bump_removal_history();
         PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(old.to_text(), encode(&denial)));
     }
     if let Some(existing) = &bare {
@@ -3006,6 +3109,66 @@ mod tests {
             methods(&exported),
             "identity_access.did drifted from the exported candid interface"
         );
+    }
+    #[test]
+    fn history_access_is_local_governor_only() {
+        let governor = principal(140);
+        assert!(history_access(true, governor, governor).is_ok());
+        assert_eq!(history_access(false, governor, governor), Err("Removal history recovery not released".into()));
+        assert!(history_access(true, governor, principal(141)).is_err());
+        assert!(history_access(true, governor, Principal::anonymous()).is_err());
+    }
+    #[test]
+    fn history_pages_preserve_terminal_fields_and_reject_stale_snapshots() {
+        let subject = principal(142);
+        deny_principals(&[subject], "history-page-account", 12, DenialReason::Rekeyed).unwrap();
+        let mut denial = principal_denial(subject).unwrap();
+        denial.rekey_destination = Some(principal(143));
+        bump_removal_history();
+        PRINCIPAL_DENIALS.with(|m| m.borrow_mut().insert(subject.to_text(), encode(&denial)));
+        let revision = removal_history_revision();
+        let mut cursor = RemovalHistoryCursor::PrincipalDenials(None);
+        let mut found = false;
+        for _ in 0..100 {
+            let page = history_page(revision, cursor, 1).unwrap();
+            assert!(page.denials.len() + page.erased.len() + page.pending.len() <= 1);
+            for (key, row) in page.denials {
+                if key == subject.to_text() {
+                    found = true;
+                    assert_eq!(row.reason, DenialReason::Rekeyed);
+                    assert_eq!(row.version, 12);
+                    assert_eq!(row.rekey_destination, Some(principal(143)));
+                }
+            }
+            cursor = page.next;
+            if matches!(cursor, RemovalHistoryCursor::Done) { break; }
+        }
+        assert!(found);
+        assert!(history_page(revision, RemovalHistoryCursor::Done, 0).is_err());
+        assert!(history_page(revision, RemovalHistoryCursor::Done, 201).is_err());
+        assert!(history_page(revision, RemovalHistoryCursor::ErasedAccounts(Some("x".repeat(257))), 1).is_err());
+        bump_removal_history();
+        assert!(history_page(revision, RemovalHistoryCursor::PrincipalDenials(None), 1).is_err());
+    }
+    #[test]
+    fn history_lifecycle_preserves_exact_legacy_receipts_without_drain_claim() {
+        let authority = principal(144);
+        let before = removal_history_revision();
+        store_link_lifecycle(&LinkLifecycle { authorities: vec![authority], pending: vec![UnlinkIntent {
+            account_id: "history-intent".into(), principal: principal(145), version: 7,
+            authorities: vec![authority], acknowledged: vec![authority],
+        }] });
+        assert!(removal_history_revision() > before);
+        let manifest = history_manifest();
+        assert_eq!(manifest.pending_intents, 1);
+        assert_eq!(manifest.club_authorities, vec![authority]);
+        let page = history_page(manifest.revision, RemovalHistoryCursor::PendingIntents(0), 1).unwrap();
+        assert_eq!(page.pending[0].authorities, vec![authority]);
+        assert_eq!(page.pending[0].acknowledged, vec![authority]);
+        assert_eq!(page.pending[0].version, 7);
+        assert!(history_page(manifest.revision, RemovalHistoryCursor::PendingIntents(2), 1).is_err());
+        store_link_lifecycle(&LinkLifecycle::default());
+        assert!(history_page(manifest.revision, page.next, 1).is_err());
     }
 }
 
