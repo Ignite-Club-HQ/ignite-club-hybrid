@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { lookupMiniLeagueOwner } from './miniLeagueOwner';
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock('./domains', () => ({ connectLiveMiniLeagueDomain: async () => ({ actor: { get_mini_leagues: get } }) }));
+const { get, connect } = vi.hoisted(() => ({ get: vi.fn(), connect: vi.fn() }));
+vi.mock('./domains', () => ({ connectLiveMiniLeagueDomain: connect }));
 const context = { target: {}, identity: {} } as never;
-beforeEach(() => get.mockReset());
+beforeEach(() => {
+  get.mockReset();
+  connect.mockReset();
+  connect.mockResolvedValue({ actor: { get_mini_leagues: get } });
+});
 describe('authorized league ownership', () => {
   it('returns the owning club from the authorized batch read', async () => {
     get.mockResolvedValue({ Ok: [{ id: 'league-a', club_id: 'club-b' }] });
@@ -21,7 +25,7 @@ describe('authorized league ownership', () => {
   });
   it('propagates transport loss instead of guessing the shared group', async () => {
     const failure = new Error('Network unavailable');
-    get.mockImplementation(() => Promise.reject(failure));
+    connect.mockRejectedValue(failure);
     const outcome = await lookupMiniLeagueOwner(context, 'league-a').then(
       value => ({ value }),
       error => ({ error }),
