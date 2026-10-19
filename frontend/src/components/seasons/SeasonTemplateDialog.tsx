@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -80,7 +81,7 @@ export function SeasonTemplateDialog({
           }
           return newSeasonId;
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: (newSeasonId) => {
       toast.success("Season created from template");

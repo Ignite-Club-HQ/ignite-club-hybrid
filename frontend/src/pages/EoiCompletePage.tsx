@@ -97,7 +97,7 @@ function SupabaseEoiCompletePage() {
         // claim_eoi_by_token is idempotent for the same caller, so it also
         // serves as the initial fetch on first load.
         icp: async (ctx) => mapLiveEoiSubmission(await claimLiveEoiByToken(ctx, token)) as EoiSubmission,
-      });
+      }, { inviteToken: token ?? "" });
     },
     enabled: !!token && !!user,
   });

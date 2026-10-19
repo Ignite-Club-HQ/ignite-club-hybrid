@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -600,7 +601,7 @@ async function syncChatAttachmentToVaultIcp({
           );
         }
       },
-    });
+    }, writeOnce({ clubId }));
   } catch (err) {
     console.warn("chatVaultSync (ICP) error:", err);
   }

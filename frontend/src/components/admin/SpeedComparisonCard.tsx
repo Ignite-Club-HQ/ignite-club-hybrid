@@ -43,7 +43,7 @@ async function loadIcp(surface: string, sinceMs: number, untilMs: number): Promi
         const count = Number(a.count);
         return { count, p50: count ? Number(a.p50_ms) : null, p95: count ? Number(a.p95_ms) : null };
       },
-    });
+    }, { shared: "app" });
   } catch { return null; }
 }
 

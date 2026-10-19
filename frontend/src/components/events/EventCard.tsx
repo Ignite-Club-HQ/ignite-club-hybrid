@@ -788,7 +788,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
             relatedId: event.id,
           });
         },
-      });
+      }, writeOnce({ clubId: event.club_id }));
       return membersToNotify.length;
     },
     onError: (error: Error) => {

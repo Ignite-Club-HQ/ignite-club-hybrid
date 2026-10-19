@@ -1,3 +1,4 @@
+import { acrossLists } from "@/live/featureScopes";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
@@ -411,7 +412,7 @@ function SupabaseClubEngagementAnalyticsPage({
           return (data || []) as { day: string; user_id: string }[];
         },
         icp: (ctx) => icpActiveUserRows(ctx, range.start, range.end),
-      });
+      }, { clubId: requireIcpClubId() });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -430,7 +431,7 @@ function SupabaseClubEngagementAnalyticsPage({
           return (data || []) as { day: string; user_id: string }[];
         },
         icp: (ctx) => icpActiveUserRows(ctx, prevRange.start, prevRange.end),
-      });
+      }, { clubId: requireIcpClubId() });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -453,7 +454,7 @@ function SupabaseClubEngagementAnalyticsPage({
           return (data || []) as { day: string; user_id: string }[];
         },
         icp: (ctx) => icpActiveUserRows(ctx, start, end),
-      });
+      }, { clubId: requireIcpClubId() });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -661,7 +662,7 @@ function SupabaseClubEngagementAnalyticsPage({
             photosUploaded: 0,
           };
         },
-      });
+      }, { clubId: requireIcpClubId() });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -685,7 +686,7 @@ function SupabaseClubEngagementAnalyticsPage({
           // Canister has one message counter per day, no club/team split.
           return points.map((p) => ({ day: p.day, club_count: Number(p.value), team_count: 0 }));
         },
-      });
+      }, { clubId: requireIcpClubId() });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -715,7 +716,7 @@ function SupabaseClubEngagementAnalyticsPage({
           // responded/expected roster breakdown — only the completion % itself.
           return points.map((p) => ({ week: p.day, completion_pct: Number(p.value), responded: 0, expected: 0 }));
         },
-      });
+      }, { clubId: requireIcpClubId() });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -782,7 +783,7 @@ function SupabaseClubEngagementAnalyticsPage({
           // placeholder rows so the existing `photos.length` consumer stays correct.
           return Array.from({ length: Number(count) }, (_, i) => ({ id: `icp-photo-${i}` }));
         },
-      }),
+      }, { clubId: requireIcpClubId() }),
     enabled: queryReady && !!access?.isAdmin,
   });
 
@@ -821,7 +822,7 @@ function SupabaseClubEngagementAnalyticsPage({
             { views: 0, reactions: 0, comments: 0 },
           );
         },
-      }),
+      }, { clubId: requireIcpClubId() }),
     enabled: !!access?.isAdmin && photos.length > 0,
   });
 
@@ -895,7 +896,7 @@ function SupabaseClubEngagementAnalyticsPage({
             { sponsor_id: r.sponsor_id, event_type: "click", n: Number(r.clicks ?? 0) },
           ]);
         },
-      }),
+      }, { clubId: requireIcpClubId() }),
     enabled: !!access?.isAdmin && sponsorRows.length > 0,
   });
 
@@ -953,7 +954,7 @@ function SupabaseClubEngagementAnalyticsPage({
             prevRange.start.getTime(),
             prevRange.end.getTime(),
           ),
-      }),
+      }, { clubId: requireIcpClubId() }),
     enabled: queryReady && !!access?.isAdmin && isIcpAnalytics,
   });
 
@@ -964,7 +965,7 @@ function SupabaseClubEngagementAnalyticsPage({
         supabase: async () => null,
         icp: (ctx) =>
           getLiveClubEngagementSponsorPerformance(ctx, requireIcpClubId(), range.start.getTime(), range.end.getTime()),
-      }),
+      }, { clubId: requireIcpClubId() }),
     enabled: queryReady && !!access?.isAdmin && isIcpAnalytics,
   });
 
@@ -992,7 +993,7 @@ function SupabaseClubEngagementAnalyticsPage({
             ctr: Number(r.impressions) ? Math.round((Number(r.clicks) / Number(r.impressions)) * 1000) / 10 : 0,
           }));
         },
-      }),
+      }, { clubId: requireIcpClubId() }),
     enabled: queryReady && !!access?.isAdmin && isIcpAnalytics && sponsorRows.length > 0,
   });
 
@@ -1037,7 +1038,7 @@ function SupabaseClubEngagementAnalyticsPage({
           const n = await getLiveClubEngagementTotalUniqueReach(ctx, requireIcpClubId(), range.start.getTime(), range.end.getTime());
           return Number(n);
         },
-      });
+      }, { clubId: requireIcpClubId() });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -1075,7 +1076,7 @@ function SupabaseClubEngagementAnalyticsPage({
             is_active: a.is_active,
           }));
         },
-      });
+      }, { shared: "app" });
     },
     enabled: queryReady && !!access?.isAdmin && isPlatform,
   });
@@ -1124,7 +1125,7 @@ function SupabaseClubEngagementAnalyticsPage({
           }
           return rows;
         },
-      });
+      }, { shared: "app" });
     },
     enabled: queryReady && !!access?.isAdmin && isPlatform,
   });
@@ -1165,7 +1166,7 @@ function SupabaseClubEngagementAnalyticsPage({
           }
           return rows;
         },
-      });
+      }, { shared: "app" });
     },
     enabled: queryReady && !!access?.isAdmin && isPlatform,
   });
@@ -1325,7 +1326,7 @@ function SupabaseClubEngagementAnalyticsPage({
           );
           return active.filter((c): c is { id: string; name: string } => c !== null);
         },
-      }),
+      }, acrossLists),
     enabled: queryReady && !!access?.isCompAdmin,
   });
 
@@ -1817,7 +1818,7 @@ function CompetitionPanel({ competitions, range }: { competitions: { id: string;
                 };
               }),
             ),
-        });
+        }, acrossLists);
         return {
           activeTeams: perComp.reduce((n, c) => n + c.activeTeams, 0),
           totalMatches: perComp.reduce((n, c) => n + c.totalMatches, 0),

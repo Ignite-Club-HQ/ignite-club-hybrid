@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -37,7 +38,7 @@ export function useEoiTeamSuggestions(seasonId?: string | null) {
             submission_ids: r.submission_ids,
           }));
         },
-      });
+      }, { seasonId });
     },
     enabled: !!seasonId,
   });
@@ -64,7 +65,7 @@ export function useAllocateEoiToTeam() {
         icp: async (ctx) => {
           await allocateLiveEoiToTeam(ctx, submissionId, teamId);
         },
-      }),
+      }, writeOnce({ eoiId: submissionId })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
       qc.invalidateQueries({ queryKey: ["eoi-stats"] });
@@ -98,7 +99,7 @@ export function useAllocateEoisBulk() {
             await allocateLiveEoiToTeam(ctx, id, teamId);
           }
         },
-      }),
+      }, { shared: "person" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
       qc.invalidateQueries({ queryKey: ["eoi-stats"] });

@@ -56,7 +56,7 @@ export function useVaultLargeFiles({ currentClubId, queryClient, formatStorageSi
           const mapped = (files as any[]).map(mapIcpVaultFileToLargeItem);
           return sortVaultLargeFileItems(mapped, "size").slice(0, LARGE_FILES_LIMIT);
         },
-      });
+      }, { clubId: currentClubId });
       setLargeFilesData({ loading: false, items });
     } catch (error) {
       console.error("Failed to fetch large files:", error);

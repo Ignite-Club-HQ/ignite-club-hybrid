@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -25,7 +26,7 @@ export function useResendEoiInvite() {
             body: { submission_id: submissionId },
           });
         },
-      }),
+      }, writeOnce({ eoiId: submissionId })),
     onSuccess: () => {
       toast.success("Invite resent");
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
@@ -70,7 +71,7 @@ export function useBulkResendEoiInvites() {
           }
           return { ok, fail };
         },
-      }),
+      }, { shared: "person" }),
     onSuccess: ({ ok, fail }) => {
       if (fail === 0) toast.success(`Sent ${ok} reminder${ok === 1 ? "" : "s"}`);
       else toast.warning(`Sent ${ok}, failed ${fail}`);

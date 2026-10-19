@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { recordLiveMatch } from "@/live/features/competitions";
@@ -84,5 +85,5 @@ export async function createManualMatch(row: ManualMatchRow) {
         return { error: { message: e instanceof Error ? e.message : String(e) } };
       }
     },
-  });
+  }, writeOnce({ competitionId: row.competition_id }));
 }

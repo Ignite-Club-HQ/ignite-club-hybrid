@@ -32,7 +32,7 @@ async function resolveTarget(record: PinnedVaultRecord): Promise<ResolvedTarget 
           const file = await getLiveVaultFile(ctx, record.vault_file_id!);
           return file ? { label: file.name || "Vault file", href: `/vault?file=${file.id}`, count: 0 } : null;
         },
-      });
+      }, { vaultFileId: record.vault_file_id });
     }
     if (record.vault_folder_id) {
       return withFeatureBackend("vault", {
@@ -48,7 +48,7 @@ async function resolveTarget(record: PinnedVaultRecord): Promise<ResolvedTarget 
             count: files.length,
           };
         },
-      });
+      }, { vaultFolderId: record.vault_folder_id });
     }
     // Whole team/club vault pins resolve their name from club_domain.
     if (!record.root_scope || !record.root_id) return null;

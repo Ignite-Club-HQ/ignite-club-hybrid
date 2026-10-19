@@ -1342,7 +1342,7 @@ export default function ClubDetailPage() {
               outcome.notificationError = e instanceof Error ? e.message : String(e);
             }
           }
-        });
+        }, writeOnce({ clubId: id ?? "" }));
       }
 
       setShowDeleteDialog(false);

@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -35,7 +36,7 @@ export function useEoiSubmissions(clubId?: string, seasonId?: string | null) {
           const subs = await listLiveEoiSubmissions(ctx, clubId, seasonId ?? null);
           return subs.map(mapLiveEoiSubmission) as EoiSubmission[];
         },
-      });
+      }, { clubId });
     },
     enabled: !!clubId,
   });
@@ -70,7 +71,7 @@ export function useEoiStats(clubId?: string, seasonId?: string | null) {
             withdrawn: Number(stats.withdrawn),
           };
         },
-      });
+      }, { clubId });
     },
     enabled: !!clubId,
   });
@@ -94,7 +95,7 @@ export function useUpdateEoiStatus() {
         icp: async (ctx) => {
           await updateLiveEoiStatus(ctx, id, status);
         },
-      }),
+      }, writeOnce({ eoiId: id })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
       qc.invalidateQueries({ queryKey: ["eoi-stats"] });
@@ -119,7 +120,7 @@ export function useAssignEoiTeam() {
         icp: async (ctx) => {
           await assignLiveEoiTeam(ctx, id, teamId);
         },
-      }),
+      }, writeOnce({ eoiId: id })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
       qc.invalidateQueries({ queryKey: ["eoi-stats"] });
@@ -139,7 +140,7 @@ export function useDeleteEoi() {
         icp: async (ctx) => {
           await deleteLiveEoi(ctx, id);
         },
-      }),
+      }, writeOnce({ eoiId: id })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
       qc.invalidateQueries({ queryKey: ["eoi-stats"] });

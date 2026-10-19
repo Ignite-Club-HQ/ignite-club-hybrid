@@ -225,7 +225,7 @@ export function EventsHeaderSponsorStrip({
           const s = await getLiveAdSetting(ctx, "events");
           return s ? { is_enabled: s.is_enabled } : null;
         },
-      }),
+      }, { shared: "app" }),
   });
   const freePlacementEnabled = !!placementSettings?.is_enabled;
 
@@ -255,7 +255,7 @@ export function EventsHeaderSponsorStrip({
               headline: a.headline[0] ?? null,
             }),
           ),
-      }),
+      }, { shared: "app" }),
   });
 
   const activeSponsor = useTieredSponsorSlot(sponsors, isProClub === true);

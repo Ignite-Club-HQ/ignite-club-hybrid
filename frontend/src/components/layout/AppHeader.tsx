@@ -1,3 +1,5 @@
+import { acrossVoid, acrossLists } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import { mergeLists } from "@/live/featureRouter";
 import { useState, useEffect, Suspense } from "react";
 import { LogoImage } from "@/components/ui/logo-image";
@@ -649,7 +651,7 @@ export function AppHeader() {
           icp: async (ctx) => {
             await markAllLiveNotificationsRead(ctx, user.id, activeClubFilter ?? null);
           },
-        });
+        }, acrossVoid);
         return;
       }
 
@@ -716,7 +718,7 @@ export function AppHeader() {
         const inbox = await withFeatureBackend("notifications", {
           supabase: async () => [] as any[],
           icp: async (ctx) => listLiveInbox(ctx, user.id, activeClubFilter ?? null, 40),
-        });
+        }, acrossLists);
         return (inbox as any[])
           .map((n) => ({
             id: n.id,
@@ -789,7 +791,7 @@ export function AppHeader() {
         const inbox = await withFeatureBackend("notifications", {
           supabase: async () => [] as any[],
           icp: async (ctx) => listLiveInbox(ctx, user.id, activeClubFilter, 500),
-        });
+        }, acrossLists);
         return (inbox as any[]).filter((n) => !n.read).length;
       }
       // Pull unread rows (capped) so we can drop DMs from senders who don't
@@ -824,7 +826,7 @@ export function AppHeader() {
         await withFeatureBackend("notifications", {
           supabase: async () => {},
           icp: async (ctx) => { await markLiveNotificationRead(ctx, id); },
-        });
+        }, writeOnce({ notificationId: id }));
         return id;
       }
       const { error } = await supabase
@@ -913,7 +915,7 @@ export function AppHeader() {
               club: (notification as any).club ?? null,
               messageId: (notification as any).idempotency_key ?? null,
             }),
-        });
+        }, { shared: "person" });
         navigateWithFreshJump(to);
       } catch {
         navigate("/notifications");

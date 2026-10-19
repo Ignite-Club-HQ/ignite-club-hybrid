@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { makeVaultFileToken } from "@/lib/chatVaultLinks";
@@ -22,5 +23,5 @@ export async function uploadIcpChatDocument(file: File, clubId: string, teamId?:
       await registerLiveVaultFile(ctx, id, "", clubId, teamId ?? null, file.name, uploaded.url, file.size, mime, false, uploaded.blobRef);
       return makeVaultFileToken(id);
     },
-  });
+  }, writeOnce({ clubId }));
 }

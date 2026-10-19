@@ -98,7 +98,7 @@ export function useClubScopeGuard() {
           const found = (competitions as Array<{ id: string }>).some((c) => c.id === competitionId);
           return found ? [activeClubFilter] : null;
         },
-      });
+      }, { competitionId });
     },
     enabled: !!competitionId && !!activeClubFilter,
     staleTime: 5 * 60 * 1000,

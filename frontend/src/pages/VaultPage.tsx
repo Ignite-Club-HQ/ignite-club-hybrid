@@ -211,7 +211,7 @@ function SupabaseVaultPage() {
           const subs = await listLiveTeamSubscriptions(ctx, teams.map((t) => t.id));
           return teams.filter((t) => liveHasAnyPro(subs.get(t.id)));
         },
-      });
+      }, { clubId });
     },
     enabled: currentView.type === "club" && currentClubHasPro !== undefined,
   });
@@ -247,7 +247,7 @@ function SupabaseVaultPage() {
               sort_order: f.sort_order,
             }));
         },
-      });
+      }, { clubId });
     },
     enabled: currentView.type === "club",
   });
@@ -293,7 +293,7 @@ function SupabaseVaultPage() {
             : (await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target)).isPro;
           return { freshRoles: userRoles ?? [], hasProFootball };
         },
-      });
+      }, { clubId });
 
       if (!hasProFootball && !isAppAdmin) {
         console.log("[Vault Mini-Leagues] Club doesn't have Pro Football, returning empty");
@@ -598,7 +598,7 @@ function SupabaseVaultPage() {
               clubName,
             };
           },
-        });
+        }, { vaultFolderId: urlFolderId ?? "" });
 
         if (!result) {
           toast.error("Folder not found or access denied");
@@ -723,7 +723,7 @@ function SupabaseVaultPage() {
                 return null;
               }
             },
-          });
+          }, { teamId });
 
           if (team) {
             const club = userClubs.find(c => c.id === team.club_id);

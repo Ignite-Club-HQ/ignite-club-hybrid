@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { enqueueLiveNotification, listLiveInbox } from "@/live/features/notifications";
@@ -83,5 +84,5 @@ export async function sendGamificationNotification({
         idempotencyKey: crypto.randomUUID(),
       });
     },
-  });
+  }, clubId ? writeOnce({ clubId }) : { shared: "person" });
 }

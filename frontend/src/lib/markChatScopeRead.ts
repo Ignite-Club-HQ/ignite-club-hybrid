@@ -1,3 +1,4 @@
+import { acrossVoid } from "@/live/featureScopes";
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -162,7 +163,7 @@ export function markChatScopeNotificationsRead({
             return { data: matches.length, error: null };
           },
         },
-      );
+      , acrossVoid);
 
       if (error) {
         console.warn("[markChatScopeNotificationsRead] rpc failed", error);

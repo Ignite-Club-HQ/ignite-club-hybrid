@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -191,7 +192,7 @@ async function syncGalleryPhotoToVaultIcp({
           null,
         );
       },
-    });
+    }, writeOnce({ clubId }));
   } catch (err) {
     console.warn("galleryVaultSync (ICP) error:", err);
   }

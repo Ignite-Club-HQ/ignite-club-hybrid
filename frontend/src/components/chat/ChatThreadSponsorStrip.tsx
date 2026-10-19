@@ -148,7 +148,7 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
           const s = await getLiveAdSetting(ctx, "chat-thread");
           return s ? { is_enabled: s.is_enabled } : null;
         },
-      }),
+      }, { shared: "app" }),
   });
 
   const placementEnabled = !!placementSettings?.is_enabled;
@@ -235,7 +235,7 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
               headline: a.headline[0] ?? null,
             }),
           ),
-      }),
+      }, { shared: "app" }),
   });
 
   const activeSponsor = useTieredSponsorSlot(sponsors, isProClub === true);

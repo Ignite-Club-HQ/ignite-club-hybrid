@@ -88,7 +88,7 @@ export async function logHomeOpenLatency(args: LogArgs): Promise<void> {
         icp: async (ctx) => {
           await recordLivePerfSample(ctx, "home_open", args.source, tap_to_paint_ms, args.cacheHit, platform);
         },
-      }).catch(() => {});
+      }, { shared: "app" }).catch(() => {});
     };
     const supabaseInsert = () => {
       void (supabase as any).from("home_open_perf").insert({

@@ -1,3 +1,5 @@
+import { acrossLists, acrossVoid } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useCallback, useState, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -294,7 +296,7 @@ export default function NotificationsPage() {
             related_id: Array.isArray(n.related_id) ? (n.related_id[0] ?? null) : null,
           })) as Notification[];
         },
-      });
+      }, acrossLists);
     },
     enabled: !!user,
     staleTime: 30000, // Consider data fresh for 30 seconds
@@ -445,7 +447,7 @@ export default function NotificationsPage() {
         icp: async (ctx) => {
           await markLiveNotificationRead(ctx, id);
         },
-      });
+      }, writeOnce({ notificationId: id }));
       return id;
     },
     onMutate: async (id) => {
@@ -482,7 +484,7 @@ export default function NotificationsPage() {
           // matching the visible-set semantics of this mutation.
           await markAllLiveNotificationsRead(ctx, user!.id, activeClubFilter ?? null);
         },
-      });
+      }, acrossVoid);
     },
     onMutate: async () => {
       // Optimistic update - mark visible notifications as read
@@ -514,7 +516,7 @@ export default function NotificationsPage() {
         icp: async (ctx) => {
           await deleteLiveNotification(ctx, id);
         },
-      });
+      }, writeOnce({ notificationId: id }));
       return id;
     },
     onMutate: async (id) => {
@@ -546,7 +548,7 @@ export default function NotificationsPage() {
         icp: async (ctx) => {
           await clearLiveInbox(ctx, user!.id, activeClubFilter ?? null);
         },
-      });
+      }, acrossVoid);
     },
     onMutate: async () => {
       // Cancel any in-flight queries to prevent stale data overwriting
@@ -810,7 +812,7 @@ export default function NotificationsPage() {
               club: notification.club ?? null,
               messageId: notification.idempotency_key ?? null,
             }),
-        });
+        }, { shared: "person" });
         if (to !== "/notifications") navigate(to);
       } catch {
         /* stay on the inbox */

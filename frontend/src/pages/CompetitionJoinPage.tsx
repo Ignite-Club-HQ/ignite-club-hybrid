@@ -401,7 +401,7 @@ function SupabaseCompetitionJoinPage() {
           await joinLiveCompetitionWithLink(ctx, token, teamId, divisionId || null);
           return comp!.id;
         },
-      });
+      }, { inviteToken: token });
       setJoining(false);
       setDone(true);
       setTimeout(() => navigate(`/competitions/${compId}`), 1200);

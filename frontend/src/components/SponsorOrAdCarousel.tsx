@@ -215,7 +215,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           const s = await getLiveAdSetting(ctx, location);
           return s ? { is_enabled: s.is_enabled } : null;
         },
-      }),
+      }, { shared: "app" }),
   });
 
   // Check if user has any ACTIVE sponsors (from sponsors table, not primary_sponsor_id)

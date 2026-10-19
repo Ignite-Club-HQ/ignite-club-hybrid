@@ -2021,7 +2021,7 @@ function SupabaseJoinTeamPage() {
               relatedId: invite.team_id,
             });
           },
-        });
+        }, writeOnce({ teamId: invite.team_id }));
       } else {
         await supabase.from("notifications").insert(rows);
       }

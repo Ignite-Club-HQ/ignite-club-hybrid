@@ -1,3 +1,4 @@
+import { acrossLists } from "@/live/featureScopes";
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -104,7 +105,7 @@ function IcpSendUpdateReminderPage() {
           }
           return out;
         },
-      }),
+      }, acrossLists),
   });
 
   const sendMutation = useMutation({
@@ -151,7 +152,7 @@ function IcpSendUpdateReminderPage() {
           }
           return totalRecipients;
         },
-      });
+      }, { shared: "app" });
     },
     onSuccess: (count) => {
       setLastResult(`Queued ${count} reminder${count === 1 ? "" : "s"}.`);

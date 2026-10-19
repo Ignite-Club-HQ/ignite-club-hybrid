@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -67,7 +68,7 @@ async function permanentlyDeleteVaultFilesIcp(fileIds: string[]): Promise<VaultD
             console.warn("[vaultDelete] blob store cleanup failed", error);
           }
         },
-      });
+      }, writeOnce({ vaultFileId: id }));
       filesDeleted += 1;
       succeeded.push({ id, kind: "file" });
     } catch (error) {
