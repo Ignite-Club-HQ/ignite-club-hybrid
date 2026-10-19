@@ -55,6 +55,8 @@ try {
   actor.setPrincipal(governor);
   // Production prototype APIs remain closed even after the upgrade.
   denied(await actor.read_principal_eligibility(old));
+  denied(await actor.read_removal_history_manifest());
+  denied(await actor.read_removal_history_page(0n, { Done: null }, 1));
   denied(await actor.set_club_authorities([principal(7)]));
   denied(await actor.rekey_principal(first, replacement, true));
   denied(await actor.erase_account(ok(await actor.whoami()).id));

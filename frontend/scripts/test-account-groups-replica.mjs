@@ -75,8 +75,18 @@ try {
   assert.ok('Denied' in pendingEligibility.decision);
   assert.equal(pendingEligibility.denied_through_version[0], 1n);
   service.setPrincipal(governor); assert.ok('Err' in await service.set_club_authorities(groups.map(g => g.canisterId)));
+  const historyBeforeUpgrade = ok(await service.read_removal_history_manifest());
+  assert.equal(historyBeforeUpgrade.pending_intents, 1n);
+  const pendingBeforeUpgrade = ok(await service.read_removal_history_page(historyBeforeUpgrade.revision, { PendingIntents: 0n }, 1)).pending[0];
+  assert.equal(pendingBeforeUpgrade.account_id, account.id);
+  assert.equal(pendingBeforeUpgrade.principal.toText(), linked.toText());
+  assert.deepEqual(pendingBeforeUpgrade.authorities.map(p => p.toText()), groups.map(g => g.canisterId.toText()));
+  assert.deepEqual(pendingBeforeUpgrade.acknowledged.map(p => p.toText()), [groups[0].canisterId.toText()]);
   await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: process.env.IDENTITY_ACCESS_WASM, sender: governor,
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
+  assert.ok('Err' in await service.read_removal_history_page(historyBeforeUpgrade.revision, { PendingIntents: 0n }, 1), 'Upgrade invalidates history continuation');
+  const historyAfterUpgrade = ok(await service.read_removal_history_manifest());
+  assert.deepEqual(ok(await service.read_removal_history_page(historyAfterUpgrade.revision, { PendingIntents: 0n }, 1)).pending[0], pendingBeforeUpgrade);
   await pic.startCanister({ canisterId: groups[1].canisterId, sender: governor });
   await pic.upgradeCanister({ canisterId: groups[0].canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor,
     arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
@@ -84,6 +94,9 @@ try {
   assert.ok('Err' in await groups[0].actor.sync_my_linked_account(), 'durable unlink receipt rejects stale identity snapshot after upgrade');
   service.setPrincipal(primary); const revoked = ok(await service.revoke(linked, 1n));
   assert.equal(revoked.version, 2n); assert.deepEqual(revoked.principals.map(p => p.toText()), [primary.toText()]);
+  service.setPrincipal(governor);
+  assert.ok('Err' in await service.read_removal_history_page(historyAfterUpgrade.revision, { PendingIntents: 0n }, 1), 'Completed unlink invalidates continuation');
+  assert.equal(ok(await service.read_removal_history_manifest()).pending_intents, 0n);
   service.setPrincipal(linked); assert.ok('Err' in await service.register_account(), 'completed denial survives deindexing');
   service.setPrincipal(governor); assert.ok('Err' in await service.begin_link(linked), 'unrelated account cannot restore revoked identity');
   assert.ok('Err' in await service.rekey_principal(primary, linked, true));
@@ -98,9 +111,12 @@ try {
   }
   // Re-link and then replay the old removal. Receiver tombstones prevent a
   // delayed acknowledgement from destructively executing a second time.
+  service.setPrincipal(governor); const historyBeforeRelink = ok(await service.read_removal_history_manifest());
   service.setPrincipal(primary); const next = ok(await service.begin_link(linked));
   service.setPrincipal(linked); ok(await service.accept_link(next.id));
   assert.ok('Err' in await service.accept_link(next.id), 'accepted relink cannot replay');
+  service.setPrincipal(governor);
+  assert.ok('Err' in await service.read_removal_history_page(historyBeforeRelink.revision, { Done: null }, 1), 'Relink updates denial history revision');
   service.setPrincipal(groups[0].canisterId);
   const relinkedEligibility = ok(await service.read_principal_eligibility(linked));
   assert.ok('Eligible' in relinkedEligibility.decision);
