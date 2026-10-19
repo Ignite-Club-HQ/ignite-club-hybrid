@@ -1206,7 +1206,9 @@ persistent actor class Main(governorInit : Principal) {
     let effective_mute_list = if (fromMessagingDomain) { mute_list } else { [] };
     if (chatMessageProcessed(message_id)) { return #Ok(0) };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
-    let allowedRecipients = await eligibleUsers(if (recipients.size() <= 200) recipients else []);
+    if (accountAdmissionEnabled and recipients.size() > 200) return #Err("Recipient admission batch exceeds 200");
+    let allowedRecipients = await eligibleUsers(recipients);
+    if (chatMessageProcessed(message_id)) return #Ok(0);
     var created : Nat16 = 0;
     for (recipient in recipients.values()) {
       let muted = effective_mute_list.any(func(m) = m == recipient);

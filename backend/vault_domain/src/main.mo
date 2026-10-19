@@ -143,8 +143,8 @@ persistent actor class Main(governorInit : Principal) {
     switch (club_domain_canister) {
       case null { false };
       case (?cid) {
-        let cd : actor { read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
-        try { await cd.read_has_club_staff_role(caller, club) } catch (_) { false }
+        let cd : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool; read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+        try { if (accountAdmissionEnabled) await cd.read_has_club_staff_role(caller, club) else await cd.has_club_staff_role(caller, club) } catch (_) { false }
       };
     }
   };
