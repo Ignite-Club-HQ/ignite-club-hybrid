@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { closedInstallAdapter, resumeInterruptedInstall, requiredCycles, type IcpInstallCalls } from './groupInstallAdapter';
+import { closedInstallAdapter, ensureDedicatedBlobStore, resumeInterruptedInstall, requiredCycles, type IcpInstallCalls } from './groupInstallAdapter';
 import { PER_GROUP_DOMAINS, runProvision, type Provision, type ProvisionAdapter } from './groupProvisioner';
 
 const OP = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
@@ -92,5 +92,13 @@ describe('closed new-group installer', () => {
   it('budgets cycles only for services still to create', () => {
     expect(requiredCycles(start(), 10n ** 12n)).toBe(12n * 1_100_000_000_000n);
     expect(requiredCycles({ ...start(), canisters: { club_domain: 'x' } }, 10n ** 12n)).toBe(11n * 1_100_000_000_000n);
+  });
+
+  it('gives the group its own photo store, created once even after a lost reply', async () => {
+    const w = world({ loseCreateReplyAt: 1 });
+    await expect(ensureDedicatedBlobStore(start(), w.adapter, w.adapter.save)).rejects.toThrow(/reply lost/);
+    const p = await ensureDedicatedBlobStore(w.saved, w.adapter, w.adapter.save);
+    expect(p.dedicatedBlobStore).toMatchObject({ canisterId: 'new-1', installed: true });
+    expect(w.counts()).toEqual({ creates: 1, installs: 1 });
   });
 });
