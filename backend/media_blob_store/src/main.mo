@@ -279,6 +279,7 @@ persistent actor MediaBlobStore {
     if (retained_mode == #frozen) return #Ok;
     if (retained_mode != #local or quota_mode != #frozen or pending_uploads.size() != 0 or retained_deletions.size() != 0) return #Err("Freeze monthly quota and drain mutations first");
     for ((_, op) in quota_operations.entries()) { if (op.status != #committed and op.status != #aborted) return #Err("Unsettled upload journal") };
+    for ((_, active) in removal_active.entries()) { if (active != 0) return #Err("In-flight media operation") };
     retained_mode := #frozen; retained_snapshot_revision := media_inventory_revision; #Ok
   };
   public shared ({ caller }) func retained_snapshot_page(cursor : RetainedProtocol.Cursor) : async RetainedProtocol.Page {
