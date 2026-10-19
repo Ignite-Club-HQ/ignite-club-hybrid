@@ -244,6 +244,24 @@ struct UnlinkIntent {
     principal: Principal,
     version: u64,
     acknowledged: Vec<Principal>,
+    // Frozen before fan-out; legacy pending jobs without an exact snapshot
+    // must not silently substitute a newer inventory during recovery.
+    #[serde(default)]
+    authorities: Vec<Principal>,
+}
+
+fn unlink_targets(job: &UnlinkIntent) -> Outcome<Vec<Principal>> {
+    if job.authorities.is_empty() || job.authorities.len() > 64 {
+        return Err("Exact unlink authority snapshot required".into());
+    }
+    let mut distinct = job.authorities.clone(); distinct.sort(); distinct.dedup();
+    if distinct.len() != job.authorities.len() || distinct.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister()) {
+        return Err("Invalid unlink authority snapshot".into());
+    }
+    if job.acknowledged.iter().any(|p| !job.authorities.contains(p)) {
+        return Err("Foreign unlink acknowledgement".into());
+    }
+    Ok(job.authorities.clone())
 }
 
 thread_local! {
@@ -286,7 +304,7 @@ fn account_group_rehearsal_enabled() -> bool {
 fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {
     if !account_group_rehearsal_enabled() { return Err("Cross-group account lifecycle not released".into()); }
     require_governor(&state(), ic_cdk::api::msg_caller())?;
-    if authorities.is_empty() || authorities.len() > 64 || authorities.iter().any(|p| *p == Principal::anonymous()) {
+    if authorities.is_empty() || authorities.len() > 64 || authorities.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister()) {
         return Err("Complete bounded club authority inventory required".into());
     }
     let mut sorted = authorities.clone(); sorted.sort(); sorted.dedup();
@@ -992,12 +1010,13 @@ async fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account>
         if job.principal != principal || job.version != expected_version { return Err("Different unlink recovery pending".into()); }
     } else {
         if lifecycle.pending.len() >= 1000 { return Err("Unlink recovery quota reached".into()); }
-        lifecycle.pending.push(UnlinkIntent { account_id: current.id.clone(), principal, version: expected_version, acknowledged: vec![] });
+        lifecycle.pending.push(UnlinkIntent { account_id: current.id.clone(), principal, version: expected_version, acknowledged: vec![], authorities: lifecycle.authorities.clone() });
         store_link_lifecycle(&lifecycle);
     }
     // Intent persists BEFORE any await. A missing response is replayed against
     // the same authority, whose removal endpoint is idempotent.
-    for authority in lifecycle.authorities.clone() {
+    let frozen = lifecycle.pending.iter().find(|job| job.account_id == current.id).ok_or("Unlink intent missing")?.clone();
+    for authority in unlink_targets(&frozen)? {
         let latest = link_lifecycle();
         let job = latest.pending.iter().find(|job| job.account_id == current.id).ok_or("Unlink already completed; reload account")?;
         if job.acknowledged.contains(&authority) { continue; }
@@ -1009,8 +1028,15 @@ async fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account>
         let mut latest = link_lifecycle();
         let job = latest.pending.iter_mut().find(|job| job.account_id == current.id).ok_or("Unlink recovery changed")?;
         if job.principal != principal || job.version != expected_version { return Err("Unlink recovery changed".into()); }
+        if job.authorities != frozen.authorities { return Err("Unlink authority snapshot changed".into()); }
         if !job.acknowledged.contains(&authority) { job.acknowledged.push(authority); }
         store_link_lifecycle(&latest);
+    }
+    let latest = link_lifecycle();
+    let completed = latest.pending.iter().find(|job| job.account_id == current.id).ok_or("Unlink recovery changed")?;
+    if completed.principal != principal || completed.version != expected_version || completed.authorities != frozen.authorities ||
+        !unlink_targets(completed)?.iter().all(|id| completed.acknowledged.contains(id)) {
+        return Err("Complete unlink acknowledgements required".into());
     }
     let mut account = get_account(&current.id).ok_or("Account unavailable")?;
     if account.version != expected_version || !account.principals.contains(&caller) { return Err("Unlink authorization changed".into()); }
@@ -1790,7 +1816,7 @@ mod tests {
         let a = Principal::self_authenticating([120; 32]);
         let b = Principal::self_authenticating([121; 32]);
         let account = Account { id: "unlink-filter".into(), principals: vec![a, b], version: 4, status: AccountStatus::Active };
-        let lifecycle = LinkLifecycle { authorities: vec![a], pending: vec![UnlinkIntent { account_id: account.id.clone(), principal: b, version: 4, acknowledged: vec![] }] };
+        let lifecycle = LinkLifecycle { authorities: vec![a], pending: vec![UnlinkIntent { account_id: account.id.clone(), principal: b, version: 4, acknowledged: vec![], authorities: vec![a] }] };
         let restored: LinkLifecycle = decode(&encode(&lifecycle));
         assert_eq!(effective_account(account, &restored).principals, vec![a]);
         assert_eq!(restored.pending[0].version, 4);
@@ -1802,7 +1828,7 @@ mod tests {
         let keeper = Principal::self_authenticating([123; 32]);
         let account = Account { id: "unlink-private".into(), principals: vec![user, keeper], version: 8, status: AccountStatus::Active };
         put_account(&account); index_principal(user, &account.id); index_principal(keeper, &account.id);
-        store_link_lifecycle(&LinkLifecycle { authorities: vec![keeper], pending: vec![UnlinkIntent { account_id: account.id.clone(), principal: user, version: 8, acknowledged: vec![keeper] }] });
+        store_link_lifecycle(&LinkLifecycle { authorities: vec![keeper], pending: vec![UnlinkIntent { account_id: account.id.clone(), principal: user, version: 8, acknowledged: vec![keeper], authorities: vec![keeper] }] });
         assert_eq!(account_for(user), Err("Identity revocation pending".into()));
         assert_eq!(account_for(keeper).unwrap().id, account.id);
         assert_eq!(link_lifecycle().pending[0].acknowledged, vec![keeper]);
@@ -1810,6 +1836,25 @@ mod tests {
     }
     fn principal(value: u8) -> Principal {
         Principal::self_authenticating([value; 32])
+    }
+    #[test]
+    fn unlink_recovery_uses_the_persisted_targets_not_a_new_registry() {
+        let a = principal(110); let b = principal(111);
+        let original = UnlinkIntent { account_id: "frozen".into(), principal: b, version: 4, acknowledged: vec![a], authorities: vec![a, b] };
+        let restored: UnlinkIntent = decode(&encode(&original));
+        let lifecycle = LinkLifecycle { authorities: vec![a], pending: vec![restored] };
+        assert_eq!(unlink_targets(&lifecycle.pending[0]).unwrap(), vec![a, b]);
+        assert!(!unlink_targets(&lifecycle.pending[0]).unwrap().iter().all(|id| lifecycle.pending[0].acknowledged.contains(id)));
+    }
+    #[test]
+    fn missing_legacy_targets_and_foreign_acknowledgements_fail_closed() {
+        let a = principal(112); let b = principal(113);
+        let mut job = UnlinkIntent { account_id: "legacy".into(), principal: b, version: 4, acknowledged: vec![], authorities: vec![] };
+        assert_eq!(unlink_targets(&job), Err("Exact unlink authority snapshot required".into()));
+        job.authorities = vec![a]; job.acknowledged = vec![b];
+        assert_eq!(unlink_targets(&job), Err("Foreign unlink acknowledgement".into()));
+        job.acknowledged.clear(); job.authorities = vec![a, a];
+        assert_eq!(unlink_targets(&job), Err("Invalid unlink authority snapshot".into()));
     }
     fn empty_core_state(governor: Principal) -> CoreState {
         CoreState {
