@@ -1234,7 +1234,7 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -1305,7 +1305,9 @@ export interface MainInterface {
         is_member: boolean;
         club_id?: string;
     }>;
+    read_has_child_guardian(user: Principal, child_id: string): Promise<boolean>;
     read_has_club_membership(user: Principal, club_id: string): Promise<boolean>;
+    read_has_club_staff_role(user: Principal, club_id: string): Promise<boolean>;
     read_my_club_memberships(offset: bigint, limit: number): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -1395,7 +1397,7 @@ export interface MainInterface {
      * / Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
      * / Any NEW stored principal / principal-text field added to this canister must be added here.
      */
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -4036,8 +4038,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.read_competition_team_access(arg0, arg1);
         return from_candid_record_n249(result);
     }
+    async read_has_child_guardian(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.read_has_child_guardian(arg0, arg1);
+        return result;
+    }
     async read_has_club_membership(arg0: Principal, arg1: string): Promise<boolean> {
         const result = await this.actor.read_has_club_membership(arg0, arg1);
+        return result;
+    }
+    async read_has_club_staff_role(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.read_has_club_staff_role(arg0, arg1);
         return result;
     }
     async read_my_club_memberships(arg0: bigint, arg1: number): Promise<{

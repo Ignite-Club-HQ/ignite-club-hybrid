@@ -1022,7 +1022,9 @@ export interface Main {
     [string, Principal],
     { 'can_manage' : boolean, 'is_member' : boolean, 'club_id' : [] | [string] }
   >,
+  'read_has_child_guardian' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_membership' : ActorMethod<[Principal, string], boolean>,
+  'read_has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
   'read_my_club_memberships' : ActorMethod<
     [bigint, number],
     {
