@@ -115,13 +115,13 @@ try {
   // freeze an actual account. No receiver acknowledgements are fabricated.
   supplemental.push({group_id:'g0',domain:'vault_domain',canister:p(99),subnet});
   ok(await actor.set_removal_supplemental_inventory(supplemental,history)); history=await revision();
-  actor.setPrincipal(outsider); const removedAccount=ok(await actor.register()); actor.setPrincipal(governor);
+  actor.setPrincipal(outsider); const removedAccount=ok(await actor.register_account()); actor.setPrincipal(governor);
   history=await revision();
   const intent=ok(await actor.begin_account_removal(removedAccount.id,history));
   assert.equal(intent.generation,1n); assert.equal(intent.inventory_digest.length,32);
   assert.equal(intent.targets.length,30); // 26 domains + 3 stores + 1 legacy service
   assert.deepEqual(intent.subjects.map(p=>p.toText()),[outsider.toText()]);
-  actor.setPrincipal(outsider); denied(await actor.whoami()); denied(await actor.register()); actor.setPrincipal(governor);
+  actor.setPrincipal(outsider); denied(await actor.whoami()); denied(await actor.register_account()); actor.setPrincipal(governor);
   actor.setPrincipal(mappedGroups[0][1].canister); assert.ok('Denied' in ok(await actor.read_principal_eligibility(outsider)).decision); actor.setPrincipal(governor);
   // Registry drift/config changes cannot replace an already frozen job.
   denied(await actor.set_service_authorities([mappedGroups[0][1].canister],await revision()));
@@ -129,7 +129,7 @@ try {
   assert.deepEqual(ok(await actor.begin_account_removal(removedAccount.id,0n)),intent);
   await pic.upgradeCanister({canisterId:identity.canisterId,wasm:identityWasm,sender:governor,wasmMemoryPersistence:'keep'});
   assert.deepEqual(ok(await actor.read_account_removal_intent(removedAccount.id)),intent);
-  actor.setPrincipal(outsider); denied(await actor.whoami()); denied(await actor.register()); actor.setPrincipal(governor);
+  actor.setPrincipal(outsider); denied(await actor.whoami()); denied(await actor.register_account()); actor.setPrincipal(governor);
   assert.deepEqual(ok(await actor.begin_account_removal(removedAccount.id,0n)),intent);
   denied(await actor.rekey_principal(outsider,p(98),false));
   const production = await pic.setupCanister({ idlFactory: identityIdl, wasm: identityWasm, sender: governor, controllers: [governor], arg: args });
