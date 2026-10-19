@@ -482,7 +482,7 @@ persistent actor class Main(governorInit : Principal) {
     club.size() > 0 and club.size() <= 64 and not Text.contains(club, #char '\u{1F}') and not Text.contains(club, #char '/')
   };
   func mediaAuthority(club : Text) : ClubMediaAuthority {
-    clubMediaAuthorities.get(club) ?? { authority = null; revision = 0; move_id = "" }
+    clubMediaAuthorities.get(club) ?? ({ authority = null; revision = 0; move_id = "" })
   };
   // Consensus operator receipt, never browser membership evidence.
   public shared ({ caller }) func read_club_media_authority(club : Text) : async { #Ok : ClubMediaAuthority; #Err : Text } {
@@ -499,7 +499,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not validMediaClub(club) or move_id.size() == 0 or move_id.size() > 128) return #Err("Invalid media authority binding");
     if (not isFenced(club)) return #Err("Club must be fenced before changing media authority");
-    switch (authority) { case (?p) { if (p.equal(Principal.anonymous()) or p.equal(Principal.fromActor(this))) return #Err("Invalid authority") }; case null {} };
+    switch (authority) { case (?p) { if (p.equal(Principal.anonymous())) return #Err("Invalid authority") }; case null {} };
     let previous = mediaAuthority(club);
     if (previous.revision != expected_revision) return #Err("Media authority revision changed");
     let next = { authority; move_id; revision = previous.revision + 1 };
