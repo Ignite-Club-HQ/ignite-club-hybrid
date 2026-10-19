@@ -227,6 +227,15 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_get_digest(source: DigestSource, chat_scope_id: string, since_ms: bigint, limit: number): Promise<DigestResults>;
+    read_account_get_preferences(user: string): Promise<Preferences>;
+    read_account_get_push_alert_settings(): Promise<PushAlertSettings>;
+    read_account_get_schedule_refreshes(clubs: Array<string>): Promise<Array<{
+        key: string;
+        club: string;
+        team?: string;
+    }>>;
+    read_account_list_scheduled(author: string, target: string | null): Promise<ScheduledResults>;
     record_chat_notify_batch(message_id: string, conversation_id: string, sender: string, preview: string, recipients: Array<string>, mute_list: Array<string>): Promise<ChatNotifyBatchResult>;
     record_digest_item(id: string, message_id: string, message_type: DigestSource, chat_scope_id: string, message_created_at_ms: bigint, classification: DigestClassification, summary: string, topic: string | null, mentions: Array<string>, provider: string | null): Promise<DigestResult>;
     recover(): Promise<ResultNat16>;
@@ -652,6 +661,30 @@ export class Notification_queue implements notification_queueInterface {
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
         return from_candid_variant_n53(result);
+    }
+    async read_account_get_digest(arg0: DigestSource, arg1: string, arg2: bigint, arg3: number): Promise<DigestResults> {
+        const result = await this.actor.read_account_get_digest(to_candid_DigestSource_n32(arg0), arg1, arg2, arg3);
+        return from_candid_DigestResults_n34(result);
+    }
+    async read_account_get_preferences(arg0: string): Promise<Preferences> {
+        const result = await this.actor.read_account_get_preferences(arg0);
+        return result;
+    }
+    async read_account_get_push_alert_settings(): Promise<PushAlertSettings> {
+        const result = await this.actor.read_account_get_push_alert_settings();
+        return from_candid_PushAlertSettings_n44(result);
+    }
+    async read_account_get_schedule_refreshes(arg0: Array<string>): Promise<Array<{
+        key: string;
+        club: string;
+        team?: string;
+    }>> {
+        const result = await this.actor.read_account_get_schedule_refreshes(arg0);
+        return from_candid_vec_n48(result);
+    }
+    async read_account_list_scheduled(arg0: string, arg1: string | null): Promise<ScheduledResults> {
+        const result = await this.actor.read_account_list_scheduled(arg0, to_candid_opt_n24(arg1));
+        return from_candid_ScheduledResults_n27(result);
     }
     async record_chat_notify_batch(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>): Promise<ChatNotifyBatchResult> {
         const result = await this.actor.record_chat_notify_batch(arg0, arg1, arg2, arg3, arg4, arg5);

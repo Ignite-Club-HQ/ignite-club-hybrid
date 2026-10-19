@@ -149,6 +149,20 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_account_get_digest' : ActorMethod<
+    [DigestSource, string, bigint, number],
+    DigestResults
+  >,
+  'read_account_get_preferences' : ActorMethod<[string], Preferences>,
+  'read_account_get_push_alert_settings' : ActorMethod<[], PushAlertSettings>,
+  'read_account_get_schedule_refreshes' : ActorMethod<
+    [Array<string>],
+    Array<{ 'key' : string, 'club' : string, 'team' : [] | [string] }>
+  >,
+  'read_account_list_scheduled' : ActorMethod<
+    [string, [] | [string]],
+    ScheduledResults
+  >,
   'record_chat_notify_batch' : ActorMethod<
     [string, string, string, string, Array<string>, Array<string>],
     ChatNotifyBatchResult

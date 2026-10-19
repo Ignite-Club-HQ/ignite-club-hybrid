@@ -366,6 +366,7 @@ export interface identity_accessInterface {
     read_linked_account(arg0: Principal): Promise<Result>;
     read_principal_eligibilities(arg0: Array<Principal>): Promise<EligibilityBatchResult>;
     read_principal_eligibility(arg0: Principal): Promise<EligibilityResult>;
+    read_service_account(arg0: Principal): Promise<Result>;
     redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12>;
     register_account(): Promise<Result>;
     rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_13>;
@@ -384,6 +385,7 @@ export interface identity_accessInterface {
     set_family(arg0: string, arg1: string): Promise<Result_2>;
     set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_15>;
     set_profile(arg0: string, arg1: string | null): Promise<Result_9>;
+    set_service_authorities(arg0: Array<Principal>): Promise<Result_2>;
     set_terms_acceptance(arg0: number): Promise<Result_16>;
     set_theme_preference(arg0: string | null): Promise<Result_9>;
     whoami(): Promise<Result>;
@@ -495,6 +497,10 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.read_principal_eligibility(arg0);
         return from_candid_EligibilityResult_n52(result);
     }
+    async read_service_account(arg0: Principal): Promise<Result> {
+        const result = await this.actor.read_service_account(arg0);
+        return from_candid_Result_n1(result);
+    }
     async redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12> {
         const result = await this.actor.redeem_entitlement(arg0, arg1, arg2, arg3, arg4);
         return from_candid_Result_12_n54(result);
@@ -566,6 +572,10 @@ export class Identity_access implements identity_accessInterface {
     async set_profile(arg0: string, arg1: string | null): Promise<Result_9> {
         const result = await this.actor.set_profile(arg0, to_candid_opt_n7(arg1));
         return from_candid_Result_9_n38(result);
+    }
+    async set_service_authorities(arg0: Array<Principal>): Promise<Result_2> {
+        const result = await this.actor.set_service_authorities(arg0);
+        return from_candid_Result_2_n10(result);
     }
     async set_terms_acceptance(arg0: number): Promise<Result_16> {
         const result = await this.actor.set_terms_acceptance(arg0);

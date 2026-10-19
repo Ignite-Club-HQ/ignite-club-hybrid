@@ -206,6 +206,66 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   read_account_get_backup: (id: text) -> (variant {
+                                             Err: text;
+                                             Ok: Backup;
+                                           });
+   read_account_get_file: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFile;
+     });
+   read_account_get_folder: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFolder;
+     });
+   read_account_get_pinned_vault: (chat_type: text, chat_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PinnedVault;
+     });
+   read_account_list_backups: () ->
+    (variant {
+       Err: text;
+       Ok: vec BackupSummary;
+     });
+   read_account_list_club_files: (club: text, team: opt text, mini_league_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec VaultFile;
+                  });
+   read_account_list_club_files_with_folder: (club: text, team: opt text,
+    mini_league_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
+   read_account_list_files: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     });
+   read_account_list_files_with_folder: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
+   read_account_list_folders: (club: text, team: opt text, mini_league_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec VaultFolder;
+                  });
+   read_account_list_trashed_files: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     });
+   read_account_list_trashed_files_with_folder: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;

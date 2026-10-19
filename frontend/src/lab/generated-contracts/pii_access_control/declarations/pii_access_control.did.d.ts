@@ -117,6 +117,8 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_account_audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
+  'read_account_my_guardian_children' : ActorMethod<[], Array<string>>,
   'read_club_media_authority' : ActorMethod<
     [string],
     { 'Ok' : ClubMediaAuthority } |

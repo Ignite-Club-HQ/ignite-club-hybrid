@@ -250,6 +250,90 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_get_backup(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Backup;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_file(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_folder(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFolder | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_pinned_vault(chat_type: string, chat_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: PinnedVault | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_backups(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<BackupSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_club_files(club: string, team: string | null, mini_league_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_club_files_with_folder(club: string, team: string | null, mini_league_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_files(folder_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_files_with_folder(folder_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_folders(club: string, team: string | null, mini_league_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_trashed_files(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_trashed_files_with_folder(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_club_media_references(club: string, offset: bigint, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Page;
@@ -721,6 +805,126 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.purge_my_data();
         return from_candid_variant_n35(result);
+    }
+    async read_account_get_backup(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Backup;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_backup(arg0);
+        return from_candid_variant_n2(result);
+    }
+    async read_account_get_file(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_file(arg0);
+        return from_candid_variant_n20(result);
+    }
+    async read_account_get_folder(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFolder | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_folder(arg0);
+        return from_candid_variant_n18(result);
+    }
+    async read_account_get_pinned_vault(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: PinnedVault | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_pinned_vault(arg0, arg1);
+        return from_candid_variant_n22(result);
+    }
+    async read_account_list_backups(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<BackupSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_backups();
+        return from_candid_variant_n27(result);
+    }
+    async read_account_list_club_files(arg0: string, arg1: string | null, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_club_files(arg0, to_candid_opt_n15(arg1), to_candid_opt_n15(arg2));
+        return from_candid_variant_n28(result);
+    }
+    async read_account_list_club_files_with_folder(arg0: string, arg1: string | null, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_club_files_with_folder(arg0, to_candid_opt_n15(arg1), to_candid_opt_n15(arg2));
+        return from_candid_variant_n29(result);
+    }
+    async read_account_list_files(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_files(arg0);
+        return from_candid_variant_n28(result);
+    }
+    async read_account_list_files_with_folder(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_files_with_folder(arg0);
+        return from_candid_variant_n29(result);
+    }
+    async read_account_list_folders(arg0: string, arg1: string | null, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_folders(arg0, to_candid_opt_n15(arg1), to_candid_opt_n15(arg2));
+        return from_candid_variant_n33(result);
+    }
+    async read_account_list_trashed_files(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_trashed_files(arg0);
+        return from_candid_variant_n28(result);
+    }
+    async read_account_list_trashed_files_with_folder(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_trashed_files_with_folder(arg0);
+        return from_candid_variant_n29(result);
     }
     async read_club_media_references(arg0: string, arg1: bigint, arg2: bigint | null): Promise<{
         __kind__: "Ok";

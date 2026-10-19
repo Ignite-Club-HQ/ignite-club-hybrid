@@ -263,6 +263,16 @@ export const idlFactory = ({ IDL }) => {
     'kind' : IDL.Text,
     'count' : IDL.Nat64,
   });
+  const RecentConversation = IDL.Record({
+    'last_message_sequence' : IDL.Nat64,
+    'conversation_id' : IDL.Text,
+    'kind' : IDL.Text,
+    'last_message_at_ms' : IDL.Opt(IDL.Nat64),
+  });
+  const ClubUnreadSummary = IDL.Record({
+    'count' : IDL.Nat64,
+    'club_id' : IDL.Text,
+  });
   const Reference = IDL.Record({
     'url' : IDL.Text,
     'path' : IDL.Opt(IDL.Text),
@@ -282,12 +292,6 @@ export const idlFactory = ({ IDL }) => {
     'body' : IDL.Vec(IDL.Nat8),
     'headers' : IDL.Vec(HttpHeader),
   });
-  const RecentConversation = IDL.Record({
-    'last_message_sequence' : IDL.Nat64,
-    'conversation_id' : IDL.Text,
-    'kind' : IDL.Text,
-    'last_message_at_ms' : IDL.Opt(IDL.Nat64),
-  });
   const ChatPhotoReminderRunResult = IDL.Record({
     'skipped' : IDL.Nat32,
     'scanned' : IDL.Nat32,
@@ -301,10 +305,6 @@ export const idlFactory = ({ IDL }) => {
     'model' : IDL.Text,
     'api_key' : IDL.Text,
     'endpoint_url' : IDL.Text,
-  });
-  const ClubUnreadSummary = IDL.Record({
-    'count' : IDL.Nat64,
-    'club_id' : IDL.Text,
   });
   const ClientPrincipal = IDL.Principal;
   const ClientKey = IDL.Record({
@@ -786,6 +786,226 @@ export const idlFactory = ({ IDL }) => {
     'purge_my_data' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_can_dm_user' : IDL.Func([IDL.Principal], [IDL.Bool], []),
+    'read_account_dm_attachments_disabled' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Bool],
+        [],
+      ),
+    'read_account_export_state' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_group_join_policy' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Record({
+            'join_policy' : IDL.Text,
+            'category' : IDL.Opt(IDL.Text),
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_group_metadata' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_group_metadata_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_mini_league_chat' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(GroupSummary), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_mute_preference' : IDL.Func([IDL.Text], [IDL.Bool], []),
+    'read_account_get_mute_preferences' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Bool)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_poll_results' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PollResults, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_user_messaging_settings' : IDL.Func(
+        [],
+        [UserMessagingSettings],
+        [],
+      ),
+    'read_account_has_blocked' : IDL.Func([IDL.Principal], [IDL.Bool], []),
+    'read_account_is_competition_admin' : IDL.Func([IDL.Text], [IDL.Bool], []),
+    'read_account_list_all_online_users' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(OnlineUser), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_blocked_users' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Principal)],
+        [],
+      ),
+    'read_account_list_club_dm_settings' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubDmSettings), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_content_reports' : IDL.Func(
+        [IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ContentReport), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_deleted_groups' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_dm_attachments_disabled' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_groups_by_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_groups_by_clubs' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_groups_by_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_join_requests' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(JoinRequest), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_latest_messages_page' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Nat16],
+        [IDL.Variant({ 'Ok' : MessagePage, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_messages' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Nat64)],
+        [IDL.Vec(Message)],
+        [],
+      ),
+    'read_account_list_messages_page' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Nat16],
+        [IDL.Variant({ 'Ok' : MessagePage, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_open_groups' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'requested' : IDL.Bool,
+                'join_policy' : IDL.Text,
+                'summary' : GroupSummary,
+                'category' : IDL.Opt(IDL.Text),
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_pinned_messages' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PinnedMessage), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_reactions' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Reaction), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_read_receipts' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_typing' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TypingUser), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_messages_since' : IDL.Func(
+        [IDL.Text, IDL.Nat64],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(MessageWithReactions),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_my_unread_counts' : IDL.Func(
+        [],
+        [IDL.Vec(UnreadSummary)],
+        [],
+      ),
+    'read_account_online_count' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_open_conversation' : IDL.Func(
+        [IDL.Text, IDL.Nat16],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'page' : MessagePage,
+              'pins' : IDL.Opt(IDL.Vec(PinnedMessage)),
+              'reactions' : IDL.Vec(Reaction),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_read_conversation_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_recent_conversations' : IDL.Func(
+        [IDL.Principal, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RecentConversation), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_search_messages' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Message), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_unread_count' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Unread, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_unread_count_by_club' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubUnreadSummary), 'Err' : IDL.Text })],
         [],
       ),
     'read_club_media_references' : IDL.Func(
