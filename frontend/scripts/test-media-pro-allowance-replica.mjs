@@ -40,12 +40,15 @@ try {
   actor.setPrincipal(owner);
 
   async function reserve(path, size) {
-    return actor.begin_upload(path, 'image/jpeg', size, 1);
+    const chunks = Math.max(1, Math.ceil(Number(size) / 1_000_000));
+    return actor.begin_upload(path, 'image/jpeg', size, chunks);
   }
 
   // Pro club: gallery and vault reservations stack in the same combined pot.
-  const galleryRaw = await reserve('clubs/club-pro/photos/a.jpg', FILE); console.log('GALLERY:', JSON.stringify(galleryRaw, (_, v) => typeof v === 'bigint' ? String(v) : v)); const gallery = ok(galleryRaw);
-  const vaultRaw = await reserve('clubs/club-pro/vault/file.bin', FILE); console.log('VAULT:', JSON.stringify(vaultRaw, (_, v) => typeof v === 'bigint' ? String(v) : v)); const vault = ok(vaultRaw);
+  const galleryRaw = await reserve('clubs/club-pro/photos/a.jpg', FILE);
+  console.log('GALLERY:', JSON.stringify(galleryRaw, (_, v) => typeof v === 'bigint' ? String(v) : v));
+  const gallery = ok(galleryRaw);
+  const vault = ok(await reserve('clubs/club-pro/vault/file.bin', FILE));
   let bytes = await actor.get_club_media_bytes('club-pro');
   assert.equal(bytes.pending, 2n * FILE);
   assert.equal(bytes.finalized, 0n);
