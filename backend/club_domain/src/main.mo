@@ -2602,6 +2602,15 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   };
 
+  // Exact configured identity only; consensus verification of all captured aliases.
+  // This is club authority evidence, not an all-service drain receipt.
+  public shared ({ caller }) func read_account_membership_erased(principals : [Principal]) : async Bool {
+    if (?caller != identityAccessCanister) return false;
+    if (principals.size() == 0 or principals.size() > 8) return false;
+    not principals.any(func(p) = acl.roles.any(func(g) = g.user == p)) and
+      not profiles.any(func(c) = principals.any(func(p) = isMember(p, c.id)))
+  };
+
   func eraseMembership(principals : [Principal], accountId : Text) : { #Ok; #Err : Text } {
     if (principals.any(func(p) = p.equal(governor))) return #Err("Governor account cannot be erased");
     var exclusions = acl.exclusions;
