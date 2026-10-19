@@ -248,6 +248,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(to_candid (fenceSnapshot(club)))
   };
   public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     if (not fenceGov(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?FenceSnapshot = from_candid (snapshot);
@@ -274,6 +275,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(s.grants.size())
   };
   public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     if (not fenceGov(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before purge");
     let n = fenceSnapshot(club).grants.size(); fenceDrop(club); #Ok(n)
@@ -591,6 +593,7 @@ persistent actor class Main(governorInit : Principal) {
   // ==================== Public Methods ====================
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     if (not isGovernor(caller)) return #Err("Only governor can transfer governorship");
     if (new_governor.equal(Principal.anonymous())) return #Err("New governor cannot be anonymous");
@@ -609,6 +612,7 @@ persistent actor class Main(governorInit : Principal) {
     ciphertext : [Nat8],
     domain_owner : Principal
   ) : async { #Ok : EncryptedPii; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
 
     if (pii_id == "" or field_id == "") {
@@ -701,6 +705,7 @@ persistent actor class Main(governorInit : Principal) {
   // lets a verified guardian extend read access (e.g. to a co-guardian)
   // without needing domain-owner rights over the whole id space.
   public shared ({ caller }) func grant_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     if (reader.equal(Principal.anonymous())) return #Err("Invalid reader");
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
@@ -726,6 +731,7 @@ persistent actor class Main(governorInit : Principal) {
   // guardian (self-registration — a caller can never claim guardianship on
   // another principal's behalf).
   public shared ({ caller }) func add_guardian_relationship(guardian : Principal, child_id : Text) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     if (guardian.equal(Principal.anonymous())) return #Err("Invalid guardian");
     if (child_id == "") return #Err("Invalid child_id");
@@ -754,6 +760,7 @@ persistent actor class Main(governorInit : Principal) {
   // guardian themself (a guardian may always revoke their own standing
   // link, e.g. after a custody change).
   public shared ({ caller }) func remove_guardian_relationship(guardian : Principal, child_id : Text) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     if (not isGovernor(caller) and not caller.equal(guardian)) {
       return #Err("Only the governor or the guardian themself may remove this relationship");
@@ -776,6 +783,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func revoke_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case null { #Err("PII not found") };
@@ -801,6 +809,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_competition_domain_canister(canister : Principal) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
     if (canister.equal(Principal.anonymous())) return #Err("Invalid canister");
@@ -809,6 +818,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func grant_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     if (field_id != "blob" or competition_id == "" or competition_id.size() > 128) return #Err("Invalid competition grant");
     switch (pii_records.find(func(record) = record.pii_id == pii_id and record.field_id == field_id)) {
@@ -846,6 +856,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func revoke_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     switch (pii_records.find(func(record) = record.pii_id == pii_id and record.field_id == field_id)) {
       case null { #Err("PII not found") };
@@ -862,6 +873,7 @@ persistent actor class Main(governorInit : Principal) {
   // time) read access to one record — e.g. a child's name so coaches can
   // render event rosters. Governor or the record's domain owner only.
   public shared ({ caller }) func grant_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (club_id == "") return #Err("Invalid club_id");
@@ -880,6 +892,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Removes a club-scoped read grant. Governor or domain owner only.
   public shared ({ caller }) func revoke_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
@@ -900,6 +913,7 @@ persistent actor class Main(governorInit : Principal) {
   // event-creator-owned, not club-owned — but without a grant no club
   // member can ever derive a vetKey for them again.
   public shared ({ caller }) func purge_club_grants(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     switch (club_domain_canister) {
       case null { return #Err("club_domain canister not configured") };
@@ -916,6 +930,7 @@ persistent actor class Main(governorInit : Principal) {
     pii_id : Text,
     field_id : Text
   ) : async { #Ok : PiiDeleteResult; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
 
     let match_record = pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id);
@@ -975,6 +990,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func emergency_shutdown() : async { #Ok; #Err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     auth(caller);
     if (not isGovernor(caller)) { return #Err("Governor only") };
 
@@ -1001,12 +1017,14 @@ persistent actor class Main(governorInit : Principal) {
   // (canister wiring), ClubReadGrant.club_id / PiiRecord.pii_id / field_id /
   // GuardianRelationship.children (content/club ids, not user identities).
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     rekeyImpl(caller, old, new, dry_run, false)
   };
 
   // Same as rekey_principal, but allowed when the new sign-in ID already has data:
   // both IDs' records end up under the new one (keyed duplicates keep the new row).
   public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    mediaAuthEpoch += 1; // invalidate suspended permission reads
     rekeyImpl(caller, old, new, dry_run, true)
   };
 
