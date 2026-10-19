@@ -81,7 +81,7 @@ try {
   const deniedMutation = async call => {
     let denied = false;
     try { const result = await call(); denied = !!result && 'Err' in result; } catch { denied = true; }
-    assert.equal(denied, true, 'Removed club upload must be denied');
+    assert.equal(denied, true, 'Removed club operation must be denied');
   };
   a.blob.actor.setPrincipal(removed);
   await deniedMutation(() => a.blob.actor.put_chunk(a.pendingUpload, 0, new Uint8Array([1])));
@@ -153,6 +153,7 @@ try {
   directory.actor.setPrincipal(worker);
   assert.equal(ok(await directory.actor.list_device_tokens([removed.toText(), retained.toText()])).length, 2);
   // Real human sends and read-back in the same upgraded groups, not fabricated message rows.
+  console.log('PASS: same-group photos, uploads, notification authorization and five-service upgrade preservation; checking direct chat access next.');
   a.messaging.actor.setPrincipal(removed);
   await deniedMutation(() => a.messaging.actor.send_message(a.conversation.id, 'must be denied', 'denied-after-upgrade', [], []));
   a.messaging.actor.setPrincipal(retained);
