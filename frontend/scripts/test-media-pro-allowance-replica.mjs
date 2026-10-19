@@ -46,7 +46,6 @@ try {
 
   // Pro club: gallery and vault reservations stack in the same combined pot.
   const galleryRaw = await reserve('clubs/club-pro/photos/a.jpg', FILE);
-  console.log('GALLERY:', JSON.stringify(galleryRaw, (_, v) => typeof v === 'bigint' ? String(v) : v));
   const gallery = ok(galleryRaw);
   const vault = ok(await reserve('clubs/club-pro/vault/file.bin', FILE));
   let bytes = await actor.get_club_media_bytes('club-pro');
