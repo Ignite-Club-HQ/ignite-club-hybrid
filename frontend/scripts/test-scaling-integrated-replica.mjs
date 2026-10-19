@@ -152,13 +152,15 @@ try {
   }
   assert.equal(sent.length, 6); assert.ok(!sent.includes('club-a:removed-device'));
   assert.ok(sent.includes('club-b:removed-device'));
+  a.queue.actor.setPrincipal(worker);
+  for (const row of ok(await a.queue.actor.claim(100000n, 50))) ok(await a.queue.actor.acknowledge(row.id, row.idempotency_key));
   a.queue.actor.setPrincipal(governor);
   ok(await a.queue.actor.enqueue('outage', retained.toText(), a.id, 'club_news', 'Preserve original body', 'outage-key'));
   const chatId = a.claimed.find(n => n.kind === 'message_chat').club;
   ok(await a.queue.actor.record_chat_notify_batch('chat-outage', chatId, governor.toText(), 'Private retry chat', [retained.toText()], []));
   a.queue.actor.setPrincipal(worker); const outageRows = ok(await a.queue.actor.claim(100000n, 50));
   const outage = outageRows.find(n => n.id === 'outage'); assert.ok(outage);
-  const chatOutage = outageRows.find(n => n.kind === 'message_chat'); assert.ok(chatOutage);
+  const chatOutage = outageRows.find(n => n.kind === 'message_chat' && n.club === chatId); assert.ok(chatOutage);
   await pic.stopCanister({ canisterId: a.club.canisterId, sender: governor });
   assert.ok('Err' in await a.queue.actor.authorize_delivery(outage.id, outage.idempotency_key));
   const chatDenied = await a.queue.actor.authorize_delivery(chatOutage.id, chatOutage.idempotency_key);
