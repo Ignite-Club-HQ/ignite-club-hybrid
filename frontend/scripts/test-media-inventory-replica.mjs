@@ -20,6 +20,12 @@ try {
   pic = await PocketIc.create(server.getUrl());
   const fixture = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
   const a = fixture.actor;
+  // Club-path uploads require a live membership authority; wire one up first.
+  const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
+  club.actor.setPrincipal(governor);
+  ok(await club.actor.create_club('C', 'Club C', 'c', [], []));
+  ok(await club.actor.add_role_grant(owner, 'c', 'player', []));
+  a.setPrincipal(governor); ok(await a.set_club_domain_canister(club.canisterId)); a.setPrincipal(owner);
   a.setPrincipal(owner);
   const oldPath = 'clubs/c/chat/orphan';
   const id = ok(await a.begin_upload(oldPath, 'image/jpeg', 1n, 1));
