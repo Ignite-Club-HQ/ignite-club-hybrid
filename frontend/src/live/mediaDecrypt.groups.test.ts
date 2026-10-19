@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   active: true,
   shared: { host: 'https://icp-api.io', canisterIds: { media_blob_store: 'shared-store', pii_access_control: 'shared-pii' } },
@@ -13,6 +13,7 @@ vi.mock('./piiVetKeys', () => ({ clubIdFromMediaPath: () => 'club-b', tryDecrypt
 vi.mock('./deviceMediaCache', () => ({ readCachedPhoto: async () => null, writeCachedPhoto: vi.fn() }));
 import { parseIcpBlobUrl, resolveIcpBlobObjectUrl } from './mediaDecrypt';
 describe('grouped media decryption', () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   beforeEach(() => {
     vi.clearAllMocks(); localStorage.clear(); state.active = true;
     state.readAcross.mockResolvedValue([state.group]); state.decrypt.mockResolvedValue(new Uint8Array([4, 5]));

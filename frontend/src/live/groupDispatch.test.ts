@@ -13,6 +13,20 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it.each([
+    ['media', 'media_metadata', { photoId: 'photo-a' }, 'photo'],
+    ['media', 'media_metadata', { galleryCardId: 'card-a' }, 'galleryCard'],
+    ['news', 'club_domain', { newsId: 'article-a' }, 'news'],
+  ] as const)('routes %s content actions only to the authorized owner', async (feature, domain, scope, kind) => {
+    const { d, session } = deps(ON);
+    const lookup = vi.fn(async () => 'moved');
+    const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
+    const dispatcher = createClubDispatcher({ ...d, lookup, open: async () => ({ ...session, readEveryGroup }) } as never);
+    await dispatcher.writeFor(feature, scope, domain, 'once', async () => 'saved', 1);
+    expect(lookup).toHaveBeenCalledWith({}, kind, Object.values(scope)[0]);
+    expect(session.writeClub).toHaveBeenCalledWith('moved', domain, 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   it('resolves competition writes to the host club and never retries a mutation', async () => {
     const { d, session } = deps(ON);
     const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
