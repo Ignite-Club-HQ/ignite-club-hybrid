@@ -77,6 +77,12 @@ export function MatchDutiesDialog({
         // resolvable without a canister-side profile lookup.
         icp: async (ctx) => {
           const rows = await listLiveGroupDuties(ctx, groupId);
+          const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+          const profiles = await withFeatureBackend("membership", {
+            supabase: async () => { throw new Error("Internet Identity required"); },
+            icp: shared => listLiveProfilesByIds(shared, rows.flatMap(r => r.account_id)),
+          }, { shared: "person" });
+          const names = new Map(profiles.map(p => [p.account_id, p.display_name]));
           return rows.map((row) => {
             const assignedTo = row.account_id[0] ?? null;
             return {
@@ -85,7 +91,7 @@ export function MatchDutiesDialog({
               assigned_to: assignedTo,
               status: assignedTo ? "confirmed" : "pending",
               points: 0,
-              assignee: null,
+              assignee: assignedTo ? { display_name: names.get(assignedTo) ?? "Member" } : null,
             } satisfies GroupDuty;
           });
         },
@@ -148,11 +154,7 @@ export function MatchDutiesDialog({
 
           return (profiles || []).slice().sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
         },
-        // Gated: resolving duty assignees requires joining club_admin/
-        // league_admin roles (user_roles) and Supabase profile rows by uuid,
-        // neither of which has a canister equivalent. Rather than invent
-        // data, ICP-routed sessions see an empty assignee list here.
-        icp: async () => [] as Array<{ id: string; display_name: string | null; avatar_url: string | null }>,
+        icp: async (ctx) => (await import("@/live/leagueReads")).readLeagueMembers(ctx, miniLeagueId),
       }, { miniLeagueId }),
     enabled: open && !!miniLeagueId,
   });
