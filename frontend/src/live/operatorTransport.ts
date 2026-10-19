@@ -47,8 +47,9 @@ export async function createOperatorTransport(options: OperatorTransportOptions)
   if (options.identity.getPrincipal().isAnonymous()) throw new Error('Authenticated operator identity required');
   const agent = await HttpAgent.create({ host: options.host, identity: options.identity, shouldFetchRootKey: Boolean(options.fetchRootKey) });
   const operator = options.identity.getPrincipal().toText();
-  // Management calls must carry the target canister as the effective id.
-  const management = (canisterId: string) => Actor.createActor(managementIdl, { agent, canisterId: Principal.fromText(canisterId) }) as unknown as {
+  // Management calls go to aaaaa-aa with the target as the effective id
+  // (mainnet routes the update to the target's subnet).
+  const management = (canisterId: string) => Actor.createActor(managementIdl, { agent, canisterId: Principal.fromText('aaaaa-aa'), effectiveCanisterId: Principal.fromText(canisterId) }) as unknown as {
     canister_status: (arg: { canister_id: Principal }) => Promise<{ settings: { controllers: Principal[] } }>;
   };
   return {
