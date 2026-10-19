@@ -6,6 +6,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
+import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -20,7 +21,7 @@ const server = await PocketIcServer.start();
 let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
-  const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: clubWasm, sender: governor, controllers: [governor], arg: IDL_arg(governor) });
+  const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: clubWasm, sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   const store = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
   const clubActor = club.actor;
   const actor = store.actor;
@@ -35,16 +36,12 @@ try {
   ok(await actor.set_club_domain_canister(club.canisterId));
   actor.setPrincipal(owner);
 
-  function clubSubscriptionDefaults() {
-    return { activated_at_ms: [], admin_pro_football_override: false, admin_pro_override: false, cancelled_at_ms: [], expires_at_ms: [], is_pro: false, is_pro_football: false, is_trial: false, plan: 'free', team_limit: [], trial_ends_at_ms: [] };
-  }
-
   async function reserve(path, size) {
     return actor.begin_upload(path, 'image/jpeg', size, 1);
   }
 
   // The full allowance fits in a single gallery reservation (pending only; no bytes transferred).
-  ok(await reserve('clubs/club-pro/photos/giant.jpg', ALLOWANCE - 1n));
+  const giant = ok(await reserve('clubs/club-pro/photos/giant.jpg', ALLOWANCE - 1n));
   let bytes = await actor.get_club_media_bytes('club-pro');
   assert.equal(bytes.pending, ALLOWANCE - 1n);
   assert.equal(bytes.finalized, 0n);
@@ -58,7 +55,7 @@ try {
   assert.equal(chatBlocked.Err, 'StorageAllowanceFull');
 
   // Aborting the reservation releases it; a finalized chat photo then counts.
-  ok(await actor.abort_upload((await reserve('clubs/club-pro/photos/giant.jpg', ALLOWANCE - 1n)).Ok));
+  ok(await actor.abort_upload(giant));
   const chat = ok(await actor.begin_upload('clubs/club-pro/chat/messages/2.jpg', 'image/jpeg', 1_000n, 1));
   ok(await actor.put_chunk(chat, 0, new Uint8Array(1_000)));
   ok(await actor.finalize_upload(chat));
@@ -74,26 +71,23 @@ try {
   assert.equal(over.Err, 'StorageAllowanceFull');
   ok(await actor.abort_upload(vault));
 
-  // Finalized bytes also count: 5 GiB finalized leaves nothing.
-  const full = ok(await actor.begin_upload('clubs/club-pro/photos/full.jpg', 'image/jpeg', ALLOWANCE - 1_000n, 1));
-  ok(await actor.put_chunk(full, 0, new Uint8Array(Number(ALLOWANCE - 1_000n) - 999)));
-  ok(await actor.finalize_upload(full));
-  bytes = await actor.get_club_media_bytes('club-pro');
-  assert.equal(bytes.finalized + bytes.pending, ALLOWANCE);
-  assert.equal((await reserve('clubs/club-pro/vault/another.bin', 1n)).Err, 'StorageAllowanceFull');
+  // Finalized bytes also count: with 1 KB finalized, only 5 GiB - 1 KB of pending fits.
+  const fits = ok(await reserve('clubs/club-pro/photos/rest.jpg', ALLOWANCE - 1_000n));
+  const overFinalized = await reserve('clubs/club-pro/photos/over2.jpg', 1n);
+  assert.equal(overFinalized.Err, 'StorageAllowanceFull');
+  ok(await actor.abort_upload(fits));
 
   // Free clubs are not subject to the Pro allowance, only their cycle caps.
-  ok(await clubActor.add_role_grant(owner, 'club-free', 'player', []));
   ok(await clubActor.create_club('club-free', 'Free Club', 'club-free', [], []));
-  ok(await clubActor.save_club_subscription({ ...clubSubscriptionDefaults(), club_id: 'club-free' }));
-  const freeBegin = await actor.begin_upload('clubs/club-free/photos/small.jpg', 'image/jpeg', 1_000n, 1);
-  assert.ok('Ok' in freeBegin || freeBegin.Err?.includes('cycle'), JSON.stringify(freeBegin));
+  ok(await clubActor.add_role_grant(owner, 'club-free', 'player', []));
+  ok(await clubActor.save_club_subscription({
+    activated_at_ms: [], admin_pro_football_override: false, admin_pro_override: false, cancelled_at_ms: [],
+    club_id: 'club-free', expires_at_ms: [], is_pro: false, is_pro_football: false, is_trial: false,
+    plan: 'free', team_limit: [], trial_ends_at_ms: [],
+  }));
+  ok(await actor.begin_upload('clubs/club-free/photos/small.jpg', 'image/jpeg', 1_000n, 1));
 
   console.log('PASS: the photo store enforces one combined Pro media allowance across vault, gallery and chat, and get_club_media_bytes reports the exact figures the admission check uses.');
 } finally {
   await server.stop();
-}
-function IDL_arg(principal) {
-  const { IDL } = require('@icp-sdk/core/candid');
-  return IDL.encode([IDL.Principal], [principal]);
 }
