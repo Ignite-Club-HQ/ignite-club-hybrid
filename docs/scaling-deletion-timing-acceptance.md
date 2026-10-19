@@ -75,3 +75,18 @@ tests** pass; identity_access WASM compiles. The mainnet release step is
 documented in `docs/icp-deployment-runbook.md`. Still open before new groups
 open live: all-service admission/drain proof, production operator
 composition, and signed-in browser/Android/push acceptance.
+
+## All-service drain proof (19 October 2026, fourth batch)
+
+`frontend/src/live/accountDeletion.drain.test.ts` runs a full admin deletion
+against real PocketIC identity, club, vault, events, messaging and media
+canisters. Before deletion the member can create a vault folder, create an
+event, send a club chat message and begin a club photo upload; after
+`eraseIcpAccountAsAdmin` completes, the same principal is denied by every
+service (vault/events return Err, messaging and media reject with membership
+errors), the club roster carries no grant for the account, and re-registration
+of the erased identity fails. This closes the "non-club erasure unproven"
+gap for access drain: vault, events, messaging and media all delegate
+authorization to live club_domain queries and fail closed once club
+membership is erased. Content-purge coverage (caller's own files, messages,
+RSVPs) remains the self-deletion `purge_my_data` path and is not claimed here.
