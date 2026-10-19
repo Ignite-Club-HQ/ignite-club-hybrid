@@ -1311,6 +1311,7 @@ persistent actor class Main(governorInit : Principal) = this {
     })
   
     } finally { removalReceiver.leave(caller) };
+  };
   
   public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
     switch (removalReceiver.prepare(caller, request)) {
