@@ -14,6 +14,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveVaultFile } from "@/live/features/vault";
 import type { VaultFolderView } from "./types";
+import { uploadWithinClubMediaAllowance } from "./clubMediaAllowance";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type VaultFileInsert = Database["public"]["Tables"]["vault_files"]["Insert"];
@@ -175,9 +176,9 @@ export async function uploadVaultItem(
     // uploaders are gated upstream (isIcpMediaUploadUnavailable) until the
     // blob-store canister ID is configured, so this fallback is unreachable
     // for Internet Identity members in practice.
-    const { error: uploadError } = await client.storage
+    const { error: uploadError } = await uploadWithinClubMediaAllowance(clubId, options.file.size, () => client.storage
       .from(storageBucket)
-      .upload(storagePath, options.file, { cacheControl: "31536000" });
+      .upload(storagePath, options.file, { cacheControl: "31536000" }), client);
     if (uploadError) {
       await dependencies.settleStorage(reservationId, false);
       throw uploadError;

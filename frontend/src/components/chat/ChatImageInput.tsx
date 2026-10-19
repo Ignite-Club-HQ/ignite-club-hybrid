@@ -9,6 +9,7 @@ import { makeVaultFileToken, makeVaultFolderToken, makeVaultRootToken } from "@/
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadWithinClubMediaAllowance } from "@/features/vault/clubMediaAllowance";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
@@ -319,16 +320,17 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       let fileName: string;
-      if (teamId && clubId) {
-        fileName = `clubs/${clubId}/teams/${teamId}/${user.id}/${timestamp}.${extension}`;
-      } else if (clubId) {
-        fileName = `clubs/${clubId}/${user.id}/${timestamp}.${extension}`;
+      if (teamId && effectiveClubId) {
+        fileName = `clubs/${effectiveClubId}/teams/${teamId}/${user.id}/${timestamp}.${extension}`;
+      } else if (effectiveClubId) {
+        fileName = `clubs/${effectiveClubId}/${user.id}/${timestamp}.${extension}`;
       } else {
         fileName = `general/${user.id}/${timestamp}.${extension}`;
       }
-      const { error: uploadError } = await supabase.storage
+      if (teamId && !effectiveClubId) throw new Error("Could not check this team's club storage. Please try again.");
+      const { error: uploadError } = await uploadWithinClubMediaAllowance(effectiveClubId, fileToUpload.size, () => supabase.storage
         .from("chat-attachments")
-        .upload(fileName, fileToUpload, { contentType, upsert: false, cacheControl: "31536000" });
+        .upload(fileName, fileToUpload, { contentType, upsert: false, cacheControl: "31536000" }));
 
       if (uploadError) throw new Error(uploadError.message || "Failed to upload image");
 
@@ -415,9 +417,9 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
         path = `general/${authUser.id}/${timestamp}.${safeExt}`;
       }
 
-      const { error: upErr } = await supabase.storage
+      const { error: upErr } = await uploadWithinClubMediaAllowance(clubId, file.size, () => supabase.storage
         .from("chat-attachments")
-        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false, cacheControl: "31536000" });
+        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false, cacheControl: "31536000" }));
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(path);
       const fileUrl = pub.publicUrl;
