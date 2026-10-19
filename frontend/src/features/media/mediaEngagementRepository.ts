@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -64,7 +65,7 @@ export async function replaceMediaReaction(
       // replaces any existing reaction from this caller — no delete needed.
       await addLiveReaction(ctx, input.photoId, input.reactionType, Date.now());
     },
-  });
+  }, writeOnce({ photoId: input.photoId }));
 }
 
 export async function removeMediaReaction(
@@ -87,7 +88,7 @@ export async function removeMediaReaction(
       );
       if (mine) await removeLiveReaction(ctx, mine.id);
     },
-  });
+  }, writeOnce({ photoId: input.photoId }));
 }
 
 export async function createMediaComment(
@@ -110,5 +111,5 @@ export async function createMediaComment(
       // dropped on the ICP branch until the canister model covers it.
       await addLiveComment(ctx, input.photoId, input.text, Date.now());
     },
-  });
+  }, writeOnce({ photoId: input.photoId }));
 }

@@ -26,6 +26,7 @@ vi.mock("@/live/features/media", () => ({
   listLiveAssets: (...args: unknown[]) => mediaReadMocks.listAssets(...args),
   listLiveComments: (...args: unknown[]) => mediaReadMocks.listComments(...args),
   listLiveReactions: (...args: unknown[]) => mediaReadMocks.listReactions(...args),
+  liveAssetSource: (asset: { storage_path: string }) => ({ kind: "supabase", storagePath: asset.storage_path }),
 }));
 
 type Client = SupabaseClient<Database>;

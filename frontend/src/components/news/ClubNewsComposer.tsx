@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileText, ImagePlus, Loader2, Paperclip, X } from "lucide-react";
@@ -312,7 +313,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
           }
           return { id: post.id };
         },
-      });
+      }, writeOnce({ clubId: postClubId }));
 
       // Notification fan-out and the chat share are Supabase-only (the
       // notification canister handles ICP fan-out separately); skip them when

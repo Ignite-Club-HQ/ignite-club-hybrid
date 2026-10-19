@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import type { FeatureBackendContext } from "@/live/featureRouter";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -61,7 +62,7 @@ export async function publishChatImageToGallery(
   return withFeatureBackend("media", {
     supabase: () => publishChatImageToGallerySupabase(args),
     icp: (ctx) => publishChatImageToGalleryIcp(ctx, args),
-  });
+  }, writeOnce(clubId ? { clubId } : { teamId: teamId ?? "" }));
 }
 
 async function publishChatImageToGallerySupabase(
@@ -202,7 +203,7 @@ async function publishChatImageToGalleryIcp(
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const checksum = await sha256Hex(bytes);
   const { tryUploadMediaToBlobStore } = await import("@/live/mediaUpload");
-  const uploaded = await tryUploadMediaToBlobStore({ storagePath, file: blob, mime: blob.type || "image/jpeg", lock: "club" });
+  const uploaded = await tryUploadMediaToBlobStore({ context: ctx, storagePath, file: blob, mime: blob.type || "image/jpeg", lock: "club" });
   if (!uploaded) throw new Error("Could not save the encrypted gallery photo");
 
   const asset = await registerLiveAsset(ctx, {
@@ -252,5 +253,5 @@ export async function unpublishGalleryPhoto(photoId: string): Promise<void> {
       // canister.
       await deleteLiveAsset(ctx, photoId);
     },
-  });
+  }, writeOnce({ photoId }));
 }

@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -526,20 +527,13 @@ export function UploadPhotoSheet({
     // clubs receive a competition-specific read grant.
     if (clubId && isFeatureRoutedToIcp("media")) {
       const mime = file.type || "application/octet-stream";
-      const blobUpload = await tryUploadMediaToBlobStore({
-        storagePath: blobStoragePath,
-        file,
-        mime,
-        competitionId: competitionId || undefined,
-      });
-      if (!blobUpload) {
-        throw new Error("Photo uploads are not available for Internet Identity members until the media canisters are configured");
-      }
-      const asset = await withFeatureBackend("media", {
+      const saved = await withFeatureBackend("media", {
         supabase: () => {
           throw new Error("unreachable: media routing checked above");
         },
         icp: async (ctx) => {
+          const blobUpload = await tryUploadMediaToBlobStore({ context: ctx, storagePath: blobStoragePath, file, mime, competitionId: competitionId || undefined });
+          if (!blobUpload) throw new Error("Media upload canisters are not configured");
           const registered = await registerLiveAsset(ctx, {
             clubId,
             kind: "photo",
@@ -551,10 +545,10 @@ export function UploadPhotoSheet({
             blobRef: blobUpload.blobRef,
           });
           if (competitionId) await setLiveAssetScope(ctx, registered.id, { competitionId });
-          return registered;
+          return { url: blobUpload.url, photoId: registered.id };
         },
-      });
-      return { url: blobUpload.url, photoId: asset.id };
+      }, writeOnce({ clubId }));
+      return saved;
     }
 
     const { error: uploadError } = await supabase.storage

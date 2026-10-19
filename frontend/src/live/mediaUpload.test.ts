@@ -62,6 +62,16 @@ describe("tryUploadMediaToBlobStore competition scope", () => {
     mocks.sha256Hex.mockResolvedValue("hash");
   });
 
+  it("keeps bytes and PII registration on the supplied club group", async () => {
+    const groupTarget = { alias: "club-b-group" } as never;
+    const context = { target: groupTarget, identity: identity as never };
+    await tryUploadMediaToBlobStore({ context, storagePath: "clubs/club-b/private.jpg", file: new Blob(["photo"]), mime: "image/jpeg", lock: "own" });
+    expect(mocks.encryptPiiValue).toHaveBeenCalledWith(context, "clubs/club-b/private.jpg", "blob", expect.any(Uint8Array));
+    expect(mocks.uploadBytesToBlobStore).toHaveBeenCalledWith(groupTarget, identity, "clubs/club-b/private.jpg", expect.any(Uint8Array), "image/jpeg");
+    expect(mocks.registerLivePii.mock.calls[0][0]).toEqual(context);
+    expect(mocks.getActiveIcpTarget).not.toHaveBeenCalled();
+  });
+
   it("uses per-file encryption and a live competition grant for competition photos", async () => {
     await tryUploadMediaToBlobStore({
       storagePath: "clubs/club-1/photo.jpg",

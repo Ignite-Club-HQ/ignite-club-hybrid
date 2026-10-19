@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -200,6 +201,7 @@ export function IcpUploadPhotoSheet({
               .toString(36)
               .slice(2, 10)}.${mimeToExtension(mime)}`;
             const uploaded = await tryUploadMediaToBlobStore({
+              context: ctx,
               storagePath,
               file: prepared.file,
               mime,
@@ -248,7 +250,7 @@ export function IcpUploadPhotoSheet({
           };
           await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
         },
-      });
+      }, writeOnce({ clubId }));
       if (scopePending) {
         toast.info(
           "Tags and captions will appear after the media backend update is deployed.",
