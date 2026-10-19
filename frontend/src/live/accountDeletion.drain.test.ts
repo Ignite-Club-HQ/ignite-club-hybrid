@@ -45,6 +45,7 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
       pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], ...(withArg ? { arg: govArg } : {}) });
     const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: process.env.IDENTITY_ACCESS_WASM!,
       sender: governor, controllers: [governor],
+      environmentVariables: [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }],
       arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
     const club = await setup(clubIdl, process.env.CLUB_DOMAIN_WASM!);
     const vault = await setup(vaultIdl, process.env.VAULT_DOMAIN_WASM!);
