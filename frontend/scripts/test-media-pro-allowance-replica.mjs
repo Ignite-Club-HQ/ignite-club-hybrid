@@ -49,7 +49,7 @@ try {
   const reserved = [];
   const fullSlots = 508; // 508 × 10 MiB + remainder = exactly 5 GiB
   for (let i = 0; i < fullSlots; i++) reserved.push(ok(await reserve(`clubs/club-pro/photos/giant-${i}.jpg`, FILE)));
-  reserved.push(ok(await reserve('clubs/club-pro/photos/giant-last.jpg', ALLOWANCE - FILE * BigInt(fullSlots))));
+  { const lastRaw = await reserve('clubs/club-pro/photos/giant-last.jpg', ALLOWANCE - FILE * BigInt(fullSlots)); console.log('LAST:', JSON.stringify(lastRaw, (_, v) => typeof v === 'bigint' ? String(v) : v)); reserved.push(ok(lastRaw)); }
   let bytes = await actor.get_club_media_bytes('club-pro');
   assert.equal(bytes.pending, ALLOWANCE);
   assert.equal(bytes.finalized, 0n);
