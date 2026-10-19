@@ -115,6 +115,13 @@ The existing scaling foundation, stable-media code, shared upload quota, routing
 
 **Activation gate:** the selected engine supports every required feature or an explicitly reviewed compatible design, live engine checks pass, and an authorized operator approves activation. This plan prepares Cloud Engine integration; it does not claim it is already implemented or verified, create an engine or authorize production migration.
 
+#### Optional add-on (kept on record, not scheduled): moving photo-heavy clubs
+
+- Owner decision (19 October 2026): existing clubs holding photos are never moved between groups; the `mediaTransferSafety` fail-closed gate is the policy. This add-on does NOT reopen that work now and is not part of the current rollout.
+- Purpose of this note: preserve the knowledge so the capability is not lost. If ever wanted, it is an explicitly approved, separately scoped add-on: verified key-carrying transfers or client-side decrypt/re-encrypt with provenance attestation, per-file permission continuity, and a signed-in/native encrypted-move acceptance run — all previously designed and locally rehearsed.
+- Escape hatch without code: members re-uploading their media makes any club movable today under the existing gate.
+- Any future activation requires a new owner-approved plan, the production evidence readers connected to the operator tool, and all current gates passing. Never relax the fail-closed gate to make a move pass.
+
 ### 9. Finish ChatGPT / MCP / OQL live verification
 
 This is a separate track: it does not need to wait for automatic group provisioning. It can follow the inventory check and its own safe deployment review.
