@@ -12,6 +12,15 @@ type Account = record {
   status : AccountStatus;
 };
 type AccountStatus = variant { Active; Suspended };
+type EligibilityDecision = variant { Eligible; Denied };
+type PrincipalEligibility = record {
+  subject : principal;
+  decision : EligibilityDecision;
+  account_version : opt nat64;
+  denied_through_version : opt nat64;
+};
+type EligibilityResult = variant { Ok : PrincipalEligibility; Err : text };
+type EligibilityBatchResult = variant { Ok : vec PrincipalEligibility; Err : text };
 // A Pro entitlement granted to a principal from an IAP (App Store) receipt
 // or a governor/verifier write. `transaction_id` is the Apple transaction
 // id (or empty for non-IAP grants) and is the replay-protection key: once a
@@ -206,6 +215,9 @@ service : (Init) -> {
   remove_verifier : (principal) -> (Result_2);
   revoke : (principal, nat64) -> (Result);
   read_linked_account : (principal) -> (Result);
+  // Local-rehearsal-only consensus evidence, never a resource grant.
+  read_principal_eligibility : (principal) -> (EligibilityResult);
+  read_principal_eligibilities : (vec principal) -> (EligibilityBatchResult);
   set_club_authorities : (vec principal) -> (Result_2);
   revoke_role : (text, text, opt text, opt text) -> (Result_2);
   revoke_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_2);
