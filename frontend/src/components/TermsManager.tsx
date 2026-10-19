@@ -157,7 +157,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
           };
           await saveLiveClubTerm(ctx, term);
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });

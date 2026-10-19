@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, UserPlus } from "lucide-react";
@@ -113,7 +114,7 @@ export default function AddRoleToMemberDialog({
             related_id: teamId,
           });
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       refreshTeamRoleChange(queryClient, teamId);

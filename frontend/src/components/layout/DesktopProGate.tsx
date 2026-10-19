@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { Capacitor } from "@capacitor/core";
 import { Smartphone, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -119,7 +120,7 @@ function useUserProClubs(enabled: boolean) {
             );
             return pro.filter((c): c is { id: string; name: string; logoUrl: string | null } => !!c);
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       const [direct, viaTeam] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user!.id).not("club_id", "is", null),

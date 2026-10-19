@@ -192,7 +192,7 @@ export default function TeamJoinLinkCard({
         return count ?? 0;
       },
       icp: async () => 0,
-    }),
+    }, { teamId }),
     staleTime: 30_000,
   });
 
@@ -302,7 +302,7 @@ export default function TeamJoinLinkCard({
           if (error) throw error;
           return role;
         },
-      }),
+      }, writeOnce({ teamId })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       toast({ title: "Link revoked", description: "The previous link no longer works." });

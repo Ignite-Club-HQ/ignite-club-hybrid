@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -658,7 +659,7 @@ export function ChatParticipantsList({
           },
           icp: (ctx) =>
             removeLiveRoleGrant(ctx, Principal.fromText(selectedMember.userId), club, roleItem.role, effectiveTeamId),
-        });
+        }, writeOnce({ clubId: club! }));
       } catch (err: any) {
         toast.error(err?.message || "Failed to remove role");
         return;
@@ -704,7 +705,7 @@ export function ChatParticipantsList({
               await removeLiveRoleGrant(ctx, userPrincipal, club, r.role, effectiveTeamId);
             }
           },
-        });
+        }, writeOnce({ clubId: club! }));
       } catch (err: any) {
         toast.error(err?.message || "Failed to remove member");
         return;

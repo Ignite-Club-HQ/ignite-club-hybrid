@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -81,7 +82,7 @@ export default function LeaderboardPage() {
           const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
           return profiles.flatMap((rows) => (rows as Array<{ id: string; name: string; deleted_at_ms: [] | [bigint] }>).filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
         },
-      });
+      }, { everyGroup: true, merge: mergeLists });
       const { data, error } = await supabase
         .from("user_roles")
         .select("club_id, clubs:club_id(id, name, deleted_at)")

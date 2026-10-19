@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, Check, AlertTriangle } from "lucide-react";
@@ -245,7 +246,7 @@ export default function ManageRolesDialog({
             console.error("Failed to send ICP notification:", e);
           }
         },
-      });
+      }, writeOnce({ clubId }));
 
       // Invalidate the affected user's role cache (e.g. team_admin gained/lost).
       invalidateRolesCache();

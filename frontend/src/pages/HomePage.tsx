@@ -1,3 +1,4 @@
+import { mergeLists } from "@/live/featureRouter";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useScheduleBroadcastListener } from "@/hooks/useScheduleBroadcastListener";
@@ -841,7 +842,7 @@ export default function HomePage() {
             .filter((r) => r.name !== "")
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      });
+      }, { everyGroup: true, merge: mergeLists });
     },
     enabled: !!user && !!userMemberships && (userMemberships?.clubIds?.length ?? 0) > 0,
     staleTime: 5 * 60 * 1000,
@@ -888,7 +889,7 @@ export default function HomePage() {
             if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
             return fetchLiveCallerIapPro(ctx);
           },
-        });
+        }, { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) });
       }
 
       // Check club subs, team subs, and teams table (for trial is_pro) in parallel
@@ -940,7 +941,7 @@ export default function HomePage() {
               }];
             });
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       if (activeClubFilter) {
         const [clubResult, subResult] = await Promise.all([
@@ -1468,7 +1469,7 @@ export default function HomePage() {
                 };
               });
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       // Only fetch teams where user is coach or team_admin (direct team edit access)
       const { data: userRoles, error: rolesError } = await supabase
@@ -1616,7 +1617,7 @@ export default function HomePage() {
                 };
               });
           },
-        });
+        }, { everyGroup: true, merge: mergeLists });
       }
       // Get user's roles
       const { data: userRoles, error: rolesError } = await supabase

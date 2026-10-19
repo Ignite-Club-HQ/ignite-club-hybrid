@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMutation } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import type { BulkChild } from "@/components/members/ChildAndSecondGuardianFields";
@@ -494,7 +495,7 @@ export function useAddBulkTeamMembersMutation({
 
       return { results, secondParentFailures, secondParentInvited, secondParentAdded };
         },
-      }),
+      }, writeOnce({ clubId })),
     onSuccess: ({ results, secondParentFailures, secondParentInvited, secondParentAdded }) => {
       setBulkResults(results);
       queryClient.invalidateQueries({ queryKey: ["pending-invites", teamId, null] });

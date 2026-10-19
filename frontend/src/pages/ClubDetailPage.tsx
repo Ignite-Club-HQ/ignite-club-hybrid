@@ -762,7 +762,7 @@ export default function ClubDetailPage() {
         await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => { await deleteLiveTeamFolder(ctx, folderId); },
-        });
+        }, writeOnce({ clubId: id! }));
         return;
       }
       const { error } = await supabase
@@ -1004,7 +1004,7 @@ export default function ClubDetailPage() {
               .filter((s): s is NonNullable<typeof s> => !!s)
               .map(mapLiveTeamSubscriptionToRow);
           },
-        });
+        }, { clubId: id! });
       }
       const { data } = await supabase
         .from("team_subscriptions")

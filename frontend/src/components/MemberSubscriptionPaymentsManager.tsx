@@ -313,7 +313,7 @@ export default function MemberSubscriptionPaymentsManager({
           if (error) throw error;
         },
         icp: (ctx) => unmarkLiveMemberPaid(ctx, paymentId),
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["member-subscription-payments", clubId] });

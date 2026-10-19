@@ -77,7 +77,7 @@ export function useSeasonPlayerStats(
             games_played: Number(row.games_played),
           }));
         },
-      });
+      }, { teamId: teamId! });
     },
     enabled: !!seasonId && !!teamId && enabled,
     staleTime: 30_000,

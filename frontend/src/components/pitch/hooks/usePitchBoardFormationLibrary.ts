@@ -154,7 +154,7 @@ export function usePitchBoardFormationLibrary({
           const { deleteLivePitchFormation } = await import("@/live/features/club");
           await deleteLivePitchFormation(ctx, formationId);
         },
-      });
+      }, writeOnce({ teamId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pitch-formations", teamId] });

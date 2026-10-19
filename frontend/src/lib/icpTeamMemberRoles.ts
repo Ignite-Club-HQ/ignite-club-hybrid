@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { withFeatureBackend } from "@/live/featureRouter";
 
 /**
@@ -34,5 +35,5 @@ export async function removeIcpTeamRoles(clubId: string, teamId: string, memberI
       const p = Principal.fromText(normId(memberId));
       for (const role of roles) if (role) await removeLiveRoleGrant(ctx, p, clubId, role, teamId);
     },
-  });
+  }, writeOnce({ clubId }));
 }

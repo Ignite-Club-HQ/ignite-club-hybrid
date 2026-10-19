@@ -204,7 +204,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
           const { deleteLiveTeamFolder } = await import("@/live/features/club");
           await deleteLiveTeamFolder(ctx, folderId);
         },
-      });
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-folders", clubId] });
