@@ -555,7 +555,6 @@ export interface identity_accessInterface {
     my_roles(): Promise<Result_13>;
     my_terms_acceptance(): Promise<Result_12>;
     cancel_account_deletion(arg0: string): Promise<Result_2>;
-    commit_account_deletion(arg0: string): Promise<Result_2>;
     prepare_account_deletion(arg0: string, arg1: bigint): Promise<Result_14>;
     rebase_account_deletion(arg0: string): Promise<Result_14>;
     read_account_removal_intent(arg0: string): Promise<Result_4>;
@@ -698,10 +697,6 @@ export class Identity_access implements identity_accessInterface {
     }
     async cancel_account_deletion(arg0: string): Promise<Result_2> {
         const result = await this.actor.cancel_account_deletion(arg0);
-        return from_candid_Result_2_n3(result);
-    }
-    async commit_account_deletion(arg0: string): Promise<Result_2> {
-        const result = await this.actor.commit_account_deletion(arg0);
         return from_candid_Result_2_n3(result);
     }
     async prepare_account_deletion(arg0: string, arg1: bigint): Promise<Result_14> {
