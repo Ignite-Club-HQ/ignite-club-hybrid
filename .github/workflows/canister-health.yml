@@ -2,9 +2,11 @@
 #
 # Every canister pays for its own reads, writes and storage out of its cycle
 # balance, and each one has a memory ceiling. This workflow prints every
-# deployed canister's cycle balance and memory size once a week (and on
-# demand from the Actions tab), warning when a balance drops under 1T cycles
-# (≈ US$1.30) or memory passes 3 GB. It changes nothing — it only reports.
+# deployed canister's real fuel and memory once a week (and on demand from the
+# Actions tab) by asking each service directly through its own public query, so
+# it needs no deploy key and cannot be fooled by management-canister settings.
+# It warns when a balance drops under 1T cycles (≈ US$1.30) or memory passes
+# 3 GB. It changes nothing — it only reports.
 #
 # Compare week to week to see the real cycle burn per canister; that replaces
 # the modelled cost estimates with measured ones.
@@ -24,8 +26,6 @@ jobs:
   health:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      ICP_HOME: ${{ github.workspace }}/.icp-home
     steps:
       - uses: actions/checkout@v4
 
@@ -33,37 +33,17 @@ jobs:
         with:
           node-version: "22.12.0"
 
-      - name: Install the icp CLI
-        run: npm install -g @icp-sdk/icp-cli --no-fund --no-audit
-
-      - name: Restore deployer identity
-        env:
-          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+      # The repo root stays dependency-free, so the client lives in the runner's
+      # temp dir and reaches the script through NODE_PATH (require honours it).
+      - name: Install the Internet Computer client
         run: |
           set -euo pipefail
-          if [ -z "${DEPLOYER_PEM:-}" ]; then
-            echo "::error::No DEPLOYER_PEM secret, so the deploy account can't be reached."
-            exit 1
-          fi
-          mkdir -p "$ICP_HOME/identity/keys"
-          PEM_FILE="$ICP_HOME/identity/keys/ignite-governor.pem"
-          printf '%s' "$DEPLOYER_PEM" \
-            | tr -d '\r' \
-            | sed 's/\\\\n/\n/g' \
-            | sed 's/\\n/\n/g' \
-            | sed -n '/-----BEGIN/,/-----END/p' \
-            | sed 's/^.*-----BEGIN/-----BEGIN/' \
-            | sed 's/\(-----END [A-Z ]*KEY-----\).*$/\1/' \
-            > "$PEM_FILE"
-          icp identity import --from-pem "$PEM_FILE" --storage plaintext ignite-governor
-          icp identity default ignite-governor
+          npm install --prefix "$RUNNER_TEMP/agentdeps" --no-fund --no-audit \
+            @dfinity/agent@2.4.1 @dfinity/candid@2.4.1 @dfinity/principal@2.4.1
 
       - name: Report balances and memory
+        env:
+          NODE_PATH: ${{ runner.temp }}/agentdeps/node_modules
         run: |
-          # Run OUTSIDE the checkout: the committed local-lab icp.yaml at the
-          # repo root makes even status queries load the lab canisters' files.
-          mkdir -p "$RUNNER_TEMP/icp-no-project"
-          cp scripts/canister-health.mjs "$RUNNER_TEMP/canister-health.mjs"
-          cd "$RUNNER_TEMP/icp-no-project"
-          HEALTH_JSON_OUT="$RUNNER_TEMP/health.json" node "$RUNNER_TEMP/canister-health.mjs"
-
+          set -euo pipefail
+          HEALTH_JSON_OUT="$RUNNER_TEMP/health.json" node scripts/canister-health.mjs
