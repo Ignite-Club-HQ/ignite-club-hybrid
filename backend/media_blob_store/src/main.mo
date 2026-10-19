@@ -718,7 +718,7 @@ persistent actor MediaBlobStore {
       let purchasedGb : ?Nat = switch (allowanceClub) { case (?c) await clubMediaPurchasedGb(c); case null null };
       if (allowanceClub != null and purchasedGb == null) return #Err("StorageAllowanceUnavailable");
       if (accountAdmissionEnabled) await admitAccount(caller);
-      await requireUploadMembership(caller, path);
+      try { await requireUploadMembership(caller, path) } catch (e) { return #Err(Error.message(e)) };
       // Check committed usage and outstanding reservations AFTER the await,
       // immediately before reserving. Concurrent sends cannot bypass caps.
       switch (checkFreeCap(path, total_size, isPro)) {
@@ -786,7 +786,7 @@ persistent actor MediaBlobStore {
     auth(caller);
     let ?pending = findUpload(upload_id) else return #Err("Unknown upload");
     if (not pending.owner.equal(caller)) return #Err("Not the upload owner");
-    await requireUploadMembership(caller, pending.path);
+    try { await requireUploadMembership(caller, pending.path) } catch (e) { return #Err(Error.message(e)) };
     switch (findUpload(upload_id)) {
       case null { #Err("Unknown upload") };
       case (?upload) {
@@ -819,7 +819,7 @@ persistent actor MediaBlobStore {
       case (null, ?op) op.path;
       case _ return #Err("Unknown upload")
     };
-    await requireUploadMembership(caller, path);
+    try { await requireUploadMembership(caller, path) } catch (e) { return #Err(Error.message(e)) };
     bumpInventory();
     switch (quota_operations.get(upload_id)) {
       case (?op) {
