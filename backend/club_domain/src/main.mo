@@ -5050,6 +5050,12 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor required");
     #Ok({ active = mediaQuotaCutover.active; stores = mediaQuotaStores })
   };
+  // Separate, read-only identity inventory relay. Never broadens the existing
+  // operator endpoint and remains absent from ordinary deployment authority.
+  public shared ({ caller }) func read_removal_media_registry() : async { #Ok : { active : Bool; stores : [Principal] }; #Err : Text } {
+    if (not accountAdmissionEnabled or accountAdmissionAuthority != ?caller) return #Err("Configured rehearsal identity required");
+    #Ok({ active = mediaQuotaCutover.active; stores = mediaQuotaStores })
+  };
   public shared ({ caller }) func reserve_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
     if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
     // Old-cycle retries are allowed only for an existing immutable token.
