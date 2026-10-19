@@ -89,6 +89,15 @@ type Main =
        Err: text;
        Ok: ClubMediaAuthority;
      });
+   read_private_media_authority: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             competition: opt principal;
+             move_id: text;
+             revision: nat;
+           };
+     });
    register_pii: (pii_id: text, field_id: text, ciphertext: vec nat8,
     domain_owner: principal) -> (variant {
                                    Err: text;
@@ -134,6 +143,16 @@ type Main =
     (variant {
        Err: text;
        Ok;
+     });
+   set_private_media_authority: (club: text, competition: opt principal,
+    move_id: text, expected: nat) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             competition: opt principal;
+             move_id: text;
+             revision: nat;
+           };
      });
    set_transfer_fence: (club: text, fenced: bool) ->
     (variant {

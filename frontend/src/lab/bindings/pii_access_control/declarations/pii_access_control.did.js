@@ -138,6 +138,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubMediaAuthority, 'Err' : IDL.Text })],
         [],
       ),
+    'read_private_media_authority' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'move_id' : IDL.Text,
+              'competition' : IDL.Opt(IDL.Principal),
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'register_pii' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal],
         [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
@@ -181,6 +195,20 @@ export const idlFactory = ({ IDL }) => {
     'set_competition_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_private_media_authority' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Principal), IDL.Text, IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'move_id' : IDL.Text,
+              'competition' : IDL.Opt(IDL.Principal),
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'set_transfer_fence' : IDL.Func(
