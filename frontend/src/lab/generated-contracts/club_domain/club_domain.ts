@@ -1318,6 +1318,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    prepare_deleted_retained_media(token: string, entry: Object): Promise<Result__1>;
     prepare_media_quota_reservation(store: Principal, token: string, club_id: string, category: string, bytes: bigint): Promise<Result>;
     profile_team_history(profile_id: string): Promise<Array<ProfileTeamHistoryEntry>>;
     publish_season(season_id: string): Promise<{
@@ -4571,6 +4572,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.prepare_account_removal(arg0);
         return from_candid_variant_n17(result);
+    }
+    async prepare_deleted_retained_media(arg0: string, arg1: Object): Promise<Result__1> {
+        const result = await this.actor.prepare_deleted_retained_media(arg0, arg1);
+        return from_candid_Result__1_n43(result);
     }
     async prepare_media_quota_reservation(arg0: Principal, arg1: string, arg2: string, arg3: string, arg4: bigint): Promise<Result> {
         const result = await this.actor.prepare_media_quota_reservation(arg0, arg1, arg2, arg3, arg4);

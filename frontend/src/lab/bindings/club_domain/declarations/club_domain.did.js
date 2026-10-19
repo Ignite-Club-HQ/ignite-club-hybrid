@@ -1555,6 +1555,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'prepare_deleted_retained_media' : IDL.Func(
+        [IDL.Text, Object],
+        [Result__1],
+        [],
+      ),
     'prepare_media_quota_reservation' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
         [Result],

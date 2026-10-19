@@ -1021,6 +1021,7 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'prepare_deleted_retained_media' : ActorMethod<[string, Object], Result__1>,
   'prepare_media_quota_reservation' : ActorMethod<
     [Principal, string, string, string, bigint],
     Result
