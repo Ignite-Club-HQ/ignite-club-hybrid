@@ -11,6 +11,40 @@ import { IDL } from '@icp-sdk/core/candid';
 export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
   const ResultUploadId = IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text });
+  const Phase = IDL.Variant({
+    'pending' : IDL.Null,
+    'done' : IDL.Null,
+    'journal' : IDL.Null,
+    'legacy' : IDL.Null,
+    'indexed' : IDL.Null,
+  });
+  const Cursor = IDL.Record({
+    'after' : IDL.Text,
+    'offset' : IDL.Nat,
+    'phase' : Phase,
+  });
+  const Entry = IDL.Record({
+    'unsettled' : IDL.Bool,
+    'kind' : IDL.Variant({
+      'pending' : IDL.Null,
+      'blob' : IDL.Null,
+      'journal' : IDL.Null,
+    }),
+    'path' : IDL.Text,
+    'content_hash' : IDL.Text,
+    'upload_id' : IDL.Text,
+    'content_length' : IDL.Nat,
+  });
+  const Page = IDL.Record({
+    'quota_shared' : IDL.Bool,
+    'fence_revision' : IDL.Opt(IDL.Nat),
+    'fenced' : IDL.Bool,
+    'next' : IDL.Opt(Cursor),
+    'scanned' : IDL.Nat,
+    'entries' : IDL.Vec(Entry),
+    'quota_authority' : IDL.Opt(IDL.Principal),
+    'revision' : IDL.Nat,
+  });
   const FinalizedBlob = IDL.Record({
     'path' : IDL.Text,
     'content_hash' : IDL.Text,
@@ -79,6 +113,11 @@ export const idlFactory = ({ IDL }) => {
     'begin_upload' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Nat32],
         [ResultUploadId],
+        [],
+      ),
+    'club_media_inventory_page' : IDL.Func(
+        [IDL.Text, Cursor, IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
         [],
       ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
@@ -180,6 +219,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),
     'set_club_domain_canister' : IDL.Func([IDL.Principal], [Result], []),
+    'set_club_media_transfer_fence' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Opt(IDL.Nat)],
+        [Result],
+        [],
+      ),
     'stable_storage_status' : IDL.Func(
         [],
         [

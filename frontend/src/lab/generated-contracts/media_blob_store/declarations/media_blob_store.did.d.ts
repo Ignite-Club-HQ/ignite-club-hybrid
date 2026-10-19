@@ -10,6 +10,17 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Cursor { 'after' : string, 'offset' : bigint, 'phase' : Phase }
+export interface Entry {
+  'unsettled' : boolean,
+  'kind' : { 'pending' : null } |
+    { 'blob' : null } |
+    { 'journal' : null },
+  'path' : string,
+  'content_hash' : string,
+  'upload_id' : string,
+  'content_length' : bigint,
+}
 export interface FinalizedBlob {
   'path' : string,
   'content_hash' : string,
@@ -49,6 +60,21 @@ export interface MediaUsage {
   'category' : string,
   'bytes' : bigint,
 }
+export interface Page {
+  'quota_shared' : boolean,
+  'fence_revision' : [] | [bigint],
+  'fenced' : boolean,
+  'next' : [] | [Cursor],
+  'scanned' : bigint,
+  'entries' : Array<Entry>,
+  'quota_authority' : [] | [Principal],
+  'revision' : bigint,
+}
+export type Phase = { 'pending' : null } |
+  { 'done' : null } |
+  { 'journal' : null } |
+  { 'legacy' : null } |
+  { 'indexed' : null };
 export type Result = { 'Ok' : null } |
   { 'Err' : string };
 export type ResultFinalized = { 'Ok' : FinalizedBlob } |
@@ -74,6 +100,11 @@ export interface _SERVICE {
   'begin_upload' : ActorMethod<
     [string, string, bigint, number],
     ResultUploadId
+  >,
+  'club_media_inventory_page' : ActorMethod<
+    [string, Cursor, [] | [bigint]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
   >,
   /**
    * / Public: remaining cycles (shown in admin settings).
@@ -144,6 +175,10 @@ export interface _SERVICE {
   >,
   'set_capacity_limit' : ActorMethod<[bigint], Result>,
   'set_club_domain_canister' : ActorMethod<[Principal], Result>,
+  'set_club_media_transfer_fence' : ActorMethod<
+    [string, boolean, [] | [bigint]],
+    Result
+  >,
   'stable_storage_status' : ActorMethod<
     [],
     {
