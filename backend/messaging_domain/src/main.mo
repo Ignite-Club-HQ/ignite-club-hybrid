@@ -3544,13 +3544,25 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before media inventory");
     switch (expected) { case (?r) { if (r != mediaEvidenceRevision) return #Err("Media inventory revision changed") }; case null { if (offset != 0) return #Err("Revision required after first page") } };
-    let (start, end) = MediaEvidence.bounds(offset, messages.size());
+    let total = messages.size() + attachmentMetadata.size() + scheduledMessages.size();
+    let (start, end) = MediaEvidence.bounds(offset, total);
     var refs : [MediaEvidence.Reference] = [];
-    for (i in Nat.range(start, end)) { let m = messages[i]; if (conversations.any(func(c) = c.id == m.conversation_id and c.club_id == club)) {
-      switch (m.attachment) { case (?a) { switch (a.url) { case (?url) { refs := refs.concat([{ resource_id = m.id; url; store = null; path = null; content_hash = null }]) }; case null {} } }; case null {} };
-    } };
-    // Scheduled bodies and independent attachment registrations are scanned
-    // separately by the reader; these cannot be silently omitted.
-    #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < messages.size()) ?end else null; references = refs })
+    for (i in Nat.range(start, end)) {
+      if (i < messages.size()) {
+        let m = messages[i]; if (conversations.any(func(c) = c.id == m.conversation_id and c.club_id == club)) {
+          switch (m.attachment) { case (?a) { switch (a.url) { case (?url) { refs := refs.concat([{ resource_id = m.id; url; store = null; path = null; content_hash = null }]) }; case null {} } }; case null {} };
+        };
+      } else if (i < messages.size() + attachmentMetadata.size()) {
+        let a = attachmentMetadata[i - messages.size()];
+        if (conversations.any(func(c) = c.id == a.conversation_id and c.club_id == club)) {
+          switch (a.url) { case (?url) { refs := refs.concat([{ resource_id = "attachment:" # a.id; url; store = null; path = null; content_hash = null }]) }; case null {} };
+        };
+      } else {
+        let s = scheduledMessages[i - messages.size() - attachmentMetadata.size()];
+        if (conversations.any(func(c) = c.id == s.conversation_id and c.club_id == club) and s.replayed_at_ms == null and (Text.contains(s.body, #text "icp0.io") or Text.contains(s.body, #text "clubs/")))
+          return #Err("Scheduled media body needs explicit provenance before inventory");
+      };
+    };
+    #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < total) ?end else null; references = refs })
   };
 }
