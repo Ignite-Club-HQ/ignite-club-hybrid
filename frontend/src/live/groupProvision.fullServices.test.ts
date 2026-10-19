@@ -64,7 +64,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     const club = actor('club_domain');
     ok(await club.create_club('new-club', 'New club', 'new-club', [], []));
     ok(await club.add_role_grant(member, 'new-club', 'club_admin', []));
-    const event = ok(await actor('events_domain', member).create_event('new-club', [], 'Training', '', 'training', [], [], [], [], 2000000000000n, 2000003600000n, [], false, [], []));
+    const event = ok(await actor('events_domain', member).create_event('new-club', [], 'Training', 'Team training', 'training', [], [], [], [], 2000000000000n, 2000003600000n, [], false, [], []));
     expect((await actor('events_domain', member).list_events(['new-club'], [])).some((r: any) => r.id === event.id)).toBe(true);
     const chat = actor('messaging_domain', member);
     const conversation = ok(await chat.ensure_conversation('new-club', ['team-new'], [member, governor]));
