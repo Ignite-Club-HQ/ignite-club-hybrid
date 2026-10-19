@@ -116,15 +116,19 @@ export interface EventGroup {
   'id' : string,
   'pitch_name' : [] | [string],
   'name' : string,
+  'state_revision' : bigint,
   'created_at_ms' : bigint,
   'team_letter' : [] | [string],
   'team_b_colour' : [] | [string],
+  'timer_state_json' : [] | [string],
   'ability_band' : [] | [string],
   'display_order' : number,
   'event_id' : string,
   'colour' : [] | [string],
+  'pitch_state_json' : [] | [string],
 }
 export interface EventGroupDuty {
+  'id' : string,
   'account_id' : [] | [string],
   'duty' : string,
   'group_id' : string,
@@ -585,6 +589,11 @@ export interface Main {
     { 'Ok' : [] | [EventDutyTeam] } |
       { 'Err' : string }
   >,
+  'get_event_group' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [EventGroup] } |
+      { 'Err' : string }
+  >,
   'get_event_roster' : ActorMethod<
     [string],
     { 'Ok' : Array<RosterEntry> } |
@@ -618,6 +627,11 @@ export interface Main {
   'get_game_summary' : ActorMethod<
     [string],
     { 'Ok' : [] | [GameSummary] } |
+      { 'Err' : string }
+  >,
+  'get_group_edit_access' : ActorMethod<
+    [string],
+    { 'Ok' : boolean } |
       { 'Err' : string }
   >,
   'get_lineup_snapshot' : ActorMethod<
@@ -888,6 +902,11 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_event_group_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'record_event_view' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -929,6 +948,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'remove_group_duty' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_group_duty_slot' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -987,6 +1011,11 @@ export interface Main {
   'save_game_summary' : ActorMethod<
     [string, string, number, number, [] | [string], number],
     { 'Ok' : GameSummary } |
+      { 'Err' : string }
+  >,
+  'save_group_duty_slot' : ActorMethod<
+    [string, string, string, [] | [string]],
+    { 'Ok' : EventGroupDuty } |
       { 'Err' : string }
   >,
   'save_lineup_snapshot' : ActorMethod<
@@ -1189,6 +1218,11 @@ export interface Main {
   'sync_active_game' : ActorMethod<
     [[] | [string], string, string, string],
     { 'Ok' : ActiveGame } |
+      { 'Err' : string }
+  >,
+  'sync_group_state' : ActorMethod<
+    [string, bigint, [] | [string], [] | [string]],
+    { 'Ok' : EventGroup } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<
