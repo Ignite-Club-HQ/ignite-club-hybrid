@@ -5,6 +5,7 @@ import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
 import { DerivedPublicKey, EncryptedVetKey, TransportSecretKey, IbeCiphertext, IbeIdentity, IbeSeed } from '@icp-sdk/vetkeys';
 import { adaptLocalAccountReads } from '../src/live/accountReadAdapter.mjs';
+import { createPushQueueIdl, notificationKey } from '../../scripts/icp-push-contract.mjs';
 import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
 import { idlFactory as chatIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
 import { idlFactory as piiIdl } from '../src/lab/bindings/pii_access_control/declarations/pii_access_control.did.js';
@@ -206,16 +207,19 @@ try {
  ok(await id.set_account_status(account.id,{Active:null}));
  // Denied/malformed prefix cannot indefinitely hide a valid tail recipient.
  queue.setPrincipal(governor); ok(await queue.enqueue('fair-tail',stranger.toText(),'club','event','tail','fair-tail'));
+ const workerQueue=pic.createActor(createPushQueueIdl,services[3].canisterId);
+ workerQueue.setPrincipal(governor);
  let tailClaimed=false;
  for(let round=0;round<8;round++) {
-  const claimed=ok(await queue.claim(99999999999999n,1));
+  const claimed=ok(await workerQueue.claim(99999999999999n,1));
   for(const item of claimed) {
    if(item.id==='fair-tail') tailClaimed=true;
-   ok(await queue.acknowledge(item.id,item.idempotency_key[0]??''));
+   assert.equal(ok(await workerQueue.acknowledge(item.id,notificationKey(item))).status.Delivered,null);
   }
   if(tailClaimed) break;
  }
  assert.ok(tailClaimed,'Eligible tail must be reached despite malformed prefix');
+ assert.equal(ok(await workerQueue.list_device_tokens([victim.toText()])).length,1,'Worker contract must use consensus token reads');
  console.log('Focused protected reads passed: five suspended vault read/discovery paths, stale discovery authority, fenced file batch, interrupted PII ciphertext, post-derivation suspension/fence, real-key decrypt controls and real vault-to-club delegation.');
  id.setPrincipal(governor); ok(await id.set_account_status(account.id,{Suspended:null}));
  chat.setPrincipal(victim);

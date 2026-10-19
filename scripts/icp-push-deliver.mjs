@@ -24,6 +24,7 @@
 
 import { createRequire } from "node:module";
 import { unwrapQueueResult } from "./icp-push-results.mjs";
+import { createPushQueueIdl, notificationKey } from './icp-push-contract.mjs';
 
 function requireIc() {
   const candidates = [];
@@ -56,42 +57,7 @@ const SEND_CONCURRENCY = 8;
 const ACK_CONCURRENCY = 8;
 const RETRY_DELAY_MS = 2 * 60 * 1000;
 
-const Result = IDL.Variant({ Ok: IDL.Null, Err: IDL.Text });
-const ResultNat16 = IDL.Variant({ Ok: IDL.Nat16, Err: IDL.Text });
-const Status = IDL.Variant({ Pending: IDL.Null, Processing: IDL.Null, Delivered: IDL.Null, Failed: IDL.Null });
-const Notification = IDL.Record({
-  id: IDL.Text,
-  user: IDL.Text,
-  club: IDL.Text,
-  kind: IDL.Text,
-  body: IDL.Text,
-  related_id: IDL.Opt(IDL.Text),
-  actor: IDL.Opt(IDL.Text),
-  read: IDL.Bool,
-  status: Status,
-  attempts: IDL.Nat16,
-  next_attempt_ms: IDL.Nat64,
-  created_at_ms: IDL.Nat64,
-  updated_at_ms: IDL.Nat64,
-  idempotency_key: IDL.Opt(IDL.Text),
-});
-const DeviceToken = IDL.Record({
-  user: IDL.Text,
-  platform: IDL.Text,
-  token: IDL.Text,
-  p256dh: IDL.Opt(IDL.Text),
-  auth: IDL.Opt(IDL.Text),
-  updated_at_ms: IDL.Nat64,
-});
-const idlFactory = ({ IDL }) =>
-  IDL.Service({
-    recover: IDL.Func([], [ResultNat16], []),
-    claim: IDL.Func([IDL.Nat64, IDL.Nat16], [IDL.Variant({ Ok: IDL.Vec(Notification), Err: IDL.Text })], []),
-    acknowledge: IDL.Func([IDL.Text, IDL.Text], [Result], []),
-    fail: IDL.Func([IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64)], [Result], []),
-    list_device_tokens: IDL.Func([IDL.Vec(IDL.Text)], [IDL.Variant({ Ok: IDL.Vec(DeviceToken), Err: IDL.Text })], ["query"]),
-    remove_device_tokens: IDL.Func([IDL.Text, IDL.Vec(IDL.Text)], [ResultNat16], []),
-  });
+const idlFactory = createPushQueueIdl;
 
 function nowMs() {
   return BigInt(Date.now());
@@ -154,7 +120,7 @@ function urlFor(n) {
   if (k === "message_chat") {
     const conversationId = related || n.club;
     if (!conversationId) return "/messages";
-    const messageId = n.idempotency_key?.length ? n.idempotency_key[0] : undefined;
+    const messageId = notificationKey(n) || undefined;
     const params = new URLSearchParams({ conversation: conversationId });
     if (messageId) params.set("message", messageId);
     return `/messages?${params.toString()}`;
@@ -235,7 +201,7 @@ async function sendFcm(projectId, oauth, token, n) {
           ...(n.kind === "message_chat"
             ? {
                 conversation_id: n.related_id?.[0] ?? n.club ?? "",
-                message_id: n.idempotency_key?.[0] ?? "",
+                message_id: notificationKey(n),
               }
             : {}),
         },
@@ -332,7 +298,7 @@ async function main() {
   let failed = 0;
   let noTokens = 0;
   await pool(outcomes, ACK_CONCURRENCY, async (o) => {
-    const key = o.n.idempotency_key?.length ? o.n.idempotency_key[0] : "";
+    const key = notificationKey(o.n);
     try {
       if (o.status === "delivered") {
         unwrapQueueResult(await queue.acknowledge(o.n.id, key), "acknowledge");
