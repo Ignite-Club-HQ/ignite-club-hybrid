@@ -1836,6 +1836,8 @@ persistent actor class Main(governorInit : Principal) {
         let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
         try {
           let fresh = await cd.list_user_club_roles(caller, club_id);
+          await admitAccount(caller);
+          if (clubDomainCanister != ?cid or isFenced(club_id)) Runtime.trap("Competition authority changed");
           let isAdmin = fresh.any(func((role, _)) = role == "club_admin");
           roles := roles.filter(func(item) = not (item.user.equal(caller) and item.role == "club_admin" and item.competition_id == club_id));
           if (isAdmin) roles := roles.concat([{ user = caller; role = "club_admin"; competition_id = club_id; team_id = null }]);

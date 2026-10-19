@@ -415,6 +415,8 @@ persistent actor class Main(governorInit : Principal) {
     body : Text,
     key : Text,
   ) : async Types.Result {
+    let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
+    if (not trustedService) await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
     if (not valid(id) or not valid(user) or not valid(club) or not valid(kind) or not valid(key)) {
@@ -426,6 +428,8 @@ persistent actor class Main(governorInit : Principal) {
         case (#Ok) {};
       };
     };
+    if (not trustedService) await admitAccount(caller);
+    if (isFenced(club)) return #Err("Notification scope changed");
     switch (get(id)) {
       case (?existing) {
         if (existing.idempotency_key != key) return #Err("Notification id already exists with a different idempotency key");
@@ -465,6 +469,8 @@ persistent actor class Main(governorInit : Principal) {
   // preference row are fail-open (treated as allowed), matching the safe
   // defaults returned by get_preferences.
   public shared ({ caller }) func fan_out(users : [Text], club : Text, kind : Text, body : Text, key_prefix : Text, related_id : ?Text) : async Types.ResultNat16 {
+    let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
+    if (not trustedService) await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
     if (users.size() == 0 or users.size() > 500) { return #Err("Invalid recipient count") };
@@ -504,6 +510,8 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
+    if (not trustedService) await admitAccount(caller);
+    if (isFenced(club)) return #Err("Notification scope changed");
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
     var created : Nat16 = 0;
     for (user in users.values()) {
@@ -1551,6 +1559,12 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_get_digest(source : Types.DigestSource, chat_scope_id : Text, since_ms : Nat64, limit : Nat16) : async Types.DigestResults {
     await admitAccount(caller);
+    let configured = messagingDomainCanister;
+    let messaging = switch (configured) { case null return #Err("Chat authority unavailable"); case (?id) id };
+    let domain : actor { read_account_can_read_digest : shared (Principal, Text) -> async Bool } = actor(messaging.toText());
+    let allowed = try { await domain.read_account_can_read_digest(caller, chat_scope_id) } catch (_) { false };
+    await admitAccount(caller);
+    if (not allowed or configured != messagingDomainCanister) return #Err("Chat scope access forbidden");
     authenticated(caller);
     if (not valid(chat_scope_id)) { return #Err("Invalid chat scope") };
     if (limit == 0 or limit > 500) { return #Err("Invalid page size") };

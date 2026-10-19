@@ -636,6 +636,13 @@ persistent actor class Main(governorInit : Principal) {
       ibeIdentity(pii_id, "blob"), vetkdContext(), vetkdKeyId<system>(), transport_public_key
     );
     await admitAccount(caller);
+    if (not isGovernor(caller)) {
+      let cid = switch (authority) { case null return #Err("Club authority unavailable"); case (?id) id };
+      let clubDomain : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(cid.toText());
+      let member = try { await clubDomain.read_has_club_membership(caller, club_id) } catch (_) { false };
+      if (not member) return #Err("Club membership changed");
+    };
+    await admitAccount(caller);
     if (not unchanged()) return #Err("Media authority or transfer fence changed");
     #Ok(encryptedKey)
   };

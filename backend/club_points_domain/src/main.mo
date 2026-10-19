@@ -158,6 +158,8 @@ persistent actor class Main(governorInit : Principal) {
         let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
         try {
           let fresh = await cd.list_user_club_roles(caller, club_id);
+          await admitAccount(caller);
+          if (clubDomainCanister != ?cid or isFenced(club_id)) return #Err("Reward authority changed");
           roles := RewardRoleMirror.replace(roles, caller, club_id, fresh);
           #Ok
         } catch (_) { #Err("Could not verify club membership. Please try again.") };

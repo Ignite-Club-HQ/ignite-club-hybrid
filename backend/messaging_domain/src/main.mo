@@ -1241,6 +1241,7 @@ persistent actor class Main(governorInit : Principal) {
     };
 
 
+    await admitAccount(caller);
     if (not canAccessConversation(caller, conversation_id) or convFenced(conversation_id)) return #Err("Conversation authorization changed");
     // DM blocking: refuse to post when either party has blocked the other.
     for (c in conversations.values()) {
@@ -4188,5 +4189,13 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func read_account_has_blocked(user : Principal) : async Bool {
     await admitAccount(caller);
     blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user))
+  };
+
+  // Original-human digest authorization; only the configured queue delegates.
+  public shared ({ caller }) func read_account_can_read_digest(subject : Principal, conversation_id : Text) : async Bool {
+    let configured = notificationQueueCanister;
+    if (configured != ?caller) return false;
+    await admitAccount(subject);
+    configured == notificationQueueCanister and not convFenced(conversation_id) and canReadTeamMessages(subject, conversation_id)
   };
 }

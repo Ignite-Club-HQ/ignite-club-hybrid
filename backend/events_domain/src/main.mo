@@ -4257,8 +4257,8 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(event_ids.filter(func(id) = eventViews.any(func(item) = item.event_id == id and item.viewer.equal(caller))))
   };
 
-  public shared ({ caller = _ }) func read_account_check_event_membership(user_id : Text, event_id : Text) : async Bool {
-    await admitAccount(_);
+  public shared ({ caller }) func read_account_check_event_membership(user_id : Text, event_id : Text) : async Bool {
+    await admitAccount(caller);
     if (not valid(user_id) or not valid(event_id)) return false;
     let onRoster = roster.any(func(item) = item.event_id == event_id and item.account_id == user_id);
     if (onRoster) return true;
