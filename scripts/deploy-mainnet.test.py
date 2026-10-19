@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import shutil
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,7 +12,7 @@ GOVERNOR = "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae"
 
 
 class DeploySafetyTests(unittest.TestCase):
-    def run_deploy(self, modern, deployed=False):
+    def run_deploy(self, modern, deployed=False, key_safe=True):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             log = temp / "calls"
@@ -29,9 +30,18 @@ case "$*" in
 esac
 ''')
             executable.chmod(0o755)
-            environment = dict(os.environ, PATH=f"{temp}:{os.environ['PATH']}",
+            preflight = temp / "node"
+            preflight.write_text('''#!/usr/bin/env bash
+if [[ "$1" != *media-key-deploy-preflight.mjs ]]; then exec "$REAL_NODE" "$@"; fi
+printf 'key-preflight %s\n' "$2" >> "$CALL_LOG"
+if [ "$KEY_SAFE" != 1 ]; then exit 43; fi
+exit 0
+''')
+            preflight.chmod(0o755)
+            environment = dict(os.environ, PATH=f"{temp}:{os.environ['PATH']}", REAL_NODE=shutil.which("node"),
                                CALL_LOG=str(log), MODERN=str(int(modern)), DEPLOYED=str(int(deployed)), ICP_PUSH_WORKER_SEED="",
                                TEST_GOVERNOR=GOVERNOR, GOVERNOR=GOVERNOR,
+                               KEY_SAFE=str(int(key_safe)),
                                DEPLOY_TARGET="mainnet", ICP_ENV="ic")
             result = subprocess.run(["bash", str(ROOT / "scripts/deploy-mainnet.sh")],
                                     env=environment, capture_output=True, text=True)
@@ -59,6 +69,13 @@ esac
     def test_eop_aware_cli_uses_state_preserving_auto_mode(self):
         _, calls = self.run_deploy(True)
         self.assertIn("deploy -e ic -y --mode auto --cycles 1000000000000", calls)
+        self.assertLess(calls.index("key-preflight before"), calls.index("deploy -e ic -y --mode auto --cycles 1000000000000"))
+
+    def test_unverified_original_photo_key_blocks_every_upgrade(self):
+        result, calls = self.run_deploy(True, key_safe=False)
+        self.assertEqual(result.returncode, 43)
+        self.assertFalse(any(call.startswith("deploy") for call in calls))
+        self.assertFalse(any(call.startswith("canister call") for call in calls))
 
     def test_failed_upgrade_stops_without_destructive_retry_or_wiring(self):
         result, calls = self.run_deploy(True)

@@ -139,6 +139,14 @@ try {
       blocked.league = await refused(A.mini_league_domain.update_mini_league(league.id, 'Hacked', [], [], 5, 3, 10, [], true));
       blocked.comp = await refused(A.competition_domain.create_competition(CLUB, 'Sneaky Cup', '2026'));
       blocked.media = await refused(A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum2', `clubs/${CLUB}/p2.jpg`, 'club', 99_999_999_999_999n));
+      for (const name of ['media_metadata', 'messaging_domain', 'vault_domain', 'club_domain']) {
+        const inventory = ok(await A[name].read_club_media_references(CLUB, 0n, []));
+        assert.ok(inventory.scanned <= 200n, `${name} metadata page is bounded`);
+        assert.equal(ok(await A[name].read_club_media_references(CLUB, 0n, [inventory.revision])).revision, inventory.revision);
+        assert.ok('Err' in await A[name].read_club_media_references(CLUB, 0n, [inventory.revision + 1n]), `${name} stale revision denied`);
+        assert.ok('Err' in await refused(as(A[name], staff, () => A[name].read_club_media_references(CLUB, 0n, []))), `${name} inventory operator-only`);
+      }
+      assert.equal(ok(await A.media_metadata.read_club_media_references(CLUB, 0n, [])).references[0].resource_id, asset.id);
       blocked.insights = await refused(A.insights_domain.record_photo_upload(CLUB, 'p2'));
       blocked.sponsor = await refused(A.insights_domain.record_club_sponsor_metric(CLUB, 'sp1', 'impressions', 1, []));
       blocked.notify = await refused(A.notification_queue.enqueue('n2', 'u1', CLUB, 'news', 'Sneaky', 'nk2'));
@@ -152,6 +160,8 @@ try {
   const done = await runTransfer(planTransfer(CLUB, 'a', 'b', 1n), adapter);
   assert.equal(done.phase, 'released'); assert.equal(assignment, 'b');
   assert.deepEqual(saved, ['fenced', 'copied', 'verified', 'cutover', 'released']);
+  for (const name of ['media_metadata', 'messaging_domain', 'vault_domain', 'club_domain'])
+    assert.ok('Err' in await B[name].read_club_media_references(CLUB, 0n, []), `${name} inventories require a held fence after move`);
   for (const [k, r] of Object.entries(blocked)) assert.ok('Err' in r, `${k} write must be refused while fenced`);
 
   // Target now serves the club in every domain; bystander club untouched.

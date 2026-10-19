@@ -1,3 +1,4 @@
+import MediaEvidence "../../shared/MediaEvidence";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -27,6 +28,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  var mediaEvidenceRevision : Nat;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -76,7 +78,9 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
+    mediaEvidenceRevision += 1;
     transferFences := transferFences.filter(func(c) = c != club);
+    mediaEvidenceRevision += 1;
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
   };
@@ -95,11 +99,13 @@ persistent actor class Main(governorInit : Principal) {
   func fenceDrop(c : Text) {
     let rootA = assets.filter(func(x) = x.club_id == c);
     let inA = func(k : Text) : Bool = rootA.any(func(x) = x.id == k);
+    mediaEvidenceRevision += 1;
     assets := assets.filter(func(x) = not (x.club_id == c));
     capabilities := capabilities.filter(func(x) = not (inA(x.asset_id)));
     reactions := reactions.filter(func(x) = not (inA(x.asset_id)));
     comments := comments.filter(func(x) = not (inA(x.asset_id)));
     roles := roles.filter(func(x) = not (x.club_id == ?c));
+    mediaEvidenceRevision += 1;
     galleryChatCards := galleryChatCards.filter(func(x) = not (x.club_id == c));
   };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
@@ -123,11 +129,13 @@ persistent actor class Main(governorInit : Principal) {
         or s.cards.any(func(x) = not (x.club_id == c))) return #Err("Snapshot contains foreign records");
     if (s.assets.any(func(e) = assets.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
+    mediaEvidenceRevision += 1;
     assets := assets.concat(s.assets);
     capabilities := capabilities.concat(s.capabilities);
     reactions := reactions.concat(s.reactions);
     comments := comments.concat(s.comments);
     roles := roles.concat(s.roles);
+    mediaEvidenceRevision += 1;
     galleryChatCards := galleryChatCards.concat(s.cards);
     #Ok(s.assets.size())
   };
@@ -247,6 +255,7 @@ persistent actor class Main(governorInit : Principal) {
       caption = null;
       album_id = null;
     };
+    mediaEvidenceRevision += 1;
     assets := assets.concat([asset]);
     #Ok(asset)
   };
@@ -282,6 +291,7 @@ persistent actor class Main(governorInit : Principal) {
         let asset = assets[i];
         if (not asset.owner.equal(caller) and not isClubStaff(caller, asset.club_id)) return #Err("Asset owner or club staff required");
         let updated : Types.Asset = { asset with team_id; mini_league_id; competition_id; event_id; caption; album_id };
+        mediaEvidenceRevision += 1;
         assets := Array.tabulate<Types.Asset>(assets.size(), func(position) {
           if (position == i) updated else assets[position]
         });
@@ -315,6 +325,7 @@ persistent actor class Main(governorInit : Principal) {
           case null {};
         };
         let updated : Types.Asset = { asset with blob_ref };
+        mediaEvidenceRevision += 1;
         assets := Array.tabulate<Types.Asset>(assets.size(), func(position) {
           if (position == i) updated else assets[position]
         });
@@ -365,6 +376,7 @@ persistent actor class Main(governorInit : Principal) {
         let asset = assets[i];
         if (not asset.owner.equal(caller)) return #Err("Asset owner required");
         let updated : Types.Asset = { asset with deleted = true; retention_until_ms = 0 };
+        mediaEvidenceRevision += 1;
         assets := Array.tabulate<Types.Asset>(assets.size(), func(position) {
           if (position == i) updated else assets[position]
         });
@@ -552,6 +564,7 @@ persistent actor class Main(governorInit : Principal) {
           created_at_ms = now;
           updated_at_ms = now;
         };
+        mediaEvidenceRevision += 1;
         galleryChatCards := galleryChatCards.concat([card]);
         #Ok(card)
       };
@@ -575,6 +588,7 @@ persistent actor class Main(governorInit : Principal) {
               push_sent;
               updated_at_ms = nowMs();
             };
+            mediaEvidenceRevision += 1;
             galleryChatCards := Array.tabulate<Types.GalleryChatCard>(galleryChatCards.size(), func(position) {
               if (position == i) updated else galleryChatCards[position]
             });
@@ -604,6 +618,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?i) {
         let existing = galleryChatCards[i];
         if (not existing.uploader_id.equal(caller) and not isClubStaff(caller, existing.club_id)) return #Err("Card author or club staff required");
+        mediaEvidenceRevision += 1;
         galleryChatCards := galleryChatCards.filter(func(c) = c.id != card_id);
         #Ok
       };
@@ -696,14 +711,33 @@ persistent actor class Main(governorInit : Principal) {
     let newGalleryChatCards = Array.map<Types.GalleryChatCard, Types.GalleryChatCard>(galleryChatCards, func(c) { if (c.uploader_id.equal(old)) { changed += 1; { c with uploader_id = new } } else c });
 
     if (not dry_run and changed > 0) {
+      mediaEvidenceRevision += 1;
       assets := newAssets;
       capabilities := newCapabilities;
       reactions := newReactions;
       comments := newComments;
       roles := newRoles;
       bulkAccessPrincipals := newBulk;
+      mediaEvidenceRevision += 1;
       galleryChatCards := newGalleryChatCards;
     };
     #ok(changed)
   };
-};
+  public shared ({ caller }) func read_club_media_references(club : Text, offset : Nat, expected : ?Nat) : async { #Ok : MediaEvidence.Page; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isFenced(club)) return #Err("Club must be fenced before media inventory");
+    switch (expected) { case (?r) { if (r != mediaEvidenceRevision) return #Err("Media inventory revision changed") }; case null { if (offset != 0) return #Err("Revision required after first page") } };
+    let total = assets.size() + galleryChatCards.size();
+    let (start, end) = MediaEvidence.bounds(offset, total);
+    var refs : [MediaEvidence.Reference] = [];
+    for (i in Nat.range(start, end)) { if (i < assets.size()) { let a = assets[i]; if (a.club_id == club) {
+      let r = switch (a.blob_ref) { case (?b) { { resource_id = a.id; url = a.storage_path; store = ?b.canister; path = ?b.path; content_hash = ?b.content_hash } }; case null { { resource_id = a.id; url = a.storage_path; store = null; path = null; content_hash = null } } };
+      refs := refs.concat([r]);
+    } } else {
+      let c = galleryChatCards[i - assets.size()]; if (c.club_id == club) {
+        switch (c.hero_image_url) { case (?url) { refs := refs.concat([{ resource_id = "card:" # c.id; url; store = null; path = null; content_hash = null }]) }; case null {} };
+      };
+    } };
+    #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < total) ?end else null; references = refs })
+  };
+}

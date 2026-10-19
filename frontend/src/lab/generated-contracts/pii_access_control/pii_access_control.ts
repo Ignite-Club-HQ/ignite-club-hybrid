@@ -177,6 +177,17 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_private_media_authority(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            move_id: string;
+            competition?: Principal;
+            revision: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     register_pii(pii_id: string, field_id: string, ciphertext: Uint8Array, domain_owner: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -236,6 +247,17 @@ export interface MainInterface {
     set_competition_domain_canister(canister: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_private_media_authority(club: string, competition: Principal | null, move_id: string, expected: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            move_id: string;
+            competition?: Principal;
+            revision: bigint;
+        };
     } | {
         __kind__: "Err";
         Err: string;
@@ -463,6 +485,20 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.read_club_media_authority(arg0);
         return from_candid_variant_n13(result);
     }
+    async read_private_media_authority(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            move_id: string;
+            competition?: Principal;
+            revision: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_private_media_authority(arg0);
+        return from_candid_variant_n17(result);
+    }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -471,7 +507,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n17(result);
+        return from_candid_variant_n19(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -540,7 +576,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_club_media_authority(arg0, to_candid_opt_n18(arg1), arg2, arg3);
+        const result = await this.actor.set_club_media_authority(arg0, to_candid_opt_n20(arg1), arg2, arg3);
         return from_candid_variant_n13(result);
     }
     async set_competition_domain_canister(arg0: Principal): Promise<{
@@ -552,6 +588,20 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.set_competition_domain_canister(arg0);
         return from_candid_variant_n1(result);
+    }
+    async set_private_media_authority(arg0: string, arg1: Principal | null, arg2: string, arg3: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            move_id: string;
+            competition?: Principal;
+            revision: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_private_media_authority(arg0, to_candid_opt_n20(arg1), arg2, arg3);
+        return from_candid_variant_n17(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -595,6 +645,21 @@ function from_candid_record_n15(value: {
     return {
         move_id: value.move_id,
         authority: record_opt_to_undefined(from_candid_opt_n16(value.authority)),
+        revision: value.revision
+    };
+}
+function from_candid_record_n18(value: {
+    move_id: string;
+    competition: [] | [Principal];
+    revision: bigint;
+}): {
+    move_id: string;
+    competition?: Principal;
+    revision: bigint;
+} {
+    return {
+        move_id: value.move_id,
+        competition: record_opt_to_undefined(from_candid_opt_n16(value.competition)),
         revision: value.revision
     };
 }
@@ -694,6 +759,33 @@ function from_candid_variant_n13(value: {
     } : value;
 }
 function from_candid_variant_n17(value: {
+    Ok: {
+        move_id: string;
+        competition: [] | [Principal];
+        revision: bigint;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        move_id: string;
+        competition?: Principal;
+        revision: bigint;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_record_n18(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n19(value: {
     Ok: _EncryptedPii;
 } | {
     Err: string;
@@ -794,7 +886,7 @@ function from_candid_vec_n8(value: Array<[] | [Uint8Array]>): Array<Uint8Array |
 function to_candid_AuditFilter_n2(value: AuditFilter): _AuditFilter {
     return to_candid_record_n3(value);
 }
-function to_candid_opt_n18(value: Principal | null): [] | [Principal] {
+function to_candid_opt_n20(value: Principal | null): [] | [Principal] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n3(value: {

@@ -1,3 +1,4 @@
+import MediaEvidence "../../shared/MediaEvidence";
 import Blob "mo:core/Blob";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
@@ -71,6 +72,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   var governor : Principal;
+  var mediaEvidenceRevision : Nat;
   var competitionAuthorities : [Principal];
   // Preparation-only ledger. No upload activation API until legacy usage
   // import and recoverable store-side sagas exist; existing stores unchanged.
@@ -383,6 +385,7 @@ persistent actor class Main(governorInit : Principal) {
       teamFolders := newTeamFolders;
       membershipEpoch += 1;
       teams := newTeams;
+      mediaEvidenceRevision += 1;
       newsPosts := newNewsPosts;
       parentInvites := newParentInvites;
       roleRequests := newRoleRequests;
@@ -1162,6 +1165,7 @@ persistent actor class Main(governorInit : Principal) {
       revision = 1;
       target_team_ids; target_mini_league_id; target_competition_id; is_important; image_url; attachments;
     };
+    mediaEvidenceRevision += 1;
     newsPosts := newsPosts.concat([post]);
     if (target_mini_league_id != null or target_competition_id != null) {
       newsAudienceRecipients := newsAudienceRecipients.concat(audienceRecipients.map(func(user) = { news_id = post.id; user }));
@@ -1190,6 +1194,7 @@ persistent actor class Main(governorInit : Principal) {
         };
         if (target_competition_id == null and not isAdmin(caller, current.club_id)) return #Err("Club admin required");
         let updated : Types.NewsPost = { current with title; body; status; target_team_ids; target_mini_league_id; target_competition_id; is_important; image_url; attachments; updated_at_ms = nowMs(); revision = current.revision + 1 };
+        mediaEvidenceRevision += 1;
         newsPosts := newsPosts.map(func(p) = if (p.id == id) updated else p);
         newsAudienceRecipients := newsAudienceRecipients.filter(func(item) = item.news_id != id);
         if (target_mini_league_id != null or target_competition_id != null) {
@@ -1214,6 +1219,7 @@ persistent actor class Main(governorInit : Principal) {
             case (#Ok(_)) {};
           };
         };
+        mediaEvidenceRevision += 1;
         newsPosts := newsPosts.filter(func(p) = p.id != id);
         newsAudienceRecipients := newsAudienceRecipients.filter(func(item) = item.news_id != id);
         newsTargets := newsTargets.filter(func(t) = t.0 != id);
@@ -2061,6 +2067,7 @@ persistent actor class Main(governorInit : Principal) {
     accountRoles := accountRoles.filter(func(r) = not (r.club == ?club or (r.club == null and inTeams(ids, r.team))));
     teamFolders := teamFolders.filter(func(f) = f.club_id != club);
     newsAudienceRecipients := newsAudienceRecipients.filter(func(r) = not newsIds.any(func(i) = i == r.news_id));
+    mediaEvidenceRevision += 1;
     newsPosts := newsPosts.filter(func(n) = n.club_id != club);
     parentInvites := parentInvites.filter(func(i) = i.club_id != club);
     roleRequests := roleRequests.filter(func(r) = r.club != club);
@@ -2110,6 +2117,7 @@ persistent actor class Main(governorInit : Principal) {
       guardians = acl.guardians.filter(func(g) = not snap.guardians.any(func(y) = y.child == g.child and y.user.equal(g.user))).concat(snap.guardians) };
     accountRoles := accountRoles.concat(snap.account_roles);
     teamFolders := teamFolders.concat(snap.team_folders);
+    mediaEvidenceRevision += 1;
     newsPosts := newsPosts.concat(snap.news);
     newsAudienceRecipients := newsAudienceRecipients.concat(snap.news_audience);
     parentInvites := parentInvites.concat(snap.parent_invites);
@@ -2149,7 +2157,9 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func freeze_club(club : Text, rev : Nat64) : async { #Ok : Nat64; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor required");
+    mediaEvidenceRevision += 1;
     frozenClubs := frozenClubs.filter(func(e) = e.0 != club);
+    mediaEvidenceRevision += 1;
     frozenClubs := frozenClubs.concat([(club, rev)]);
     #Ok(rev)
   };
@@ -2157,6 +2167,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func unfreeze_club(club : Text, rev : Nat64) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor required");
+    mediaEvidenceRevision += 1;
     frozenClubs := frozenClubs.filter(func(e) = e.0 != club);
     #Ok
   };
@@ -4412,6 +4423,7 @@ persistent actor class Main(governorInit : Principal) {
     teamFolders := teamFolders.filter(func(f) = f.club_id != id);
     sponsors := sponsors.filter(func(s) = s.club_id != id);
     clubListings := clubListings.filter(func(e) = e.0 != id);
+    mediaEvidenceRevision += 1;
     frozenClubs := frozenClubs.filter(func(e) = e.0 != id);
     membershipEpoch += 1;
     acl := {
@@ -4424,6 +4436,7 @@ persistent actor class Main(governorInit : Principal) {
     };
     accountRoles := accountRoles.filter(func(r) = r.club != ?id and (switch (r.team) { case (?t) { not isClubTeam(t) }; case null { true } }));
     newsAudienceRecipients := newsAudienceRecipients.filter(func(item) = not clubNewsIds.any(func(newsId) = newsId == item.news_id));
+    mediaEvidenceRevision += 1;
     newsPosts := newsPosts.filter(func(n) = n.club_id != id);
     parentInvites := parentInvites.filter(func(i) = i.club_id != id);
     roleRequests := roleRequests.filter(func(r) = r.club != id);
@@ -5299,5 +5312,18 @@ persistent actor class Main(governorInit : Principal) {
     let f : PitchNotifyFlags = { team_id; coach; team_admin; subs_manager };
     pitchNotifyFlags := pitchNotifyFlags.filter(func(x) = x.team_id != team_id).concat([f]);
     #Ok(f)
+  };
+
+  public shared ({ caller }) func read_club_media_references(club : Text, offset : Nat, expected : ?Nat) : async { #Ok : MediaEvidence.Page; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not isTransferFenced(club)) return #Err("Club must be fenced before media inventory");
+    switch (expected) { case (?r) { if (r != mediaEvidenceRevision) return #Err("Media inventory revision changed") }; case null { if (offset != 0) return #Err("Revision required after first page") } };
+    let (start, end) = MediaEvidence.bounds(offset, newsPosts.size());
+    var refs : [MediaEvidence.Reference] = [];
+    for (i in Nat.range(start, end)) { let n = newsPosts[i]; if (n.club_id == club) {
+      switch (n.image_url) { case (?url) { refs := refs.concat([{ resource_id = n.id # ":image"; url; store = null; path = null; content_hash = null }]) }; case null {} };
+      var j = 0; for (a in n.attachments.values()) { refs := refs.concat([{ resource_id = n.id # ":attachment:" # Nat.toText(j); url = a.url; store = null; path = null; content_hash = null }]); j += 1 };
+    } };
+    #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < newsPosts.size()) ?end else null; references = refs })
   };
 }

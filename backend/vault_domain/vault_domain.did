@@ -41,6 +41,14 @@ type VaultFile =
    team: opt text;
    uploaded_by: principal;
  };
+type Reference = 
+ record {
+   content_hash: opt text;
+   path: opt text;
+   resource_id: text;
+   store: opt text;
+   url: text;
+ };
 type PinnedVault = 
  record {
    chat_id: text;
@@ -53,6 +61,13 @@ type PinnedVault =
    updated_at_ms: nat64;
    vault_file_id: opt text;
    vault_folder_id: opt text;
+ };
+type Page = 
+ record {
+   next: opt nat;
+   references: vec Reference;
+   revision: nat;
+   scanned: nat;
  };
 type Main = 
  service {
@@ -191,6 +206,11 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   read_club_media_references: (club: text, offset: nat, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: Page;
+                 });
    read_resource_club: (kind: text, id: text) ->
     (variant {
        Err: text;

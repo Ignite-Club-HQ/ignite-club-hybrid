@@ -22,13 +22,14 @@ function generatedMethods(source) {
 for (const role of manifest.roles) {
   if (role.status === "planned" || role.status === "external_boundary") continue;
   const rolePath = path.join(root, role.path);
-  const candidFile = fs.readdirSync(rolePath).find(file => file.endsWith(".did") && !file.startsWith("."));
+  const canonical = `${role.name}.did`;
+  const candidFile = fs.existsSync(path.join(rolePath, canonical)) ? canonical : fs.readdirSync(rolePath).find(file => file.endsWith(".did") && !file.startsWith("."));
   if (!candidFile) throw new Error(`Missing Candid contract for ${role.name}`);
 
   const declarationsDir = path.join(bindingsRoot, role.name, "declarations");
   if (!fs.existsSync(declarationsDir)) throw new Error(`Generated binding missing for ${role.name}`);
   const declaration = fs.readdirSync(declarationsDir).find(file => file.endsWith(".did.d.ts"));
-  if (!declaration) throw new Error(`Generated declaration missing for ${role.name}: ${bindingDir}`);
+  if (!declaration) throw new Error(`Generated declaration missing for ${role.name}: ${declarationsDir}`);
 
   const candid = candidMethods(fs.readFileSync(path.join(rolePath, candidFile), "utf8"));
   const generated = generatedMethods(fs.readFileSync(path.join(declarationsDir, declaration), "utf8"));

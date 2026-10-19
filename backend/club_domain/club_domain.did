@@ -241,6 +241,14 @@ type RemovedMember =
    removed_by: principal;
    user: principal;
  };
+type Reference = 
+ record {
+   content_hash: opt text;
+   path: opt text;
+   resource_id: text;
+   store: opt text;
+   url: text;
+ };
 type PromoCode = 
  record {
    access_level: text;
@@ -327,6 +335,13 @@ type ParentInvite =
    id: text;
    invited_by: principal;
    team_id: opt text;
+ };
+type Page = 
+ record {
+   next: opt nat;
+   references: vec Reference;
+   revision: nat;
+   scanned: nat;
  };
 type Operation = 
  variant {
@@ -1165,6 +1180,11 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
+   read_club_media_references: (club: text, offset: nat, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: Page;
+                 });
    read_competition_team_access: (team_id: text, user: principal) ->
     (record {
        can_manage: bool;

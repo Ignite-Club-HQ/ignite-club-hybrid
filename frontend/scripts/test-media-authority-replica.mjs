@@ -132,6 +132,16 @@ try {
   await denied(member);
   a.setPrincipal(governor); ok(await a.set_transfer_fence('moving', false));
   await decrypt(member); await denied(stale); await denied(stranger);
+  // A private file keeps the ORIGINAL crypto key while its pre-existing
+  // staff entitlement follows verified destination roles, not old mirrors.
+  a.setPrincipal(member); ok(await a.grant_pii_read_club(privatePath, 'blob', 'moving'));
+  target.actor.setPrincipal(governor); ok(await target.actor.add_role_grant(stranger, 'moving', 'coach', []));
+  await privateRead(stranger, true); await privateRead(stale, false);
+  a.setPrincipal(governor); ok(await a.set_transfer_fence('moving', true));
+  ok(await a.purge_club_snapshot('moving')); ok(await a.set_transfer_fence('moving', false));
+  await privateRead(stranger, true); // source metadata purge retains original grant
+  target.actor.setPrincipal(governor); ok(await target.actor.remove_member('moving', stranger));
+  await privateRead(stranger, false); await privateRead(member, true);
   a.setPrincipal(stale);
   assert.ok('Ok' in await a.get_club_media_vetkey('bystander', TransportSecretKey.random().publicKeyBytes()), 'other club keeps original authority');
   await pic.upgradeCanister({ canisterId: original.canisterId,

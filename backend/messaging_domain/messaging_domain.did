@@ -96,6 +96,14 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
+type Reference = 
+ record {
+   content_hash: opt text;
+   path: opt text;
+   resource_id: text;
+   store: opt text;
+   url: text;
+ };
 type RecentConversation = 
  record {
    conversation_id: text;
@@ -157,6 +165,13 @@ type PinnedMessage =
    id: text;
    message_id: text;
    pinned_by: principal;
+ };
+type Page = 
+ record {
+   next: opt nat;
+   references: vec Reference;
+   revision: nat;
+   scanned: nat;
  };
 type OnlineUser = 
  record {
@@ -566,6 +581,11 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   read_club_media_references: (club: text, offset: nat, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: Page;
+                 });
    /// Location-only lookup for group routing: which club owns this chat, if
    /// it lives in this canister. Participants only; null when not held here.
    read_conversation_club: (conversation_id: text) ->

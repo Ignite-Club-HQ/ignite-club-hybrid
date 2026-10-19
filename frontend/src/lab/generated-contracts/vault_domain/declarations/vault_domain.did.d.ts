@@ -175,6 +175,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  'read_club_media_references' : ActorMethod<
+    [string, bigint, [] | [bigint]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
+  >,
   'read_resource_club' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [string] } |
@@ -263,6 +268,12 @@ export interface Main {
       { 'Err' : string }
   >,
 }
+export interface Page {
+  'references' : Array<Reference>,
+  'next' : [] | [bigint],
+  'scanned' : bigint,
+  'revision' : bigint,
+}
 export interface PinnedVault {
   'root_id' : [] | [string],
   'root_scope' : [] | [string],
@@ -274,6 +285,13 @@ export interface PinnedVault {
   'chat_id' : string,
   'vault_file_id' : [] | [string],
   'chat_type' : string,
+}
+export interface Reference {
+  'url' : string,
+  'path' : [] | [string],
+  'content_hash' : [] | [string],
+  'store' : [] | [string],
+  'resource_id' : string,
 }
 export interface VaultFile {
   'id' : string,

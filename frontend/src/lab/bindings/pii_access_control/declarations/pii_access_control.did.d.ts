@@ -122,6 +122,17 @@ export interface Main {
     { 'Ok' : ClubMediaAuthority } |
       { 'Err' : string }
   >,
+  'read_private_media_authority' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'move_id' : string,
+          'competition' : [] | [Principal],
+          'revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'register_pii' : ActorMethod<
     [string, string, Uint8Array, Principal],
     { 'Ok' : EncryptedPii } |
@@ -165,6 +176,17 @@ export interface Main {
   'set_competition_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_private_media_authority' : ActorMethod<
+    [string, [] | [Principal], string, bigint],
+    {
+        'Ok' : {
+          'move_id' : string,
+          'competition' : [] | [Principal],
+          'revision' : bigint,
+        }
+      } |
       { 'Err' : string }
   >,
   'set_transfer_fence' : ActorMethod<
