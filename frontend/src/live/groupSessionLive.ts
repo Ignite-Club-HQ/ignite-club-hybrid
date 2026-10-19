@@ -61,11 +61,17 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   });
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
-export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team', id: string): Promise<string | null> {
+export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest', id: string): Promise<string | null> {
+  if (kind === 'roleRequest') return (await import('./roleRequestOwner')).lookupRoleRequestOwner(ctx, id);
   const d = await import('./domains');
   const unwrap = (r: { Ok: [] | [string] } | { Err: string }) => { if ('Err' in r) throw new Error(r.Err); return r.Ok[0] ?? null; };
   if (kind === 'event') return unwrap(await (await d.connectLiveEventsDomain(ctx.target, ctx.identity)).actor.read_event_club(id));
   if (kind === 'conversation') return unwrap(await (await d.connectLiveMessagingDomain(ctx.target, ctx.identity)).actor.read_conversation_club(id));
+  if (kind === 'clubLink') {
+    const result = await (await d.connectLiveClubDomain(ctx.target, ctx.identity)).actor.get_club_link(id);
+    if ('Err' in result) throw new Error(result.Err);
+    return result.Ok[0]?.club_id ?? null;
+  }
   const { getLiveTeam } = await import('./features/club');
   return (await getLiveTeam(ctx, id))[0]?.club_id ?? null;
 }

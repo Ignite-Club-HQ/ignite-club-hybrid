@@ -449,7 +449,7 @@ function SupabaseClassEnrolmentPage() {
         icp: async (ctx) => {
           await withdrawLiveFromClass(ctx, enrolmentId);
         },
-      });
+      }, writeOnce({ clubId: clubId ?? '' }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["class-enrolments-children"] });

@@ -83,7 +83,7 @@ export const liveClubLinksService: ClubLinksService = {
       if ("Err" in res || !res.Ok.length) throw new Error("Link not found");
       return toLink(res.Ok[0], 0n);
     },
-  }),
+  }, { clubLinkId: id }),
   save: (clubId, draft) => withFeatureBackend("membership", {
     supabase: async () => {
       const row = { club_id: clubId, title: draft.title, subtitle: draft.subtitle, url: draft.url, icon: draft.icon, open_mode: draft.open_mode, is_active: draft.is_active };
@@ -105,14 +105,14 @@ export const liveClubLinksService: ClubLinksService = {
       if (error) throw error;
     },
     icp: async (ctx) => { await icpMutate(ctx, await clubOfLink(ctx, id), { Remove: { id } }); },
-  }),
+  }, writeOnce({ clubLinkId: id })),
   setActive: (id, active) => withFeatureBackend("membership", {
     supabase: async () => {
       const { error } = await supabase.from("club_links").update({ is_active: active }).eq("id", id);
       if (error) throw error;
     },
     icp: async (ctx) => { await icpMutate(ctx, await clubOfLink(ctx, id), { SetActive: { id, active } }); },
-  }),
+  }, writeOnce({ clubLinkId: id })),
   reorder: (clubId, first, second) => withFeatureBackend("membership", {
     supabase: async () => {
       const { data, error } = await supabase.from("club_links").select("id, sort_order").in("id", [first, second]);

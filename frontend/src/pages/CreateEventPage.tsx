@@ -482,7 +482,7 @@ function SupabaseCreateEventPage() {
               max_guests_per_member_default: 2,
             }));
         },
-      }),
+      }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [row.id, row])).values()] }),
     enabled: !!user,
   });
 

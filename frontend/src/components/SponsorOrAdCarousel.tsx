@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { useEffect, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
@@ -186,13 +187,13 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           const grants = await myLiveRoleGrants(ctx);
           const clubIds = [...new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c))];
           if (effectiveClubFilter && !clubIds.includes(effectiveClubFilter)) clubIds.push(effectiveClubFilter);
-          const flags = await Promise.all(clubIds.map((c) => isLiveClubPro(ctx, c).then((pro) => [c, pro] as const)));
+          const flags = await Promise.all(clubIds.map((c) => readMembershipInScope(ctx, { clubId: c }, (scoped) => isLiveClubPro(scoped, c)).then((pro) => [c, pro] as const)));
           const proClubIds = new Set(flags.filter(([, pro]) => pro).map(([c]) => c));
           const hasAnyPro = proClubIds.size > 0;
           const isProFiltered = effectiveClubFilter ? proClubIds.has(effectiveClubFilter) : hasAnyPro;
           return { isProFiltered, hasAnyPro, resolved: true };
         },
-      });
+      }, { shared: 'person' });
     },
   });
 

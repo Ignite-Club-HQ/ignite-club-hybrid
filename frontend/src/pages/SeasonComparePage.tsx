@@ -179,6 +179,7 @@ function SupabaseSeasonComparePage() {
 
       {leftId && rightId ? (
         <ComparePanels
+          clubId={clubId}
           leftId={leftId}
           rightId={rightId}
           leftName={seasons.find((s) => s.id === leftId)?.name ?? "Season A"}
@@ -196,18 +197,20 @@ function SupabaseSeasonComparePage() {
 }
 
 function ComparePanels({
+  clubId,
   leftId,
   rightId,
   leftName,
   rightName,
 }: {
+  clubId: string | undefined;
   leftId: string;
   rightId: string;
   leftName: string;
   rightName: string;
 }) {
-  const { data: left = [], isLoading: leftLoading } = useSeasonTeamSummary(leftId);
-  const { data: right = [], isLoading: rightLoading } = useSeasonTeamSummary(rightId);
+  const { data: left = [], isLoading: leftLoading } = useSeasonTeamSummary(leftId, true, clubId);
+  const { data: right = [], isLoading: rightLoading } = useSeasonTeamSummary(rightId, true, clubId);
 
   if (leftLoading || rightLoading) {
     return (

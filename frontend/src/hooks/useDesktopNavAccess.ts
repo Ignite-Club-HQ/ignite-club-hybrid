@@ -1,3 +1,4 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -41,7 +42,7 @@ export function useDesktopNavAccess() {
           supabase: async () => [],
           icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
         }, { shared: 'person' });
-        rows = grants.map((g) => ({ role: g.role, club_id: g.club ?? null, team_id: g.team ?? null }));
+        rows = grants.map((g) => ({ role: g.role, club_id: g.club[0] ?? null, team_id: g.team[0] ?? null }));
       } else {
         const { data: roles, error } = await supabase
           .from("user_roles")
@@ -68,7 +69,7 @@ export function useDesktopNavAccess() {
               const resolved = await Promise.all(
                 teamIds.map(async (id) => {
                   try {
-                    const t = (await getLiveTeam(ctx, id)) as unknown as { id: string; name?: string; club_id?: string; club?: string } | null;
+                    const t = (await readMembershipInScope(ctx, { teamId: id }, (scoped) => getLiveTeam(scoped, id)))[0];
                     return t
                       ? { id: t.id, name: t.name ?? "Team", club_id: (t.club_id ?? t.club) ?? null }
                       : null;
@@ -79,7 +80,7 @@ export function useDesktopNavAccess() {
               );
               return resolved.filter((t): t is { id: string; name: string; club_id: string | null } => !!t);
             },
-          });
+          }, { shared: 'person' });
           teamClubMap = new Map(
             teams.filter((t) => !!t.club_id).map((t) => [t.id, t.club_id as string]),
           );
@@ -114,7 +115,7 @@ export function useDesktopNavAccess() {
               const resolved = await Promise.all(
                 clubIds.map(async (id) => {
                   try {
-                    const p = await getLiveClubProfile(ctx, id);
+                    const p = await readMembershipInScope(ctx, { clubId: id }, (scoped) => getLiveClubProfile(scoped, id));
                     const profile = Array.isArray(p) ? p[0] : p;
                     const sport = (profile as { sport?: [] | [string] } | null | undefined)?.sport;
                     return { id, sport: sport?.[0] ?? null };
@@ -125,7 +126,7 @@ export function useDesktopNavAccess() {
               );
               return resolved.filter((p): p is { id: string; sport: string | null } => !!p);
             },
-          });
+          }, { shared: 'person' });
           profiles.forEach((c) => {
             if (hasGameBoardSupport(c.sport)) boardClubIds.add(c.id);
           });

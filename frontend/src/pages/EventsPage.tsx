@@ -1,3 +1,5 @@
+import { readMembershipInScope } from "@/live/membershipRouting";
+import { mergeMemberships } from "@/live/membershipMerge";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -95,11 +97,7 @@ async function getLiveEventMemberships(
 
   // Roster/attendance-derived scope (parent of a child on a team) — best
   // effort, matching the Supabase child_guardians/children leg.
-  const scope = await getLiveAccountRosterScope(ctx, accountId).catch(() => ({
-    teamIds: [] as string[],
-    clubIds: [] as string[],
-    childIds: [] as string[],
-  }));
+  const scope = await scopePromise;
   scope.teamIds.forEach((t) => { if (!teamIds.includes(t)) teamIds.push(t); });
   scope.clubIds.forEach((c) => clubIds.add(c));
 
@@ -108,14 +106,14 @@ async function getLiveEventMemberships(
     teamIds.map(async (teamId) => {
       // Cheap check: if any known club lists this team we skip the fetch.
       try {
-        const teamOpt = await getLiveTeam(ctx, teamId);
+        const teamOpt = await readMembershipInScope(ctx, { teamId }, (scoped) => getLiveTeam(scoped, teamId));
         const clubId = (teamOpt as any)?.[0]?.club_id as string | undefined;
         if (clubId) clubIds.add(clubId);
       } catch { /* best effort */ }
     }),
   );
 
-  const miniLeagues = await listMyLiveMiniLeagues(ctx).catch(() => [] as { id: string }[]);
+  const miniLeagues = await miniLeaguesPromise;
   const miniLeagueIds = Array.from(new Set(miniLeagues.map((l) => l.id)));
 
   return {
@@ -303,7 +301,7 @@ export default function EventsPage() {
             const clubs = await Promise.all(
               memberships.clubIds.map(async (clubId) => {
                 try {
-                  const profileOpt = await getLiveClubProfile(ctx, clubId);
+                  const profileOpt = await readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubProfile(scoped, clubId));
                   const profile = (profileOpt as any)?.[0] as { name?: string; sport?: string[] } | undefined;
                   return { id: clubId, name: profile?.name ?? "Club", sport: (profile?.sport?.[0] ?? null) as string | null };
                 } catch {
@@ -313,7 +311,7 @@ export default function EventsPage() {
             );
             return clubs.sort((a, b) => a.name.localeCompare(b.name));
           },
-        });
+        }, { shared: 'person' });
       }
 
       const start = performance.now();
@@ -413,7 +411,7 @@ export default function EventsPage() {
             });
             return memberships;
           },
-        });
+        }, { everyGroup: true, merge: mergeMemberships });
       }
 
       // Proactively refresh JWT if it's near expiry — prevents an expired
@@ -630,7 +628,7 @@ export default function EventsPage() {
             const scopeClubIds = clubFilter ? [clubFilter] : m.clubIds;
             const out: { id: string; name: string; club_id: string }[] = [];
             const teamsByClub = await Promise.all(
-              scopeClubIds.map((clubId) => listLiveTeams(ctx, clubId).catch(() => [] as any[])),
+              scopeClubIds.map((clubId) => readMembershipInScope(ctx, { clubId }, (scoped) => listLiveTeams(scoped, clubId)).catch(() => [] as any[])),
             );
             for (const [clubIndex, clubId] of scopeClubIds.entries()) {
               const teams = teamsByClub[clubIndex];
@@ -646,7 +644,7 @@ export default function EventsPage() {
             }
             return out.sort((a, b) => a.name.localeCompare(b.name));
           },
-        });
+        }, { shared: 'person' });
       }
       if (useIcpLab) {
         return fixtureData.getLocalLabTeamList().map((team) => ({
@@ -752,7 +750,7 @@ export default function EventsPage() {
             const getClubInfo = async (clubId: string) => {
               if (!clubInfoCache.has(clubId)) {
                 try {
-                  const profileOpt = await getLiveClubProfile(ctx, clubId);
+                  const profileOpt = await readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubProfile(scoped, clubId));
                   const profile = (profileOpt as any)?.[0] as { name?: string; sport?: string[] } | undefined;
                   clubInfoCache.set(clubId, { name: profile?.name ?? "Club", sport: (profile?.sport?.[0] ?? null) as string | null });
                 } catch {
@@ -764,7 +762,7 @@ export default function EventsPage() {
             const getTeamName = async (teamId: string) => {
               if (!teamNameCache.has(teamId)) {
                 try {
-                  const teamOpt = await getLiveTeam(ctx, teamId);
+                  const teamOpt = await readMembershipInScope(ctx, { teamId }, (scoped) => getLiveTeam(scoped, teamId));
                   teamNameCache.set(teamId, ((teamOpt as any)?.[0]?.name ?? null) as string | null);
                 } catch {
                   teamNameCache.set(teamId, null);

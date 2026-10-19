@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Send, UserPlus, Mail, CheckCircle2, Share2, Copy, Search } from "lucide-react";
@@ -139,7 +140,7 @@ export default function InviteOtherParentSheet({
           await linkLiveGuardian(ctx, childId, guardian);
           await setLiveGuardianRelationship(ctx, childId, guardian, "parent", false);
         },
-      });
+      }, writeOnce({ shared: 'person' }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });
@@ -162,7 +163,7 @@ export default function InviteOtherParentSheet({
       return withFeatureBackend("membership", {
         supabase: () => sendInviteSupabase(effectiveDelivery),
         icp: (ctx) => sendInviteIcp(ctx, effectiveDelivery),
-      });
+      }, writeOnce({ teamId: teamIds[0] ?? '' }));
     },
     onSuccess: (data) => {
       if (!data) return;

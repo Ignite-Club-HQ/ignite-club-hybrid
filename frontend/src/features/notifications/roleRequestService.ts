@@ -4,6 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { approveLiveRoleRequest, rejectLiveRoleRequest } from "@/live/features/membership";
+import { writeOnce } from "@/live/clubScope";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type RoleRequestAction = "approve" | "deny";
@@ -124,5 +125,5 @@ export async function processRoleRequest(
       // has no canister equivalent yet, so it is intentionally skipped here
       // rather than silently failing a fetch against a non-existent table.
     },
-  });
+  }, writeOnce({ roleRequestId: requestId }));
 }

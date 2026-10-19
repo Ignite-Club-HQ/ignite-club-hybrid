@@ -76,7 +76,10 @@ export function useMyDutyTeamAccess() {
           )),
         };
       },
-    }),
+    }, { everyGroup: true, merge: (parts) => ({
+      teamIds: [...new Set(parts.flatMap(p => p.teamIds))],
+      leagueAdminClubIds: [...new Set(parts.flatMap(p => p.leagueAdminClubIds))],
+    }) }),
   });
 }
 

@@ -320,7 +320,7 @@ export default function CreateTeamPage() {
               playhq_auto_create_events: false,
             });
           },
-        });
+        }, writeOnce({ shared: 'person' }));
         setSaving(false);
         toast({
           title: "Personal team created",
