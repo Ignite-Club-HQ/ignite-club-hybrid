@@ -12,10 +12,11 @@
 // serialize every caller through one lock so installs never overlap.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isInstallLockAbandoned } from "./frontend-install-lock.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendDir = path.join(projectRoot, "frontend");
@@ -23,7 +24,6 @@ const nodeModules = path.join(frontendDir, "node_modules");
 const viteBin = path.join(nodeModules, "vite", "bin", "vite.js");
 const stampFile = path.join(nodeModules, ".ignite-install-stamp");
 const lockDir = path.join(os.tmpdir(), "ignite-frontend-install.lock");
-const LOCK_STALE_MS = 10 * 60_000;
 const LOCK_WAIT_MS = 10 * 60_000;
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -48,10 +48,11 @@ function acquireLock() {
   while (true) {
     try {
       mkdirSync(lockDir);
+      writeFileSync(path.join(lockDir, "owner.pid"), String(process.pid));
       return;
     } catch {
       try {
-        if (Date.now() - statSync(lockDir).mtimeMs > LOCK_STALE_MS) {
+        if (isInstallLockAbandoned(lockDir)) {
           rmSync(lockDir, { recursive: true, force: true });
           continue;
         }
