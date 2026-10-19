@@ -36,9 +36,24 @@ export interface Account {
  */
 export type AccountStatus = { 'Active' : null } |
   { 'Suspended' : null };
+export interface Binding {
+  'registry_revision' : bigint,
+  'host' : string,
+  'network_kind' : string,
+  'deployment_revision' : bigint,
+  'target_alias' : string,
+  'registry' : Principal,
+  'deployment_id' : string,
+}
 export type DenialReason = { 'Erased' : null } |
   { 'Rekeyed' : null } |
   { 'Unlinked' : null };
+export interface Domain { 'domain' : string, 'canister' : Principal }
+export interface DomainPlacement {
+  'domain' : string,
+  'subnet' : Principal,
+  'canister' : Principal,
+}
 export type EligibilityDecision = { 'Eligible' : null } |
   { 'Denied' : null };
 /**
@@ -56,6 +71,11 @@ export interface Entitlement {
   'granted_at_ms' : bigint,
   'expires_at_ms' : bigint,
 }
+export interface Evidence {
+  'snapshot' : Snapshot,
+  'binding' : Binding,
+  'history_revision' : bigint,
+}
 export interface Exclusion {
   'account_id' : string,
   'club' : string,
@@ -69,6 +89,11 @@ export interface ExternalSiteBinding {
   'site_id' : string,
 }
 export interface FamilyLink { 'account_id' : string, 'child_id' : string }
+export interface Group {
+  'id' : string,
+  'domains' : Array<Domain>,
+  'target_alias' : string,
+}
 export interface Init { 'governor' : Principal }
 export interface LinkChallenge {
   'id' : bigint,
@@ -83,6 +108,17 @@ export interface MemoryStats {
   'memory_bytes' : bigint,
   'stable_bytes' : bigint,
   'heap_bytes' : bigint,
+}
+export interface Placement {
+  'host' : string,
+  'network_kind' : string,
+  'deployment_revision' : bigint,
+  'approved_subnets' : Array<Principal>,
+  'additional_subnets_enabled' : boolean,
+  'group_id' : string,
+  'domains' : Array<DomainPlacement>,
+  'deployment_id' : string,
+  'primary_subnet' : Principal,
 }
 export interface PrincipalDenial {
   'account_id' : string,
@@ -159,25 +195,27 @@ export type Result_10 = { 'Ok' : [] | [TermsAcceptance] } |
   { 'Err' : string };
 export type Result_11 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
-export type Result_12 = { 'Ok' : Array<PrincipalEligibility> } |
+export type Result_12 = { 'Ok' : Evidence } |
   { 'Err' : string };
-export type Result_13 = { 'Ok' : PrincipalEligibility } |
+export type Result_13 = { 'Ok' : Array<PrincipalEligibility> } |
   { 'Err' : string };
-export type Result_14 = { 'Ok' : RemovalHistoryManifest } |
+export type Result_14 = { 'Ok' : PrincipalEligibility } |
   { 'Err' : string };
-export type Result_15 = { 'Ok' : RemovalHistoryPage } |
+export type Result_15 = { 'Ok' : RemovalHistoryManifest } |
   { 'Err' : string };
-export type Result_16 = { 'Ok' : Entitlement } |
+export type Result_16 = { 'Ok' : RemovalHistoryPage } |
   { 'Err' : string };
-export type Result_17 = { 'Ok' : bigint } |
+export type Result_17 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_18 = { 'Ok' : Array<ProfileSearchResult> } |
+export type Result_18 = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_19 = { 'Ok' : PrivacyConsent } |
+export type Result_19 = { 'Ok' : Array<ProfileSearchResult> } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_20 = { 'Ok' : TermsAcceptance } |
+export type Result_20 = { 'Ok' : PrivacyConsent } |
+  { 'Err' : string };
+export type Result_21 = { 'Ok' : TermsAcceptance } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : LinkChallenge } |
   { 'Err' : string };
@@ -199,6 +237,11 @@ export interface RoleGrant {
   'role' : string,
   'team' : [] | [string],
   'site_id' : [] | [string],
+}
+export interface Snapshot {
+  'groups' : Array<Group>,
+  'placements' : Array<Placement>,
+  'revision' : bigint,
 }
 export interface State {
   'privacy_consents' : Array<PrivacyConsent>,
@@ -331,25 +374,26 @@ export interface _SERVICE {
    * users).
    */
   'my_terms_acceptance' : ActorMethod<[], Result_10>,
+  'read_group_inventory_evidence' : ActorMethod<[bigint], Result_12>,
   /**
    * Only configured canisters may ask for another caller's links. No browser
    * supplies an account id or a principal list; the index is authoritative.
    */
   'read_linked_account' : ActorMethod<[Principal], Result>,
-  'read_principal_eligibilities' : ActorMethod<[Array<Principal>], Result_12>,
+  'read_principal_eligibilities' : ActorMethod<[Array<Principal>], Result_13>,
   /**
    * Consensus reads; never create an account or grant resource permissions.
    * Versions are account-scoped evidence, NOT globally atomic access tokens.
    */
-  'read_principal_eligibility' : ActorMethod<[Principal], Result_13>,
+  'read_principal_eligibility' : ActorMethod<[Principal], Result_14>,
   /**
    * Local-only consensus recovery evidence. Reader lists/club receipts are NOT
    * a complete deployment inventory or an in-flight drain acknowledgement.
    */
-  'read_removal_history_manifest' : ActorMethod<[], Result_14>,
+  'read_removal_history_manifest' : ActorMethod<[], Result_15>,
   'read_removal_history_page' : ActorMethod<
     [bigint, RemovalHistoryCursor, number],
-    Result_15
+    Result_16
   >,
   /**
    * Subject-bound consensus ownership read; never implicitly registers an account.
@@ -370,7 +414,7 @@ export interface _SERVICE {
    */
   'redeem_entitlement' : ActorMethod<
     [string, string, bigint, string, string],
-    Result_16
+    Result_17
   >,
   'register_account' : ActorMethod<[], Result>,
   /**
@@ -383,7 +427,7 @@ export interface _SERVICE {
    * number of records changed (or that would change when `dry_run`).
    * Any NEW stored principal / principal-text field must be added here.
    */
-  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_17>,
+  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_18>,
   /**
    * Governor-only: revokes a verifier principal.
    */
@@ -411,7 +455,7 @@ export interface _SERVICE {
    * can grant roles without a second lookup. Profiles without an account or
    * with a blank name are skipped.
    */
-  'search_profiles' : ActorMethod<[string, number], Result_18>,
+  'search_profiles' : ActorMethod<[string, number], Result_19>,
   /**
    * Admin-gated (governor or an account holding the `app_admin` role):
    * suspends or reactivates an account. `Suspended` accounts are rejected by
@@ -439,7 +483,7 @@ export interface _SERVICE {
    */
   'set_entitlement' : ActorMethod<
     [Principal, string, string, bigint, string],
-    Result_16
+    Result_17
   >,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_2>,
   'set_exclusion_scoped' : ActorMethod<
@@ -447,7 +491,8 @@ export interface _SERVICE {
     Result_2
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_19>,
+  'set_group_inventory_binding' : ActorMethod<[Binding, bigint], Result_2>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_20>,
   /**
    * Sets (or replaces) the caller's profile. The account must already exist —
    * sign-in provisioning calls register_account first.
@@ -460,7 +505,7 @@ export interface _SERVICE {
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_20>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_21>,
   /**
    * Sets (or clears) the caller's UI theme preference, so it follows the
    * account across devices. Creates a blank profile entry if the caller has
