@@ -83,6 +83,10 @@ VAULT_DOMAIN="$(cid vault_domain)"
 PII_ACCESS_CONTROL="$(cid pii_access_control)"
 IDENTITY_ACCESS="$(cid identity_access)"
 
+echo "==> Wiring: shared identity lifecycle and club authority inventory"
+icp canister call club_domain set_identity_access_canister "(principal \"$IDENTITY_ACCESS\")" -e "$ICP_ENV"
+icp canister call identity_access set_club_authorities "(vec { principal \"$CLUB_DOMAIN\" })" -e "$ICP_ENV"
+
 echo "==> Wiring: timer_jobs.initialize() (first-caller-wins governor)"
 icp canister call timer_jobs initialize '()' -e "$ICP_ENV"
 

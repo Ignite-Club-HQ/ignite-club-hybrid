@@ -74,6 +74,7 @@ persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
   var mediaEvidenceRevision : Nat;
   var competitionAuthorities : [Principal];
+  var identityAccessCanister : ?Principal;
   // Preparation-only ledger. No upload activation API until legacy usage
   // import and recoverable store-side sagas exist; existing stores unchanged.
   var mediaQuotaLedger : MediaQuota.Ledger;
@@ -518,6 +519,40 @@ persistent actor class Main(governorInit : Principal) {
       if (account.principals.any(func(item) = item.equal(principal))) return ?account;
     };
     null
+  };
+
+  public shared ({ caller }) func set_identity_access_canister(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid identity authority required");
+    identityAccessCanister := ?id; membershipEpoch += 1; #Ok
+  };
+  type LinkedAccount = { id : Text; principals : [Principal]; version : Nat64; status : { #Active; #Suspended } };
+  public shared ({ caller }) func sync_my_linked_account() : async { #Ok; #Err : Text } {
+    auth(caller);
+    let authority = switch (identityAccessCanister) { case null return #Err("Identity authority not configured"); case (?id) id };
+    let epoch = membershipEpoch;
+    let service : actor { read_linked_account : shared (Principal) -> async { #Ok : LinkedAccount; #Err : Text } } = actor(authority.toText());
+    let reply = try { await (with timeout = 10) service.read_linked_account(caller) } catch (_) { return #Err("Identity authority unavailable") };
+    if (identityAccessCanister != ?authority or epoch != membershipEpoch) return #Err("Account authority changed; retry");
+    let account = switch (reply) { case (#Err(e)) return #Err(e); case (#Ok(a)) a };
+    if (account.status != #Active or account.principals.size() == 0 or account.principals.size() > 8 or not account.principals.any(func(p) = p == caller)
+        or account.principals.any(Principal.isAnonymous)) return #Err("Invalid linked account");
+    if (accounts.any(func(a) = a.id == account.id and a.version > account.version)) return #Err("Stale linked account");
+    // Drop obsolete local aliases instead of trusting old local link challenges.
+    accounts := accounts.filter(func(a) = a.id != account.id and not a.principals.any(func(p) = account.principals.any(func(q) = p == q)))
+      .concat([{ id = account.id; version = account.version; principals = account.principals; legacy_subject = caller }]);
+    membershipEpoch += 1; #Ok
+  };
+  public shared ({ caller }) func revoke_linked_principal(account_id : Text, user : Principal, version : Nat64) : async { #Ok; #Err : Text } {
+    if (identityAccessCanister != ?caller or Principal.isAnonymous(caller)) return #Err("Identity authority required");
+    if (Principal.isAnonymous(user) or user == governor) return #Err("Cannot revoke identity");
+    switch (accounts.find(func(a) = a.id == account_id)) {
+      case (?a) { if (a.version > version) return #Err("Account version conflict") };
+      case null {};
+    };
+    let erased = eraseMembership([user], "principal:" # user.toText());
+    switch (erased) { case (#Err(e)) return #Err(e); case _ {} };
+    accounts := accounts.map(func(a) = { a with principals = a.principals.filter(func(p) = p != user) });
+    membershipEpoch += 1; #Ok
   };
 
   func getListing(club : Text) : Types.Listing {
@@ -2530,6 +2565,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func begin_identity_link(target : Principal) : async { #Ok : Types.Challenge; #Err : Text } {
     auth(caller);
+    if (identityAccessCanister != null) return #Err("Use shared identity authority");
     if (target.equal(Principal.anonymous())) return #Err("Invalid target identity");
     switch (accountFor(caller), accountFor(target)) {
       case (null, _) { #Err("Unlinked identity") };
@@ -2553,6 +2589,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func accept_identity_link(id : Nat64) : async { #Ok : Types.Account; #Err : Text } {
     auth(caller);
+    if (identityAccessCanister != null) return #Err("Use shared identity authority");
     let now = nowNs();
     switch (Array.findIndex(accountChallenges, func(challenge) = challenge.id == id)) {
       case null { #Err("Unknown challenge") };
@@ -2579,6 +2616,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func revoke_identity(target : Principal, expected_version : Nat64) : async { #Ok : Types.Account; #Err : Text } {
     auth(caller);
+    if (identityAccessCanister != null) return #Err("Use shared identity authority");
     switch (accountFor(caller)) {
       case null { #Err("Unlinked identity") };
       case (?current) {
