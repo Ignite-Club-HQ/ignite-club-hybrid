@@ -44,14 +44,16 @@ try {
     group.actor.setPrincipal(stranger); assert.ok('Err' in await group.actor.revoke_linked_principal(account.id, linked, 1n));
   }
   service.setPrincipal(stranger); assert.ok('Err' in await service.read_linked_account(primary));
-  // A real suspended sync cannot commit across local removal, even if its
-  // identity reply was already requested at the prior account generation.
+  // Stop the remote authority so sync cannot finish before local removal.
+  // One tick alone does not establish an async pause on same-subnet actors.
+  await pic.stopCanister({ canisterId: identity.canisterId, sender: governor });
   const deferredGroup = pic.createDeferredActor(clubIdl, groups[0].canisterId);
   deferredGroup.setPrincipal(linked);
   const staleSync = await deferredGroup.sync_my_linked_account();
   await pic.tick(1);
   groups[0].actor.setPrincipal(identity.canisterId);
   ok(await groups[0].actor.revoke_linked_principal(account.id, linked, 1n));
+  await pic.startCanister({ canisterId: identity.canisterId, sender: governor });
   assert.ok('Err' in await staleSync(), 'suspended account sync cannot cross a receiver removal');
   groups[0].actor.setPrincipal(linked);
   assert.ok('Err' in await groups[0].actor.sync_my_linked_account(), 'old authority snapshot also fails when sync starts after the removal receipt');
