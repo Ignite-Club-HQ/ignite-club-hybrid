@@ -28,7 +28,7 @@ try {
     ok(await oldEvents.sync_group_state(savedGroup.id, 0n, ['{"elapsedSeconds":75}'], []));
     const savedLeague = ok(await oldLeague.create_mini_league('upgrade-club', 'Kept league', [], [], 6, 3, 10, [], true));
     for (const [actor, wasm] of [[oldEvents, process.env.EVENTS_DOMAIN_WASM], [oldLeague, process.env.MINI_LEAGUE_DOMAIN_WASM]]) {
-      await pic.upgradeCanister({ canisterId: ids.get(actor), wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+      await pic.upgradeCanister({ canisterId: ids.get(actor), wasm, sender: governor, arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
     }
     assert.equal(ok(await oldEvents.get_event_group(savedGroup.id))[0].timer_state_json[0], '{"elapsedSeconds":75}');
     assert.equal(ok(await oldLeague.get_mini_league(savedLeague.id)).name, 'Kept league');
