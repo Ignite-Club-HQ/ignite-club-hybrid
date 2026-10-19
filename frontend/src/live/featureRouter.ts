@@ -42,7 +42,7 @@ export const FEATURE_GROUP_DOMAIN: Record<FeatureArea, GroupDomain | null> = {
 };
 /** Club scope for a call. writeKey marks a write (idempotency key); attempts
  * 1 = never auto-retry (creates without a canister idempotency key). */
-export type ClubScope = ({ clubId: string } | { competitionId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string }
+export type ClubScope = ({ clubId: string } | { competitionId: string } | { eventGroupId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string }
   /** Not club data: person-to-person (DMs, blocks, presence) or app-wide
    * settings. Always served by the shared canisters, never by a group. */
   | { shared: 'person' | 'app' }

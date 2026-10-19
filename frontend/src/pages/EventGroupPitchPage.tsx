@@ -18,7 +18,7 @@ import { AssignDutySheet } from "@/components/AssignDutySheet";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { setLiveGroupDuty, removeLiveGroupDuty } from "@/live/features/events";
+import { saveLiveGroupDutySlot, removeLiveGroupDutySlot } from "@/live/features/events";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
 // Lazy load PitchBoard for performance
@@ -333,7 +333,7 @@ function SupabaseEventGroupPitchPage() {
       const addedOnIcp = await withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
-          await setLiveGroupDuty(ctx, groupId!, name, null);
+          await saveLiveGroupDutySlot(ctx, groupId ?? "", crypto.randomUUID(), name, null);
           return true;
         },
       }, writeOnce({ eventId: eventId! }));
@@ -364,7 +364,7 @@ function SupabaseEventGroupPitchPage() {
         icp: async (ctx) => {
           const duty = duties?.find((candidate) => candidate.id === dutyId);
           if (!duty?.name) throw new Error("Duty not found");
-          await setLiveGroupDuty(ctx, groupId!, duty.name, assignedTo);
+          await saveLiveGroupDutySlot(ctx, groupId ?? "", duty.id, duty.name, assignedTo);
           return true;
         },
       }, writeOnce({ eventId: eventId! }));
@@ -393,7 +393,7 @@ function SupabaseEventGroupPitchPage() {
         const removedOnIcp = await withFeatureBackend("events", {
           supabase: () => false,
           icp: async (ctx) => {
-            await removeLiveGroupDuty(ctx, groupId!, duty.name);
+            await removeLiveGroupDutySlot(ctx, groupId ?? "", duty.id);
             return true;
           },
         }, writeOnce({ eventId: eventId! }));

@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { setLiveGroupDuty, removeLiveGroupDuty, listLiveGroupDuties } from "@/live/features/events";
+import { saveLiveGroupDutySlot, removeLiveGroupDutySlot, listLiveGroupDuties } from "@/live/features/events";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -86,7 +86,7 @@ export function MatchDutiesDialog({
           return rows.map((row) => {
             const assignedTo = row.account_id[0] ?? null;
             return {
-              id: row.duty,
+              id: row.id,
               name: row.duty,
               assigned_to: assignedTo,
               status: assignedTo ? "confirmed" : "pending",
@@ -168,7 +168,7 @@ export function MatchDutiesDialog({
       const addedOnIcp = await withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
-          await setLiveGroupDuty(ctx, groupId, name, null);
+          await saveLiveGroupDutySlot(ctx, groupId, crypto.randomUUID(), name, null);
           return true;
         },
       }, writeOnce({ eventId }));
@@ -199,7 +199,7 @@ export function MatchDutiesDialog({
         icp: async (ctx) => {
           const duty = duties?.find((candidate) => candidate.id === dutyId);
           if (!duty?.name) throw new Error("Duty not found");
-          await setLiveGroupDuty(ctx, groupId, duty.name, assignedTo);
+          await saveLiveGroupDutySlot(ctx, groupId, duty.id, duty.name, assignedTo);
           return true;
         },
       }, writeOnce({ eventId }));
@@ -236,7 +236,7 @@ export function MatchDutiesDialog({
         const removedOnIcp = await withFeatureBackend("events", {
           supabase: () => false,
           icp: async (ctx) => {
-            await removeLiveGroupDuty(ctx, groupId, duty.name);
+            await removeLiveGroupDutySlot(ctx, groupId, duty.id);
             return true;
           },
         }, writeOnce({ eventId }));
