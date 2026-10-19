@@ -250,6 +250,18 @@ persistent actor MediaBlobStore {
     switch (club_domain_canister) { case (?id) { ?(actor(id.toText()) : QuotaService) }; case null null }
   };
 
+  // Upload ownership alone is not club authorization. Re-evaluate the
+  // original human against the owning club before each upload mutation.
+  func requireUploadMembership(user : Principal, path : Text) : async () {
+    let ?club = clubIdFromPath(path) else return;
+    if (isGovernor<system>(user)) return;
+    let ?authority = club_domain_canister else throw Error.reject("Club upload authority unavailable");
+    let service : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(authority.toText());
+    let member = try { await (with timeout = 10) service.read_has_club_membership(user, club) } catch (_) { false };
+    if (removalReceiver.denied(user) or mediaFenced(path)) throw Error.reject("Upload authorization fenced");
+    if (club_domain_canister != ?authority or not member) throw Error.reject("Club membership required for upload");
+  };
+
   // Freeze is irreversible to local enforcement. Reads remain available.
   // No upload can slip past a subscription await: begin rechecks this mode.
   public shared ({ caller }) func freeze_media_quota() : async Result {
@@ -344,6 +356,9 @@ persistent actor MediaBlobStore {
       if (removalReceiver.denied(upload.owner)) { ignore await abortShared(upload.id); return #Err("Account removal fenced") };
       let result = await service.reserve_media_quota(upload.id, op.club_id, op.category, op.bytes, op.cycle);
       if (removalReceiver.denied(upload.owner)) { ignore await abortShared(upload.id); return #Err("Account removal fenced") };
+      try { await requireUploadMembership(upload.owner, upload.path) } catch (_) {
+        ignore await abortShared(upload.id); return #Err("Club membership changed")
+      };
       bumpInventory();
       // Concurrent abort/finalize must never be overwritten by a callback.
       let ?latest = quota_operations.get(upload.id) else return #Err("Missing quota journal");
@@ -643,6 +658,7 @@ persistent actor MediaBlobStore {
     if (path == "" or path.size() > 1_024 or mime.size() > 256) return #Err("Invalid path or MIME");
     if (total_size > UploadPolicy.maxWireBytes) return #Err("FileTooLarge");
     if (not UploadPolicy.validDeclaration(total_size, chunk_count.toNat())) return #Err("Invalid chunk declaration");
+    await requireUploadMembership(caller, path);
     if (quota_mode == #sharedQuota) {
       switch (pending_uploads.find(func(u) = u.path == path)) {
         case (?upload) {
@@ -662,6 +678,7 @@ persistent actor MediaBlobStore {
         case _ { false };
       };
       if (accountAdmissionEnabled) await admitAccount(caller);
+      await requireUploadMembership(caller, path);
       // Check committed usage and outstanding reservations AFTER the await,
       // immediately before reserving. Concurrent sends cannot bypass caps.
       switch (checkFreeCap(path, total_size, isPro)) {
@@ -719,6 +736,9 @@ persistent actor MediaBlobStore {
     try {
     await admitAccount(caller);
     auth(caller);
+    let ?pending = findUpload(upload_id) else return #Err("Unknown upload");
+    if (not pending.owner.equal(caller)) return #Err("Not the upload owner");
+    await requireUploadMembership(caller, pending.path);
     switch (findUpload(upload_id)) {
       case null { #Err("Unknown upload") };
       case (?upload) {
@@ -746,6 +766,12 @@ persistent actor MediaBlobStore {
     try {
     await admitAccount(caller);
     auth(caller);
+    let path = switch (findUpload(upload_id), quota_operations.get(upload_id)) {
+      case (?upload, _) upload.path;
+      case (null, ?op) op.path;
+      case _ return #Err("Unknown upload")
+    };
+    await requireUploadMembership(caller, path);
     bumpInventory();
     switch (quota_operations.get(upload_id)) {
       case (?op) {
