@@ -93,6 +93,36 @@ export async function getLiveClubMediaUsage(
   return out;
 }
 
+export interface ClubMediaBytes {
+  finalized: number;
+  pending: number;
+}
+
+/**
+ * Authoritative per-club media bytes (vault + gallery + chat combined) as the
+ * photo store's own admission check sees them, summed across photo stores.
+ * Stores that predate the query or are unreachable contribute nothing, so
+ * callers can fall back to their own accounting.
+ */
+export async function getLiveClubMediaBytes(
+  target: IcpTargetConfig,
+  identity: Identity,
+  clubId: string,
+): Promise<ClubMediaBytes> {
+  const out: ClubMediaBytes = { finalized: 0, pending: 0 };
+  for (const key of listBlobStoreKeys(target)) {
+    try {
+      const { actor } = await connectLiveBlobStore(target, identity, key);
+      const r = await actor.get_club_media_bytes(clubId);
+      out.finalized += Number(r.finalized);
+      out.pending += Number(r.pending);
+    } catch {
+      // Store not upgraded yet / unreachable — skip it.
+    }
+  }
+  return out;
+}
+
 function isStoreFullError(error: unknown): boolean {
   return /StoreFull/.test(error instanceof Error ? error.message : String(error));
 }
