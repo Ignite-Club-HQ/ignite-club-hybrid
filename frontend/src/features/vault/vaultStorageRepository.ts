@@ -158,22 +158,26 @@ export async function fetchVaultStorageBreakdown(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultStorageBreakdown> {
-  // Secure sign-in: total the vault files stored on the vault canister (no
-  // Supabase reads). Gallery photos are not counted there yet.
+  // Secure sign-in: total club media straight from the photo store (no
+  // Supabase reads). The on-chain Pro allowance covers vault, gallery and
+  // chat combined, so the store's own club-bytes reading is authoritative;
+  // vault-file accounting is the fallback for stores that predate it.
   if (resolveAuthBackend() === "icp") {
     const { withFeatureBackend } = await import("@/live/featureRouter");
     return withFeatureBackend("vault", {
       supabase: async () => emptyVaultStorageBreakdown(),
       icp: async (ctx) => {
-        const [{ listLiveVaultClubFiles }, { listLiveTeams }] = await Promise.all([
+        const [{ listLiveVaultClubFiles }, { listLiveTeams }, { getLiveClubMediaBytes }] = await Promise.all([
           import("@/live/features/vault"),
           import("@/live/features/club"),
+          import("@/live/blobStoreUpload"),
         ]);
-        const [files, teams] = await Promise.all([
+        const [files, teams, storeBytes] = await Promise.all([
           listLiveVaultClubFiles(ctx, clubId, null, null),
           listLiveTeams(ctx, clubId).catch(() => [] as any[]),
+          getLiveClubMediaBytes(ctx.target, ctx.identity, clubId).catch(() => ({ finalized: 0, pending: 0 })),
         ]);
-        return calculateVaultStorageBreakdown({
+        const breakdown = calculateVaultStorageBreakdown({
           photos: [],
           files: (files as any[])
             .filter((file) => !file.is_external_link)
@@ -186,6 +190,8 @@ export async function fetchVaultStorageBreakdown(
           teams: (teams as any[]).map((team) => ({ id: team.id, name: team.name })),
           miniLeagues: [],
         });
+        const storeTotal = storeBytes.finalized + storeBytes.pending;
+        return storeTotal > breakdown.total ? { ...breakdown, total: storeTotal } : breakdown;
       },
     }, { clubId });
   }
