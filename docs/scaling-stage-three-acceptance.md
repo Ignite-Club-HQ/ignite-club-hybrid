@@ -16,6 +16,8 @@
 
 ## Remaining integration/release dependencies
 
+Follow-up: `docs/scaling-complete-group-acceptance.md` verifies actual twelve-service setup/business read-back/upgrades and dedicated blob encryption. This supersedes the missing-local-artifact limitation below, not production management, recovery/account-access or mainnet/native/FCM requirements.
+
 ### Current bounded setup batch (19 October 2026)
 
 - Executor now requires a separate configuration phase between installation and health. `groupProvisionConfiguration` enumerates the existing club/chat/PII/vault/reward/competition/league/notification settings, including shared inbox identity and worker grant, and checkpoints every intent/acknowledgement. All planned calls encode against the actual generated update signatures. No identity admission setter or global-removal authority publication is added.

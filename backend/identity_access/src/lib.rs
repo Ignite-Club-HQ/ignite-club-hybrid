@@ -1383,6 +1383,7 @@ fn begin_link(target: Principal) -> Outcome<LinkChallenge> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     let account = account_for_write(caller)?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
     if link_lifecycle().pending.iter().any(|job| job.account_id == account.id) { return Err("Unlink recovery pending".into()); }
     authenticated(target)?;
     validate_denied_relink(target, &account.id, account.version)?;
@@ -1435,6 +1436,7 @@ fn accept_link(id: u64) -> Outcome<Account> {
         return Err("Identity already assigned".into());
     }
     let mut account = get_account(&challenge.account_id).ok_or("Account unavailable")?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
     if account.status != AccountStatus::Active || link_lifecycle().pending.iter().any(|job| job.account_id == account.id) {
         return Err("Account unavailable during link recovery".into());
     }
@@ -1470,6 +1472,7 @@ async fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account>
     let caller = ic_cdk::api::msg_caller();
     // A self-unlink may only be resumed by a surviving sign-in identity.
     let current = account_for_write(caller)?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&current.id)) { return Err("Deletion reservation pending".into()); }
     if principal == caller { return Err("Use a surviving identity to revoke this sign-in".into()); }
     if !current.principals.contains(&principal) || current.principals.len() == 1 {
         return Err("Cannot revoke missing or last identity".into());
@@ -1766,6 +1769,9 @@ fn rekey_principal_core(
     new: Principal,
     dry_run: bool,
 ) -> Outcome<u64> {
+    if [old,new].iter().any(|p| find_account_by_principal(*p).is_some_and(|a| DELETION_TICKETS.with(|m|m.borrow().contains_key(&a.id)))) {
+        return Err("Deletion reservation pending".into());
+    }
     if removal_subject_fenced(old) || removal_subject_fenced(new) ||
         find_account_by_principal(old).is_some_and(|a| removal_intent(&a.id).is_some()) ||
         find_account_by_principal(new).is_some_and(|a| removal_intent(&a.id).is_some()) {
@@ -1988,6 +1994,7 @@ fn set_account_status(account_id: String, status: AccountStatus) -> Outcome<Acco
         return Err("Forbidden".into());
     }
     let mut account = get_account(&account_id).ok_or("Unknown account")?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
     if status == AccountStatus::Suspended && account.principals.contains(&state.governor) {
         return Err("Governor account cannot be suspended".into());
     }
@@ -2343,7 +2350,7 @@ mod tests {
         let account=Account {id:"barrier-restored-account".into(),principals:vec![subject],version:5,status:AccountStatus::Active};
         put_account(&account); index_principal(subject,&account.id);
         let intent=persist_removal_intent(&account,inventory.clone(),p(90)).unwrap();
-        assert_eq!(intent.generation,1); assert_eq!(intent.targets.len(),28);
+        assert_eq!(intent.generation,1); assert_eq!(intent.targets.len(),27);
         assert!(account_for(subject).is_err()); assert!(ensure_account(subject).is_err());
         assert_eq!(principal_eligibility(subject).decision,EligibilityDecision::Denied);
         let mut restored=account.clone(); restored.version=99; restored.principals=vec![restored_alias];

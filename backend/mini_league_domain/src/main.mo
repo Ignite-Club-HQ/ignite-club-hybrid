@@ -177,6 +177,19 @@ persistent actor class Main(governorInit : Principal) = this {
   func isClubAdmin(caller : Principal, club_id : Text) : Bool {
     isGovernor(caller) or hasRole(caller, "club_admin", club_id, null)
   };
+  // Creation must use current club authority, not a manually populated mirror.
+  func currentClubAdmin(caller : Principal, club : Text) : async* Bool {
+    if (isGovernor(caller)) return true;
+    let id = switch (clubDomainCanister) { case null return false; case (?id) id };
+    let domain : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor(id.toText());
+    let fresh = try { await (with timeout = 10) domain.read_account_list_user_club_roles(caller, club) } catch (_) { return false };
+    await admitAccount(caller);
+    if (clubDomainCanister != ?id or isFenced(club)) return false;
+    roles := roles.filter(func(r) = not (r.user.equal(caller) and r.club_id == club)).concat(
+      fresh.map(func((role, team)) : Types.RoleGrant = { user = caller; role; club_id = club; team_id = team })
+    );
+    fresh.any(func((role, _)) = role == "club_admin")
+  };
   // League-admin = club admin OR the league creator OR explicitly granted via
   // mini_league_admins — mirrors can_view_mini_league / the admin-management
   // semantics of ManageMiniLeagueAdminsSheet.
@@ -362,7 +375,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not validOpt(description, 2000) or not validOpt(logo_url, 512)) return #Err("Invalid mini-league");
-    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    if (not (await* currentClubAdmin(caller, club_id))) return #Err("Club admin required");
     let now = nowMs();
     let created : Types.MiniLeague = {
       id = nextId("mlg-" # club_id, leagues.size()); club_id; name; description; logo_url;

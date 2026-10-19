@@ -4,13 +4,14 @@ import { Principal } from '@icp-sdk/core/principal';
 import { PER_GROUP_DOMAINS, type Provision, type ProvisionCheckpoint } from './groupProvisioner';
 import type { GroupDomain } from './groupRouting';
 
-type Operation = { domain: GroupDomain; method: string; args: unknown[] };
+type ConfigurationDomain = GroupDomain | 'media_blob_store';
+type Operation = { domain: ConfigurationDomain; method: string; args: unknown[] };
 export type ConfigurationTransport = {
   // Must verify this exact operator still controls the bound canister.
   verifyGovernor(canisterId: string, governor: string): Promise<void>;
   call(canisterId: string, method: string, args: unknown[]): Promise<{ Ok: unknown } | { Err: string }>;
 };
-export type ConfigurationGlobals = { identityAccess: string; pushWorker: string };
+export type ConfigurationGlobals = { identityAccess: string; pushWorker: string; mediaBlobStore: string };
 
 export function groupConfigurationPlan(p: Provision, globals: ConfigurationGlobals) {
   const ids = PER_GROUP_DOMAINS.map(d => p.canisters[d]);
@@ -22,9 +23,12 @@ export function groupConfigurationPlan(p: Provision, globals: ConfigurationGloba
     return value;
   };
   ids.forEach(principal);
-  const identity = principal(globals.identityAccess), worker = principal(globals.pushWorker);
-  if (ids.includes(identity.toText()) || ids.includes(worker.toText())) throw new Error('Global identity or worker duplicated in group');
+  const identity = principal(globals.identityAccess), worker = principal(globals.pushWorker), blob = principal(globals.mediaBlobStore);
+  if (ids.includes(identity.toText()) || ids.includes(worker.toText()) || ids.includes(blob.toText()) || new Set([identity.toText(), worker.toText(), blob.toText()]).size !== 3) throw new Error('Global identity, worker or media store duplicated in group');
   const operations: Operation[] = [];
+  operations.push({ domain: 'media_blob_store', method: 'set_club_domain_canister', args: [principal(p.canisters.club_domain)] });
+  operations.push({ domain: 'club_domain', method: 'register_media_quota_store', args: [blob] });
+  operations.push({ domain: 'timer_jobs', method: 'grant_worker', args: [worker] });
   const link = (domain: GroupDomain, method: string, target: GroupDomain, vector = false) => {
     const id = principal(p.canisters[target]);
     operations.push({ domain, method, args: [vector ? [id] : id] });
@@ -58,7 +62,7 @@ export async function configureProvisionGroup(start: Provision, checkpoint: Prov
   if (start.pending) throw new Error('Unresolved configuration intent');
   const operations = groupConfigurationPlan(start, globals);
   const binding = JSON.stringify([start.id, start.groupId, start.deploymentId, start.subnetId, governor,
-    PER_GROUP_DOMAINS.map(d => [d, start.canisters[d]]), globals.identityAccess, globals.pushWorker]);
+    PER_GROUP_DOMAINS.map(d => [d, start.canisters[d]]), globals.identityAccess, globals.pushWorker, globals.mediaBlobStore]);
   if (start.configuration && start.configuration.binding !== binding) throw new Error('Configuration binding changed');
   const names = operations.map(op => `${op.domain}.${op.method}`);
   const completed = start.configuration?.completed ?? [];
@@ -72,13 +76,14 @@ export async function configureProvisionGroup(start: Provision, checkpoint: Prov
     if (!id) throw new Error('Incomplete configuration inventory');
     await transport.verifyGovernor(id, governor);
   }
+  await transport.verifyGovernor(globals.mediaBlobStore, governor);
   for (const operation of operations) {
     const name = `${operation.domain}.${operation.method}`;
     if (p.configuration.completed.includes(name)) continue;
-    const id = p.canisters[operation.domain];
+    const id = operation.domain === 'media_blob_store' ? globals.mediaBlobStore : p.canisters[operation.domain];
     if (!id) throw new Error('Missing configuration receiver');
     await transport.verifyGovernor(id, governor);
-    p = { ...p, pending: { kind: 'configure', domain: operation.domain, operation: name } };
+    p = { ...p, pending: { kind: 'configure', operation: name } };
     await checkpoint(p); // durable intent precedes external mutation
     const result = await transport.call(id, operation.method, operation.args);
     // A lost reply/failed acknowledgement retains the exact unresolved intent.

@@ -46,7 +46,7 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
     id.setPrincipal(linked); ok(await id.accept_link(challenge.id));
     for(const c of clubs){c.actor.setPrincipal(linked);ok(await c.actor.sync_my_linked_account());}
     const subnet=p(90); let revision=0n;
-    const groups=clubs.map((c,i)=>({id:i?'new':'legacy',target_alias:'mainnet',domains:GROUP_DOMAINS.map((domain,n)=>({domain,canister:domain==='club_domain'?c.canisterId:p(20+i*20+n)})),
+    const groups=clubs.map((c,i)=>({id:i?'new':'legacy',target_alias:'mainnet',domains:GROUP_DOMAINS.map((domain,n)=>({domain,canister:domain==='club_domain'?c.canisterId:domain==='secret_workload_identity'?p(70):p(20+i*20+n)})),
       accepting:true,max_clubs:100,assigned_clubs:0,heap_budget_bytes:1000000n,heap_bytes:0n,min_cycles:1n,cycles:1n,observed_at_ns:0n}));
     for(const g of groups){
       revision=ok(await router.actor.register_group(g,revision));
@@ -115,9 +115,14 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
     f.id.setPrincipal(governor);ok(await f.id.settle_account_deletion(f.account.id));
     f.router.actor.setPrincipal(governor);ok(await f.router.actor.record_group_health('new',1n,2n,f.revision));
   },60000);
-  it('rejects a changed linked-account snapshot at commit and keeps its registry reservation',async()=>{
-    const f=await fixture();f.id.setPrincipal(governor);ok(await f.id.prepare_account_deletion(f.account.id,f.revision));
-    f.id.setPrincipal(user);const challenge=ok(await f.id.begin_link(stranger));f.id.setPrincipal(stranger);ok(await f.id.accept_link(challenge.id));
+  it('blocks new and already-issued links, unlink and status changes while deletion holds the snapshot',async()=>{
+    const f=await fixture();f.id.setPrincipal(user);const challenge=ok(await f.id.begin_link(stranger));
+    f.id.setPrincipal(governor);ok(await f.id.prepare_account_deletion(f.account.id,f.revision));
+    expect(await f.id.set_account_status(f.account.id,{Suspended:null})).toEqual({Err:'Deletion reservation pending'});
+    expect(await f.id.rekey_principal(user,stranger,false)).toEqual({Err:'Deletion reservation pending'});
+    f.id.setPrincipal(user);expect(await f.id.begin_link(stranger)).toEqual({Err:'Deletion reservation pending'});
+    expect(await f.id.revoke(linked,ok(await f.id.whoami()).version)).toEqual({Err:'Deletion reservation pending'});
+    f.id.setPrincipal(stranger);expect(await f.id.accept_link(challenge.id)).toEqual({Err:'Deletion reservation pending'});
     f.id.setPrincipal(governor);expect(await f.id.commit_account_deletion(f.account.id)).toHaveProperty('Err');
     f.router.actor.setPrincipal(governor);expect(await f.router.actor.record_group_health('new',1n,2n,f.revision)).toEqual({Err:'Deletion registry locked'});
     f.id.setPrincipal(user);expect(ok(await f.id.whoami()).id).toBe(f.account.id);
