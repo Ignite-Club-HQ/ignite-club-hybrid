@@ -22,7 +22,10 @@ export type ProvisionCheckpoint = (p: Provision) => Promise<void>;
 /** A directory returned a definite refusal: no mutation committed. */
 export class ProvisionRefusedError extends Error {}
 export type ProvisionAdapter = {
+  /** Receives the durable intent record; repeating it with the same intent must be idempotent. */
   createCanister(p: Provision, domain: GroupDomain): Promise<{ canisterId: string; subnetId: string }>;
+  /** Optional idempotency token persisted in the create intent before the call. */
+  createOperation?(p: Provision, domain: GroupDomain): string;
   install(p: Provision, domain: GroupDomain, canisterId: string): Promise<void>;
   configure(p: Provision, checkpoint: ProvisionCheckpoint): Promise<void>;
   healthy(p: Provision, domain: GroupDomain, canisterId: string): Promise<boolean>;
@@ -41,7 +44,7 @@ export function approveProvision(d: PlacementDecision, a: OperatorApproval, grou
   return { id: a.proposalId, groupId, deploymentId: d.deploymentId, subnetId: d.subnetId, phase: 'approved', canisters: {}, expectedRevision: revision };
 }
 
-export async function runProvision(start: Provision, a: ProvisionAdapter, options: { stopAfterRegistration?: boolean } = {}): Promise<Provision> {
+export async function runProvision(start: Provision, a: ProvisionAdapter, options: { stopAfterRegistration?: boolean; stopAt?: 'checked' } = {}): Promise<Provision> {
   let p = start;
   const step = async (n: Provision) => { await a.save(n); p = n; };
   if (p.phase === 'failed' || p.phase === 'enabled') return p;
@@ -67,8 +70,9 @@ export async function runProvision(start: Provision, a: ProvisionAdapter, option
     if (p.phase === 'approved') {
       for (const d of PER_GROUP_DOMAINS) {
         if (p.canisters[d]) continue; // resume: never create twice
-        await checkpoint({ ...p, pending: { kind: 'create', domain: d } });
-        const c = await a.createCanister(p, d);
+        const intent: Provision = { ...p, pending: { kind: 'create', domain: d, operation: a.createOperation?.(p, d) } };
+        await checkpoint(intent);
+        const c = await a.createCanister(intent, d);
         // Keep even an incorrectly placed canister in the operator inventory.
         await checkpoint({ ...p, pending: undefined, canisters: { ...p.canisters, [d]: c.canisterId }, observedSubnets: { ...p.observedSubnets, [d]: c.subnetId } });
         if (c.subnetId !== p.subnetId) throw new Error(`${d} landed on unapproved subnet ${c.subnetId}`);
@@ -82,8 +86,9 @@ export async function runProvision(start: Provision, a: ProvisionAdapter, option
         if (p.installedDomains?.includes(d)) continue;
         const id = p.canisters[d];
         if (!id) throw new Error(`Missing ${d}`);
-        await checkpoint({ ...p, pending: { kind: 'install', domain: d } });
-        await a.install(p, d, id);
+        const intent: Provision = { ...p, pending: { kind: 'install', domain: d } };
+        await checkpoint(intent);
+        await a.install(intent, d, id);
         await checkpoint({ ...p, pending: undefined, installedDomains: [...(p.installedDomains ?? []), d] });
       }
       await checkpoint({ ...p, phase: 'installed' });
@@ -100,6 +105,7 @@ export async function runProvision(start: Provision, a: ProvisionAdapter, option
       }
       await checkpoint({ ...p, phase: 'checked' });
     }
+    if (p.phase === 'checked' && options.stopAt === 'checked') return p; // closed: never registered
     if (p.phase === 'checked') {
       const revision = p.registration?.placementRevision ?? p.registration?.closedRevision ?? p.expectedRevision;
       if ((await a.readRegistryRevision()) !== revision) throw new Error('Registry changed since approval; re-approve');

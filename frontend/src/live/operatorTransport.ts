@@ -7,13 +7,16 @@ import { HttpAgent, Actor, type ActorMethod } from '@icp-sdk/core/agent';
 import { IDL } from '@icp-sdk/core/candid';
 import { Principal } from '@icp-sdk/core/principal';
 import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
+import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
 import type { ConfigurationTransport } from './groupProvisionConfiguration';
 
-export type OperatorIdentity = Ed25519KeyIdentity;
+export type OperatorIdentity = Ed25519KeyIdentity | Secp256k1KeyIdentity;
 
-/** Load an Ed25519 operator identity from a PEM file (raw or SEC1 v2). */
+/** Load the operator identity from a PEM file: secp256k1 (icp-cli's default,
+ * "EC PRIVATE KEY") or Ed25519 (raw or SEC1 v2). */
 export function loadOperatorIdentity(pemPath: string): OperatorIdentity {
   const pem = readFileSync(pemPath, 'utf8');
+  if (/BEGIN EC PRIVATE KEY/.test(pem)) return Secp256k1KeyIdentity.fromPem(pem);
   const der = Buffer.from(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64');
   // Raw 32-byte seed; 64-byte secretKey (seed||public) keeps the seed half;
   // SEC1 v2 ("MC4CAQAwBQYDK2VwBCIEIC...") carries the seed as the final 32 bytes.

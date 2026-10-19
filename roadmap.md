@@ -11,7 +11,8 @@
 - [x] Capacity policy foundation (owner approved 20 October Adelaide): 70% closed preparation request queue and 80% fill-first placement; fresh complete tested-resource evidence, approved-ready/fuel/subnet checks, immutable assignments and activation guards retained. 43 focused frontend + 22 router tests pass; real CLI rerun/read-back produces one closed request. Preview build OK. Evidence and limitations: `docs/scaling-capacity-policy.md`. No live changes.
 - [x] Live capacity collector: scheduled workflow reads real per-service memory/fuel, builds evidence against owner `deploy/groups/tested-limits.json`, queues CLOSED requests at 70%; 4 collector tests pass.
 - [ ] Owner: commit `deploy/groups/tested-limits.json` (tested storage limits; processing limits after load test).
-- [ ] Automatic closed-group creation/install and live rollover: blocked by production create/install adapter, router measurement wiring and release/approval gates. Do not claim automatic canister creation or live activation.
+- [x] Closed-group installer: `install-new-group.yml` + `install-group-closed.ts` create (cycles-ledger dedup), install (module-hash idempotent, never overwrite), configure and health-check 12 services, stop before registration. Not yet run on mainnet.
+- [ ] Release-path safety review, live mainnet acceptance, owner-approved opening/rollover (plan batches 2–4).
 
 Owner request: revisit the plan and simplify overengineered scope. Ordinary club removal revokes that club only; preserve other-club access and existing protections. Pause expanded whole-account erasure/global-drain development. The current simplified plan is `.lovable/plan.md` (archived after approval); it supersedes the older A–F execution order, not historical evidence or existing fail-closed gates.
 
