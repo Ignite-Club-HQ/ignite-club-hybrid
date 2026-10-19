@@ -141,6 +141,15 @@ export interface Main {
     { 'Ok' : MiniLeagueJoinLink } |
       { 'Err' : string }
   >,
+  'get_league_members' : ActorMethod<
+    [string],
+    {
+        'Ok' : Array<
+          { 'user_id' : string, 'is_parent' : boolean, 'is_staff' : boolean }
+        >
+      } |
+      { 'Err' : string }
+  >,
   'get_mini_league' : ActorMethod<
     [string],
     { 'Ok' : MiniLeague } |
@@ -149,6 +158,20 @@ export interface Main {
   'get_mini_leagues' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<MiniLeague> } |
+      { 'Err' : string }
+  >,
+  'get_my_league_access' : ActorMethod<
+    [Array<string>],
+    {
+        'Ok' : Array<
+          {
+            'id' : string,
+            'can_manage' : boolean,
+            'is_club_admin' : boolean,
+            'can_delete' : boolean,
+          }
+        >
+      } |
       { 'Err' : string }
   >,
   'get_news_audience' : ActorMethod<
