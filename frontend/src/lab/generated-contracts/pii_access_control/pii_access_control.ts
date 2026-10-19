@@ -51,12 +51,19 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface EncryptedPii {
-    master_key_id: string;
-    ciphertext: Uint8Array;
+export interface AuditRecord {
+    allowed: boolean;
+    requesting_principal: Principal;
     pii_id: string;
-    nonce: Uint8Array;
+    operation: string;
+    timestamp: bigint;
     field_id: string;
+    purpose: string;
+}
+export interface Receipt {
+    outstanding: bigint;
+    request: Request;
+    receiver: Principal;
 }
 export interface MainInterface {
     add_guardian_relationship(guardian: Principal, child_id: string): Promise<{
@@ -156,6 +163,13 @@ export interface MainInterface {
     }>;
     my_guardian_children(): Promise<Array<string>>;
     pii_vetkey_verification_key(): Promise<Uint8Array>;
+    prepare_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     purge_club_grants(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -172,6 +186,13 @@ export interface MainInterface {
     }>;
     read_account_audit_access(filter: AuditFilter): Promise<Array<AuditRecord>>;
     read_account_my_guardian_children(): Promise<Array<string>>;
+    read_account_removal_drain(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_club_media_authority(club: string): Promise<{
         __kind__: "Ok";
         Ok: ClubMediaAuthority;
@@ -284,18 +305,16 @@ export interface ClubMediaAuthority {
     authority?: Principal;
     revision: bigint;
 }
-export interface AuditRecord {
-    allowed: boolean;
-    requesting_principal: Principal;
-    pii_id: string;
-    operation: string;
-    timestamp: bigint;
-    field_id: string;
-    purpose: string;
-}
 export interface PiiDeleteResult {
     shredded_at: bigint;
     key_destroyed: boolean;
+}
+export interface EncryptedPii {
+    master_key_id: string;
+    ciphertext: Uint8Array;
+    pii_id: string;
+    nonce: Uint8Array;
+    field_id: string;
 }
 export interface AuditFilter {
     opt_from_ts?: bigint;
@@ -304,9 +323,15 @@ export interface AuditFilter {
     opt_principal?: Principal;
     opt_field_id?: string;
 }
+export interface Request {
+    account_id: string;
+    inventory_digest: Uint8Array;
+    subjects: Array<Principal>;
+    generation: bigint;
+}
 export interface pii_access_controlInterface extends MainInterface {
 }
-import type { AuditFilter as _AuditFilter, ClubMediaAuthority as _ClubMediaAuthority, EncryptedPii as _EncryptedPii, PiiDeleteResult as _PiiDeleteResult } from "./declarations/pii_access_control.did";
+import type { AuditFilter as _AuditFilter, ClubMediaAuthority as _ClubMediaAuthority, EncryptedPii as _EncryptedPii, PiiDeleteResult as _PiiDeleteResult, Receipt as _Receipt } from "./declarations/pii_access_control.did";
 export class Pii_access_control implements pii_access_controlInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async add_guardian_relationship(arg0: Principal, arg1: string): Promise<{
@@ -457,6 +482,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.pii_vetkey_verification_key();
         return result;
     }
+    async prepare_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.prepare_account_removal(arg0);
+        return from_candid_variant_n1(result);
+    }
     async purge_club_grants(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -485,6 +520,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.read_account_my_guardian_children();
         return result;
     }
+    async read_account_removal_drain(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_removal_drain(arg0);
+        return from_candid_variant_n13(result);
+    }
     async read_club_media_authority(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: ClubMediaAuthority;
@@ -493,7 +538,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.read_club_media_authority(arg0);
-        return from_candid_variant_n13(result);
+        return from_candid_variant_n14(result);
     }
     async read_private_media_authority(arg0: string): Promise<{
         __kind__: "Ok";
@@ -507,7 +552,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.read_private_media_authority(arg0);
-        return from_candid_variant_n17(result);
+        return from_candid_variant_n18(result);
     }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
@@ -517,7 +562,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n19(result);
+        return from_candid_variant_n20(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -586,8 +631,8 @@ export class Pii_access_control implements pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_club_media_authority(arg0, to_candid_opt_n20(arg1), arg2, arg3);
-        return from_candid_variant_n13(result);
+        const result = await this.actor.set_club_media_authority(arg0, to_candid_opt_n21(arg1), arg2, arg3);
+        return from_candid_variant_n14(result);
     }
     async set_competition_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -610,8 +655,8 @@ export class Pii_access_control implements pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_private_media_authority(arg0, to_candid_opt_n20(arg1), arg2, arg3);
-        return from_candid_variant_n17(result);
+        const result = await this.actor.set_private_media_authority(arg0, to_candid_opt_n21(arg1), arg2, arg3);
+        return from_candid_variant_n18(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -634,16 +679,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         return from_candid_variant_n1(result);
     }
 }
-function from_candid_ClubMediaAuthority_n14(value: _ClubMediaAuthority): ClubMediaAuthority {
-    return from_candid_record_n15(value);
+function from_candid_ClubMediaAuthority_n15(value: _ClubMediaAuthority): ClubMediaAuthority {
+    return from_candid_record_n16(value);
 }
-function from_candid_opt_n16(value: [] | [Principal]): Principal | null {
+function from_candid_opt_n17(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n9(value: [] | [Uint8Array]): Uint8Array | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n15(value: {
+function from_candid_record_n16(value: {
     move_id: string;
     authority: [] | [Principal];
     revision: bigint;
@@ -654,11 +699,11 @@ function from_candid_record_n15(value: {
 } {
     return {
         move_id: value.move_id,
-        authority: record_opt_to_undefined(from_candid_opt_n16(value.authority)),
+        authority: record_opt_to_undefined(from_candid_opt_n17(value.authority)),
         revision: value.revision
     };
 }
-function from_candid_record_n18(value: {
+function from_candid_record_n19(value: {
     move_id: string;
     competition: [] | [Principal];
     revision: bigint;
@@ -669,7 +714,7 @@ function from_candid_record_n18(value: {
 } {
     return {
         move_id: value.move_id,
-        competition: record_opt_to_undefined(from_candid_opt_n16(value.competition)),
+        competition: record_opt_to_undefined(from_candid_opt_n17(value.competition)),
         revision: value.revision
     };
 }
@@ -750,6 +795,25 @@ function from_candid_variant_n12(value: {
     } : value;
 }
 function from_candid_variant_n13(value: {
+    Ok: _Receipt;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Receipt;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n14(value: {
     Ok: _ClubMediaAuthority;
 } | {
     Err: string;
@@ -762,13 +826,13 @@ function from_candid_variant_n13(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_ClubMediaAuthority_n14(value.Ok)
+        Ok: from_candid_ClubMediaAuthority_n15(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n17(value: {
+function from_candid_variant_n18(value: {
     Ok: {
         move_id: string;
         competition: [] | [Principal];
@@ -789,13 +853,13 @@ function from_candid_variant_n17(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n18(value.Ok)
+        Ok: from_candid_record_n19(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n19(value: {
+function from_candid_variant_n20(value: {
     Ok: _EncryptedPii;
 } | {
     Err: string;
@@ -896,7 +960,7 @@ function from_candid_vec_n8(value: Array<[] | [Uint8Array]>): Array<Uint8Array |
 function to_candid_AuditFilter_n2(value: AuditFilter): _AuditFilter {
     return to_candid_record_n3(value);
 }
-function to_candid_opt_n20(value: Principal | null): [] | [Principal] {
+function to_candid_opt_n21(value: Principal | null): [] | [Principal] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n3(value: {

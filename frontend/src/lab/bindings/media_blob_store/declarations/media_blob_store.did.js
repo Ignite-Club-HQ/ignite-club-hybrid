@@ -100,12 +100,23 @@ export const idlFactory = ({ IDL }) => {
     ),
     'status_code' : IDL.Nat16,
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
   const FreeUsageRow = IDL.Record({
     'count' : IDL.Nat,
     'cycle' : IDL.Nat,
     'category' : IDL.Text,
     'bytes' : IDL.Nat64,
     'club_id' : IDL.Text,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
   });
   
   return IDL.Service({
@@ -174,6 +185,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'put_chunk' : IDL.Func(
         [IDL.Text, IDL.Nat32, IDL.Vec(IDL.Nat8)],
         [Result],
@@ -195,6 +211,11 @@ export const idlFactory = ({ IDL }) => {
     'read_account_get_upload_outcome' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(FinalizedBlob), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'reconcile_upload_operations' : IDL.Func(
