@@ -17,9 +17,9 @@ const world = () => {
 
 describe('closed-group reciprocal configuration', () => {
   it('every planned setting has the exact update signature in current domain contracts', async () => {
-    const contracts = import.meta.glob('./../lab/bindings/*/declarations/*.did.js');
+    const contracts = import.meta.glob('../lab/bindings/*/declarations/*.did.js');
     for (const operation of groupConfigurationPlan(initial(), globals)) {
-      const load = contracts[`./../lab/bindings/${operation.domain}/declarations/${operation.domain}.did.js`];
+      const load = contracts[`../lab/bindings/${operation.domain}/declarations/${operation.domain}.did.js`];
       if (!load) throw new Error(`Missing contract ${operation.domain}`);
       const module = await load() as { idlFactory(input: { IDL: typeof IDL }): IDL.ServiceClass };
       const method = module.idlFactory({ IDL })._fields.find(([name]) => name === operation.method)?.[1];
