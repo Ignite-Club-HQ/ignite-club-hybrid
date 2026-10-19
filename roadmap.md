@@ -2,7 +2,8 @@
 
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 
-- [ ] Correct the owner's misleading health report: exact actual usage parsing, regression tests and rerun on GitHub; current 5T/zero figures are settings, not verified balances. Owner reports mainnet upgrade succeeded; signed-in acceptance and scaling activation remain separate.
+- [x] Correct the owner's misleading health report: exact actual Cycles/Balance and Memory size parsing replaces allocation/reservation settings; six regression tests pass and whole-script fixtures show 0.40T/201.33 MB with low-fuel warning, while missing actual fields fail the run. Preview build OK. Owner reports mainnet upgrade succeeded; signed-in acceptance and scaling activation remain separate.
+- [ ] Owner rerun of Canister health report with the corrected script: actual signed mainnet balances/memory are still unverified; the uploaded 5T/zero figures were settings, not usage. No deploy-key access in this workspace.
 
 - [x] Resolve reported mainnet deploy preflight IC0406: replaced forbidden ingress vetkd_public_key with canonical SDK offline mainnet public derivation; sole-controller, durable receipt and before/after key-preservation checks retained. Nine key checks and six deploy safeguards pass; live public PII key matches independently derived mainnet key_1. Preview build OK. Mainnet upgrade rerun remains owner action; full signed pre/post-upgrade flow is not yet verified and scaling stays off.
 
