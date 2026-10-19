@@ -203,8 +203,8 @@ persistent actor class Main(governorInit : Principal) = this {
       case null player.claimed_by == ?user or player.parent_user_id == ?user.toText();
     }
   };
-  public composite query ({ caller }) func verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
-    if (caller != Principal.fromActor(this)) return false;
+  public composite query ({ caller = origin }) func verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
+    if (origin != Principal.fromActor(this)) return false;
     let caller = viewer;
     if (Principal.isAnonymous(caller)) return false;
     if (isLeagueAdmin(caller, league) or isClubMember(caller, league.club_id)) return true;
@@ -213,8 +213,8 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     false
   };
-  public composite query ({ caller }) func filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
-    if (caller != Principal.fromActor(this)) return [];
+  public composite query ({ caller = origin }) func filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
+    if (origin != Principal.fromActor(this)) return [];
     let caller = viewer;
     var out : [Types.MiniLeague] = [];
     for (league in candidates.values()) if (await this.verify_league_access(caller, league)) out := out.concat([league]);
