@@ -26,7 +26,7 @@ try {
  id.setPrincipal(victim); const account=ok(await id.register_account());
  id.setPrincipal(stranger); ok(await id.register_account());
  id.setPrincipal(victim); assert.ok('Err' in await id.read_service_account(stranger));
- chat.setPrincipal(governor); const conversation=ok(await chat.create_conversation('club',[],[victim]));
+ chat.setPrincipal(governor); const conversation=ok(await chat.create_conversation('club',[],[victim,governor]));
  chat.setPrincipal(victim); ok(await chat.send_message(conversation.id,'local private message','m1',[],[]));
  assert.equal(ok(await chat.read_account_list_messages_page(conversation.id,[],10)).messages.length,1);
  await denied(()=>chat.list_messages_page(conversation.id,[],10));
