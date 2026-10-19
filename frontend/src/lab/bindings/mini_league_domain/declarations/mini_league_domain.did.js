@@ -161,6 +161,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MiniLeagueGroupPlayer, 'Err' : IDL.Text })],
         [],
       ),
+    'can_read_league_matches' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'cancel_session' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : MiniLeagueSession, 'Err' : IDL.Text })],
@@ -506,6 +511,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_events_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

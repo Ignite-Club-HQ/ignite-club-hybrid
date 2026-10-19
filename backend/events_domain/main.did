@@ -440,7 +440,7 @@ type Main =
     (variant {
        Err: text;
        Ok: opt EventGroup;
-     }) query;
+     }) composite_query;
    get_event_roster: (event_id: text) ->
     (variant {
        Err: text;
@@ -480,7 +480,7 @@ type Main =
     (variant {
        Err: text;
        Ok: bool;
-     }) query;
+     }) composite_query;
    get_lineup_snapshot: (event_id: text, team_id: opt text) ->
     (variant {
        Err: text;
@@ -607,13 +607,14 @@ type Main =
     (variant {
        Err: text;
        Ok: vec EventGroup;
-     }) query;
+     }) composite_query;
    list_event_views: (event_id: text) ->
     (variant {
        Err: text;
        Ok: vec EventView;
      }) query;
-   list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
+   list_events: (club_id: opt text, team_id: opt text) ->
+    (vec Event) composite_query;
    list_events_for_duty_teams: (team_ids: vec text) ->
     (variant {
        Err: text;
@@ -623,7 +624,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec Event;
-     }) query;
+     }) composite_query;
    list_favourite_event_titles: () -> (vec text) query;
    list_game_player_stats: (event_id: text) ->
     (variant {
@@ -634,12 +635,12 @@ type Main =
     (variant {
        Err: text;
        Ok: vec EventGroupDuty;
-     }) query;
+     }) composite_query;
    list_group_players: (group_id: text) ->
     (variant {
        Err: text;
        Ok: vec EventGroupPlayer;
-     }) query;
+     }) composite_query;
    list_match_captains: (event_id: text) ->
     (variant {
        Err: text;
@@ -749,12 +750,12 @@ type Main =
     (variant {
        Err: text;
        Ok: opt text;
-     }) query;
+     }) composite_query;
    read_event_group_club: (group_id: text) ->
     (variant {
        Err: text;
        Ok: opt text;
-     }) query;
+     }) composite_query;
    record_event_view: (event_id: text) -> (variant {
                                              Err: text;
                                              Ok;
@@ -956,6 +957,11 @@ type Main =
                         Err: text;
                         Ok: MatchGoalkeeperAssignment;
                       });
+   set_mini_league_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_mini_league_rsvp: (event_id: text, subject: RsvpSubject, state:
     text) -> (variant {
                 Err: text;

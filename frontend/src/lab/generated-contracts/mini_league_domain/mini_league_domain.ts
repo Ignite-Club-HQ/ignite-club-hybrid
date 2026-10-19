@@ -79,6 +79,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    can_read_league_matches(viewer: Principal, league_id: string, club_id: string): Promise<boolean>;
     cancel_session(id: string): Promise<{
         __kind__: "Ok";
         Ok: MiniLeagueSession;
@@ -426,6 +427,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_events_domain_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_mini_league_status(id: string, status: string): Promise<{
         __kind__: "Ok";
         Ok: MiniLeague;
@@ -647,6 +655,10 @@ export class Mini_league_domain implements mini_league_domainInterface {
     }> {
         const result = await this.actor.assign_player_to_group(arg0, arg1, to_candid_opt_n6(arg2));
         return from_candid_variant_n12(result);
+    }
+    async can_read_league_matches(arg0: Principal, arg1: string, arg2: string): Promise<boolean> {
+        const result = await this.actor.can_read_league_matches(arg0, arg1, arg2);
+        return result;
     }
     async cancel_session(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1143,6 +1155,16 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n34(result);
+    }
+    async set_events_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_events_domain_canister(arg0);
         return from_candid_variant_n34(result);
     }
     async set_mini_league_status(arg0: string, arg1: string): Promise<{

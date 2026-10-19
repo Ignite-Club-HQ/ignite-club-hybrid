@@ -153,6 +153,8 @@ type Main =
                      Err: text;
                      Ok: MiniLeagueGroupPlayer;
                    });
+   can_read_league_matches: (viewer: principal, league_id: text, club_id:
+    text) -> (bool) query;
    cancel_session: (id: text) -> (variant {
                                     Err: text;
                                     Ok: MiniLeagueSession;
@@ -412,6 +414,10 @@ type Main =
                                                    Err: text;
                                                    Ok;
                                                  });
+   set_events_domain_canister: (id: principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    set_mini_league_status: (id: text, status: text) ->
     (variant {
        Err: text;

@@ -32,3 +32,17 @@ describe('canister group clock synchronization', () => {
     view.unmount();
   });
 });
+
+ it('clears this board after revoked access without clearing another board', async () => {
+   const view = renderHook(() => useEventGroupSync(team, 'g', { readOnly: true }));
+   await waitFor(() => expect(localStorage.getItem(timerKey)).not.toBeNull());
+   localStorage.setItem('pitch-board-timer-state-team-other', '{"elapsedSeconds":200}');
+   state.read.mockRejectedValueOnce(new Error('Forbidden'));
+   await act(async () => { await view.result.current.loadFromDatabase(true); });
+   expect(localStorage.getItem(timerKey)).toBeNull();
+   expect(localStorage.getItem(pitchKey)).toBeNull();
+   expect(localStorage.getItem('ignite-pitch-board-state')).toBeNull();
+   expect(localStorage.getItem('pitch-board-timer-state-team-other')).toBe('{"elapsedSeconds":200}');
+   expect(state.write).not.toHaveBeenCalled();
+   view.unmount();
+ });

@@ -133,6 +133,9 @@ icp canister call vault_domain set_competition_domain_canister "(principal \"$CO
 icp canister call messaging_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
 icp canister call messaging_domain set_competition_domain_canister "(principal \"$COMPETITION_DOMAIN\")" -e "$ICP_ENV"
 
+icp canister call events_domain set_mini_league_domain_canister "(principal \"$MINI_LEAGUE_DOMAIN\")" -e "$ICP_ENV"
+icp canister call mini_league_domain set_events_domain_canister "(principal \"$EVENTS_DOMAIN\")" -e "$ICP_ENV"
+
 echo "==> Wiring: club news audiences (club_domain <-> mini_league_domain/competition_domain)"
 icp canister call club_domain set_mini_league_domain_canister "(principal \"$MINI_LEAGUE_DOMAIN\")" -e "$ICP_ENV"
 icp canister call club_domain set_competition_domain_canister "(principal \"$COMPETITION_DOMAIN\")" -e "$ICP_ENV"

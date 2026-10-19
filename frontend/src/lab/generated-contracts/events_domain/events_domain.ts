@@ -1161,6 +1161,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_mini_league_domain_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_mini_league_rsvp(event_id: string, subject: RsvpSubject, state: string): Promise<{
         __kind__: "Ok";
         Ok: MiniLeagueRsvp;
@@ -3163,6 +3170,16 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.set_match_goalkeeper(arg0, arg1, arg2, arg3);
         return from_candid_variant_n202(result);
+    }
+    async set_mini_league_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_mini_league_domain_canister(arg0);
+        return from_candid_variant_n1(result);
     }
     async set_mini_league_rsvp(arg0: string, arg1: RsvpSubject, arg2: string): Promise<{
         __kind__: "Ok";

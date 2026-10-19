@@ -1141,6 +1141,11 @@ export interface Main {
     { 'Ok' : MatchGoalkeeperAssignment } |
       { 'Err' : string }
   >,
+  'set_mini_league_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_mini_league_rsvp' : ActorMethod<
     [string, RsvpSubject, string],
     { 'Ok' : MiniLeagueRsvp } |

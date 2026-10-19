@@ -34,3 +34,5 @@
 - Named league invitations use mini_league_domain preview/claim tokens; club email invitations remain a distinct contract. League chats use membership-gated messaging lookup and club-admin-created tagged private groups. Why: possession of child IDs or generic club discovery cannot prove ownership or chat audience.
 - IcpSignInScreen owns login presentation; AuthPage retains provider invocation and redirects to preserve identity, invite and session semantics.
 - Sign-in footers and profile policy links share legalLinks destinations; open separately to preserve drafts and invite URLs, and reuse destinations for internal legal pages.
+
+- Event-group sync clears the current board’s cached state on denied/missing canister reads, leaves other boards and transient-failure caches intact, and never writes for spectators. Why: revoked league access must not retain a stale board or wipe unrelated matches.
