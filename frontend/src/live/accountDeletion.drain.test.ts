@@ -72,7 +72,7 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     (await events).actor.setPrincipal(member);
     ok(await (await events).actor.create_event('c1', [], 'Training', 'Weekly session', 'training', [], [], [], [], BigInt(Date.now() + 3_600_000), BigInt(Date.now() + 7_200_000), [], false, [], []));
     messaging.actor.setPrincipal(governor);
-    const conversation = ok(await messaging.actor.create_conversation('c1', [], [member]));
+    const conversation = ok(await messaging.actor.create_conversation('c1', [], [governor, member]));
     messaging.actor.setPrincipal(member);
     ok(await messaging.actor.send_message(conversation.id, 'hello', 'k1', [], []));
     media.actor.setPrincipal(member);
