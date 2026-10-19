@@ -37,6 +37,10 @@ export type OperatorTransportOptions = {
   idls: Map<string, (ctx: { IDL: typeof IDL }) => unknown>;
   /** Fetch root key for local replicas; never on mainnet. */
   fetchRootKey?: boolean;
+  /** Rehearsal-only controller proof: PocketIC's management canister refuses
+   * ingress canister_status, so local replicas verify controllers through the
+   * server API instead. Never set on mainnet. */
+  statusOverride?: (canisterId: string, governor: string) => Promise<void>;
 };
 
 export async function createOperatorTransport(options: OperatorTransportOptions): Promise<ConfigurationTransport> {
@@ -50,6 +54,7 @@ export async function createOperatorTransport(options: OperatorTransportOptions)
   return {
     async verifyGovernor(canisterId: string, governor: string) {
       if (governor !== operator) throw new Error('Transport identity does not match the required governor');
+      if (options.statusOverride) return await options.statusOverride(canisterId, governor);
       const status = await management(canisterId).canister_status({ canister_id: Principal.fromText(canisterId) });
       if (!status.settings.controllers.some(c => c.toText() === governor)) {
         throw new Error(`Operator does not control ${canisterId}`);

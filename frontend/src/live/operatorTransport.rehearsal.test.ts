@@ -64,7 +64,14 @@ describe.skipIf(!enabled)('production operator transport (real signed calls)', (
     const port = await pic.makeLive();
     const idls = new Map<string, any>();
     for (const [name, service] of services) idls.set(service.canisterId.toText(), (await load(name)).idlFactory);
-    const transport = await createOperatorTransport({ host: `http://127.0.0.1:${port}`, identity: loaded, idls, fetchRootKey: true });
+    // PocketIC's management canister refuses ingress canister_status, so the
+    // rehearsal proves controllers through the server API; the signed
+    // management-call path in the transport is the mainnet path.
+    const statusOverride = async (canisterId: string, expected: string) => {
+      const status = await pic.canisterStatus({ canisterId: Principal.fromText(canisterId), sender: governor });
+      if (!status.settings.controllers.some(c => c.toText() === expected)) throw new Error(`Operator does not control ${canisterId}`);
+    };
+    const transport = await createOperatorTransport({ host: `http://127.0.0.1:${port}`, identity: loaded, idls, fetchRootKey: true, statusOverride });
 
     // Governor verification is real: a foreign principal is rejected before any call.
     await expect(transport.verifyGovernor(services.get('club_domain').canisterId.toText(), member.toText())).rejects.toThrow('does not match');
