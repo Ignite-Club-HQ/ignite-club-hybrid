@@ -111,7 +111,8 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     // Messaging denies removed members with a trap (reject) rather than an Err variant.
     await expect(messaging.actor.send_message(conversation.id, 'still here?', 'k2', [], [])).rejects.toThrow();
     media.actor.setPrincipal(member);
-    denied(await media.actor.begin_upload('clubs/c1/more.jpg', 'image/jpeg', 10n, 1));
+    // Media denies with a reject ("Club membership required for upload").
+    await expect(media.actor.begin_upload('clubs/c1/more.jpg', 'image/jpeg', 10n, 1)).rejects.toThrow('Club membership required');
     identity.actor.setPrincipal(member);
     expect(await identity.actor.register_account()).toHaveProperty('Err');
   }, 120000);
