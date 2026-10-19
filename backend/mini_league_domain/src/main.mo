@@ -178,7 +178,7 @@ persistent actor class Main(governorInit : Principal) {
     if (caller.equal(Principal.anonymous())) return false;
     if (isLeagueAdmin(caller, league)) return true;
     if (isClubMember(caller, league.club_id)) return true;
-    players.any(func(p) = p.mini_league_id == league.id and p.claimed_by == ?caller)
+    players.any(func(p) = p.mini_league_id == league.id and (p.claimed_by == ?caller or p.parent_user_id == ?caller.toText()))
   };
   func findLeague(id : Text) : ?Types.MiniLeague { leagues.find(func(item) = item.id == id) };
   func requireLeagueAdmin(caller : Principal, id : Text) : { #Ok : Types.MiniLeague; #Err : Text } {
@@ -656,8 +656,8 @@ persistent actor class Main(governorInit : Principal) {
               case (?cid) guardians.filter(func(item) = item.child_id == cid).size();
               case null 0;
             };
-            let parentLinked = player.parent_user_id != null or childParent != null;
-            let pending = player.parent_user_id == null and (player.child_id == null or (childParent == null and guardianCount == 0));
+            let parentLinked = player.parent_user_id != null or player.claimed_by != null or childParent != null;
+            let pending = player.parent_user_id == null and player.claimed_by == null and (player.child_id == null or (childParent == null and guardianCount == 0));
             #Ok({ parent_linked = parentLinked; guardian_count = guardianCount; pending })
           };
         }

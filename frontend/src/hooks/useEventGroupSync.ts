@@ -346,6 +346,8 @@ export function useEventGroupSync(
 
   // Auto-start sync when component mounts with an event group
   useEffect(() => {
+    icpRevisionRef.current = null;
+    lastSyncedStateRef.current = "";
     if (actualGroupId) {
       startSync();
     }

@@ -274,6 +274,7 @@ persistent actor class Main(governorInit : Principal) {
     let incomingDuties = snap.group_duties ?? [];
     if (incomingGroups.any(func(g) = not snap.events.any(func(e) = e.id == g.event_id)) or incomingPlayers.any(func(p) = not incomingGroups.any(func(g) = g.id == p.group_id)) or incomingDuties.any(func(d) = not incomingGroups.any(func(g) = g.id == d.group_id))) return #Err("Snapshot contains foreign group records");
     if (incomingGroups.any(func(g) = eventGroups.any(func(x) = x.id == g.id and not events.any(func(e) = e.id == x.event_id and e.club_id == club)))) return #Err("Group id collides with another club");
+    if (incomingDuties.any(func(d) = eventGroupDuties.any(func(x) = x.id == d.id and not events.any(func(e) = e.club_id == club and eventGroups.any(func(g) = g.id == x.group_id and g.event_id == e.id))))) return #Err("Duty id collides with another club");
     let oldGroups = eventGroups.filter(func(g) = events.any(func(e) = e.id == g.event_id and e.club_id == club)).map(func(g) = g.id);
     eventGroups := eventGroups.filter(func(g) = not oldGroups.any(func(id) = id == g.id)).concat(incomingGroups);
     eventGroupPlayers := eventGroupPlayers.filter(func(p) = not oldGroups.any(func(id) = id == p.group_id)).concat(incomingPlayers);
@@ -1706,7 +1707,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(duty)) return #Err("Invalid duty");
     let value : Types.EventGroupDuty = { id = "legacy:" # group_id # ":" # duty; group_id; duty; account_id };
-    eventGroupDuties := eventGroupDuties.filter(func(item) = not (item.group_id == group_id and item.duty == duty));
+    eventGroupDuties := eventGroupDuties.filter(func(item) = item.id != "legacy:" # group_id # ":" # duty);
     eventGroupDuties := eventGroupDuties.concat([value]);
     #Ok(value)
   };
@@ -1715,7 +1716,7 @@ persistent actor class Main(governorInit : Principal) {
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
-    eventGroupDuties := eventGroupDuties.filter(func(item) = not (item.group_id == group_id and item.duty == duty));
+    eventGroupDuties := eventGroupDuties.filter(func(item) = item.id != "legacy:" # group_id # ":" # duty);
     #Ok
   };
 
