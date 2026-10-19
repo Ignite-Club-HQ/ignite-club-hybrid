@@ -46,5 +46,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
 - Media moves: operator-only authenticated registries, journaled fences, bounded consensus pages; reconciliation never enables encrypted moves. Owner policy 2026-10-19: clubs holding encrypted media are never moved — keep the fail-closed gate, never build re-encryption; existing clubs stay put, only new clubs get group placement. Why: photo keys are tied to the creating group.
-
-
+- Cross-group account lifecycle is an unreleased local-only protocol: keep authority-wide revocation and new-group activation blocked until complete revision-bound inventory, direct/mirrored permission invalidation and stale-sync races are proven. Why: successful local fan-out cannot prove immediate revocation across unavailable groups.
