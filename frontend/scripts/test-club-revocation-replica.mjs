@@ -55,7 +55,7 @@ try {
   const reply = await pic.client.awaitCall(heldKey);
   assert.ok('Err' in IDL.decode(signature.retTypes, reply.body)[0], 'Stale permitting membership reply must not yield a fresh photo key');
   a.pii.actor.setPrincipal(governor); ok(await a.pii.actor.set_club_domain_canister(a.club.canisterId));
-  console.log('MEMBERSHIP:', JSON.stringify(await a.club.actor.read_has_club_membership(removed, a.id), (_, v) => typeof v === 'bigint' ? String(v) : v)); console.log('VETKEY:', JSON.stringify((await a.read(removed)) === undefined ? 'read-ok' : 'read-val', null, 0).slice(0, 80)); await deny(() => a.read(removed));
+  await deny(() => a.read(removed));
   a.blob.actor.setPrincipal(removed);
   await deny(() => a.blob.actor.put_chunk(pending, 0, new Uint8Array([1])));
   await deny(() => a.blob.actor.finalize_upload(pending));
@@ -74,9 +74,9 @@ try {
   await a.read(retained);
   // Clearing the roster marker does not silently restore previously revoked roles.
   a.club.actor.setPrincipal(governor); ok(await a.club.actor.restore_member(a.id, removed));
-  console.log('MEMBERSHIP:', JSON.stringify(await a.club.actor.read_has_club_membership(removed, a.id), (_, v) => typeof v === 'bigint' ? String(v) : v)); console.log('VETKEY:', JSON.stringify((await a.read(removed)) === undefined ? 'read-ok' : 'read-val', null, 0).slice(0, 80)); await deny(() => a.read(removed)); await deny(() => a.start(removed, 'marker-cleared'));
+  await deny(() => a.read(removed)); await deny(() => a.start(removed, 'marker-cleared'));
   // Upgrade persistence without snapshot rollback: cached keys are not revoked.
   await pic.upgradeCanister({ canisterId: a.club.canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] }, arg: IDL.encode([IDL.Principal], [governor]) });
-  console.log('MEMBERSHIP:', JSON.stringify(await a.club.actor.read_has_club_membership(removed, a.id), (_, v) => typeof v === 'bigint' ? String(v) : v)); console.log('VETKEY:', JSON.stringify((await a.read(removed)) === undefined ? 'read-ok' : 'read-val', null, 0).slice(0, 80)); await deny(() => a.read(removed)); await a.read(retained); await b.read(removed);
+  await deny(() => a.read(removed)); await a.read(retained); await b.read(removed);
   console.log('PASS: actual two-group photo decrypt, club-only key/chunk/finalize/new-upload denial, pending upload interruption, original-human delegated denial, retained members, other-club uploads, authority outage, marker restore and upgrade persistence. No live services or global account flags.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
