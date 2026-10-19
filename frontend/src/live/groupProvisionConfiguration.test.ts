@@ -5,7 +5,7 @@ import { configureProvisionGroup, groupConfigurationPlan } from './groupProvisio
 import { PER_GROUP_DOMAINS, runProvision, type Provision, type ProvisionAdapter } from './groupProvisioner';
 
 const id = (n: number) => Principal.fromUint8Array(Uint8Array.from([n, 1])).toText();
-const globals = { identityAccess: id(90), pushWorker: id(91) };
+const globals = { identityAccess: id(90), pushWorker: id(91), mediaBlobStore: id(96) };
 const initial = (): Provision => ({ id: 'p', groupId: 'new', deploymentId: 'local', subnetId: id(80), phase: 'installed', expectedRevision: 1n,
   canisters: Object.fromEntries(PER_GROUP_DOMAINS.map((d, i) => [d, id(i + 1)])), installedDomains: [...PER_GROUP_DOMAINS] });
 const world = () => {
@@ -35,6 +35,9 @@ describe('closed-group reciprocal configuration', () => {
     expect(find('notification_queue', 'set_messaging_domain_canister')?.args[0]).toEqual(Principal.fromText(p.canisters.messaging_domain ?? ''));
     expect(find('notification_queue', 'set_identity_access_canister')?.args[0]).toEqual(Principal.fromText(globals.identityAccess));
     expect(find('notification_queue', 'grant_worker')?.args[0]).toEqual(Principal.fromText(globals.pushWorker));
+    expect(find('media_blob_store', 'set_club_domain_canister')?.args[0]).toEqual(Principal.fromText(p.canisters.club_domain ?? ''));
+    expect(find('club_domain', 'register_media_quota_store')?.args[0]).toEqual(Principal.fromText(globals.mediaBlobStore));
+    expect(find('timer_jobs', 'grant_worker')?.args[0]).toEqual(Principal.fromText(globals.pushWorker));
     expect(find('competition_domain', 'set_participant_club_authorities')?.args[0]).toEqual([Principal.fromText(p.canisters.club_domain ?? '')]);
     expect(plan.some(op => op.method === 'set_identity_authority' || op.method === 'set_account_authorities')).toBe(false);
   });
