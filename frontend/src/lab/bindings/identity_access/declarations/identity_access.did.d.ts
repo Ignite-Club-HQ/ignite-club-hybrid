@@ -373,6 +373,7 @@ export interface _SERVICE {
   'begin_link' : ActorMethod<[Principal], Result_5>,
   'bind_external_site' : ActorMethod<[string, string, string], Result_6>,
   'check_field_access' : ActorMethod<[string, string], Result_7>,
+  'cancel_account_deletion' : ActorMethod<[string], Result_2>,
   'commit_account_deletion' : ActorMethod<[string], Result_2>,
   /**
    * Public: remaining cycles (shown in admin settings).
@@ -573,6 +574,7 @@ export interface _SERVICE {
    * never called `set_profile`.
    */
   'set_theme_preference' : ActorMethod<[[] | [string]], Result_11>,
+  'rebase_account_deletion' : ActorMethod<[string], Result_14>,
   'settle_account_deletion' : ActorMethod<[string], Result_2>,
   'whoami' : ActorMethod<[], Result>,
 }
