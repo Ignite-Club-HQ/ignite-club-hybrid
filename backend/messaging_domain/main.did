@@ -348,22 +348,22 @@ type Main =
     (record {
        category: opt text;
        join_policy: text;
-     }) query;
+     });
    get_group_metadata: (conversation_id: text) ->
     (variant {
        Err: text;
        Ok: GroupMetadata;
-     }) query;
+     });
    get_group_metadata_multi: (conversation_ids: vec text) ->
     (variant {
        Err: text;
        Ok: vec GroupMetadata;
-     }) query;
+     });
    get_mini_league_chat: (club_id: text, league_id: text) ->
     (variant {
        Err: text;
        Ok: opt GroupSummary;
-     }) query;
+     });
    get_minimum_app_versions: () ->
     (variant {
        Err: text;
@@ -372,7 +372,7 @@ type Main =
                  text;
                };
      }) query;
-   get_mute_preference: (conversation_id: text) -> (bool) query;
+   get_mute_preference: (conversation_id: text) -> (bool);
    get_mute_preferences: (conversation_ids: vec text) ->
     (variant {
        Err: text;
@@ -390,7 +390,7 @@ type Main =
     (variant {
        Err: text;
        Ok: PollResults;
-     }) query;
+     });
    get_user_messaging_settings: () -> (UserMessagingSettings) query;
    grant_competition_admin: (conversation_id: text, user: principal) ->
     (variant {
@@ -408,7 +408,7 @@ type Main =
        Err: text;
        Ok: nat;
      });
-   is_competition_admin: (conversation_id: text) -> (bool) query;
+   is_competition_admin: (conversation_id: text) -> (bool);
    join_open_group: (conversation_id: text) -> (variant {
                                                   Err: text;
                                                   Ok;
@@ -463,34 +463,33 @@ type Main =
     (variant {
        Err: text;
        Ok: vec GroupSummary;
-     }) query;
+     });
    list_groups_by_clubs: (club_ids: vec text) ->
     (variant {
        Err: text;
        Ok: vec GroupSummary;
-     }) query;
+     });
    list_groups_by_team: (team_id: text) ->
     (variant {
        Err: text;
        Ok: vec GroupSummary;
-     }) query;
+     });
    list_join_requests: (conversation_id: text) ->
     (variant {
        Err: text;
        Ok: vec JoinRequest;
-     }) query;
+     });
    list_latest_messages_page: (conversation_id: text, before: opt nat64,
     limit: nat16) -> (variant {
                         Err: text;
                         Ok: MessagePage;
-                      }) query;
-   list_messages: (conversation_id: text, after: opt nat64) ->
-    (vec Message) query;
+                      });
+   list_messages: (conversation_id: text, after: opt nat64) -> (vec Message);
    list_messages_page: (conversation_id: text, after: opt nat64, limit:
     nat16) -> (variant {
                  Err: text;
                  Ok: MessagePage;
-               }) query;
+               });
    list_open_groups: (club_id: text) ->
     (variant {
        Err: text;
@@ -502,27 +501,27 @@ type Main =
            requested: bool;
            summary: GroupSummary;
          };
-     }) query;
+     });
    list_pinned_messages: (conversation_id: text) ->
     (variant {
        Err: text;
        Ok: vec PinnedMessage;
-     }) query;
+     });
    list_reactions: (conversation_id: text) ->
     (variant {
        Err: text;
        Ok: vec Reaction;
-     }) query;
+     });
    list_read_receipts: (conversation_id: text) ->
     (variant {
        Err: text;
        Ok: vec Receipt;
-     }) query;
+     });
    list_typing: (conversation_id: text) ->
     (variant {
        Err: text;
        Ok: vec TypingUser;
-     }) query;
+     });
    mark_read: (conversation_id: text, message_id: text) ->
     (variant {
        Err: text;
@@ -543,13 +542,12 @@ type Main =
     (variant {
        Err: text;
        Ok: vec MessageWithReactions;
-     }) query;
-   my_unread_counts: () -> (vec UnreadSummary) query;
-   online_count: (conversation_id: text) ->
-    (variant {
-       Err: text;
-       Ok: nat64;
-     }) query;
+     });
+   my_unread_counts: () -> (vec UnreadSummary);
+   online_count: (conversation_id: text) -> (variant {
+                                               Err: text;
+                                               Ok: nat64;
+                                             });
    open_conversation: (conversation_id: text, limit: nat16) ->
     (variant {
        Err: text;
@@ -559,7 +557,7 @@ type Main =
           pins: opt vec PinnedMessage;
           reactions: vec Reaction;
         };
-     }) query;
+     });
    pin_message: (conversation_id: text, message_id: text) ->
     (variant {
        Err: text;
@@ -582,6 +580,8 @@ type Main =
                            Ok: nat32;
                          });
    read_account_can_dm_user: (other: principal) -> (bool);
+   read_account_can_read_digest: (subject: principal, conversation_id:
+    text) -> (bool);
    read_account_dm_attachments_disabled: (user: principal) -> (bool);
    read_account_export_state: () -> (variant {
                                        Err: text;
@@ -771,7 +771,7 @@ type Main =
     (variant {
        Err: text;
        Ok: opt text;
-     }) query;
+     });
    recapTransform: (record {
                       context: blob;
                       response: HttpRequestResult;
@@ -780,7 +780,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec RecentConversation;
-     }) query;
+     });
    register_attachment_metadata: (conversation_id: text, message_id:
     opt text, kind: text, ref_id: text, url: opt text, size_bytes:
     opt nat64) -> (variant {
@@ -837,7 +837,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec Message;
-     }) query;
+     });
    send_message: (conversation_id: text, body: text, idempotency_key: 
     text, attachment: opt Attachment, reply_to_id: opt text) ->
     (variant {
@@ -967,16 +967,15 @@ type Main =
        Err: text;
        Ok;
      });
-   unread_count: (conversation_id: text) ->
-    (variant {
-       Err: text;
-       Ok: Unread;
-     }) query;
+   unread_count: (conversation_id: text) -> (variant {
+                                               Err: text;
+                                               Ok: Unread;
+                                             });
    unread_count_by_club: ("principal": principal) ->
     (variant {
        Err: text;
        Ok: vec ClubUnreadSummary;
-     }) query;
+     });
    update_group: (conversation_id: text, name: opt text, avatar: opt text,
     description: opt text, admin_only_posting: opt bool) ->
     (variant {

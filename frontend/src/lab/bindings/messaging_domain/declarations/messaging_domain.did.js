@@ -519,22 +519,22 @@ export const idlFactory = ({ IDL }) => {
             'category' : IDL.Opt(IDL.Text),
           }),
         ],
-        ['query'],
+        [],
       ),
     'get_group_metadata' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'get_group_metadata_multi' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'get_mini_league_chat' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(GroupSummary), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'get_minimum_app_versions' : IDL.Func(
         [],
@@ -546,7 +546,7 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
-    'get_mute_preference' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'get_mute_preference' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'get_mute_preferences' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [
@@ -565,7 +565,7 @@ export const idlFactory = ({ IDL }) => {
     'get_poll_results' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : PollResults, 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'get_user_messaging_settings' : IDL.Func(
         [],
@@ -588,7 +588,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
-    'is_competition_admin' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'is_competition_admin' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'join_open_group' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -643,37 +643,37 @@ export const idlFactory = ({ IDL }) => {
     'list_groups_by_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_groups_by_clubs' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_groups_by_team' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_join_requests' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(JoinRequest), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_latest_messages_page' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Nat16],
         [IDL.Variant({ 'Ok' : MessagePage, 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_messages' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64)],
         [IDL.Vec(Message)],
-        ['query'],
+        [],
       ),
     'list_messages_page' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Nat16],
         [IDL.Variant({ 'Ok' : MessagePage, 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_open_groups' : IDL.Func(
         [IDL.Text],
@@ -690,27 +690,27 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        [],
       ),
     'list_pinned_messages' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(PinnedMessage), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_reactions' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Reaction), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_read_receipts' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_typing' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(TypingUser), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'mark_read' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -741,13 +741,13 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        [],
       ),
-    'my_unread_counts' : IDL.Func([], [IDL.Vec(UnreadSummary)], ['query']),
+    'my_unread_counts' : IDL.Func([], [IDL.Vec(UnreadSummary)], []),
     'online_count' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'open_conversation' : IDL.Func(
         [IDL.Text, IDL.Nat16],
@@ -761,7 +761,7 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
-        ['query'],
+        [],
       ),
     'pin_message' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -1021,7 +1021,7 @@ export const idlFactory = ({ IDL }) => {
     'read_conversation_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'recapTransform' : IDL.Func(
         [
@@ -1036,7 +1036,7 @@ export const idlFactory = ({ IDL }) => {
     'recent_conversations' : IDL.Func(
         [IDL.Principal, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Vec(RecentConversation), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'register_attachment_metadata' : IDL.Func(
         [
@@ -1103,7 +1103,7 @@ export const idlFactory = ({ IDL }) => {
     'search_messages' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Vec(Message), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'send_message' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(Attachment), IDL.Opt(IDL.Text)],
@@ -1238,12 +1238,12 @@ export const idlFactory = ({ IDL }) => {
     'unread_count' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Unread, 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'unread_count_by_club' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubUnreadSummary), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'update_group' : IDL.Func(
         [

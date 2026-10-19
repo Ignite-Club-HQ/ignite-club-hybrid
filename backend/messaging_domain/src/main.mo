@@ -471,6 +471,61 @@ persistent actor class Main(governorInit : Principal) {
   };
 
 
+  // Stored chat participants locate access; current club authority must also admit
+  // the original human. Real DMs and competition audiences are separate scopes.
+  func requiresClubMembership(c : Types.Conversation) : Bool {
+    if (c.club_id == "dm" or c.id == BROADCAST_CONVERSATION_ID) return false;
+    switch (getGroupMetadataFor(c.id)) {
+      case (?m) { m.kind != "competition" and m.kind != "competition_admin" };
+      case null { true };
+    }
+  };
+
+  func requireChatClubMember(subject : Principal, club : Text) : async* () {
+    if (isGovernor(subject)) return;
+    auth(subject);
+    let configured = clubDomainCanister;
+    let ?cd = configured else throw Error.reject("Club chat authority unavailable");
+    let authority : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(cd.toText());
+    let member = await (with timeout = 10) authority.read_has_club_membership(subject, club);
+    if (configured != clubDomainCanister or isFenced(club)) throw Error.reject("Club chat authorization changed");
+    if (not member) throw Error.reject("Club chat access forbidden");
+  };
+
+  func requireChatAccess(subject : Principal, conversation_id : Text) : async* () {
+    let captured = conversations.find(func(c) = c.id == conversation_id);
+    switch (captured) {
+      case null {};
+      case (?c) {
+        if (requiresClubMembership(c)) {
+          await* requireChatClubMember(subject, c.club_id);
+          let fresh = conversations.find(func(item) = item.id == conversation_id);
+          switch (fresh) {
+            case (?current) {
+              if (current.club_id != c.club_id or current.team_id != c.team_id or not requiresClubMembership(current))
+                throw Error.reject("Conversation authorization changed");
+            };
+            case null { throw Error.reject("Conversation no longer exists") };
+          };
+        };
+      };
+    };
+  };
+
+  func requireMessageChatAccess(subject : Principal, message_id : Text) : async* () {
+    switch (messages.find(func(m) = m.id == message_id)) {
+      case (?m) { await* requireChatAccess(subject, m.conversation_id) };
+      case null {};
+    };
+  };
+
+  func requirePollChatAccess(subject : Principal, poll_id : Text) : async* () {
+    switch (polls.find(func(p) = p.id == poll_id)) {
+      case (?p) { await* requireChatAccess(subject, p.conversation_id) };
+      case null {};
+    };
+  };
+
   func conversationLatestSequence(conversation_id : Text) : Nat64 {
     for (item in conversations.values()) {
       if (item.id == conversation_id) {
@@ -491,6 +546,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func create_conversation(club_id : Text, team_id : ?Text, participants : [Principal]) : async { #Ok : Types.Conversation; #Err : Text } {
     await admitAccount(caller);
+    if (club_id != "dm") { await* requireChatClubMember(caller, club_id) };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or participants.size() == 0) return #Err("Invalid conversation participants");
@@ -613,6 +669,7 @@ persistent actor class Main(governorInit : Principal) {
   // open a thread they belong to.
   public shared ({ caller }) func ensure_club_admin_thread(club_id : Text, member : Principal) : async { #Ok : Types.Conversation; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatClubMember(caller, club_id);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
@@ -1211,6 +1268,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (conversations.find(func(c) = c.id == conversation_id)) { case (?c) { if (isFenced(c.club_id)) return #Err("Club is temporarily locked for a transfer"); }; case null {} };
@@ -1232,6 +1290,7 @@ persistent actor class Main(governorInit : Principal) {
   func sendAs(caller : Principal, conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async* { #Ok : Types.Message; #Err : Text } {
     await admitAccount(caller);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
+    await* requireChatAccess(caller, conversation_id);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     // The broadcast conversation is open-read, so the check above passes for
     // every signed-in member; only platform admins (club_domain's app_admin
@@ -1249,6 +1308,8 @@ persistent actor class Main(governorInit : Principal) {
 
 
     await admitAccount(caller);
+    if (not canAccessConversation(caller, conversation_id) or convFenced(conversation_id)) return #Err("Conversation authorization changed");
+    await* requireChatAccess(caller, conversation_id);
     if (not canAccessConversation(caller, conversation_id) or convFenced(conversation_id)) return #Err("Conversation authorization changed");
     // DM blocking: refuse to post when either party has blocked the other.
     for (c in conversations.values()) {
@@ -1307,6 +1368,7 @@ persistent actor class Main(governorInit : Principal) {
   // allow a longer body than chat messages (valid() caps at 128 chars).
   public shared ({ caller }) func broadcast_announcement(club_id : Text, team_ids : [Text], include_club_chat : Bool, body : Text, idempotency_key : Text) : async { #Ok : Types.BroadcastResult; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatClubMember(caller, club_id);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(idempotency_key)) return #Err("Invalid announcement");
@@ -1352,6 +1414,7 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func update_message(message_id : Text, body : Text) : async { #Ok : Types.Message; #Err : Text } {
     await admitAccount(caller);
+    await* requireMessageChatAccess(caller, message_id);
     if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validBody(body)) return #Err("Invalid message");
@@ -1386,6 +1449,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func mark_read(conversation_id : Text, message_id : Text) : async { #Ok : Types.Receipt; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -1413,7 +1477,8 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func list_messages(conversation_id : Text, after : ?Nat64) : async [Types.Message] {
+  public shared ({ caller }) func list_messages(conversation_id : Text, after : ?Nat64) : async [Types.Message] {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) Runtime.trap("Conversation access forbidden");
     var filtered : [Types.Message] = [];
@@ -1429,7 +1494,8 @@ persistent actor class Main(governorInit : Principal) {
     filtered
   };
 
-  public query ({ caller }) func list_messages_page(conversation_id : Text, after : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
+  public shared ({ caller }) func list_messages_page(conversation_id : Text, after : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
@@ -1460,7 +1526,8 @@ persistent actor class Main(governorInit : Principal) {
   // as `before` to load the next-older page, null means nothing older remains.
   // (list_messages_page pages forward from the OLDEST message, which is not
   // what a chat screen wants when it first opens.)
-  public query ({ caller }) func list_latest_messages_page(conversation_id : Text, before : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
+  public shared ({ caller }) func list_latest_messages_page(conversation_id : Text, before : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
@@ -1502,7 +1569,8 @@ persistent actor class Main(governorInit : Principal) {
   // Case-insensitive substring search over a conversation's message bodies,
   // newest matches first. Mirrors the Supabase chat-history search used by
   // chatHistorySearchFetcher.ts so ICP-routed threads get the same feature.
-  public query ({ caller }) func search_messages(conversation_id : Text, needle : Text, limit : Nat16) : async { #Ok : [Types.Message]; #Err : Text } {
+  public shared ({ caller }) func search_messages(conversation_id : Text, needle : Text, limit : Nat16) : async { #Ok : [Types.Message]; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
@@ -1522,7 +1590,8 @@ persistent actor class Main(governorInit : Principal) {
   // Full reaction rows (user + emoji) for a conversation so clients can
   // render "who reacted" and restore reactions on refetch. list_messages_page
   // intentionally stays lightweight; reactions are fetched alongside it.
-  public query ({ caller }) func list_reactions(conversation_id : Text) : async { #Ok : [Types.Reaction]; #Err : Text } {
+  public shared ({ caller }) func list_reactions(conversation_id : Text) : async { #Ok : [Types.Reaction]; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     var result : [Types.Reaction] = [];
@@ -1540,11 +1609,12 @@ persistent actor class Main(governorInit : Principal) {
   // reactions on those messages, and the conversation's pins. Pins are null
   // when the caller may read messages but not pins (anonymous / no
   // conversation access); clients then fall back to list_pinned_messages.
-  public query ({ caller }) func open_conversation(conversation_id : Text, limit : Nat16) : async {
+  public shared ({ caller }) func open_conversation(conversation_id : Text, limit : Nat16) : async {
     #Ok : { page : Types.MessagePage; reactions : [Types.Reaction]; pins : ?[Types.PinnedMessage] };
     #Err : Text;
   } {
     denyLegacyAccountQuery();
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let latest = conversationLatestSequence(conversation_id);
@@ -1589,7 +1659,8 @@ persistent actor class Main(governorInit : Principal) {
     })
   };
 
-  public query ({ caller }) func unread_count(conversation_id : Text) : async { #Ok : Types.Unread; #Err : Text } {
+  public shared ({ caller }) func unread_count(conversation_id : Text) : async { #Ok : Types.Unread; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(unreadFor(caller, conversation_id))
@@ -1597,6 +1668,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func delete_message(message_id : Text) : async { #Ok : Types.Message; #Err : Text } {
     await admitAccount(caller);
+    await* requireMessageChatAccess(caller, message_id);
     if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     var found_idx : ?Nat = null;
@@ -1697,12 +1769,22 @@ persistent actor class Main(governorInit : Principal) {
     members : [Principal],
   ) : async { #Ok : Types.GroupMetadata; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (findConversationIndex(conversation_id) == null) return #Err("Conversation not found");
     if (not valid(conversation_id) or not valid(name) or not validKind(kind)) return #Err("Invalid group metadata");
     if (members.any(func(m) = m.equal(Principal.anonymous()))) return #Err("Invalid member");
     let existing = getGroupMetadataFor(conversation_id);
+    let stored = conversations.find(func(c) = c.id == conversation_id);
+    if (not isGovernor(caller)) {
+      switch (stored) {
+        case (?c) {
+          if (club_id != ?c.club_id or team_id != c.team_id) return #Err("Conversation scope is immutable");
+          if (requiresClubMembership(c) and (kind == "competition" or kind == "competition_admin")) return #Err("Conversation scope is immutable");
+        }; case null {};
+      };
+    };
     switch (existing) {
       case (?meta) { if (not canManageGroupMetadata(caller, meta)) return #Err("Group metadata management forbidden") };
       case null {
@@ -1726,7 +1808,8 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(updated)
   };
 
-  public query ({ caller }) func get_group_metadata(conversation_id : Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+  public shared ({ caller }) func get_group_metadata(conversation_id : Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id) and not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     switch (getGroupMetadataFor(conversation_id)) {
@@ -1773,6 +1856,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func grant_competition_admin(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("App admin required");
@@ -1783,7 +1867,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public query ({ caller }) func is_competition_admin(conversation_id : Text) : async Bool {
+  public shared ({ caller }) func is_competition_admin(conversation_id : Text) : async Bool {
     denyLegacyAccountQuery();
     isCompetitionAdminFor(caller, conversation_id)
   };
@@ -1823,7 +1907,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // A league tag locates an existing private group; it never grants membership.
-  public query ({ caller }) func get_mini_league_chat(club_id : Text, league_id : Text) : async { #Ok : ?Types.GroupSummary; #Err : Text } {
+  public shared ({ caller }) func get_mini_league_chat(club_id : Text, league_id : Text) : async { #Ok : ?Types.GroupSummary; #Err : Text } {
+    await* requireChatClubMember(caller, club_id);
     denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return #Err("Forbidden");
     let matches = groupMetadata.filter(func(m) = not m.deleted and m.club_id == ?club_id and m.kind == "mini_league:" # league_id and m.members.any(func(p) = p.equal(caller)));
@@ -1834,6 +1919,7 @@ persistent actor class Main(governorInit : Principal) {
   // Find-or-create is atomic and safe to resume; no cross-canister await.
   public shared ({ caller }) func ensure_mini_league_chat(club_id : Text, league_id : Text, name : Text, members : [Principal]) : async { #Ok : Types.GroupSummary; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatClubMember(caller, club_id);
     auth(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     if (not isGovernor(caller) and not hasRole(caller, "club_admin", ?club_id, null)) return #Err("Club admin required");
@@ -1851,7 +1937,8 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(toGroupSummary(caller, meta))
   };
 
-  public query ({ caller }) func list_groups_by_club(club_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+  public shared ({ caller }) func list_groups_by_club(club_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+    await* requireChatClubMember(caller, club_id);
     denyLegacyAccountQuery();
     if (not valid(club_id)) return #Err("Invalid club id");
     if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
@@ -1859,11 +1946,12 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(Array.map<Types.GroupMetadata, Types.GroupSummary>(matches, func(m) = toGroupSummary(caller, m)))
   };
 
-  public query ({ caller }) func list_groups_by_team(team_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+  public shared ({ caller }) func list_groups_by_team(team_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
     denyLegacyAccountQuery();
     if (not valid(team_id)) return #Err("Invalid team id");
     var club_of_team = "";
     for (m in groupMetadata.values()) { if (m.team_id == ?team_id) { club_of_team := Option.get(m.club_id, "") } };
+    await* requireChatClubMember(caller, club_of_team);
     if (not canBrowseTeamGroups(caller, club_of_team, team_id)) return #Err("Team access forbidden");
     let matches = groupMetadata.filter(func(m) = m.team_id == ?team_id and not m.deleted);
     #Ok(Array.map<Types.GroupMetadata, Types.GroupSummary>(matches, func(m) = toGroupSummary(caller, m)))
@@ -1875,7 +1963,8 @@ persistent actor class Main(governorInit : Principal) {
   // conversation-scoped read path. Privacy-scoped to conversation members
   // (participants or group members) so a caller only sees who has read
   // messages in conversations they belong to.
-  public query ({ caller }) func list_read_receipts(conversation_id : Text) : async { #Ok : [Types.Receipt]; #Err : Text } {
+  public shared ({ caller }) func list_read_receipts(conversation_id : Text) : async { #Ok : [Types.Receipt]; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canAccessConversation(caller, conversation_id) and not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(receipts.filter(func(r) = r.conversation_id == conversation_id))
@@ -1885,12 +1974,13 @@ persistent actor class Main(governorInit : Principal) {
   // in, annotated with each conversation's metadata kind so the frontend can
   // bucket into {teams, clubs, groups, dms, broadcast} without a second
   // round-trip per conversation.
-  public query ({ caller }) func my_unread_counts() : async [Types.UnreadSummary] {
+  public shared ({ caller }) func my_unread_counts() : async [Types.UnreadSummary] {
     denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return [];
     var result : [Types.UnreadSummary] = [];
     for (conversation in conversations.values()) {
-      if (conversation.participants.any(func(p) = p.equal(caller))) {
+      let visible = try { await* requireChatAccess(caller, conversation.id); true } catch (_) { false };
+      if (visible and conversation.participants.any(func(p) = p.equal(caller))) {
         let u = unreadFor(caller, conversation.id);
         if (u.count > 0) {
           result := result.concat([{ conversation_id = conversation.id; kind = inferConversationKind(conversation); count = u.count }]);
@@ -1927,6 +2017,7 @@ persistent actor class Main(governorInit : Principal) {
     role_entries : [(Principal, Text)],
   ) : async { #Ok : Types.GroupMetadata; #Err : Text } {
     await admitAccount(caller);
+    if (kind != "competition") { await* requireChatClubMember(caller, club_id) };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not validKind(kind)) return #Err("Invalid group");
@@ -1953,6 +2044,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func update_group(conversation_id : Text, name : ?Text, avatar : ?Text, description : ?Text, admin_only_posting : ?Bool) : async { #Ok : Types.GroupMetadata; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (getGroupMetadataFor(conversation_id)) {
@@ -1977,6 +2069,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func add_group_members(conversation_id : Text, members : [Principal]) : async { #Ok : Types.GroupMetadata; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (members.size() == 0 or members.any(func(p) = p.equal(Principal.anonymous()))) return #Err("Invalid members");
@@ -2030,6 +2123,7 @@ persistent actor class Main(governorInit : Principal) {
   // (owner/admin role, scoped admin, governor/app_admin) only.
   public shared ({ caller }) func remove_group_member(conversation_id : Text, member : Principal) : async { #Ok : Types.GroupMetadata; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (member.equal(Principal.anonymous())) return #Err("Invalid member");
@@ -2049,6 +2143,7 @@ persistent actor class Main(governorInit : Principal) {
   // gate (mirrors remove_group_member's effect targeted at the caller).
   public shared ({ caller }) func leave_group(conversation_id : Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
@@ -2064,6 +2159,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func soft_delete_group(conversation_id : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (getGroupMetadataFor(conversation_id)) {
@@ -2098,6 +2194,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func restore_group(conversation_id : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (getGroupMetadataFor(conversation_id)) {
@@ -2114,6 +2211,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func purge_group(conversation_id : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     auth(caller);
     if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
     switch (getGroupMetadataFor(conversation_id)) {
@@ -2166,6 +2264,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func request_join_group(conversation_id : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (findGroupMetadataIndex(conversation_id) == null) return #Err("Group metadata not found");
@@ -2178,6 +2277,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func approve_join_request(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
@@ -2220,6 +2320,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_group_join_policy(conversation_id : Text, join_policy : Text, category : ?Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (join_policy != "invite_only" and join_policy != "request_to_join" and join_policy != "open_to_club") return #Err("Invalid join policy");
@@ -2231,14 +2332,16 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public query ({ caller }) func get_group_join_policy(conversation_id : Text) : async { join_policy : Text; category : ?Text } {
+  public shared ({ caller }) func get_group_join_policy(conversation_id : Text) : async { join_policy : Text; category : ?Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     joinPolicyOf(conversation_id)
   };
 
   // Club-level groups (no team) a club member may discover: open_to_club or
   // request_to_join, not deleted.
-  public query ({ caller }) func list_open_groups(club_id : Text) : async { #Ok : [{ summary : Types.GroupSummary; join_policy : Text; category : ?Text; requested : Bool }]; #Err : Text } {
+  public shared ({ caller }) func list_open_groups(club_id : Text) : async { #Ok : [{ summary : Types.GroupSummary; join_policy : Text; category : ?Text; requested : Bool }]; #Err : Text } {
+    await* requireChatClubMember(caller, club_id);
     denyLegacyAccountQuery();
     if (not valid(club_id)) return #Err("Invalid club id");
     if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
@@ -2257,6 +2360,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func join_open_group(conversation_id : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (joinPolicyOf(conversation_id).join_policy != "open_to_club") return #Err("Group is not open");
@@ -2285,6 +2389,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func reject_join_request(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
@@ -2292,7 +2397,8 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public query ({ caller }) func list_join_requests(conversation_id : Text) : async { #Ok : [Types.JoinRequest]; #Err : Text } {
+  public shared ({ caller }) func list_join_requests(conversation_id : Text) : async { #Ok : [Types.JoinRequest]; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
     #Ok(joinRequests.filter(func(r) = r.conversation_id == conversation_id))
@@ -2308,6 +2414,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func create_poll(conversation_id : Text, message_id : ?Text, question : Text, options : [Text]) : async { #Ok : Types.Poll; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -2323,6 +2430,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func vote_poll(poll_id : Text, option_index : Nat32) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requirePollChatAccess(caller, poll_id);
     auth(caller);
     switch (findPollIndex(poll_id)) {
       case null { #Err("Poll not found") };
@@ -2340,6 +2448,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func close_poll(poll_id : Text) : async { #Ok : Types.Poll; #Err : Text } {
     await admitAccount(caller);
+    await* requirePollChatAccess(caller, poll_id);
     auth(caller);
     switch (findPollIndex(poll_id)) {
       case null { #Err("Poll not found") };
@@ -2357,6 +2466,7 @@ persistent actor class Main(governorInit : Principal) {
   // the poll and every vote cast on it.
   public shared ({ caller }) func delete_poll(poll_id : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requirePollChatAccess(caller, poll_id);
     auth(caller);
     switch (findPollIndex(poll_id)) {
       case null { #Err("Poll not found") };
@@ -2370,7 +2480,8 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func get_poll_results(poll_id : Text) : async { #Ok : Types.PollResults; #Err : Text } {
+  public shared ({ caller }) func get_poll_results(poll_id : Text) : async { #Ok : Types.PollResults; #Err : Text } {
+    await* requirePollChatAccess(caller, poll_id);
     denyLegacyAccountQuery();
     switch (findPollIndex(poll_id)) {
       case null { #Err("Poll not found") };
@@ -2397,6 +2508,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_mute_preference(conversation_id : Text, muted : Bool) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     mutePreferences := mutePreferences.filter(func(m) = not (m.user.equal(caller) and m.conversation_id == conversation_id));
@@ -2418,11 +2530,12 @@ persistent actor class Main(governorInit : Principal) {
     }))
   };
 
-  public query ({ caller }) func get_group_metadata_multi(conversation_ids : [Text]) : async { #Ok : [Types.GroupMetadata]; #Err : Text } {
+  public shared ({ caller }) func get_group_metadata_multi(conversation_ids : [Text]) : async { #Ok : [Types.GroupMetadata]; #Err : Text } {
     denyLegacyAccountQuery();
     if (conversation_ids.size() > 300) return #Err("Too many ids");
     var out : [Types.GroupMetadata] = [];
     for (id in conversation_ids.values()) {
+      await* requireChatAccess(caller, id);
       if (canReadTeamMessages(caller, id) or canAccessConversation(caller, id)) {
         switch (getGroupMetadataFor(id)) { case (?meta) { out := out.concat([meta]) }; case null {} };
       };
@@ -2430,9 +2543,10 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(out)
   };
 
-  public query ({ caller }) func list_groups_by_clubs(club_ids : [Text]) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+  public shared ({ caller }) func list_groups_by_clubs(club_ids : [Text]) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
     denyLegacyAccountQuery();
     if (club_ids.size() > 200) return #Err("Too many ids");
+    for (club in club_ids.values()) { await* requireChatClubMember(caller, club) };
     let allowed = club_ids.filter(func(c) = valid(c) and canBrowseClubGroups(caller, c));
     let matches = groupMetadata.filter(func(m) =
       m.team_id == null and not m.deleted and (switch (m.club_id) { case (?c) allowed.any(func(a) = a == c); case null false })
@@ -2440,7 +2554,8 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(Array.map<Types.GroupMetadata, Types.GroupSummary>(matches, func(m) = toGroupSummary(caller, m)))
   };
 
-  public query ({ caller }) func get_mute_preference(conversation_id : Text) : async Bool {
+  public shared ({ caller }) func get_mute_preference(conversation_id : Text) : async Bool {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return false;
     for (m in mutePreferences.values()) {
@@ -2479,8 +2594,10 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func forward_message(message_id : Text, to_conversation_id : Text) : async { #Ok : Types.Message; #Err : Text } {
     await admitAccount(caller);
+    await* requireMessageChatAccess(caller, message_id);
     if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    await* requireChatAccess(caller, to_conversation_id);
     var original : ?Types.Message = null;
     for (m in messages.values()) { if (m.id == message_id) { original := ?m } };
     switch (original) {
@@ -2495,9 +2612,11 @@ persistent actor class Main(governorInit : Principal) {
             for (m in messages.values()) {
               if (m.conversation_id == to_conversation_id and m.idempotency_key == key) { return #Ok(m) };
             };
-            let posted = postMessage(ci, caller, orig.body, key, orig.attachment, null);
-            ignore fanOutChatNotify(posted);
-            ignore fanOutWsPokeForMessage(posted);
+            await* requireMessageChatAccess(caller, message_id);
+            if (not canReadTeamMessages(caller, orig.conversation_id)) return #Err("Source conversation access forbidden");
+            let posted = switch (await* sendAs(caller, to_conversation_id, orig.body, key, orig.attachment, null)) {
+              case (#Err(e)) return #Err(e); case (#Ok(m)) m;
+            };
             forwardRecords := forwardRecords.concat([{ message_id = posted.id; to_conversation_id; from_conversation_id = orig.conversation_id; from_message_id = orig.id; original_sender = orig.sender }]);
             #Ok(posted)
           };
@@ -2512,6 +2631,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func register_scheduled_message(conversation_id : Text, body : Text, scheduled_at_ms : Nat64) : async { #Ok : Types.ScheduledMessage; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -2543,17 +2663,19 @@ persistent actor class Main(governorInit : Principal) {
         let freshIndex = switch (scheduledMessages.findIndex(func(r) = r.id == id)) { case null return #Err("Scheduled message not found"); case (?n) n };
         let rec = scheduledMessages[freshIndex];
         if (rec != captured) return #Err("Scheduled message changed");
+        await* requireChatAccess(rec.sender, rec.conversation_id);
+        if (not canAccessConversation(rec.sender, rec.conversation_id)) return #Err("Conversation access forbidden");
         if (rec.replayed_at_ms != null) return #Ok(rec);
         if (not rec.sender.equal(caller) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Replay forbidden");
         switch (findConversationIndex(rec.conversation_id)) {
           case null { #Err("Conversation not found") };
           case (?ci) {
-            let posted = postMessage(ci, rec.sender, rec.body, "sched-" # rec.id, null, null);
-            ignore fanOutChatNotify(posted);
-            ignore fanOutWsPokeForMessage(posted);
+            let posted = switch (await* sendAs(rec.sender, rec.conversation_id, rec.body, "sched-" # rec.id, null, null)) {
+              case (#Err(e)) return #Err(e); case (#Ok(m)) m;
+            };
             let updated = { rec with replayed_at_ms = ?nowMs(); replayed_message_id = ?posted.id };
             mediaEvidenceRevision += 1;
-            scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (pos == i) updated else scheduledMessages[pos]);
+            scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (scheduledMessages[pos].id == id) updated else scheduledMessages[pos]);
             #Ok(updated)
           };
         }
@@ -2565,6 +2687,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func register_attachment_metadata(conversation_id : Text, message_id : ?Text, kind : Text, ref_id : Text, url : ?Text, size_bytes : ?Nat64) : async { #Ok : Types.AttachmentMetadata; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -2585,6 +2708,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func toggle_reaction(message_id : Text, emoji : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireMessageChatAccess(caller, message_id);
     if (msgFenced(message_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(emoji)) return #Err("Invalid reaction");
@@ -2622,7 +2746,8 @@ persistent actor class Main(governorInit : Principal) {
 
   /// Location-only lookup for group routing: which club owns this chat, if
   /// it lives in this canister. Participants only; null when not held here.
-  public query ({ caller }) func read_conversation_club(conversation_id : Text) : async { #Ok : ?Text; #Err : Text } {
+  public shared ({ caller }) func read_conversation_club(conversation_id : Text) : async { #Ok : ?Text; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (Principal.isAnonymous(caller)) return #Err("Sign in required");
     switch (findConversationIndex(conversation_id)) {
@@ -2647,7 +2772,8 @@ persistent actor class Main(governorInit : Principal) {
     summary
   };
 
-  public query ({ caller }) func messages_since(conversation_id : Text, since_ms : Nat64) : async { #Ok : [Types.MessageWithReactions]; #Err : Text } {
+  public shared ({ caller }) func messages_since(conversation_id : Text, since_ms : Nat64) : async { #Ok : [Types.MessageWithReactions]; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     var result : [Types.MessageWithReactions] = [];
@@ -2802,12 +2928,13 @@ persistent actor class Main(governorInit : Principal) {
 
   // ===================== Per-club unread breakdown =====================
 
-  public query ({ caller }) func unread_count_by_club(principal : Principal) : async { #Ok : [Types.ClubUnreadSummary]; #Err : Text } {
+  public shared ({ caller }) func unread_count_by_club(principal : Principal) : async { #Ok : [Types.ClubUnreadSummary]; #Err : Text } {
     denyLegacyAccountQuery();
     if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
     var result : [Types.ClubUnreadSummary] = [];
     for (conversation in conversations.values()) {
-      if (conversation.participants.any(func(p) = p.equal(principal))) {
+      let visible = try { await* requireChatAccess(principal, conversation.id); true } catch (_) { false };
+      if (visible and conversation.participants.any(func(p) = p.equal(principal))) {
         let u = unreadFor(principal, conversation.id);
         if (u.count > 0) {
           var found = false;
@@ -2821,13 +2948,14 @@ persistent actor class Main(governorInit : Principal) {
 
   // ===================== Recent conversations rail =====================
 
-  public query ({ caller }) func recent_conversations(principal : Principal, limit : Nat16) : async { #Ok : [Types.RecentConversation]; #Err : Text } {
+  public shared ({ caller }) func recent_conversations(principal : Principal, limit : Nat16) : async { #Ok : [Types.RecentConversation]; #Err : Text } {
     denyLegacyAccountQuery();
     if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid limit");
     var entries : [Types.RecentConversation] = [];
     for (conversation in conversations.values()) {
-      if (conversation.participants.any(func(p) = p.equal(principal)) and not isGroupDeleted(conversation.id)) {
+      let visible = try { await* requireChatAccess(principal, conversation.id); true } catch (_) { false };
+      if (visible and conversation.participants.any(func(p) = p.equal(principal)) and not isGroupDeleted(conversation.id)) {
         let lastSeq : Nat64 = if (conversation.next_sequence == 0) 0 else conversation.next_sequence - 1;
         entries := entries.concat([{ conversation_id = conversation.id; kind = inferConversationKind(conversation); last_message_sequence = lastSeq; last_message_at_ms = null }]);
       };
@@ -2972,6 +3100,7 @@ persistent actor class Main(governorInit : Principal) {
   // no API key, no third-party data sharing.
   public shared ({ caller }) func generate_chat_recap(scope_id : Text, since_ms : ?Nat64) : async { #Ok : Text; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, scope_id);
     auth(caller);
     switch (authorizeRecapCaller(caller, scope_id)) {
       case (?err) { return #Err(err) };
@@ -2987,6 +3116,7 @@ persistent actor class Main(governorInit : Principal) {
     if (transcript == "") return #Err("No new messages to recap");
     let result = await runRecapCompletion(transcript);
     await admitAccount(caller);
+    await* requireChatAccess(caller, scope_id);
     switch (authorizeRecapCaller(caller, scope_id)) { case (?err) #Err(err); case null result }
   };
 
@@ -2996,6 +3126,7 @@ persistent actor class Main(governorInit : Principal) {
   // generate_chat_recap.
   public shared ({ caller }) func summarize_transcript(scope_id : Text, transcript : Text) : async { #Ok : Text; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, scope_id);
     auth(caller);
     switch (authorizeRecapCaller(caller, scope_id)) {
       case (?err) { return #Err(err) };
@@ -3005,6 +3136,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not checkAndMarkRecapRateLimit(caller)) return #Err("Please wait a moment before requesting another recap");
     let result = await runRecapCompletion(truncateText(transcript, 6000));
     await admitAccount(caller);
+    await* requireChatAccess(caller, scope_id);
     switch (authorizeRecapCaller(caller, scope_id)) { case (?err) #Err(err); case null result }
   };
 
@@ -3331,7 +3463,8 @@ persistent actor class Main(governorInit : Principal) {
   // How many participants of the conversation (excluding the caller) sent a
   // heartbeat within the last 150 seconds. Mirrors the Supabase presence
   // window so both backends report comparable numbers.
-  public query ({ caller }) func online_count(conversation_id : Text) : async { #Ok : Nat64; #Err : Text } {
+  public shared ({ caller }) func online_count(conversation_id : Text) : async { #Ok : Nat64; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -3362,6 +3495,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_typing(conversation_id : Text, is_typing : Bool, name : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -3374,7 +3508,8 @@ persistent actor class Main(governorInit : Principal) {
 
   // Live typing users for a conversation, excluding the caller and any ping
   // older than TYPING_TTL_MS. Polled by the frontend on a short interval.
-  public query ({ caller }) func list_typing(conversation_id : Text) : async { #Ok : [Types.TypingUser]; #Err : Text } {
+  public shared ({ caller }) func list_typing(conversation_id : Text) : async { #Ok : [Types.TypingUser]; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -3393,6 +3528,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func pin_message(conversation_id : Text, message_id : Text) : async { #Ok : Types.PinnedMessage; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -3416,6 +3552,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func unpin_message(conversation_id : Text, message_id : Text) : async { #Ok; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (convFenced(conversation_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -3423,7 +3560,8 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public query ({ caller }) func list_pinned_messages(conversation_id : Text) : async { #Ok : [Types.PinnedMessage]; #Err : Text } {
+  public shared ({ caller }) func list_pinned_messages(conversation_id : Text) : async { #Ok : [Types.PinnedMessage]; #Err : Text } {
+    await* requireChatAccess(caller, conversation_id);
     denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -3720,6 +3858,7 @@ persistent actor class Main(governorInit : Principal) {
   // Protected consensus reads for the opt-in local account-removal rehearsal.
   public shared ({ caller }) func read_account_list_messages(conversation_id : Text, after : ?Nat64) : async [Types.Message] {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) Runtime.trap("Conversation access forbidden");
     var filtered : [Types.Message] = [];
     for (m in messages.values()) {
@@ -3736,6 +3875,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_list_messages_page(conversation_id : Text, after : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let latest = conversationLatestSequence(conversation_id);
@@ -3761,6 +3901,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_list_latest_messages_page(conversation_id : Text, before : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let latest = conversationLatestSequence(conversation_id);
@@ -3799,6 +3940,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_search_messages(conversation_id : Text, needle : Text, limit : Nat16) : async { #Ok : [Types.Message]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let lower_needle = Text.toLower(needle);
@@ -3816,6 +3958,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_list_reactions(conversation_id : Text) : async { #Ok : [Types.Reaction]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     var result : [Types.Reaction] = [];
     for (m in messages.values()) {
@@ -3833,6 +3976,7 @@ persistent actor class Main(governorInit : Principal) {
     #Err : Text;
   } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let latest = conversationLatestSequence(conversation_id);
@@ -3879,6 +4023,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_unread_count(conversation_id : Text) : async { #Ok : Types.Unread; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(unreadFor(caller, conversation_id))
   };
@@ -3891,6 +4036,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_get_group_metadata(conversation_id : Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id) and not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     switch (getGroupMetadataFor(conversation_id)) {
       case (?meta) { #Ok(meta) };
@@ -3918,6 +4064,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_get_mini_league_chat(club_id : Text, league_id : Text) : async { #Ok : ?Types.GroupSummary; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatClubMember(caller, club_id);
     if (caller.equal(Principal.anonymous())) return #Err("Forbidden");
     let matches = groupMetadata.filter(func(m) = not m.deleted and m.club_id == ?club_id and m.kind == "mini_league:" # league_id and m.members.any(func(p) = p.equal(caller)));
     if (matches.size() > 1) return #Err("Conflicting league chats");
@@ -3926,6 +4073,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_list_groups_by_club(club_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatClubMember(caller, club_id);
     if (not valid(club_id)) return #Err("Invalid club id");
     if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
     let matches = groupMetadata.filter(func(m) = m.club_id == ?club_id and m.team_id == null and not m.deleted);
@@ -3937,6 +4085,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not valid(team_id)) return #Err("Invalid team id");
     var club_of_team = "";
     for (m in groupMetadata.values()) { if (m.team_id == ?team_id) { club_of_team := Option.get(m.club_id, "") } };
+    await* requireChatClubMember(caller, club_of_team);
     if (not canBrowseTeamGroups(caller, club_of_team, team_id)) return #Err("Team access forbidden");
     let matches = groupMetadata.filter(func(m) = m.team_id == ?team_id and not m.deleted);
     #Ok(Array.map<Types.GroupMetadata, Types.GroupSummary>(matches, func(m) = toGroupSummary(caller, m)))
@@ -3944,6 +4093,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_list_read_receipts(conversation_id : Text) : async { #Ok : [Types.Receipt]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canAccessConversation(caller, conversation_id) and not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(receipts.filter(func(r) = r.conversation_id == conversation_id))
   };
@@ -3953,7 +4103,8 @@ persistent actor class Main(governorInit : Principal) {
     if (caller.equal(Principal.anonymous())) return [];
     var result : [Types.UnreadSummary] = [];
     for (conversation in conversations.values()) {
-      if (conversation.participants.any(func(p) = p.equal(caller))) {
+      let visible = try { await* requireChatAccess(caller, conversation.id); true } catch (_) { false };
+      if (visible and conversation.participants.any(func(p) = p.equal(caller))) {
         let u = unreadFor(caller, conversation.id);
         if (u.count > 0) {
           result := result.concat([{ conversation_id = conversation.id; kind = inferConversationKind(conversation); count = u.count }]);
@@ -3991,11 +4142,13 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_get_group_join_policy(conversation_id : Text) : async { join_policy : Text; category : ?Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     joinPolicyOf(conversation_id)
   };
 
   public shared ({ caller }) func read_account_list_open_groups(club_id : Text) : async { #Ok : [{ summary : Types.GroupSummary; join_policy : Text; category : ?Text; requested : Bool }]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatClubMember(caller, club_id);
     if (not valid(club_id)) return #Err("Invalid club id");
     if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
     var out : [{ summary : Types.GroupSummary; join_policy : Text; category : ?Text; requested : Bool }] = [];
@@ -4013,12 +4166,14 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_list_join_requests(conversation_id : Text) : async { #Ok : [Types.JoinRequest]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
     #Ok(joinRequests.filter(func(r) = r.conversation_id == conversation_id))
   };
 
   public shared ({ caller }) func read_account_get_poll_results(poll_id : Text) : async { #Ok : Types.PollResults; #Err : Text } {
     await admitAccount(caller);
+    await* requirePollChatAccess(caller, poll_id);
     switch (findPollIndex(poll_id)) {
       case null { #Err("Poll not found") };
       case (?i) {
@@ -4058,6 +4213,7 @@ persistent actor class Main(governorInit : Principal) {
     if (conversation_ids.size() > 300) return #Err("Too many ids");
     var out : [Types.GroupMetadata] = [];
     for (id in conversation_ids.values()) {
+      await* requireChatAccess(caller, id);
       if (canReadTeamMessages(caller, id) or canAccessConversation(caller, id)) {
         switch (getGroupMetadataFor(id)) { case (?meta) { out := out.concat([meta]) }; case null {} };
       };
@@ -4068,6 +4224,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func read_account_list_groups_by_clubs(club_ids : [Text]) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
     await admitAccount(caller);
     if (club_ids.size() > 200) return #Err("Too many ids");
+    for (club in club_ids.values()) { await* requireChatClubMember(caller, club) };
     let allowed = club_ids.filter(func(c) = valid(c) and canBrowseClubGroups(caller, c));
     let matches = groupMetadata.filter(func(m) =
       m.team_id == null and not m.deleted and (switch (m.club_id) { case (?c) allowed.any(func(a) = a == c); case null false })
@@ -4077,6 +4234,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_get_mute_preference(conversation_id : Text) : async Bool {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (caller.equal(Principal.anonymous())) return false;
     for (m in mutePreferences.values()) {
       if (m.user.equal(caller) and m.conversation_id == conversation_id) { return m.muted };
@@ -4086,6 +4244,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_read_conversation_club(conversation_id : Text) : async { #Ok : ?Text; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (Principal.isAnonymous(caller)) return #Err("Sign in required");
     switch (findConversationIndex(conversation_id)) {
       case null { #Ok(null) };
@@ -4095,6 +4254,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_messages_since(conversation_id : Text, since_ms : Nat64) : async { #Ok : [Types.MessageWithReactions]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     var result : [Types.MessageWithReactions] = [];
     for (m in messages.values()) {
@@ -4116,7 +4276,8 @@ persistent actor class Main(governorInit : Principal) {
     if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
     var result : [Types.ClubUnreadSummary] = [];
     for (conversation in conversations.values()) {
-      if (conversation.participants.any(func(p) = p.equal(principal))) {
+      let visible = try { await* requireChatAccess(principal, conversation.id); true } catch (_) { false };
+      if (visible and conversation.participants.any(func(p) = p.equal(principal))) {
         let u = unreadFor(principal, conversation.id);
         if (u.count > 0) {
           var found = false;
@@ -4134,7 +4295,8 @@ persistent actor class Main(governorInit : Principal) {
     if (limit == 0 or limit > 100) return #Err("Invalid limit");
     var entries : [Types.RecentConversation] = [];
     for (conversation in conversations.values()) {
-      if (conversation.participants.any(func(p) = p.equal(principal)) and not isGroupDeleted(conversation.id)) {
+      let visible = try { await* requireChatAccess(principal, conversation.id); true } catch (_) { false };
+      if (visible and conversation.participants.any(func(p) = p.equal(principal)) and not isGroupDeleted(conversation.id)) {
         let lastSeq : Nat64 = if (conversation.next_sequence == 0) 0 else conversation.next_sequence - 1;
         entries := entries.concat([{ conversation_id = conversation.id; kind = inferConversationKind(conversation); last_message_sequence = lastSeq; last_message_at_ms = null }]);
       };
@@ -4156,6 +4318,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_online_count(conversation_id : Text) : async { #Ok : Nat64; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     let now = nowMs();
@@ -4178,6 +4341,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_list_typing(conversation_id : Text) : async { #Ok : [Types.TypingUser]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     let now = nowMs();
@@ -4191,6 +4355,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func read_account_list_pinned_messages(conversation_id : Text) : async { #Ok : [Types.PinnedMessage]; #Err : Text } {
     await admitAccount(caller);
+    await* requireChatAccess(caller, conversation_id);
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(pinnedMessages.filter(func(p) = p.conversation_id == conversation_id))
@@ -4217,26 +4382,12 @@ persistent actor class Main(governorInit : Principal) {
     blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user))
   };
 
-  // Original-human digest authorization; only the configured queue delegates.
+  // Trusted delegation checks the original human, never the queue's identity.
   public shared ({ caller }) func read_account_can_read_digest(subject : Principal, conversation_id : Text) : async Bool {
     let configured = notificationQueueCanister;
     if (configured != ?caller) return false;
     await admitAccount(subject);
-    let conversation = conversations.find(func(c) = c.id == conversation_id);
-    switch (conversation) {
-      case (?c) {
-        let kind = inferConversationKind(c);
-        if (kind != "direct" and kind != "broadcast") {
-          let authority = clubDomainCanister;
-          let ?cd = authority else throw Error.reject("Club delivery authority unavailable");
-          let clubs : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(cd.toText());
-          let member = await (with timeout = 10) clubs.read_has_club_membership(subject, c.club_id);
-          if (authority != clubDomainCanister) throw Error.reject("Club delivery authority changed");
-          if (not member) return false;
-        }
-      };
-      case null { if (conversation_id != BROADCAST_CONVERSATION_ID) return false }
-    };
+    try { await* requireChatAccess(subject, conversation_id) } catch (_) { return false };
     configured == notificationQueueCanister and not convFenced(conversation_id) and canReadTeamMessages(subject, conversation_id)
   };
 }
