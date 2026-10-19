@@ -38,7 +38,7 @@ let sequence = 10;
 
 describe.skipIf(!enabled)('local deletion activation boundary (real club/identity contracts)', () => {
   beforeAll(async () => { server = await PocketIcServer.start(); pic = await PocketIc.create(server.getUrl()); }, 60000);
-  afterAll(async () => { await pic?.tearDown(); await server?.stop(); });
+  afterAll(async () => { await pic?.tearDown(); await server?.stop(); }, 60000);
 
   async function fixture() {
     const primary = p(sequence++), linked = p(sequence++);

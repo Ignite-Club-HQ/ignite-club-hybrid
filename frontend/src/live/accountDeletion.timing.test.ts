@@ -94,10 +94,12 @@ describe.skipIf(!enabled)('real local admin deletion registry reservation',()=>{
   },60000);
   it('does not commit until every real club denies every captured alias; locks survive upgrades and unauthorized release',async()=>{
     const f=await fixture();f.id.setPrincipal(governor);ok(await f.id.prepare_account_deletion(f.account.id,f.revision));
+    expect(await f.id.erase_account(f.account.id)).toEqual({Err:'Bound deletion required'});
     expect(await f.id.commit_account_deletion(f.account.id)).toHaveProperty('Err');
     expect(await f.id.settle_account_deletion(f.account.id)).toHaveProperty('Err');
     f.router.actor.setPrincipal(stranger);expect(await f.router.actor.release_deletion_lock(f.account.id,f.revision)).toEqual({Err:'Deletion authority required'});
     await pic.upgradeCanister({canisterId:f.router.canisterId,sender:governor,wasm:process.env.SHARD_ROUTER_WASM});
+    await pic.upgradeCanister({canisterId:f.shared.canisterId,sender:governor,wasm:process.env.IDENTITY_ACCESS_WASM});
     f.router.actor.setPrincipal(governor);expect(await f.router.actor.record_group_health('new',1n,2n,f.revision)).toEqual({Err:'Deletion registry locked'});
     await eraseIcpAccountAsAdmin({getPrincipal:()=>governor} as Identity,f.targets[0],f.account.id);
     for(let i=0;i<2;i++)expect(await f.roles(i,linked)).toEqual([]);

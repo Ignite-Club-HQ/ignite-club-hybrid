@@ -3,17 +3,17 @@ import type { Identity } from "@icp-sdk/core/agent";
 import type { IcpTargetConfig } from "./targetRegistry";
 import { eraseIcpAccountAsAdmin } from "./adminAccountDeletion";
 const m = vi.hoisted(() => ({ revoke: vi.fn(), erase: vi.fn(), dispose: vi.fn(), active: false,
-  validate: vi.fn(), sessionDispose: vi.fn(), targets: [] as IcpTargetConfig[] }));
+  prepare: vi.fn(), commit: vi.fn(), settle: vi.fn(), validate: vi.fn(), sessionDispose: vi.fn(), targets: [] as IcpTargetConfig[] }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: m.active }) }));
 vi.mock('./groupSessionLive', () => ({ openLiveGroupReadSession: async () => ({
-  readEveryGroup: async () => m.targets, assertRegistryUnchanged: m.validate, dispose: m.sessionDispose,
+  deletionRegistryRevision: 4n, readEveryGroup: async () => m.targets, assertRegistryUnchanged: m.validate, dispose: m.sessionDispose,
 }) }));
 vi.mock("./domains", () => ({ connectLiveClubDomain: async (target: IcpTargetConfig) => ({ actor: {
   erase_account_membership: (id: string) => m.revoke(id, target.canisterIds?.club_domain),
 } }) }));
-vi.mock("./identityAccess", () => ({ connectLiveIdentityAccessClientWithIdentity: async () => ({ client: { eraseAccount: m.erase, dispose: m.dispose } }) }));
+vi.mock("./identityAccess", () => ({ connectLiveIdentityAccessClientWithIdentity: async () => ({ client: { prepareAccountDeletion: m.prepare, commitAccountDeletion: m.commit, settleAccountDeletion: m.settle, eraseAccount: m.erase, dispose: m.dispose } }) }));
 beforeEach(() => { vi.clearAllMocks(); m.active = false; m.targets = []; m.validate.mockResolvedValue(undefined);
-  m.revoke.mockResolvedValue({ Ok: null }); m.erase.mockResolvedValue(undefined); });
+  m.prepare.mockResolvedValue(undefined); m.commit.mockResolvedValue(undefined); m.settle.mockResolvedValue(undefined); m.revoke.mockResolvedValue({ Ok: null }); m.erase.mockResolvedValue(undefined); });
 const target = (id: string) => ({ host: 'https://icp-api.io', networkKind: 'public_mainnet',
   canisterIds: { club_domain: id } }) as IcpTargetConfig;
 describe("administrator erasure", () => {
@@ -32,7 +32,11 @@ describe("administrator erasure", () => {
     m.active = true; m.targets = [target('legacy'), target('new')];
     await eraseIcpAccountAsAdmin({} as Identity, target('legacy'), 'selected-account');
     expect(m.revoke.mock.calls).toEqual([['selected-account', 'legacy'], ['selected-account', 'new']]);
-    expect(m.revoke.mock.invocationCallOrder[1]).toBeLessThan(m.erase.mock.invocationCallOrder[0]);
+    expect(m.prepare).toHaveBeenCalledWith('selected-account',4n);
+    expect(m.prepare.mock.invocationCallOrder[0]).toBeLessThan(m.revoke.mock.invocationCallOrder[0]);
+    expect(m.revoke.mock.invocationCallOrder[1]).toBeLessThan(m.commit.mock.invocationCallOrder[0]);
+    expect(m.commit).toHaveBeenCalledWith('selected-account');
+    expect(m.settle).toHaveBeenCalledWith('selected-account'); expect(m.erase).not.toHaveBeenCalled();
     expect(m.sessionDispose).toHaveBeenCalledOnce();
   });
   it('blocks shared erasure and permits full-inventory retry after partial revocation fails', async () => {
@@ -42,7 +46,7 @@ describe("administrator erasure", () => {
     expect(m.erase).not.toHaveBeenCalled();
     await eraseIcpAccountAsAdmin({} as Identity, target('legacy'), 'selected-account');
     expect(m.revoke.mock.calls.map(c => c[1])).toEqual(['legacy', 'new', 'legacy', 'new']);
-    expect(m.erase).toHaveBeenCalledOnce();
+    expect(m.commit).toHaveBeenCalledOnce();
   });
   it('stops on registry change immediately after the first revocation', async () => {
     m.active = true; m.targets = [target('new')];
