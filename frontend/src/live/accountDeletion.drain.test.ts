@@ -68,7 +68,7 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
 
     // Pre-deletion: the member can act in every service.
     vault.actor.setPrincipal(member);
-    ok(await vault.actor.create_folder('f1', 'c1', [], [], 'Folder', [], [], [], 0, '', []));
+    ok(await vault.actor.create_folder('f1', 'c1', [], [], 'Folder', [], [], [], 0, [], []));
     (await events).actor.setPrincipal(member);
     ok(await (await events).actor.create_event('c1', [], 'Training', '', 'training', [], [], [], [], 0n, 3_600_000n, [], false, [], []));
     messaging.actor.setPrincipal(governor);
@@ -92,7 +92,7 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     // Post-deletion: every service denies the erased principal.
     expect(await club.actor.read_account_membership_erased([member])).toBe(true);
     vault.actor.setPrincipal(member);
-    denied(await vault.actor.create_folder('f2', 'c1', [], [], 'Folder', [], [], [], 0, '', []));
+    denied(await vault.actor.create_folder('f2', 'c1', [], [], 'Folder', [], [], [], 0, [], []));
     (await events).actor.setPrincipal(member);
     denied(await (await events).actor.create_event('c1', [], 'Training', '', 'training', [], [], [], [], 0n, 3_600_000n, [], false, [], []));
     messaging.actor.setPrincipal(member);
