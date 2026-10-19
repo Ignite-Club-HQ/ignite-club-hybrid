@@ -118,3 +118,26 @@ export async function resumeInterruptedInstall(start: Provision,
   await save(p);
   return p;
 }
+
+/** Creates and installs the group's own photo store before configuration, with
+ * the same idempotent create/install protocol. Configuring a new group against
+ * the live shared store would replace that store's single club authority and
+ * break existing clubs' uploads, quotas and staff deletes. */
+export async function ensureDedicatedBlobStore(start: Provision,
+  a: Pick<ProvisionAdapter, 'createCanister' | 'createOperation' | 'install' | 'healthy'>, save: (p: Provision) => Promise<void>): Promise<Provision> {
+  const blob = 'media_blob_store' as unknown as GroupDomain;
+  let p = start;
+  let b = p.dedicatedBlobStore ?? {};
+  if (!b.canisterId) {
+    if (!b.createOperation) { b = { ...b, createOperation: a.createOperation!(p, blob) }; p = { ...p, dedicatedBlobStore: b }; await save(p); }
+    const c = await a.createCanister({ ...p, pending: { kind: 'create', domain: blob, operation: b.createOperation } }, blob);
+    b = { ...b, canisterId: c.canisterId, subnetId: c.subnetId }; p = { ...p, dedicatedBlobStore: b }; await save(p);
+  }
+  if (b.subnetId !== p.subnetId) throw new Error(`Group photo store landed on unapproved subnet ${b.subnetId}`);
+  if (!b.installed) {
+    await a.install(p, blob, b.canisterId!);
+    b = { ...b, installed: true }; p = { ...p, dedicatedBlobStore: b }; await save(p);
+  }
+  if (!(await a.healthy(p, blob, b.canisterId!))) throw new Error('Group photo store failed health check');
+  return p;
+}

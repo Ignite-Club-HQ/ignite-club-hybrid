@@ -20,7 +20,9 @@ const live = new Set(Object.values(LIVE));
 if (PER_GROUP_DOMAINS.some(d => live.has(p.canisters[d] ?? ''))) throw new Error('Group lists a live legacy canister; refusing');
 const pushWorker = process.env.PUSH_WORKER_PRINCIPAL;
 if (!pushWorker) throw new Error('PUSH_WORKER_PRINCIPAL required');
-const globals = { identityAccess: LIVE.identity_access, mediaBlobStore: LIVE.media_blob_store, pushWorker };
+const mediaBlobStore = p.dedicatedBlobStore?.installed ? p.dedicatedBlobStore.canisterId : undefined;
+if (!mediaBlobStore || live.has(mediaBlobStore)) throw new Error('Group needs its own installed photo store; never configure against the live shared store');
+const globals = { identityAccess: LIVE.identity_access, mediaBlobStore, pushWorker };
 groupConfigurationPlan(p, globals); // validate before any call
 
 const identity = loadOperatorIdentity(pem);

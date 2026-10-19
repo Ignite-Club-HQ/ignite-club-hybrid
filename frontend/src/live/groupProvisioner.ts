@@ -17,6 +17,8 @@ export type Provision = {
   installedDomains?: GroupDomain[];
   observedSubnets?: Partial<Record<GroupDomain, string>>;
   registration?: { closedRevision: bigint; placementRevision?: bigint };
+  /** Group-owned photo store; never the live shared store (its single club authority would be repointed). */
+  dedicatedBlobStore?: { canisterId?: string; createOperation?: string; subnetId?: string; installed?: boolean };
 };
 export type ProvisionCheckpoint = (p: Provision) => Promise<void>;
 /** A directory returned a definite refusal: no mutation committed. */

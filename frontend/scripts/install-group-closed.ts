@@ -11,7 +11,7 @@ import { Principal } from '@icp-sdk/core/principal';
 import { createOperatorTransport, loadOperatorIdentity } from '../src/live/operatorTransport';
 import { configureProvisionGroup } from '../src/live/groupProvisionConfiguration';
 import { approveProvision, PER_GROUP_DOMAINS, runProvision, type Provision, type ProvisionAdapter } from '../src/live/groupProvisioner';
-import { closedInstallAdapter, requiredCycles, resumeInterruptedInstall } from '../src/live/groupInstallAdapter';
+import { closedInstallAdapter, ensureDedicatedBlobStore, requiredCycles, resumeInterruptedInstall } from '../src/live/groupInstallAdapter';
 import { mainnetInstallCalls } from '../src/live/icpInstallCalls';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
 import type { GroupDomain } from '../src/live/groupRouting';
@@ -57,13 +57,13 @@ const wasmFor = (d: GroupDomain) => {
   for (const n of [`${d}.wasm.gz`, `${d}.wasm`]) if (existsSync(join(wasmDir, n))) return new Uint8Array(readFileSync(join(wasmDir, n)));
   throw new Error(`Missing build for ${d} in ${wasmDir}`);
 };
-const wasms = new Map(PER_GROUP_DOMAINS.map(d => [d, wasmFor(d)])); // all builds present before any spend
+const wasms = new Map([...PER_GROUP_DOMAINS, 'media_blob_store' as GroupDomain].map(d => [d, wasmFor(d)])); // all builds present before any spend
 const governorArg = IDL.encode([IDL.Principal], [Principal.fromText(operator)]);
 const live = new Set<string>(Object.values(LIVE));
 const host = process.env.ICP_HOST || 'https://icp-api.io';
 const calls = await mainnetInstallCalls(host, identity);
 
-const need = requiredCycles(p, perCanister);
+const need = requiredCycles(p, perCanister) + (p.dedicatedBlobStore?.canisterId ? 0n : perCanister + 100_000_000_000n);
 const have = await calls.cyclesBalance();
 console.log(`Operator ${operator}: cycles ${Number(have) / 1e12}T, needs ${Number(need) / 1e12}T for remaining services`);
 if (have < need) throw new Error('Not enough cycles: run "Top up canister cycles" / mint cycles for the deploy identity first');
@@ -71,10 +71,10 @@ if (have < need) throw new Error('Not enough cycles: run "Top up canister cycles
 const install = closedInstallAdapter(calls, {
   wasm: d => wasms.get(d)!,
   initArg: d => d === 'timer_jobs' ? IDL.encode([], []) : governorArg, // timer_jobs captures its installer as governor
-  environment: d => d === 'pii_access_control' ? [{ name: 'VETKD_KEY_NAME', value: 'key_1' }] : [],
+  environment: d => d === 'pii_access_control' ? [{ name: 'VETKD_KEY_NAME', value: 'key_1' }]
+    : (d as string) === 'media_blob_store' ? [{ name: 'GOVERNOR_PRINCIPAL', value: operator }] : [],
 }, { operator, liveCanisters: live, cyclesPerCanister: perCanister, nowNs: () => BigInt(Date.now()) * 1_000_000n });
 
-const globals = { identityAccess: LIVE.identity_access, mediaBlobStore: LIVE.media_blob_store, pushWorker };
 const never = async () => { throw new Error('Closed installer never registers or opens a group'); };
 const adapter: ProvisionAdapter = { ...install, save,
   configure: async (rec, checkpoint) => {
@@ -88,7 +88,12 @@ const adapter: ProvisionAdapter = { ...install, save,
   readRegistryRevision: never, registerGroup: never, enableGroup: never };
 
 p = await resumeInterruptedInstall(p, install, save);
+p = await ensureDedicatedBlobStore(p, install, save);
+const mediaBlobStore = p.dedicatedBlobStore!.canisterId!;
+if (live.has(mediaBlobStore)) throw new Error('Refusing to configure a group against the live shared photo store');
+const globals = { identityAccess: LIVE.identity_access, mediaBlobStore, pushWorker };
 p = await runProvision(p, adapter, { stopAt: 'checked' });
 for (const d of PER_GROUP_DOMAINS) console.log(`${d.padEnd(22)} ${p.canisters[d] ?? '-'}`);
+console.log(`${'photo store (own)'.padEnd(22)} ${mediaBlobStore}`);
 if (p.phase !== 'checked') throw new Error(`Stopped at ${p.phase}: ${p.error ?? p.pending?.kind ?? ''}. Re-run to resume.`);
 console.log(`Group ${groupId} installed, configured and healthy. It stays CLOSED: not registered, receives no clubs.`);
