@@ -44,13 +44,15 @@ const FREE_LIMIT_MESSAGES: Record<string, string> = {
   gallery_photo: "You've used your 10 free photo uploads this cycle. Upgrade to Pro for unlimited uploads.",
   chat_photo: "You've used your 10 free chat photos this cycle. Upgrade to Pro for unlimited chat photos.",
   chat_file: "Your club has used its free chat file allowance (10 files / 25 MB) this cycle. Upgrade to Pro for unlimited chat attachments.",
-  vault: "Your club has used its free vault allowance (10 files / 25 MB) this cycle. Upgrade to Pro for unlimited vault storage.",
+  vault: "Your club has used its free vault allowance (10 files / 25 MB) this cycle. Upgrade to Pro for 5 GB of vault storage.",
 };
 
 /** Free-plan cap rejection from the canister, mapped to the Supabase wording. */
 export function freeLimitMessage(error: unknown): string | null {
   const text = error instanceof Error ? error.message : String(error);
   if (text.includes("FileTooLarge")) return "This file is larger than 10 MB. Please choose a smaller file.";
+  if (text.includes("VaultStorageFull")) return "Your club has used all of its vault storage. Delete files or add more storage to keep uploading.";
+  if (text.includes("VaultAllowanceUnavailable")) return "We couldn't check your club's vault storage right now. Please try again shortly.";
   const m = /FreeLimitReached:(\w+)/.exec(text);
   return m ? FREE_LIMIT_MESSAGES[m[1]] ?? "Free plan upload limit reached. Upgrade to Pro." : null;
 }
