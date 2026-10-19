@@ -108,7 +108,8 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     (await events).actor.setPrincipal(member);
     denied(await (await events).actor.create_event('c1', [], 'Training', 'Weekly session', 'training', [], [], [], [], BigInt(Date.now() + 3_600_000), BigInt(Date.now() + 7_200_000), [], false, [], []));
     messaging.actor.setPrincipal(member);
-    denied(await messaging.actor.send_message(conversation.id, 'still here?', 'k2', [], []));
+    // Messaging denies removed members with a trap (reject) rather than an Err variant.
+    await expect(messaging.actor.send_message(conversation.id, 'still here?', 'k2', [], [])).rejects.toThrow();
     media.actor.setPrincipal(member);
     denied(await media.actor.begin_upload('clubs/c1/more.jpg', 'image/jpeg', 10n, 1));
     identity.actor.setPrincipal(member);
