@@ -1,3 +1,4 @@
+import AccountAdmission "../../shared/AccountAdmission";
 import MediaEvidence "../../shared/MediaEvidence";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
@@ -14,6 +15,19 @@ import Types "types";
 import PinScope "pinScope";
 
 persistent actor class Main(governorInit : Principal) {
+  // Opt-in local rehearsal only; production deploy scripts must never set these.
+  transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
+  transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
+    case (?id) ?Principal.fromText(id); case null null
+  };
+  transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  func admitAccount(subject : Principal) : async () {
+    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+  };
+  func denyLegacyAccountQuery() {
+    if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
+  };
+
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -265,6 +279,7 @@ persistent actor class Main(governorInit : Principal) {
     description : ?Text,
     color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canWrite(caller, club, team, competition_id))) return #Err("Club or competition admin required");
@@ -323,6 +338,7 @@ persistent actor class Main(governorInit : Principal) {
     description : ?Text,
     color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    await admitAccount(caller);
     if (folderFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validLong(name, 160)) return #Err("Invalid folder name");
@@ -343,6 +359,7 @@ persistent actor class Main(governorInit : Principal) {
   // Soft delete. Refuses while the folder still has live subfolders or files
   // so the tree never orphans live content.
   public shared ({ caller }) func delete_folder(id : Text) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    await admitAccount(caller);
     if (folderFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
@@ -362,6 +379,7 @@ persistent actor class Main(governorInit : Principal) {
   // folders in the club/team scope. Folders with restricted_roles are hidden
   // from callers who don't hold one of the listed roles.
   public query ({ caller }) func list_folders(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     #Ok(folders.filter(func(item) =
       item.club == club and
@@ -375,6 +393,7 @@ persistent actor class Main(governorInit : Principal) {
   // Single-folder lookup, same visibility rule as list_folders: folders with
   // restricted_roles are invisible to callers lacking one of those roles.
   public query ({ caller }) func get_folder(id : Text) : async { #Ok : ?Types.VaultFolder; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Ok(null) };
@@ -389,6 +408,7 @@ persistent actor class Main(governorInit : Principal) {
   // Location-only, fresh authority check. Includes trash and competition
   // items so restore/share dispatch never guesses their owning club.
   public shared ({ caller }) func read_resource_club(kind : Text, id : Text) : async { #Ok : ?Text; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not valid(id)) return #Err("Invalid id");
     let folder = if (kind == "folder") folders.find(func(f) = f.id == id) else null;
     let file = if (kind == "file") files.find(func(f) = f.id == id) else null;
@@ -410,6 +430,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func list_competition_folders(competition_id : Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     let access = switch (await getCompetitionAccess(caller, competition_id)) {
       case null { return #Err("Competition access unavailable") };
@@ -425,6 +446,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func get_competition_folder(id : Text) : async { #Ok : ?Types.VaultFolder; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     switch (folders.find(func(folder) = folder.id == id and folder.deleted_at_ms == null and folder.competition_id != null)) {
       case null { #Ok(null) };
@@ -460,6 +482,7 @@ persistent actor class Main(governorInit : Principal) {
     mini_league_id : ?Text,
     competition_id : ?Text,
   ) : async { #Ok : Types.VaultFile; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canWrite(caller, club, team, competition_id))) return #Err("Club or competition admin required");
@@ -509,6 +532,7 @@ persistent actor class Main(governorInit : Principal) {
   // folder has restricted_roles is invisible to callers lacking one of
   // those roles. A file with no (deleted) folder is visible like vault root.
   public query ({ caller }) func get_file(id : Text) : async { #Ok : ?Types.VaultFile; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Ok(null) };
@@ -524,6 +548,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_files(folder_id : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
       case (?folder) {
@@ -537,6 +562,7 @@ persistent actor class Main(governorInit : Principal) {
   // Folder-joined counterpart of list_files for the vault browser's folder
   // path/name breadcrumbs — same visibility rules as list_files.
   public query ({ caller }) func list_files_with_folder(folder_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
       case (?folder) {
@@ -548,6 +574,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func list_competition_files_with_folder(folder_id : Text, competition_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     let access = switch (await getCompetitionAccess(caller, competition_id)) {
       case null { return #Err("Competition access unavailable") };
@@ -571,6 +598,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     #Ok(files.filter(func(item) =
       item.club == club and
@@ -586,6 +614,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Folder-joined counterpart of list_club_files — same filters/visibility.
   public query ({ caller }) func list_club_files_with_folder(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     #Ok(files.filter(func(item) =
       item.club == club and
@@ -600,6 +629,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func trash_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    await admitAccount(caller);
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
@@ -615,6 +645,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func restore_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    await admitAccount(caller);
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms != null)) {
@@ -630,6 +661,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func rename_file(id : Text, name : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    await admitAccount(caller);
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validLong(name, 160)) return #Err("Invalid file name");
@@ -650,6 +682,7 @@ persistent actor class Main(governorInit : Principal) {
   // root (no folder) and leaves its team scope unchanged — provisional
   // until the vault scope model is verified post-deploy.
   public shared ({ caller }) func move_file(id : Text, folder_id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    await admitAccount(caller);
     if (fileFenced(id) or folderFenced(folder_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
@@ -681,6 +714,7 @@ persistent actor class Main(governorInit : Principal) {
   // this canister (Supabase storage today, the blob store later), so byte
   // cleanup stays with the storage layer.
   public shared ({ caller }) func delete_file_permanent(id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id)) {
@@ -695,6 +729,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null))
   };
@@ -702,6 +737,7 @@ persistent actor class Main(governorInit : Principal) {
   // Folder-joined counterpart of list_trashed_files, for the trash view's
   // "was in <folder>" breadcrumb.
   public query ({ caller }) func list_trashed_files_with_folder(club : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null).map(withFolderJoin))
   };
@@ -723,6 +759,7 @@ persistent actor class Main(governorInit : Principal) {
     root_id : ?Text,
     enabled : Bool,
   ) : async { #Ok : Types.PinnedVault; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validChatType(chat_type)) return #Err("Invalid chat type");
@@ -770,11 +807,13 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok : ?Types.PinnedVault; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     #Ok(pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id))
   };
 
   public shared ({ caller }) func clear_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     switch (pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id)) {
       case null { #Ok };
@@ -799,6 +838,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_backup(backup_label : Text) : async { #Ok : Types.Backup; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not validLong(backup_label, 160)) return #Err("Invalid backup label");
@@ -815,6 +855,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_backups() : async { #Ok : [Types.BackupSummary]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     #Ok(backups.map(func(b : Types.Backup) : Types.BackupSummary {
@@ -826,6 +867,7 @@ persistent actor class Main(governorInit : Principal) {
   // Full snapshot (every folder/file row in the backup) for the download/export
   // button — the frontend serializes this to a JSON file client-side.
   public query ({ caller }) func get_backup(id : Text) : async { #Ok : Types.Backup; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     switch (backups.find(func(b : Types.Backup) : Bool = b.id == id)) {
@@ -839,6 +881,7 @@ persistent actor class Main(governorInit : Principal) {
   // can't clobber newer edits made after the snapshot was taken. Returns the
   // number of folders/files actually re-inserted.
   public shared ({ caller }) func restore_backup(id : Text) : async { #Ok : Nat; #Err : Text } {
+    await admitAccount(caller);
     if (transferFences.size() > 0) return #Err("Restore is blocked while a club transfer is in progress");
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
@@ -861,6 +904,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_backup(id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not backups.any(func(b : Types.Backup) : Bool = b.id == id)) return #Err("Backup not found");
@@ -969,5 +1013,139 @@ persistent actor class Main(governorInit : Principal) {
       refs := refs.concat([r]);
     } };
     #Ok({ revision = mediaEvidenceRevision; scanned = end - start; next = if (end < files.size()) ?end else null; references = refs })
+  };
+
+  // Protected consensus reads for the opt-in local account-removal rehearsal.
+  public shared ({ caller }) func read_account_list_folders(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    #Ok(folders.filter(func(item) =
+      item.club == club and
+      item.competition_id == null and
+      item.deleted_at_ms == null and
+      (team == null or item.team == team or item.team == null) and
+      (mini_league_id == null or item.mini_league_id == mini_league_id) and
+      canViewFolder(caller, item)))
+  };
+
+  public shared ({ caller }) func read_account_get_folder(id : Text) : async { #Ok : ?Types.VaultFolder; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
+      case null { #Ok(null) };
+      case (?folder) {
+        if (folder.competition_id != null) return #Ok(null);
+        if (not canViewFolder(caller, folder)) return #Ok(null);
+        #Ok(?folder)
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_get_file(id : Text) : async { #Ok : ?Types.VaultFile; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
+      case null { #Ok(null) };
+      case (?file) {
+        if (file.competition_id != null) return #Ok(null);
+        switch (folders.find(func(item) = item.id == file.folder_id and item.deleted_at_ms == null)) {
+          case (?folder) { if (not canViewFolder(caller, folder)) return #Ok(null) };
+          case null {};
+        };
+        #Ok(?file)
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_files(folder_id : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
+      case (?folder) {
+        if (folder.competition_id != null or not canViewFolder(caller, folder)) return #Ok([]);
+      };
+      case null {};
+    };
+    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null))
+  };
+
+  public shared ({ caller }) func read_account_list_files_with_folder(folder_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
+      case (?folder) {
+        if (folder.competition_id != null or not canViewFolder(caller, folder)) return #Ok([]);
+      };
+      case null {};
+    };
+    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null).map(withFolderJoin))
+  };
+
+  public shared ({ caller }) func read_account_list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    #Ok(files.filter(func(item) =
+      item.club == club and
+      item.competition_id == null and
+      item.deleted_at_ms == null and
+      (team == null or item.team == team or item.team == null) and
+      (mini_league_id == null or item.mini_league_id == mini_league_id) and
+      (switch (folders.find(func(f) = f.id == item.folder_id)) {
+        case null { true };
+        case (?folder) { canViewFolder(caller, folder) };
+      })))
+  };
+
+  public shared ({ caller }) func read_account_list_club_files_with_folder(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    #Ok(files.filter(func(item) =
+      item.club == club and
+      item.competition_id == null and
+      item.deleted_at_ms == null and
+      (team == null or item.team == team or item.team == null) and
+      (mini_league_id == null or item.mini_league_id == mini_league_id) and
+      (switch (folders.find(func(f) = f.id == item.folder_id)) {
+        case null { true };
+        case (?folder) { canViewFolder(caller, folder) };
+      })).map(withFolderJoin))
+  };
+
+  public shared ({ caller }) func read_account_list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null))
+  };
+
+  public shared ({ caller }) func read_account_list_trashed_files_with_folder(club : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null).map(withFolderJoin))
+  };
+
+  public shared ({ caller }) func read_account_get_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok : ?Types.PinnedVault; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    #Ok(pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id))
+  };
+
+  public shared ({ caller }) func read_account_list_backups() : async { #Ok : [Types.BackupSummary]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    #Ok(backups.map(func(b : Types.Backup) : Types.BackupSummary {
+      { id = b.id; backup_label = b.backup_label; created_at_ms = b.created_at_ms; created_by = b.created_by;
+        folder_count = b.folders.size(); file_count = b.files.size() }
+    }))
+  };
+
+  public shared ({ caller }) func read_account_get_backup(id : Text) : async { #Ok : Types.Backup; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    switch (backups.find(func(b : Types.Backup) : Bool = b.id == id)) {
+      case null { #Err("Backup not found") };
+      case (?backup) { #Ok(backup) };
+    }
   };
 }
