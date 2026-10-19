@@ -389,7 +389,7 @@ persistent actor MediaBlobStore {
     // unreachable authority must leave the ciphertext stored but unpublished.
     try { await requireUploadMembership(op.owner, op.path) } catch (e) { return #Err(Error.message(e)) };
     try {
-      switch (await service.commit_media_quota(id)) {
+      let _dbg = Debug.print("DBG commitShared " # id); switch (await service.commit_media_quota(id)) {
         case (#Ok(r)) {
           bumpInventory();
           if (r.status != #committed) return #Err("Quota not committed");
