@@ -19,6 +19,7 @@ import Time "mo:core/Time";
 import Timer "mo:core/Timer";
 import Types "types";
 import AccountErasure "accountErasure";
+import AccountUnlinkFence "accountUnlinkFence";
 import Oql "../../shared/Oql";
 import OqlClubs "oqlClubs";
 import MediaQuota "mediaQuota";
@@ -540,7 +541,10 @@ persistent actor class Main(governorInit : Principal) {
     let account = switch (reply) { case (#Err(e)) return #Err(e); case (#Ok(a)) a };
     if (account.status != #Active or account.principals.size() == 0 or account.principals.size() > 8 or not account.principals.any(func(p) = p == caller)
         or account.principals.any(Principal.isAnonymous)) return #Err("Invalid linked account");
+    if (AccountUnlinkFence.rejects(account.id, account.version, account.principals, identityUnlinkReceipts)) return #Err("Revoked linked account snapshot");
     if (accounts.any(func(a) = a.id == account.id and a.version > account.version)) return #Err("Stale linked account");
+    if (accounts.any(func(a) = a.id == account.id and a.version == account.version and
+        (a.principals.size() != account.principals.size() or a.principals.any(func(p) = not account.principals.any(func(q) = p == q))))) return #Err("Conflicting linked account snapshot");
     // A linked identity cannot bypass a removal recorded for another alias.
     var exclusions = acl.exclusions.concat(removedMembers.map(func(m) = { club = m.club; user = m.user }));
     for (e in exclusions.values()) if (account.principals.any(func(p) = p == e.user)) {
