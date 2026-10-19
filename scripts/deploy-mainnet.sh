@@ -22,6 +22,13 @@ DEPLOY_TARGET="${DEPLOY_TARGET:-mainnet}"
 ICP_ENV="${ICP_ENV:-ic}"
 PROJECT_DIR="$(cd "$(dirname "$0")/../deploy/$DEPLOY_TARGET" && pwd)"
 IDS_JSON="$PROJECT_DIR/.icp/data/mappings/$ICP_ENV.ids.json"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Held across attestation, upgrade and key read-back. Never treat a local
+# lock as proof against another controller: preflight requires sole governor.
+mkdir -p "$PROJECT_DIR/.icp/data/media-key-attestations"
+exec 9>"$PROJECT_DIR/.icp/data/media-key-attestations/deploy.lock"
+flock -n 9 || { echo "ERROR: another deployment holds the photo-key lock"; exit 1; }
+KEY_RECEIPT="$PROJECT_DIR/.icp/data/media-key-attestations/$ICP_ENV.json"
 
 cd "$PROJECT_DIR"
 
@@ -47,12 +54,19 @@ if [ "$CURRENT" != "$GOVERNOR" ]; then
   exit 1
 fi
 
+if [ -f "$IDS_JSON" ] && node -e "const m=require('$IDS_JSON');process.exit(m.pii_access_control ? 0 : 1)"; then
+  echo "==> Attesting original encrypted-photo key before any upgrade"
+  bun "$REPO_DIR/frontend/scripts/media-key-deploy-preflight.mjs" before "$IDS_JSON" "$KEY_RECEIPT" "$DEPLOY_TARGET" "$ICP_ENV"
+fi
 echo "==> Deploying all 18 canisters to $DEPLOY_TARGET (this funds them from your cycles balance)"
 # 1T cycles per canister (18T total) fits a ~8 ICP budget with headroom; top up later as needed.
 # -y skips interactive candid/confirmation prompts so this runs unattended in CI.
 # Auto installs new canisters and upgrades existing ones, preserving EOP memory.
 # Never fall back to reinstall or wasm-memory-persistence=replace on failure.
 icp deploy -e "$ICP_ENV" -y --mode auto --cycles 1000000000000
+if [ -f "$KEY_RECEIPT" ]; then
+  bun "$REPO_DIR/frontend/scripts/media-key-deploy-preflight.mjs" after "$IDS_JSON" "$KEY_RECEIPT" "$DEPLOY_TARGET" "$ICP_ENV"
+fi
 
 [ -f "$IDS_JSON" ] || { echo "ERROR: $IDS_JSON not found after deploy"; exit 1; }
 
