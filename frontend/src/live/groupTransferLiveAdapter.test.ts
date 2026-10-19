@@ -28,6 +28,14 @@ describe('live move adapter', () => {
     await expect(liveTransferAdapter(d).cleanupTerminal?.({ clubId:'club', fromGroup:'a', toGroup:'b', phase:'released', registryRevision:8n, log:['released'] })).rejects.toThrow('authority drift');
     expect(release).not.toHaveBeenCalled();
   });
+  it('verifies destination key authority before purge or group unlock', async () => {
+    const { d } = deps([]); d.targetFor = async () => 'b'; d.readRegistryRevision = async () => 8n;
+    d.mediaInventory = async (fromGroup, toGroup, clubId) => ({ fromGroup, toGroup, clubId, complete: true, encryptedObjects: 0, pendingUploads: 0, sharedQuotaReady: true });
+    d.mediaKeyRecovery = { prepareCutover: vi.fn(), beforeAbortUnlock: vi.fn(), verifyReleased: async () => { throw new Error('destination authority uncertain'); } };
+    await expect(liveTransferAdapter(d).purgeSource('a','club')).rejects.toThrow('destination authority uncertain');
+    expect(d.actors('a').club_domain.purge_club_snapshot).not.toHaveBeenCalled();
+    expect(d.actors('a').club_domain.unfreeze_club).not.toHaveBeenCalled();
+  });
   it('refuses moves without an authenticated media reader', async () => {
     const { d } = deps([]);
     await expect(liveTransferAdapter(d).verifyMedia?.('a', 'b', 'club')).rejects.toThrow('inventory reader required');

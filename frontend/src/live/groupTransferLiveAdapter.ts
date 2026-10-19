@@ -152,6 +152,10 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       const destination = await d.targetFor(club);
       if (!destination || destination === group) throw new Error('Persisted destination required before media-safe purge');
       await verifyMedia(group, destination, club);
+      // Key-state proof must precede irreversible purge AND either group's
+      // unlock, not merely the later terminal blob-fence release.
+      await d.mediaKeyRecovery?.verifyReleased({ clubId: club, fromGroup: group, toGroup: destination,
+        registryRevision: await d.readRegistryRevision(), phase: 'cutover', log: ['cutover'] });
       const a = d.actors(group);
       for (const dom of LIVE_DOMAINS) ok(await a[dom].purge_club_snapshot(club));
       await fenceAll(group, club, false);
