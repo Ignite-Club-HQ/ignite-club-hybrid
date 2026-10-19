@@ -3131,8 +3131,16 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func create_pending_invite(kind : Text, club_id : Text, team_id : ?Text, child_id : ?Text, email : Text, role : ?Text) : async { #Ok : { invite : Types.PendingInvite; payload : Types.InvitePayload }; #Err : Text } {
     auth(caller);
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
+    if (isExcluded(caller, club_id)) return #Err("Forbidden");
     if (kind != "team" and kind != "club" and kind != "guardian") return #Err("Invalid invite kind");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
+    if (kind == "guardian") {
+      switch (child_id) {
+        case null return #Err("Referenced child required");
+        case (?child) { if (not parentInviteScopeValid(club_id, team_id, child)) return #Err("Referenced child not in invite scope") };
+      }
+    };
     switch (team_id) {
       case (?team) {
         let directAccess = canManageTeam(caller, club_id, ?team);
@@ -3149,9 +3157,19 @@ persistent actor class Main(governorInit : Principal) {
       };
       case null { if (not isAdmin(caller, club_id)) return #Err("Club admin required") };
     };
+    let token = "pinv-" # (await randomHex(16));
+    if (kind == "guardian") {
+      if (not canManageTeam(caller, club_id, team_id)) return #Err("Invite authorization changed");
+      switch (child_id) {
+        case null return #Err("Referenced child required");
+        case (?child) { if (not parentInviteScopeValid(club_id, team_id, child)) return #Err("Referenced child not in invite scope") };
+      }
+    };
+    if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
+    if (isExcluded(caller, club_id)) return #Err("Forbidden");
     let now = nowMs();
     let invite : Types.PendingInvite = {
-      id = "pinv-" # (await randomHex(16));
+      id = token;
       kind; club_id; team_id; child_id; email; role;
       invited_by = caller;
       created_at_ms = now;
@@ -3263,10 +3281,16 @@ persistent actor class Main(governorInit : Principal) {
     switch (pendingInvites.find(func(i) = i.id == id)) {
       case null { #Err("Invite not found") };
       case (?invite) {
+        if (isTransferFenced(invite.club_id)) return #Err("Club is temporarily locked for a transfer");
         if (invite.status == "accepted") return #Err("Invite already accepted");
         if (invite.status == "revoked") return #Err("Invite revoked");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
         if (invite.kind == "guardian") {
+          if (isExcluded(invite.invited_by, invite.club_id) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
+          switch (invite.child_id) {
+            case null return #Err("Referenced child required");
+            case (?child) { if (not parentInviteScopeValid(invite.club_id, invite.team_id, child)) return #Err("Referenced child not in invite scope") };
+          };
           switch (invite.child_id) {
             case (?childId) {
               switch (invite.team_id) {

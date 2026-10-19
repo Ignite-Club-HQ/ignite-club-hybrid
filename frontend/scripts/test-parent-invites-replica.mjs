@@ -28,6 +28,9 @@ try {
   assert.ok('Err' in await a.create_parent_invite('club-a', ['team-a'], 'child-b'));
   assert.ok('Err' in await a.create_parent_invite('club-a', ['team-a'], 'unknown-child'));
   assert.ok('Err' in await a.create_parent_invite('club-a', ['team-b'], 'child-a'));
+  assert.ok('Err' in await a.create_pending_invite('guardian', 'club-a', ['team-a'], ['child-b'], 'opaque-email-ref', []));
+  assert.ok('Err' in await a.create_pending_invite('guardian', 'club-a', ['team-a'], [], 'opaque-email-ref', []));
+  const pendingGuardian = ok(await a.create_pending_invite('guardian', 'club-a', ['team-a'], ['child-a'], 'opaque-email-ref', [])).invite.id;
   const token = ok(await a.create_parent_invite('club-a', ['team-a'], 'child-a')).id;
   assert.match(token, /^inv-[a-f0-9]{32}$/);
   a.setPrincipal(parent); b.setPrincipal(parent);
@@ -49,6 +52,7 @@ try {
   a.setPrincipal(parent);
   assert.ok('Err' in await a.get_parent_invite(removedIssuer));
   assert.ok('Err' in await a.accept_parent_invite(removedIssuer));
+  assert.ok('Err' in await a.accept_pending_invite(pendingGuardian));
   a.setPrincipal(owner);
   const fencedToken = ok(await a.create_parent_invite('club-a', ['team-a'], 'child-a')).id;
   ok(await a.freeze_club('club-a', 1n)); a.setPrincipal(parent);
