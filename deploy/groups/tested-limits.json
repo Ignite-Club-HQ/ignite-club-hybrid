@@ -1,0 +1,23 @@
+{
+  "_note": "ESTIMATES (20 Oct 2026), not load-tested. Bytes of usable memory per service. Replace with tested figures.",
+  "deploymentId": "mainnet",
+  "groupId": "g1",
+  "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+  "clubCount": 0,
+  "storageLimitBytes": {
+    "media_blob_store": 1600000000,
+    "messaging_domain": 2000000000,
+    "media_metadata": 2000000000,
+    "notification_queue": 2000000000,
+    "events_domain": 2000000000,
+    "insights_domain": 2000000000,
+    "identity_access": 2000000000,
+    "club_domain": 2000000000,
+    "vault_domain": 2000000000,
+    "pii_access_control": 2000000000,
+    "club_points_domain": 1000000000,
+    "competition_domain": 1000000000,
+    "mini_league_domain": 1000000000,
+    "timer_jobs": 1000000000
+  }
+}
