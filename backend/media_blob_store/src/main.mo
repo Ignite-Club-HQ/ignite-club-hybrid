@@ -405,7 +405,12 @@ persistent actor MediaBlobStore {
     if (op.status == #aborted) return #Ok;
     if (not QuotaOperation.canAbort(op)) return #Err("Already finalized; retry finalize");
     quota_operations.add(id, { op with status = #aborting });
-    let ?service = quotaService() else return #Err("Quota authority unset; retry abort");
+    let ?service = quotaService() else {
+      // Leave the upload retryable: an unset authority must not dead-end it.
+      let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
+      if (latest.status == #aborting) quota_operations.add(id, { latest with status = #uploading });
+      return #Err("Quota authority unset; retry abort")
+    };
     try {
       switch (await service.cancel_media_quota(id, op.club_id, op.category, op.bytes, op.cycle)) {
         case (#Ok(r)) {
@@ -418,7 +423,13 @@ persistent actor MediaBlobStore {
         };
         case (#Err(message)) #Err(message)
       }
-    } catch (_) { #Err("Quota release outcome unknown; retry abort") }
+    } catch (_) {
+      // Unknown outcome: the reservation may or may not be released. Keep the
+      // upload retryable instead of dead-ending it in #aborting.
+      let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
+      if (latest.status == #aborting) quota_operations.add(id, { latest with status = #uploading });
+      #Err("Quota release outcome unknown; retry abort")
+    }
   };
 
   type FreeUsageRow = { club_id : Text; cycle : Nat; category : Text; count : Nat; bytes : Nat64 };
