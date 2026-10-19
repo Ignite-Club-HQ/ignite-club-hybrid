@@ -977,6 +977,7 @@ persistent actor MediaBlobStore {
     try {
     await admitAccount(caller);
     auth(caller);
+    if (retainedBlocked()) return #Err("Retained store frozen or unavailable");
     let ?pending = findUpload(upload_id) else return #Err("Unknown upload");
     if (not pending.owner.equal(caller)) return #Err("Not the upload owner");
     try { await requireUploadMembership(caller, pending.path) } catch (e) { return #Err(Error.message(e)) };
@@ -1007,6 +1008,7 @@ persistent actor MediaBlobStore {
     try {
     await admitAccount(caller);
     auth(caller);
+    if (retainedBlocked()) return #Err("Retained store frozen or unavailable");
     let path = switch (findUpload(upload_id), quota_operations.get(upload_id)) {
       case (?upload, _) upload.path;
       case (null, ?op) op.path;
