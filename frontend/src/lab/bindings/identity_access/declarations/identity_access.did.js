@@ -246,20 +246,40 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : RemovalHistoryPage,
     'Err' : IDL.Text,
   });
-  const Result_17 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
-  const Result_18 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
+  const MediaRegistry = IDL.Record({
+    'stores' : IDL.Vec(IDL.Principal),
+    'active' : IDL.Bool,
+  });
+  const MediaEvidence = IDL.Record({
+    'club_authority' : IDL.Principal,
+    'registry' : MediaRegistry,
+  });
+  const Supplemental = IDL.Record({
+    'domain' : IDL.Text,
+    'group_id' : IDL.Text,
+    'subnet' : IDL.Principal,
+    'canister' : IDL.Principal,
+  });
+  const RemovalInventory = IDL.Record({
+    'media' : IDL.Vec(MediaEvidence),
+    'groups' : Evidence,
+    'supplemental' : IDL.Vec(Supplemental),
+  });
+  const Result_17 = IDL.Variant({ 'Ok' : RemovalInventory, 'Err' : IDL.Text });
+  const Result_18 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
+  const Result_19 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
   const ProfileSearchResult = IDL.Record({
     'account_id' : IDL.Text,
     'principal' : IDL.Principal,
     'avatar_ref' : IDL.Opt(IDL.Text),
     'display_name' : IDL.Text,
   });
-  const Result_19 = IDL.Variant({
+  const Result_20 = IDL.Variant({
     'Ok' : IDL.Vec(ProfileSearchResult),
     'Err' : IDL.Text,
   });
-  const Result_20 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
-  const Result_21 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
+  const Result_21 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
+  const Result_22 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
   
   return IDL.Service({
     'accept_link' : IDL.Func([IDL.Nat64], [Result], []),
@@ -341,16 +361,17 @@ export const idlFactory = ({ IDL }) => {
         [Result_16],
         [],
       ),
+    'read_removal_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_17], []),
     'read_service_account' : IDL.Func([IDL.Principal], [Result], []),
     'redeem_entitlement' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Text, IDL.Text],
-        [Result_17],
+        [Result_18],
         [],
       ),
     'register_account' : IDL.Func([], [Result], []),
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
-        [Result_18],
+        [Result_19],
         [],
       ),
     'remove_verifier' : IDL.Func([IDL.Principal], [Result_2], []),
@@ -371,14 +392,14 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         [],
       ),
-    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_19], ['query']),
+    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_20], ['query']),
     'set_account_status' : IDL.Func([IDL.Text, AccountStatus], [Result], []),
     'set_attestation_secret' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result_2], []),
     'set_club_authorities' : IDL.Func([IDL.Vec(IDL.Principal)], [Result_2], []),
     'set_club_switcher_hint_seen' : IDL.Func([], [Result_9], []),
     'set_entitlement' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Nat64, IDL.Text],
-        [Result_17],
+        [Result_18],
         [],
       ),
     'set_exclusion' : IDL.Func(
@@ -399,16 +420,21 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_privacy_consent' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
-        [Result_20],
+        [Result_21],
         [],
       ),
     'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_9], []),
+    'set_removal_supplemental_inventory' : IDL.Func(
+        [IDL.Vec(Supplemental), IDL.Nat64],
+        [Result_2],
+        [],
+      ),
     'set_service_authorities' : IDL.Func(
         [IDL.Vec(IDL.Principal)],
         [Result_2],
         [],
       ),
-    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_21], []),
+    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_22], []),
     'set_theme_preference' : IDL.Func([IDL.Opt(IDL.Text)], [Result_9], []),
     'whoami' : IDL.Func([], [Result], ['query']),
   });

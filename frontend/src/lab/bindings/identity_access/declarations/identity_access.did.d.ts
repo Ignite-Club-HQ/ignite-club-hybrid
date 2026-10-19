@@ -104,6 +104,14 @@ export interface LinkChallenge {
   'expires_at_ns' : bigint,
   'expected_version' : bigint,
 }
+export interface MediaEvidence {
+  'club_authority' : Principal,
+  'registry' : MediaRegistry,
+}
+export interface MediaRegistry {
+  'stores' : Array<Principal>,
+  'active' : boolean,
+}
 export interface MemoryStats {
   'memory_bytes' : bigint,
   'stable_bytes' : bigint,
@@ -187,6 +195,11 @@ export interface RemovalHistoryPage {
   'next' : RemovalHistoryCursor,
   'revision' : bigint,
 }
+export interface RemovalInventory {
+  'media' : Array<MediaEvidence>,
+  'groups' : Evidence,
+  'supplemental' : Array<Supplemental>,
+}
 export type Result = { 'Ok' : Account } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : Access } |
@@ -205,17 +218,19 @@ export type Result_15 = { 'Ok' : RemovalHistoryManifest } |
   { 'Err' : string };
 export type Result_16 = { 'Ok' : RemovalHistoryPage } |
   { 'Err' : string };
-export type Result_17 = { 'Ok' : Entitlement } |
+export type Result_17 = { 'Ok' : RemovalInventory } |
   { 'Err' : string };
-export type Result_18 = { 'Ok' : bigint } |
+export type Result_18 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_19 = { 'Ok' : Array<ProfileSearchResult> } |
+export type Result_19 = { 'Ok' : bigint } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_20 = { 'Ok' : PrivacyConsent } |
+export type Result_20 = { 'Ok' : Array<ProfileSearchResult> } |
   { 'Err' : string };
-export type Result_21 = { 'Ok' : TermsAcceptance } |
+export type Result_21 = { 'Ok' : PrivacyConsent } |
+  { 'Err' : string };
+export type Result_22 = { 'Ok' : TermsAcceptance } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : LinkChallenge } |
   { 'Err' : string };
@@ -288,6 +303,12 @@ export interface State {
    */
   'terms_acceptances' : Array<TermsAcceptance>,
   'next_challenge' : bigint,
+}
+export interface Supplemental {
+  'domain' : string,
+  'group_id' : string,
+  'subnet' : Principal,
+  'canister' : Principal,
 }
 export interface TermsAcceptance {
   'account_id' : string,
@@ -395,6 +416,7 @@ export interface _SERVICE {
     [bigint, RemovalHistoryCursor, number],
     Result_16
   >,
+  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_17>,
   /**
    * Subject-bound consensus ownership read; never implicitly registers an account.
    */
@@ -414,7 +436,7 @@ export interface _SERVICE {
    */
   'redeem_entitlement' : ActorMethod<
     [string, string, bigint, string, string],
-    Result_17
+    Result_18
   >,
   'register_account' : ActorMethod<[], Result>,
   /**
@@ -427,7 +449,7 @@ export interface _SERVICE {
    * number of records changed (or that would change when `dry_run`).
    * Any NEW stored principal / principal-text field must be added here.
    */
-  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_18>,
+  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_19>,
   /**
    * Governor-only: revokes a verifier principal.
    */
@@ -455,7 +477,7 @@ export interface _SERVICE {
    * can grant roles without a second lookup. Profiles without an account or
    * with a blank name are skipped.
    */
-  'search_profiles' : ActorMethod<[string, number], Result_19>,
+  'search_profiles' : ActorMethod<[string, number], Result_20>,
   /**
    * Admin-gated (governor or an account holding the `app_admin` role):
    * suspends or reactivates an account. `Suspended` accounts are rejected by
@@ -483,7 +505,7 @@ export interface _SERVICE {
    */
   'set_entitlement' : ActorMethod<
     [Principal, string, string, bigint, string],
-    Result_17
+    Result_18
   >,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_2>,
   'set_exclusion_scoped' : ActorMethod<
@@ -492,12 +514,16 @@ export interface _SERVICE {
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
   'set_group_inventory_binding' : ActorMethod<[Binding, bigint], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_20>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_21>,
   /**
    * Sets (or replaces) the caller's profile. The account must already exist —
    * sign-in provisioning calls register_account first.
    */
   'set_profile' : ActorMethod<[string, [] | [string]], Result_9>,
+  'set_removal_supplemental_inventory' : ActorMethod<
+    [Array<Supplemental>, bigint],
+    Result_2
+  >,
   'set_service_authorities' : ActorMethod<[Array<Principal>], Result_2>,
   /**
    * Sets (records) the caller's acceptance of the current terms/privacy
@@ -505,7 +531,7 @@ export interface _SERVICE {
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_21>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_22>,
   /**
    * Sets (or clears) the caller's UI theme preference, so it follows the
    * account across devices. Creates a blank profile entry if the caller has
