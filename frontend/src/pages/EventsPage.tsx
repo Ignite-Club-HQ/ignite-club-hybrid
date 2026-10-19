@@ -527,7 +527,7 @@ export default function EventsPage() {
             const leagues = await listMyLiveMiniLeagues(ctx);
             return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
           },
-        }),
+        }, { everyGroup: true, merge: (parts) => ({ data: [...new Map(parts.flatMap(p => p.data ?? []).map(r => [r.mini_league_id, r])).values()], error: null }) }),
         withFeatureBackend<{ data: { mini_league_id: string }[] | null; error: any }>("mini_leagues", {
           supabase: async () =>
             supabase
@@ -535,7 +535,7 @@ export default function EventsPage() {
               .select("mini_league_id")
               .eq("user_id", user!.id),
           icp: async () => ({ data: [] as { mini_league_id: string }[], error: null as any }),
-        }),
+        }, { shared: "person" }),
         leagueAdminClubIds.size > 0
           ? withFeatureBackend<{ data: { id: string }[] | null; error: any }>("mini_leagues", {
               supabase: async () =>
@@ -551,7 +551,7 @@ export default function EventsPage() {
                 ).flat();
                 return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
               },
-            })
+            }, { shared: "person" })
           : Promise.resolve({ data: [], error: null } as any),
       ]);
       diagLog("memberships:mini_leagues", {
@@ -688,7 +688,7 @@ export default function EventsPage() {
             .map((l) => ({ id: l.id, name: l.name, club_id: l.club_id }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      });
+      }, { shared: "person" });
     },
     enabled: (!!user || useIcpLab) && !!userMemberships,
     staleTime: 30 * 60 * 1000,

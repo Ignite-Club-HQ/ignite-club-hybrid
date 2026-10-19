@@ -1,3 +1,5 @@
+import { mergeMiniLeagueRows } from "@/live/miniLeagueRouting";
+import { writeOnce } from "@/live/clubScope";
 import { mergeLists } from "@/live/featureRouter";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -236,7 +238,7 @@ export default function MiniLeaguesPage() {
 
           return leaguesWithCounts;
         },
-      }),
+      }, clubIdFromUrl ? { clubId: clubIdFromUrl } : { everyGroup: true, merge: mergeMiniLeagueRows }),
     enabled: !!user,
   });
 
@@ -274,7 +276,7 @@ export default function MiniLeaguesPage() {
             showMatchesToMembers: true,
           });
         },
-      }),
+      }, writeOnce({ clubId: data.club_id })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-leagues"] });
       setIsCreateOpen(false);

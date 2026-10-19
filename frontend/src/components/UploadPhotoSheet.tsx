@@ -357,7 +357,7 @@ export function UploadPhotoSheet({
         return withFeatureBackend("mini_leagues", {
           supabase: async () => [] as MiniLeague[],
           icp: async (ctx) => (await listLiveMiniLeaguesByClub(ctx, selectedClubId)).map((l) => ({ id: l.id, name: l.name })),
-        });
+        }, { clubId: selectedClubId });
       }
       
       const isClubAdmin = userRoles?.some(r => r.role === "club_admin" && r.club_id === selectedClubId);

@@ -48,7 +48,7 @@ export function useNewsAudienceTargets(clubId: string | null) {
               id: m.id,
               name: m.name,
             })),
-        }),
+        }, { clubId: clubId ?? "" }),
       );
       return { competitions, miniLeagues };
     },

@@ -1,3 +1,4 @@
+import { mergeMiniLeagueRows } from "@/live/miniLeagueRouting";
 import { mergeLists } from "@/live/featureRouter";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -474,7 +475,7 @@ export default function HomePage() {
                 ).flat();
                 return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
               },
-            })
+            }, { shared: "person" })
           : Promise.resolve({ data: [] as { id: string }[], error: null as any }),
         // Filter out soft-deleted clubs from role-derived memberships. Without
         // this, deleting a club leaves orphan user_roles rows that still make
@@ -1412,7 +1413,7 @@ export default function HomePage() {
             clubs: { name: "Loading...", sport: null },
           })) as MiniLeague[];
         },
-      }),
+      }, { everyGroup: true, merge: mergeMiniLeagueRows }),
     enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,

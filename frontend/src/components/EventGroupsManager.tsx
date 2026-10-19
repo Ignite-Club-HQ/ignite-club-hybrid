@@ -167,7 +167,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             // players for a mini league or a group, not a filtered id set).
             // ICP-routed sessions see empty names rather than invented data.
             icp: async () => [] as { id: string; name: string; ability_rating: number | null }[],
-          });
+          }, { miniLeagueId });
 
           players = (playersData || []).map(p => ({
             ...p,
@@ -253,7 +253,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             clubs: null as { sport: string | null } | null,
           };
         },
-      }),
+      }, { miniLeagueId }),
     enabled: !!miniLeagueId,
   });
 
@@ -291,7 +291,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
             }))
             .sort((a, b) => (b.ability_rating || 0) - (a.ability_rating || 0)) as (MiniLeaguePlayer & { child_id: string | null })[];
         },
-      }),
+      }, { miniLeagueId }),
     enabled: !!miniLeagueId,
   });
 

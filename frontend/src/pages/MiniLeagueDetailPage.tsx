@@ -85,7 +85,7 @@ export default function MiniLeagueDetailPage() {
             club: { id: canisterLeague.club_id, name: "" },
           } as any;
         },
-      }),
+      }, { miniLeagueId: id ?? "" }),
     enabled: !!id,
   });
 

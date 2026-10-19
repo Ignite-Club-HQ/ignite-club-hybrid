@@ -1224,7 +1224,7 @@ export function AppHeader() {
                   return null;
                 }
               },
-            });
+            }, { miniLeagueId: relatedId });
             if (miniLeagueCheckMJ) {
               navigate(`/mini-leagues/${relatedId}`);
             } else {

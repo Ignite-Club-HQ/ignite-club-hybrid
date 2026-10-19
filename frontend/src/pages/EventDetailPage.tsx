@@ -1113,7 +1113,7 @@ export default function EventDetailPage() {
             child_id: p.child_id[0] ?? null,
           }));
         },
-      });
+      }, { miniLeagueId: event?.mini_league_id ?? "" });
 
       const childIds = Array.from(
         new Set(players.map((p: any) => p.child_id).filter((id: string | null): id is string => !!id)),
@@ -1191,7 +1191,7 @@ export default function EventDetailPage() {
             .filter((p) => p.parent_user_id[0] === myPrincipal)
             .map((p) => ({ id: p.id, name: p.name, child_id: p.child_id[0] ?? null }));
         },
-      }),
+      }, { miniLeagueId: event?.mini_league_id ?? "" }),
     enabled: !!event?.mini_league_id && !!user?.id,
   });
 
@@ -1349,7 +1349,7 @@ export default function EventDetailPage() {
             .map((p: any) => ({ id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null }))
             .sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
         },
-      });
+      }, { miniLeagueId });
     },
     enabled: !!event?.mini_league_id && !!id,
   });

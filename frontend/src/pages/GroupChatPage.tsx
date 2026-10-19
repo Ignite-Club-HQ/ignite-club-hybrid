@@ -444,7 +444,7 @@ export default function GroupChatPage() {
             return null;
           }
         },
-      });
+      }, { miniLeagueId: mlId });
     },
     enabled: !!group?.mini_league_id,
     staleTime: 5 * 60 * 1000,

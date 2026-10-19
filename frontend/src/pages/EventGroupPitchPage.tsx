@@ -145,7 +145,7 @@ function SupabaseEventGroupPitchPage() {
         // same gate). ICP-routed sessions see empty names rather than
         // invented data.
         icp: async () => [] as { id: string; name: string; ability_rating: number | null }[],
-      });
+      }, { eventId: eventId ?? "" });
 
       return (playersData || []).map(p => ({
         ...p,
@@ -196,7 +196,7 @@ function SupabaseEventGroupPitchPage() {
             clubs: null as { sport: string | null } | null,
           };
         },
-      }),
+      }, { miniLeagueId: group?.event?.mini_league_id ?? "" }),
     enabled: !!group?.event?.mini_league_id,
   });
 
@@ -320,7 +320,7 @@ function SupabaseEventGroupPitchPage() {
         // club user_roles — no canister equivalent. ICP-routed sessions see
         // an empty assignee list rather than a partial/incorrect one.
         icp: async () => [] as { id: string; display_name: string | null; avatar_url: string | null }[],
-      }),
+      }, { miniLeagueId: group?.event?.mini_league_id ?? "" }),
     enabled: !!group?.event?.mini_league_id,
   });
 
