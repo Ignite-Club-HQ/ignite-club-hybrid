@@ -26,6 +26,7 @@ try {
   const clubActor = club.actor;
   const actor = store.actor;
   clubActor.setPrincipal(governor);
+  actor.setPrincipal(governor);
   ok(await clubActor.create_club('club-pro', 'Pro Club', 'club-pro', [], []));
   ok(await clubActor.add_role_grant(owner, 'club-pro', 'player', []));
   ok(await clubActor.save_club_subscription({
