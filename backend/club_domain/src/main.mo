@@ -2400,6 +2400,23 @@ persistent actor class Main(governorInit : Principal) {
     principals.any(func(p) = isMember(p, club_id))
   };
 
+  // Consensus booleans only: no child names, guardian lists or stored grants.
+  public shared func read_has_club_staff_role(user : Principal, club_id : Text) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    acl.roles.any(func(grant) = grant.user.equal(user) and grant.club == ?club_id)
+  };
+
+  public shared func read_has_child_guardian(user : Principal, child_id : Text) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    switch (acl.children.find(func(child) = child.id == child_id)) {
+      case null false;
+      case (?child) {
+        (switch (child.parent) { case (?p) p.equal(user); case null false })
+        or acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))
+      };
+    }
+  };
+
   // The user's role grants in one club as (role, team) pairs. events_domain
   // mirrors these on create/update so club and team admins set up here can
   // schedule events without a separate grant there. Public query, same
