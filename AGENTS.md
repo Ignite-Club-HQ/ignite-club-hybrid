@@ -9,9 +9,8 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Preview runs frontend/ via lovable.toml and scripts/*-preview.mjs; maps SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Root stays dependency-free.
-- Install frontend via scripts/ensure-frontend-deps.mjs only; bare npm ci wipes the running preview's dependencies.
-- build-preview.mjs must copy live-index.html to dist/index.html for static hosting and SPA fallback.
+- Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
+- Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html to dist/index.html for static hosting/SPA fallback.
 - Retired URLs use App.tsx ParamRedirect, never 404.
 - Read frontend/AGENTS.md, backend/AGENTS.md and scripts/AGENTS.md before changes in those directories.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
@@ -45,5 +44,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
-- Media moves: operator-only authenticated registries, journaled fences, bounded consensus pages; reconciliation never enables encrypted moves. Owner policy 2026-10-19: clubs holding encrypted media are never moved — keep the fail-closed gate, never build re-encryption; existing clubs stay put, only new clubs get group placement. Why: photo keys are tied to the creating group.
-- Cross-group account lifecycle is an unreleased local-only protocol: keep authority-wide revocation and new-group activation blocked until complete revision-bound inventory, direct/mirrored permission invalidation and stale-sync races are proven. Why: successful local fan-out cannot prove immediate revocation across unavailable groups.
+- Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
+- Cross-group accounts remain local-only; block new-group activation until revision-bound inventory, authority-wide revocation, mirror invalidation and stale-sync safety pass. Why: local fan-out cannot prove revocation across unavailable groups.
