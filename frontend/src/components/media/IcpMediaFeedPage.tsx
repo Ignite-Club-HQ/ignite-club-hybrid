@@ -1,3 +1,6 @@
+import { readContentInScope } from "@/live/contentRouting";
+import { acrossLists } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -222,7 +225,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
   const grants = await getLiveMyRoleGrants(ctx);
   const grantClubIds = new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c));
   const grantTeamIds = new Set(grants.map((g) => g.team[0]).filter((t): t is string => !!t));
-  const clubsRaw = (await listLiveMembershipClubs(ctx)) as unknown as {
+  const clubsRaw = (await readContentInScope(ctx, "membership", acrossLists, listLiveMembershipClubs)) as unknown as {
     id: string;
     name: string;
     sport: [] | [string];
@@ -254,15 +257,15 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       const directMember = grantClubIds.has(club.id);
       if (!directMember && grantTeamIds.size === 0) return;
       if (!directMember) {
-        const clubTeams = (await listLiveTeams(ctx, club.id).catch(() => [])) as unknown as { id: string }[];
+        const clubTeams = (await readContentInScope(ctx, "membership", { clubId: club.id }, scoped => listLiveTeams(scoped, club.id))) as unknown as { id: string }[];
         if (!clubTeams.some((t) => grantTeamIds.has(t.id))) return;
       }
       options.clubs.push({ id: club.id, name: club.name, sport: club.sport[0] ?? null });
       const [assets, teams, miniLeagues, competitions] = await Promise.all([
-        listLiveAssets(ctx, club.id).catch(() => []),
-        listLiveTeams(ctx, club.id).catch(() => []),
-        listLiveMiniLeaguesByClub(ctx, club.id).catch(() => []),
-        listLiveCompetitions(ctx, club.id).catch(() => []),
+        readContentInScope(ctx, "media", { clubId: club.id }, scoped => listLiveAssets(scoped, club.id)),
+        readContentInScope(ctx, "membership", { clubId: club.id }, scoped => listLiveTeams(scoped, club.id)),
+        readContentInScope(ctx, "mini_leagues", { clubId: club.id }, scoped => listLiveMiniLeaguesByClub(scoped, club.id)),
+        readContentInScope(ctx, "competitions", { clubId: club.id }, scoped => listLiveCompetitions(scoped, club.id)),
       ]);
       for (const team of teams as unknown as {
         id: string;
@@ -318,7 +321,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
   const groups = new Map<string, typeof rawAssets>();
   for (const asset of rawAssets) {
     if (!assetViews.has(asset.id)) continue;
-    const key = asset.album_id[0] ?? asset.id;
+    const key = `${asset.club_id}:${asset.album_id[0] ?? asset.id}`;
     const group = groups.get(key) ?? [];
     group.push(asset);
     groups.set(key, group);
@@ -330,8 +333,8 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       const first = sorted[0];
       const ownerId = first.owner.toText();
       const [reactionsRaw, commentsRaw] = await Promise.all([
-        listLiveReactions(ctx, first.id).catch(() => []),
-        listLiveComments(ctx, first.id).catch(() => []),
+        readContentInScope(ctx, "media", { photoId: first.id }, scoped => listLiveReactions(scoped, first.id)),
+        readContentInScope(ctx, "media", { photoId: first.id }, scoped => listLiveComments(scoped, first.id)),
       ]);
       const reactions = (reactionsRaw as unknown as {
         kind: string;
@@ -361,7 +364,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       const competitionId = first.competition_id[0] ?? null;
       return {
         id: key,
-        assets: sorted.map((a) => assetViews.get(a.id)!),
+        assets: sorted.flatMap(a => { const view = assetViews.get(a.id); return view ? [view] : []; }),
         representativeAssetId: first.id,
         ownerId,
         ownerName: "Member",
@@ -476,7 +479,7 @@ export function IcpMediaFeedPage() {
           throw new Error("unreachable");
         },
         icp: (ctx) => loadLiveMediaFeed(ctx),
-      });
+      }, { shared: "person" });
       if (principal) writeFeedSnapshot(principal, feed);
       return feed;
     },
@@ -491,11 +494,13 @@ export function IcpMediaFeedPage() {
         supabase: async () => {
           throw new Error("unreachable");
         },
-        icp: (ctx) =>
-          remove
-            ? removeLiveReaction(ctx, post.representativeAssetId)
-            : addLiveReaction(ctx, post.representativeAssetId, emoji, Date.now()),
-      }),
+        icp: async (ctx) => {
+          if (!remove) return addLiveReaction(ctx, post.representativeAssetId, emoji, Date.now());
+          const reactions = await listLiveReactions(ctx, post.representativeAssetId);
+          const mine = reactions.find(r => r.user.toText() === ctx.identity.getPrincipal().toText());
+          if (mine) return removeLiveReaction(ctx, mine.id);
+        },
+      }, writeOnce({ photoId: post.representativeAssetId })),
     // Instant on-screen update; the canister save finishes in the background.
     onMutate: async ({ post, emoji, remove }) => {
       const key = ["icp-media-feed", principal];
@@ -532,7 +537,7 @@ export function IcpMediaFeedPage() {
           throw new Error("unreachable");
         },
         icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text, Date.now()),
-      }),
+      }, writeOnce({ photoId: post.representativeAssetId })),
     // Show the comment the moment Send is tapped; the feed refetch replaces
     // it with the canister copy (the sheet reads the live post).
     onMutate: ({ post, text }) => {
@@ -575,7 +580,7 @@ export function IcpMediaFeedPage() {
             await deleteLiveAsset(ctx, asset.id);
           }
         },
-      }),
+      }, writeOnce({ photoId: post.representativeAssetId })),
     onSuccess: () => toast.success("Deleted"),
     onError: (err) => toast.error(err instanceof Error ? err.message : "Delete failed"),
     onSettled: invalidate,

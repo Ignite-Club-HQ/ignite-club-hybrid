@@ -1,3 +1,5 @@
+import { readContentInScope } from "@/live/contentRouting";
+import { acrossLists } from "@/live/featureScopes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -105,7 +107,7 @@ export async function fetchMediaFeedPage(
         nextCursor: page.length === options.pageSize ? options.offset + options.pageSize : undefined,
       };
     },
-  });
+  }, options.clubId ? { clubId: options.clubId } : options.competitionId ? { competitionId: options.competitionId } : options.eventId ? { eventId: options.eventId } : options.teamId ? { teamId: options.teamId } : { shared: "person" });
 }
 
 export async function fetchHighlightedMediaPhoto(
@@ -152,7 +154,7 @@ export async function fetchMediaReactions(
       // photo_reactions row shape; profile enrichment stays Supabase-side and
       // resolves to null for principal ids.
       const results = await Promise.all(
-        photoIds.map((photoId) => listLiveReactions(ctx, photoId).catch(() => [])),
+        photoIds.map((photoId) => readContentInScope(ctx, "media", { photoId }, scoped => listLiveReactions(scoped, photoId))),
       );
       return results.flat().map((reaction: any) => ({
         photo_id: reaction.asset_id,
@@ -161,7 +163,7 @@ export async function fetchMediaReactions(
         profiles: null,
       }));
     },
-  });
+  }, { shared: "person" });
 }
 
 export async function fetchMediaComments(
@@ -187,7 +189,7 @@ export async function fetchMediaComments(
       // Provisional mapping: canister comment (asset_id, author, body) onto
       // the photo_comments row shape.
       const results = await Promise.all(
-        photoIds.map((photoId) => listLiveComments(ctx, photoId).catch(() => [])),
+        photoIds.map((photoId) => readContentInScope(ctx, "media", { photoId }, scoped => listLiveComments(scoped, photoId))),
       );
       return results
         .flat()
@@ -204,5 +206,5 @@ export async function fetchMediaComments(
           profiles: null,
         })) as any[];
     },
-  });
+  }, { shared: "person" });
 }
