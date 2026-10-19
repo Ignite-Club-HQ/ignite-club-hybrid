@@ -1678,7 +1678,7 @@ persistent actor class Main(governorInit : Principal) {
     let group = switch (eventGroups.find(func(g) = g.id == group_id)) { case null return #Err("Group not found"); case (?g) g };
     if (not canEditGroupState(caller, group)) return #Err("Forbidden");
     if (group.state_revision != expected_revision) return #Err("State revision conflict");
-    if (not validOpt(timer_json, 8192) or not validOpt(pitch_json, 262144)) return #Err("Match state too large");
+    if ((switch (timer_json) { case (?t) t.size() > 8192; case null false }) or (switch (pitch_json) { case (?t) t.size() > 262144; case null false })) return #Err("Match state too large");
     let updated : Types.EventGroup = { group with timer_state_json = timer_json; pitch_state_json = pitch_json; state_revision = group.state_revision + 1 };
     eventGroups := eventGroups.map(func(g) = if (g.id == group_id) updated else g);
     #Ok(updated)
@@ -1687,7 +1687,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func save_group_duty_slot(group_id : Text, slot_id : Text, duty : Text, account_id : ?Text) : async { #Ok : Types.EventGroupDuty; #Err : Text } {
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
-    if (not valid(slot_id) or not valid(duty) or not validOpt(account_id, 128)) return #Err("Invalid duty");
+    if (not valid(slot_id) or not valid(duty) or not validOptId(account_id)) return #Err("Invalid duty");
     if (eventGroupDuties.any(func(d) = d.id == slot_id and d.group_id != group_id)) return #Err("Duty id belongs to another group");
     let value : Types.EventGroupDuty = { id = slot_id; group_id; duty; account_id };
     eventGroupDuties := eventGroupDuties.filter(func(d) = d.id != slot_id).concat([value]);
@@ -1875,7 +1875,7 @@ persistent actor class Main(governorInit : Principal) {
     var index = 0;
     for (spec in groups.values()) {
       let id = "grp-" # event_id # "-" # Nat.toText(base + index);
-      newGroups := newGroups.concat([{ timer_state_json = null; pitch_state_json = null; state_revision = 0; id; event_id; name = spec.name; created_at_ms = nowMs(); team_letter = null; colour = spec.team_a_colour; team_b_colour = spec.team_b_colour; display_order = spec.display_order; ability_band = spec.ability_band; pitch_name = spec.pitch_name }]);
+      newGroups := newGroups.concat([{ timer_state_json = null; pitch_state_json = null; state_revision = (0 : Nat64); id; event_id; name = spec.name; created_at_ms = nowMs(); team_letter = null; colour = spec.team_a_colour; team_b_colour = spec.team_b_colour; display_order = spec.display_order; ability_band = spec.ability_band; pitch_name = spec.pitch_name }]);
       newPlayers := newPlayers.concat(spec.players.map(func(p) : Types.EventGroupPlayer = { group_id = id; account_id = p.account_id; team_letter = p.team_letter }));
       for (d in spec.duties.values()) { newDuties := newDuties.concat([{ id = "batch:" # id # ":" # Nat.toText(newDuties.size()); group_id = id; duty = d.duty; account_id = d.account_id }]) };
       createdIds := createdIds.concat([id]);
