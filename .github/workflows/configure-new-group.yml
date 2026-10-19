@@ -1,0 +1,49 @@
+# Configure an already-installed new club group on mainnet, kept CLOSED.
+# Signs with the DEPLOYER_PEM secret; never registers or opens the group.
+# Input: path to the group's committed provision.json (phase "installed").
+name: Configure new group (closed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      provision_file:
+        description: "Committed provision.json for the new group, e.g. deploy/groups/g2/provision.json"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+      - name: Install frontend dependencies
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Write operator key
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM" || { echo "::error::DEPLOYER_PEM secret missing"; exit 1; }
+          umask 077
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/operator.pem"
+      - name: Configure group (closed)
+        working-directory: frontend
+        env:
+          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
+        run: npx --yes tsx@4 scripts/configure-group-closed.ts "../${{ inputs.provision_file }}" "$RUNNER_TEMP/operator.pem"
+      - name: Commit configuration progress
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/operator.pem"
+          git config user.name "ignite-operator"; git config user.email "operator@users.noreply.github.com"
+          git add "${{ inputs.provision_file }}" && git commit -m "Group configuration progress" && git push || true
