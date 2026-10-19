@@ -8,6 +8,9 @@
 - Legacy pending records migrate using the prior implementation's persisted inventory, which could not change while recovery was pending. Invalid historical inventories reject upgrade.
 - Consensus registry evidence validates revision, complete domain/placement sets, deployment, host, network, subnet approvals and required original authorities. Verified wiring is local-only and rechecks the registry between setters.
 - Two-real-group PocketIC checks cover stopped authority, suspended sync, receiver and identity upgrades, recovery, surviving identities, newer relinks, old receipt replay and concurrent unlink requests.
+- A separate bounded stable map retains principal unlink denials before external calls and after completion/upgrades. Registration, governor rekey and unrelated-account link challenges reject denied identities. A fresh newer challenge from the original surviving account can restore identity eligibility while retaining denial history; deleted domain roles remain absent.
+- Local-only, configured-authority consensus eligibility reads accept one subject or 1–200 unique subjects, deny unknown/suspended/revoked identities, and expose account-scoped evidence only—not a resource permission or reusable access token. Missing configuration and non-authority callers fail.
+- The latest batch passes 31 Rust tests, 17 focused frontend tests, both full backend-mode suites, 17-contract drift and the two-real-group recovery rehearsal. This is not hosted/native acceptance.
 
 ## Not released
 
@@ -15,7 +18,7 @@ The above is recovery correctness, **not authority-wide revocation**. Identity r
 
 ## Remaining engineering
 
-1. Persist authoritative principal-denial generations before external removal work. Retain tombstones after unlink/erasure so registration cannot regain obsolete grants.
+1. Extend the implemented unlink-denial foundation to account erasure, rekeyed-away principals and verified historical restoration. Completed removals predating the new map cannot be reconstructed from current account records. Version backup/restore evidence to include denial history; existing account exports alone are incomplete. Keep account-scoped versions distinct from the future globally monotonic fencing generation.
 2. Enforce principal eligibility before every resource-permission alternative across all club/group/media services. Eligibility denies or permits evaluating existing permissions; it never grants a role.
 3. Handle ordinary query, composite-query and update boundaries explicitly. Consensus identity checks cannot be hidden inside a synchronous helper or called as an update from a composite query. Preserve equivalent single/batch/discovery behavior.
 4. Revalidate after awaits and define a drain/ack barrier for already-authorized in-flight operations. A remote check followed by a local commit is not atomic global revocation.
