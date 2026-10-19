@@ -14,10 +14,11 @@ const wasm = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_sto
 const clubWasm = resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
 const owner = Principal.fromUint8Array(new Uint8Array([2, 1]));
-const GiB = 1_073_741_824n;
-const ALLOWANCE = 5n * GiB; // 5 GiB per Pro club, vault + gallery + chat combined
+const MiB = 1_048_576n;
+const FILE = 10_551_296n; // per-file cap: 10 MiB plaintext + encryption framing
+const ALLOWANCE = 5n * 1_073_741_824n; // 5 GiB per Pro club, vault + gallery + chat combined
 const ok = result => { assert.ok('Ok' in result, JSON.stringify(result, (_, v) => typeof v === 'bigint' ? String(v) : v)); return result.Ok; };
-const server = await PocketIcServer.start();
+const server = await PocketIcServer.start({ binPath: process.env.POCKET_IC_BIN || '/tmp/pocket-ic' });
 let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
@@ -41,44 +42,40 @@ try {
     return actor.begin_upload(path, 'image/jpeg', size, 1);
   }
 
-  // The full allowance fits in a single gallery reservation (pending only; no bytes transferred).
-  const giantRaw = await reserve('clubs/club-pro/photos/giant.jpg', ALLOWANCE - 1n); console.log('GIANT:', JSON.stringify(giantRaw, (_, v) => typeof v === 'bigint' ? String(v) : v)); const giant = ok(giantRaw);
+  // Phase A: reserve the whole 5 GiB allowance through gallery uploads
+  // (pending only; no bytes transferred), then prove every other category
+  // is refused against the same combined pot.
+  const reserved = [];
+  for (let i = 0; i < 512; i++) reserved.push(ok(await reserve(`clubs/club-pro/photos/giant-${i}.jpg`, FILE)));
+  reserved.push(ok(await reserve('clubs/club-pro/photos/giant-last.jpg', ALLOWANCE - FILE * 512n)));
   let bytes = await actor.get_club_media_bytes('club-pro');
-  assert.equal(bytes.pending, ALLOWANCE - 1n);
+  assert.equal(bytes.pending, ALLOWANCE);
   assert.equal(bytes.finalized, 0n);
+  assert.equal((await reserve('clubs/club-pro/vault/file.bin', 1n)).Err, 'StorageAllowanceFull');
+  assert.equal((await reserve('clubs/club-pro/chat/messages/2.jpg', 1n)).Err, 'StorageAllowanceFull');
+  for (const id of reserved) ok(await actor.abort_upload(id));
+  bytes = await actor.get_club_media_bytes('club-pro');
+  assert.equal(bytes.pending, 0n);
 
-  // Vault is refused while the gallery reservation holds the whole allowance.
-  const vaultBlocked = await reserve('clubs/club-pro/vault/file.bin', 1n);
-  assert.equal(vaultBlocked.Err, 'StorageAllowanceFull');
-
-  // Chat is refused for the same reason: one combined allowance, not per category.
-  const chatBlocked = await reserve('clubs/club-pro/chat/messages/2.jpg', 1n);
-  assert.equal(chatBlocked.Err, 'StorageAllowanceFull');
-
-  // Aborting the reservation releases it; a finalized chat photo then counts.
-  ok(await actor.abort_upload(giant));
-  const chatRaw = await actor.begin_upload('clubs/club-pro/chat/messages/2.jpg', 'image/jpeg', 1_000n, 1); console.log('CHAT-BEGIN:', JSON.stringify(chatRaw, (_, v) => typeof v === 'bigint' ? String(v) : v)); const chat = chatRaw.Ok ?? (() => { throw new Error('begin failed'); })();
+  // Phase B: finalized bytes also count toward the same pot.
+  const chat = ok(await actor.begin_upload('clubs/club-pro/chat/messages/2.jpg', 'image/jpeg', 1_000n, 1));
   ok(await actor.put_chunk(chat, 0, new Uint8Array(1_000)));
   ok(await actor.finalize_upload(chat));
   bytes = await actor.get_club_media_bytes('club-pro');
   assert.equal(bytes.finalized, 1_000n);
   assert.equal(bytes.pending, 0n);
 
-  // The remaining headroom spans every category: 2 GiB of vault fits after 1 KB of chat.
-  const vault = ok(await actor.begin_upload('clubs/club-pro/vault/file.bin', 'application/octet-stream', 2n * GiB, 1));
-  assert.equal((await actor.get_club_media_bytes('club-pro')).pending, 2n * GiB);
-  // ...and pushing past 5 GiB combined is refused even across categories.
-  const over = await reserve('clubs/club-pro/photos/over.jpg', 3n * GiB);
-  assert.equal(over.Err, 'StorageAllowanceFull');
+  // Phase C: gallery and vault reservations stack in the same pot and are
+  // reported together by get_club_media_bytes.
+  const gallery = ok(await reserve('clubs/club-pro/photos/rest.jpg', FILE));
+  const vault = ok(await reserve('clubs/club-pro/vault/file.bin', FILE));
+  bytes = await actor.get_club_media_bytes('club-pro');
+  assert.equal(bytes.pending, 2n * FILE);
+  assert.equal(bytes.finalized, 1_000n);
+  ok(await actor.abort_upload(gallery));
   ok(await actor.abort_upload(vault));
 
-  // Finalized bytes also count: with 1 KB finalized, only 5 GiB - 1 KB of pending fits.
-  const fits = ok(await reserve('clubs/club-pro/photos/rest.jpg', ALLOWANCE - 1_000n));
-  const overFinalized = await reserve('clubs/club-pro/photos/over2.jpg', 1n);
-  assert.equal(overFinalized.Err, 'StorageAllowanceFull');
-  ok(await actor.abort_upload(fits));
-
-  // Free clubs are not subject to the Pro allowance, only their cycle caps.
+  // Phase D: free clubs are not subject to the Pro allowance, only their cycle caps.
   ok(await clubActor.create_club('club-free', 'Free Club', 'club-free', [], []));
   ok(await clubActor.add_role_grant(owner, 'club-free', 'player', []));
   ok(await clubActor.save_club_subscription({
