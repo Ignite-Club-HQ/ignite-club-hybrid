@@ -313,6 +313,19 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   };
 
+  public shared ({ caller }) func read_can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
+    if (eventsDomainCanister != ?caller or Principal.isAnonymous(viewer)) return false;
+    let league = switch (findLeague(league_id)) { case null return false; case (?l) l };
+    if (league.club_id != club_id or league.status != "active") return false;
+    if (isLeagueAdmin(viewer, league) or isClubMember(viewer, club_id)) return true;
+    for (p in players.values()) {
+      if (p.mini_league_id == league_id and (await* playerAccessWrite(viewer, p))) {
+        return eventsDomainCanister == ?caller and findLeague(league_id) == ?league and findPlayer(p.id) == ?p and not leagueFenced(league_id);
+      };
+    };
+    false
+  };
+
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");

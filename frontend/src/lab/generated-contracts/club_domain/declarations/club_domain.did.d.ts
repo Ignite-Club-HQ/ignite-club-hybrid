@@ -708,6 +708,7 @@ export interface Main {
     { 'Ok' : WelcomeEmailJob } |
       { 'Err' : string }
   >,
+  'has_child_guardian' : ActorMethod<[Principal, string], boolean>,
   'has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'import_club_snapshot' : ActorMethod<
@@ -1198,6 +1199,11 @@ export interface Main {
     { 'Ok' : Account } |
       { 'Err' : string }
   >,
+  'revoke_linked_principal' : ActorMethod<
+    [string, Principal, bigint],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'revoke_pending_invite' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -1406,6 +1412,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_identity_access_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_messaging_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -1516,6 +1527,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'start_media_quota_cutover' : ActorMethod<
+    [],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'sync_my_linked_account' : ActorMethod<
     [],
     { 'Ok' : null } |
       { 'Err' : string }

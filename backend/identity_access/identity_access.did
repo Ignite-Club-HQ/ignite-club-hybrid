@@ -205,6 +205,8 @@ service : (Init) -> {
   // Governor-only: revokes a verifier principal.
   remove_verifier : (principal) -> (Result_2);
   revoke : (principal, nat64) -> (Result);
+  read_linked_account : (principal) -> (Result);
+  set_club_authorities : (vec principal) -> (Result_2);
   revoke_role : (text, text, opt text, opt text) -> (Result_2);
   revoke_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_2);
   // Case-insensitive substring search over display names — the ICP-mode

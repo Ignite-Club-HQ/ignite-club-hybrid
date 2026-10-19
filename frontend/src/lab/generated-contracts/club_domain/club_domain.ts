@@ -891,6 +891,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    has_child_guardian(user: Principal, child_id: string): Promise<boolean>;
     has_club_staff_role(user: Principal, club_id: string): Promise<boolean>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
     import_club_snapshot(club: string, snapshot: Uint8Array): Promise<{
@@ -1540,6 +1541,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    revoke_linked_principal(account_id: string, user: Principal, version: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     revoke_pending_invite(id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1807,6 +1815,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_identity_access_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_messaging_domain_canister(id: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1956,6 +1971,13 @@ export interface MainInterface {
         Err: string;
     }>;
     start_media_quota_cutover(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    sync_my_linked_account(): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -3432,6 +3454,10 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.get_welcome_email_job(arg0);
         return from_candid_variant_n170(result);
     }
+    async has_child_guardian(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.has_child_guardian(arg0, arg1);
+        return result;
+    }
     async has_club_staff_role(arg0: Principal, arg1: string): Promise<boolean> {
         const result = await this.actor.has_club_staff_role(arg0, arg1);
         return result;
@@ -4382,6 +4408,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.revoke_identity(arg0, arg1);
         return from_candid_variant_n1(result);
     }
+    async revoke_linked_principal(arg0: string, arg1: Principal, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.revoke_linked_principal(arg0, arg1, arg2);
+        return from_candid_variant_n17(result);
+    }
     async revoke_pending_invite(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -4766,6 +4802,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.set_guardian_relationship(arg0, arg1, arg2, arg3);
         return from_candid_variant_n17(result);
     }
+    async set_identity_access_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_identity_access_canister(arg0);
+        return from_candid_variant_n17(result);
+    }
     async set_messaging_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -4988,6 +5034,16 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.start_media_quota_cutover();
+        return from_candid_variant_n17(result);
+    }
+    async sync_my_linked_account(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.sync_my_linked_account();
         return from_candid_variant_n17(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
