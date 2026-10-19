@@ -551,6 +551,8 @@ persistent actor class Main(governorInit : Principal) {
     };
     let erased = eraseMembership([user], "principal:" # user.toText());
     switch (erased) { case (#Err(e)) return #Err(e); case _ {} };
+    acl := { acl with guardians = acl.guardians.filter(func(g) = g.user != user);
+      children = acl.children.map(func(c) = if (c.parent == ?user) { c with parent = null } else c) };
     accounts := accounts.map(func(a) = { a with principals = a.principals.filter(func(p) = p != user) });
     membershipEpoch += 1; #Ok
   };
@@ -2492,16 +2494,19 @@ persistent actor class Main(governorInit : Principal) {
     acl.roles.any(func(grant) = grant.user.equal(user) and grant.club == ?club_id)
   };
 
-  public shared func read_has_child_guardian(user : Principal, child_id : Text) : async Bool {
-    if (user.equal(Principal.anonymous())) return false;
+  func currentChildGuardian(user : Principal, child_id : Text) : Bool {
+    if (Principal.isAnonymous(user)) return false;
     switch (acl.children.find(func(child) = child.id == child_id)) {
       case null false;
       case (?child) {
-        (switch (child.parent) { case (?p) p.equal(user); case null false })
-        or acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))
+        not isExcluded(user, child.club) and
+        ((switch (child.parent) { case (?p) p.equal(user); case null false })
+        or acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user)))
       };
     }
   };
+  public query func has_child_guardian(user : Principal, child_id : Text) : async Bool { currentChildGuardian(user, child_id) };
+  public shared func read_has_child_guardian(user : Principal, child_id : Text) : async Bool { currentChildGuardian(user, child_id) };
 
   // The user's role grants in one club as (role, team) pairs. events_domain
   // mirrors these on create/update so club and team admins set up here can
