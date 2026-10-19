@@ -1,5 +1,7 @@
 # Ignite Club HQ Hybrid — Credit-efficient scaling completion
 
+> Superseded execution scope: the owner's 19 October 2026, 08:50 UTC review replaces A–F with the simplified plan and roadmap batches 1–4. Expanded whole-account deletion is paused, not complete. Preserve the historical evidence and existing safety gates below; do not resume this older execution order automatically.
+
 ## Outcome and boundaries
 
 Finish the remaining local implementation and checks in substantial, focused batches. Preserve working code and existing test evidence rather than restarting the scaling project.
