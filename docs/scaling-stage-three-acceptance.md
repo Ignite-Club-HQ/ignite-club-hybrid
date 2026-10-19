@@ -16,6 +16,18 @@
 
 ## Remaining integration/release dependencies
 
+### Current bounded setup batch (19 October 2026)
+
+- Executor now requires a separate configuration phase between installation and health. `groupProvisionConfiguration` enumerates the existing club/chat/PII/vault/reward/competition/league/notification settings, including shared inbox identity and worker grant, and checkpoints every intent/acknowledgement. All planned calls encode against the actual generated update signatures. No identity admission setter or global-removal authority publication is added.
+- Configuration receipts bind proposal, group, deployment, subnet, all per-group IDs, governor and global identity/worker. Changes, unverified governor control, missing IDs, unknown receipts and lost replies stop before health or registration. Acknowledged settings do not repeat. Storage acknowledgement failure leaves the last exact unresolved intent.
+- `runProvision(..., { stopAfterRegistration: true })` explicitly prepares a closed registered group without calling enable. Existing default enable behavior and production refusal remain unchanged.
+- `scripts/group-provision-journal.mjs` supplies exclusive non-expiring local locking and synced atomic bigint checkpoints. Errors retain locks; no automatic unlock, restore or production transport is supplied.
+- Focused setup/routing suite: 65 tests across seven files; journal: five tests; existing safe-deployment tests: six; 17-contract drift passes. This is local executor/contract evidence, not real all-domain installation or signed-in browser/native acceptance. Prior service-slice evidence is reused rather than rebuilt.
+
+**Exact activation blocker:** `routerProvisionSteps.enableGroup` requires local-rehearsal account-authority composition; its production path intentionally refuses even with a callback. `wireVerifiedLocalAccountAuthorities` likewise refuses non-local targets. Club scope alone does not demonstrate account-wide identity/removal independence. No guard was weakened. A bounded separately approved design must establish that independence or finish the required safeguards before activation; whole-account/global-drain development remains paused.
+
+**Engineering still open:** governor-authenticated management transport, production installation arguments/environment and complete per-domain semantic health, shared-device worker integration, and actual all-domain install/configuration/read-back rehearsal. The configuration transport remains an explicit adapter boundary; stubbed control verification is not production permission. Missing local events/timer/router WASMs and PocketIC binary were not regenerated in this focused batch. Deployment access and real browser/Android/FCM sessions remain release prerequisites, not passing evidence.
+
 Production activation remains blocked by `routerProvisionSteps`' local-only account-authority callback. These changes do not supply a released authenticated management adapter, exclusive durable operator journal, complete per-domain install/configuration/health composition or semantic recovery transport.
 
 The integrated rehearsal must verify full domain wiring, app reads/writes, notifications, club revocation and other-club continuity, and establish that paused account-erasure prototypes are outside the activated path. Local probes do not resolve that production dependency.
