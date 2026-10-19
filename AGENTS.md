@@ -45,5 +45,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
+- Media moves use separate storage inventory and encryption-authority evidence; storage scans require persisted club fences and revision-bound consensus pages across a complete authenticated registry. Why: metadata references miss orphan bytes and copied grants cannot preserve vetKey derivation.
 
 
