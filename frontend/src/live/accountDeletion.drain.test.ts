@@ -65,6 +65,9 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     ok(await club.actor.add_role_grant(member, 'c1', 'club_admin', []));
     identity.actor.setPrincipal(governor); ok(await identity.actor.register_account());
     identity.actor.setPrincipal(member); const account = ok(await identity.actor.register_account());
+    club.actor.setPrincipal(governor);
+    ok(await club.actor.set_identity_access_canister(identity.canisterId));
+    club.actor.setPrincipal(member); ok(await club.actor.sync_my_linked_account());
 
     // Pre-deletion: the member can act in every service.
     vault.actor.setPrincipal(member);
