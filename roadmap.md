@@ -1,5 +1,21 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+## Current execution order — credit-efficient completion (19 October 2026)
+
+This checklist supersedes older “next stage” ordering below; historical evidence remains unchanged. Reuse existing implementations and rehearsals, change only demonstrated gaps, and keep admission/routing local-only. No deployment, live-data changes or scaling activation is authorized.
+
+- [x] Record the owner's request to complete all remaining scaling checks using focused, token-efficient batches; consolidate the updated plan for review.
+- [ ] A. Finish permission acceptance: interrupted single/batch/discovery reads and key issuance, changed fences/authorities, and trusted-service delegated calls. Maintain one bounded service/permission coverage matrix; positive controls and same-resource retries must prove denied actions leave no partial effects.
+- [ ] B. Complete removal safety: server-verified full service/group/media inventory, generation-bound admission and drain acknowledgements, durable denial-history recovery/capacity safeguards, and restarted-unacknowledged-group denial before unlink retry. Local implementation, not an external blocker.
+- [ ] C. Connect protected reads and close remaining feature/group-routing gaps locally: preserve single/batch/discovery equivalence, explicit personal/host/club scopes and Supabase behavior; no legacy private-query bypass, silent fallback or production prototype flags.
+- [ ] D. Complete multi-group notification/device delivery: canonical recipients, bounded fair polling, explicit unavailable/denied results, delegated audience checks and claimed-delivery removal barriers. Preserve infrastructure identity authorization.
+- [ ] E. Close provisioning/loading/recovery gaps: complete same-deployment wiring, indexed bounded hot reads, quota callback-loss and whole-inventory semantic recovery checks; test media-free transfer only. Optional subnet/Cloud Engine readiness remains disabled pending actual capability checks.
+- [ ] F. Run one integrated local release rehearsal after A–E, then obtain separately approved deployment and signed-in browser/Android acceptance. Live gates wait on authorized deployment, current inventory/maintenance arrangements and usable sessions/devices; actual engine checks wait on selected engine details. Local engineering must not be labelled blocked by credentials.
+
+Validation budget: run changed-rule tests plus direct dependants per batch; compile only touched canisters and check contract drift only when interfaces change. Reuse compiled artifacts keyed by source/toolchain inputs. Run broad suites once at the integration gate, or earlier only for a concrete shared-boundary regression. Missing coverage stays open; cost efficiency never substitutes sampled inventory or mocks for required real evidence.
+
+## Prior implementation evidence and outstanding release gates
+
 - [x] Focused interruption batch: observed delayed competition callbacks deny suspended vault writers and replaced authorities; observed delayed subscription callback denies suspended uploads. Positive controls and same-ID/path retries verify no denied folder/reservation remains. Two missing post-await checks fixed; twelve-service rehearsal and 17-contract drift pass; no deployment or activation.
 - [ ] Item 1 remaining acceptance: interrupted batch reads/key issuance, changed fences and trusted-service delegated-call compatibility still need dedicated coverage. The three focused tests above do not establish every permission alternative or global revocation. No external credential blocker; unfinished engineering is not running in the background.
 - [x] Expanded local permission batch: clubs, events, competitions, leagues, rewards, media metadata/blob uploads and insights now have opt-in human admission and 210 additive consensus reads. Chat digest authorization checks the original human; reward/competition mirrors, random role links, media keys, vault writes and chat recap/settings renew checks after remote work. Twelve real local services pass positive private-record reads (including exactly 7 reward points), suspended/erased denial and authority outage checks; 40 identity tests, shared evidence assertions and 17-contract drift pass. Item 2 UI rollout, item 3 global inventory/drain and deployment remain separate; scaling stays off.
