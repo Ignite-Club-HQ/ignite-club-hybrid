@@ -3,7 +3,7 @@
   "deploymentId": "mainnet",
   "groupId": "g1",
   "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-  "clubCount": 0,
+  "clubCount": 18,
   "storageLimitBytes": {
     "media_blob_store": 1600000000,
     "messaging_domain": 2000000000,
