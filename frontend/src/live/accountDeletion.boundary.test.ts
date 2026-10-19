@@ -81,6 +81,7 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
       deploymentId: deployment.id, deploymentRevision: 1n, domains: g.domains.map(d => ({ ...d, subnetId: 'local' })) })) } as GroupRegistry;
     const identity = { getPrincipal: () => primary } as Identity;
     let unavailable = false;
+    let outageAfterFirst = false;
     let mutateAfterRevoke = false;
     let discoveryDrift = false;
     let reads = 0;
@@ -100,6 +101,9 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
       return { actor: { erase_account_membership: (a: string) => actor.erase_account_membership(a),
         erase_my_membership: async () => { const r = await actor.erase_my_membership();
           if (index === 0 && mutateAfterRevoke) registry.revision += 1n;
+          if (index === 0 && outageAfterFirst) {
+            await pic.stopCanister({ canisterId: clubs[1].canisterId, sender: governor }); unavailable = true;
+          }
           return r;
         } } };
     };
@@ -120,6 +124,10 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
     };
     return { primary, linked, account, id, clubs, targets, identity, roles,
       unavailable: (v: boolean) => { unavailable = v; }, drift: () => { discoveryDrift = true; },
+      interruptRemoval: () => { outageAfterFirst = true; }, resumeRemoval: async () => {
+        await pic.startCanister({ canisterId: clubs[1].canisterId, sender: governor });
+        unavailable = false; outageAfterFirst = false;
+      },
       midRemovalDrift: () => { mutateAfterRevoke = true; } };
   }
 
@@ -150,21 +158,47 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
     for (let i = 0; i < 2; i++) expect(await f.roles(i, f.linked)).toHaveLength(1);
   }, 60000);
 
-  it('records the unresolved mid-removal registry boundary without claiming safety', async () => {
+  it('partial revocation preserves identity and retry does not restore the removed club', async () => {
+    const f = await fixture(); f.interruptRemoval();
+    await expect(eraseMyIcpAccount(f.identity, f.targets[0])).rejects.toThrow('unavailable');
+    f.id.setPrincipal(f.primary); expect(ok(await f.id.whoami()).id).toBe(f.account.id);
+    expect(await f.roles(0, f.linked)).toEqual([]);
+    expect(seam.purges).toEqual([]);
+    await f.resumeRemoval();
+    await eraseMyIcpAccount(f.identity, f.targets[0]);
+    for (let i = 0; i < 2; i++) expect(await f.roles(i, f.linked)).toEqual([]);
+  }, 60000);
+
+  it('unlink retries use the same legacy/new inventory and relink alone restores no grants', async () => {
+    const f = await fixture();
+    await pic.stopCanister({ canisterId: f.clubs[1].canisterId, sender: governor });
+    f.id.setPrincipal(f.primary); expect(await f.id.revoke(f.linked, 1n)).toHaveProperty('Err');
+    f.id.setPrincipal(f.linked); expect(await f.id.register_account()).toHaveProperty('Err');
+    await pic.startCanister({ canisterId: f.clubs[1].canisterId, sender: governor });
+    f.id.setPrincipal(f.primary); expect(ok(await f.id.revoke(f.linked, 1n)).version).toBe(2n);
+    for (let i = 0; i < 2; i++) {
+      expect(await f.roles(i, f.linked)).toEqual([]);
+      expect(await f.roles(i, f.primary)).toHaveLength(1);
+    }
+    f.id.setPrincipal(f.primary); const challenge = ok(await f.id.begin_link(f.linked));
+    f.id.setPrincipal(f.linked); ok(await f.id.accept_link(challenge.id));
+    for (let i = 0; i < 2; i++) expect(await f.roles(i, f.linked)).toEqual([]);
+  }, 60000);
+
+  it.fails('RELEASE BLOCKER: registry changes after revocation must stop shared erasure', async () => {
     const f = await fixture(); f.midRemovalDrift();
     // Characterization of a release blocker, not an approved behavior rule:
     // the entrypoint closes its session before writes and never revalidates.
-    await eraseMyIcpAccount(f.identity, f.targets[0]);
-    f.id.setPrincipal(f.primary); expect(await f.id.whoami()).toHaveProperty('Err');
+    await expect(eraseMyIcpAccount(f.identity, f.targets[0])).rejects.toThrow();
   }, 60000);
 
-  it('records the admin gap: shared erasure leaves new-group linked roles intact', async () => {
+  it.fails('RELEASE BLOCKER: admin erasure must revoke new-group linked roles', async () => {
     const f = await fixture();
     const admin = { getPrincipal: () => governor } as Identity;
     await eraseIcpAccountAsAdmin(admin, f.targets[0], f.account.id);
     for (const principal of [f.primary, f.linked]) {
       expect(await f.roles(0, principal)).toEqual([]);
-      expect(await f.roles(1, principal)).toHaveLength(1);
+      expect(await f.roles(1, principal)).toEqual([]);
       f.id.setPrincipal(principal); expect(await f.id.whoami()).toHaveProperty('Err');
       expect(await f.id.register_account()).toHaveProperty('Err');
     }
