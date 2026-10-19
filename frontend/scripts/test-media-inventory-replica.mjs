@@ -8,6 +8,7 @@ import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import { readFencedClubStoreInventory } from '../src/live/mediaStoreInventory.ts';
+import { mediaTransferPreparation } from '../src/live/mediaTransferPreparation.ts';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const wasm = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
@@ -105,6 +106,27 @@ try {
   ok(await second.actor.reconcile_upload_operations(''));
   const settled = await readFencedClubStoreInventory('c', 'isolated-pocketic', async () => registry);
   assert.equal(settled.pendingUploads, 0); assert.equal(settled.encryptedObjects, 204);
+  // Production preparation module, local authenticated complete fixture only.
+  // Durable receipts survive a recreated operator and a real store upgrade.
+  let receipt = null;
+  const preparationDeps = { readRegistry: async () => registry,
+    actor: id => registry.stores.find(s => s.canisterId === id).actor,
+    load: async () => receipt, save: async value => { receipt = structuredClone(value); } };
+  const binding = { moveId: 'local-media-preparation', deploymentId: registry.deploymentId,
+    clubId: 'empty-club', fromGroup: 'a', toGroup: 'b' };
+  const prepared = await mediaTransferPreparation(binding, preparationDeps).prepare();
+  assert.equal(prepared.encryptedObjects, 0); assert.equal(prepared.stores.length, 2);
+  assert.deepEqual(receipt.stores.map(s => s.state), ['held', 'held']);
+  await pic.upgradeCanister({ canisterId: second.canisterId, wasm, sender: governor,
+    upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  const resumed = mediaTransferPreparation(binding, preparationDeps);
+  const afterUpgrade = await resumed.prepare();
+  assert.deepEqual(afterUpgrade.stores.map(s => s.fenceRevision), prepared.stores.map(s => s.fenceRevision));
+  await resumed.release(); assert.deepEqual(receipt.stores.map(s => s.state), ['released', 'released']);
+  // Releasing this club never releases the populated bystander's fences.
+  const bystander = await readFencedClubStoreInventory('c', 'isolated-pocketic', async () => registry);
+  assert.equal(bystander.encryptedObjects, 204);
+  console.log('PASS: durable two-store operator preparation, restart and EOP upgrade resume, CAS release and bystander-fence isolation.');
   console.log('PASS: governor-only bounded legacy/stable/orphan/pending inventory, revision invalidation, persisted CAS fences, drain/upgrade preservation, and 203-record paging.');
   console.log('PASS: actual two-store consensus reader counts orphan objects, rejects malformed cursors, includes uncertain committed ciphertext and verifies settled recovery without dropping bytes.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }

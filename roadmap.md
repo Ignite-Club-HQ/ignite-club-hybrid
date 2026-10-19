@@ -1,6 +1,6 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
-- [ ] Current batch: connect persisted operator photo-store fence preparation and reconciled inventory to the resumable move adapter; test interruption, changed registry/fences and blocked encrypted moves. Preserve locks on ambiguous outcomes. Original-key authorization and production registry/metadata readers remain separate blockers.
+- [x] Current batch: durable operator photo-store preparation journals full registry fence intent before mutation, persists exact CAS acknowledgements, rejects unknown/changed locks and retains locks on ambiguous failures. Reconciled storage/metadata/authority evidence plugs into the live move adapter after source-domain fencing; resumed copying now rechecks media, release replays safely, and ciphertext remains blocked. Authenticated production completeness/metadata readers and original-key authorization are still required; no activation or deployment.
 
 - [x] Saved remaining scaling checklist to Files (19 October 2026) and added operator media reference/provenance reconciliation with existing move-gate output. Validates complete fenced gallery/chat/vault/article evidence, registry/deployment/club binding, ciphertext hashes/lengths, original store authorities and distinct club/per-file encryption identities; retains orphan/unknown objects and uncertain uploads. Not a production evidence adapter or encrypted-move authorization; those remain in media move completion.
 
