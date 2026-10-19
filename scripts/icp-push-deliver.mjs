@@ -307,7 +307,7 @@ async function main() {
       } else {
         // A denied/unavailable scope is never counted as delivered. Retry
         // preserves its original body, and authority is checked again.
-        unwrapQueueResult(await queue.fail(o.n.id, o.error ?? "delivery failed", [nowMs() + BigInt(RETRY_DELAY_MS)]), "retry");
+        unwrapQueueResult(await queue.fail(o.n.id, o.error ?? "delivery denied", o.status === 'denied' ? [] : [nowMs() + BigInt(RETRY_DELAY_MS)]), "retry");
         failed++;
       }
     } catch (e) {

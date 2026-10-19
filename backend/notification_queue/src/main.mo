@@ -470,14 +470,23 @@ persistent actor class Main(governorInit : Principal) {
   // enqueuing a notification they opted out of. Recipients without a stored
   // preference row are fail-open (treated as allowed), matching the safe
   // defaults returned by get_preferences.
-  public shared ({ caller }) func fan_out(users : [Text], club : Text, kind : Text, body : Text, key_prefix : Text, related_id : ?Text) : async Types.ResultNat16 {
+  public shared ({ caller }) func fan_out(inputUsers : [Text], club : Text, kind : Text, body : Text, key_prefix : Text, related_id : ?Text) : async Types.ResultNat16 {
     let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
     if (not trustedService) await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
-    if (users.size() == 0 or users.size() > 500) { return #Err("Invalid recipient count") };
+    if (inputUsers.size() == 0 or inputUsers.size() > 500) { return #Err("Invalid recipient count") };
     if (not valid(club) or not valid(kind) or not valid(key_prefix)) { return #Err("Invalid fan-out fields") };
-    if (users.any(func(u) = not valid(u))) { return #Err("Invalid recipient") };
+    var users : [Text] = [];
+    for (raw in inputUsers.values()) {
+      let trimmed = Text.trim(raw, #predicate(func(c) = c == ' ' or c == '\n' or c == '\r' or c == '\t'));
+      let text = switch (Text.stripStart(trimmed, #text "principal:")) { case (?bare) bare; case null trimmed };
+      let parsed = try { await async { ?Principal.fromText(text) } } catch (_) { null };
+      let ?principal = parsed else return #Err("Invalid recipient");
+      if (Principal.isAnonymous(principal)) return #Err("Invalid recipient");
+      let user = principal.toText();
+      if (not users.any(func(u) = u == user)) users := users.concat([user]);
+    };
     if (UpdateReminderAccess.protectedKind(kind)) {
       switch (await authorizeUpdateReminder(caller, users, club)) {
         case (#Err(e)) { return #Err(e) };
@@ -637,7 +646,7 @@ persistent actor class Main(governorInit : Principal) {
     worker(caller);
     if (limit == 0 or limit > 100) return #Err("Invalid batch size");
     var candidates : [Types.Notification] = [];
-    if (accountAdmissionEnabled) {
+    {
       // Advance even if admission denies every candidate; otherwise a denied
       // prefix can permanently starve an eligible notification behind it.
       let count = items.size();
@@ -649,10 +658,6 @@ persistent actor class Main(governorInit : Principal) {
         scanned += 1;
       };
       if (count > 0) rehearsalClaimCursor := (rehearsalClaimCursor + scanned) % count;
-    } else {
-      for (item in items.values()) {
-        if (candidates.size() < Nat16.toNat(limit) and item.status == #Pending and item.next_attempt_ms <= now_ms and not isFenced(item.club)) candidates := candidates.concat([item]);
-      };
     };
     let allowed = await eligibleUsers(candidates.map(func(n) = n.user));
     worker(caller); // worker may have been revoked during admission
