@@ -25,7 +25,7 @@ try {
     for (const user of [removed, retained]) ok(await club.actor.add_role_grant(user, id, 'player', []));
     ok(await pii.actor.set_club_domain_canister(club.canisterId));
     ok(await blob.actor.set_club_domain_canister(club.canisterId));
-    const pub = ok(await pii.actor.get_vetkd_public_key());
+    const pub = await pii.actor.pii_vetkey_verification_key();
     const verification = DerivedPublicKey.deserialize(Uint8Array.from(pub));
     const identity = new TextEncoder().encode(`clubmedia:${id}\u001fblob`);
     const plain = new TextEncoder().encode(`Private photo ${id}`);
