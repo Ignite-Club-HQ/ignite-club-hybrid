@@ -65,9 +65,13 @@ describe.skipIf(!enabled)('account deletion all-service drain (real contracts)',
     ok(await club.actor.add_role_grant(member, 'c1', 'club_admin', []));
     identity.actor.setPrincipal(governor); ok(await identity.actor.register_account());
     identity.actor.setPrincipal(member); const account = ok(await identity.actor.register_account());
+    // Setter-only local wiring: transient rehearsal flag, removed before all calls.
+    await pic.updateCanisterSettings({ canisterId: club.canisterId, sender: governor,
+      environmentVariables: [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }] });
     club.actor.setPrincipal(governor);
     ok(await club.actor.set_identity_access_canister(identity.canisterId));
     club.actor.setPrincipal(member); ok(await club.actor.sync_my_linked_account());
+    await pic.updateCanisterSettings({ canisterId: club.canisterId, sender: governor, environmentVariables: [] });
 
     // Pre-deletion: the member can act in every service.
     vault.actor.setPrincipal(member);
