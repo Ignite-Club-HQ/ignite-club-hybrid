@@ -94,7 +94,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     sameDeployment: d.sameDeployment,
     verifyMedia,
     async setFence(group, club, on) {
-      await fenceAll(group, club, on);
+      if (on) await fenceAll(group, club, true);
       if (on) { // locked first, so no new sponsor-only count can land after the fold
         const sponsors = await d.clubSponsorIds(group, club);
         for (let i = 0; i < sponsors.length; i += 500)
@@ -106,7 +106,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
         for (const dom of LIVE_DOMAINS) ok(await d.actors(target)[dom].purge_club_snapshot(club));
         await fenceAll(target, club, false);
       }
-      if (!on) await d.mediaPreparation?.release();
+      if (!on) await fenceAll(group, club, false); // target cleanup precedes source unlock
     },
     async exportPage(group, club, domain, cursor) {
       if (global(domain)) return { rows: [], next: null };
@@ -150,8 +150,11 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       await fenceAll(group, club, false);
       const target = await d.targetFor(club);
       if (target && target !== group) await fenceAll(target, club, false);
-      await d.mediaPreparation?.release();
     },
     save: d.save,
+    async cleanupTerminal(t) {
+      if (t.phase !== 'released' && t.phase !== 'aborted') throw new Error('Durable terminal transfer required');
+      await d.mediaPreparation?.release();
+    },
   };
 }

@@ -20,6 +20,25 @@ function adapter(o: Partial<TransferAdapter> = {}) {
   return { a, saved, fences };
 }
 describe('transfer runner', () => {
+  it('persists abort before unlocking and resumes failed terminal cleanup without copying', async () => {
+    const { a, saved } = adapter({ digest: async (g, _c, domain) => ({ domain, records: 3, digest: g }),
+      setFence: async (_g, _c, on) => { if (!on) { expect(saved.at(-1)?.phase).toBe('aborted'); throw new Error('unlock lost'); } } });
+    await expect(runTransfer(planTransfer('club','a','b',7n), a)).rejects.toThrow('unlock lost');
+    const aborted = saved.at(-1); if (!aborted) throw new Error('Missing abort');
+    const imports = vi.fn(); const cleanup = vi.fn(async () => {});
+    const result = await runTransfer(aborted, { ...a, setFence: async () => {}, importPage: imports, cleanupTerminal: cleanup });
+    expect(result.phase).toBe('aborted'); expect(imports).not.toHaveBeenCalled(); expect(cleanup).toHaveBeenCalledWith(aborted);
+  });
+  it('replays terminal media release after durable completion without rechecking or copying', async () => {
+    const cleanup = vi.fn(async () => { throw new Error('release interrupted'); });
+    const { a, saved } = adapter({ cleanupTerminal: cleanup });
+    await expect(runTransfer(planTransfer('club','a','b',7n), a)).rejects.toThrow('release interrupted');
+    const released = saved.at(-1); if (!released) throw new Error('Missing release');
+    expect(released.phase).toBe('released');
+    const media = vi.fn(async () => { throw new Error('must not reacquire'); });
+    await runTransfer(released, { ...a, verifyMedia: media, cleanupTerminal: async () => {} });
+    expect(media).not.toHaveBeenCalled();
+  });
   it.each(['fenced', 'copied'] as const)('checks media before resuming %s without copying or releasing locks', async phase => {
     const { a, fences } = adapter({ verifyMedia: async () => { throw new Error('media registry unavailable'); }, importPage: vi.fn() });
     await expect(runTransfer({ ...planTransfer('club','a','b',7n), phase }, a)).rejects.toThrow('media registry unavailable');
