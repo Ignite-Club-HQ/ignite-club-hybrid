@@ -71,9 +71,29 @@ try {
   await privateRead(stale, true);
   a.setPrincipal(member); ok(await a.revoke_pii_read(privatePath, 'blob', stale));
   await privateRead(stale, false);
+  a.setPrincipal(member); ok(await a.grant_pii_read_club(privatePath, 'blob', 'moving'));
+  await privateRead(stale, true);
+  a.setPrincipal(member); ok(await a.revoke_pii_read_club(privatePath, 'blob', 'moving'));
+  await privateRead(stale, false);
+  source.actor.setPrincipal(member); const child = ok(await source.actor.create_own_child());
+  a.setPrincipal(governor); ok(await a.register_pii(child.id, 'name', [1, 2], governor));
+  a.setPrincipal(member); ok(await a.add_guardian_relationship(member, child.id));
+  const guardianRead = async expected => {
+    a.setPrincipal(member);
+    const result = ok(await a.get_encrypted_pii_vetkeys_batch([child.id], 'name', TransportSecretKey.random().publicKeyBytes()));
+    assert.equal(result[0].length, expected ? 1 : 0);
+  };
+  await guardianRead(true);
+  source.actor.setPrincipal(member); ok(await source.actor.delete_own_child(child.id));
+  await guardianRead(false); // stored mirror cannot outlive verified relationship
   // Deterministic suspended calls, not a timing-dependent Promise.all race.
   const deferred = pic.createDeferredActor(piiIdl, original.canisterId);
   deferred.setPrincipal(member);
+  const rejectedRace = await deferred.get_club_media_vetkey('moving', TransportSecretKey.random().publicKeyBytes());
+  await pic.tick(1);
+  a.setPrincipal(stranger); assert.ok('Err' in await a.purge_club_snapshot('moving'));
+  assert.ok('Err' in await a.import_club_snapshot('moving', []));
+  assert.ok('Ok' in await rejectedRace(), 'rejected non-governor calls do not mutate epochs or interrupt key reads');
   const pendingPrivate = await deferred.get_encrypted_pii_vetkeys_batch([privatePath], 'blob', TransportSecretKey.random().publicKeyBytes());
   await pic.tick(1);
   a.setPrincipal(member); ok(await a.revoke_pii_read(privatePath, 'blob', stale));
