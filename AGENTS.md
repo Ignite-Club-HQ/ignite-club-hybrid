@@ -42,7 +42,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls. Why: avoid leaks.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
-- Cross-group accounts stay local-only; identity uses durable unlink denials and consensus eligibility, never resource grants. Block activation until all-service fences/inventory/mirror checks pass. Why: fan-out cannot deny unreached groups.
-- Account admission stays local-only with no live UI/deploy flags; follow backend/AGENTS.md for test evidence requirements. Why: eligibility alone cannot prove complete inventory/drain or global revocation.
+- Cross-group accounts/admission stay local-only: no live UI/deploy flags. Identity uses durable unlink denials and consensus eligibility, never resource grants. Activation requires complete all-service fences/inventory/drain/mirror proof; follow backend/AGENTS.md for evidence. Why: eligibility and fan-out cannot prove global revocation or deny unreached groups.
 
 - Mainnet photo-key preflight uses SDK offline derivation, signed controller checks and durable pre/post-upgrade receipts; other targets fail closed. Why: vetKD rejects ingress.
