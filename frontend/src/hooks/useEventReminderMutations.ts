@@ -309,7 +309,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
             if (count === 0) throw new Error("All members have already been notified about this event!");
             return count;
           },
-        });
+        }, writeOnce({ eventId: id }));
       }
 
       // Shared recipient policy (same audience as bulk reminders)

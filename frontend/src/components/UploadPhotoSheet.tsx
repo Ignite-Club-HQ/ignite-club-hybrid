@@ -169,7 +169,7 @@ export function UploadPhotoSheet({
             }));
             return rows.flatMap((row) => (row ? [row as Club] : []));
           },
-        });
+        }, { shared: 'person' });
       }
 
       if (isAppAdmin) {

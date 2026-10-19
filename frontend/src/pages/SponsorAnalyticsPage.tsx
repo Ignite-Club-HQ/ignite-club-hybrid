@@ -122,7 +122,7 @@ function IcpSponsorAnalyticsPage() {
           }
           return rows;
         },
-      }),
+      }, { shared: 'person' }),
     enabled: isAppAdmin === true && !!clubs,
   });
 

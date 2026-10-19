@@ -838,7 +838,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
             }));
             return rows.filter((r): r is ClubTheme => r !== null);
           },
-        });
+        }, { shared: 'person' });
         return guardClubListResult(`club-themes:${user.id}`, themes);
       }
 
@@ -974,7 +974,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
               }
             }));
           },
-        });
+        }, { shared: 'person' });
       } else {
         const [rolesRes, teamRolesRes] = await Promise.all([
           supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
@@ -1010,7 +1010,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
             }));
             return rows.filter((r): r is NonNullable<typeof r> => r !== null);
           },
-        });
+        }, { shared: 'person' });
         return guardClubListResult(`user-clubs:${user.id}`, clubs);
       }
       const { data: clubs, error: clubsError } = await supabase
@@ -1290,7 +1290,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
             const teams = await listLiveTeams(ctx, activeClubTheme);
             return teams.filter((t) => !t.deleted_at_ms.length).map((t) => t.id);
           },
-        });
+        }, { clubId: activeClubTheme });
       }
       const { data, error } = await supabase
         .from("teams")

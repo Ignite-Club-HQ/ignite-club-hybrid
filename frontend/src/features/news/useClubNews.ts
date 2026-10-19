@@ -442,7 +442,7 @@ export function useTeamNamesByIds(teamIds?: string[] | null) {
           const teams = await Promise.all(ids.map(id => getLiveTeam(ctx, id)));
           return teams.map(t => t[0]).filter(Boolean).map(t => ({ id: t!.id, name: t!.name }));
         }
-      });
+      }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [row.id, row])).values()] });
     },
     enabled: ids.length > 0,
     staleTime: 5 * 60 * 1000,

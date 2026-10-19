@@ -59,7 +59,7 @@ async function fetchClubNames(clubIds: string[]): Promise<Record<string, string>
         );
         return map;
       },
-    });
+    }, { shared: 'person' });
   } catch {
     return {};
   }

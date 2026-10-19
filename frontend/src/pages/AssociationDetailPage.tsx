@@ -133,7 +133,7 @@ function SupabaseAssociationDetailPage() {
               members: new Set(perClub.flatMap((c) => c.members)).size,
             };
           },
-        });
+        }, { shared: 'person' });
       }
       const [teamsRes, eventsRes, membersRes] = await Promise.all([
         supabase.from("teams").select("id", { count: "exact", head: true }).in("club_id", clubIds),

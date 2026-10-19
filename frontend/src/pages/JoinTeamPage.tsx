@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1334,7 +1335,7 @@ function SupabaseJoinTeamPage() {
               await vault.registerLiveChildNamePii(ctx, childId, childName, me);
               await vault.grantLiveClubChildNameRead(ctx, childId, clubId);
             },
-          });
+          }, writeOnce({ teamId: invite.team_id ?? '' }));
         } catch (e) {
           console.error("[JoinTeam] ICP child auto-create failed", e);
           toast({
@@ -1528,7 +1529,7 @@ function SupabaseJoinTeamPage() {
               await claimLiveAdminJoinLink(ctx, token!);
               return ["league_admin" as AppRole];
             },
-          });
+          }, writeOnce({ inviteToken: token ?? '' }));
         }
         if (isIcpParentJoinLink) {
           // Nothing to claim at join time: the token was validated during
@@ -2037,7 +2038,7 @@ function SupabaseJoinTeamPage() {
             const kids = (await listLiveChildren(ctx)) as Array<{ teams: string[] }>;
             return kids.some((k) => k.teams.includes(invite.team_id!));
           },
-        });
+        }, { shared: 'person' });
       }
       const [{ data: own }, { data: guarded }] = await Promise.all([
         supabase.from("children").select("id").eq("parent_id", user.id),
@@ -2122,7 +2123,7 @@ function SupabaseJoinTeamPage() {
                   await vault.grantLiveClubChildNameRead(ctx, childId, clubId);
                   return true;
                 },
-              })
+              }, writeOnce({ teamId: invite.team_id ?? '' }))
             : false;
         if (!icpHandled) {
         // Create new child

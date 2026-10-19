@@ -380,7 +380,7 @@ function SupabaseMediaPage() {
           }
           return false;
         },
-      });
+      }, { shared: 'person' });
       if (icpResult !== null) return icpResult;
       try { await ensureFreshSession(); } catch { /* offline / signed out — let queries surface real errors */ }
       const overall = performance.now();

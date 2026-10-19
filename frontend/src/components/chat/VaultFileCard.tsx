@@ -167,7 +167,7 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
           const profile = c.length ? c[0] : null;
           return profile?.name ? { name: profile.name } : null;
         },
-      });
+      }, rootScope === 'team' ? { teamId: rootId } : { clubId: rootId });
     },
     enabled: !!rootScope && !!rootId,
     staleTime: 60 * 1000,

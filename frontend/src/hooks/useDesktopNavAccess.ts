@@ -79,7 +79,7 @@ export function useDesktopNavAccess() {
               );
               return resolved.filter((t): t is { id: string; name: string; club_id: string | null } => !!t);
             },
-          });
+          }, { shared: 'person' });
           teamClubMap = new Map(
             teams.filter((t) => !!t.club_id).map((t) => [t.id, t.club_id as string]),
           );
@@ -125,7 +125,7 @@ export function useDesktopNavAccess() {
               );
               return resolved.filter((p): p is { id: string; sport: string | null } => !!p);
             },
-          });
+          }, { shared: 'person' });
           profiles.forEach((c) => {
             if (hasGameBoardSupport(c.sport)) boardClubIds.add(c.id);
           });

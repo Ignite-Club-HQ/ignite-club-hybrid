@@ -47,7 +47,7 @@ function SupabaseAdminPage() {
           .filter((g) => (g.role === "team_admin" || g.role === "coach") && g.team.length > 0)
           .map((g) => g.team[0] as string)));
       },
-    }),
+    }, { everyGroup: true, merge: (parts) => [...new Set(parts.flat())] }),
     enabled: !!user,
   });
   const isTeamAdminOrCoach = teamAdminCoachTeamIds.length > 0;
@@ -89,7 +89,7 @@ function SupabaseAdminPage() {
           (!s.expires_at || new Date(s.expires_at) > new Date()),
       );
       },
-    }),
+    }, { shared: 'person' }),
   });
 
   // Check if user is club admin (for club-scoped tools like restoring deleted chats)
@@ -112,7 +112,7 @@ function SupabaseAdminPage() {
           .filter((g) => g.role === "club_admin" && g.club.length > 0)
           .map((g) => g.club[0] as string)));
       },
-    }),
+    }, { everyGroup: true, merge: (parts) => [...new Set(parts.flat())] }),
     enabled: !!user,
   });
   const isClubAdmin = clubAdminClubIds.length > 0;

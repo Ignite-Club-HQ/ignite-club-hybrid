@@ -192,7 +192,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           const isProFiltered = effectiveClubFilter ? proClubIds.has(effectiveClubFilter) : hasAnyPro;
           return { isProFiltered, hasAnyPro, resolved: true };
         },
-      });
+      }, { shared: 'person' });
     },
   });
 

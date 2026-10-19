@@ -1052,7 +1052,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
             );
             return rows;
           },
-        });
+        }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [`${row.team_id}:${row.competition_id}`, row])).values()] });
       }
 
       const { data, error } = await supabase.rpc("get_team_competition_names", {

@@ -510,7 +510,7 @@ export default function EventDetailPage() {
             .map((g: any) => g.account_id as string),
         );
       },
-    }),
+    }, { eventId: id }),
     enabled: !!(event as any)?.team_id && !useIcpLab,
     staleTime: 60_000,
   });
@@ -536,7 +536,7 @@ export default function EventDetailPage() {
           (grants ?? []).filter((g: any) => g.role === "player").map((g: any) => g.account_id as string),
         );
       },
-    }),
+    }, { eventId: id }),
     enabled: !!(event as any)?.club_id && !(event as any)?.team_id && !useIcpLab,
     staleTime: 60_000,
   });
