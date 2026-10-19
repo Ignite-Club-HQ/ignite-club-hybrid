@@ -279,6 +279,14 @@ try {
  assert.ok(heldDrain.outstanding>0n,'Held key request must prevent a drained receipt');
  ok(await pii.prepare_account_removal(receiverRequest));
  assert.ok('Err' in await pii.prepare_account_removal({...receiverRequest,generation:8n}));
+ for (const receiver of [club,vault]) {
+  receiver.setPrincipal(identity.canisterId);
+  ok(await receiver.prepare_account_removal(receiverRequest));
+  assert.equal(ok(await receiver.read_account_removal_drain(receiverRequest)).outstanding,0n);
+ }
+ // Existing local roles remain: denial must come from the durable human fence.
+ vault.setPrincipal(victim); await denied(()=>vault.read_account_list_club_files('club',[],[]));
+ club.setPrincipal(extra[0].canisterId); await denied(()=>club.read_has_club_staff_role(victim,'club'));
  id.setPrincipal(victim); ok(await id.erase_account(account.id));
  await delayed.actor.release(); await denied(erasedPhotoKey);
  pii.setPrincipal(identity.canisterId);
@@ -286,6 +294,11 @@ try {
  await pic.upgradeCanister({canisterId:services[1].canisterId,wasm:process.env.PII_ACCESS_CONTROL_WASM,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
  assert.equal(ok(await pii.read_account_removal_drain(receiverRequest)).outstanding,0n);
  pii.setPrincipal(governor); assert.ok('err' in await pii.rekey_principal(victim,stranger,false));
+ for (const [receiver,canisterId,wasm] of [[club,extra[0].canisterId,process.env.CLUB_DOMAIN_WASM],[vault,services[2].canisterId,process.env.VAULT_DOMAIN_WASM]]) {
+  await pic.upgradeCanister({canisterId,wasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
+  receiver.setPrincipal(identity.canisterId);
+  assert.equal(ok(await receiver.read_account_removal_drain(receiverRequest)).outstanding,0n);
+ }
  pii.setPrincipal(governor); ok(await pii.set_club_domain_canister(extra[0].canisterId));
  pii.setPrincipal(victim); await denied(()=>pii.get_club_media_vetkey('club',TransportSecretKey.random().publicKeyBytes()));
  vault.setPrincipal(victim); await denied(()=>vault.read_account_list_club_files('club',[],[]));

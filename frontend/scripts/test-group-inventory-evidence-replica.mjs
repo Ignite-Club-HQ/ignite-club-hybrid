@@ -127,6 +127,11 @@ try {
   assert.equal(intent.generation,1n); assert.equal(intent.inventory_digest.length,32);
   assert.equal(intent.targets.length,30); // 26 domains + 3 stores + 1 legacy service
   assert.deepEqual(intent.subjects.map(p=>p.toText()),[outsider.toText()]);
+  const snapshotType=IDL.Record({id:IDL.Vec(IDL.Nat8),taken_at_timestamp:IDL.Nat64,total_size:IDL.Nat64});
+  async function management(method,type,input,outputs=[]) {
+    const result=await pic.updateCall({canisterId:Principal.managementCanister(),method,arg:IDL.encode([type],[input]),sender:governor});
+    return IDL.decode(outputs,result);
+  }
   // Real identity -> each actual receiver, not a supplied/browser receipt.
   for (const [n,{store}] of mediaStores.entries()) {
     const receipt=ok(await actor.advance_account_removal_receiver(removedAccount.id,store.canisterId));
@@ -138,6 +143,14 @@ try {
     assert.equal((await store.actor.http_request({url:'/clubs/local/gallery/staged.jpg',method:'GET',headers:[],body:new Uint8Array()})).status_code,404);
     await pic.upgradeCanister({canisterId:store.canisterId,wasm:'/tmp/removal/media_blob_store.wasm',sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
     await assert.rejects(()=>store.actor.begin_upload('after.jpg','image/jpeg',1n,1));
+    assert.deepEqual(ok(await actor.advance_account_removal_receiver(removedAccount.id,store.canisterId)),receipt);
+    // Actual management snapshot/reload of the fenced receiver. Identity stays
+    // advanced; this is NOT proof of safe coordinator/history rollback.
+    await pic.stopCanister({canisterId:store.canisterId,sender:governor});
+    const [snapshot]=await management('take_canister_snapshot',IDL.Record({canister_id:IDL.Principal,replace_snapshot:IDL.Opt(IDL.Vec(IDL.Nat8))}),{canister_id:store.canisterId,replace_snapshot:[]},[snapshotType]);
+    await management('load_canister_snapshot',IDL.Record({canister_id:IDL.Principal,snapshot_id:IDL.Vec(IDL.Nat8),sender_canister_version:IDL.Opt(IDL.Nat64)}),{canister_id:store.canisterId,snapshot_id:snapshot.id,sender_canister_version:[]});
+    await pic.startCanister({canisterId:store.canisterId,sender:governor});
+    await assert.rejects(()=>store.actor.finalize_upload(staged[n]));
     assert.deepEqual(ok(await actor.advance_account_removal_receiver(removedAccount.id,store.canisterId)),receipt);
   }
   denied(await actor.advance_account_removal_receiver(removedAccount.id,p(98)));
