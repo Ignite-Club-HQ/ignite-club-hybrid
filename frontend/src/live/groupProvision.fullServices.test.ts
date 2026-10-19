@@ -81,12 +81,14 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     const folder = ok(await actor('vault_domain', member).create_folder('folder', 'new-club', [], [], 'Training', [], [], [], 0, [], []));
     expect(folder.id).toBe('folder');
     const points = actor('club_points_domain', member);
+    ok(await points.refresh_club_roles('new-club'));
     ok(await points.award_points('new-club', { User: member.toText() }, 'attendance', 'new-event', 7, 'Attendance', [], [], []));
     expect(ok(await points.get_user_points('new-club', member.toText()))).toBe(7);
     const competition = ok(await actor('competition_domain', member).create_competition('new-club', 'Cup', '2026'));
     expect(competition.id).toBeTruthy();
     const league = ok(await actor('mini_league_domain', member).create_mini_league('new-club', 'League', [], [], 5, 3, 10, ['red', 'green'], true));
     expect(league.id).toBeTruthy();
+    expect(await actor('mini_league_domain', outsider).create_mini_league('new-club', 'Denied', [], [], 5, 3, 10, ['red'], true)).toHaveProperty('Err');
     const media = actor('media_metadata', member);
     const asset = ok(await media.register_asset('new-club', 'photo', 'image/jpeg', 'checksum', 'clubs/new-club/gallery/one.jpg', 'private', 99999999999999n));
     expect((await media.get_asset(asset.id))[0].id).toBe(asset.id);
