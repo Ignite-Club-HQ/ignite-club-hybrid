@@ -69,9 +69,8 @@ export async function lookupEntityClub(ctx: FeatureBackendContext, kind: EntityK
   const unwrap = (r: { Ok: [] | [string] } | { Err: string }) => { if ('Err' in r) throw new Error(r.Err); return r.Ok[0] ?? null; };
   if (kind === 'competitionMatch' || kind === 'eoi') return unwrap(await (await d.connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_resource_club(kind === 'competitionMatch' ? 'match' : 'eoi', id));
   if (kind === 'vaultFile' || kind === 'vaultFolder') {
-    const v = await import('./features/vault');
-    const row = kind === 'vaultFile' ? await v.getLiveVaultFile(ctx, id) : await v.getLiveVaultFolder(ctx, id);
-    return row?.club || null;
+    const { actor } = await d.connectLiveVaultDomain(ctx.target, ctx.identity);
+    return unwrap(await actor.read_resource_club(kind === 'vaultFile' ? 'file' : 'folder', id));
   }
   if (kind === 'notification') {
     const { actor } = await d.connectLiveNotificationQueue(ctx.target, ctx.identity);
