@@ -43,7 +43,7 @@ try {
   assert.equal(ok(await actor.rekey_principal(old, replacement, false)), 0n);
   actor.setPrincipal(old); denied(await actor.register_account()); denied(await actor.whoami());
   actor.setPrincipal(replacement); assert.equal(ok(await actor.whoami()).id, moved.id);
-  assert.equal(ok(await actor.get_my_profile())[0].display_name, 'Local surviving fixture');
+  assert.equal(ok(await actor.get_profile()).display_name, 'Local surviving fixture');
   denied(await actor.begin_link(old));
 
   await pic.upgradeCanister({ canisterId: identity.canisterId, wasm, sender: governor, arg: args });
