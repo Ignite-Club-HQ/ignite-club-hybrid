@@ -144,7 +144,7 @@ try {
         assert.ok(inventory.scanned <= 200n, `${name} metadata page is bounded`);
         assert.equal(ok(await A[name].read_club_media_references(CLUB, 0n, [inventory.revision])).revision, inventory.revision);
         assert.ok('Err' in await A[name].read_club_media_references(CLUB, 0n, [inventory.revision + 1n]), `${name} stale revision denied`);
-        assert.ok('Err' in await as(A[name], staff, () => A[name].read_club_media_references(CLUB, 0n, [])), `${name} inventory operator-only`);
+        assert.ok('Err' in await refused(as(A[name], staff, () => A[name].read_club_media_references(CLUB, 0n, []))), `${name} inventory operator-only`);
       }
       assert.equal(ok(await A.media_metadata.read_club_media_references(CLUB, 0n, [])).references[0].resource_id, asset.id);
       blocked.insights = await refused(A.insights_domain.record_photo_upload(CLUB, 'p2'));
