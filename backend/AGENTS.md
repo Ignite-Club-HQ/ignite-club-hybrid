@@ -45,3 +45,5 @@
 
 - events_domain migration 20261030_000000 freezes group-state and persistent duty-slot shapes; transfers include groups, allocations and duties with foreign-ID collision checks. Match writes require view+edit authority, exact revision and transfer fences. Why: preserve duplicate duty labels and live match state through upgrades/moves.
 - mini_league_domain named claims atomically bind eligible players to the caller and replay only for that claimant; messaging mini-league tagged groups only locate existing membership and never grant access. Why: token preview and club association are not child-ownership or private-chat authorization.
+
+- events_domain and mini_league_domain require reciprocal governor wiring (set_mini_league_domain_canister / set_events_domain_canister); composite match reads verify the original caller through can_read_league_matches and the league’s owning club, with no stored parent grants. Match writes use bounded consensus authority calls and reload fences/duties/revisions afterwards. Why: named invite claims must admit league parents, not unrelated club data or stale grants.

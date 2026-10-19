@@ -129,7 +129,10 @@ export function useEventGroupSync(
           localStorage.setItem("pitch-board-timer-state", value);
         }
         if (force) window.dispatchEvent(new CustomEvent("game-state-changed"));
-      } catch (error) { clearCanisterState(); console.error("[EventGroupSync] Canister read failed", error); }
+      } catch (error) {
+        if (error instanceof Error && /forbidden|not visible|not found/i.test(error.message)) clearCanisterState();
+        console.error("[EventGroupSync] Canister read failed", error);
+      }
       return;
     }
 

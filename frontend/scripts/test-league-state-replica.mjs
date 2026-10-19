@@ -19,6 +19,24 @@ try {
   const destination = await setup(eventsIdl, process.env.EVENTS_DOMAIN_WASM);
   const league = await setup(leagueIdl, process.env.MINI_LEAGUE_DOMAIN_WASM);
   const chat = await setup(chatIdl, process.env.MESSAGING_DOMAIN_WASM);
+  if (process.env.EVENTS_DOMAIN_OLD_WASM && process.env.MINI_LEAGUE_DOMAIN_OLD_WASM) {
+    const oldEvents = await setup(eventsIdl, process.env.EVENTS_DOMAIN_OLD_WASM);
+    const oldLeague = await setup(leagueIdl, process.env.MINI_LEAGUE_DOMAIN_OLD_WASM);
+    oldEvents.setPrincipal(governor); oldLeague.setPrincipal(governor);
+    const savedEvent = ok(await oldEvents.create_event('upgrade-club', [], 'Kept round', 'Round', 'game', [], [], [], [], 1000n, 2000n, [], false, [], []));
+    const savedGroup = ok(await oldEvents.create_event_group(savedEvent.id, 'Kept pitch', [], [], [], []));
+    ok(await oldEvents.sync_group_state(savedGroup.id, 0n, ['{"elapsedSeconds":75}'], []));
+    const savedLeague = ok(await oldLeague.create_mini_league('upgrade-club', 'Kept league', [], [], 6, 3, 10, [], true));
+    for (const [actor, wasm] of [[oldEvents, process.env.EVENTS_DOMAIN_WASM], [oldLeague, process.env.MINI_LEAGUE_DOMAIN_WASM]]) {
+      await pic.upgradeCanister({ canisterId: ids.get(actor), wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+    }
+    assert.equal(ok(await oldEvents.get_event_group(savedGroup.id))[0].timer_state_json[0], '{"elapsedSeconds":75}');
+    assert.equal(ok(await oldLeague.get_mini_league(savedLeague.id)).name, 'Kept league');
+    ok(await oldEvents.set_mini_league_domain_canister(ids.get(oldLeague)));
+    ok(await oldLeague.set_events_domain_canister(ids.get(oldEvents)));
+    console.log('PASS: new authority migrations preserve existing event clocks and league rows through EOP upgrades.');
+  }
+
   for (const a of [events, destination, league, chat]) a.setPrincipal(governor);
   const event = ok(await events.create_event('club-a', [], 'Round', 'League round', 'mini_league', [], [], [], [], 1000n, 2000n, [], false, [], []));
   const group = ok(await events.create_event_group(event.id, 'Pitch A', [], [], [], []));
