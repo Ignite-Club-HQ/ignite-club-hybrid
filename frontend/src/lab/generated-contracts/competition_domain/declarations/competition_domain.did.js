@@ -605,12 +605,12 @@ export const idlFactory = ({ IDL }) => {
     'list_entries' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamEntry), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_entries_by_team' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamEntry), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_eoi_submissions' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
@@ -625,7 +625,7 @@ export const idlFactory = ({ IDL }) => {
     'list_matches' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Match), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_my_news_competitions' : IDL.Func(
         [],
@@ -650,7 +650,7 @@ export const idlFactory = ({ IDL }) => {
     'list_seasons' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'memory_stats' : IDL.Func(
         [],
@@ -669,6 +669,16 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_competition_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_resource_club' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_token_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         ['query'],
@@ -780,6 +790,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_official_chat' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_participant_club_authorities' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

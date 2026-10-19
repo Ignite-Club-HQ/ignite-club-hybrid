@@ -1165,6 +1165,12 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
+   read_competition_team_access: (team_id: text, user: principal) ->
+    (record {
+       can_manage: bool;
+       club_id: opt text;
+       is_member: bool;
+     }) query;
    read_has_club_membership: (user: principal, club_id: text) -> (bool);
    read_my_club_memberships: (offset: nat, limit: nat16) ->
     (variant {
@@ -1184,6 +1190,10 @@ type Main =
              next: opt text;
            };
      });
+   read_season_club: (id: text) -> (variant {
+                                      Err: text;
+                                      Ok: opt text;
+                                    }) query;
    record_presence_heartbeat: () -> (variant {
                                        Err: text;
                                        Ok;
@@ -1480,6 +1490,11 @@ type Main =
     (variant {
        Err: text;
        Ok: ClubSettings;
+     });
+   set_competition_authorities: (ids: vec principal) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    set_competition_domain_canister: (id: principal) ->
     (variant {

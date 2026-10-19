@@ -411,12 +411,12 @@ type Main =
     (variant {
        Err: text;
        Ok: vec TeamEntry;
-     }) query;
+     });
    list_entries_by_team: (team_id: text) ->
     (variant {
        Err: text;
        Ok: vec TeamEntry;
-     }) query;
+     });
    list_eoi_submissions: (club_id: text, season_id: opt text) ->
     (variant {
        Err: text;
@@ -431,7 +431,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec Match;
-     }) query;
+     });
    list_my_news_competitions: () ->
     (variant {
        Err: text;
@@ -456,7 +456,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec Season;
-     }) query;
+     });
    memory_stats: () ->
     (record {
        heap_bytes: nat;
@@ -467,7 +467,16 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
-   read_competition_club: (id: text) ->
+   read_competition_club: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok: opt text;
+                                         });
+   read_resource_club: (kind: text, id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_token_club: (token: text) ->
     (variant {
        Err: text;
        Ok: opt text;
@@ -577,6 +586,11 @@ type Main =
                 Err: text;
                 Ok;
               });
+   set_participant_club_authorities: (ids: vec principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_pii_access_control_canister: (id: principal) ->
     (variant {
        Err: text;
