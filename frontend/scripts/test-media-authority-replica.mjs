@@ -50,6 +50,40 @@ try {
     assert.ok('Err' in result);
   };
   await decrypt(member); await decrypt(stale); await denied(stranger);
+  // Real private-file identity: club membership must not imply owner access.
+  const privatePath = 'clubs/moving/vault/private-file';
+  const privateIdentity = new TextEncoder().encode(privatePath + '\u001fblob');
+  const privateCipher = IbeCiphertext.encrypt(verification, IbeIdentity.fromBytes(privateIdentity), plaintext, IbeSeed.random()).serialize();
+  a.setPrincipal(governor); ok(await a.register_pii(privatePath, 'blob', [...privateCipher], member));
+  const privateRead = async (user, expected) => {
+    a.setPrincipal(user); const transport = TransportSecretKey.random();
+    const result = ok(await a.get_encrypted_pii_vetkeys_batch([privatePath], 'blob', transport.publicKeyBytes()));
+    assert.equal(result[0].length, expected ? 1 : 0);
+    if (expected) {
+      const key = EncryptedVetKey.deserialize(Uint8Array.from(result[0][0])).decryptAndVerify(transport, verification, privateIdentity);
+      assert.deepEqual(IbeCiphertext.deserialize(privateCipher).decrypt(key), plaintext);
+    }
+  };
+  await privateRead(member, true); await privateRead(stale, false); await privateRead(stranger, false);
+  a.setPrincipal(stranger);
+  assert.ok('Err' in await a.add_guardian_relationship(stranger, privatePath), 'self-claimed guardian cannot unlock private files');
+  a.setPrincipal(member); ok(await a.grant_pii_read(privatePath, 'blob', stale));
+  await privateRead(stale, true);
+  a.setPrincipal(member); ok(await a.revoke_pii_read(privatePath, 'blob', stale));
+  await privateRead(stale, false);
+  // Deterministic suspended calls, not a timing-dependent Promise.all race.
+  const deferred = pic.createDeferredActor(piiIdl, original.canisterId);
+  deferred.setPrincipal(member);
+  const pendingPrivate = await deferred.get_encrypted_pii_vetkeys_batch([privatePath], 'blob', TransportSecretKey.random().publicKeyBytes());
+  await pic.tick(1);
+  a.setPrincipal(member); ok(await a.revoke_pii_read(privatePath, 'blob', stale));
+  assert.ok('Err' in await pendingPrivate(), 'permission mutation invalidates suspended private-key derivation');
+  const pendingShared = await deferred.get_club_media_vetkey('moving', TransportSecretKey.random().publicKeyBytes());
+  await pic.tick(1);
+  a.setPrincipal(governor); ok(await a.set_transfer_fence('moving', true));
+  ok(await a.set_transfer_fence('moving', false));
+  assert.ok('Err' in await pendingShared(), 'even a fence acquired and released during an await invalidates the key');
+  await decrypt(member);
   a.setPrincipal(stranger);
   assert.ok('Err' in await a.register_pii('clubmedia:moving', 'blob', [1], stranger), 'generic records cannot capture the shared photo identity');
   assert.ok('Err' in await a.register_pii('clubmedia:moving\u001fblob', '', [1], stranger));
@@ -75,6 +109,12 @@ try {
     arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   a.setPrincipal(governor); assert.deepEqual(ok(await a.read_club_media_authority('moving')), receipt);
   assert.deepEqual(Uint8Array.from(await a.pii_vetkey_verification_key()), verificationBytes);
+  await pic.updateCanisterSettings({ canisterId: original.canisterId, sender: governor,
+    environmentVariables: [{ name: 'VETKD_KEY_NAME', value: 'test_key_1' }] });
+  await pic.upgradeCanister({ canisterId: original.canisterId,
+    wasm: resolve(root, 'backend/pii_access_control/.mops/.build/pii_access_control.wasm'), sender: governor,
+    arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  assert.deepEqual(Uint8Array.from(await a.pii_vetkey_verification_key()), verificationBytes, 'environment changes cannot replace the pinned key');
   await decrypt(member); await denied(stale);
   target.actor.setPrincipal(governor); ok(await target.actor.remove_member('moving', member));
   await denied(member); // source still has this member; no stale fallback
