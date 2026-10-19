@@ -8,6 +8,7 @@ import {
   listLiveAssets,
   listLiveComments,
   listLiveReactions,
+  liveAssetSource,
 } from "@/live/features/media";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
@@ -71,36 +72,34 @@ export async function fetchMediaFeedPage(
       };
     },
     icp: async (ctx) => {
-      // The media_metadata canister lists assets per club only; feeds without
-      // a club scope (cross-club views, gallery-card subsets, team/event
-      // filters) have no canister query yet and return empty until parity
-      // lands. Provisional until verified against a deployed canister.
-      if (!options.clubId || options.cardId) {
-        return { photos: [] as any[], nextCursor: undefined };
-      }
-      const assets = await listLiveAssets(ctx, options.clubId);
+      const clubIds = options.clubId ? [options.clubId] : await (async () => {
+        const { listLiveMembershipClubs } = await import("@/live/features/membership");
+        const clubs = await readContentInScope(ctx, "membership", acrossLists, listLiveMembershipClubs);
+        return [...new Set(clubs.filter(c => !c.deleted_at_ms?.length).map(c => c.id))];
+      })();
+      const parts = await Promise.all(clubIds.map(clubId => readContentInScope(ctx, "media", { clubId }, scoped => listLiveAssets(scoped, clubId))));
+      const assets = [...new Map(parts.flat().map(asset => [asset.id, asset])).values()];
       const photos = assets
-        .filter((asset) => !asset.deleted)
-        .map((asset) => ({
-          id: asset.id,
-          file_url: asset.storage_path,
-          image_url: asset.storage_path,
-          title: asset.kind,
-          caption: null,
-          // The canister asset carries retention/expiry timestamps but no
-          // creation timestamp — date display and ordering are provisional.
-          created_at: null,
-          club_id: asset.club_id,
-          team_id: null,
-          event_id: null,
-          mini_league_id: null,
-          competition_id: asset.competition_id[0] ?? null,
-          uploader_id: asset.owner.toText(),
-          album_id: null,
-          clubs: null,
-          teams: null,
-          mini_leagues: null,
-        }));
+        .filter(asset => !asset.deleted && (!options.cardId || options.cardPhotoIds?.includes(asset.id)))
+        .filter(asset => !options.teamId || asset.team_id?.[0] === options.teamId)
+        .filter(asset => !options.eventId || asset.event_id?.[0] === options.eventId)
+        .filter(asset => !options.competitionId || asset.competition_id?.[0] === options.competitionId)
+        .map(asset => {
+          const source = liveAssetSource(asset);
+          const url = source.kind === "icp-blob" ? source.url : source.storagePath;
+          return {
+            id: asset.id, file_url: url, image_url: url, title: asset.kind,
+            caption: asset.caption?.[0] ?? null,
+            created_at: asset.created_at_ms ? new Date(Number(asset.created_at_ms)).toISOString() : null,
+            club_id: asset.club_id, team_id: asset.team_id?.[0] ?? null,
+            event_id: asset.event_id?.[0] ?? null, mini_league_id: asset.mini_league_id?.[0] ?? null,
+            competition_id: asset.competition_id?.[0] ?? null, uploader_id: asset.owner.toText(),
+            album_id: asset.album_id?.[0] ?? null, clubs: null, teams: null, mini_leagues: null,
+          };
+        })
+        .filter(photo => !options.dateFrom || !!photo.created_at && photo.created_at >= options.dateFrom)
+        .filter(photo => !options.dateTo || !!photo.created_at && photo.created_at <= options.dateTo)
+        .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
       const page = photos.slice(options.offset, options.offset + options.pageSize);
       return {
         photos: page,
