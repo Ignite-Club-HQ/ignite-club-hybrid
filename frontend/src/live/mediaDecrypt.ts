@@ -1,3 +1,4 @@
+import { activationStatus, SHIPPED_GATES } from "./groupActivation";
 import { getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
@@ -41,11 +42,12 @@ function storedSessionPrincipal(): string | null {
 export function parseIcpBlobUrl(
   url: string,
   target: IcpTargetConfig | null,
+  requireConfigured = !activationStatus(SHIPPED_GATES).active,
 ): { path: string; canisterId: string } | null {
   if (!target) return null;
   // Any configured photo store (sharding) — unknown canisters are rejected.
   const stores = listBlobStoreCanisterIds(target);
-  if (stores.length === 0) return null;
+  if (requireConfigured && stores.length === 0) return null;
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -57,12 +59,12 @@ export function parseIcpBlobUrl(
   let canisterId: string;
   if (ICP_GATEWAY_HOSTS.includes(parsed.hostname)) {
     // Legacy path-style URLs stored before the subdomain fix.
-    if (!stores.includes(segments[0])) return null;
+    if (requireConfigured && !stores.includes(segments[0])) return null;
     canisterId = segments[0];
     path = segments.slice(1).join("/");
   } else {
     const sub = /^([a-z0-9-]+)\.(?:raw\.)?icp0\.io$/.exec(parsed.hostname)?.[1];
-    if (!sub || !stores.includes(sub)) return null;
+    if (!sub || requireConfigured && !stores.includes(sub)) return null;
     canisterId = sub;
     path = segments.join("/");
   }
@@ -92,8 +94,16 @@ export async function readCachedIcpBlobObjectUrl(url: string): Promise<string | 
  * raw URL, which serves only ciphertext.
  */
 export async function resolveIcpBlobObjectUrl(url: string): Promise<string | null> {
-  const target = getActiveIcpTarget();
-  const match = parseIcpBlobUrl(url, target);
+  let target = getActiveIcpTarget();
+  if (activationStatus(SHIPPED_GATES).active && parseIcpBlobUrl(url, target)) {
+    const { clubDispatch } = await import("./groupDispatch");
+    const targets = await clubDispatch.readAcross("media", "media_metadata", async ctx => parseIcpBlobUrl(url, ctx.target, true) ? [ctx.target] : [], parts => parts.flat());
+    const unique = [...new Map(targets.map(t => [JSON.stringify(t.canisterIds), t])).values()];
+    if (!unique.length) throw new Error("Photo store is not in the approved group inventory");
+    if (new Set(unique.map(t => t.canisterIds.pii_access_control)).size !== 1) throw new Error("Photo store has conflicting encryption authorities");
+    target = unique[0];
+  }
+  const match = parseIcpBlobUrl(url, target, true);
   if (!match) return null;
   // Photos seen before on this device open straight from the local cache.
   // Check it BEFORE awaiting session re-confirmation: after a reconnect or
