@@ -25,6 +25,12 @@ export interface Account {
 }
 export type AccountStatus = { 'Active' : null } |
   { 'Suspended' : null };
+export type EligibilityBatchResult = { 'Ok' : Array<PrincipalEligibility> } |
+  { 'Err' : string };
+export type EligibilityDecision = { 'Eligible' : null } |
+  { 'Denied' : null };
+export type EligibilityResult = { 'Ok' : PrincipalEligibility } |
+  { 'Err' : string };
 /**
  * A Pro entitlement granted to a principal from an IAP (App Store) receipt
  * or a governor/verifier write. `transaction_id` is the Apple transaction
@@ -62,6 +68,12 @@ export interface LinkChallenge {
   'accepted' : boolean,
   'expires_at_ns' : bigint,
   'expected_version' : bigint,
+}
+export interface PrincipalEligibility {
+  'account_version' : [] | [bigint],
+  'decision' : EligibilityDecision,
+  'subject' : Principal,
+  'denied_through_version' : [] | [bigint],
 }
 export interface PrivacyConsent {
   'account_id' : string,
@@ -264,6 +276,14 @@ export interface _SERVICE {
    */
   'my_terms_acceptance' : ActorMethod<[], Result_10>,
   'read_linked_account' : ActorMethod<[Principal], Result>,
+  'read_principal_eligibilities' : ActorMethod<
+    [Array<Principal>],
+    EligibilityBatchResult
+  >,
+  /**
+   * Local-rehearsal-only consensus evidence, never a resource grant.
+   */
+  'read_principal_eligibility' : ActorMethod<[Principal], EligibilityResult>,
   /**
    * Caller-authenticated: redeems a signed attestation minted by the
    * session-free IAP verification endpoint after it confirms an Apple
