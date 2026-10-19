@@ -30,6 +30,79 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result_1 = IDL.Variant({ 'Ok' : Access, 'Err' : IDL.Text });
   const Result_2 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
+  const MediaRegistry = IDL.Record({
+    'stores' : IDL.Vec(IDL.Principal),
+    'active' : IDL.Bool,
+  });
+  const MediaEvidence = IDL.Record({
+    'club_authority' : IDL.Principal,
+    'registry' : MediaRegistry,
+  });
+  const Domain = IDL.Record({
+    'domain' : IDL.Text,
+    'canister' : IDL.Principal,
+  });
+  const Group = IDL.Record({
+    'id' : IDL.Text,
+    'domains' : IDL.Vec(Domain),
+    'target_alias' : IDL.Text,
+  });
+  const DomainPlacement = IDL.Record({
+    'domain' : IDL.Text,
+    'subnet' : IDL.Principal,
+    'canister' : IDL.Principal,
+  });
+  const Placement = IDL.Record({
+    'host' : IDL.Text,
+    'network_kind' : IDL.Text,
+    'deployment_revision' : IDL.Nat64,
+    'approved_subnets' : IDL.Vec(IDL.Principal),
+    'additional_subnets_enabled' : IDL.Bool,
+    'group_id' : IDL.Text,
+    'domains' : IDL.Vec(DomainPlacement),
+    'deployment_id' : IDL.Text,
+    'primary_subnet' : IDL.Principal,
+  });
+  const Snapshot = IDL.Record({
+    'groups' : IDL.Vec(Group),
+    'placements' : IDL.Vec(Placement),
+    'revision' : IDL.Nat64,
+  });
+  const Binding = IDL.Record({
+    'registry_revision' : IDL.Nat64,
+    'host' : IDL.Text,
+    'network_kind' : IDL.Text,
+    'deployment_revision' : IDL.Nat64,
+    'target_alias' : IDL.Text,
+    'registry' : IDL.Principal,
+    'deployment_id' : IDL.Text,
+  });
+  const Evidence = IDL.Record({
+    'snapshot' : Snapshot,
+    'binding' : Binding,
+    'history_revision' : IDL.Nat64,
+  });
+  const Supplemental = IDL.Record({
+    'domain' : IDL.Text,
+    'group_id' : IDL.Text,
+    'subnet' : IDL.Principal,
+    'canister' : IDL.Principal,
+  });
+  const RemovalInventory = IDL.Record({
+    'media' : IDL.Vec(MediaEvidence),
+    'groups' : Evidence,
+    'supplemental' : IDL.Vec(Supplemental),
+  });
+  const Intent = IDL.Record({
+    'account_id' : IDL.Text,
+    'account_version' : IDL.Nat64,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'inventory' : RemovalInventory,
+    'generation' : IDL.Nat64,
+    'targets' : IDL.Vec(IDL.Principal),
+  });
+  const Result_3 = IDL.Variant({ 'Ok' : Intent, 'Err' : IDL.Text });
   const LinkChallenge = IDL.Record({
     'id' : IDL.Nat64,
     'account_id' : IDL.Text,
@@ -39,18 +112,18 @@ export const idlFactory = ({ IDL }) => {
     'expires_at_ns' : IDL.Nat64,
     'expected_version' : IDL.Nat64,
   });
-  const Result_3 = IDL.Variant({ 'Ok' : LinkChallenge, 'Err' : IDL.Text });
+  const Result_4 = IDL.Variant({ 'Ok' : LinkChallenge, 'Err' : IDL.Text });
   const ExternalSiteBinding = IDL.Record({
     'account_id' : IDL.Text,
     'external_user_id' : IDL.Text,
     'linked_at_ns' : IDL.Nat64,
     'site_id' : IDL.Text,
   });
-  const Result_4 = IDL.Variant({
+  const Result_5 = IDL.Variant({
     'Ok' : ExternalSiteBinding,
     'Err' : IDL.Text,
   });
-  const Result_5 = IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text });
+  const Result_6 = IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text });
   const PrivacyConsent = IDL.Record({
     'account_id' : IDL.Text,
     'updated_at_ns' : IDL.Nat64,
@@ -112,17 +185,17 @@ export const idlFactory = ({ IDL }) => {
     'terms_acceptances' : IDL.Vec(TermsAcceptance),
     'next_challenge' : IDL.Nat64,
   });
-  const Result_6 = IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text });
-  const Result_7 = IDL.Variant({
+  const Result_7 = IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text });
+  const Result_8 = IDL.Variant({
     'Ok' : IDL.Vec(ExternalSiteBinding),
     'Err' : IDL.Text,
   });
-  const Result_8 = IDL.Variant({
+  const Result_9 = IDL.Variant({
     'Ok' : IDL.Vec(Entitlement),
     'Err' : IDL.Text,
   });
-  const Result_9 = IDL.Variant({ 'Ok' : Profile, 'Err' : IDL.Text });
-  const Result_10 = IDL.Variant({
+  const Result_10 = IDL.Variant({ 'Ok' : Profile, 'Err' : IDL.Text });
+  const Result_11 = IDL.Variant({
     'Ok' : IDL.Opt(TermsAcceptance),
     'Err' : IDL.Text,
   });
@@ -131,55 +204,11 @@ export const idlFactory = ({ IDL }) => {
     'stable_bytes' : IDL.Nat,
     'heap_bytes' : IDL.Nat,
   });
-  const Result_11 = IDL.Variant({
+  const Result_12 = IDL.Variant({
     'Ok' : IDL.Vec(RoleGrant),
     'Err' : IDL.Text,
   });
-  const Domain = IDL.Record({
-    'domain' : IDL.Text,
-    'canister' : IDL.Principal,
-  });
-  const Group = IDL.Record({
-    'id' : IDL.Text,
-    'domains' : IDL.Vec(Domain),
-    'target_alias' : IDL.Text,
-  });
-  const DomainPlacement = IDL.Record({
-    'domain' : IDL.Text,
-    'subnet' : IDL.Principal,
-    'canister' : IDL.Principal,
-  });
-  const Placement = IDL.Record({
-    'host' : IDL.Text,
-    'network_kind' : IDL.Text,
-    'deployment_revision' : IDL.Nat64,
-    'approved_subnets' : IDL.Vec(IDL.Principal),
-    'additional_subnets_enabled' : IDL.Bool,
-    'group_id' : IDL.Text,
-    'domains' : IDL.Vec(DomainPlacement),
-    'deployment_id' : IDL.Text,
-    'primary_subnet' : IDL.Principal,
-  });
-  const Snapshot = IDL.Record({
-    'groups' : IDL.Vec(Group),
-    'placements' : IDL.Vec(Placement),
-    'revision' : IDL.Nat64,
-  });
-  const Binding = IDL.Record({
-    'registry_revision' : IDL.Nat64,
-    'host' : IDL.Text,
-    'network_kind' : IDL.Text,
-    'deployment_revision' : IDL.Nat64,
-    'target_alias' : IDL.Text,
-    'registry' : IDL.Principal,
-    'deployment_id' : IDL.Text,
-  });
-  const Evidence = IDL.Record({
-    'snapshot' : Snapshot,
-    'binding' : Binding,
-    'history_revision' : IDL.Nat64,
-  });
-  const Result_12 = IDL.Variant({ 'Ok' : Evidence, 'Err' : IDL.Text });
+  const Result_13 = IDL.Variant({ 'Ok' : Evidence, 'Err' : IDL.Text });
   const EligibilityDecision = IDL.Variant({
     'Eligible' : IDL.Null,
     'Denied' : IDL.Null,
@@ -190,11 +219,11 @@ export const idlFactory = ({ IDL }) => {
     'subject' : IDL.Principal,
     'denied_through_version' : IDL.Opt(IDL.Nat64),
   });
-  const Result_13 = IDL.Variant({
+  const Result_14 = IDL.Variant({
     'Ok' : IDL.Vec(PrincipalEligibility),
     'Err' : IDL.Text,
   });
-  const Result_14 = IDL.Variant({
+  const Result_15 = IDL.Variant({
     'Ok' : PrincipalEligibility,
     'Err' : IDL.Text,
   });
@@ -206,7 +235,7 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
     'club_authorities' : IDL.Vec(IDL.Principal),
   });
-  const Result_15 = IDL.Variant({
+  const Result_16 = IDL.Variant({
     'Ok' : RemovalHistoryManifest,
     'Err' : IDL.Text,
   });
@@ -242,44 +271,25 @@ export const idlFactory = ({ IDL }) => {
     'next' : RemovalHistoryCursor,
     'revision' : IDL.Nat64,
   });
-  const Result_16 = IDL.Variant({
+  const Result_17 = IDL.Variant({
     'Ok' : RemovalHistoryPage,
     'Err' : IDL.Text,
   });
-  const MediaRegistry = IDL.Record({
-    'stores' : IDL.Vec(IDL.Principal),
-    'active' : IDL.Bool,
-  });
-  const MediaEvidence = IDL.Record({
-    'club_authority' : IDL.Principal,
-    'registry' : MediaRegistry,
-  });
-  const Supplemental = IDL.Record({
-    'domain' : IDL.Text,
-    'group_id' : IDL.Text,
-    'subnet' : IDL.Principal,
-    'canister' : IDL.Principal,
-  });
-  const RemovalInventory = IDL.Record({
-    'media' : IDL.Vec(MediaEvidence),
-    'groups' : Evidence,
-    'supplemental' : IDL.Vec(Supplemental),
-  });
-  const Result_17 = IDL.Variant({ 'Ok' : RemovalInventory, 'Err' : IDL.Text });
-  const Result_18 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
-  const Result_19 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
+  const Result_18 = IDL.Variant({ 'Ok' : RemovalInventory, 'Err' : IDL.Text });
+  const Result_19 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
+  const Result_20 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
   const ProfileSearchResult = IDL.Record({
     'account_id' : IDL.Text,
     'principal' : IDL.Principal,
     'avatar_ref' : IDL.Opt(IDL.Text),
     'display_name' : IDL.Text,
   });
-  const Result_20 = IDL.Variant({
+  const Result_21 = IDL.Variant({
     'Ok' : IDL.Vec(ProfileSearchResult),
     'Err' : IDL.Text,
   });
-  const Result_21 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
-  const Result_22 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
+  const Result_22 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
+  const Result_23 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
   
   return IDL.Service({
     'accept_link' : IDL.Func([IDL.Nat64], [Result], []),
@@ -299,34 +309,35 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'add_verifier' : IDL.Func([IDL.Principal], [Result_2], []),
-    'begin_link' : IDL.Func([IDL.Principal], [Result_3], []),
+    'begin_account_removal' : IDL.Func([IDL.Text, IDL.Nat64], [Result_3], []),
+    'begin_link' : IDL.Func([IDL.Principal], [Result_4], []),
     'bind_external_site' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
-        [Result_4],
+        [Result_5],
         [],
       ),
     'check_field_access' : IDL.Func(
         [IDL.Text, IDL.Text],
-        [Result_5],
+        [Result_6],
         ['query'],
       ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'erase_account' : IDL.Func([IDL.Text], [Result_2], []),
-    'export_state' : IDL.Func([], [Result_6], ['query']),
-    'get_external_bindings' : IDL.Func([IDL.Text], [Result_7], ['query']),
-    'get_my_entitlements' : IDL.Func([], [Result_8], ['query']),
+    'export_state' : IDL.Func([], [Result_7], ['query']),
+    'get_external_bindings' : IDL.Func([IDL.Text], [Result_8], ['query']),
+    'get_my_entitlements' : IDL.Func([], [Result_9], ['query']),
     'get_privacy_consent' : IDL.Func(
         [IDL.Text, IDL.Text],
-        [Result_5],
+        [Result_6],
         ['query'],
       ),
-    'get_profile' : IDL.Func([], [Result_9], ['query']),
+    'get_profile' : IDL.Func([], [Result_10], ['query']),
     'get_profiles_by_ids' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Vec(Profile)],
         ['query'],
       ),
-    'get_terms_acceptance' : IDL.Func([IDL.Text], [Result_10], ['query']),
+    'get_terms_acceptance' : IDL.Func([IDL.Text], [Result_11], ['query']),
     'grant_role' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [Result_2],
@@ -343,35 +354,36 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         [],
       ),
-    'is_pro' : IDL.Func([IDL.Principal], [Result_5], ['query']),
+    'is_pro' : IDL.Func([IDL.Principal], [Result_6], ['query']),
     'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
-    'my_roles' : IDL.Func([], [Result_11], ['query']),
-    'my_terms_acceptance' : IDL.Func([], [Result_10], ['query']),
-    'read_group_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_12], []),
+    'my_roles' : IDL.Func([], [Result_12], ['query']),
+    'my_terms_acceptance' : IDL.Func([], [Result_11], ['query']),
+    'read_account_removal_intent' : IDL.Func([IDL.Text], [Result_3], []),
+    'read_group_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_13], []),
     'read_linked_account' : IDL.Func([IDL.Principal], [Result], []),
     'read_principal_eligibilities' : IDL.Func(
         [IDL.Vec(IDL.Principal)],
-        [Result_13],
+        [Result_14],
         [],
       ),
-    'read_principal_eligibility' : IDL.Func([IDL.Principal], [Result_14], []),
-    'read_removal_history_manifest' : IDL.Func([], [Result_15], []),
+    'read_principal_eligibility' : IDL.Func([IDL.Principal], [Result_15], []),
+    'read_removal_history_manifest' : IDL.Func([], [Result_16], []),
     'read_removal_history_page' : IDL.Func(
         [IDL.Nat64, RemovalHistoryCursor, IDL.Nat16],
-        [Result_16],
+        [Result_17],
         [],
       ),
-    'read_removal_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_17], []),
+    'read_removal_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_18], []),
     'read_service_account' : IDL.Func([IDL.Principal], [Result], []),
     'redeem_entitlement' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Text, IDL.Text],
-        [Result_18],
+        [Result_19],
         [],
       ),
     'register_account' : IDL.Func([], [Result], []),
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
-        [Result_19],
+        [Result_20],
         [],
       ),
     'remove_verifier' : IDL.Func([IDL.Principal], [Result_2], []),
@@ -392,14 +404,14 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         [],
       ),
-    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_20], ['query']),
+    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_21], ['query']),
     'set_account_status' : IDL.Func([IDL.Text, AccountStatus], [Result], []),
     'set_attestation_secret' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result_2], []),
     'set_club_authorities' : IDL.Func([IDL.Vec(IDL.Principal)], [Result_2], []),
-    'set_club_switcher_hint_seen' : IDL.Func([], [Result_9], []),
+    'set_club_switcher_hint_seen' : IDL.Func([], [Result_10], []),
     'set_entitlement' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Nat64, IDL.Text],
-        [Result_18],
+        [Result_19],
         [],
       ),
     'set_exclusion' : IDL.Func(
@@ -420,10 +432,10 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_privacy_consent' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
-        [Result_21],
+        [Result_22],
         [],
       ),
-    'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_9], []),
+    'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_10], []),
     'set_removal_supplemental_inventory' : IDL.Func(
         [IDL.Vec(Supplemental), IDL.Nat64],
         [Result_2],
@@ -434,8 +446,8 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         [],
       ),
-    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_22], []),
-    'set_theme_preference' : IDL.Func([IDL.Opt(IDL.Text)], [Result_9], []),
+    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_23], []),
+    'set_theme_preference' : IDL.Func([IDL.Opt(IDL.Text)], [Result_10], []),
     'whoami' : IDL.Func([], [Result], ['query']),
   });
 };
