@@ -108,7 +108,7 @@ try {
   await pic.upgradeCanister({ canisterId: groups[0].canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor,
     arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   groups[0].actor.setPrincipal(linked);
-  assert.ok('Err' in await groups[0].actor.sync_my_linked_account(), 'durable unlink receipt rejects stale identity snapshot after upgrade');
+  await accessDenied(() => groups[0].actor.sync_my_linked_account());
   service.setPrincipal(primary); const revoked = ok(await service.revoke(linked, 1n));
   assert.equal(revoked.version, 2n); assert.deepEqual(revoked.principals.map(p => p.toText()), [primary.toText()]);
   service.setPrincipal(governor);
