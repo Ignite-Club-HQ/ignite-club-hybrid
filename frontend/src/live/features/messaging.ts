@@ -1506,3 +1506,15 @@ export async function runLiveChatPhotoGalleryReminders(
     skipped: Number(row.skipped),
   };
 }
+
+export async function getLiveMiniLeagueChat(ctx: FeatureBackendContext, clubId: string, leagueId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const row = unwrapCandid(actor.get_mini_league_chat(clubId, leagueId), "League chat")[0];
+  return row ? { id: row.conversation_id } : null;
+}
+export async function ensureLiveMiniLeagueChat(ctx: FeatureBackendContext, clubId: string, leagueId: string, name: string, members: string[]) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const audience = [...new Set([...members.map(m => m.replace(/^principal:/, '')), ctx.identity.getPrincipal().toText()])].map(m => Principal.fromText(m));
+  const row = unwrapCandid(actor.ensure_mini_league_chat(clubId, leagueId, name, audience), "Create league chat");
+  return { id: row.conversation_id };
+}
