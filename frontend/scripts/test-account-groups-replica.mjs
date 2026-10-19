@@ -68,9 +68,12 @@ try {
   // Stop the remote authority so sync cannot finish before local removal.
   // One tick alone does not establish an async pause on same-subnet actors.
   await pic.stopCanister({ canisterId: identity.canisterId, sender: governor });
-  const deferredGroup = pic.createDeferredActor(clubIdl, groups[0].canisterId);
-  deferredGroup.setPrincipal(linked);
-  const staleSync = await deferredGroup.sync_my_linked_account();
+  // The package's deferred-actor wrapper loses rejected promises. Use its
+  // underlying client so a trapped admission reply is actually catchable.
+  const syncSignature = new Map(clubIdl({ IDL })._fields).get('sync_my_linked_account');
+  const syncMessage = await pic.client.submitCall({ canisterId: groups[0].canisterId,
+    sender: linked, method: 'sync_my_linked_account', payload: new Uint8Array(IDL.encode(syncSignature.argTypes, [])) });
+  const staleSync = async () => IDL.decode(syncSignature.retTypes, (await pic.client.awaitCall(syncMessage)).body)[0];
   await pic.tick(1);
   groups[0].actor.setPrincipal(identity.canisterId);
   ok(await groups[0].actor.revoke_linked_principal(account.id, linked, 1n));
