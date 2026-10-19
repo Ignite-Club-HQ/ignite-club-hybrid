@@ -105,6 +105,8 @@ try {
   const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   club.actor.setPrincipal(governor);
   ok(await club.actor.create_club('c1', 'Test club', 'test-club', [], []));
+  // Uploads now require live membership in every quota mode.
+  ok(await club.actor.add_role_grant(owner, 'c1', 'player', []));
   const second = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
   for (const store of [fixture, second]) {
     store.actor.setPrincipal(governor);
