@@ -1,4 +1,6 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import RemovalReceiver "../../shared/RemovalReceiver";
+import Error "mo:core/Error";
 import MediaEvidence "../../shared/MediaEvidence";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
@@ -8,21 +10,28 @@ import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
+import Map "mo:core/Map";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
 import PinScope "pinScope";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
   transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
   transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
     case (?id) ?Principal.fromText(id); case null null
   };
+  var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
+  var removal_subjects : Map.Map<Principal, Text>;
+  var removal_active : Map.Map<Principal, Nat>;
+  transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
   func admitAccount(subject : Principal) : async () {
-    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
+    let eligible = await accountAdmission.eligible(subject);
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
@@ -290,6 +299,8 @@ persistent actor class Main(governorInit : Principal) {
     description : ?Text,
     color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -339,6 +350,8 @@ persistent actor class Main(governorInit : Principal) {
     };
     folders := folders.concat([folder]);
     #Ok(folder)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func update_folder(
@@ -349,6 +362,8 @@ persistent actor class Main(governorInit : Principal) {
     description : ?Text,
     color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (folderFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -366,11 +381,15 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Soft delete. Refuses while the folder still has live subfolders or files
   // so the tree never orphans live content.
   public shared ({ caller }) func delete_folder(id : Text) : async { #Ok : Types.VaultFolder; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (folderFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -386,6 +405,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // mini_league_id filters to one mini league's folders; null returns all
@@ -421,6 +442,8 @@ persistent actor class Main(governorInit : Principal) {
   // Location-only, fresh authority check. Includes trash and competition
   // items so restore/share dispatch never guesses their owning club.
   public shared ({ caller }) func read_resource_club(kind : Text, id : Text) : async { #Ok : ?Text; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller); if (not valid(id)) return #Err("Invalid id");
     let folder = if (kind == "folder") folders.find(func(f) = f.id == id) else null;
@@ -440,9 +463,13 @@ persistent actor class Main(governorInit : Principal) {
     if (folder != null and folders.find(func(f) = f.id == id) != folder) return #Ok(null);
     if (file != null and files.find(func(f) = f.id == id) != file) return #Ok(null);
     #Ok(?club)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func list_competition_folders(competition_id : Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     let access = switch (await getCompetitionAccess(caller, competition_id)) {
@@ -456,9 +483,13 @@ persistent actor class Main(governorInit : Principal) {
       folder.deleted_at_ms == null and
       (folder.restricted_roles.size() == 0 or access.can_manage)
     ))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func get_competition_folder(id : Text) : async { #Ok : ?Types.VaultFolder; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     switch (folders.find(func(folder) = folder.id == id and folder.deleted_at_ms == null and folder.competition_id != null)) {
@@ -479,6 +510,8 @@ persistent actor class Main(governorInit : Principal) {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func register_file(
@@ -495,6 +528,8 @@ persistent actor class Main(governorInit : Principal) {
     mini_league_id : ?Text,
     competition_id : ?Text,
   ) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -539,6 +574,8 @@ persistent actor class Main(governorInit : Principal) {
     mediaEvidenceRevision += 1;
     files := files.concat([file]);
     #Ok(file)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Single-file lookup, same visibility rule as list_files: a file whose
@@ -587,6 +624,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func list_competition_files_with_folder(folder_id : Text, competition_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     let access = switch (await getCompetitionAccess(caller, competition_id)) {
@@ -608,6 +647,8 @@ persistent actor class Main(governorInit : Principal) {
       file.folder_id == folder_id and
       file.deleted_at_ms == null
     ).map(withFolderJoin))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
@@ -642,6 +683,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func trash_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -656,9 +699,13 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func restore_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -673,9 +720,13 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func rename_file(id : Text, name : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -691,6 +742,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Moves a file into another folder of the same club and adopts that
@@ -698,6 +751,8 @@ persistent actor class Main(governorInit : Principal) {
   // root (no folder) and leaves its team scope unchanged — provisional
   // until the vault scope model is verified post-deploy.
   public shared ({ caller }) func move_file(id : Text, folder_id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (fileFenced(id) or folderFenced(folder_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -726,12 +781,16 @@ persistent actor class Main(governorInit : Principal) {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Hard delete — removes the metadata row outright. File bytes live outside
   // this canister (Supabase storage today, the blob store later), so byte
   // cleanup stays with the storage layer.
   public shared ({ caller }) func delete_file_permanent(id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -745,6 +804,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
@@ -778,6 +839,8 @@ persistent actor class Main(governorInit : Principal) {
     root_id : ?Text,
     enabled : Bool,
   ) : async { #Ok : Types.PinnedVault; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -823,6 +886,8 @@ persistent actor class Main(governorInit : Principal) {
     };
     pinned_vaults := pinned_vaults.filter(func(item) = not (item.chat_type == chat_type and item.chat_id == chat_id)).concat([pin]);
     #Ok(pin)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func get_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok : ?Types.PinnedVault; #Err : Text } {
@@ -832,6 +897,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func clear_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     switch (pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id)) {
@@ -842,6 +909,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ---------- On-chain vault backups (governor/app-admin only) ----------
@@ -857,6 +926,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_backup(backup_label : Text) : async { #Ok : Types.Backup; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
@@ -871,6 +942,8 @@ persistent actor class Main(governorInit : Principal) {
     };
     backups := backups.concat([backup]);
     #Ok(backup)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func list_backups() : async { #Ok : [Types.BackupSummary]; #Err : Text } {
@@ -900,6 +973,8 @@ persistent actor class Main(governorInit : Principal) {
   // can't clobber newer edits made after the snapshot was taken. Returns the
   // number of folders/files actually re-inserted.
   public shared ({ caller }) func restore_backup(id : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (transferFences.size() > 0) return #Err("Restore is blocked while a club transfer is in progress");
     auth(caller);
@@ -920,15 +995,21 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(restored)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func delete_backup(id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not backups.any(func(b : Types.Backup) : Bool = b.id == id)) return #Err("Backup not found");
     backups := backups.filter(func(b : Types.Backup) : Bool = b.id != id);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Permanently removes the caller's own vault content during account
@@ -962,6 +1043,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func rekey_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #err("Forbidden");
+    if (removalReceiver.denied(old) or removalReceiver.denied(new_principal)) return #err("Removed identity cannot be rekeyed or merged");
     if (old.equal(Principal.anonymous()) or new_principal.equal(Principal.anonymous())) return #err("Invalid principal");
     if (old.equal(new_principal)) return #err("old and new principal must differ");
     if (isGovernor(old)) return #err("Cannot rekey the governor");
@@ -1074,13 +1156,19 @@ persistent actor class Main(governorInit : Principal) {
 
   // Protected consensus reads for the opt-in local account-removal rehearsal.
   public shared ({ caller }) func read_account_list_folders(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller); auth(caller);
     if (not (await currentClubMember(caller, club))) return #Err("Club membership required");
     #Ok(folders.filter(func(item) = item.club == club and item.competition_id == null and item.deleted_at_ms == null and
       (team == null or item.team == team or item.team == null) and (mini_league_id == null or item.mini_league_id == mini_league_id) and canViewFolder(caller, item)))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_folder(id : Text) : async { #Ok : ?Types.VaultFolder; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
@@ -1091,16 +1179,24 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(?folder)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_file(id : Text) : async { #Ok : ?Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller); auth(caller);
     let file = switch (files.find(func(f) = f.id == id and f.deleted_at_ms == null and f.competition_id == null)) { case null return #Ok(null); case (?f) f };
     if (not (await accountFileAccess(caller, file))) return #Ok(null);
     #Ok(?file)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_files(folder_id : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
@@ -1111,8 +1207,12 @@ persistent actor class Main(governorInit : Principal) {
     };
     let visible = await accountFiles(caller, files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null));
     #Ok(visible)
+  
+    } finally { removalReceiver.leave(caller) };
   };
   public shared ({ caller }) func read_account_list_files_with_folder(folder_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
@@ -1123,8 +1223,12 @@ persistent actor class Main(governorInit : Principal) {
     };
     let visible = await accountFiles(caller, files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null and item.competition_id == null));
     #Ok(visible.map(withFolderJoin))
+  
+    } finally { removalReceiver.leave(caller) };
   };
   public shared ({ caller }) func read_account_list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     let visible = await accountFiles(caller, files.filter(func(item) =
@@ -1138,8 +1242,12 @@ persistent actor class Main(governorInit : Principal) {
         case (?folder) { canViewFolder(caller, folder) };
       })));
     #Ok(visible)
+  
+    } finally { removalReceiver.leave(caller) };
   };
   public shared ({ caller }) func read_account_list_club_files_with_folder(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     let visible = await accountFiles(caller, files.filter(func(item) =
@@ -1153,26 +1261,42 @@ persistent actor class Main(governorInit : Principal) {
         case (?folder) { canViewFolder(caller, folder) };
       })));
     #Ok(visible.map(withFolderJoin))
+  
+    } finally { removalReceiver.leave(caller) };
   };
   public shared ({ caller }) func read_account_list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     let visible = await accountFiles(caller, files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null));
     #Ok(visible)
+  
+    } finally { removalReceiver.leave(caller) };
   };
   public shared ({ caller }) func read_account_list_trashed_files_with_folder(club : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     let visible = await accountFiles(caller, files.filter(func(item) = item.club == club and item.deleted_at_ms != null and item.competition_id == null));
     #Ok(visible.map(withFolderJoin))
+  
+    } finally { removalReceiver.leave(caller) };
   };
   public shared ({ caller }) func read_account_get_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok : ?Types.PinnedVault; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     #Ok(pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_backups() : async { #Ok : [Types.BackupSummary]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
@@ -1180,9 +1304,13 @@ persistent actor class Main(governorInit : Principal) {
       { id = b.id; backup_label = b.backup_label; created_at_ms = b.created_at_ms; created_by = b.created_by;
         folder_count = b.folders.size(); file_count = b.files.size() }
     }))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_backup(id : Text) : async { #Ok : Types.Backup; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
@@ -1190,5 +1318,13 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Backup not found") };
       case (?backup) { #Ok(backup) };
     }
+  
+    } finally { removalReceiver.leave(caller) };
+  };
+  public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
+    removalReceiver.prepare(caller, request)
+  };
+  public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    removalReceiver.receipt(caller, request, Principal.fromActor(this), 0)
   };
 }

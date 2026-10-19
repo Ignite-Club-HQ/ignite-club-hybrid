@@ -49,6 +49,7 @@ const MEM_SUPPLEMENTAL_INVENTORY: u8 = 11;
 const MEM_REMOVAL_GENERATION: u8 = 12;
 const MEM_REMOVAL_INTENTS: u8 = 13;
 const MEM_REMOVAL_SUBJECTS: u8 = 14;
+const MEM_REMOVAL_RECEIPTS: u8 = 15;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -463,6 +464,8 @@ thread_local! {
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_INTENTS)));
     static REMOVAL_SUBJECTS: RefCell<StableBTreeMap<String, String, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_SUBJECTS)));
+    static REMOVAL_RECEIPTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_RECEIPTS)));
 }
 fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {
     REMOVAL_INTENTS.with(|m| m.borrow().get(&account_id.to_string())).map(|bytes| decode(&bytes))
@@ -509,6 +512,29 @@ async fn begin_account_removal(account_id: String, expected_history_revision: u6
 fn read_account_removal_intent(account_id: String) -> Outcome<removal_barrier::Intent> {
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     removal_intent(&account_id).ok_or("Removal intent missing".into())
+}
+// A bounded one-receiver step: retries always re-read the real receiver.
+// Stored receipts are recovery evidence, never cached permission to complete.
+#[ic_cdk::update]
+async fn advance_account_removal_receiver(account_id: String, target: Principal) -> Outcome<removal_barrier::Receipt> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    let intent = removal_intent(&account_id).ok_or("Removal intent missing")?;
+    if !intent.targets.contains(&target) { return Err("Receiver outside frozen removal inventory".into()); }
+    let request = intent.request();
+    let reply = ic_cdk::call::Call::bounded_wait(target, "prepare_account_removal")
+        .with_arg(&request).await.map_err(|_| "Receiver fence unavailable; intent remains locked")?;
+    let prepared: Outcome<()> = reply.candid().map_err(|_| "Invalid receiver fence reply")?;
+    prepared?;
+    if removal_intent(&account_id).as_ref() != Some(&intent) { return Err("Removal intent changed".into()); }
+    let reply = ic_cdk::call::Call::bounded_wait(target, "read_account_removal_drain")
+        .with_arg(&request).await.map_err(|_| "Receiver drain unavailable; intent remains locked")?;
+    let result: Outcome<removal_barrier::Receipt> = reply.candid().map_err(|_| "Invalid receiver drain reply")?;
+    let receipt = result?;
+    if removal_intent(&account_id).as_ref() != Some(&intent) { return Err("Removal intent changed".into()); }
+    intent.validate_receipt(target, &receipt)?;
+    REMOVAL_RECEIPTS.with(|m| m.borrow_mut().insert(format!("{}:{}", account_id, target.to_text()), encode(&receipt)));
+    bump_removal_history();
+    Ok(receipt)
 }
 fn group_inventory_binding() -> Option<group_inventory::Binding> {
     GROUP_INVENTORY_BINDING.with(|m| if m.borrow().get().is_empty() { None } else { Some(decode(m.borrow().get())) })

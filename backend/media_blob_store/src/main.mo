@@ -1,4 +1,6 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import RemovalReceiver "../../shared/RemovalReceiver";
+import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -49,9 +51,15 @@ persistent actor MediaBlobStore {
   transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
     case (?id) ?Principal.fromText(id); case null null
   };
+  var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
+  var removal_subjects : Map.Map<Principal, Text>;
+  var removal_active : Map.Map<Principal, Nat>;
+  transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
   func admitAccount(subject : Principal) : async () {
-    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
+    let eligible = await accountAdmission.eligible(subject);
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
@@ -333,7 +341,9 @@ persistent actor MediaBlobStore {
     if (op.status != #reserving) return #Err("Upload cannot be resumed");
     let ?service = quotaService() else return #Err("Quota authority unset; retry begin");
     try {
+      if (removalReceiver.denied(upload.owner)) { ignore await abortShared(upload.id); return #Err("Account removal fenced") };
       let result = await service.reserve_media_quota(upload.id, op.club_id, op.category, op.bytes, op.cycle);
+      if (removalReceiver.denied(upload.owner)) { ignore await abortShared(upload.id); return #Err("Account removal fenced") };
       bumpInventory();
       // Concurrent abort/finalize must never be overwritten by a callback.
       let ?latest = quota_operations.get(upload.id) else return #Err("Missing quota journal");
@@ -624,6 +634,8 @@ persistent actor MediaBlobStore {
   // ==================== Upload protocol ====================
 
   public shared ({ caller }) func begin_upload(path : Text, mime : Text, total_size : Nat64, chunk_count : Nat32) : async ResultUploadId {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
@@ -698,9 +710,13 @@ persistent actor MediaBlobStore {
       }
     };
     #Ok(id)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func put_chunk(upload_id : Text, index : Nat32, data : Blob) : async Result {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     switch (findUpload(upload_id)) {
@@ -721,9 +737,13 @@ persistent actor MediaBlobStore {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func finalize_upload(upload_id : Text) : async ResultFinalized {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     bumpInventory();
@@ -789,9 +809,13 @@ persistent actor MediaBlobStore {
         })
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func abort_upload(upload_id : Text) : async Result {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     if (not isGovernor<system>(caller)) await admitAccount(caller);
     auth(caller);
     bumpInventory();
@@ -812,6 +836,8 @@ persistent actor MediaBlobStore {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ==================== Reads ====================
@@ -865,6 +891,8 @@ persistent actor MediaBlobStore {
   };
 
   public shared ({ caller }) func delete_blob(path : Text) : async Result {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
@@ -883,6 +911,8 @@ persistent actor MediaBlobStore {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Serves ciphertext only — see the module header. No authorization here:
@@ -974,6 +1004,7 @@ persistent actor MediaBlobStore {
     auth(caller);
     if (not isGovernor<system>(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Removed identity cannot be rekeyed or merged");
     if (old.equal(new)) return #err("old and new principal must differ");
     if (isGovernor<system>(old)) return #err("Cannot rekey the governor");
 
@@ -1110,6 +1141,8 @@ persistent actor MediaBlobStore {
 
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_get_upload_outcome(upload_id : Text) : async { #Ok : ?FinalizedBlob; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     switch (quota_operations.get(upload_id)) {
       case (?op) {
@@ -1118,5 +1151,29 @@ persistent actor MediaBlobStore {
       };
       case null #Err("Unknown upload")
     }
+  
+    } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
+    switch (removalReceiver.prepare(caller, request)) {
+      case (#Err(message)) #Err(message);
+      case (#Ok) {
+        // Purely local unfinished uploads can be discarded atomically. Shared
+        // quota outcomes retain their journals until cancellation/commit settles.
+        pending_uploads := pending_uploads.filter(func(u) {
+          not removalReceiver.denied(u.owner) or quota_operations.get(u.id) != null
+        });
+        bumpInventory(); #Ok
+      }
+    }
+  };
+  public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    var unresolved = 0;
+    for (upload in pending_uploads.values()) { if (request.subjects.any(func(p) = p == upload.owner)) unresolved += 1 };
+    for ((_, op) in quota_operations.entries()) {
+      if (request.subjects.any(func(p) = p == op.owner) and op.status != #committed and op.status != #aborted) unresolved += 1
+    };
+    removalReceiver.receipt(caller, request, Principal.fromActor(MediaBlobStore), unresolved)
   };
 };

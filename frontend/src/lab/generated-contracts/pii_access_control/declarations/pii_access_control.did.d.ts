@@ -107,6 +107,11 @@ export interface Main {
   >,
   'my_guardian_children' : ActorMethod<[], Array<string>>,
   'pii_vetkey_verification_key' : ActorMethod<[], Uint8Array>,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_grants' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -119,6 +124,11 @@ export interface Main {
   >,
   'read_account_audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
   'read_account_my_guardian_children' : ActorMethod<[], Array<string>>,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'read_club_media_authority' : ActorMethod<
     [string],
     { 'Ok' : ClubMediaAuthority } |
@@ -205,6 +215,17 @@ export interface Main {
 export interface PiiDeleteResult {
   'shredded_at' : bigint,
   'key_destroyed' : boolean,
+}
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

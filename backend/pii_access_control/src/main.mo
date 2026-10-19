@@ -1,4 +1,6 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import RemovalReceiver "../../shared/RemovalReceiver";
+import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 /// PII Access Control Canister
 /// Mediates access to personally identifiable information (PII) with
@@ -44,15 +46,21 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import ManagementCanister "mo:ic-vetkeys/ManagementCanister";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
   transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
   transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
     case (?id) ?Principal.fromText(id); case null null
   };
+  var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
+  var removal_subjects : Map.Map<Principal, Text>;
+  var removal_active : Map.Map<Principal, Nat>;
+  transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
   func admitAccount(subject : Principal) : async () {
-    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
+    let eligible = await accountAdmission.eligible(subject);
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
@@ -506,6 +514,8 @@ persistent actor class Main(governorInit : Principal) {
     field_id : Text,
     transport_public_key : Blob
   ) : async { #Ok : [?Blob]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (pii_ids.size() > 25) return #Err("Batch too large");
@@ -550,6 +560,8 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     #Ok(out)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ==================== Per-club photo key ====================
@@ -609,6 +621,8 @@ persistent actor class Main(governorInit : Principal) {
     club_id : Text,
     transport_public_key : Blob
   ) : async { #Ok : Blob; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -648,6 +662,8 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (not unchanged()) return #Err("Media authority or transfer fence changed");
     #Ok(encryptedKey)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ==================== Public Methods ====================
@@ -672,6 +688,8 @@ persistent actor class Main(governorInit : Principal) {
     ciphertext : [Nat8],
     domain_owner : Principal
   ) : async { #Ok : EncryptedPii; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
 
@@ -722,6 +740,8 @@ persistent actor class Main(governorInit : Principal) {
       nonce = [];
       master_key_id = vetkeySchemeId();
     })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Batch read of encrypted PII fields. The canister returns ciphertext only
@@ -734,6 +754,8 @@ persistent actor class Main(governorInit : Principal) {
     operation : Text,
     purpose : Text
   ) : async { #Ok : [EncryptedPii]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (pii_ids.size() > 100) return #Err("Batch too large");
@@ -767,6 +789,8 @@ persistent actor class Main(governorInit : Principal) {
     await admitAccount(caller);
     if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     #Ok(out)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Grants a reader read access to a record. The caller must be the
@@ -775,6 +799,8 @@ persistent actor class Main(governorInit : Principal) {
   // lets a verified guardian extend read access (e.g. to a co-guardian)
   // without needing domain-owner rights over the whole id space.
   public shared ({ caller }) func grant_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (reader.equal(Principal.anonymous())) return #Err("Invalid reader");
@@ -793,6 +819,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Registers a verified guardian relationship: `guardian` may thereafter
@@ -802,6 +830,8 @@ persistent actor class Main(governorInit : Principal) {
   // guardian (self-registration — a caller can never claim guardianship on
   // another principal's behalf).
   public shared ({ caller }) func add_guardian_relationship(guardian : Principal, child_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (guardian.equal(Principal.anonymous())) return #Err("Invalid guardian");
@@ -827,12 +857,16 @@ persistent actor class Main(governorInit : Principal) {
     };
     log_audit(caller, child_id, "guardian_relationship", "add", true, "Guardian relationship registered");
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Removes a guardian relationship. Callable by the governor, or by the
   // guardian themself (a guardian may always revoke their own standing
   // link, e.g. after a custody change).
   public shared ({ caller }) func remove_guardian_relationship(guardian : Principal, child_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (not isGovernor(caller) and not caller.equal(guardian)) {
@@ -845,6 +879,8 @@ persistent actor class Main(governorInit : Principal) {
     );
     log_audit(caller, child_id, "guardian_relationship", "remove", true, "Guardian relationship removed");
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Lists the pii_ids (children) the caller is a verified guardian of.
@@ -863,6 +899,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func revoke_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
@@ -875,6 +913,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Sets the club_domain canister used to verify club membership for
@@ -899,6 +939,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func grant_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (field_id != "blob" or competition_id == "" or competition_id.size() > 128) return #Err("Invalid competition grant");
@@ -937,9 +979,13 @@ persistent actor class Main(governorInit : Principal) {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func revoke_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     switch (pii_records.find(func(record) = record.pii_id == pii_id and record.field_id == field_id)) {
@@ -952,12 +998,16 @@ persistent actor class Main(governorInit : Principal) {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Grants every member of `club_id` (verified via club_domain at read
   // time) read access to one record — e.g. a child's name so coaches can
   // render event rosters. Governor or the record's domain owner only.
   public shared ({ caller }) func grant_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -974,10 +1024,14 @@ persistent actor class Main(governorInit : Principal) {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Removes a club-scoped read grant. Governor or domain owner only.
   public shared ({ caller }) func revoke_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
@@ -991,6 +1045,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Removes every club-scoped read grant for a permanently deleted club.
@@ -1021,6 +1077,8 @@ persistent actor class Main(governorInit : Principal) {
     pii_id : Text,
     field_id : Text
   ) : async { #Ok : PiiDeleteResult; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
 
@@ -1050,6 +1108,8 @@ persistent actor class Main(governorInit : Principal) {
         #Err("PII record not found")
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared query ({ caller }) func audit_access(filter : AuditFilter) : async [AuditRecord] {
@@ -1126,6 +1186,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Removed identity cannot be rekeyed or merged");
     if (old.equal(new)) return #err("old and new principal must differ");
     if (isGovernor(old)) return #err("Cannot rekey the governor");
 
@@ -1202,6 +1263,8 @@ persistent actor class Main(governorInit : Principal) {
 
   // Protected consensus reads for the opt-in local account-removal rehearsal.
   public shared ({ caller }) func read_account_my_guardian_children() : async [Text] {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     let id = switch (club_domain_canister) { case null return []; case (?id) id };
@@ -1213,9 +1276,13 @@ persistent actor class Main(governorInit : Principal) {
       if (allowed and club_domain_canister == ?id) out := out.concat([child]);
     };
     out
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_audit_access(filter : AuditFilter) : async [AuditRecord] {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
     await admitAccount(caller);
     auth(caller);
     if (not isGovernor(caller)) Runtime.trap("Governor only");
@@ -1243,5 +1310,18 @@ persistent actor class Main(governorInit : Principal) {
       };
       principal_match and field_match and pii_match and time_from_match and time_to_match
     })
+  
+    } finally { removalReceiver.leave(caller) };
   };
-}
+  
+  public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
+    let fresh = removal_intents.get(request.account_id) == null;
+    switch (removalReceiver.prepare(caller, request)) {
+      case (#Err(message)) #Err(message);
+      case (#Ok) { if (fresh) mediaAuthEpoch += 1; #Ok }
+    }
+  };
+  public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    removalReceiver.receipt(caller, request, Principal.fromActor(this), 0)
+  };
+};

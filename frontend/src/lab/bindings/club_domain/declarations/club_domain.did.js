@@ -547,7 +547,7 @@ export const idlFactory = ({ IDL }) => {
     'Remove' : IDL.Record({ 'id' : IDL.Text }),
     'Reorder' : IDL.Record({ 'first' : IDL.Text, 'second' : IDL.Text }),
   });
-  const Request = IDL.Record({
+  const Request__1 = IDL.Record({
     'request_id' : IDL.Text,
     'club' : IDL.Text,
     'operation' : Operation,
@@ -556,6 +556,12 @@ export const idlFactory = ({ IDL }) => {
   const Mutation = IDL.Record({
     'link' : IDL.Opt(Link),
     'revision' : IDL.Nat64,
+  });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
   });
   const ProfileTeamHistoryEntry = IDL.Record({
     'season_start_date' : IDL.Text,
@@ -570,6 +576,11 @@ export const idlFactory = ({ IDL }) => {
     'club_name' : IDL.Text,
     'club_id' : IDL.Text,
     'season_status' : IDL.Text,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
   });
   const Reference = IDL.Record({
     'url' : IDL.Text,
@@ -1492,11 +1503,16 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'mutate' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Mutation, 'Err' : IDL.Text })],
         [],
       ),
     'my_role_grants' : IDL.Func([], [IDL.Vec(RoleGrant)], ['query']),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'prepare_media_quota_reservation' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
         [Result],
@@ -1873,6 +1889,11 @@ export const idlFactory = ({ IDL }) => {
     'read_account_read_season_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'read_account_whoami' : IDL.Func(

@@ -169,6 +169,11 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
@@ -233,6 +238,11 @@ export interface Main {
   'read_account_list_trashed_files_with_folder' : ActorMethod<
     [string],
     { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   'read_club_media_references' : ActorMethod<
@@ -346,12 +356,23 @@ export interface PinnedVault {
   'vault_file_id' : [] | [string],
   'chat_type' : string,
 }
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
 export interface Reference {
   'url' : string,
   'path' : [] | [string],
   'content_hash' : [] | [string],
   'store' : [] | [string],
   'resource_id' : string,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface VaultFile {
   'id' : string,

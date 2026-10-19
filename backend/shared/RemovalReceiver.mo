@@ -1,0 +1,56 @@
+import Map "mo:core/Map";
+import Principal "mo:core/Principal";
+import Text "mo:core/Text";
+import Blob "mo:core/Blob";
+
+// Receiver-local persistent fences. A receipt is NOT global completion.
+module {
+  public type Request = { account_id : Text; generation : Nat64; inventory_digest : Blob; subjects : [Principal] };
+  public type Receipt = { request : Request; receiver : Principal; outstanding : Nat };
+  public class Gate(enabled : Bool, authority : ?Principal,
+    intents : Map.Map<Text, Request>, subjects : Map.Map<Principal, Text>, active : Map.Map<Principal, Nat>) {
+    public func denied(subject : Principal) : Bool { subjects.containsKey(subject) };
+    public func enter(subject : Principal) : Bool {
+      if (not enabled) return true;
+      if (denied(subject)) return false;
+      let count = switch (active.get(subject)) { case null 0; case (?n) n };
+      if (count >= 200 or (count == 0 and active.size() >= 100_000)) return false;
+      active.add(subject, count + 1);
+      true
+    };
+    public func leave(subject : Principal) {
+      if (not enabled) return;
+      switch (active.get(subject)) {
+        case (?n) { if (n <= 1) active.remove(subject) else active.add(subject, n - 1) };
+        case null {}
+      }
+    };
+    public func prepare(caller : Principal, request : Request) : { #Ok; #Err : Text } {
+      if (not enabled or authority != ?caller or Principal.isAnonymous(caller)) return #Err("Configured rehearsal identity required");
+      if (request.account_id == "" or request.account_id.size() > 128 or request.generation == 0 or request.inventory_digest.size() != 32 or request.subjects.size() == 0 or request.subjects.size() > 8) return #Err("Invalid removal fence");
+      switch (intents.get(request.account_id)) {
+        case (?prior) { return if (prior == request) #Ok else #Err("Immutable removal fence conflict") };
+        case null {}
+      };
+      if (intents.size() >= 10_000 or subjects.size() + request.subjects.size() > 80_000) return #Err("Removal fence capacity reached");
+      var unique = Map.empty<Principal, Bool>();
+      for (subject in request.subjects.values()) {
+        if (Principal.isAnonymous(subject) or subject == Principal.fromText("aaaaa-aa") or unique.containsKey(subject) or subjects.containsKey(subject)) return #Err("Invalid or previously fenced subject");
+        unique.add(subject, true)
+      };
+      // Entire request validated before any persistent mutation. No awaits.
+      intents.add(request.account_id, request);
+      for (subject in request.subjects.values()) subjects.add(subject, request.account_id);
+      #Ok
+    };
+    public func receipt(caller : Principal, request : Request, receiver : Principal, pending : Nat) : { #Ok : Receipt; #Err : Text } {
+      if (not enabled or authority != ?caller or Principal.isAnonymous(caller)) return #Err("Configured rehearsal identity required");
+      if (intents.get(request.account_id) != ?request) return #Err("Exact persistent removal fence required");
+      var outstanding = pending;
+      for (subject in request.subjects.values()) {
+        outstanding += switch (active.get(subject)) { case null 0; case (?n) n }
+      };
+      #Ok({ request; receiver; outstanding })
+    }
+  }
+}

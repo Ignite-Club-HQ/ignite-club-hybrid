@@ -51,11 +51,12 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface HttpRequest {
-    url: string;
-    method: string;
-    body: Uint8Array;
-    headers: Array<HeaderField>;
+export interface FreeUsageRow {
+    count: bigint;
+    cycle: bigint;
+    category: string;
+    bytes: bigint;
+    club_id: string;
 }
 export interface Cursor {
     after: string;
@@ -67,10 +68,21 @@ export interface Health {
     version: string;
     blob_count: bigint;
 }
+export interface Request {
+    account_id: string;
+    inventory_digest: Uint8Array;
+    subjects: Array<Principal>;
+    generation: bigint;
+}
 export interface FinalizedBlob {
     path: string;
     content_hash: string;
     content_length: bigint;
+}
+export interface Receipt {
+    outstanding: bigint;
+    request: Request;
+    receiver: Principal;
 }
 export interface Entry {
     unsettled: boolean;
@@ -137,13 +149,11 @@ export interface HttpResponse {
     };
     status_code: number;
 }
-export type HeaderField = [string, string];
-export interface FreeUsageRow {
-    count: bigint;
-    cycle: bigint;
-    category: string;
-    bytes: bigint;
-    club_id: string;
+export interface HttpRequest {
+    url: string;
+    method: string;
+    body: Uint8Array;
+    headers: Array<HeaderField>;
 }
 export interface MediaUsage {
     count: bigint;
@@ -152,6 +162,7 @@ export interface MediaUsage {
     category: string;
     bytes: bigint;
 }
+export type HeaderField = [string, string];
 export enum Phase {
     pending = "pending",
     done = "done",
@@ -222,6 +233,13 @@ export interface media_blob_storeInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    prepare_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
     quota_snapshot_page(offset: bigint): Promise<{
         total: bigint;
@@ -233,6 +251,13 @@ export interface media_blob_storeInterface {
     read_account_get_upload_outcome(upload_id: string): Promise<{
         __kind__: "Ok";
         Ok: FinalizedBlob | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_removal_drain(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
     } | {
         __kind__: "Err";
         Err: string;
@@ -274,7 +299,7 @@ export interface media_blob_storeInterface {
         legacy_count: bigint;
     }>;
 }
-import type { Cursor as _Cursor, Entry as _Entry, FinalizedBlob as _FinalizedBlob, HeaderField as _HeaderField, HttpResponse as _HttpResponse, MediaUsage as _MediaUsage, Page as _Page, Phase as _Phase, Result as _Result, ResultFinalized as _ResultFinalized, ResultUploadId as _ResultUploadId, StreamResponse as _StreamResponse, StreamToken as _StreamToken } from "./declarations/media_blob_store.did";
+import type { Cursor as _Cursor, Entry as _Entry, FinalizedBlob as _FinalizedBlob, HeaderField as _HeaderField, HttpResponse as _HttpResponse, MediaUsage as _MediaUsage, Page as _Page, Phase as _Phase, Receipt as _Receipt, Result as _Result, ResultFinalized as _ResultFinalized, ResultUploadId as _ResultUploadId, StreamResponse as _StreamResponse, StreamToken as _StreamToken } from "./declarations/media_blob_store.did";
 export class Media_blob_store implements media_blob_storeInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async abort_upload(arg0: string): Promise<Result> {
@@ -384,6 +409,16 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.migrate_legacy_blob();
         return from_candid_variant_n41(result);
     }
+    async prepare_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.prepare_account_removal(arg0);
+        return from_candid_variant_n2(result);
+    }
     async put_chunk(arg0: string, arg1: number, arg2: Uint8Array): Promise<Result> {
         const result = await this.actor.put_chunk(arg0, arg1, arg2);
         return from_candid_Result_n1(result);
@@ -408,6 +443,16 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.read_account_get_upload_outcome(arg0);
         return from_candid_variant_n31(result);
     }
+    async read_account_removal_drain(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_removal_drain(arg0);
+        return from_candid_variant_n42(result);
+    }
     async reconcile_upload_operations(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -419,7 +464,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.reconcile_upload_operations(arg0);
-        return from_candid_variant_n42(result);
+        return from_candid_variant_n43(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -442,7 +487,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.retire_upload_outcomes(arg0);
-        return from_candid_variant_n43(result);
+        return from_candid_variant_n44(result);
     }
     async set_capacity_limit(arg0: bigint): Promise<Result> {
         const result = await this.actor.set_capacity_limit(arg0);
@@ -847,6 +892,25 @@ function from_candid_variant_n41(value: {
     } : value;
 }
 function from_candid_variant_n42(value: {
+    Ok: _Receipt;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Receipt;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n43(value: {
     Ok: {
         attempted: bigint;
         cursor: string;
@@ -871,7 +935,7 @@ function from_candid_variant_n42(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n43(value: {
+function from_candid_variant_n44(value: {
     Ok: {
         cursor: string;
         removed: bigint;

@@ -36,6 +36,17 @@ export const idlFactory = ({ IDL }) => {
     'nonce' : IDL.Vec(IDL.Nat8),
     'field_id' : IDL.Text,
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
   const ClubMediaAuthority = IDL.Record({
     'move_id' : IDL.Text,
     'authority' : IDL.Opt(IDL.Principal),
@@ -127,6 +138,11 @@ export const idlFactory = ({ IDL }) => {
         ['composite_query'],
       ),
     'pii_vetkey_verification_key' : IDL.Func([], [IDL.Vec(IDL.Nat8)], []),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_club_grants' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
@@ -143,6 +159,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_account_my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], []),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
     'read_club_media_authority' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubMediaAuthority, 'Err' : IDL.Text })],

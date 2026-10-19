@@ -994,8 +994,17 @@ export interface Main {
     { 'Ok' : SeasonTeamAssignment } |
       { 'Err' : string }
   >,
-  'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
+  'mutate' : ActorMethod<
+    [Request__1],
+    { 'Ok' : Mutation } |
+      { 'Err' : string }
+  >,
   'my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'prepare_media_quota_reservation' : ActorMethod<
     [Principal, string, string, string, bigint],
     Result
@@ -1305,6 +1314,11 @@ export interface Main {
   'read_account_read_season_club' : ActorMethod<
     [string],
     { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   'read_account_whoami' : ActorMethod<
@@ -2031,6 +2045,11 @@ export interface PromoCode {
   'club_id' : [] | [string],
   'expires_at_ms' : [] | [bigint],
 }
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
 export interface Reference {
   'url' : string,
   'path' : [] | [string],
@@ -2045,6 +2064,12 @@ export interface RemovedMember {
   'removed_by' : Principal,
 }
 export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
+}
+export interface Request__1 {
   'request_id' : string,
   'club' : string,
   'operation' : Operation,

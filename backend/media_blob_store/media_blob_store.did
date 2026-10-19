@@ -30,6 +30,19 @@ type Result =
    Err: text;
    Ok;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
 type Phase = 
  variant {
    done;
@@ -171,6 +184,10 @@ service : {
             remaining: nat;
           };
     });
+  prepare_account_removal: (request: Request) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
   put_chunk: (upload_id: text, index: nat32, data: blob) -> (Result);
   quota_snapshot_page: (offset: nat) ->
    (record {
@@ -184,6 +201,11 @@ service : {
    (variant {
       Err: text;
       Ok: opt FinalizedBlob;
+    });
+  read_account_removal_drain: (request: Request) ->
+   (variant {
+      Err: text;
+      Ok: Receipt;
     });
   reconcile_upload_operations: (cursor: text) ->
    (variant {
