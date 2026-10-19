@@ -2,6 +2,7 @@ import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { IDL } from '@icp-sdk/core/candid';
 import { Principal } from '@icp-sdk/core/principal';
+import { DerivedPublicKey, EncryptedVetKey, TransportSecretKey, IbeCiphertext, IbeIdentity, IbeSeed } from '@icp-sdk/vetkeys';
 import { configureProvisionGroup, groupConfigurationPlan } from './groupProvisionConfiguration';
 import { PER_GROUP_DOMAINS, type Provision } from './groupProvisioner';
 const enabled = Boolean(process.env.NEW_GROUP_FULL_REPLICA && process.env.POCKET_IC_BIN);
@@ -102,8 +103,20 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     expect(ok(await actor('timer_jobs', worker).claim(1n, 10)).some((j: any) => j.id === job.id)).toBe(true);
     ok(await actor('timer_jobs', worker).complete(job.id, 'group-job'));
     blob.actor.setPrincipal(member);
-    const upload = ok(await blob.actor.begin_upload('clubs/new-club/gallery/one.jpg', 'image/jpeg', 3n, 1));
-    ok(await blob.actor.put_chunk(upload, 0, [1, 2, 3])); ok(await blob.actor.finalize_upload(upload));
+    const verification = DerivedPublicKey.deserialize(Uint8Array.from(await pii.pii_vetkey_verification_key()));
+    const mediaIdentity = new TextEncoder().encode('clubmedia:new-club\u001fblob');
+    const plain = new TextEncoder().encode('Private complete-group photo');
+    const cipher = IbeCiphertext.encrypt(verification, IbeIdentity.fromBytes(mediaIdentity), plain, IbeSeed.random()).serialize();
+    const upload = ok(await blob.actor.begin_upload('clubs/new-club/gallery/one.jpg', 'image/jpeg', BigInt(cipher.length), 1));
+    ok(await blob.actor.put_chunk(upload, 0, cipher)); ok(await blob.actor.finalize_upload(upload));
+    const decryptPhoto = async () => {
+      const transport = TransportSecretKey.random();
+      const encryptedKey = ok(await actor('pii_access_control', member).get_club_media_vetkey('new-club', transport.publicKeyBytes()));
+      const key = EncryptedVetKey.deserialize(Uint8Array.from(encryptedKey)).decryptAndVerify(transport, verification, mediaIdentity);
+      const response = await blob.actor.http_request({ url: '/clubs/new-club/gallery/one.jpg', method: 'GET', headers: [], body: [] });
+      expect(IbeCiphertext.deserialize(Uint8Array.from(response.body)).decrypt(key)).toEqual(plain);
+    };
+    await decryptPhoto();
     expect((await blob.actor.http_request({ url: '/clubs/new-club/gallery/one.jpg', method: 'GET', headers: [], body: [] })).status_code).toBe(200);
     blob.actor.setPrincipal(outsider);
     await expect(blob.actor.begin_upload('clubs/new-club/gallery/denied.jpg', 'image/jpeg', 3n, 1)).rejects.toThrow();
@@ -112,15 +125,18 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
       let stats; try { stats = await service.actor.memory_stats(); } catch (e) { throw Error(`${name} health: ${String(e)}`); } expect(stats.memory_bytes, name).toBeGreaterThan(0n);
     }
     for (const [name, service] of services) {
-      await pic.upgradeCanister({ canisterId: service.canisterId, sender: governor, wasm: process.env[`${name.toUpperCase()}_WASM`] });
+      await pic.upgradeCanister({ canisterId: service.canisterId, sender: governor, wasm: process.env[`${name.toUpperCase()}_WASM`],
+        ...(name === 'timer_jobs' ? {} : { upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] }, arg: IDL.encode([IDL.Principal], [governor]) }) });
     }
     expect((await actor('events_domain', member).list_events(['new-club'], [])).some((r: any) => r.id === event.id)).toBe(true);
     expect(ok(await actor('messaging_domain', member).list_messages_page(conversation.id, [], 10)).messages.some((m: any) => m.id === message.id)).toBe(true);
     expect(ok(await actor('club_points_domain', member).get_user_points('new-club', member.toText()))).toBe(7);
     expect((await actor('media_metadata', member).get_asset(asset.id))[0].id).toBe(asset.id);
+    await decryptPhoto();
     ok(await actor('club_domain').remove_member('new-club', member));
     expect(await actor('mini_league_domain', member).create_mini_league('new-club', 'Removed', [], [], 5, 3, 10, ['red'], true)).toHaveProperty('Err');
     await expect(actor('media_blob_store', member).begin_upload('clubs/new-club/gallery/removed.jpg', 'image/jpeg', 3n, 1)).rejects.toThrow();
+    expect(await actor('pii_access_control', member).get_club_media_vetkey('new-club', TransportSecretKey.random().publicKeyBytes())).toHaveProperty('Err');
     expect(saved.phase).toBe('installed'); expect(saved.registration).toBeUndefined(); // Never enabled/registered by a health test.
   }, 120000);
 });
