@@ -10,8 +10,8 @@ import { planTransfer, TRANSFER_DOMAINS } from './groupTransfer';
 import { runTransfer, type TransferAdapter } from './groupTransferRunner';
 import { GROUP_DOMAINS } from './groupRouting';
 
-const policy = { deploymentId: 'ic', primarySubnet: 's1', additionalSubnetsEnabled: false, approvedSubnets: ['s1'] };
-const cap = (groupId: string, clubs: number): GroupCapacity => ({ groupId, deploymentId: 'ic', subnetId: 's1', enabled: true, clubs, maxDomainBytes: 1e8, dailyGrowthBytes: 0 });
+const policy = { deploymentId: 'ic', nowMs: 1, primarySubnet: 's1', additionalSubnetsEnabled: false, approvedSubnets: ['s1'] };
+const cap = (groupId: string, clubs: number): GroupCapacity => ({ groupId, deploymentId: 'ic', subnetId: 's1', enabled: true, ready: true, cyclesHealthy: true, clubs, maxDomainBytes: 1e8, dailyGrowthBytes: 0, capacity: { deploymentId: 'ic', observedAtMs: 1, requiredResources: ['clubs'], readings: [{ resource: 'clubs', used: clubs, testedLimit: MAX_CLUBS_PER_GROUP, evidence: 'local-fixture' }] } });
 
 function provisionWorld(crashAt = -1, subnet = 's1') {
   let revision = 2n; let created = 0; const saved: Provision[] = []; const registry: string[] = []; const enabled: string[] = [];
@@ -26,8 +26,8 @@ function provisionWorld(crashAt = -1, subnet = 's1') {
 }
 
 describe('integrated scaling rehearsal', () => {
-  it('places clubs on the least-loaded group, then asks to provision when all are full', () => {
-    expect(placeNewClub([cap('a', 10), cap('b', 3)], policy)).toEqual({ kind: 'place', groupId: 'b' });
+  it('fills an occupied group, then asks to provision when all are full', () => {
+    expect(placeNewClub([cap('a', 10), cap('b', 3)], policy)).toEqual({ kind: 'place', groupId: 'a' });
     expect(placeNewClub([cap('a', MAX_CLUBS_PER_GROUP), cap('b', MAX_CLUBS_PER_GROUP)], policy).kind).toBe('provision');
   });
 
