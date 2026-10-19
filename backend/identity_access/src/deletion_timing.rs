@@ -99,26 +99,6 @@ pub async fn cancel_account_deletion(account_id: String) -> Outcome<()> {
     DELETION_TICKETS.with(|m|m.borrow_mut().remove(&account_id)); Ok(())
 }
 #[ic_cdk::update]
-pub async fn rebase_account_deletion(account_id: String) -> Outcome<Ticket> {
-    if !account_group_rehearsal_enabled() { return Err("Bound deletion not released".into()); }
-    let caller=ic_cdk::api::msg_caller(); authorized(&account_id,caller)?;
-    let t=ticket(&account_id).ok_or("Missing deletion ticket")?;
-    recoverable(&t)?;
-    let binding=group_inventory_binding().ok_or("Deletion registry not pinned")?;
-    if binding==t.binding { return Ok(t); }
-    release(&t).await?;
-    let next=Ticket { account:t.account.clone(), binding };
-    // Persist the retargeted ticket BEFORE the new reservation; reply loss must not retarget it.
-    DELETION_TICKETS.with(|m|m.borrow_mut().insert(account_id.clone(),encode(&next)));
-    acquire(&next).await?;
-    authorized(&account_id,caller)?;
-    if account_is_erased(&account_id) { return Err("Deletion committed during rebase; settle instead".into()); }
-    if ticket(&account_id).as_ref()!=Some(&next) || get_account(&account_id).as_ref()!=Some(&next.account) || group_inventory_binding().as_ref()!=Some(&next.binding) {
-        return Err("Deletion account or binding changed; reservation retained".into());
-    }
-    Ok(next)
-}
-#[ic_cdk::update]
 pub async fn settle_account_deletion(account_id: String) -> Outcome<()> {
     if !account_group_rehearsal_enabled() { return Err("Bound deletion not released".into()); }
     let caller=ic_cdk::api::msg_caller();

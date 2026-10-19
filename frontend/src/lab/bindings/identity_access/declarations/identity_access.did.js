@@ -394,7 +394,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_principal_eligibility' : IDL.Func([IDL.Principal], [Result_17], []),
     'read_removal_history_manifest' : IDL.Func([], [Result_18], []),
-    'rebase_account_deletion' : IDL.Func([IDL.Text], [Result_14], []),
     'read_removal_history_page' : IDL.Func(
         [IDL.Nat64, RemovalHistoryCursor, IDL.Nat16],
         [Result_19],

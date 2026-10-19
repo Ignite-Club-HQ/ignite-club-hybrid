@@ -574,7 +574,6 @@ export interface _SERVICE {
    * never called `set_profile`.
    */
   'set_theme_preference' : ActorMethod<[[] | [string]], Result_11>,
-  'rebase_account_deletion' : ActorMethod<[string], Result_14>,
   'settle_account_deletion' : ActorMethod<[string], Result_2>,
   'whoami' : ActorMethod<[], Result>,
 }

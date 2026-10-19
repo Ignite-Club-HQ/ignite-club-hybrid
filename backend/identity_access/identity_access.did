@@ -415,7 +415,6 @@ service : (Init) -> {
   // account across devices. Creates a blank profile entry if the caller has
   // never called `set_profile`.
   set_theme_preference : (opt text) -> (Result_11);
-  rebase_account_deletion : (text) -> (Result_14);
   settle_account_deletion : (text) -> (Result_2);
   whoami : () -> (Result) query;
 }

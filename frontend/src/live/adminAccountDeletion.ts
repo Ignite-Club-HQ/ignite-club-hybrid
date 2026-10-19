@@ -21,17 +21,7 @@ export async function eraseIcpAccountAsAdmin(identity: Identity, target: IcpTarg
     }
     await inventory.validate();
     if (inventory.revision !== undefined) {
-      try {
-        await client.commitAccountDeletion(accountId);
-      } catch (error) {
-        // Registry drift after membership erasure: rebase the retained ticket to the
-        // current pinned binding once, then retry the exact same commit. Any other
-        // failure keeps the reservation for explicit recovery.
-        if (!/changed|drift|revision/i.test(String(error))) throw error;
-        await client.rebaseAccountDeletion(accountId);
-        await inventory.validate();
-        await client.commitAccountDeletion(accountId);
-      }
+      await client.commitAccountDeletion(accountId);
       await client.settleAccountDeletion(accountId);
     } else await client.eraseAccount(accountId);
     return { success: true, immediate: true };
