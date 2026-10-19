@@ -4,6 +4,8 @@
 
 Current owner request: finish cross-group removal so recovery cannot restore fresh photo-key access, uploads or delegated access, then verify live. Implement and test the durable barrier locally first; live destructive testing remains blocked until every receiver drains, history-complete recovery is verified and an authorized disposable account/complete production inventory are available. Do not enable rehearsal flags on production to bypass these gates.
 
+Current follow-up: finish removal work, reusing the existing local encrypted-photo and registry fixtures; implement persistent receiver fences and actual in-flight drain evidence rather than declaring identity-only denial complete.
+
 This checklist supersedes older “next stage” ordering below; historical evidence remains unchanged. Reuse existing implementations and rehearsals, change only demonstrated gaps, and keep admission/routing local-only. No deployment, live-data changes or scaling activation is authorized.
 
 - [x] Record the owner's request to complete all remaining scaling checks using focused, token-efficient batches; consolidate the updated plan for review.
