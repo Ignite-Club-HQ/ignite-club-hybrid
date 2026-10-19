@@ -35,6 +35,41 @@ pub struct Placement {
 pub struct Snapshot { pub revision: u64, pub groups: Vec<Group>, pub placements: Vec<Placement> }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Evidence { pub binding: Binding, pub history_revision: u64, pub snapshot: Snapshot }
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Supplemental { pub group_id: String, pub domain: String, pub canister: Principal, pub subnet: Principal }
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MediaRegistry { pub active: bool, pub stores: Vec<Principal> }
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MediaEvidence { pub club_authority: Principal, pub registry: MediaRegistry }
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RemovalInventory { pub groups: Evidence, pub supplemental: Vec<Supplemental>, pub media: Vec<MediaEvidence> }
+
+pub fn validate_complete(s: &Snapshot, b: &Binding, clubs: &[Principal], readers: &[Principal], extra: &[Supplemental], media: &[MediaEvidence]) -> Result<(), String> {
+    validate(s, b, clubs, &[])?;
+    if extra.is_empty() || extra.len() > 256 || media.len() != s.groups.len() { return Err("Complete bounded media inventory required".into()); }
+    let mut all: BTreeSet<_> = s.groups.iter().flat_map(|g| g.domains.iter().map(|d| d.canister)).collect();
+    let mut stores = BTreeSet::new();
+    for e in extra {
+        let p = s.placements.iter().find(|p| p.group_id == e.group_id).ok_or("Foreign supplemental group")?;
+        if !(DOMAINS.contains(&e.domain.as_str()) || ["media_blob_store", "identity_access", "placement_registry", "shard_router"].contains(&e.domain.as_str())) ||
+            !principal_ok(e.canister) || !all.insert(e.canister) || !p.approved_subnets.contains(&e.subnet) ||
+            (!p.additional_subnets_enabled && e.subnet != p.primary_subnet) { return Err("Invalid supplemental authority placement".into()); }
+        if e.domain == "media_blob_store" { stores.insert(e.canister); }
+    }
+    let mut observed = BTreeSet::new(); let mut authorities = BTreeSet::new();
+    for g in &s.groups {
+        let club = g.domains.iter().find(|d| d.domain == "club_domain").ok_or("Missing club")?.canister;
+        let evidence = media.iter().find(|v| v.club_authority == club).ok_or("Missing club media registry")?;
+        if !authorities.insert(club) || evidence.registry.stores.is_empty() || evidence.registry.stores.len() > 64 { return Err("Incomplete media registry".into()); }
+        for store in &evidence.registry.stores {
+            if !principal_ok(*store) || !observed.insert(*store) || !extra.iter().any(|e| e.domain == "media_blob_store" && e.group_id == g.id && e.canister == *store) {
+                return Err("Omitted, duplicate or foreign media store".into());
+            }
+        }
+    }
+    if stores != observed || readers.iter().any(|r| !all.contains(r)) { return Err("Missing registered service or media authority".into()); }
+    Ok(())
+}
 
 fn principal_ok(p: Principal) -> bool { p != Principal::anonymous() && p != Principal::management_canister() }
 pub fn validate_binding(b: &Binding) -> Result<(), String> {
@@ -133,5 +168,19 @@ pub fn validate(snapshot: &Snapshot, b: &Binding, clubs: &[Principal], readers: 
         for host in ["http://isolated.invalid", "https://user@isolated.invalid", "https://isolated.invalid/path", "https://isolated.invalid?x"] {
             let mut bad = b.clone(); bad.host = host.into(); assert!(validate_binding(&bad).is_err());
         }
+    }
+    #[test] fn complete_media_and_delegated_service_inventory_rejects_every_omission() {
+        let (s,b,clubs) = fixture(); let p = |n| Principal::from_slice(&[n,1]);
+        let extra = vec![Supplemental { group_id:"g0".into(),domain:"media_blob_store".into(),canister:p(91),subnet:p(80) },
+            Supplemental { group_id:"g1".into(),domain:"media_blob_store".into(),canister:p(92),subnet:p(80) },
+            Supplemental { group_id:"g0".into(),domain:"vault_domain".into(),canister:p(93),subnet:p(80) }];
+        let media = vec![MediaEvidence {club_authority:clubs[0],registry:MediaRegistry {active:false,stores:vec![p(91)]}},
+            MediaEvidence {club_authority:clubs[1],registry:MediaRegistry {active:true,stores:vec![p(92)]}}];
+        assert!(validate_complete(&s,&b,&clubs,&[p(93),p(91)],&extra,&media).is_ok());
+        for n in 0..extra.len() { let mut bad=extra.clone(); bad.remove(n); assert!(validate_complete(&s,&b,&clubs,&[p(93)],&bad,&media).is_err()); }
+        let mut bad=media.clone(); bad[0].registry.stores.push(p(94)); assert!(validate_complete(&s,&b,&clubs,&[],&extra,&bad).is_err());
+        let mut bad=extra.clone(); bad[1].group_id="g0".into(); assert!(validate_complete(&s,&b,&clubs,&[],&bad,&media).is_err());
+        let mut bad=extra.clone(); bad[0].subnet=p(81); assert!(validate_complete(&s,&b,&clubs,&[],&bad,&media).is_err());
+        assert!(validate_complete(&s,&b,&clubs,&[p(95)],&extra,&media).is_err());
     }
 }

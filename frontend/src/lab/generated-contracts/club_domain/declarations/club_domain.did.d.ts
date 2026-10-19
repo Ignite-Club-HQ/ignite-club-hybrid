@@ -1351,6 +1351,11 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'read_removal_media_registry' : ActorMethod<
+    [],
+    { 'Ok' : { 'stores' : Array<Principal>, 'active' : boolean } } |
+      { 'Err' : string }
+  >,
   'read_season_club' : ActorMethod<
     [string],
     { 'Ok' : [] | [string] } |

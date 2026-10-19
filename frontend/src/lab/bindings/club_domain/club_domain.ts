@@ -1741,6 +1741,16 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_removal_media_registry(): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            stores: Array<Principal>;
+            active: boolean;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_season_club(id: string): Promise<{
         __kind__: "Ok";
         Ok: string | null;
@@ -5119,6 +5129,19 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.read_my_club_memberships_indexed(to_candid_opt_n18(arg0), arg1);
         return from_candid_variant_n260(result);
+    }
+    async read_removal_media_registry(): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            stores: Array<Principal>;
+            active: boolean;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_removal_media_registry();
+        return from_candid_variant_n257(result);
     }
     async read_season_club(arg0: string): Promise<{
         __kind__: "Ok";

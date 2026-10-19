@@ -42,6 +42,8 @@ const MEM_SERVICE_AUTHORITIES: u8 = 8;
 const MEM_REMOVAL_HISTORY_REVISION: u8 = 9;
 // Pinned registry trust binding only; never a fencing generation or grant.
 const MEM_GROUP_INVENTORY_BINDING: u8 = 10;
+// Operator-pinned supplemental placements; not a removal generation.
+const MEM_SUPPLEMENTAL_INVENTORY: u8 = 11;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -447,6 +449,8 @@ thread_local! {
         RefCell::new(StableCell::init(memory(MEM_REMOVAL_HISTORY_REVISION), 0));
     static GROUP_INVENTORY_BINDING: RefCell<StableCell<Vec<u8>, Memory>> =
         RefCell::new(StableCell::init(memory(MEM_GROUP_INVENTORY_BINDING), Vec::new()));
+    static SUPPLEMENTAL_INVENTORY: RefCell<StableCell<Vec<u8>, Memory>> =
+        RefCell::new(StableCell::init(memory(MEM_SUPPLEMENTAL_INVENTORY), Vec::new()));
 }
 fn group_inventory_binding() -> Option<group_inventory::Binding> {
     GROUP_INVENTORY_BINDING.with(|m| if m.borrow().get().is_empty() { None } else { Some(decode(m.borrow().get())) })
@@ -494,6 +498,51 @@ async fn read_group_inventory_evidence(expected_history_revision: u64) -> Outcom
     Ok(group_inventory::Evidence { binding, history_revision: revision, snapshot: snapshot.ok_or("Missing registry snapshot")? })
 }
 fn removal_history_revision() -> u64 { REMOVAL_HISTORY_REVISION.with(|m| *m.borrow().get()) }
+fn supplemental_inventory() -> Vec<group_inventory::Supplemental> {
+    SUPPLEMENTAL_INVENTORY.with(|m| if m.borrow().get().is_empty() { vec![] } else { decode(m.borrow().get()) })
+}
+#[ic_cdk::update]
+fn set_removal_supplemental_inventory(entries: Vec<group_inventory::Supplemental>, expected_history_revision: u64) -> Outcome<()> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    if removal_history_revision() != expected_history_revision || !link_lifecycle().pending.is_empty() { return Err("History changed or unlink pending".into()); }
+    if group_inventory_binding().is_none() || entries.is_empty() || entries.len() > 256 { return Err("Pinned bounded supplemental inventory required".into()); }
+    let mut unique = std::collections::BTreeSet::new();
+    if entries.iter().any(|e| e.group_id.is_empty() || e.group_id.len()>64 || e.domain.len()>64 || e.canister==Principal::anonymous() ||
+        e.canister==Principal::management_canister() || e.subnet==Principal::anonymous() || e.subnet==Principal::management_canister() || !unique.insert(e.canister)) {
+        return Err("Invalid supplemental inventory".into());
+    }
+    if supplemental_inventory().iter().any(|e| !entries.contains(e)) { return Err("Cannot drop or substitute a pinned authority".into()); }
+    bump_removal_history(); SUPPLEMENTAL_INVENTORY.with(|m| m.borrow_mut().set(encode(&entries))); Ok(())
+}
+#[ic_cdk::update]
+async fn read_removal_inventory_evidence(expected_history_revision: u64) -> Outcome<group_inventory::RemovalInventory> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    let binding = group_inventory_binding().ok_or("Group inventory registry not pinned")?;
+    let extra = supplemental_inventory(); let clubs=link_lifecycle().authorities; let readers=service_authorities();
+    let unchanged = || removal_history_revision()==expected_history_revision && group_inventory_binding().as_ref()==Some(&binding) && supplemental_inventory()==extra;
+    if !unchanged() { return Err("History revision changed".into()); }
+    let mut prior = None;
+    for _ in 0..2 {
+        let reply=ic_cdk::call::Call::bounded_wait(binding.registry,"read_group_registry").with_arg(&binding.target_alias)
+            .await.map_err(|_| "Group registry unavailable".to_string())?;
+        let snapshot: Outcome<group_inventory::Snapshot>=reply.candid().map_err(|_| "Invalid group registry reply".to_string())?;
+        if !unchanged() { return Err("Inventory changed during group read".into()); }
+        let snapshot=snapshot?; group_inventory::validate(&snapshot,&binding,&clubs,&[])?;
+        let mut media=Vec::new();
+        for g in &snapshot.groups {
+            let authority=g.domains.iter().find(|d|d.domain=="club_domain").ok_or("Missing club authority")?.canister;
+            let reply=ic_cdk::call::Call::bounded_wait(authority,"read_removal_media_registry").await.map_err(|_| "Media registry unavailable".to_string())?;
+            let registry: Outcome<group_inventory::MediaRegistry>=reply.candid().map_err(|_| "Invalid media registry reply".to_string())?;
+            if !unchanged() { return Err("Inventory changed during media read".into()); }
+            media.push(group_inventory::MediaEvidence {club_authority:authority,registry:registry?});
+        }
+        group_inventory::validate_complete(&snapshot,&binding,&clubs,&readers,&extra,&media)?;
+        let current=group_inventory::RemovalInventory {groups:group_inventory::Evidence {binding:binding.clone(),history_revision:expected_history_revision,snapshot},supplemental:extra.clone(),media};
+        if prior.as_ref().is_some_and(|p|p!=&current) { return Err("Remote inventory changed during read".into()); }
+        prior=Some(current);
+    }
+    prior.ok_or("Missing complete inventory".into())
+}
 fn bump_removal_history() {
     let next = removal_history_revision().checked_add(1).expect("Removal history revision exhausted");
     REMOVAL_HISTORY_REVISION.with(|m| m.borrow_mut().set(next));

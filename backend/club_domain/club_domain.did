@@ -1519,6 +1519,14 @@ type Main =
              next: opt text;
            };
      });
+   read_removal_media_registry: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             active: bool;
+             stores: vec principal;
+           };
+     });
    read_season_club: (id: text) -> (variant {
                                       Err: text;
                                       Ok: opt text;
