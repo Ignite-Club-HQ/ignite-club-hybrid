@@ -36,6 +36,11 @@ export const idlFactory = ({ IDL }) => {
     'nonce' : IDL.Vec(IDL.Nat8),
     'field_id' : IDL.Text,
   });
+  const ClubMediaAuthority = IDL.Record({
+    'move_id' : IDL.Text,
+    'authority' : IDL.Opt(IDL.Principal),
+    'revision' : IDL.Nat,
+  });
   const Main = IDL.Service({
     'add_guardian_relationship' : IDL.Func(
         [IDL.Principal, IDL.Text],
@@ -128,6 +133,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'read_club_media_authority' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubMediaAuthority, 'Err' : IDL.Text })],
+        [],
+      ),
     'register_pii' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal],
         [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
@@ -161,6 +171,11 @@ export const idlFactory = ({ IDL }) => {
     'set_club_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_media_authority' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Principal), IDL.Text, IDL.Nat],
+        [IDL.Variant({ 'Ok' : ClubMediaAuthority, 'Err' : IDL.Text })],
         [],
       ),
     'set_competition_domain_canister' : IDL.Func(

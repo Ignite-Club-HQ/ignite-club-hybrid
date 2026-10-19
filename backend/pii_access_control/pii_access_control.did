@@ -84,6 +84,11 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_club_media_authority: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubMediaAuthority;
+     });
    register_pii: (pii_id: text, field_id: text, ciphertext: vec nat8,
     domain_owner: principal) -> (variant {
                                    Err: text;
@@ -119,6 +124,12 @@ type Main =
        Err: text;
        Ok;
      });
+   set_club_media_authority: (club: text, authority: opt principal, move_id:
+    text, expected_revision: nat) ->
+    (variant {
+       Err: text;
+       Ok: ClubMediaAuthority;
+     });
    set_competition_domain_canister: (canister: principal) ->
     (variant {
        Err: text;
@@ -142,6 +153,12 @@ type EncryptedPii =
    master_key_id: text;
    nonce: vec nat8;
    pii_id: text;
+ };
+type ClubMediaAuthority = 
+ record {
+   authority: opt principal;
+   move_id: text;
+   revision: nat;
  };
 type AuditRecord = 
  record {
