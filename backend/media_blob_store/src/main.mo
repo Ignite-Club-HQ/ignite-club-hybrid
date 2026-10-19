@@ -712,10 +712,12 @@ persistent actor MediaBlobStore {
         case (?clubId, ?_) { await clubIsPro(clubId) };
         case _ { false };
       };
-      // Pro vault allowance (5 GiB + purchased). Fail closed when unreadable.
-      let vaultClub : ?Text = if (isPro and categoryForPath(path) == ?"vault") clubIdFromPath(path) else null;
-      let purchasedGb : ?Nat = switch (vaultClub) { case (?c) await clubVaultPurchasedGb(c); case null null };
-      if (vaultClub != null and purchasedGb == null) return #Err("VaultAllowanceUnavailable");
+      // Pro media allowance (5 GiB + purchased) across vault, gallery and
+      // chat combined, so one Pro club cannot crowd out the whole store.
+      // Fail closed when unreadable.
+      let allowanceClub : ?Text = if (isPro) clubIdFromPath(path) else null;
+      let purchasedGb : ?Nat = switch (allowanceClub) { case (?c) await clubMediaPurchasedGb(c); case null null };
+      if (allowanceClub != null and purchasedGb == null) return #Err("StorageAllowanceUnavailable");
       if (accountAdmissionEnabled) await admitAccount(caller);
       await requireUploadMembership(caller, path);
       // Check committed usage and outstanding reservations AFTER the await,
@@ -725,10 +727,10 @@ persistent actor MediaBlobStore {
         case null {};
       };
       // No await between this check and the reservation below.
-      switch (vaultClub, purchasedGb) {
+      switch (allowanceClub, purchasedGb) {
         case (?c, ?gb) {
-          let (used, pending) = clubVaultBytes(c);
-          if (not UploadPolicy.withinProVault(used, pending, total_size.toNat(), gb)) return #Err("VaultStorageFull");
+          let (used, pending) = clubMediaBytes(c);
+          if (not UploadPolicy.withinProMediaAllowance(used, pending, total_size.toNat(), gb)) return #Err("StorageAllowanceFull");
         };
         case _ {};
       };

@@ -25,11 +25,12 @@ assert Policy.withinFreeQuota(8, 0, 1, 0, 1, 10, null);
 assert not Policy.withinFreeQuota(9, 0, 1, 0, 1, 10, null);
 assert Policy.withinFreeQuota(0, 25_165_824, 0, 0, 1_048_576, 10, ?26_214_400);
 assert not Policy.withinFreeQuota(0, 25_165_824, 1, 1, 1_048_576, 10, ?26_214_400);
-// Pro vault: 5 GiB base plus purchased GB, counting in-flight uploads.
-assert Policy.withinProVault(5_368_709_119, 0, 1, 0);
-assert not Policy.withinProVault(5_368_709_119, 1, 1, 0);
-assert Policy.withinProVault(6_442_450_944, 0, 0, 1);
-assert not Policy.withinProVault(6_442_450_944, 0, 1, 1);
+// Pro media allowance: 5 GiB base plus purchased GB, counting vault, gallery
+// and chat bytes combined, including in-flight uploads.
+assert Policy.withinProMediaAllowance(5_368_709_119, 0, 1, 0);
+assert not Policy.withinProMediaAllowance(5_368_709_119, 1, 1, 0);
+assert Policy.withinProMediaAllowance(6_442_450_944, 0, 0, 1);
+assert not Policy.withinProMediaAllowance(6_442_450_944, 0, 1, 1);
 // Large capacity is opt-in: default ceiling unchanged, large mode 32 GiB.
 assert Policy.effectiveCapacityFor(42_949_672_960, false) == 2_147_483_648;
 assert Policy.effectiveCapacityFor(42_949_672_960, true) == 34_359_738_368;
