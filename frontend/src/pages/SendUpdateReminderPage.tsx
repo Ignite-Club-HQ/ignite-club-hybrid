@@ -122,6 +122,11 @@ function IcpSendUpdateReminderPage() {
           let totalRecipients = 0;
           const prefix = `update-reminder-${Date.now()}`;
           for (const clubId of clubIds) {
+            totalRecipients += await withFeatureBackend("notifications", {
+              supabase: async () => { throw new Error("ICP-only page"); },
+              icp: async (scoped) => {
+            const ctx = scoped;
+            let queued = 0;
             // list_role_grants returns one row per (account, role, team) —
             // dedupe to unique account ids before fanning out so a member
             // with several roles in the same club is notified once.
@@ -147,8 +152,11 @@ function IcpSendUpdateReminderPage() {
                 body: body.trim(),
                 idempotencyKeyPrefix: `${prefix}-${clubId}-${i}`,
               });
-              totalRecipients += Number(created);
+              queued += Number(created);
             }
+            return queued;
+              },
+            }, writeOnce({ clubId }));
           }
           return totalRecipients;
         },
