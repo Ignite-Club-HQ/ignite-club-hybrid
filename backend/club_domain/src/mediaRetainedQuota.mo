@@ -38,16 +38,16 @@ module {
   };
   // Only a frozen/drained, authenticated exact inventory may call baseline.
   // Conflicting repeat pages fail, instead of adding retained bytes twice.
-  public func baseline(ledger : Ledger, object : Object) : Bool {
-    if (ledger.stores.get(object.store.toText()) != ?false or not valid(object.club) or not valid(object.path)) return false;
-    let id = key(object.store, object.path);
+  public func baseline(ledger : Ledger, entry : Object) : Bool {
+    if (ledger.stores.get(entry.store.toText()) != ?false or not valid(entry.club) or not valid(entry.path)) return false;
+    let id = key(entry.store, entry.path);
     switch (ledger.objects.get(id)) {
-      case (?saved) return saved == object;
+      case (?saved) return saved == entry;
       case null {};
     };
     if (ledger.objects.size() >= maxEntries) return false;
-    ledger.objects.add(id, object);
-    ledger.totals.add(object.club, amount(ledger.totals, object.club) + object.bytes); true
+    ledger.objects.add(id, entry);
+    ledger.totals.add(entry.club, amount(ledger.totals, entry.club) + entry.bytes); true
   };
   // Caller must prove end-of-inventory, hashes and no concurrent mutations.
   // No inferred readiness from an empty page or a frontend-configured store.
@@ -121,22 +121,22 @@ module {
   };
   // Idempotent exact revision deletion credit. A late receipt must never
   // remove a newer replacement or refund its bytes. Journal is not retired.
-  public func deleted(ledger : Ledger, store : Principal, token : Text, object : Object) : Result {
-    if (not ready(ledger) or ledger.stores.get(store.toText()) != ?true or object.store != store or not valid(token)) return #Err("Invalid deletion");
+  public func deleted(ledger : Ledger, store : Principal, token : Text, entry : Object) : Result {
+    if (not ready(ledger) or ledger.stores.get(store.toText()) != ?true or entry.store != store or not valid(token)) return #Err("Invalid deletion");
     let id = key(store, token);
     switch (ledger.operations.get(id)) {
       case (?saved) {
-        if (saved.path != object.path or saved.club != object.club or saved.previous != ?object or saved.bytes != 0 or saved.state != #committed) return #Err("Token conflict");
+        if (saved.path != entry.path or saved.club != entry.club or saved.previous != ?entry or saved.bytes != 0 or saved.state != #committed) return #Err("Token conflict");
         return #Ok(saved)
       };
       case null {};
     };
-    let objectId = key(store, object.path);
-    let used = amount(ledger.totals, object.club);
-    if (ledger.objects.get(objectId) != ?object or ledger.locks.get(objectId) != null or used < object.bytes) return #Err("Deletion revision mismatch");
+    let objectId = key(store, entry.path);
+    let used = amount(ledger.totals, entry.club);
+    if (ledger.objects.get(objectId) != ?entry or ledger.locks.get(objectId) != null or used < entry.bytes) return #Err("Deletion revision mismatch");
     if (ledger.operations.size() >= maxEntries) return #Err("Retained ledger full");
-    let saved : Operation = { store; token; path = object.path; club = object.club; bytes = 0; previous = ?object; state = #committed };
-    ledger.objects.remove(objectId); ledger.totals.add(object.club, used - object.bytes);
+    let saved : Operation = { store; token; path = entry.path; club = entry.club; bytes = 0; previous = ?entry; state = #committed };
+    ledger.objects.remove(objectId); ledger.totals.add(entry.club, used - entry.bytes);
     ledger.operations.add(id, saved); #Ok(saved)
   };
 }
