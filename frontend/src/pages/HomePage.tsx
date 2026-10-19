@@ -1314,7 +1314,7 @@ export default function HomePage() {
               .map((c, i) => ({ id: c.id, name: c.name, sport: c.sport[0] ?? null, class_mode_enabled: classModeFlags[i] }))
               .sort((a, b) => a.name.localeCompare(b.name)) as Club[];
           },
-        });
+        }, { everyGroup: true, merge: (parts: Club[][]) => parts.flat().sort((a, b) => a.name.localeCompare(b.name)) });
       }
       const { data, error } = await supabase
         .from("clubs")
@@ -1357,7 +1357,7 @@ export default function HomePage() {
             );
             return (teamsByClub.flat() as unknown as Team[]).sort((a, b) => a.name.localeCompare(b.name));
           },
-        });
+        }, { everyGroup: true, merge: (parts: Team[][]) => parts.flat().sort((a, b) => a.name.localeCompare(b.name)) });
       }
       const { data, error } = await supabase
         .from("teams")

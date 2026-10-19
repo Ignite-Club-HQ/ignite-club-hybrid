@@ -452,7 +452,7 @@ export default function DirectMessagePage() {
             }
             return null;
           },
-        });
+        }, { everyGroup: true, merge: (parts: (string | null)[]) => parts.find(Boolean) ?? null });
       }
       const [mine, theirs] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),

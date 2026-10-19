@@ -187,6 +187,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
+    'place_my_new_club' : IDL.Func([IDL.Text, IDL.Text], [Result_3], []),
     'read_group_registry' : IDL.Func([IDL.Text], [Result_13], []),
     'read_hosted_club_assignment' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],

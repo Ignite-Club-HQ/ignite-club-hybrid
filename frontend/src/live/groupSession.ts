@@ -181,6 +181,15 @@ export async function openGroupSession(context: FeatureBackendContext, transport
         const result = await read(targetFor(route.groupId)); live(); return result;
       } finally { routing.assignments.delete(hostClubId); }
     },
+    /** Create a brand-new club in the group the router just placed it in.
+     * Single attempt (creates are never retried); the group must be in this
+     * session's verified registry. Reopen the session afterwards. */
+    async createInGroup<T>(groupId: string, domain: GroupDomain, write: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
+      if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
+      live();
+      if (!registry.groups.some(g => g.id === groupId)) throw new Error('Placed group is not in the verified registry');
+      const result = await write(targetFor(groupId)); live(); return result;
+    },
     /** Bounded read across every group, for discovery that is not keyed by one
      * club (e.g. competitions a team entered, wherever they are hosted).
      * Every group must answer; results keep registry order. */
