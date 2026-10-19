@@ -67,7 +67,7 @@ try {
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   await pic.startCanister({ canisterId: groups[1].canisterId, sender: governor });
   await pic.upgradeCanister({ canisterId: groups[0].canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor,
-    arg: IDL.encode([IDL.Principal], [governor]) });
+    arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   groups[0].actor.setPrincipal(linked);
   assert.ok('Err' in await groups[0].actor.sync_my_linked_account(), 'durable unlink receipt rejects stale identity snapshot after upgrade');
   service.setPrincipal(primary); const revoked = ok(await service.revoke(linked, 1n));
