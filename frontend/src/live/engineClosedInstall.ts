@@ -4,7 +4,6 @@
 import { Principal } from '@icp-sdk/core/principal';
 import { PER_GROUP_DOMAINS, runProvision, type Provision, type ProvisionCheckpoint, type ProvisionAdapter } from './groupProvisioner';
 import { configureProvisionGroup, type ConfigurationTransport } from './groupProvisionConfiguration';
-import type { GroupDomain } from './groupRouting';
 
 export const ENGINE_INSTALL_SERVICES = [...PER_GROUP_DOMAINS, 'media_blob_store'] as const;
 export type EngineInstallService = typeof ENGINE_INSTALL_SERVICES[number];
@@ -48,6 +47,7 @@ export async function runEngineClosedInstall(m: EngineInstallManifest, start: En
   const binding = engineInstallBinding(m);
   if (start.binding !== binding || start.provision.deploymentId !== m.deploymentId || start.provision.groupId !== m.groupId || start.provision.subnetId !== m.subnetId) throw new Error('Engine install binding changed');
   if (start.provision.registration || ['registered', 'enabled'].includes(start.provision.phase)) throw new Error('Engine installer cannot register or open a group');
+  if (start.provision.pending) throw new Error(`Unresolved ${start.provision.pending.kind} intent; exact operator reconciliation required`);
   const reserved = new Set([...m.liveCanisters, m.proxyCanisterId, m.identityAccess, m.pushWorker]);
   const own = (id: string) => { principal(id); if (reserved.has(id)) throw new Error('Refusing live/shared canister'); };
   const verify = async (id: string) => {
@@ -72,7 +72,7 @@ export async function runEngineClosedInstall(m: EngineInstallManifest, start: En
   const savedIds = [...Object.values(start.provision.canisters), start.provision.dedicatedBlobStore?.canisterId].filter((id): id is string => !!id);
   if (new Set(savedIds).size !== savedIds.length) throw new Error('Duplicate saved engine inventory');
   for (const id of savedIds) await verify(id);
-  const create = async (p: Provision, d: EngineInstallService) => {
+  const create = async (p: Provision) => {
     const token = p.pending?.operation;
     if (!token?.trim()) throw new Error('Durable create operation required');
     const c = await t.create({ operation: token, subnetId: m.subnetId, controllers: [m.operator] });
@@ -81,7 +81,7 @@ export async function runEngineClosedInstall(m: EngineInstallManifest, start: En
     return c;
   };
   const a: ProvisionAdapter = {
-    createOperation: operation, createCanister: (p, d) => create(p, d), install: (_p, d, id) => install(id, d),
+    createOperation: operation, createCanister: p => create(p), install: (_p, d, id) => install(id, d),
     healthy: (_p, d, id) => health(id, d), save: checkpoint,
     async configure(p, cp) {
       let b = p.dedicatedBlobStore;
@@ -89,7 +89,7 @@ export async function runEngineClosedInstall(m: EngineInstallManifest, start: En
         const token = operation();
         const intent: Provision = { ...p, pending: { kind: 'create', operation: token }, dedicatedBlobStore: { createOperation: token } };
         await cp(intent);
-        const c = await create(intent, 'media_blob_store');
+        const c = await create(intent);
         b = { canisterId: c.canisterId, subnetId: c.subnetId, createOperation: token };
         p = { ...p, pending: undefined, dedicatedBlobStore: b }; await cp(p);
       }

@@ -34,7 +34,9 @@ export function planClubPlacement(input: {
   if (!deploymentId) return { kind: 'blocked', reason: 'No explicit country deployment; no fallback permitted' };
   const approved = input.approvedDeployments.get(deploymentId);
   const registered = table.deployments.get(deploymentId);
-  if (!approved || !registered || JSON.stringify({ ...approved, revision: String(approved.revision) }) !== JSON.stringify({ ...registered, revision: String(registered.revision) }) || !approved.enabled) {
+  const fingerprint = (d: GroupDeployment) => JSON.stringify([d.id, d.alias, d.networkKind, d.host,
+    String(d.revision), d.enabled, d.additionalSubnetsEnabled, d.primarySubnet, [...d.approvedSubnets].sort()]);
+  if (!approved || !registered || fingerprint(approved) !== fingerprint(registered) || !approved.enabled) {
     return { kind: 'blocked', deploymentId, reason: 'Missing, changed or disabled deployment approval' };
   }
   if (approved.networkKind === 'cloud_engine') return { kind: 'blocked', deploymentId, reason: 'Real Cloud Engine acceptance and release required; no mainnet fallback' };
