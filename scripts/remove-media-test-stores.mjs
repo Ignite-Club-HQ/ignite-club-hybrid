@@ -1,6 +1,8 @@
 // Removes finished isolated photo-store test canisters and returns their leftover fuel to the deploy key.
 // Uses the pinned icp CLI (`canister delete` recovers liquid cycles via the cycles ledger).
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseRunIds, controllersFrom, assertRemovable, REMOVE_CONFIRM } from './remove-media-test-stores-policy.mjs';
@@ -15,10 +17,13 @@ const root = resolve(import.meta.dirname, '..');
 const branch = 'ignite-media-test-receipts';
 const api = createJournalApi(repo, x => JSON.stringify(x));
 
+// Run outside the checkout: the repo-root icp.yaml makes the CLI load local-lab files and fail.
+const icpCwd = mkdtempSync(join(tmpdir(), 'icp-no-project-'));
+const icpEnv = { ...process.env, DO_NOT_TRACK: '1' };
 function icp(args) {
   // Identity commands take no network flag; canister/cycles commands target mainnet.
-  const r = spawnSync('icp', args[0] === 'identity' ? args : [...args, '-n', 'ic'], { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(`icp ${args[0]} ${args[1]} failed (exit ${r.status})`);
+  const r = spawnSync('icp', args[0] === 'identity' ? args : [...args, '-n', 'ic'], { encoding: 'utf8', cwd: icpCwd, env: icpEnv });
+  if (r.status !== 0) throw new Error(`icp ${args[0]} ${args[1]} failed (exit ${r.status}): ${String(r.stderr).trim().split('\n').slice(-2).join(' ')}`);
   return r.stdout;
 }
 const who = icp(['identity', 'principal']).trim();
@@ -51,7 +56,7 @@ for (const runId of runIds) {
     if (receipt.removal?.phase === 'removed') { console.log(`${runId}: already removed`); continue; }
     const id = receipt.canisterId;
     if (receipt.removal?.phase === 'removing') {
-      const gone = spawnSync('icp', ['canister', 'status', id, '--public', '-n', 'ic'], { encoding: 'utf8' }).status !== 0;
+      const gone = spawnSync('icp', ['canister', 'status', id, '--public', '-n', 'ic'], { encoding: 'utf8', cwd: icpCwd, env: icpEnv }).status !== 0;
       if (!gone) throw new Error(`${runId}: earlier removal interrupted and store still exists; check it manually`);
     } else {
       const controllers = controllersFrom(JSON.parse(icp(['canister', 'status', id, '--json'])));
