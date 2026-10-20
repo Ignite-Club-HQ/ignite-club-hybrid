@@ -12,11 +12,17 @@
     "capacityBytes": 5368709120
   },
   "phase": "create",
-  "pending": {
-    "kind": "create",
-    "time": "2026-10-20T05:41:11.923Z"
-  },
-  "receipts": [],
+  "pending": null,
+  "receipts": [
+    {
+      "phase": "create",
+      "result": {
+        "canisterId": "3hdfk-5iaaa-aaaal-qxptq-cai",
+        "fundedCycles": "2900000000000"
+      },
+      "time": "2026-10-20T05:41:26.669Z"
+    }
+  ],
   "objects": {},
   "previousUnpaidAttempts": [
     {
@@ -35,5 +41,6 @@
       }
     }
   ],
-  "createdAtNs": "1792474873429000000"
+  "createdAtNs": "1792474873429000000",
+  "canisterId": "3hdfk-5iaaa-aaaal-qxptq-cai"
 }
