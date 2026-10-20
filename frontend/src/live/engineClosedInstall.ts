@@ -36,6 +36,7 @@ export function engineInstallBinding(m: EngineInstallManifest): string {
   if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Engine HTTPS origin required');
   if (!m.deploymentId.trim() || !m.groupId.trim()) throw new Error('Deployment and group required');
   [m.subnetId, m.operator, m.proxyCanisterId, m.identityAccess, m.pushWorker, ...m.liveCanisters].forEach(principal);
+  if (new Set(m.liveCanisters).size !== m.liveCanisters.length) throw new Error('Duplicate live engine inventory');
   if (new Set([m.proxyCanisterId, m.identityAccess, m.pushWorker]).size !== 3) throw new Error('Distinct shared services required');
   for (const d of ENGINE_INSTALL_SERVICES) if (!/^[a-f0-9]{64}$/.test(m.moduleHashes[d] ?? '')) throw new Error(`Exact module hash required: ${d}`);
   return JSON.stringify([m.deploymentId, m.groupId, url.origin, m.subnetId, m.operator, m.proxyCanisterId,

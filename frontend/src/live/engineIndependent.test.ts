@@ -143,6 +143,18 @@ describe('zero-cycle engine closed installation — offline transport', () => {
     w.t.status = async id => ({ ...await original(id), moduleHash: 'malformed' });
     expect((await w.run()).provision.error).toContain('Malformed'); expect(w.mutations).not.toContain('install');
   });
+  it('refuses a domain ID returned for the dedicated photo store', async () => {
+    const w = installer(); const original = w.t.create;
+    w.t.create = async a => w.status.size === 12 ? { canisterId: id(1), subnetId: a.subnetId } : original(a);
+    const stopped = await w.run(); expect(stopped.provision.error).toContain('Duplicate created');
+    expect(stopped.provision.pending?.kind).toBe('create'); expect(stopped.provision.registration).toBeUndefined();
+    expect(w.mutations.filter(v => v === 'install')).toHaveLength(12);
+  });
+  it('refuses duplicate live inventory before any action', async () => {
+    const w = installer();
+    await expect(runEngineClosedInstall({ ...m, liveCanisters: [id(85), id(85)] }, w.start, w.t, w.save, () => 'op')).rejects.toThrow('Duplicate live');
+    expect(w.mutations).toEqual([]);
+  });
 });
 
 function placement() {
