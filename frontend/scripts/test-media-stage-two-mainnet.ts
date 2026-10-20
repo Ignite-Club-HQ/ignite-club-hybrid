@@ -206,7 +206,13 @@ try {
     // Tiny test must free enough 64 KiB slots for a genuinely multi-chunk file.
     const keys = Object.keys(state.objects); const keepSamples = keys.slice(-6);
     let removed = 0;
-    for (const path of keys.slice(0, -6)) { if (removed >= 4 * MiB) break; const f = state.objects[path]; ok(await a.delete_blob(path)); removed += Math.max(65536, 2 ** Math.ceil(Math.log2(f.size))); delete state.objects[path]; }
+    let deleted = 0;
+    for (const path of keys.slice(0, -6)) {
+      if (removed >= 4 * MiB) break;
+      if (deleted++ % 4 === 0) await fuel();
+      const f = state.objects[path]; ok(await a.delete_blob(path));
+      removed += Math.max(65536, 2 ** Math.ceil(Math.log2(f.size))); delete state.objects[path];
+    }
     const bytes = Buffer.alloc(2 * MiB, 7); const path = prefix + 'interrupted';
     const id = ok(await a.begin_upload(path, 'application/octet-stream', BigInt(bytes.length), 3)); ok(await a.put_chunk(id, 0, bytes.subarray(0, CHUNK)));
     state.pendingUpload = { id, path, size: bytes.length, hash: hash(bytes) }; await save();
