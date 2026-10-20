@@ -12,6 +12,8 @@ mod groups;
 mod group_index;
 #[cfg(feature = "scale-probe")]
 mod scale_probe;
+#[cfg(feature = "scale-probe")]
+use scale_probe::Probe;
 mod discovery;
 mod media_growth;
 use discovery::GroupPlacement;

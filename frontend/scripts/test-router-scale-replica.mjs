@@ -73,6 +73,14 @@ try {
     assert.deepEqual(afterUpgrade, ok(placed.result));
     await pic.advanceTime(16 * 60 * 1000); await pic.tick();
     const expired = await probe('place', `expired-${count}`); assert.ok('Err' in expired.result);
+    const expiredRetry = await probe('place'); assert.deepEqual(ok(expiredRetry.result), ok(placed.result));
+    assert.equal(await actor.version(), revision);
+    let exhausted;
+    if (count === 4096) {
+      for (let i = 0; i < count; i++) revision = ok(await actor.record_group_health(`g${String(i).padStart(4, '0')}`, 100n, 0n, revision));
+      exhausted = await probe('place', 'all-exhausted');
+      assert.ok('Err' in exhausted.result); assert.equal(await actor.version(), revision);
+    }
     actor.setPrincipal(guest);
     assert.ok('Err' in await actor.measure_scale_path('place', 'unauthorized', 'local', revision));
     actor.setPrincipal(Principal.anonymous());
@@ -81,7 +89,8 @@ try {
     const scenario = { groups: count, registryPages: pages, instructions: {
       placement: placed.instructions, retry: retry.instructions, hosted: hosted.instructions,
       foreignDenied: foreign.instructions, revisionDenied: conflict.instructions,
-      coldIndexRebuildPlacement: cold.instructions, allExpiredDenied: expired.instructions } };
+      coldIndexRebuildPlacement: cold.instructions, allExpiredDenied: expired.instructions,
+      expiredRetry: expiredRetry.instructions, allExhaustedDenied: exhausted?.instructions } };
     report.scenarios.push(scenario);
     await writeFile(output, JSON.stringify(report, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2));
     console.log('PASS', count, 'groups', JSON.stringify(scenario, (_, v) => typeof v === 'bigint' ? v.toString() : v));
