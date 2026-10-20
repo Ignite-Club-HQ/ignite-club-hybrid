@@ -1,0 +1,13 @@
+{
+  "plan": {
+    "paymentId": "card-mixed-001",
+    "testId": "media-mixed-001",
+    "scenario": "mixed",
+    "principal": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "targetCycles": "5000000000000",
+    "balanceBefore": "906426965938",
+    "shortfallCycles": "4093573034062"
+  },
+  "phase": "creating-order",
+  "createdAt": "2026-10-20T06:29:08.113Z"
+}
