@@ -175,7 +175,7 @@ try {
  denied(await c.save_club_subscription({...subscription,is_pro:false,plan:'free'}));
  assert.equal(ok(await c.get_club_subscription('c'))[0].is_pro,true);
  await pic.startCanister({canisterId:router.canisterId,sender:governor});
- await pic.upgradeCanister({canisterId:router.canisterId,wasm:routerWasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+ await pic.upgradeCanister({canisterId:router.canisterId,wasm:routerWasm,sender:governor});
  ok(await c.save_club_subscription(subscription));
  denied(await r.place_my_new_club('00000000-0000-4000-8000-000000000001','local'));
  console.log('PASS: same-authority router reservations, exact baseline, caller/group binding, outage publication denial, upgrade persistence and exhausted new-club placement.');

@@ -78,6 +78,9 @@ module {
     var offset = slice.offset.toNat();
     // Merge only aligned free buddies, never live or merely adjacent objects.
     while (slot < 16_777_216) {
+      // Legacy allocations were only page-aligned, not size-class-aligned.
+      // Never turn a legacy unaligned extent into a larger overlapping slot.
+      if (offset % slot != 0) { addFree(store, slot, Nat64.fromNat(offset)); return };
       let buddy = if ((offset / slot) % 2 == 0) offset + slot else offset - slot;
       let ?rows = store.free.get(slot) else { addFree(store, slot, Nat64.fromNat(offset)); return };
       if (not rows.containsKey(Nat64.fromNat(buddy))) { addFree(store, slot, Nat64.fromNat(offset)); return };

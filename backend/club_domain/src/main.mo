@@ -6015,6 +6015,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (routerGrowthRehearsal and not (await reserveRouterGrowth(club_id))) return #Err("Group-wide growth reservation required");
     auth(caller);
     if (removalReceiver.denied(caller) or not (isAdmin(caller, club_id) or isGovernor(caller)) or clubStorageGb(club_id) != priorAddons or not promoCodes.any(func(p) = p == promo)) return #Err("Storage grant changed during reservation");
+    switch (promo.expires_at_ms) { case (?e) { if (e < nowMs()) return #Err("This promo code has expired") }; case null {} };
     clubStorageAddons := clubStorageAddons.filter(func((c, _) : (Text, Nat32)) : Bool = c != club_id).concat([(club_id, total)]);
     promoRedemptions := promoRedemptions.concat([{
       promo_id = promo.id; target_id = "club-storage:" # club_id; redeemed_by = caller; redeemed_at_ms = nowMs(); expires_at_ms = (0 : Nat64);
