@@ -354,12 +354,12 @@ export async function fetchVaultFolderTree(
       let query = client
         .from("vault_folders")
         .select("id,name,parent_id,restricted_roles");
-      if (view.type === "club") {
-        query = query.eq("club_id", view.clubId).is("team_id", null);
-      } else if (view.type === "team") {
-        query = query.eq("team_id", view.teamId);
-      } else {
-        query = query.eq("club_id", view.clubId).eq("competition_id", view.competitionId);
+      if (options.view.type === "club") {
+        query = query.eq("club_id", options.view.clubId).is("team_id", null);
+      } else if (options.view.type === "team") {
+        query = query.eq("team_id", options.view.teamId);
+      } else if (options.view.type === "competition") {
+        query = query.eq("club_id", options.view.clubId).eq("competition_id", options.view.competitionId);
       }
       const { data } = await query;
       return buildVaultFolderTree(data ?? [], scope.folderId, options);
@@ -415,10 +415,11 @@ export async function searchVaultContents(
       }));
     const visibleFolderIds = new Set(options.tree.descendantIds);
     const files = resolvedData
-      .filter((file) =>
-        scope.folderId
-          ? file.folder_id === scope.folderId || (!!file.folder_id && visibleFolderIds.has(file.folder_id))
-          : !file.folder_id || visibleFolderIds.has(file.folder_id),
+      .filter(
+        (file) =>
+          !file.folder_id ||
+          visibleFolderIds.has(file.folder_id) ||
+          file.folder_id === scope.folderId,
       )
       .map((file) => ({
         ...file,
