@@ -270,12 +270,12 @@ function SupabasePublicCompetitionPage() {
   });
 
   const { data: ladder = [] } = useQuery({
-    queryKey: ["public-competition-ladder", id, matches],
+    queryKey: ["public-competition-ladder", id, matches, competition?.points_win, competition?.points_draw, competition?.points_loss],
     enabled: !!competition,
     queryFn: async () => {
       const { data: entries, error } = await supabase.from("competition_entries").select("*, teams:team_id(id,name,logo_url)").eq("competition_id", id!);
       if (error) throw error;
-      return buildCompetitionLadderRows(entries ?? [], matches, new Map((entries ?? []).map((e: any) => [e.team_id,e.teams])), { win: 3, draw: 1, loss: 0 });
+      return buildCompetitionLadderRows(entries ?? [], matches, new Map((entries ?? []).map((e: any) => [e.team_id,e.teams])), { win: competition!.points_win, draw: competition!.points_draw, loss: competition!.points_loss });
     },
   });
 

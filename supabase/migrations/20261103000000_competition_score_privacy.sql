@@ -28,4 +28,28 @@ UPDATE public.competition_matches SET home_score=NULL,away_score=NULL;
 ALTER TABLE public.competition_matches ADD CONSTRAINT scores_stored_separately CHECK (home_score IS NULL AND away_score IS NULL);
 -- Legacy aggregate outputs must not expose historic derived scores.
 REVOKE SELECT ON public.competition_ladder FROM anon, authenticated;
+-- Serialize against concurrent result saves and fixture deletion. The authorization
+-- helper is deliberately identical to manage_results RLS above.
+CREATE FUNCTION public.save_competition_match_result(
+ p_match_id uuid, p_home_score integer, p_away_score integer, p_status text
+) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE target public.competition_matches%ROWTYPE;
+BEGIN
+ SELECT * INTO target FROM public.competition_matches WHERE id=p_match_id FOR UPDATE;
+ IF NOT FOUND OR NOT public.can_manage_competition_vault(target.competition_id) THEN
+   RAISE EXCEPTION 'Competition manager required' USING ERRCODE = '42501';
+ END IF;
+ IF p_home_score < 0 OR p_away_score < 0 THEN
+   RAISE EXCEPTION 'Scores must be nonnegative' USING ERRCODE = '22023';
+ END IF;
+ INSERT INTO public.competition_match_results(match_id,home_score,away_score)
+ VALUES(p_match_id,p_home_score,p_away_score)
+ ON CONFLICT(match_id) DO UPDATE SET home_score=excluded.home_score,away_score=excluded.away_score;
+ UPDATE public.competition_matches SET status=coalesce(p_status,target.status),
+ manually_overridden_at=CASE WHEN target.source IS DISTINCT FROM 'manual' THEN coalesce(target.manually_overridden_at,now()) ELSE target.manually_overridden_at END WHERE id=p_match_id;
+END
+$$;
+REVOKE ALL ON FUNCTION public.save_competition_match_result(uuid,integer,integer,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.save_competition_match_result(uuid,integer,integer,text) TO authenticated;
 COMMIT;
