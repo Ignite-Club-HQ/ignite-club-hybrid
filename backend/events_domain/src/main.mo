@@ -22,6 +22,7 @@ import Types "types";
 import Oql "../../shared/Oql";
 import OqlEvents "oqlEvents";
 import HistoryPrivacy "historyPrivacy";
+import PlayhqFeed "playhqFeed";
 
 persistent actor class Main(governorInit : Principal) {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -2888,6 +2889,42 @@ persistent actor class Main(governorInit : Principal) {
     } catch (e) {
       #Err("PlayHQ request failed: " # Error.message(e))
     }
+  };
+
+  // Production PlayHQ endpoint shapes, complete bounded pages only. This
+  // returns solely to the configured competition service, never a browser.
+  public shared ({caller}) func fetch_playhq_grade(tenant:Text,grade:Text) : async {#Ok:{games:[{game_id:Text;home_id:Text;away_id:Text;home_name:Text;away_name:Text;home_score:?Nat16;away_score:?Nat16;starts_at_ms:?Nat64;status:Text;venue:?Text}];stats:[{game_id:Text;team_id:Text;player_id:Text;player_name:Text;stats_json:Text}]};#Err:Text} {
+    let authority=competitionDomainCanister;
+    if(authority!=?caller) return #Err("Trusted competition canister only");
+    if(not valid(tenant) or not valid(grade) or Text.contains(grade,#char '/') or Text.contains(tenant,#char '/') or Text.contains(grade,#char '?')) return #Err("Invalid PlayHQ scope");
+    let body=switch(await* playhqHttpGet("/grades/"#grade#"/fixture")){case(#Err(e))return #Err(e);case(#Ok(b))b};
+    let rows=switch(PlayhqFeed.rows(body)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+    var games:[{game_id:Text;home_id:Text;away_id:Text;home_name:Text;away_name:Text;home_score:?Nat16;away_score:?Nat16;starts_at_ms:?Nat64;status:Text;venue:?Text}]=[];
+    var stats:[{game_id:Text;team_id:Text;player_id:Text;player_name:Text;stats_json:Text}]=[];
+    for(row in rows.values()) {
+      let id=PlayhqFeed.str(row,"id");
+      if(not valid(id) or Text.contains(id,#char '/') or Text.contains(id,#char '?')) return #Err("Invalid game identity");
+      let home=PlayhqFeed.field(PlayhqFeed.field(row,"teams"),"home");let away=PlayhqFeed.field(PlayhqFeed.field(row,"teams"),"away");
+      let h=PlayhqFeed.str(home,"id");let a=PlayhqFeed.str(away,"id");
+      if(not valid(h) or not valid(a) or h==a) return #Err("Invalid fixture teams");
+      let score=PlayhqFeed.field(row,"score");let status=Text.toUpper(PlayhqFeed.str(row,"status"));
+      let state=if(Text.contains(status,#text "COMPLETE") or Text.contains(status,#text "FINAL") or status=="FT")"completed"else if(Text.contains(status,#text "CANCEL") or Text.contains(status,#text "FORFEIT"))"cancelled"else "scheduled";
+      let date=PlayhqFeed.str(PlayhqFeed.field(row,"schedule"),"date");
+      let venue=PlayhqFeed.str(PlayhqFeed.field(row,"venue"),"name");
+      games:=games.concat([{game_id=id;home_id=h;away_id=a;home_name=PlayhqFeed.str(home,"name");away_name=PlayhqFeed.str(away,"name");home_score=PlayhqFeed.score(score,"home");away_score=PlayhqFeed.score(score,"away");starts_at_ms=parsePlayhqTime(if(date=="")PlayhqFeed.str(row,"startsAt")else date,"UTC");status=state;venue=if(venue=="")null else ?venue}]);
+      if(state=="completed") {
+        let raw=switch(await* playhqHttpGet("/games/"#id#"/statistics")){case(#Err(e))return #Err(e);case(#Ok(b))b};
+        let players=switch(PlayhqFeed.rows(raw)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+        for(p in players.values()) {
+          let player=PlayhqFeed.field(p,"player");let playerId=PlayhqFeed.str(player,"id");let team=PlayhqFeed.str(PlayhqFeed.field(p,"team"),"id");
+          if(not valid(playerId) or (team!=h and team!=a)) return #Err("Foreign player-stat team");
+          stats:=stats.concat([{game_id=id;team_id=team;player_id=playerId;player_name=PlayhqFeed.str(player,"name");stats_json=PlayhqFeed.numeric(PlayhqFeed.field(p,"statistics"))}]);
+          if(stats.size()>2000) return #Err("Player-stat batch too large");
+        }
+      }
+    };
+    if(authority!=competitionDomainCanister) return #Err("Competition authority changed");
+    #Ok({games;stats})
   };
 
   // Mirrors PlayHQTeamLinkCard's Supabase `competitions` read: id/name/season
