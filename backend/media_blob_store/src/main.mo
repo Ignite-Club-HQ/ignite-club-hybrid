@@ -933,6 +933,22 @@ persistent actor MediaBlobStore {
 
   // ==================== Upload protocol ====================
 
+  // Read-only recovery evidence for isolated owner-path tests. No club paths,
+  // shared ledgers or arbitrary prefixes; clearing still uses abort_upload.
+  public shared ({ caller }) func read_pending_test_uploads(prefix : Text) : async { #Ok : [{ id : Text; path : Text; size : Nat64 }]; #Err : Text } {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    let parts = Text.split(prefix, #char '/').toArray();
+    if (parts.size() != 4 or parts[0] != "users" or parts[1] != "network-test" or parts[2] == "" or parts[2].size() > 48 or parts[3] != "") return #Err("Isolated test prefix required");
+    if (club_domain_canister != null or quota_mode != #local or retained_mode != #local) return #Err("Unregistered local-quota test store required");
+    if (pending_uploads.size() > UploadPolicy.maxPending) return #Err("Pending inventory exceeds bound");
+    var rows : [{ id : Text; path : Text; size : Nat64 }] = [];
+    for (upload in pending_uploads.values()) {
+      if (not upload.path.startsWith(#text prefix) or not upload.owner.equal(caller)) return #Err("Foreign pending upload; operator reconciliation required");
+      rows := rows.concat([{ id = upload.id; path = upload.path; size = upload.total_size }]);
+    };
+    #Ok(rows)
+  };
+
   public shared ({ caller }) func begin_upload(path : Text, mime : Text, total_size : Nat64, chunk_count : Nat32) : async ResultUploadId {
     if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
     try {
