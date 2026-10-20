@@ -1,14 +1,10 @@
 // Real actor rollover with an explicitly seeded LOCAL fixture, never mainnet.
 import assert from 'node:assert/strict';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 const seeded = process.env.MEDIA_MULTI_ACTOR_WASM;
 if (!seeded) throw new Error('MEDIA_MULTI_ACTOR_WASM must name the disposable local seeded actor');
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const candidate = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
 const ok = r => { assert.ok('Ok' in r, String(r.Err)); return r.Ok; };
 const server = await PocketIcServer.start({ binPath: process.env.POCKET_IC_BIN || '/root/.cache/mops/pocket-ic/15.0.0/pocket-ic' });
@@ -44,7 +40,9 @@ try {
   const token = read.streaming_strategy[0]?.Callback.token; assert.ok(token);
   assert.equal(Buffer.from((await a.http_request_streaming_callback(token)).body).toString(), 'finished');
   await pic.updateCanisterSettings({ canisterId: id, sender: governor, environmentVariables: env.filter(e => e.name !== 'IGNITE_MEDIA_MULTI_REGION_LOCAL_REHEARSAL') });
-  await pic.upgradeCanister({ canisterId: id, wasm: candidate, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  // Keep this fixture's migration tail. A production module predates the
+  // local seed migration and cannot be used as a backwards-migration test.
+  await pic.upgradeCanister({ canisterId: id, wasm: seeded, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   // Turning the rehearsal off must not strand existing bank-one ciphertext.
   assert.equal((await a.http_request({ url: '/users/rollover/file', method: 'GET', headers: [], body: [] })).status_code, 200);
   assert.ok('Err' in await a.begin_upload('users/rollover/closed', 'application/octet-stream', 1n, 1));
