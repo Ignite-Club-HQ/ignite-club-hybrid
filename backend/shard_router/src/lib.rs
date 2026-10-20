@@ -889,6 +889,14 @@ mod tests {
         assert!(assign_group_record("growth-b".into(),g.target_alias,current_revision(),1).is_err());
         assert!(group_assignment_for("growth-b").is_none());
         assert_eq!(growth_budget(&g.id).unwrap().committed(),Ok(100));
+        let original = g.photo_store;
+        g.photo_store = Some(Principal::from_slice(&[241]));
+        GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(),encode(&g)));
+        assert!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80).is_err());
+        assert!(verified_store_growth(&g.id).is_none());
+        g.photo_store = original;
+        GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(),encode(&g)));
+        assert_eq!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80),Ok(80));
         TEST_GROWTH.with(|v| *v.borrow_mut() = false);
     }
     #[test]

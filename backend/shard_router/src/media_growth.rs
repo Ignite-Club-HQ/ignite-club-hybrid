@@ -113,4 +113,14 @@ mod tests {
         assert!(!b.matches("g","local",s,s));
         assert!(!b.matches("g","local",a,a));
     }
+    #[test]
+    fn concurrent_promises_preserve_existing_headroom() {
+        let mut b=StoreBudget::import(Principal::from_slice(&[2]),1,&baseline(),110,20,vec![("existing".into(),70)]).unwrap();
+        assert_eq!(b.budget.reserve("new-a",10),Ok(10));
+        assert_eq!(b.budget.reserve("new-b",10),Ok(10));
+        assert!(b.budget.reserve("new-c",10).is_err());
+        assert_eq!(b.budget.commitments.get("existing"),Some(&70));
+        assert_eq!(b.budget.reserve("new-a",10),Ok(10));
+        assert_eq!(b.budget.committed(),Ok(110));
+    }
 }
