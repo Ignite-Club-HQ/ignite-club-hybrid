@@ -6,7 +6,9 @@ module {
   public let capacityCeiling : Nat64 = 2_147_483_648;
   // Opt-in ceiling for stable-backed stores (IGNITE_MEDIA_LARGE_CAPACITY=1).
   // Configured maximum; 80% admission and allocator/runtime headroom still apply.
-  public let largeCapacityCeiling : Nat64 = 68_719_476_736; // 64 GiB
+  public let largeCapacityCeiling : Nat64 = 214_748_364_800; // 200 GiB (build page cap 240 GiB, runtime table 256 GiB)
+  // Finalized + pending file records per store.
+  public let maxStoredFiles : Nat = 1_000_000;
   // Pro media allowance: 5 GiB per club across vault, gallery and chat combined,
   // plus purchased add-on GB.
   public let proMediaBaseBytes : Nat = 5_368_709_120;

@@ -1,3 +1,8 @@
+[moc]
+# 240 GiB stable page cap (3,932,160 x 64 KiB): above the 200 GiB app ceiling,
+# below the 256 GiB Motoko Region block table. Never raise to 256 GiB or more.
+args = ["--max-stable-pages", "3932160"]
+
 [dependencies]
 core = "2.6.1"
 sha2 = "0.2.5"

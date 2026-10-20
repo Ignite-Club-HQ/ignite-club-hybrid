@@ -8,6 +8,6 @@ export function assertEnlargeConfirmation(value) {
 }
 export function capacityBytesFor(gib) {
   const n = Number(gib);
-  if (!Number.isInteger(n) || n < 3 || n > 64) throw new Error('Size must be a whole number of GB from 3 to 64');
+  if (!Number.isInteger(n) || n < 3 || n > 200) throw new Error("Size must be a whole number of GB from 3 to 200");
   return BigInt(n) * GIB;
 }
