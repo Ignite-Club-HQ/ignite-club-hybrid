@@ -14,7 +14,7 @@
 import { supabase as defaultClient } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isVaultImageItem } from "./vaultItemClassification";
-import { mapLiveVaultFile, mapLiveVaultFolder, resolveCompetitionVaultFileUrls } from "./vaultReadRepository";
+import { mapLiveVaultFile, mapLiveVaultFolder, unwrapLiveVaultFileWithFolder, resolveCompetitionVaultFileUrls } from "./vaultReadRepository";
 
 type Client = typeof defaultClient;
 
@@ -119,7 +119,7 @@ export const fetchVaultFolderContents = async (
           ? listLiveVaultFilesWithFolder(ctx, folderId ?? "", competitionId)
           : listLiveVaultClubFilesWithFolder(ctx, clubId as string, teamId),
       ]);
-      const rows = (liveFiles as any[]).map(mapLiveVaultFile);
+      const rows = (liveFiles as any[]).map(unwrapLiveVaultFileWithFolder).map(mapLiveVaultFile);
       const allFolders = (liveFolders as any[]).map(mapLiveVaultFolder);
 
       const all = rows.filter(r => (folderId ? r.folder_id === folderId : !r.folder_id));

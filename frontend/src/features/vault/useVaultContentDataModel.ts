@@ -190,6 +190,8 @@ export function useVaultContentDataModel({
         view: currentView,
         searchQuery: debouncedVaultSearchQuery,
         tree: folderTree ?? EMPTY_FOLDER_TREE,
+        isClubAdmin: (isAppAdmin ?? false) || isClubAdmin,
+        isCoachOrTeamAdmin,
       }),
     enabled: recursiveEnabled && !!folderTree,
     keepPreviousData: true,

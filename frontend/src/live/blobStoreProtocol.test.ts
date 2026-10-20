@@ -92,6 +92,7 @@ describe("media_blob_store contract", () => {
       "read_account_get_upload_outcome",
       "read_account_removal_drain",
       "read_pending_test_uploads",
+      "read_pending_uploads",
       "read_physical_growth_capacity",
       "reconcile_retained_deletions",
       "reconcile_upload_operations",

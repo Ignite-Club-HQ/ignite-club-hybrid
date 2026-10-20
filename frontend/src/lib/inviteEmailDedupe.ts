@@ -115,7 +115,14 @@ export async function lookupInvitableUserByEmail(opts: {
       if (!opts.clubId) return null;
       const { findLivePendingInviteByEmailHash } = await import("@/live/features/club");
       const hash = await hashInviteEmail(email, opts.clubId);
-      const foundOpt = await findLivePendingInviteByEmailHash(ctx, opts.clubId, hash);
+      let foundOpt: unknown;
+      try {
+        foundOpt = await findLivePendingInviteByEmailHash(ctx, opts.clubId, hash);
+      } catch (error) {
+        // Dedupe is advisory: a failed lookup falls back to a normal invite.
+        console.warn("[inviteEmailDedupe] pending-invite lookup failed (ICP)", error);
+        return null;
+      }
       const found = Array.isArray(foundOpt) ? foundOpt[0] : foundOpt;
       if (!found) return null;
       return {

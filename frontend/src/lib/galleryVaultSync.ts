@@ -39,7 +39,7 @@ export async function syncGalleryPhotoToVault({
   miniLeagueId?: string | null;
 }) {
   if (isFeatureRoutedToIcp("vault")) {
-    await syncGalleryPhotoToVaultIcp({ fileUrl, fileName, userId, clubId, teamId });
+    await syncGalleryPhotoToVaultIcp({ fileUrl, fileName, fileSize, fileType, userId, clubId, teamId });
     return;
   }
   try {
@@ -147,12 +147,16 @@ async function getOrCreateGalleryFolder(
 async function syncGalleryPhotoToVaultIcp({
   fileUrl,
   fileName,
+  fileSize,
+  fileType,
   userId: _userId,
   clubId,
   teamId,
 }: {
   fileUrl: string;
   fileName: string;
+  fileSize?: number | null;
+  fileType?: string | null;
   userId: string;
   clubId: string;
   teamId?: string | null;
@@ -165,8 +169,13 @@ async function syncGalleryPhotoToVaultIcp({
       },
       icp: async (ctx: FeatureBackendContext) => {
         const folderName = "Gallery Uploads";
-        const folders = await listLiveVaultFolders(ctx, clubId, teamId || null);
-        let folder = folders.find((f) => f.name === folderName && !f.parent_id?.[0]);
+        const scopedTeamId = teamId || null;
+        const folders = await listLiveVaultFolders(ctx, clubId, scopedTeamId);
+        // Only reuse a root folder in the exact same scope (team vs club).
+        let folder = folders.find((f: any) =>
+          f.name === folderName &&
+          !f.parent_id?.[0] &&
+          ((Array.isArray(f.team) ? f.team[0] : f.team) ?? null) === scopedTeamId);
         if (!folder) {
           folder = await createLiveVaultFolder(
             ctx,
@@ -186,8 +195,8 @@ async function syncGalleryPhotoToVaultIcp({
           teamId || null,
           fileName,
           fileUrl,
-          0,
-          "image/jpeg",
+          Math.max(0, Math.round(Number(fileSize ?? 0)) || 0),
+          fileType || "image/jpeg",
           false,
           null,
         );

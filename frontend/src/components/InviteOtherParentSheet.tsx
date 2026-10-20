@@ -199,7 +199,8 @@ export default function InviteOtherParentSheet({
     if (teamId) {
       const teamResult = await getLiveTeam(ctx, teamId);
       const team = Array.isArray(teamResult) ? teamResult[0] : teamResult;
-      clubId = (team as any)?.club_id ?? null;
+      if (!team || (team as any).id !== teamId) throw new InviteScopeResolutionError();
+      clubId = (team as any).club_id ?? null;
       if (!clubId) throw new InviteScopeResolutionError();
     }
     if (!clubId) throw new InviteScopeResolutionError();

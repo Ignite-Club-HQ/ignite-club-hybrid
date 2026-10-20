@@ -76,9 +76,10 @@ export function useForwardDestinations(userId: string | undefined, enabled: bool
           const grants = await getLiveMyRoleGrants(ctx);
           const clubIds = [...new Set(grants.map((grant) => optionText(grant.club)).filter((id): id is string => !!id))];
           const teamIds = [...new Set(grants.map((grant) => optionText(grant.team)).filter((id): id is string => !!id))];
+          if (clubIds.length === 0 && teamIds.length === 0) return [];
           const [clubGroups, teamGroups] = await Promise.all([
-            ...clubIds.map((id) => listLiveGroupsByClub(ctx, id).catch(() => [])),
-            ...teamIds.map((id) => listLiveGroupsByTeam(ctx, id).catch(() => [])),
+            Promise.all(clubIds.map((id) => listLiveGroupsByClub(ctx, id).catch(() => []))),
+            Promise.all(teamIds.map((id) => listLiveGroupsByTeam(ctx, id).catch(() => []))),
           ]);
           const groupsById = new Map<string, { id: string; name: string; club_id: string | null; team_id: string | null }>();
           for (const group of [...clubGroups.flat(), ...teamGroups.flat()]) {
