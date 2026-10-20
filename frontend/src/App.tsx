@@ -354,6 +354,27 @@ const getInitialTheme = (): 'light' | 'dark' => {
 
 const INITIAL_THEME = getInitialTheme();
 
+// One shared placement load per page: React StrictMode (dev preview) mounts
+// App twice, which used to fetch every setting twice before first paint.
+let placementLoad: Promise<void> | null = null;
+function loadPlacementOnce(): Promise<void> {
+  placementLoad ??= (async () => {
+    const [overrides, routing, country] = await Promise.all([
+      import("./live/loadIcpAdminOverrides"),
+      import("./live/loadBackendRouting"),
+      import("./live/userCountry"),
+    ]);
+    // Each loader is failure-tolerant internally (falls back to
+    // build-time/unknown values), so all three settle even offline.
+    await Promise.all([
+      overrides.loadIcpAdminOverrides(),
+      routing.loadBackendRoutingConfig(),
+      country.detectCountryByIp(),
+    ]);
+  })();
+  return placementLoad;
+}
+
 const App = () => {
   // Global safety net: catch any unhandled promise rejections
   // This prevents iOS WebView crashes from uncaught async errors
@@ -384,25 +405,13 @@ const App = () => {
     let cancelled = false;
     void (async () => {
       try {
-        const [overrides, routing, country] = await Promise.all([
-          import("./live/loadIcpAdminOverrides"),
-          import("./live/loadBackendRouting"),
-          import("./live/userCountry"),
-        ]);
-        // Each loader is failure-tolerant internally (falls back to
-        // build-time/unknown values), so all three settle even offline.
-        await Promise.all([
-          overrides.loadIcpAdminOverrides(),
-          routing.loadBackendRoutingConfig(),
-          country.detectCountryByIp(),
-        ]);
+        await loadPlacementOnce();
       } finally {
         if (!cancelled) setPlacementReady(true);
       }
     })();
     return () => { cancelled = true; };
   }, []);
-
   // Handle Android hardware back button
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;

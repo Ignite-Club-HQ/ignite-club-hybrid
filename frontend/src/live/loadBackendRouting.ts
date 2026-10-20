@@ -57,9 +57,16 @@ function decodeOnChain(raw: string | null): unknown {
  * Supabase session and so cannot write the row). Each save stamps
  * `savedAtMs`; a copy without it counts as oldest.
  */
+/** Extra wait for the canister copy once the Supabase row has arrived. */
+const ON_CHAIN_WAIT_WITH_ROW_MS = 1500;
+
 export async function fetchStoredBackendRoutingConfig(): Promise<BackendRoutingConfig | null> {
   let row: unknown = null;
   let rowError: unknown = null;
+  // Read both copies in parallel (they used to run back to back, adding a
+  // full canister round trip to every boot). The on-chain copy is capped so
+  // a slow replica never holds the splash once the Supabase row is in.
+  const onChainPromise = readLiveAppConfig(BACKEND_ROUTING_CONFIG_KEY);
   try {
     const { data, error } = await supabase
       .from("app_settings")
@@ -71,7 +78,13 @@ export async function fetchStoredBackendRoutingConfig(): Promise<BackendRoutingC
   } catch (error) {
     rowError = error;
   }
-  const onChain = decodeOnChain(await readLiveAppConfig(BACKEND_ROUTING_CONFIG_KEY));
+  const onChainRaw = row
+    ? await Promise.race([
+        onChainPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), ON_CHAIN_WAIT_WITH_ROW_MS)),
+      ])
+    : await onChainPromise;
+  const onChain = decodeOnChain(onChainRaw);
   const pick = onChain && (!row || savedAtOf(onChain) > savedAtOf(row)) ? onChain : row;
   if (!pick && rowError) throw rowError;
   return pick ? parseBackendRoutingConfig(pick) : null;
