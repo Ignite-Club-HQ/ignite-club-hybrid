@@ -560,7 +560,7 @@ persistent actor class Main(governorInit : Principal) {
     let authority=competitionDomainCanister;
     if(authority!=?caller) return #Err("Trusted competition canister only");
     auth(input.creator);await admitAccount(input.creator);
-    if(authority!=competitionDomainCanister or input.teams.size()!=2 or input.starts_at_ms>=input.ends_at_ms or input.title.size()>256) return #Err("Invalid fixture or changed authority");
+    if (authority != competitionDomainCanister or input.teams.size() != 2 or input.starts_at_ms >= input.ends_at_ms or input.title.size() > 256) return #Err("Invalid fixture or changed authority");
     if(input.teams[0].team_id==input.teams[1].team_id or input.teams.any(func(t)=not valid(t.team_id) or not valid(t.club_id) or isFenced(t.club_id))) return #Err("Invalid or locked fixture teams");
     var ids:[Text]=[];
     for(target in input.teams.values()) {
@@ -2331,6 +2331,7 @@ persistent actor class Main(governorInit : Principal) {
         let event = switch (events.find(func(e) = e.id == id and not e.deleted)) { case null return #Err("Event not found"); case (?e) e };
         if (event.team_id != ?team_id) return #Err("Game result team mismatch");
         let authority = competitionDomainCanister;
+        switch(await matchHistoryAccess(caller,event,true)){case(#Ok(true)){};case _ return #Err("Competition manager required")};
         for (operation in competitionEventOperations.values()) {
           if (operation.event_ids.any(func(e) = e == id)) {
             let configured = switch (authority) { case null return #Err("Competition authority unavailable"); case (?a) a };
@@ -2412,6 +2413,7 @@ persistent actor class Main(governorInit : Principal) {
       case null return #Err("Event not found"); case (?e) e
     };
     if (not manages(caller,event) or eventFenced(event_id)) return #Err("Game result management forbidden");
+    switch(await matchHistoryAccess(caller,event,true)){case(#Ok(true)){};case _ return #Err("Competition manager required")};
     // Removing a competition's mirrored History is also a result mutation.
     let authority = competitionDomainCanister;
     for (operation in competitionEventOperations.values()) {
