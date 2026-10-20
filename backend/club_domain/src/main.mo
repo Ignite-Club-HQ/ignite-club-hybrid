@@ -5568,6 +5568,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func acknowledge_retained_media(token : Text) : async { #Ok; #Err : Text } {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    // An already retired token can acknowledge local cleanup again, but its
+    // expired epoch can never create a new authority operation.
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Ok;
     if (MediaJournalRetirement.acknowledge(mediaJournalState, mediaRetainedState.ledger, mediaQuotaCutover.ledger, caller, token)) #Ok else #Err("Both ledgers must be settled")
   };
   public shared ({ caller }) func retire_retained_media_records(cursor : Text) : async { #Ok : { removed : Nat; cursor : Text }; #Err : Text } {

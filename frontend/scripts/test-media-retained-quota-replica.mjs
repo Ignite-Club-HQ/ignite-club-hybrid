@@ -118,6 +118,33 @@ try {
  denied(await a.begin_upload('clubs/c/chat/over','image/jpeg',1n,1));
  await pic.advanceTime(181*86_400_000); await pic.tick(30);
  assert.deepEqual(ok(await c.read_club_retained_media_bytes('c')),{finalized:0n,pending:0n});
+ // Expired, acknowledged authority operations retire without resurrecting
+ // reservations; store cleanup can follow authority cleanup in either order.
+ let retired = 0, cursor = '';
+ do { const page=ok(await c.retire_retained_media_records(cursor)); retired += Number(page.removed); cursor=page.cursor; } while(cursor);
+ assert.ok(retired > 0);
+ c.setPrincipal(stores[0].canisterId);
+ denied(await c.reserve_retained_media(gallery,'clubs/c/photos/new',7n));
+ denied(await c.cancel_retained_media(gallery,'c','clubs/c/photos/new',7n));
+ ok(await c.acknowledge_retained_media(gallery));
+ c.setPrincipal(governor);
+ for(const store of stores) { store.actor.setPrincipal(governor); ok(await store.actor.reconcile_upload_operations('')); ok(await store.actor.retire_upload_outcomes('')); }
+ // Activate only the local growth gate after the existing exact baseline.
+ await pic.updateCanisterSettings({canisterId:club.canisterId,sender:governor,environmentVariables:[{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'},{name:'IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL',value:'1'}]});
+ await pic.upgradeCanister({canisterId:club.canisterId,wasm:clubWasm,sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+ denied(await c.create_club('blocked','No capacity yet','blocked',[],[]));
+ const overhead=6_553_600_000n, base=5_368_709_120n;
+ denied(await c.configure_media_growth(overhead+base*2n+2048n,0n,1024n,['wrong']));
+ ok(await c.configure_media_growth(overhead+base*2n+2048n,0n,1024n,['c']));
+ denied(await c.configure_media_growth(overhead+base*4n,0n,1024n,['c']));
+ ok(await c.save_club_subscription(subscription));
+ ok(await c.create_club('c2','Second club','second',[],[]));
+ denied(await c.create_club('c3','No more room','third',[],[]));
+ denied(await c.save_club_subscription({...subscription,club_id:'c2'}));
+ assert.equal(ok(await c.get_club_subscription('c2')).length,0);
+ await pic.upgradeCanister({canisterId:club.canisterId,wasm:clubWasm,sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+ denied(await c.create_club('c3','Still no room','third',[],[]));
+ console.log('PASS: acknowledged expiry retirement rejects replay; atomic growth reservations gate real creation/Pro grants and survive upgrade.');
  // Production installs cannot start retained cutover even as governor.
  const production=await pic.setupCanister({idlFactory:clubIdl,wasm:clubWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])}); production.actor.setPrincipal(governor); denied(await production.actor.start_media_retained_cutover());
  console.log('PASS: authenticated exact two-store baseline, combined pending/retained accounting, branding, replacement, deletion preparation/outage/upgrade, commit recovery, free monthly limits, retention credits and production activation refusal.');

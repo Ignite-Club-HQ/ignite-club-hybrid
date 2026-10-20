@@ -772,7 +772,7 @@ persistent actor MediaBlobStore {
 
   func canReserve(size : Nat64) : Bool {
     UploadPolicy.canAdmitFor(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
-    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), StableBytes.limitFor(largeMode()))))
+    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), capacity_limit_bytes.toNat()))))
   };
 
   func storedChunkBytes(upload : PendingUpload) : Nat {
@@ -1065,7 +1065,7 @@ persistent actor MediaBlobStore {
         // Replace any prior blob at this path (re-upload by owner/governor).
         if (stable_writes) {
           if (stable_blobs.size() >= 100_000 and stable_blobs.get(upload.path) == null) return #Err("Stable metadata capacity reached");
-          let ?slice = StableBytes.writeWithin(stable_bytes, assembled, StableBytes.limitFor(largeMode())) else return #Err("StoreFull");
+          let ?slice = StableBytes.writeWithin(stable_bytes, assembled, capacity_limit_bytes.toNat()) else return #Err("StoreFull");
           removeStored(upload.path);
           stable_blobs.add(upload.path, { path = upload.path; mime = upload.mime; owner = upload.owner; content_hash; slice; uploaded_at = Time.now() });
         } else {
