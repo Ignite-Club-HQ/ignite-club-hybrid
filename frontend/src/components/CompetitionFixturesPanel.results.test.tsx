@@ -45,7 +45,7 @@ vi.mock("@tanstack/react-query", async importOriginal => {
   };
 });
 
-import { CompetitionFixturesPanel } from "./CompetitionFixturesPanel";
+import { buildCompetitionLadderRows, CompetitionFixturesPanel } from "./CompetitionFixturesPanel";
 
 function mutationQuery() {
   const query: any = {};
@@ -123,6 +123,22 @@ describe("CompetitionFixturesPanel result management", () => {
     renderPanel();
     expect(screen.queryByText("Scores hidden")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /edit score/i })).toBeInTheDocument();
+  });
+
+  it.each([null, []])("excludes masked signed-in ladder results (%j) with custom competition points", (masked) => {
+    const entries = ["h", "a"].map(team_id => ({ team_id, status: "accepted", division_id: null }));
+    const game = { status: "completed", home_team: "h", away_team: "a", home_score: masked, away_score: masked };
+    const rows = buildCompetitionLadderRows(entries, [game, { ...game, home_score: 4, away_score: 2 }], new Map(), { win: 7, draw: 4, loss: 2 });
+    expect(rows.find(r => r.team_id === "h")).toMatchObject({ played: 1, points: 7, goals_for: 4 });
+    expect(rows.find(r => r.team_id === "a")).toMatchObject({ played: 1, points: 2 });
+  });
+
+  it("renders visible division-show results for a member", () => {
+    mocks.matches = [match({ status: "completed", home_score: 4, away_score: 2 })];
+    renderPanel({ isAdmin: false });
+    expect(screen.queryByText("Scores hidden")).not.toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /enter score|edit score/i })).not.toBeInTheDocument();
   });
 
   it("does not expose result controls to a non-admin", () => {
