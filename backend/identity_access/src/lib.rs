@@ -2387,6 +2387,17 @@ mod tests {
         assert!(ERASED_ACCOUNTS.with(|m| m.borrow().contains_key(&"retained-0".to_string())));
     }
     #[test]
+    fn actual_account_registration_crosses_10000_and_keeps_first_identity() {
+        let principal_at = |i: u32| Principal::self_authenticating(i.to_be_bytes());
+        for i in 0..10_001u32 { ensure_account(principal_at(i)).unwrap(); }
+        assert_eq!(account_count(), 10_001);
+        let first = account_for(principal_at(0)).unwrap();
+        assert_eq!(ensure_account(principal_at(0)).unwrap(), first.id);
+        assert_eq!(account_count(), 10_001);
+        assert_eq!(account_for(principal_at(10_000)).unwrap().id, account_id(principal_at(10_000)));
+        assert!(ensure_account(Principal::anonymous()).is_err());
+    }
+    #[test]
     fn removal_intent_survives_restored_accounts_and_cannot_complete_without_receivers() {
         let (snapshot,binding,clubs)=group_inventory::tests::fixture();
         let p=|v| Principal::from_slice(&[v,1]);
