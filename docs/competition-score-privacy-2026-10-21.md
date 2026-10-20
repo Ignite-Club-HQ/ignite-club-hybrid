@@ -64,3 +64,12 @@ Partial completion; **not release-ready**.
 - Authenticated actor-level hidden-score reads and real operator export/import/purge round-trip remain unverified; the new wire test is explicitly not a substitute.
 - Complete deployed-schema/trigger/view/RPC/PlayHQ compatibility audit, fixes where needed, and SQL semantic/RLS validation remain blocked by missing source definitions and the prohibition on applying SQL to any database.
 - No full frontend suite, frontend build/typecheck, production actor compilation after type extraction, or Candid drift check was run this round. No deployment, live service calls, or database application occurred; network access was limited to development tooling/guidance downloads.
+
+## Round 5 status
+
+- PocketIC tests against a freshly built production competition_domain Wasm pass: manager reads hidden scores; member and anonymous callers get them stripped across competition hide + division inherit/hide/show.
+- Two-canister operator snapshot export -> import -> purge test passes; score_privacy carries over and the source is cleared.
+- Candid drift check passes.
+- Frontend score-privacy integration tests added (real policy path, both modes); stale ladder tests fixed.
+- Full suites: ICP 5,623 passed / 0 failed / 757 skipped; Supabase 6,021 passed / 1 failed (backup test, unrelated to score privacy) / 358 skipped. Affected files not separately rerun after the final fix.
+- Still open: Supabase migration audit blocked on missing original competition schema/trigger/view migrations and the external PlayHQ score sync source; migration remains unapplied. Unrelated Supabase backup test failure not investigated.
