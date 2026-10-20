@@ -31,4 +31,13 @@ test('unknown mutations and changed bindings cannot be replayed', () => {
   assert.throws(() => assertResume({ binding, pending: { kind: 'create' } }, binding));
   assert.throws(() => assertResume({ binding: { ...binding, runId: 'other' } }, binding));
   assert.doesNotThrow(() => assertResume({ binding }, binding));
+});test('only runs that never reached canister creation may restart under the same id', async () => {
+  const { isUnpaidAttempt } = await import('./media-stage-two-policy.mjs');
+  const unpaid = { binding, phase: 'approved', pending: null, receipts: [], objects: {}, error: 'Deploy identity lacks approved funding plus ledger fee' };
+  assert.equal(isUnpaidAttempt(unpaid), true);
+  assert.equal(isUnpaidAttempt({ ...unpaid, phase: 'create' }), false);
+  assert.equal(isUnpaidAttempt({ ...unpaid, createdAtNs: '1' }), false);
+  assert.equal(isUnpaidAttempt({ ...unpaid, canisterId: 'aaaaa-aa' }), false);
+  assert.equal(isUnpaidAttempt({ ...unpaid, pending: { kind: 'create' } }), false);
+  assert.equal(isUnpaidAttempt({ ...unpaid, receipts: [{ phase: 'create' }] }), false);
 });

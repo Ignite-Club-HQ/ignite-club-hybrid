@@ -28,4 +28,9 @@ export function assertFuel(binding, current, initial) {
 export function assertResume(saved, binding) {
   if (JSON.stringify(saved.binding) !== JSON.stringify(binding)) throw new Error('Saved test binding differs');
   if (saved.pending) throw new Error('Unresolved mutation: report and reconcile; never automatically repeat');
+}// A saved run that stopped before the create phase started never spent cycles or created a canister,
+// so it may be restarted under the same id (e.g. after funding the deploy account).
+export function isUnpaidAttempt(saved) {
+  return saved?.phase === 'approved' && !saved.pending && !saved.canisterId && !saved.createdAtNs
+    && !(saved.receipts?.length) && !Object.keys(saved.objects ?? {}).length;
 }
