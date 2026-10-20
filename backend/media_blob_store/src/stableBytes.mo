@@ -22,11 +22,23 @@ module {
   };
   public func write(store : Store, bytes : Blob) : ?Slice { writeWithin(store, bytes, limit) };
   // At most nine size classes. Split only free slots; live offsets never move.
-  func availableClass(store : Store, slot : Nat) : ?Nat {
+  func availableClass(store : Store, slot : Nat, cap : Nat) : ?(Nat, Nat64) {
     if (slot > 16_777_216) return null;
     var size = slot;
     while (size <= 16_777_216) {
-      switch (store.free.get(size)) { case (?rows) { if (rows.size() > 0) return ?size }; case null {} };
+      switch (store.free.get(size)) {
+        case (?rows) {
+          // Ordered map: if the lowest offset is outside the cap all later
+          // offsets in this class are too; still try larger classes.
+          switch (rows.entries().next()) {
+            case (?(offset, _)) {
+              if (offset.toNat() + size <= cap and validSlice(store.end.toNat(), { offset; length = slot; slot = size })) return ?(size, offset)
+            };
+            case null {}
+          }
+        };
+        case null {}
+      };
       size *= 2
     };
     null
@@ -45,11 +57,9 @@ module {
   public func reserveWithin(store : Store, length : Nat, cap : Nat) : ?Slice {
     let slot = slotFor(length);
     if (slot > 16_777_216) return null;
-    let offset = switch (availableClass(store, slot)) {
-      case (?size) {
+    let offset = switch (availableClass(store, slot, cap)) {
+      case (?(size, offset)) {
         let ?offsets = store.free.get(size) else return null;
-        let ?(offset, _) = offsets.entries().next() else return null;
-        if (not validSlice(store.end.toNat(), { offset; length; slot = size }) or offset.toNat() + size > cap) return null;
         offsets.remove(offset);
         var split = size;
         while (split > slot) {
@@ -108,7 +118,7 @@ module {
   public func canAllocateWithin(store : Store, length : Nat, cap : Nat) : Bool {
     let slot = slotFor(length);
     if (slot > 16_777_216) return false;
-    if (availableClass(store, slot) != null) return true;
+    if (availableClass(store, slot, cap) != null) return true;
     ((store.end.toNat() + slot - 1) / slot) * slot + slot <= cap
   }
 }
