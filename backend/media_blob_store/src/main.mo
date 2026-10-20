@@ -949,6 +949,14 @@ persistent actor MediaBlobStore {
     #Ok(rows)
   };
 
+  // Governor-only operator read: every pending upload, so an operator can
+  // drain them with abort_upload before storage migration. No bytes.
+  public shared ({ caller }) func read_pending_uploads() : async { #Ok : [{ id : Text; path : Text; size : Nat64 }]; #Err : Text } {
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    if (pending_uploads.size() > UploadPolicy.maxPending) return #Err("Pending inventory exceeds bound");
+    #Ok(Array.map<PendingUpload, { id : Text; path : Text; size : Nat64 }>(pending_uploads, func(u) = { id = u.id; path = u.path; size = u.total_size }))
+  };
+
   public shared ({ caller }) func begin_upload(path : Text, mime : Text, total_size : Nat64, chunk_count : Nat32) : async ResultUploadId {
     if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
     try {
