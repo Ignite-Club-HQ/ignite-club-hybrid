@@ -59,7 +59,10 @@ describe("Vault upload/file-name/quota-reservation behavior contract", () => {
     const hasServiceFailure = /if \(uploadError\) \{\s*await dependencies\.settleStorage\(reservationId, false\);\s*throw uploadError;\s*\}/.test(
       uploadServiceSource,
     );
-    expect(hasInlineFailure || hasServiceFailure).toBe(true);
+    const hasServiceCatchFailure = /if \(uploadError\) throw uploadError;\s*\} catch \(error\) \{\s*await dependencies\.settleStorage\(reservationId, false\);\s*throw error;\s*\}/.test(
+      uploadServiceSource,
+    );
+    expect(hasInlineFailure || hasServiceFailure || hasServiceCatchFailure).toBe(true);
   });
 
   it("compensates the orphaned storage object and settles as failed when the metadata insert fails", () => {
