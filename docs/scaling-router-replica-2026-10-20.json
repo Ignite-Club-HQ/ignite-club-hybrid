@@ -1,0 +1,49 @@
+{
+  "environment": "isolated PocketIC",
+  "metrics": "IC performance_counter(0) path instructions; excludes ingress Candid and reply encoding",
+  "scenarios": [
+    {
+      "groups": 65,
+      "registryPages": 2,
+      "instructions": {
+        "placement": "10623726",
+        "retry": "222529",
+        "hosted": "222510",
+        "foreignDenied": "223457",
+        "revisionDenied": "12296",
+        "coldIndexRebuildPlacement": "10660437",
+        "allExpiredDenied": "12680223",
+        "expiredRetry": "225791"
+      }
+    },
+    {
+      "groups": 500,
+      "registryPages": 8,
+      "instructions": {
+        "placement": "446780",
+        "retry": "241049",
+        "hosted": "241105",
+        "foreignDenied": "241925",
+        "revisionDenied": "18263",
+        "coldIndexRebuildPlacement": "80252957",
+        "allExpiredDenied": "103761212",
+        "expiredRetry": "244444"
+      }
+    },
+    {
+      "groups": 4096,
+      "registryPages": 64,
+      "instructions": {
+        "placement": "512934",
+        "retry": "268924",
+        "hosted": "269152",
+        "foreignDenied": "270381",
+        "revisionDenied": "22670",
+        "coldIndexRebuildPlacement": "664055035",
+        "allExpiredDenied": "936632130",
+        "expiredRetry": "272375",
+        "allExhaustedDenied": "30820"
+      }
+    }
+  ]
+}
