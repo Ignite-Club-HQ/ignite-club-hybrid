@@ -47,3 +47,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
+- Photo store capacity: app ceiling (uploadPolicy) < build `--max-stable-pages` (media mops.toml, 240 GiB) < Motoko 1.16.1 shared Region table (256 GiB). Never set the page cap at/above 256 GiB without a reviewed runtime. Why: the runtime has no aggregate block-table exhaustion guard.
