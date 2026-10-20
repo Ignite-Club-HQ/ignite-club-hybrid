@@ -15,7 +15,8 @@ const ok = result => { assert.ok('Ok' in result, JSON.stringify(result, (_, v) =
 const server = await PocketIcServer.start({ binPath: process.env.POCKET_IC_BIN || '/tmp/pocket-ic' });
 try {
   const pic = await PocketIc.create(server.getUrl());
-  const fixture = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }] });
+  const environmentVariables = [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }, { name: 'IGNITE_MEDIA_SLOT_LOCAL_REHEARSAL', value: '1' }];
+  const fixture = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor], environmentVariables });
   const a = fixture.actor; a.setPrincipal(governor);
   ok(await a.enable_stable_media_storage());
   // 16 MiB physical ceiling allows a real bounded allocator-exhaustion test.
@@ -33,6 +34,34 @@ try {
     assert.equal(result.content_hash, createHash('sha256').update(bytes).digest('hex'));
     timings.push(performance.now() - start); expected.set(path, size);
   }
+  // Hold all four owner slots before sending chunks. A fifth request cannot
+  // borrow the same tail; the four accepted uploads survive an upgrade.
+  ok(await a.set_capacity_limit(2_097_152n));
+  const held = [];
+  for (let n = 0; n < 4; n++) held.push(ok(await a.begin_upload(`users/pending/${n}`, 'application/octet-stream', 400_000n, 1)));
+  assert.equal((await a.stable_storage_status()).allocated_bytes, 2_097_152n);
+  const capacity = ok(await a.read_physical_growth_capacity());
+  assert.equal(capacity.pending_count, 4n);
+  assert.equal(capacity.pending_slot_bytes, 2_097_152n);
+  assert.equal(capacity.legacy_pending_count, 0n);
+  assert.equal(capacity.allocatable_object_slots, 0n);
+  a.setPrincipal(Principal.fromUint8Array(new Uint8Array([9, 1])));
+  assert.ok('Err' in await a.read_physical_growth_capacity());
+  a.setPrincipal(governor);
+  assert.ok('Err' in await a.begin_upload('users/pending/overflow', 'application/octet-stream', 1n, 1));
+  await pic.upgradeCanister({ canisterId: fixture.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  // A lower limit closes new admissions but cannot steal already held extents.
+  ok(await a.set_capacity_limit(1n));
+  for (const id of held) { ok(await a.put_chunk(id, 0, Buffer.alloc(400_000, 6))); ok(await a.finalize_upload(id)); }
+  assert.equal(ok(await a.read_physical_growth_capacity()).pending_slot_bytes, 0n);
+  for (let n = 0; n < 4; n++) ok(await a.delete_blob(`users/pending/${n}`));
+  ok(await a.set_capacity_limit(2_097_152n));
+  const aborted = ok(await a.begin_upload('users/pending/abort', 'application/octet-stream', 400_000n, 1));
+  ok(await a.abort_upload(aborted));
+  assert.ok('Err' in await a.abort_upload(aborted));
+  const retry = ok(await a.begin_upload('users/pending/retry', 'application/octet-stream', 400_000n, 1));
+  ok(await a.abort_upload(retry));
+  ok(await a.set_capacity_limit(16_777_216n));
   // Mixed image/file sizes, overwrite churn, and same-class freed-slot reuse.
   for (let round = 0; round < 3; round++) {
     for (let index = 0; index < sizes.length; index++) await upload(`users/load/${index}`, sizes[index]);

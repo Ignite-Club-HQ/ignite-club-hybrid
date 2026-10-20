@@ -13,7 +13,7 @@
 - Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html to dist/index.html for static hosting/SPA fallback.
 - Read frontend/, backend/ and scripts/ AGENTS.md before edits.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
-- Schedule updates: omit to keep; empty image/zero end-date clears. Monthly recurrence clamps in UTC. Why: Candid compatibility.
+- Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
 - Competition welcome settings live on competition_domain behind refreshed manager access; club-role mirrors fail closed. Why: no Supabase fallback or stale access.
@@ -35,7 +35,7 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets/access.
-- Local media: router memory 12 reserves before placement/grants, no refunds; recheck replies. Retire paired acked epochs, keep legacy revisions; merge free aligned slots only. Why: replay/overlap. Live needs proof/approval.
+- Local media: reserve router growth/upload slots before awaits; settle aborts, transfer finalized slots. Require per-store roots; keep paired retirement/legacy revisions/aligned buddies. Why: replay/overselling. Live needs proof/approval.
 - II paths enforce club scope; uploads verify membership to prevent revocation bypass.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.

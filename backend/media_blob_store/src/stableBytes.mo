@@ -22,11 +22,23 @@ module {
   };
   public func write(store : Store, bytes : Blob) : ?Slice { writeWithin(store, bytes, limit) };
   // At most nine size classes. Split only free slots; live offsets never move.
-  func availableClass(store : Store, slot : Nat) : ?Nat {
+  func availableClass(store : Store, slot : Nat, cap : Nat) : ?(Nat, Nat64) {
     if (slot > 16_777_216) return null;
     var size = slot;
     while (size <= 16_777_216) {
-      switch (store.free.get(size)) { case (?rows) { if (rows.size() > 0) return ?size }; case null {} };
+      switch (store.free.get(size)) {
+        case (?rows) {
+          // Ordered map: if the lowest offset is outside the cap all later
+          // offsets in this class are too; still try larger classes.
+          switch (rows.entries().next()) {
+            case (?(offset, _)) {
+              if (offset.toNat() + size <= cap and validSlice(store.end.toNat(), { offset; length = slot; slot = size })) return ?(size, offset)
+            };
+            case null {}
+          }
+        };
+        case null {}
+      };
       size *= 2
     };
     null
@@ -36,14 +48,18 @@ module {
     rows.add(offset, ())
   };
   public func writeWithin(store : Store, bytes : Blob, cap : Nat) : ?Slice {
-    let length = bytes.size();
+    let ?slice = reserveWithin(store, bytes.size(), cap) else return null;
+    if (not writeReserved(store, slice, bytes)) return null;
+    ?slice
+  };
+  // A reservation owns a real extent. No ciphertext is written until finalize;
+  // concurrent admissions cannot all promise the same free buddy or tail.
+  public func reserveWithin(store : Store, length : Nat, cap : Nat) : ?Slice {
     let slot = slotFor(length);
     if (slot > 16_777_216) return null;
-    let offset = switch (availableClass(store, slot)) {
-      case (?size) {
+    let offset = switch (availableClass(store, slot, cap)) {
+      case (?(size, offset)) {
         let ?offsets = store.free.get(size) else return null;
-        let ?(offset, _) = offsets.entries().next() else return null;
-        if (not validSlice(store.end.toNat(), { offset; length; slot = size })) return null;
         offsets.remove(offset);
         var split = size;
         while (split > slot) {
@@ -69,8 +85,13 @@ module {
         Nat64.fromNat(aligned)
       }
     };
-    Region.storeBlob(store.region, offset, bytes);
     ?{ offset; length; slot }
+  };
+  // Caller must own the durable reservation; this never allocates or moves it.
+  public func writeReserved(store : Store, slice : Slice, bytes : Blob) : Bool {
+    if (bytes.size() != slice.length or not validSlice(store.end.toNat(), slice) or
+      slice.offset.toNat() + slice.slot > Region.size(store.region).toNat() * 65_536) return false;
+    Region.storeBlob(store.region, slice.offset, bytes); true
   };
   public func release(store : Store, slice : Slice) {
     if (not validSlice(store.end.toNat(), slice)) return;
@@ -94,10 +115,19 @@ module {
     Region.loadBlob(store.region, slice.offset + Nat64.fromNat(offset), Nat.min(requested, slice.length - offset))
   };
   public func canAllocate(store : Store, length : Nat) : Bool { canAllocateWithin(store, length, limit) };
+  // Bounded proof of reusable *whole* maximum-size roots. Smaller holes
+  // deliberately count as zero, even if their aggregate byte sum is large.
+  public func allocatableRoots(store : Store, cap : Nat) : Nat {
+    if (store.end.toNat() > cap) return 0;
+    let root = 16_777_216;
+    let freeRoots = switch (store.free.get(root)) { case (?rows) rows.size(); case null 0 };
+    let aligned = ((store.end.toNat() + root - 1) / root) * root;
+    freeRoots + (if (aligned > cap) 0 else (cap - aligned) / root)
+  };
   public func canAllocateWithin(store : Store, length : Nat, cap : Nat) : Bool {
     let slot = slotFor(length);
     if (slot > 16_777_216) return false;
-    if (availableClass(store, slot) != null) return true;
+    if (availableClass(store, slot, cap) != null) return true;
     ((store.end.toNat() + slot - 1) / slot) * slot + slot <= cap
   }
 }

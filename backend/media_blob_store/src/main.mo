@@ -153,6 +153,8 @@ persistent actor MediaBlobStore {
   var stable_bytes : StableBytes.Store;
   var stable_blobs : Map.Map<Text, StoredRecord>;
   var stable_writes : Bool;
+  var upload_slots : Map.Map<Text, StableBytes.Slice>;
+  transient let physicalReservationRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_SLOT_LOCAL_REHEARSAL") == ?"1";
   var retention_cursor : Text;
   var legacy_retention_cursor : Nat;
   var media_inventory_revision : Nat;
@@ -623,6 +625,7 @@ persistent actor MediaBlobStore {
           if (r.status != #released) return #Err("Reservation not released");
           let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
           quota_operations.add(id, { latest with status = #aborted });
+          releaseUploadSlot(id);
           pending_uploads := pending_uploads.filter(func(u) = u.id != id);
           if (retained_mode == #active) { switch (retainedService()) { case (?retained) { ignore await retained.acknowledge_retained_media(id) }; case null {} } };
           #Ok
@@ -784,7 +787,16 @@ persistent actor MediaBlobStore {
 
   func canReserve(size : Nat64) : Bool {
     UploadPolicy.canAdmitFor(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
-    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), capacity_limit_bytes.toNat())))
+    // Removing the local flag with pending extents must fail closed, not
+    // silently allocate a second slice for an already reserved upload.
+    (physicalReservationRehearsal or upload_slots.size() == 0) and
+    (not stable_writes or (stable_blobs.size() + pending_uploads.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), capacity_limit_bytes.toNat())))
+  };
+  func releaseUploadSlot(id : Text) {
+    switch (upload_slots.get(id)) {
+      case (?slice) { upload_slots.remove(id); StableBytes.release(stable_bytes, slice) };
+      case null {}
+    }
   };
 
   func storedChunkBytes(upload : PendingUpload) : Nat {
@@ -885,6 +897,25 @@ persistent actor MediaBlobStore {
   public query func stable_storage_status() : async { enabled : Bool; legacy_count : Nat; indexed_count : Nat; allocated_bytes : Nat64 } {
     { enabled = stable_writes; legacy_count = blobs.size(); indexed_count = stable_blobs.size(); allocated_bytes = stable_bytes.end }
   };
+  // Exact per-store allocator observations, not an aggregate group promise.
+  // Authenticated operator/authority only, locally gated; no club paths/PII.
+  public shared ({ caller }) func read_physical_growth_capacity() : async {
+    #Ok : { revision : Nat; configured_bytes : Nat; allocated_bytes : Nat; pending_slot_bytes : Nat;
+      pending_count : Nat; legacy_pending_count : Nat; allocatable_object_slots : Nat; max_object_slot_bytes : Nat };
+    #Err : Text
+  } {
+    if (not physicalReservationRehearsal or (not isGovernor<system>(caller) and ?caller != club_domain_canister)) return #Err("Local capacity authority required");
+    if (not stable_writes or blobs.size() != 0) return #Err("Complete stable-only store required");
+    var held = 0;
+    var legacyPending = 0;
+    for (upload in pending_uploads.values()) {
+      switch (upload_slots.get(upload.id)) { case (?slice) held += slice.slot; case null legacyPending += 1 }
+    };
+    if (upload_slots.size() + legacyPending != pending_uploads.size()) return #Err("Physical reservation inventory mismatch");
+    #Ok({ revision = media_inventory_revision; configured_bytes = capacity_limit_bytes.toNat();
+      allocated_bytes = stable_bytes.end.toNat(); pending_slot_bytes = held; pending_count = pending_uploads.size();
+      legacy_pending_count = legacyPending; allocatable_object_slots = if (legacyPending > 0) 0 else StableBytes.allocatableRoots(stable_bytes, capacity_limit_bytes.toNat()); max_object_slot_bytes = 16_777_216 })
+  };
 
   func findUpload(id : Text) : ?PendingUpload {
     Array.find<PendingUpload>(pending_uploads, func(upload) { upload.id == id })
@@ -975,6 +1006,12 @@ persistent actor MediaBlobStore {
     bumpInventory();
     next_upload_seq += 1;
     let id = if (retained_mode == #active) "r1:" # currentCycle().toText() # ":" # next_upload_seq.toText() # ":upload" else "upload-" # Nat64.toText(next_upload_seq);
+    // Reserve the actual class before the authority await or any chunks.
+    // Unknown authority replies keep the same extent until settled abort.
+    if (physicalReservationRehearsal and stable_writes) {
+      let ?slice = StableBytes.reserveWithin(stable_bytes, total_size.toNat(), capacity_limit_bytes.toNat()) else return #Err("StoreFull");
+      upload_slots.add(id, slice)
+    };
     let upload : PendingUpload = {
       id;
       path;
@@ -989,7 +1026,7 @@ persistent actor MediaBlobStore {
       let uploadCategory = if (retained_mode == #active and clubIdFromPath(path) != null) ?(categoryForPath(path) ?? "branding") else categoryForPath(path);
       switch (uploadCategory, clubIdFromPath(path)) {
         case (?category, ?club_id) {
-          if (quota_operations.size() >= 100_000) { pending_uploads := pending_uploads.filter(func(u) = u.id != id); return #Err("Upload outcome ledger full; retire terminal outcomes") };
+          if (quota_operations.size() >= 100_000) { releaseUploadSlot(id); pending_uploads := pending_uploads.filter(func(u) = u.id != id); return #Err("Upload outcome ledger full; retire terminal outcomes") };
           let op : QuotaOperation.Operation = { owner = caller; path; club_id; category; bytes = total_size.toNat(); cycle = currentCycle(); created_at = Time.now(); status = #reserving; result = null };
           quota_operations.add(id, op);
           return await reserveShared(upload)
@@ -1077,9 +1114,19 @@ persistent actor MediaBlobStore {
         // Replace any prior blob at this path (re-upload by owner/governor).
         if (stable_writes) {
           if (stable_blobs.size() >= 100_000 and stable_blobs.get(upload.path) == null) return #Err("Stable metadata capacity reached");
-          let ?slice = StableBytes.writeWithin(stable_bytes, assembled, capacity_limit_bytes.toNat()) else return #Err("StoreFull");
+          let slice = switch (upload_slots.get(upload_id)) {
+            case (?held) {
+              if (not physicalReservationRehearsal) return #Err("Physical reservation rehearsal disabled; restore before finalizing");
+              if (not StableBytes.writeReserved(stable_bytes, held, assembled)) return #Err("Physical reservation mismatch");
+              held
+            };
+            // Old uploads survive an additive upgrade, but have no promise.
+            case null { let ?fresh = StableBytes.writeWithin(stable_bytes, assembled, capacity_limit_bytes.toNat()) else return #Err("StoreFull"); fresh }
+          };
           removeStored(upload.path);
           stable_blobs.add(upload.path, { path = upload.path; mime = upload.mime; owner = upload.owner; content_hash; slice; uploaded_at = Time.now() });
+          // Ownership transfers atomically from pending upload to live object.
+          upload_slots.remove(upload_id);
         } else {
           removeStored(upload.path);
           blobs := blobs.concat([record]);
@@ -1136,6 +1183,7 @@ persistent actor MediaBlobStore {
         if (not upload.owner.equal(caller) and not isGovernor<system>(caller)) {
           return #Err("Not the upload owner");
         };
+        releaseUploadSlot(upload_id);
         pending_uploads := pending_uploads.filter(func(item) { item.id != upload_id });
         #Ok
       };
@@ -1477,7 +1525,9 @@ persistent actor MediaBlobStore {
         // Purely local unfinished uploads can be discarded atomically. Shared
         // quota outcomes retain their journals until cancellation/commit settles.
         pending_uploads := pending_uploads.filter(func(u) {
-          not removalReceiver.denied(u.owner) or quota_operations.get(u.id) != null
+          let keep = not removalReceiver.denied(u.owner) or quota_operations.get(u.id) != null;
+          if (not keep) releaseUploadSlot(u.id);
+          keep
         });
         bumpInventory(); #Ok
       }
