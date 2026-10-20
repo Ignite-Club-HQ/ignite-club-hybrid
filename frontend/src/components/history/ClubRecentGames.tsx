@@ -1,7 +1,6 @@
 import { useMemo, useState, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Trophy, ChevronRight, Star } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { listHistory, type HistoryResult } from "@/features/competitions/history/historyRepository";
 import { resultOutcome } from "@/features/competitions/history/resultVisibility";
@@ -29,7 +27,7 @@ const sportLabel = (s: string) => (s === "basketball" ? "Basketball" : "Netball"
 export default function ClubRecentGames({ clubId, limit = 5 }: ClubRecentGamesProps) {
   const [openRow, setOpenRow] = useState<ClubGameRow | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["club-recent-games", clubId, limit],
     queryFn: () => listHistory({ clubId }, limit),
   });
@@ -54,6 +52,7 @@ export default function ClubRecentGames({ clubId, limit = 5 }: ClubRecentGamesPr
     );
   }
 
+  if (isError) return <p className="text-sm text-destructive" role="alert">Could not load recent games.</p>;
   if (rows.length === 0) return null;
 
   return (

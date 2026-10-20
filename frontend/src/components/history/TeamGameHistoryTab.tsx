@@ -1,6 +1,5 @@
 import { useMemo, useState, Suspense } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +18,6 @@ import { Trophy, Trash2, Calendar, Star, Loader2, CalendarDays } from "lucide-re
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { deleteHistory, listHistory, type HistoryResult } from "@/features/competitions/history/historyRepository";
 import { resultOutcome } from "@/features/competitions/history/resultVisibility";
@@ -51,7 +49,7 @@ export default function TeamGameHistoryTab({
   const [deleting, setDeleting] = useState(false);
   const [sportFilter, setSportFilter] = useState<SportFilter>("all");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["game_results", teamId],
     queryFn: () => listHistory({ teamId }),
   });
@@ -97,6 +95,8 @@ export default function TeamGameHistoryTab({
       </div>
     );
   }
+
+  if (isError) return <p className="text-sm text-destructive" role="alert">Could not load game history.</p>;
 
   if (!data?.length) {
     return (
