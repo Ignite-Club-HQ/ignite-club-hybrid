@@ -2293,6 +2293,9 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not valid(event_id) or not valid(team_id)) return #Err("Invalid game player stats");
     if (not canManageTeamBoard(caller, team_id)) return #Err("Game stats management forbidden");
+    let event=switch(events.find(func(e)=e.id==event_id and e.team_id==?team_id and not e.deleted)){case null return #Err("Game-stat team mismatch");case(?e)e};
+    switch(await matchHistoryAccess(caller,event,true)){case(#Ok(true)){};case _ return #Err("Competition manager required")};
+    if(eventFenced(event_id) or not canManageTeamBoard(caller,team_id)) return #Err("Game-stat authority changed");
     let rows : [Types.GamePlayerStat] = stats.map(func(input) : Types.GamePlayerStat {
       {
         event_id; team_id;

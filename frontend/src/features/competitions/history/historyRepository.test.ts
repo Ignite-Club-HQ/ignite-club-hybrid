@@ -45,4 +45,9 @@ describe("preserved History read boundary", () => {
     mocks.events.mockRejectedValue(new Error("denied"));
     await expect(listHistory({ teamId: "team-1" })).rejects.toThrow("denied");
   });
+  it("does not expose raw History when the protected endpoint is absent",async()=>{
+    mocks.rpc.mockResolvedValue({data:null,error:{code:"PGRST202",message:"endpoint missing"}});
+    mocks.events.mockRejectedValue(new Error("endpoint missing"));
+    await expect(listHistory({teamId:"team-1"})).rejects.toThrow("endpoint missing");
+  });
 });
