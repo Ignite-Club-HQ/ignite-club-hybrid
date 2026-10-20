@@ -82,3 +82,9 @@ test('uploads are priced at 2,000 cycles per byte plus margin and refused up fro
   // A frozen reserve raises the floor even when the raw balance looks fine.
   assert.throws(() => assertFuel(b, 1_437_000_000_000n, 4_400_000_000_000n, 0, 500_000_000_000n), /frozen reserve/);
 });
+
+test('tiny run refuses up front when per-object fees cannot be covered (media-tiny-001)', async () => {
+  const { assertAffordable } = await import('./media-stage-two-policy.mjs');
+  const b = approveTest({ runId: 'media-tiny-002', scenario: 'tiny', budgetT: '3', confirm: CONFIRM, governor: 'aaaaa-aa', subnetId: 's', wasmSha256: 'a'.repeat(64) });
+  assert.throws(() => assertAffordable(b, 2_385_000_000_000n, 2_390_000_000_000n, 15 * 1024 ** 2, 71_000_000_000n, 15_000), /Not enough fuel/);
+});

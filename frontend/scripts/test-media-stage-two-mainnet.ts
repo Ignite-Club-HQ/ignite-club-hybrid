@@ -140,8 +140,8 @@ async function fuel(nextBytes = 0) {
   state.lastFuel = { cycles: s.cycles.toString(), freezeReserve: reserve.toString(), reserved: s.reserved_cycles.toString(), memory: s.memory_size.toString() };
   assertFuel(binding, s.cycles, BigInt(state.initialCycles), nextBytes, reserve); return s;
 }
-async function affordable(remainingBytes: number) {
-  const s = await proof(); assertAffordable(binding, s.cycles, BigInt(state.initialCycles), remainingBytes, freezeReserve(s));
+async function affordable(remainingBytes: number, remainingObjects = 0) {
+  const s = await proof(); assertAffordable(binding, s.cycles, BigInt(state.initialCycles), remainingBytes, freezeReserve(s), remainingObjects);
   console.log(`Fuel ${s.cycles} covers the remaining ~${(remainingBytes / 1024 ** 3).toFixed(2)} GiB of uploads`);
 }
 async function phase(name: string, work: () => Promise<unknown>) {
@@ -265,7 +265,8 @@ try {
       // Fill to capacity, then churn re-uploads half the payload twice (≈ one more full payload).
       // Tiny files exhaust 64 KiB slots long before byte capacity, so price by the record bound instead.
       const fillBytes = binding.scenario === 'tiny' ? max * 1024 : binding.capacityBytes;
-      await affordable(Math.max(0, fillBytes - total()) + fillBytes);
+      const stored = Object.keys(state.objects).length;
+      await affordable(Math.max(0, fillBytes - total()) + fillBytes, binding.scenario === 'tiny' ? Math.max(0, max - stored) + max / 2 : 0);
       for (let i = 0; i < max; i += 4) {
         const missing = Array.from({ length: Math.min(4, max - i) }, (_, j) => i + j).filter(index => !state.objects[prefix + index]);
         if (!missing.length) continue;

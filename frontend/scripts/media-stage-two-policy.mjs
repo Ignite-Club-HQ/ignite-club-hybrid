@@ -32,12 +32,19 @@ export function assertFuel(binding, current, initial, nextBytes = 0, freezeReser
   if (current < FUEL_FLOOR + CALL_RESERVE + freezeReserve + next) throw new Error(`Fuel safety floor reached (${T(current)} left, ${T(freezeReserve)} frozen reserve); no automatic top-up`);
   if (initial - current + CALL_RESERVE + next > BigInt(binding.budgetCycles) - LEDGER_FEE) throw new Error('Approved funding bound reached');
 }
+// Measured on media-tiny-001 (mainnet): each object costs ~155M cycles in message/execution fees regardless
+// of size, and the frozen reserve grows ~89M cycles per stored object (≈115 KiB of memory each).
+// Margins of ~30% / ~35% on top.
+export const PER_OBJECT_CYCLES = 200_000_000n;
+export const PER_OBJECT_RESERVE_CYCLES = 120_000_000n;
 // Refuse up front when the remaining uploads cannot be paid for, instead of spending fuel and stopping mid-way.
-export function assertAffordable(binding, current, initial, remainingBytes, freezeReserve = 0n) {
-  const need = uploadCycles(remainingBytes) + FUEL_FLOOR + CALL_RESERVE + freezeReserve;
+export function assertAffordable(binding, current, initial, remainingBytes, freezeReserve = 0n, remainingObjects = 0) {
+  const objects = BigInt(Math.max(0, Math.ceil(remainingObjects)));
+  const spend = uploadCycles(remainingBytes) + objects * PER_OBJECT_CYCLES;
+  const need = spend + FUEL_FLOOR + CALL_RESERVE + freezeReserve + objects * PER_OBJECT_RESERVE_CYCLES;
   const budgetLeft = BigInt(binding.budgetCycles) - LEDGER_FEE - (initial - current);
-  if (need > current || uploadCycles(remainingBytes) + CALL_RESERVE > budgetLeft)
-    throw new Error(`Not enough fuel to finish ${binding.scenario}: remaining uploads (${(remainingBytes / GiB).toFixed(2)} GiB) need about ${T(need)} on the store; it holds ${T(current)}. Nothing was uploaded.`);
+  if (need > current || spend + CALL_RESERVE > budgetLeft)
+    throw new Error(`Not enough fuel to finish ${binding.scenario}: remaining uploads (${(remainingBytes / GiB).toFixed(2)} GiB, ${objects} objects) need about ${T(need)} on the store; it holds ${T(current)}. Nothing was uploaded.`);
 }
 export function isOutOfCycles(error) { return /IC0207|out of cycles/i.test(String(error?.message ?? error)); }
 export function assertResume(saved, binding) {
