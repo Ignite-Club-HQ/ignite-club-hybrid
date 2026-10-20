@@ -1,12 +1,22 @@
 # Stage 2 — separate real-network photo-store rehearsal
 
-Status: requirements prepared; NOT deployed or run. Owner agreed to the next testing stage on 20 October 2026. No live expansion or group opening.
+Status: dedicated workflow/runner prepared with focused safety checks; NOT deployed or run. Owner requested setup on 20 October 2026. No live expansion or group opening.
 
 ## Scope/access
 
 Create a new dedicated unregistered test store, never group-1/group-2 storage. Synthetic data only; no live club/quota/router/PII wiring. Existing photos stay untouched.
 
-Signing uses owner GitHub Actions `DEPLOYER_PEM`. No workspace deploy identity or accessible GitHub connection was available. Never paste the key into chat. Existing full mainnet deploy and closed-group installer workflows are unsuitable: they affect more than one test store. A separate durable runner/workflow and focused safety tests still need implementation; no runnable Stage-2 workflow exists yet.
+Signing uses owner GitHub Actions `DEPLOYER_PEM`. No workspace deploy identity or accessible GitHub connection was available. Never paste the key into chat. Existing full mainnet deploy and closed-group installer workflows are unsuitable: they affect more than one test store.
+
+## Run the dedicated workflow
+
+GitHub Actions → **Test larger photo store (isolated mainnet)** on the branch containing these changes. Start with **smoke**, unique id `media-smoke-001`, and an explicit whole-number funding ceiling from **2–20T cycles**. Default 5T is a proposed funding ceiling, not an estimated test cost. Type **TEST ISOLATED STORE** to authorize spending. The ceiling includes the 0.1T ledger fee; the remainder funds exactly one new unregistered store. No top-ups, deletion or live-group configuration occur.
+
+After smoke passes, run **mixed** with a fresh id for a 5 GiB bounded fill/two churn rounds/upgrade, then **tiny** with another fresh id for a separate 512 MiB target. Each run creates one separate store. The workflow is manual and serialized with existing governor deployments.
+
+Reports appear in the `media-stage-two-<id>` artifact and the dedicated **ignite-media-test-receipts** branch at `deploy/media-tests/<id>.json`. Actions must permit contents-write access. Every mutation phase is saved/read back before calls and each completed phase is saved immediately. Interrupted phases cannot auto-resume; reconcile the saved target and pending intent before any further paid creation. A lost reply can mean a committed operation. Keep the receipts branch.
+
+The runner verifies exact sole controller/subnet/module/environment, excludes known live/group and prior test targets, and reads authenticated fuel before operation batches with a 1T floor plus 0.25T call reserve. The hard ceiling caps upfront funding, not lifetime upkeep or exact per-call consumption. Remaining fuel is retained, not test cost; idle storage incurs upkeep until separate operator cleanup. A low-fuel/incomplete run is not a pass. Upgrade preserves Wasm memory and refuses modules over the bounded direct-upgrade size. Production receives no local rehearsal flags; reservation timing differs from Stage 1.
 
 ## Required safeguards
 
@@ -25,4 +35,4 @@ Signing uses owner GitHub Actions `DEPLOYER_PEM`. No workspace deploy identity o
 
 ## Open blockers
 
-Standalone durable runner/workflow and safety tests unfinished. Actual signing/funding/execution needs owner GitHub workflow and approved budget. Complete existing-file/pending-upload reconciliation plus gallery/chat/vault acceptance remain live-expansion prerequisites even after this isolated rehearsal passes.
+Actual signing/funding/execution needs owner GitHub workflow and approved funding ceiling. The workflow has not run on mainnet; no real time/fuel figures are claimed. Complete existing-file/pending-upload reconciliation plus gallery/chat/vault acceptance remain live-expansion prerequisites even after this isolated rehearsal passes.
