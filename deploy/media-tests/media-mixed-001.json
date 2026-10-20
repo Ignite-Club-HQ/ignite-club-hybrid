@@ -12,10 +12,7 @@
     "capacityBytes": 5368709120
   },
   "phase": "fill",
-  "pending": {
-    "kind": "fill",
-    "time": "2026-10-20T06:36:23.791Z"
-  },
+  "pending": null,
   "receipts": [
     {
       "phase": "create",
@@ -1092,5 +1089,10 @@
   "createdAtNs": "1792478096172000000",
   "canisterId": "2knbe-saaaa-aaaal-qxpua-cai",
   "initialCycles": "4394997667949",
-  "error": "The replica returned a rejection error:\n  Request ID: 95541e9b993dde76a7f3679f066ec8843e77caac95d82c4dced331d5a994aa75\n  Reject code: 4\n  Reject text: could not perform self call\n  Error code: IC0406\n\nCall context:\n  Canister ID: 2knbe-saaaa-aaaal-qxpua-cai\n  Method name: begin_upload\n  HTTP details: {\n  \"ok\": true,\n  \"status\": 200,\n  \"statusText\": \"OK\",\n  \"headers\": [\n    [\n      \"access-control-allow-origin\",\n      \"*\"\n    ],\n    [\n      \"access-control-expose-headers\",\n      \"accept-ranges,content-length,content-range,x-request-id,x-ic-canister-id\"\n    ],\n    [\n      \"content-length\",\n      \"1939\"\n    ],\n    [\n      \"content-type\",\n      \"application/cbor\"\n    ],\n    [\n      \"date\",\n      \"Tue, 20 Oct 2026 07:11:39 GMT\"\n    ],\n    [\n      \"strict-transport-security\",\n      \"max-age=31536000; includeSubDomains\"\n    ],\n    [\n      \"x-content-type-options\",\n      \"nosniff\"\n    ],\n    [\n      \"x-frame-options\",\n      \"DENY\"\n    ],\n    [\n      \"x-ic-canister-id\",\n      \"2knbe-saaaa-aaaal-qxpua-cai\"\n    ],\n    [\n      \"x-request-id\",\n      \"01a15826-c586-7660-b202-899707e6df3b\"\n    ]\n  ]\n}"
+  "resumedFill": [
+    {
+      "at": "2026-10-20T07:26:21.521Z",
+      "error": "The replica returned a rejection error:\n  Request ID: 95541e9b993dde76a7f3679f066ec8843e77caac95d82c4dced331d5a994aa75\n  Reject code: 4\n  Reject text: could not perform self call\n  Error code: IC0406\n\nCall context:\n  Canister ID: 2knbe-saaaa-aaaal-qxpua-cai\n  Method name: begin_upload\n  HTTP details: {\n  \"ok\": true,\n  \"status\": 200,\n  \"statusText\": \"OK\",\n  \"headers\": [\n    [\n      \"access-control-allow-origin\",\n      \"*\"\n    ],\n    [\n      \"access-control-expose-headers\",\n      \"accept-ranges,content-length,content-range,x-request-id,x-ic-canister-id\"\n    ],\n    [\n      \"content-length\",\n      \"1939\"\n    ],\n    [\n      \"content-type\",\n      \"application/cbor\"\n    ],\n    [\n      \"date\",\n      \"Tue, 20 Oct 2026 07:11:39 GMT\"\n    ],\n    [\n      \"strict-transport-security\",\n      \"max-age=31536000; includeSubDomains\"\n    ],\n    [\n      \"x-content-type-options\",\n      \"nosniff\"\n    ],\n    [\n      \"x-frame-options\",\n      \"DENY\"\n    ],\n    [\n      \"x-ic-canister-id\",\n      \"2knbe-saaaa-aaaal-qxpua-cai\"\n    ],\n    [\n      \"x-request-id\",\n      \"01a15826-c586-7660-b202-899707e6df3b\"\n    ]\n  ]\n}"
+    }
+  ]
 }
