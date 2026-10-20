@@ -4,7 +4,7 @@
 
 ### Current priority — owner decision 20 October 2026, 02:14 UTC
 
-- [ ] Review Placement Settings and prepare deployment/group/Cloud Engine links and fail-closed compatibility checks; no engine activation or live changes.
+- [x] Placement Settings now saves planned deployment/subnet/group/proxy links, checks full engine service inventories, and code-blocks engine activation; 31 focused tests pass. Evidence: `docs/cloud-engine-readiness.md`. Signed-in screen check, real engine installer/proxy acceptance and assignment-aware routing remain before activation.
 - [x] Prepare isolated mixed-test recovery: fixed old/new module hashes and target, governor-only pending inventory, journaled aborts, whole fill scan and settled batches; 22 checks and actual old-module replica upgrade/re-upload pass. No mainnet action taken.
 - [x] Recovery ran on mainnet: upgrade verified, 4 unfinished uploads cleared, fill reached 279 objects / 846 MB, then stopped on fuel (uploads cost ~2.15T per GiB; full mixed needs ~20T+). Runner now refuses up front when unaffordable and counts the frozen reserve; 24 checks pass.
 - [x] Owner decision 20 October: stop mixed at the 846 MB / 279-object evidence (store `2knbe-…` left idle, ~1.44T); do not top up or resume it.
