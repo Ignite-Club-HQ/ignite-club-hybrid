@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const workflow = readFileSync(new URL('../.github/workflows/test-media-large-store-mainnet.yml', import.meta.url), 'utf8');
 const runner = readFileSync(new URL('../frontend/scripts/test-media-stage-two-mainnet.ts', import.meta.url), 'utf8');
+test('runner temporary directory is resolved only in step context, not job environment', () => {
+  const jobEnvironment = workflow.split('    env:\n')[1]?.split('    steps:\n')[0];
+  assert.ok(jobEnvironment);
+  assert.doesNotMatch(jobEnvironment, /\$\{\{\s*runner\./);
+  const paidStep = workflow.split('- name: Run one separate paid test store')[1]?.split('- name: Remove signing key')[0];
+  assert.ok(paidStep);
+  assert.match(paidStep, /TEST_REPORT_DIR: \$\{\{ runner\.temp \}\}\/media-stage-two/);
+});
 test('workflow is manual, pinned and serialized with governor deployments', () => {
   assert.match(workflow, /workflow_dispatch:/); assert.doesNotMatch(workflow, /schedule:/);
   assert.match(workflow, /@icp-sdk\/icp-cli@1\.7\.0/);

@@ -35,7 +35,6 @@ jobs:
       TEST_SCENARIO: ${{ inputs.scenario }}
       TEST_BUDGET_T: ${{ inputs.budget_t }}
       TEST_CONFIRM: ${{ inputs.confirm }}
-      TEST_REPORT_DIR: ${{ runner.temp }}/media-stage-two
     steps:
       - name: Validate explicit paid scope
         shell: bash
@@ -75,6 +74,7 @@ jobs:
       - name: Run one separate paid test store
         working-directory: frontend
         env:
+          TEST_REPORT_DIR: ${{ runner.temp }}/media-stage-two
           GH_TOKEN: ${{ github.token }}
           OPERATOR_PEM_PATH: ${{ runner.temp }}/media-test-operator.pem
           TEST_WASM_PATH: ${{ runner.temp }}/media-test.wasm
