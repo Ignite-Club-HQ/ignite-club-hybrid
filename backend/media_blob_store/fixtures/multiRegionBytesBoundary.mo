@@ -58,7 +58,15 @@ persistent actor {
     assert Multi.read(store, edge2, 0, 100) == "edge-2!";
     assert Multi.read(store, old, 0, 100) == "legacy!";
     saved := [old, edge0, reused, edge2, edge3];
-    assert Multi.physicalBytes(store) <= Multi.runtimeBytes - Multi.runtimeReserve
+    assert Multi.physicalBytes(store) <= Multi.runtimeBytes - Multi.runtimeReserve;
+    // Exhaust the bounded fourth bank's configured tail, then observe a
+    // real refusal without creating bank five or modifying any file.
+    let ?bank3 = store.regions.get(3) else { assert false; loop {} };
+    sparse(bank3, Multi.bankCapacity(3, cap));
+    let before = Multi.physicalBytes(store);
+    assert not Multi.canAllocateWithin(store, 1, cap, true);
+    assert Multi.reserveWithin(store, 1, cap, true) == null;
+    assert Multi.physicalBytes(store) == before and store.regions.size() == 3
   };
   public func verifyUpgrade() : async () {
     assert saved.size() == 5;
