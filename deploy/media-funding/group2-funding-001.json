@@ -12,6 +12,24 @@
     "topups": [],
     "feeCycles": "0"
   },
-  "phase": "creating-order",
-  "createdAt": "2026-10-20T12:14:13.129Z"
+  "phase": "checkout-ready",
+  "createdAt": "2026-10-20T12:14:13.129Z",
+  "order": {
+    "order_id": "co-46-77c6c3b1d2718e3625f3ef8b62bd5c5e",
+    "checkout_url": "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-46-77c6c3b1d2718e3625f3ef8b62bd5c5e&prefilled_amount=2647",
+    "amount": {
+      "currency": "USD",
+      "value": "26.47"
+    },
+    "net": {
+      "currency": "USD",
+      "value": "25.40"
+    },
+    "fee": {
+      "currency": "USD",
+      "value": "1.07"
+    },
+    "estimated_cycles": "18694140178111",
+    "expires_at": "2026-10-21T13:14:21Z"
+  }
 }
