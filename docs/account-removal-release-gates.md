@@ -2,6 +2,8 @@
 
 ## Scope update — 19 October 2026, 08:50 UTC
 
+**20 October 2026, 10:36 UTC update:** the owner authorized necessary removal/drain/recovery engineering to close actual second-group dependencies. No spending, live upgrade or opening is authorized. Latest partial messaging evidence: `messaging-removal-proof-2026-10-20.md`. Seven domain receivers, full shared-service inventory, claimed delivery/completion and coordinated history recovery remain unfinished. The pause below is historical scope, not a reason to bypass these blockers.
+
 The expanded whole-account deletion/global-drain project is **paused**, not complete. The active scaling plan now prioritizes club-scoped membership revocation: deny future private access/uploads/delegated actions in that club while preserving other clubs and remaining members. The evidence and open engineering below remain an accurate record of the separate account-erasure project, not the current execution queue.
 
 Keep all implemented protections and existing production gates. Deferral does not authorize enabling incomplete account erasure, unsafe restoration or partial routing. If a planned activation depends on these unfinished guarantees, identify that specific dependency and leave activation blocked until an explicit safe resolution is tested. Existing account-deletion behavior is unchanged by this documentation update.

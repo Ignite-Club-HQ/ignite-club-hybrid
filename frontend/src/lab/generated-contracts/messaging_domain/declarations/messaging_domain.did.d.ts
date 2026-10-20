@@ -450,7 +450,7 @@ export interface Main {
   >,
   'list_read_receipts' : ActorMethod<
     [string],
-    { 'Ok' : Array<Receipt> } |
+    { 'Ok' : Array<Receipt__1> } |
       { 'Err' : string }
   >,
   'list_typing' : ActorMethod<
@@ -460,7 +460,7 @@ export interface Main {
   >,
   'mark_read' : ActorMethod<
     [string, string],
-    { 'Ok' : Receipt } |
+    { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
   'memory_stats' : ActorMethod<
@@ -497,6 +497,11 @@ export interface Main {
   'pin_message' : ActorMethod<
     [string, string],
     { 'Ok' : PinnedMessage } |
+      { 'Err' : string }
+  >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'presence_heartbeat' : ActorMethod<
@@ -641,7 +646,7 @@ export interface Main {
   >,
   'read_account_list_read_receipts' : ActorMethod<
     [string],
-    { 'Ok' : Array<Receipt> } |
+    { 'Ok' : Array<Receipt__1> } |
       { 'Err' : string }
   >,
   'read_account_list_typing' : ActorMethod<
@@ -679,6 +684,11 @@ export interface Main {
   'read_account_recent_conversations' : ActorMethod<
     [Principal, number],
     { 'Ok' : Array<RecentConversation> } |
+      { 'Err' : string }
+  >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   'read_account_search_messages' : ActorMethod<
@@ -1038,6 +1048,11 @@ export interface RecapConfig {
   'endpoint_url' : string,
 }
 export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Receipt__1 {
   'conversation_id' : string,
   'read' : boolean,
   'user' : Principal,
@@ -1055,6 +1070,12 @@ export interface Reference {
   'content_hash' : [] | [string],
   'store' : [] | [string],
   'resource_id' : string,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface RoleGrant {
   'role' : string,
@@ -1100,7 +1121,7 @@ export interface State {
   'attachmentMetadata' : Array<AttachmentMetadata>,
   'dmLinks' : Array<DmLink>,
   'userMessagingSettings' : Array<UserMessagingSettings>,
-  'receipts' : Array<Receipt>,
+  'receipts' : Array<Receipt__1>,
   'reactions' : Array<Reaction>,
   'roles' : Array<RoleGrant>,
   'competitionAdmins' : Array<CompetitionAdmin>,

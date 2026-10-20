@@ -64,7 +64,7 @@ type State =
    pollVotes: vec PollVote;
    polls: vec Poll;
    reactions: vec Reaction;
-   receipts: vec Receipt;
+   receipts: vec Receipt__1;
    roles: vec RoleGrant;
    scheduledMessages: vec ScheduledMessage;
    schema: nat32;
@@ -96,6 +96,13 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
 type Reference = 
  record {
    content_hash: opt text;
@@ -111,12 +118,18 @@ type RecentConversation =
    last_message_at_ms: opt nat64;
    last_message_sequence: nat64;
  };
-type Receipt = 
+type Receipt__1 = 
  record {
    conversation_id: text;
    message_id: text;
    read: bool;
    user: principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
  };
 type RecapConfig = 
  record {
@@ -515,7 +528,7 @@ type Main =
    list_read_receipts: (conversation_id: text) ->
     (variant {
        Err: text;
-       Ok: vec Receipt;
+       Ok: vec Receipt__1;
      });
    list_typing: (conversation_id: text) ->
     (variant {
@@ -525,7 +538,7 @@ type Main =
    mark_read: (conversation_id: text, message_id: text) ->
     (variant {
        Err: text;
-       Ok: Receipt;
+       Ok: Receipt__1;
      });
    memory_stats: () ->
     (record {
@@ -533,7 +546,7 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
-   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -563,6 +576,10 @@ type Main =
        Err: text;
        Ok: PinnedMessage;
      });
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    presence_heartbeat: (platform: opt text) -> (variant {
                                                   Err: text;
                                                   Ok;
@@ -707,7 +724,7 @@ type Main =
    read_account_list_read_receipts: (conversation_id: text) ->
     (variant {
        Err: text;
-       Ok: vec Receipt;
+       Ok: vec Receipt__1;
      });
    read_account_list_typing: (conversation_id: text) ->
     (variant {
@@ -745,6 +762,11 @@ type Main =
                  Err: text;
                  Ok: vec RecentConversation;
                });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    read_account_search_messages: (conversation_id: text, needle: text, limit:
     nat16) -> (variant {
                  Err: text;
@@ -797,7 +819,7 @@ type Main =
        Err: text;
        Ok;
      });
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;

@@ -173,7 +173,7 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'hide_message_preview' : IDL.Bool,
   });
-  const Receipt = IDL.Record({
+  const Receipt__1 = IDL.Record({
     'conversation_id' : IDL.Text,
     'read' : IDL.Bool,
     'user' : IDL.Principal,
@@ -217,7 +217,7 @@ export const idlFactory = ({ IDL }) => {
     'attachmentMetadata' : IDL.Vec(AttachmentMetadata),
     'dmLinks' : IDL.Vec(DmLink),
     'userMessagingSettings' : IDL.Vec(UserMessagingSettings),
-    'receipts' : IDL.Vec(Receipt),
+    'receipts' : IDL.Vec(Receipt__1),
     'reactions' : IDL.Vec(Reaction),
     'roles' : IDL.Vec(RoleGrant),
     'competitionAdmins' : IDL.Vec(CompetitionAdmin),
@@ -263,11 +263,22 @@ export const idlFactory = ({ IDL }) => {
     'kind' : IDL.Text,
     'count' : IDL.Nat64,
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
   const RecentConversation = IDL.Record({
     'last_message_sequence' : IDL.Nat64,
     'conversation_id' : IDL.Text,
     'kind' : IDL.Text,
     'last_message_at_ms' : IDL.Opt(IDL.Nat64),
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
   });
   const ClubUnreadSummary = IDL.Record({
     'count' : IDL.Nat64,
@@ -704,7 +715,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'list_read_receipts' : IDL.Func(
         [IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt__1), 'Err' : IDL.Text })],
         [],
       ),
     'list_typing' : IDL.Func(
@@ -714,7 +725,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'mark_read' : IDL.Func(
         [IDL.Text, IDL.Text],
-        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
     'memory_stats' : IDL.Func(
@@ -766,6 +777,11 @@ export const idlFactory = ({ IDL }) => {
     'pin_message' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : PinnedMessage, 'Err' : IDL.Text })],
+        [],
+      ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'presence_heartbeat' : IDL.Func(
@@ -946,7 +962,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_account_list_read_receipts' : IDL.Func(
         [IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt__1), 'Err' : IDL.Text })],
         [],
       ),
     'read_account_list_typing' : IDL.Func(
@@ -996,6 +1012,11 @@ export const idlFactory = ({ IDL }) => {
     'read_account_recent_conversations' : IDL.Func(
         [IDL.Principal, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Vec(RecentConversation), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'read_account_search_messages' : IDL.Func(
