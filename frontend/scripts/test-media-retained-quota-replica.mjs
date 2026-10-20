@@ -126,6 +126,13 @@ try {
  c.setPrincipal(stores[0].canisterId);
  denied(await c.reserve_retained_media(gallery,'clubs/c/photos/new',7n));
  assert.equal(ok(await c.cancel_retained_media(gallery,'c','clubs/c/photos/new',7n)).state.released,null);
+ const currentEpoch=BigInt(Math.floor((await pic.getTime())/(30*86_400_000)));
+ denied(await c.reserve_media_quota(gallery,'c','gallery_photo',7n,currentEpoch));
+ denied(await c.cancel_media_quota(gallery,'c','gallery_photo',7n,currentEpoch));
+ const expiredUnknown='r1:1:999999999:upload';
+ assert.equal(ok(await c.cancel_retained_media(expiredUnknown,'c','clubs/c/photos/absent',1n)).state.released,null);
+ denied(await c.reserve_retained_media(expiredUnknown,'clubs/c/photos/absent',1n));
+ assert.deepEqual(ok(await c.read_club_retained_media_bytes('c')),{finalized:0n,pending:0n});
  ok(await c.acknowledge_retained_media(gallery));
  c.setPrincipal(governor);
  for(const store of stores) { store.actor.setPrincipal(governor); ok(await store.actor.reconcile_upload_operations('')); ok(await store.actor.retire_upload_outcomes('')); }
@@ -147,5 +154,6 @@ try {
  console.log('PASS: acknowledged expiry retirement rejects replay; atomic growth reservations gate real creation/Pro grants and survive upgrade.');
  // Production installs cannot start retained cutover even as governor.
  const production=await pic.setupCanister({idlFactory:clubIdl,wasm:clubWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])}); production.actor.setPrincipal(governor); denied(await production.actor.start_media_retained_cutover());
+ denied(await production.actor.configure_media_growth(overhead+base*4n,0n,1024n,[]));
  console.log('PASS: authenticated exact two-store baseline, combined pending/retained accounting, branding, replacement, deletion preparation/outage/upgrade, commit recovery, free monthly limits, retention credits and production activation refusal.');
 } finally {await server.stop();}
