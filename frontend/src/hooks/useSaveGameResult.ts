@@ -5,6 +5,7 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
 import { saveLiveGameResult } from "@/live/features/events";
+import { saveHistoryResult } from "@/features/competitions/history/historyRepository";
 import { useToast } from "@/hooks/use-toast";
 import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
 
@@ -115,7 +116,13 @@ export function useSaveGameResult() {
           if (error) throw error;
           if (!event) throw new Error("Event not found or access denied.");
           if (event.competition_match_id) {
-            throw new Error("Save this score from the competition fixtures result editor.");
+            await saveHistoryResult({team_id:input.teamId,event_id:input.eventId,sport:input.sport,
+              home_label:input.homeLabel,away_label:input.awayLabel,home_score:input.homeScore,away_score:input.awayScore,
+              period_scores:input.perQuarter,player_stats:input.players,mvp_player_id:input.mvpPlayerId??null,mvp_player_name:mvp?.name??null},opts?.onlyIfMissing??false);
+            savedKeyRef.current=key;setSaved(true);
+            await queryClient.invalidateQueries();
+            if(!opts?.silent) toast({title:"Game saved",description:"Available in History on the team page."});
+            return true;
           }
         }
 

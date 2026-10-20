@@ -28,6 +28,7 @@ import { RecurringCancelEventDialog } from "@/components/RecurringCancelEventDia
 import { Clock, MapPin, Pencil, Bell, XCircle, Trash2, CheckCircle2, HelpCircle, X, ChevronRight, Users, MoreVertical, AlertCircle } from "lucide-react";
 import { getEventTypeLabel } from "@/lib/eventTypeLabel";
 import { supabase } from "@/integrations/supabase/client";
+import { readHistoryResult } from "@/features/competitions/history/historyRepository";
 import { useViewerIsAdultPlayer } from "@/hooks/useViewerIsAdultPlayer";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -184,12 +185,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
           },
         }, { eventId: event.id });
       }
-      const { data } = await supabase
-        .from("game_results")
-        .select("home_score, away_score, home_label, away_label")
-        .eq("event_id", event.id)
-        .maybeSingle();
-      return data;
+      return readHistoryResult(event.id);
     },
   });
   // "Today" boost — full-strength rail; otherwise dim slightly so today reads first.
