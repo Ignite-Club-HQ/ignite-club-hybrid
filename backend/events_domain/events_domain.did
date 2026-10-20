@@ -352,6 +352,10 @@ type Main =
                                               Err: text;
                                               Ok;
                                             });
+   delete_game_result: (event_id: text) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
    delete_saved_location: (id: text) -> (variant {
                                            Err: text;
                                            Ok;
@@ -647,7 +651,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec GamePlayerStat;
-     }) query;
+     });
    list_group_duties: (group_id: text) ->
     (variant {
        Err: text;

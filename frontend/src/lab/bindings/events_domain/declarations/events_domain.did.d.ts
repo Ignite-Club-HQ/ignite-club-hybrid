@@ -483,6 +483,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'delete_game_result' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_saved_location' : ActorMethod<
     [string],
     { 'Ok' : null } |

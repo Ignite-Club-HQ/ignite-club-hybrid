@@ -330,6 +330,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    delete_game_result(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     delete_saved_location(id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2365,6 +2372,16 @@ export class Events_domain implements events_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.delete_event_group(arg0);
+        return from_candid_variant_n1(result);
+    }
+    async delete_game_result(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.delete_game_result(arg0);
         return from_candid_variant_n1(result);
     }
     async delete_saved_location(arg0: string): Promise<{

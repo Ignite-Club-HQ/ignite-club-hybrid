@@ -686,6 +686,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_game_result' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'delete_saved_location' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -1025,7 +1030,7 @@ export const idlFactory = ({ IDL }) => {
     'list_game_player_stats' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(GamePlayerStat), 'Err' : IDL.Text })],
-        ['query'],
+        [],
       ),
     'list_group_duties' : IDL.Func(
         [IDL.Text],
