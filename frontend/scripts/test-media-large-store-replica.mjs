@@ -10,6 +10,7 @@ import { performance } from 'node:perf_hooks';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
+import { mergeCapacityResults } from './media-capacity-report.mjs';
 const wasm = resolve(dirname(fileURLToPath(import.meta.url)), '../../backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
 const ok = r => { assert.ok('Ok' in r, JSON.stringify(r, (_, v) => typeof v === 'bigint' ? String(v) : v)); return r.Ok; };
@@ -25,9 +26,9 @@ const scenarios = [
 ].filter(s => selected.includes(s.name));
 const results = [];
 const writeReport = () => {
-  let prior = [];
-  try { prior = JSON.parse(readFileSync('/tmp/media-large-store.json', 'utf8')).results || []; } catch { /* first run for this path */ }
-  const merged = [...new Map([...prior, ...results].map(r => [r.name, r])).values()];
+  let prior;
+  try { prior = JSON.parse(readFileSync('/tmp/media-large-store.json', 'utf8')); } catch { /* first run for this path */ }
+  const merged = mergeCapacityResults(prior, results, hash(readFileSync(wasm)));
   writeFileSync('/tmp/media-large-store.json', JSON.stringify({
     environment: 'isolated-pocketic', wasmSha256: hash(readFileSync(wasm)), productionCapacityProven: false, results: merged,
     limitations: [
@@ -121,6 +122,7 @@ try {
         simulatedCyclesSpent: startCycles - await pic.getCyclesBalance(fixture.canisterId),
         sameSizeChurnRounds: 2, partialUploadUpgradeRecovered: true,
       });
+      writeReport();
       console.log(`PASS ${scenario.name}: ${fillObjects} objects; ${usage.total_bytes} payload bytes; ${status.allocated_bytes} physical high-water`);
     } finally { await pic.tearDown(); await server.stop(); }
   }
