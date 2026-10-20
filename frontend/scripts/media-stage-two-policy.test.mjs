@@ -64,3 +64,21 @@ test('fill resumes only after every earlier phase is recorded on the same store'
   assert.equal(isTransientReject(new Error('Reject code: 4 could not perform self call Error code: IC0406')), true);
   assert.equal(isTransientReject(new Error('Unexpected refusal: NotAuthorized')), false);
 });
+
+test('out-of-cycles is a fuel stop, never retried as a busy store', async () => {
+  const { isTransientReject, isOutOfCycles } = await import('./media-stage-two-policy.mjs');
+  const e = new Error('Reject code: 4 Reject text: IC0207: Canister x is out of cycles Error code: IC0406');
+  assert.equal(isOutOfCycles(e), true);
+  assert.equal(isTransientReject(e), false);
+});
+
+test('uploads are priced at 2,000 cycles per byte plus margin and refused up front when unaffordable', async () => {
+  const { uploadCycles, assertAffordable, assertFuel } = await import('./media-stage-two-policy.mjs');
+  assert.equal(uploadCycles(GiB), BigInt(GiB) * 2_400n);
+  const b = approveTest({ runId: 'media-mixed-001', scenario: 'mixed', budgetT: '5', confirm: CONFIRM, governor: 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae', subnetId: 'e66qm', wasmSha256: 'a'.repeat(64) });
+  // The measured state: 1.44T left, ~9.6 GiB still to upload.
+  assert.throws(() => assertAffordable(b, 1_437_000_000_000n, 4_400_000_000_000n, 9.6 * GiB), /Not enough fuel/);
+  assert.doesNotThrow(() => assertAffordable(b, 4_400_000_000_000n, 4_400_000_000_000n, 0.5 * GiB));
+  // A frozen reserve raises the floor even when the raw balance looks fine.
+  assert.throws(() => assertFuel(b, 1_437_000_000_000n, 4_400_000_000_000n, 0, 500_000_000_000n), /frozen reserve/);
+});

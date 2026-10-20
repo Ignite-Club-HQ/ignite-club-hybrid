@@ -171,7 +171,7 @@ async function upload(path: string, size: number) {
   const r = await retry('begin_upload', () => a.begin_upload(path, 'application/octet-stream', BigInt(size), Math.ceil(size / CHUNK)));
   if ('Err' in r) { refused[r.Err] = (refused[r.Err] ?? 0) + 1; if (r.Err !== 'StoreFull') throw new Error(`Unexpected refusal: ${r.Err}`); return false; }
   for (let i = 0; i < Math.ceil(size / CHUNK); i++) ok(await retry('put_chunk', () => a.put_chunk(r.Ok, i, bytes.subarray(i * CHUNK, (i + 1) * CHUNK))));
-  const final = await retry('finalize_upload', () => a.finalize_upload(r.Ok));
+  let final; try { final = await a.finalize_upload(r.Ok); } catch (e) { if (isOutOfCycles(e)) throw new Error('Test store ran low on fuel during finalize_upload; stopped (unfinished uploads are cleared on the next resume)'); throw e; }
   if ('Err' in final) { ok(await a.abort_upload(r.Ok)); refused[final.Err] = (refused[final.Err] ?? 0) + 1; if (final.Err !== 'StoreFull') throw new Error(`Unexpected refusal: ${final.Err}`); return false; }
   assert.equal(final.Ok.content_hash, hash(bytes)); assert.equal(final.Ok.content_length, BigInt(size));
   state.objects[path] = { size, hash: final.Ok.content_hash }; uploads.push(performance.now() - started); return true;
