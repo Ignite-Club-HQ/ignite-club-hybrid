@@ -11,7 +11,7 @@
 
 - Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
 - Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
-- Read nested AGENTS.md; scripts/ governs media recovery and paid replay.
+- Read nested AGENTS.md (scripts/, backend/, backend/media_blob_store/); scripts/ governs media recovery and paid replay.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -35,7 +35,6 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets/access.
-- Media: packed/roots stay fixtures; memory 13 keeps promises; tokens/free-only, paired revisions/buddies remain. Separate configured, physical and 80% payload caps; upgrades keep sizes. Sparse tests need actor upgrade/accounting checks; live needs approval. Why: capacity is not guaranteed space.
 - II paths enforce club scope; uploads verify membership to prevent revocation bypass.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
@@ -47,4 +46,3 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
-- Photo store capacity: app ceiling (uploadPolicy) < build `--max-stable-pages` (media mops.toml, 240 GiB) < Motoko 1.16.1 shared Region table (256 GiB). Never set the page cap at/above 256 GiB without a reviewed runtime. Why: the runtime has no aggregate block-table exhaustion guard.
