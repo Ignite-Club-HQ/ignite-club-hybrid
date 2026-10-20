@@ -2262,8 +2262,9 @@ persistent actor class Main(governorInit : Principal) {
       case (#Err(e)) #Err(e);
       case (#Ok(result)) {
         let hidden = switch (result) { case null false; case (?r) r.scores_hidden };
-        #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id).map(func(item) =
-          if (hidden) ({ item with goals_scored = 0 }) else item))
+        #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id).map(func(item : Types.GamePlayerStat) : Types.GamePlayerStat {
+          if (hidden) ({ item with goals_scored = 0 : Nat32 }) else item
+        }))
       }
     }
   };
