@@ -14,7 +14,7 @@
 import { supabase as defaultClient } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isVaultImageItem } from "./vaultItemClassification";
-import { mapLiveVaultFile, mapLiveVaultFolder, resolveCompetitionVaultFileUrls } from "./vaultReadRepository";
+import { mapLiveVaultFile, mapLiveVaultFolder, unwrapLiveVaultFileWithFolder, resolveCompetitionVaultFileUrls } from "./vaultReadRepository";
 
 type Client = typeof defaultClient;
 
