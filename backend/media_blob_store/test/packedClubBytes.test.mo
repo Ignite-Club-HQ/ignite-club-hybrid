@@ -49,12 +49,21 @@ persistent actor {
     let ?same = Packed.reserve(packed, 1) else { assert false; loop {} };
     assert same.page == handles[0].page and same.offset == handles[0].offset;
     assert same.generation > handles[0].generation;
+    assert Packed.read(packed, same, 0, 1) == Blob.fromArray([]);
     Packed.release(packed, handles[0]);
     assert not Packed.write(packed, handles[0], Blob.fromArray([9]));
     assert Packed.write(packed, same, Blob.fromArray([8]));
     for (i in Nat.range(1, 1024)) Packed.release(packed, handles[i]);
     Packed.release(packed, same);
     assert packed.pages.size() == 0;
+    let reopened = Packed.empty(spaces, "c");
+    let ?newHandle = Packed.reserve(reopened, 1) else { assert false; loop {} };
+    assert newHandle.generation > same.generation;
+    assert not Packed.write(reopened, same, Blob.fromArray([9]));
+    Packed.release(reopened, same);
+    assert Packed.read(reopened, newHandle, 0, 1) == Blob.fromArray([]);
+    assert Packed.write(reopened, newHandle, Blob.fromArray([6]));
+    Packed.release(reopened, newHandle);
     let ?whole = Packed.reserve(packed, Packed.pageBytes) else { assert false; loop {} };
     let bytes = Blob.fromArray(Array.repeat<Nat8>(3, Packed.pageBytes));
     assert Packed.write(packed, whole, bytes);
@@ -67,5 +76,20 @@ persistent actor {
     assert packed.pages.size() == 0;
     // The enclosing root remains promised to this club after page deletion.
     assert Stable.reserveWithin(global, 1, Space.rootBytes) == null;
+    // Adjacent small buddies merge, but a pinned neighbour never moves.
+    let ?left = Packed.reserve(packed, 32_768) else { assert false; loop {} };
+    let ?right = Packed.reserve(packed, 32_768) else { assert false; loop {} };
+    assert left.page == right.page and left.offset != right.offset;
+    assert Packed.write(packed, right, Blob.fromArray(Array.repeat<Nat8>(5, 32_768)));
+    Packed.release(packed, left);
+    let ?quarterA = Packed.reserve(packed, 16_384) else { assert false; loop {} };
+    let ?quarterB = Packed.reserve(packed, 16_384) else { assert false; loop {} };
+    assert quarterA.page == right.page and quarterB.page == right.page;
+    assert Packed.read(packed, right, 0, 1) == Blob.fromArray([5]);
+    Packed.release(packed, quarterA); Packed.release(packed, quarterB);
+    let ?merged = Packed.reserve(packed, 32_768) else { assert false; loop {} };
+    assert merged.page == left.page and merged.offset == left.offset;
+    Packed.release(packed, merged); Packed.release(packed, right);
+    assert packed.pages.size() == 0;
   }
 }
