@@ -175,6 +175,7 @@ persistent actor MediaBlobStore {
     cancel_retained_media : shared (Text, Text, Text, Nat) -> async RetainedQuota.Result;
     credit_deleted_retained_media : shared (Text, RetainedQuota.Object) -> async RetainedQuota.Result;
     prepare_deleted_retained_media : shared (Text, RetainedQuota.Object) -> async RetainedQuota.Result;
+    acknowledge_retained_media : shared Text -> async Result;
   };
   func retainedService() : ?RetainedService { switch (club_domain_canister) { case (?id) ?(actor(id.toText()) : RetainedService); case null null } };
 
@@ -334,7 +335,12 @@ persistent actor MediaBlobStore {
     try {
       if (not original.removed) {
         switch (await (with timeout = 10) service.prepare_deleted_retained_media(original.token, entry)) {
-          case (#Err(message)) return #Err(message);
+          case (#Err(message)) {
+            if (message == "Expired retained token absent") {
+              switch (retained_deletions.get(path)) { case (?current) { if (current.token == original.token and not current.removed) retained_deletions.remove(path) }; case null {} }
+            };
+            return #Err(message)
+          };
           case (#Ok(op)) { if (op.state != #reserved) return #Err("Deletion preparation conflict") }
         };
         if (authority != club_domain_canister or retainedBlocked()) return #Err("Deletion authority changed");
@@ -347,14 +353,23 @@ persistent actor MediaBlobStore {
         }
       };
       switch (await (with timeout = 10) service.credit_deleted_retained_media(original.token, entry)) {
-        case (#Err(message)) #Err(message);
+        case (#Err(message)) {
+          if (message == "Expired retained token absent" and original.removed) {
+            switch (await service.acknowledge_retained_media(original.token)) {
+              case (#Ok) { switch (retained_deletions.get(path)) { case (?current) { if (current.token == original.token and current.removed) retained_deletions.remove(path) }; case null {} }; #Ok };
+              case (#Err(error)) #Err(error)
+            }
+          } else #Err(message)
+        };
         case (#Ok(op)) {
           if (op.state != #committed or authority != club_domain_canister) return #Err("Deletion receipt changed");
           switch (retained_deletions.get(path)) {
             case null #Ok;
             case (?latest) {
               if (latest.token != original.token or not latest.removed) return #Err("Deletion receipt changed");
-              retained_deletions.remove(path); bumpInventory(); #Ok
+              if (original.token.startsWith(#text "r1:")) { switch (await (with timeout = 10) service.acknowledge_retained_media(original.token)) { case (#Err(message)) return #Err(message); case (#Ok) {} } };
+              switch (retained_deletions.get(path)) { case (?current) { if (current.token == original.token) retained_deletions.remove(path) }; case null {} };
+              bumpInventory(); #Ok
             }
           }
         }
@@ -372,7 +387,7 @@ persistent actor MediaBlobStore {
     let ?club = RetainedProtocol.club(path) else return #Err("Club path required");
     if (retained_deletions.size() >= 100_000) return #Err("Deletion ledger full");
     next_upload_seq += 1;
-    let receipt : RetainedProtocol.Deletion = { token = "delete-" # next_upload_seq.toText(); path; club; bytes = record.length; revision = retained_revisions.get(path) ?? 0; owner = record.owner; removed = false };
+    let receipt : RetainedProtocol.Deletion = { token = "r1:" # currentCycle().toText() # ":" # next_upload_seq.toText() # ":delete"; path; club; bytes = record.length; revision = retained_revisions.get(path) ?? 0; owner = record.owner; removed = false };
     retained_deletions.add(path, receipt);
     await creditDeletion(path)
   };
@@ -461,7 +476,17 @@ persistent actor MediaBlobStore {
         deletes := deletes.concat([id]); removed += 1
       }
     };
-    for (id in deletes.values()) quota_operations.remove(id);
+    removed := 0;
+    for (id in deletes.values()) {
+      var permitted = retained_mode != #active or id.startsWith(#text "upload-");
+      if (retained_mode == #active and id.startsWith(#text "r1:")) {
+        switch (retainedService()) {
+          case (?retained) { try { switch (await retained.acknowledge_retained_media(id)) { case (#Ok) permitted := true; case _ {} } } catch (_) {} };
+          case null {}
+        }
+      };
+      if (permitted) { quota_operations.remove(id); removed += 1 }
+    };
     if (scanned < 200) next := "";
     #Ok({ removed; cursor = next })
   };
@@ -479,6 +504,9 @@ persistent actor MediaBlobStore {
     for (id in ids.values()) {
       switch (quota_operations.get(id)) {
         case (?op) {
+          if (retained_mode == #active and (op.status == #committed or op.status == #aborted) and id.startsWith(#text "r1:")) {
+            switch (retainedService()) { case (?retained) { ignore await retained.acknowledge_retained_media(id); attempted += 1 }; case null {} }
+          };
           if (op.status == #committing) { ignore await commitShared(id); attempted += 1 };
           if (op.status == #aborting) { ignore await abortShared(id); attempted += 1 };
           if (op.status == #reserving) {
@@ -560,6 +588,7 @@ persistent actor MediaBlobStore {
           let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
           let ?result = latest.result else return #Err("Missing result");
           quota_operations.add(id, { latest with status = #committed });
+          if (retained_mode == #active) { switch (retainedService()) { case (?retained) { ignore await retained.acknowledge_retained_media(id) }; case null {} } };
           #Ok(result)
         };
         case (#Err(message)) #Err(message)
@@ -595,6 +624,7 @@ persistent actor MediaBlobStore {
           let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
           quota_operations.add(id, { latest with status = #aborted });
           pending_uploads := pending_uploads.filter(func(u) = u.id != id);
+          if (retained_mode == #active) { switch (retainedService()) { case (?retained) { ignore await retained.acknowledge_retained_media(id) }; case null {} } };
           #Ok
         };
         case (#Err(message)) #Err(message)
@@ -754,7 +784,7 @@ persistent actor MediaBlobStore {
 
   func canReserve(size : Nat64) : Bool {
     UploadPolicy.canAdmitFor(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
-    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), StableBytes.limitFor(largeMode()))))
+    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), capacity_limit_bytes.toNat())))
   };
 
   func storedChunkBytes(upload : PendingUpload) : Nat {
@@ -944,7 +974,7 @@ persistent actor MediaBlobStore {
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
     bumpInventory();
     next_upload_seq += 1;
-    let id = "upload-" # Nat64.toText(next_upload_seq);
+    let id = if (retained_mode == #active) "r1:" # currentCycle().toText() # ":" # next_upload_seq.toText() # ":upload" else "upload-" # Nat64.toText(next_upload_seq);
     let upload : PendingUpload = {
       id;
       path;
@@ -1047,7 +1077,7 @@ persistent actor MediaBlobStore {
         // Replace any prior blob at this path (re-upload by owner/governor).
         if (stable_writes) {
           if (stable_blobs.size() >= 100_000 and stable_blobs.get(upload.path) == null) return #Err("Stable metadata capacity reached");
-          let ?slice = StableBytes.writeWithin(stable_bytes, assembled, StableBytes.limitFor(largeMode())) else return #Err("StoreFull");
+          let ?slice = StableBytes.writeWithin(stable_bytes, assembled, capacity_limit_bytes.toNat()) else return #Err("StoreFull");
           removeStored(upload.path);
           stable_blobs.add(upload.path, { path = upload.path; mime = upload.mime; owner = upload.owner; content_hash; slice; uploaded_at = Time.now() });
         } else {

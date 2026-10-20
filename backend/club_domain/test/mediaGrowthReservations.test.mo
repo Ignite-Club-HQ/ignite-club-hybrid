@@ -1,0 +1,15 @@
+import Growth "../src/mediaGrowthReservations";
+import Retained "../src/mediaRetainedQuota";
+let state = Growth.empty();
+let ledger = Retained.empty();
+assert not Growth.reserve(state, ledger, "c", 1);
+state.configured := true; state.usable := Growth.slotOverhead + 2 * Retained.baseBytes;
+assert Growth.reserve(state, ledger, "c", 5_368_709_120);
+assert Growth.committed(state) == state.usable;
+assert not Growth.reserve(state, ledger, "other", 1);
+assert not Growth.reserve(state, ledger, "c", 5_368_709_121);
+assert Growth.reserve(state, ledger, "c", 1);
+assert Growth.committed(state) == state.usable;
+state.usable += 2 * Retained.gib;
+assert Growth.reserve(state, ledger, "c", 5_368_709_120 + 1_073_741_824);
+assert not Growth.reserve(state, ledger, "c", 5_368_709_120 + 1_073_741_825);

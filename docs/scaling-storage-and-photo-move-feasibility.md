@@ -149,4 +149,10 @@ Existing single-store Pro, full storage/shared-monthly recovery and bounded two-
 
 ### Still required
 
-Retained operation history is capped at 100,000 entries and fails closed; a safe bounded retirement/replay protocol is **not implemented**. Prove this before long-term use. Authoritative physical growth commitments for admission/entitlement changes, representative full-volume capacity evidence, complete signed live inventory and separately approved release/activation remain outstanding. No live canisters, capacity settings, group openings or club moves changed.
+New local epoch-bound retained operations retire only after store acknowledgement and dual-ledger terminal settlement, in pages of at most 200 scanned records. Legacy authority operations and revision history remain retained. Expired unknown cancellation acknowledges absence without recreating reservations; replay cannot rebind the monthly cycle. Unresolved operations never expire automatically.
+
+The local authority reserves growth before club creation, subscription publication and storage-promo grants, with no await between reservation and publication. Commitments survive downgrade, deletion and upgrade, and uploads cannot exceed them. It requires a complete local baseline, active retained accounting and `IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL=1`; router-wide placement still needs shared reservations before activation.
+
+`frontend/scripts/test-media-capacity-workload-replica.mjs` measures mixed-size churn, reuse, physical exhaustion, readback and upgrade in isolated PocketIC; it never changes tested limits. It found and fixed allocation ignoring the configured store budget. In a bounded 16 MiB run, churn stranded size-class space so exhaustion occurred at 19 live 400 KB files (7,600,000 payload / 16,580,608 allocated bytes); local upload median was ~65 ms, p95 ~235 ms. These are not mainnet guarantees.
+
+Remaining gates: fragmentation-aware capacity proof, full-volume/mainnet measurements, router-wide reservations, signed live inventory, legacy/revision-map retirement and separate activation approval. No live canisters, capacity settings, group openings or club moves changed.

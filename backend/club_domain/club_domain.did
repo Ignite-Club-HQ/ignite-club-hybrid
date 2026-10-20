@@ -469,6 +469,10 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   acknowledge_retained_media: (token: text) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
    activate_media_quota: () -> (variant {
                                   Err: text;
                                   Ok;
@@ -553,6 +557,11 @@ type Main =
      });
    commit_media_quota: (token: text) -> (Result);
    commit_retained_media: (token: text) -> (Result__1);
+   configure_media_growth: (usable: nat, unassigned: nat, free_bytes: 
+    nat, clubs: vec text) -> (variant {
+                                Err: text;
+                                Ok;
+                              });
    create_child_for_parent_in_club: (club_id: text, parent: principal) ->
     (variant {
        Err: text;
@@ -1725,6 +1734,14 @@ type Main =
              removed: nat;
              reservation_cursor: text;
              usage_cursor: text;
+           };
+     });
+   retire_retained_media_records: (cursor: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             cursor: text;
+             removed: nat;
            };
      });
    revoke_identity: (target: principal, expected_version: nat64) ->

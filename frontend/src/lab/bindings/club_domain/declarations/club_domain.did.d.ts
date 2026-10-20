@@ -258,6 +258,11 @@ export interface Main {
     { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
+  'acknowledge_retained_media' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'activate_media_quota' : ActorMethod<
     [],
     { 'Ok' : null } |
@@ -354,6 +359,11 @@ export interface Main {
   >,
   'commit_media_quota' : ActorMethod<[string], Result>,
   'commit_retained_media' : ActorMethod<[string], Result__1>,
+  'configure_media_growth' : ActorMethod<
+    [bigint, bigint, bigint, Array<string>],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'create_child_for_parent_in_club' : ActorMethod<
     [string, Principal],
     { 'Ok' : Child } |
@@ -1529,6 +1539,11 @@ export interface Main {
           'removed' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'retire_retained_media_records' : ActorMethod<
+    [string],
+    { 'Ok' : { 'cursor' : string, 'removed' : bigint } } |
       { 'Err' : string }
   >,
   'revoke_identity' : ActorMethod<
