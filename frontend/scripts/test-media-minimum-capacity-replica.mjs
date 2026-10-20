@@ -41,12 +41,14 @@ try {
   ok(await a.put_chunk(pending, 1, Buffer.from('finished')));
   ok(await a.finalize_upload(pending));
   assert.equal((await a.get_usage()).total_bytes, 1_000_016n);
+  const finalizedAllocation = (await a.stable_storage_status()).allocated_bytes;
+  assert.equal(finalizedAllocation, 2_097_152n);
   ok(await a.delete_blob('users/minimum/pending'));
   assert.equal((await a.get_usage()).total_bytes, 8n);
   const cancelled = ok(await a.begin_upload('users/minimum/abort', 'application/octet-stream', 1_000_008n, 2));
   ok(await a.abort_upload(cancelled));
   const retry = ok(await a.begin_upload('users/minimum/retry', 'application/octet-stream', 1_000_008n, 2));
-  assert.equal((await a.stable_storage_status()).allocated_bytes, allocation);
+  assert.equal((await a.stable_storage_status()).allocated_bytes, finalizedAllocation);
   ok(await a.abort_upload(retry));
   assert.equal((await a.get_usage()).total_bytes, 8n);
   console.log('PASS: current 64 GiB rejection, owner-only settings, committed-file and pending-upload upgrade preservation, abort/retry reuse and exact totals. Not 64 GiB production acceptance.');
