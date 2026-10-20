@@ -11,7 +11,7 @@
     "budgetCycles": "3000000000000",
     "capacityBytes": 5368709120
   },
-  "phase": "upgrade-mid-upload",
+  "phase": "complete",
   "pending": null,
   "receipts": [
     {
@@ -102,5 +102,27 @@
     "path": "users/network-test/media-smoke-001/interrupted",
     "size": 2097152,
     "hash": "c406296b30d433e27c08e2989ad557c7e9ae7825d1bea14c42aa4ef53c9e8a9d"
+  },
+  "summary": {
+    "payloadBytes": 2097152,
+    "objects": 1,
+    "physical": {
+      "indexed_count": "1",
+      "allocated_bytes": "2097152",
+      "enabled": true,
+      "legacy_count": "0"
+    },
+    "realCyclesConsumedSinceInstall": "18603055472",
+    "uploadSamples": 1,
+    "uploadMedianMs": 12943.825936000001,
+    "uploadP95Ms": 12943.825936000001,
+    "verifiedReads": 3,
+    "readP95Ms": 3666.0865829999966,
+    "productionCapacityProven": false,
+    "limitations": [
+      "Synthetic owner paths only; no club entitlement, encryption or UI acceptance.",
+      "Funding ceiling includes retained idle fuel; storage upkeep continues until operator cleanup.",
+      "This run does not prove full 32 GiB capacity."
+    ]
   }
 }
