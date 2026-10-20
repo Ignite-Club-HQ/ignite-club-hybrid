@@ -109,6 +109,10 @@ export async function uploadVaultItem(
   // Quota reserve/settle are Supabase-only and intentionally skipped:
   // storage accounting is hard-zeroed for ICP (vaultAccessRepository).
   if (isFeatureRoutedToIcp("vault")) {
+    // Fail closed before any bytes are encrypted or uploaded.
+    if (!clubId) {
+      throw new Error("Vault uploads need a club scope on the ICP backend");
+    }
     // Every on-chain byte costs upload time; shrink photos first (same
     // resize the gallery uses). Non-images pass through untouched.
     if (options.kind === "photo") {
@@ -127,9 +131,6 @@ export async function uploadVaultItem(
       : null;
     if (!blobUpload) {
       throw new Error("Vault uploads are not available for Internet Identity members until the media canisters are configured");
-    }
-    if (!clubId) {
-      throw new Error("Vault uploads need a club scope on the ICP backend");
     }
     await withFeatureBackend("vault", {
       supabase: () => {
