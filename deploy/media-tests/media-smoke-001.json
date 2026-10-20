@@ -45,5 +45,6 @@
     }
   ],
   "createdAtNs": "1792474873429000000",
-  "canisterId": "3hdfk-5iaaa-aaaal-qxptq-cai"
+  "canisterId": "3hdfk-5iaaa-aaaal-qxptq-cai",
+  "error": "Cannot find required field 'canister_version' in record, expected fields: [canister_version, cycles, settings, module_hash], received fields: [_58798021_, _79599772_, _100394802_, _238856128_, _596483356_, _1054895615_, _1614520508_, _2096228120_, _2190693645_, _2336062691_, _2642624104_, _2733945392_, _2928387969_, _4090107140_]"
 }
