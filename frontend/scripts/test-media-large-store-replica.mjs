@@ -1,5 +1,5 @@
 // Stage 1 large-store rehearsal: existing actor only, isolated PocketIC, synthetic ciphertext; never mainnet.
-// Proves the 32 GiB large-capacity mode beyond the old 2 GiB heap limit, record-count behaviour,
+// Probes large-capacity mode beyond the old 2 GiB heap limit, record-count behaviour,
 // upgrade persistence and interrupted-upload recovery at high fill. Certifies nothing about mainnet.
 import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
@@ -56,9 +56,10 @@ try {
         ],
       });
       const a = fixture.actor; a.setPrincipal(governor);
-      // Large mode must reject a heap-mode-scale mistake and accept the 32 GiB ceiling.
-      assert.ok('Err' in await a.set_capacity_limit(BigInt(40 * GiB)), 'must refuse above 32 GiB');
+      // Larger mode cannot be used until stable writes are enabled.
+      assert.ok('Err' in await a.set_capacity_limit(BigInt(64 * GiB)), 'stable writes must be enabled first');
       ok(await a.enable_stable_media_storage());
+      assert.ok('Err' in await a.set_capacity_limit(BigInt(64 * GiB) + 1n), 'must refuse above 64 GiB');
       ok(await a.set_capacity_limit(BigInt(scenario.ceiling)));
       const baseline = await a.memory_stats(), startCycles = await pic.getCyclesBalance(fixture.canisterId);
       const live = new Map(), uploads = [], reads = []; let refused = 0;

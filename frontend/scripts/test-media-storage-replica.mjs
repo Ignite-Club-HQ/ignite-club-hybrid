@@ -81,7 +81,7 @@ try {
   ok(await large.actor.enable_stable_media_storage());
   ok(await large.actor.set_capacity_limit(34_359_738_368n));
   assert.equal((await large.actor.get_usage()).capacity_limit_bytes, 34_359_738_368n);
-  assert.ok('Err' in await large.actor.set_capacity_limit(34_359_738_369n));
+  assert.ok('Err' in await large.actor.set_capacity_limit(68_719_476_737n));
   large.actor.setPrincipal(other);
   assert.ok('Err' in await large.actor.set_capacity_limit(2_147_483_648n));
   large.actor.setPrincipal(governor);
