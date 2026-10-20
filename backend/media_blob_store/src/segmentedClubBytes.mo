@@ -29,12 +29,21 @@ module {
     Region.storeNat64(region, at + 32, segment.slot.toNat64());
     Region.storeNat64(region, at + 40, 0)
   };
-  func load(state : State, file : Handle, index : Nat) : Packed.Handle {
+  func rawSegment(state : State, file : Handle, index : Nat) : Packed.Handle {
     let region = state.pool.space.store.region;
     let at = position(file, index);
     { generation = Region.loadNat64(region, at).toNat(); page = Region.loadNat64(region, at + 8);
       offset = Region.loadNat64(region, at + 16).toNat(); length = Region.loadNat64(region, at + 24).toNat();
       slot = Region.loadNat64(region, at + 32).toNat() }
+  };
+  func checkedSegment(state : State, file : Handle, index : Nat) : ?Packed.Handle {
+    if (index >= file.segments) return null;
+    let segment = rawSegment(state, file, index);
+    let expected = Nat.min(Packed.pageBytes, file.length - index * Packed.pageBytes);
+    if (segment.length != expected or segment.slot != Packed.slotFor(expected)) return null;
+    if (segment.offset % segment.slot != 0 or segment.offset + segment.slot > Packed.pageBytes) return null;
+    if (segment.generation == file.table.generation or not Packed.contains(state.pool, segment)) return null;
+    ?segment
   };
   public func reserve(state : State, length : Nat) : ?Handle {
     if (length == 0 or length > maxSegments * Packed.pageBytes) return null;
@@ -54,7 +63,7 @@ module {
         case (?segment) { save(state, file, acquired, segment); acquired += 1 };
         case null {
           var i = 0;
-          while (i < acquired) { Packed.release(state.pool, load(state, file, i)); i += 1 };
+          while (i < acquired) { Packed.release(state.pool, rawSegment(state, file, i)); i += 1 };
           Packed.release(state.pool, table);
           return null
         }
@@ -65,7 +74,10 @@ module {
   // Exactly one bounded page per call; never assemble whole ciphertexts.
   public func writeSegment(state : State, file : Handle, index : Nat, bytes : Blob) : Bool {
     if (not valid(state, file) or index >= file.segments) return false;
-    let segment = load(state, file, index);
+    let ?segment = checkedSegment(state, file, index) else return false;
+    if (Region.loadNat64(state.pool.space.store.region, position(file, index) + 40) == 1) {
+      return Packed.read(state.pool, segment, 0, segment.length) == bytes
+    };
     if (not Packed.write(state.pool, segment, bytes)) return false;
     Region.storeNat64(state.pool.space.store.region, position(file, index) + 40, 1); true
   };
@@ -74,6 +86,7 @@ module {
     var i = 0;
     while (i < file.segments) {
       if (Region.loadNat64(state.pool.space.store.region, position(file, i) + 40) != 1) return false;
+      let ?_segment = checkedSegment(state, file, i) else return false;
       i += 1
     }; true
   };
@@ -86,7 +99,7 @@ module {
     while (remaining > 0) {
       let index = cursor / Packed.pageBytes;
       if (Region.loadNat64(state.pool.space.store.region, position(file, index) + 40) != 1) return "";
-      let segment = load(state, file, index);
+      let ?segment = checkedSegment(state, file, index) else return "";
       let inner = cursor % Packed.pageBytes;
       let take = Nat.min(remaining, segment.length - inner);
       let bytes = Packed.read(state.pool, segment, inner, take);
@@ -102,7 +115,12 @@ module {
   public func release(state : State, file : Handle) {
     if (not valid(state, file)) return;
     var i = 0;
-    while (i < file.segments) { Packed.release(state.pool, load(state, file, i)); i += 1 };
+    // A malformed descriptor keeps the file locked, never partially frees it.
+    while (i < file.segments) {
+      let ?_segment = checkedSegment(state, file, i) else return; i += 1
+    };
+    i := 0;
+    while (i < file.segments) { Packed.release(state.pool, rawSegment(state, file, i)); i += 1 };
     state.files.remove(file.generation);
     Packed.release(state.pool, file.table)
   };

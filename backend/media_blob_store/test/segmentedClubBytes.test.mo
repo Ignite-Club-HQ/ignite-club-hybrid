@@ -61,8 +61,33 @@ persistent actor {
     assert not Segments.writeSegment(files, stale, 0, ([9] : [Nat8]).toBlob());
     Segments.release(files, stale);
     assert Segments.writeSegment(files, replacement, 0, ([8] : [Nat8]).toBlob());
+    assert Segments.writeSegment(files, replacement, 0, ([8] : [Nat8]).toBlob());
+    assert not Segments.writeSegment(files, replacement, 0, ([9] : [Nat8]).toBlob());
+    let foreign = Segments.empty(Packed.empty(spaces, "foreign"));
+    assert not Segments.writeSegment(foreign, replacement, 0, ([8] : [Nat8]).toBlob());
+    Segments.release(foreign, replacement);
     assert Segments.read(files, replacement, 0, 1) == ([8] : [Nat8]).toBlob();
     Segments.release(files, replacement);
+    // Descriptor records themselves share pages with tiny ciphertexts.
+    var tinyFiles : [Segments.Handle] = [];
+    for (_ in Nat.range(0, 512)) {
+      let ?file = Segments.reserve(files, 1) else { assert false; loop {} };
+      tinyFiles := tinyFiles.concat([file])
+    };
+    assert pool.pages.size() == 1;
+    for (file in tinyFiles.values()) Segments.release(files, file);
+    assert pool.pages.size() == 0;
+    // Malformed descriptors are refused without partially releasing pages.
+    let ?damaged = Segments.reserve(files, 65_537) else { assert false; loop {} };
+    let at = damaged.table.page + damaged.table.offset.toNat64() + 24;
+    Region.storeNat64(store.region, at, 0);
+    assert not Segments.writeSegment(files, damaged, 0, Array.repeat<Nat8>(7, 65_536).toBlob());
+    let before = pool.pages.size();
+    Segments.release(files, damaged);
+    assert pool.pages.size() == before and files.files.size() == 1;
+    Region.storeNat64(store.region, at, 65_536);
+    Segments.release(files, damaged);
+    assert pool.pages.size() == 0 and files.files.size() == 0;
     // Fail after acquiring a descriptor and many payload pages. Roll back
     // all physical reservations without refunding the club's promised roots.
     let smallStore : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
