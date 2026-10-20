@@ -1,0 +1,55 @@
+{
+  "environment": "isolated-pocketic",
+  "wasmSha256": "8ea0289f54fb5224c1eb1e17da9242e909d34dd333cfb5f7643bbfaaebf76c9b",
+  "productionCapacityProven": false,
+  "results": [
+    {
+      "name": "large-records",
+      "ceiling": 536870912,
+      "sizes": [
+        1024
+      ],
+      "max": 10000,
+      "concurrency": 4,
+      "fillObjects": 8192,
+      "refused": 4,
+      "payloadBytes": "8388608",
+      "physicalHighWaterBytes": "536870912",
+      "payloadFraction": 0.015625,
+      "baseline": {
+        "memory_bytes": "5373952",
+        "stable_bytes": "0",
+        "heap_bytes": "5338896"
+      },
+      "memoryAtFill": {
+        "memory_bytes": "335544320",
+        "stable_bytes": "0",
+        "heap_bytes": "57090536"
+      },
+      "memoryAfterChurnAndUpgrade": {
+        "memory_bytes": "335544320",
+        "stable_bytes": "0",
+        "heap_bytes": "66737176"
+      },
+      "fillMs": 530314.082855,
+      "localFillMiBPerSecond": 0.015085399876486747,
+      "uploadSamples": 16384,
+      "uploadMedianMs": 284.59281000029296,
+      "uploadP95Ms": 833.4425340001471,
+      "verifiedReads": 16,
+      "readMedianMs": 3.3051379999378696,
+      "readP95Ms": 4.988948000012897,
+      "simulatedCyclesSpent": "2087350449456",
+      "sameSizeChurnRounds": 2,
+      "partialUploadUpgradeRecovered": true
+    }
+  ],
+  "limitations": [
+    "Synthetic ciphertext on existing user-path actor methods; not club entitlement, encryption or UI acceptance.",
+    "5 GiB mixed and 512 MiB record-count bounds; not a full 32 GiB fill.",
+    "Assumed workload sizes, not observed customer data; same-size churn only.",
+    "100,000-record actor ceiling not reached (8,192 records max here).",
+    "Local time and simulated aggregate cycles are not mainnet throughput/cost or per-operation instructions.",
+    "No live flags, settings, deployments or club moves changed."
+  ]
+}
