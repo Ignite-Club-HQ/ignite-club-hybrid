@@ -268,6 +268,22 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_pending_uploads' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'id' : IDL.Text,
+                'path' : IDL.Text,
+                'size' : IDL.Nat64,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_physical_growth_capacity' : IDL.Func(
         [],
         [
