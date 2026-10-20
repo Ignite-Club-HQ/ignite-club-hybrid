@@ -24,7 +24,7 @@ try {
  assert.equal(Boolean(oldClub),Boolean(oldStore),'Old authority and stores must be tested together');
  const club = await pic.setupCanister({idlFactory:clubIdl,wasm:oldClub || clubWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor]),environmentVariables:[{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'}]});
  const stores=[];
- for(let i=0;i<2;i++) stores.push(await pic.setupCanister({idlFactory,wasm:oldStore || wasm,sender:governor,controllers:[governor],environmentVariables:[{name:'GOVERNOR_PRINCIPAL',value:governor.toText()},{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'}]}));
+ for(let i=0;i<2;i++) stores.push(await pic.setupCanister({idlFactory,wasm:oldStore || wasm,sender:governor,controllers:[governor],environmentVariables:[{name:'GOVERNOR_PRINCIPAL',value:governor.toText()},{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'},{name:'IGNITE_MEDIA_SLOT_LOCAL_REHEARSAL',value:'1'}]}));
  const c=club.actor; c.setPrincipal(governor);
  ok(await c.create_club('c','Test Club','test-club',[],[]));
  ok(await c.add_role_grant(owner,'c','player',[]));
