@@ -7,6 +7,7 @@ import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
+import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const wasm = resolve(root,'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const clubWasm = resolve(root,'backend/club_domain/.mops/.build/club_domain.wasm');
@@ -151,6 +152,33 @@ try {
  assert.equal(ok(await c.get_club_subscription('c2')).length,0);
  await pic.upgradeCanister({canisterId:club.canisterId,wasm:clubWasm,sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
  denied(await c.create_club('c3','Still no room','third',[],[]));
+ // Same real authority and stores, now backed by the router's physical ledger.
+ const routerWasm=resolve(root,'target/wasm32-unknown-unknown/release/shard_router.wasm');
+ const router=await pic.setupCanister({idlFactory:routerIdl,wasm:routerWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor}])});
+ const r=router.actor; r.setPrincipal(governor);
+ const domains=['club_domain','events_domain','messaging_domain','vault_domain','competition_domain','club_points_domain','mini_league_domain','media_metadata','insights_domain','notification_queue','pii_access_control','timer_jobs','secret_workload_identity'].map((domain,i)=>({domain,canister:domain==='club_domain'?club.canisterId:Principal.fromUint8Array(new Uint8Array([50+i,1]))}));
+ let revision=ok(await r.register_group({id:'g',target_alias:'local',domains,accepting:true,max_clubs:100,assigned_clubs:0,heap_budget_bytes:1000n,heap_bytes:0n,min_cycles:1n,cycles:0n,observed_at_ns:0n,photo_store:[stores[0].canisterId]},0n));
+ revision=ok(await r.record_group_health('g',1n,2n,revision));
+ for(const id of ['c','c2']) { const assigned=ok(await r.assign_new_club_group(id,'local',revision)); revision=assigned.revision; }
+ await pic.updateCanisterSettings({canisterId:router.canisterId,sender:governor,environmentVariables:[{name:'IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL',value:'1'}]});
+ await pic.updateCanisterSettings({canisterId:club.canisterId,sender:governor,environmentVariables:[{name:'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL',value:'1'},{name:'IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL',value:'1'},{name:'IGNITE_MEDIA_ROUTER_GROWTH_LOCAL_REHEARSAL',value:'1'}]});
+ await pic.upgradeCanister({canisterId:club.canisterId,wasm:clubWasm,sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+ // Configuration refuses a partial baseline; no silent reserve for omitted clubs.
+ denied(await r.configure_group_media_growth('g',overhead+base*2n+2048n,overhead,2048n,[['c',base*2n]],revision));
+ ok(await r.configure_group_media_growth('g',overhead+base*2n+2048n,overhead,2048n,[['c',base*2n],['c2',2048n]],revision));
+ denied(await c.save_club_subscription(subscription)); // binding mandatory
+ ok(await c.configure_media_growth_router(router.canisterId,'g','local'));
+ denied(await c.configure_media_growth_router(router.canisterId,'foreign','local'));
+ ok(await c.save_club_subscription(subscription));
+ r.setPrincipal(other); denied(await r.reserve_group_media_growth('g','local','c',base*2n)); r.setPrincipal(governor);
+ await pic.stopCanister({canisterId:router.canisterId,sender:governor});
+ denied(await c.save_club_subscription({...subscription,is_pro:false,plan:'free'}));
+ assert.equal(ok(await c.get_club_subscription('c'))[0].is_pro,true);
+ await pic.startCanister({canisterId:router.canisterId,sender:governor});
+ await pic.upgradeCanister({canisterId:router.canisterId,wasm:routerWasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+ ok(await c.save_club_subscription(subscription));
+ denied(await r.place_my_new_club('00000000-0000-4000-8000-000000000001','local'));
+ console.log('PASS: same-authority router reservations, exact baseline, caller/group binding, outage publication denial, upgrade persistence and exhausted new-club placement.');
  console.log('PASS: acknowledged expiry retirement rejects replay; atomic growth reservations gate real creation/Pro grants and survive upgrade.');
  // Production installs cannot start retained cutover even as governor.
  const production=await pic.setupCanister({idlFactory:clubIdl,wasm:clubWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])}); production.actor.setPrincipal(governor); denied(await production.actor.start_media_retained_cutover());
