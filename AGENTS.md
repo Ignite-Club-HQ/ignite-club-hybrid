@@ -11,7 +11,7 @@
 
 - Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
 - Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html to dist/index.html for static hosting/SPA fallback.
-- Read subdirectory AGENTS.md before edits; scripts/ governs isolated media tests. Why: preserve live storage and durable receipts.
+- Read subdirectory AGENTS.md; scripts/ governs isolated media tests to protect live storage and receipts.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -44,4 +44,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
 - Cross-group accounts/admission stay local-only: no live UI/deploy flags. Identity uses durable unlink denials and consensus eligibility, never resource grants. Activation requires complete all-service fences/inventory/drain/mirror proof; follow backend/AGENTS.md for evidence. Why: eligibility and fan-out cannot prove global revocation or deny unreached groups.
 
-- Mainnet photo-key preflight: offline SDK derivation, signed controller checks, durable pre/post-upgrade receipts; other targets fail closed (vetKD rejects ingress).
+- Mainnet key preflight: offline SDK derivation, signed controller checks, durable upgrade receipts; other targets fail closed (vetKD rejects ingress).
