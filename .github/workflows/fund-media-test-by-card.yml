@@ -1,0 +1,81 @@
+name: Fund photo-store test by card
+
+on:
+  workflow_dispatch:
+    inputs:
+      payment_id:
+        description: 'Unique payment ID, e.g. card-smoke-001; never rerun an existing order'
+        required: true
+      test_id:
+        description: 'Planned test ID, e.g. media-smoke-004 (test runs separately)'
+        required: true
+      scenario:
+        description: 'Test you plan to fund'
+        type: choice
+        options: [smoke, mixed, tiny]
+        default: smoke
+      budget_t:
+        description: 'Same whole T funding ceiling as your test (2–20), including creation fee'
+        required: true
+        default: '5'
+      confirm:
+        description: 'Type CREATE CARD LINK; no card charge until you pay at checkout'
+        required: true
+
+permissions:
+  contents: write
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+
+jobs:
+  funding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Verify card-funding safeguards
+        run: node --test scripts/media-card-funding-policy.test.mjs scripts/media-card-funding-workflow.test.mjs frontend/scripts/media-stage-two-github.test.mjs
+      - name: Install verified card-capable CLI
+        run: |
+          npm install -g @icp-sdk/icp-cli@1.7.0 --no-fund --no-audit
+          icp cycles buy --help > /dev/null
+      - name: Create payment link and wait for delivery (open this log)
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          ICP_HOME: ${{ runner.temp }}/media-card-identity
+          GH_TOKEN: ${{ github.token }}
+          PAYMENT_ID: ${{ inputs.payment_id }}
+          TEST_RUN_ID: ${{ inputs.test_id }}
+          TEST_SCENARIO: ${{ inputs.scenario }}
+          TEST_BUDGET_T: ${{ inputs.budget_t }}
+          CARD_CONFIRM: ${{ inputs.confirm }}
+          FUNDING_REPORT_DIR: ${{ runner.temp }}/media-card-report
+          DO_NOT_TRACK: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$DEPLOYER_PEM"
+          mkdir -p "$ICP_HOME"
+          trap 'rm -rf "$ICP_HOME"' EXIT
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$ICP_HOME/operator.pem"
+          icp identity import --from-pem "$ICP_HOME/operator.pem" --storage plaintext ignite-card-deployer
+          unset DEPLOYER_PEM
+          # Run outside the project: funding must not load unrelated canister build configuration.
+          cd "$RUNNER_TEMP"
+          node "$GITHUB_WORKSPACE/scripts/create-media-test-card-link.mjs"
+      - name: Remove temporary identity even after cancellation
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/media-card-identity"
+      - name: Save payment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-card-${{ inputs.payment_id }}
+          path: ${{ runner.temp }}/media-card-report/
+          if-no-files-found: warn
+          retention-days: 90
