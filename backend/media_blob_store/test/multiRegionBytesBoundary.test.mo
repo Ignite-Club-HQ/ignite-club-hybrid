@@ -7,6 +7,7 @@ import Region "mo:core/Region";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Nat64 "mo:core/Nat64";
+import Blob "mo:core/Blob";
 persistent actor {
   let legacy : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
   let store : Multi.Store = { legacy; regions = Map.empty() };
@@ -62,7 +63,7 @@ persistent actor {
   public func verifyUpgrade() : async () {
     assert saved.size() == 5;
     for (i in Nat.range(0, saved.size())) {
-      assert Multi.read(store, saved[i], 0, 100) == ["legacy!", "edge-0!", "reuse-1", "edge-2!", "edge-3!"][i]
+      assert Multi.read(store, saved[i], 0, 100) == (["legacy!", "edge-0!", "reuse-1", "edge-2!", "edge-3!"] : [Blob])[i]
     };
     Multi.release(store, saved[4]);
     let ?held = Multi.reserveWithin(store, 7, Multi.runtimeBytes, true) else { assert false; loop {} };
