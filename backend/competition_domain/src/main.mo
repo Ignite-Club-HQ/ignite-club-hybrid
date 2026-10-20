@@ -16,6 +16,7 @@ import Nat8 "mo:core/Nat8";
 import Iter "mo:core/Iter";
 import Types "types";
 import Welcome "welcomeSettings";
+import ScorePrivacy "scorePrivacy";
 
 persistent actor class Main(governorInit : Principal) {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -52,6 +53,23 @@ persistent actor class Main(governorInit : Principal) {
   var tokens : [Types.JoinToken];
   var seasons : [Types.Season];
   var matches : [Types.Match];
+  var scorePrivacySettings : [ScorePrivacy.Setting];
+  func readableMatch(game : Types.Match, manager : Bool) : Types.MatchRead {
+    ScorePrivacy.mask(game, not manager and ScorePrivacy.hidden(scorePrivacySettings, game.competition_id, game.division_id))
+  };
+  public query func get_score_privacy(competition_id : Text) : async [ScorePrivacy.Setting] {
+    scorePrivacySettings.filter(func(x) = x.competition_id == competition_id)
+  };
+  public shared ({ caller }) func set_score_privacy(competition_id : Text, division : ?Text, hide_scores : ?Bool) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    await syncForCompetition(caller, competition_id);
+    if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    scorePrivacySettings := scorePrivacySettings.filter(func(x) = not (x.competition_id == competition_id and x.division == division));
+    switch (hide_scores) { case (?hide) { scorePrivacySettings := scorePrivacySettings.concat([{ competition_id; division; hide_scores = hide }]) }; case null {} };
+    #Ok
+  };
   var bulkAccessPrincipals : [Principal];
   var chatSettings : [Types.ChatSettings];
   var competitionWelcomeSettings : [Welcome.Settings];
@@ -942,7 +960,7 @@ persistent actor class Main(governorInit : Principal) {
   public query func get_public_competition_page(competition_id : Text) : async {
     #Ok : {
       competition : Types.Competition;
-      matches : [Types.Match];
+      matches : [Types.MatchRead];
       hide_ladder : Bool;
       hidden_divisions : [Text];
     };
@@ -954,7 +972,7 @@ persistent actor class Main(governorInit : Principal) {
     let hiddenDivisions = divisionSettings.filter(func(item) = item.competition_id == competition_id and item.hide_ladder).map(func(item) = item.division);
     #Ok({
       competition = found[0];
-      matches = matches.filter(func(item) = item.competition_id == competition_id);
+      matches = matches.filter(func(item) = item.competition_id == competition_id).map(func(game) = readableMatch(game, false));
       hide_ladder = hideLadder;
       hidden_divisions = hiddenDivisions;
     });
@@ -982,12 +1000,12 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(seasons.filter(func(item) = item.competition_id == competition_id))
   };
 
-  public shared ({ caller }) func list_matches(competition_id : Text) : async { #Ok : [Types.Match]; #Err : Text } {
+  public shared ({ caller }) func list_matches(competition_id : Text) : async { #Ok : [Types.MatchRead]; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
     await syncForCompetition(caller, competition_id);
     if (not (await participantVisible(caller, competition_id))) return #Err("Competition access forbidden");
-    #Ok(matches.filter(func(item) = item.competition_id == competition_id))
+    #Ok(matches.filter(func(item) = item.competition_id == competition_id).map(func(game) = readableMatch(game, canManageCompetition(caller, competition_id))))
   };
 
   public query ({ caller }) func is_competition_admin(competition_id : Text) : async { #Ok : Bool; #Err : Text } {

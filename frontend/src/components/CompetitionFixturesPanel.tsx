@@ -109,7 +109,7 @@ export function buildCompetitionLadderRows(
   }
 
   for (const match of matches) {
-    if (match.status !== "completed") continue;
+    if (match.status !== "completed" || optional(match.home_score) == null || optional(match.away_score) == null) continue;
     const homeId = match.home_team ?? match.home_team_id;
     const awayId = match.away_team ?? match.away_team_id;
     const homeScore = number(match.home_score);
@@ -227,8 +227,8 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
               away_team_id: awayTeamId,
               home: entryByTeam.get(homeTeamId) ?? { id: homeTeamId, name: homeTeamId, logo_url: null },
               away: entryByTeam.get(awayTeamId) ?? { id: awayTeamId, name: awayTeamId, logo_url: null },
-              home_score: Number(match.home_score),
-              away_score: Number(match.away_score),
+              home_score: opt(match.home_score) == null ? null : Number(opt(match.home_score)),
+              away_score: opt(match.away_score) == null ? null : Number(opt(match.away_score)),
               status: match.status,
               scheduled_at: scheduledAt == null ? null : new Date(Number(scheduledAt)).toISOString(),
               venue: opt(match.venue),
@@ -1587,7 +1587,7 @@ function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRound
 
             {/* Score / vs */}
             <div className="flex flex-col items-center justify-center px-1 shrink-0">
-              {hasScore ? (
+              {!hasScore && ["completed", "played"].includes(match.status) ? <span className="text-xs text-muted-foreground">Scores hidden</span> : hasScore ? (
                 <div className="flex items-center gap-1 text-xl font-bold tabular-nums leading-none">
                   <span className={homeWon ? "" : awayWon ? "text-muted-foreground" : ""}>{match.home_score ?? "–"}</span>
                   <span className="text-muted-foreground text-sm">-</span>

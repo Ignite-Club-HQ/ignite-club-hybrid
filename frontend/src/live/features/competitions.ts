@@ -980,3 +980,12 @@ export async function fetchLivePublicCompetitionPage(competitionId: string) {
   if (result.__kind__ === "Err") throw new Error(result.Err);
   return result.Ok;
 }
+
+export async function getLiveScorePrivacy(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return actor.get_score_privacy(competitionId);
+}
+export async function setLiveScorePrivacy(ctx: FeatureBackendContext, competitionId: string, division: string | null, hide: boolean | null) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_score_privacy(competitionId, candidOpt(division), candidOpt(hide)), "Update score privacy");
+}

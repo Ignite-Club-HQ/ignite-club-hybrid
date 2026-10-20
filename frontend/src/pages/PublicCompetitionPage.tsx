@@ -24,8 +24,8 @@ type LiveMatch = {
   round_number?: number;
   home_team: string;
   away_team: string;
-  home_score: number;
-  away_score: number;
+  home_score: number | null;
+  away_score: number | null;
   division_id?: string;
   scheduled_at_ms?: bigint;
 };
@@ -59,7 +59,7 @@ export function computeLiveLadder(
     return row;
   };
   for (const m of matches) {
-    if (m.status !== "completed" && m.status !== "played") continue;
+    if ((m.status !== "completed" && m.status !== "played") || m.home_score == null || m.away_score == null) continue;
     const home = rowFor(m.home_team, m.division_id);
     const away = rowFor(m.away_team, m.division_id);
     home.played += 1;
@@ -207,7 +207,7 @@ function IcpPublicCompetitionPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <span className="flex-1 font-medium truncate text-right">{m.home_team}</span>
                   <span className="px-2 font-bold tabular-nums">
-                    {m.status === "completed" || m.status === "played" ? `${m.home_score} : ${m.away_score}` : "– : –"}
+                    {m.status === "completed" || m.status === "played" ? m.home_score == null || m.away_score == null ? "Scores hidden" : `${m.home_score} : ${m.away_score}` : "– : –"}
                   </span>
                   <span className="flex-1 font-medium truncate">{m.away_team}</span>
                 </div>
@@ -402,7 +402,7 @@ function SupabasePublicCompetitionPage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="flex-1 font-medium truncate text-right">{m.home?.name ?? "?"}</span>
-                  <span className="px-2 font-bold tabular-nums">{m.home_score ?? "–"} : {m.away_score ?? "–"}</span>
+                  <span className="px-2 font-bold tabular-nums">{m.home_score == null && ["completed", "played"].includes(m.status) ? "Scores hidden" : `${m.home_score ?? "–"} : ${m.away_score ?? "–"}`}</span>
                   <span className="flex-1 font-medium truncate">{m.away?.name ?? "?"}</span>
                 </div>
               </CardContent>
