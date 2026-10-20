@@ -263,8 +263,9 @@ try {
         console.log(`Cleared ${cleared} unfinished test uploads; reconciled ${Object.keys(state.objects).length} stored objects (${total()} bytes)`); await save();
       }
       // Fill to capacity, then churn re-uploads half the payload twice (≈ one more full payload).
-      const churnBytes = binding.scenario === 'tiny' ? 0 : binding.capacityBytes;
-      await affordable(Math.max(0, binding.capacityBytes - total()) + churnBytes);
+      // Tiny files exhaust 64 KiB slots long before byte capacity, so price by the record bound instead.
+      const fillBytes = binding.scenario === 'tiny' ? max * 1024 : binding.capacityBytes;
+      await affordable(Math.max(0, fillBytes - total()) + fillBytes);
       for (let i = 0; i < max; i += 4) {
         const missing = Array.from({ length: Math.min(4, max - i) }, (_, j) => i + j).filter(index => !state.objects[prefix + index]);
         if (!missing.length) continue;
