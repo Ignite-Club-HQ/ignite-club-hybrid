@@ -522,6 +522,96 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_account_can_invite_players_to_team' : ActorMethod<[string], boolean>,
+  'read_account_competition_engagement_summary' : ActorMethod<
+    [Array<string>, bigint, bigint],
+    { 'Ok' : Array<CompetitionEngagementSummary> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_chat_settings' : ActorMethod<
+    [string],
+    { 'Ok' : ChatSettings } |
+      { 'Err' : string }
+  >,
+  'read_account_get_my_pending_eois' : ActorMethod<
+    [],
+    { 'Ok' : Array<EoiSubmission> } |
+      { 'Err' : string }
+  >,
+  'read_account_is_competition_admin' : ActorMethod<
+    [string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'read_account_is_competition_invite_manager' : ActorMethod<
+    [string, Principal],
+    boolean
+  >,
+  'read_account_list_competition_broadcasts' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Broadcast> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_competitions' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_competitions_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_division_settings' : ActorMethod<
+    [string],
+    { 'Ok' : Array<DivisionSetting> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_invites_by_invitee' : ActorMethod<
+    [],
+    { 'Ok' : Array<CompetitionInvite> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_my_news_competitions' : ActorMethod<
+    [],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_my_personal_competitions' : ActorMethod<
+    [],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_official_chats' : ActorMethod<
+    [string],
+    { 'Ok' : Array<OfficialChat> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_public_competitions' : ActorMethod<
+    [],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'read_account_read_token_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_competition_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_resource_club' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_token_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'record_match' : ActorMethod<
     [string, string, string],
     { 'Ok' : Match } |
@@ -628,6 +718,11 @@ export interface Main {
   >,
   'set_official_chat' : ActorMethod<
     [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_participant_club_authorities' : ActorMethod<
+    [Array<Principal>],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

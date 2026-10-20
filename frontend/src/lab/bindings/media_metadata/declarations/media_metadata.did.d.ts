@@ -151,6 +151,23 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_account_get_asset' : ActorMethod<[string], [] | [Asset]>,
+  'read_account_get_gallery_chat_card' : ActorMethod<
+    [string],
+    [] | [GalleryChatCard]
+  >,
+  'read_account_list_assets' : ActorMethod<[string], Array<Asset>>,
+  'read_account_list_comments' : ActorMethod<[string], Array<Comment>>,
+  'read_account_list_gallery_chat_cards' : ActorMethod<
+    [string, string],
+    Array<GalleryChatCard>
+  >,
+  'read_account_list_reactions' : ActorMethod<[string], Array<Reaction>>,
+  'read_club_media_references' : ActorMethod<
+    [string, bigint, [] | [bigint]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
+  >,
   'register_asset' : ActorMethod<
     [string, string, string, string, string, string, bigint],
     { 'Ok' : Asset } |
@@ -217,11 +234,24 @@ export interface Main {
       { 'Err' : string }
   >,
 }
+export interface Page {
+  'references' : Array<Reference>,
+  'next' : [] | [bigint],
+  'scanned' : bigint,
+  'revision' : bigint,
+}
 export interface Reaction {
   'kind' : string,
   'user' : Principal,
   'created_at_ms' : bigint,
   'asset_id' : string,
+}
+export interface Reference {
+  'url' : string,
+  'path' : [] | [string],
+  'content_hash' : [] | [string],
+  'store' : [] | [string],
+  'resource_id' : string,
 }
 export interface RoleGrant {
   'role' : string,

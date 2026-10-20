@@ -10,14 +10,14 @@ import { planTransfer, TRANSFER_DOMAINS } from './groupTransfer';
 import { runTransfer, type TransferAdapter } from './groupTransferRunner';
 import { GROUP_DOMAINS } from './groupRouting';
 
-const policy = { deploymentId: 'ic', primarySubnet: 's1', additionalSubnetsEnabled: false, approvedSubnets: ['s1'] };
-const cap = (groupId: string, clubs: number): GroupCapacity => ({ groupId, deploymentId: 'ic', subnetId: 's1', enabled: true, clubs, maxDomainBytes: 1e8, dailyGrowthBytes: 0 });
+const policy = { deploymentId: 'ic', nowMs: 1, primarySubnet: 's1', additionalSubnetsEnabled: false, approvedSubnets: ['s1'] };
+const cap = (groupId: string, clubs: number): GroupCapacity => ({ groupId, deploymentId: 'ic', subnetId: 's1', enabled: true, ready: true, cyclesHealthy: true, clubs, maxDomainBytes: 1e8, dailyGrowthBytes: 0, capacity: { deploymentId: 'ic', observedAtMs: 1, requiredResources: ['clubs'], readings: [{ resource: 'clubs', used: clubs, testedLimit: MAX_CLUBS_PER_GROUP, evidence: 'local-fixture' }] } });
 
 function provisionWorld(crashAt = -1, subnet = 's1') {
   let revision = 2n; let created = 0; const saved: Provision[] = []; const registry: string[] = []; const enabled: string[] = [];
   const a: ProvisionAdapter = {
     createCanister: async (_p, d) => { if (created === crashAt) { created++; throw new Error('Request timed out'); } created++; return { canisterId: `c-${d}`, subnetId: subnet }; },
-    install: async () => {}, healthy: async () => true,
+    install: async () => {}, configure: async () => {}, healthy: async () => true,
     readRegistryRevision: async () => revision,
     registerGroup: async p => { registry.push(p.groupId); revision++; }, enableGroup: async p => { enabled.push(p.groupId); },
     save: async p => { saved.push(structuredClone(p)); },
@@ -26,8 +26,8 @@ function provisionWorld(crashAt = -1, subnet = 's1') {
 }
 
 describe('integrated scaling rehearsal', () => {
-  it('places clubs on the least-loaded group, then asks to provision when all are full', () => {
-    expect(placeNewClub([cap('a', 10), cap('b', 3)], policy)).toEqual({ kind: 'place', groupId: 'b' });
+  it('fills an occupied group, then asks to provision when all are full', () => {
+    expect(placeNewClub([cap('a', 10), cap('b', 3)], policy)).toEqual({ kind: 'place', groupId: 'a' });
     expect(placeNewClub([cap('a', MAX_CLUBS_PER_GROUP), cap('b', MAX_CLUBS_PER_GROUP)], policy).kind).toBe('provision');
   });
 
@@ -42,7 +42,10 @@ describe('integrated scaling rehearsal', () => {
     const w = provisionWorld(4); let p = approveProvision(d, { operator: 'gov', proposalId: 'p1', deploymentId: 'ic', subnetId: 's1' }, 'c', 2n);
     p = await runProvision(p, w.a);
     expect(p.phase).toBe('failed'); expect(w.registry).toEqual([]);
-    const resumed = { ...w.saved.filter(s => s.phase === 'approved').at(-1)!, phase: 'approved' as const };
+    const receipt = w.saved.filter(s => s.phase === 'approved').at(-1);
+    if (!receipt) throw new Error('Missing provisioning receipt');
+    // This fixture failed before creation; an operator has proved no commit.
+    const resumed = { ...receipt, pending: undefined, phase: 'approved' as const };
     expect(Object.keys(resumed.canisters)).toHaveLength(4);
     const done = await runProvision(resumed, w.a);
     expect(done.phase).toBe('enabled'); expect(Object.keys(done.canisters)).toHaveLength(PER_GROUP_DOMAINS.length);
@@ -87,7 +90,7 @@ describe('integrated scaling rehearsal', () => {
 
   it('activation stays off until every gate passes; inactive always routes legacy', () => {
     expect(chooseRoute(OFF, true)).toBe('legacy');
-    const almost = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, routedDomains: GROUP_DOMAINS, registryRevision: 4n, approvedRevision: 4n };
+    const almost = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, routedDomains: GROUP_DOMAINS, registryRevision: 4n, approvedRevision: 4n, removalWiring: { revision: 4n, groupIds: ["a"], checkedAtMs: 0 } };
     expect(activationStatus(almost).missing).toEqual(['mainnet verification']);
     expect(chooseRoute(almost, true)).toBe('legacy');
     expect(chooseRoute({ ...almost, mainnetVerified: true }, true)).toBe('group');

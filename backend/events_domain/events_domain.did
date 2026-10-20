@@ -436,6 +436,11 @@ type Main =
        Err: text;
        Ok: opt EventDutyTeam;
      }) query;
+   get_event_group: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventGroup;
+     }) composite_query;
    get_event_roster: (event_id: text) ->
     (variant {
        Err: text;
@@ -471,6 +476,11 @@ type Main =
        Err: text;
        Ok: opt GameSummary;
      }) query;
+   get_group_edit_access: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     }) composite_query;
    get_lineup_snapshot: (event_id: text, team_id: opt text) ->
     (variant {
        Err: text;
@@ -597,13 +607,14 @@ type Main =
     (variant {
        Err: text;
        Ok: vec EventGroup;
-     }) query;
+     }) composite_query;
    list_event_views: (event_id: text) ->
     (variant {
        Err: text;
        Ok: vec EventView;
      }) query;
-   list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
+   list_events: (club_id: opt text, team_id: opt text) ->
+    (vec Event) composite_query;
    list_events_for_duty_teams: (team_ids: vec text) ->
     (variant {
        Err: text;
@@ -613,7 +624,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec Event;
-     }) query;
+     }) composite_query;
    list_favourite_event_titles: () -> (vec text) query;
    list_game_player_stats: (event_id: text) ->
     (variant {
@@ -624,12 +635,12 @@ type Main =
     (variant {
        Err: text;
        Ok: vec EventGroupDuty;
-     }) query;
+     }) composite_query;
    list_group_players: (group_id: text) ->
     (variant {
        Err: text;
        Ok: vec EventGroupPlayer;
-     }) query;
+     }) composite_query;
    list_match_captains: (event_id: text) ->
     (variant {
        Err: text;
@@ -733,13 +744,304 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   read_account_check_event_membership: (user_id: text, event_id: text) ->
+    (bool);
+   read_account_child_is_in_event_audience: (child_id: text, event_id:
+    text) -> (variant {
+                Err: text;
+                Ok: bool;
+              });
+   read_account_event_roster: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: EventRoster;
+     });
+   read_account_execute: (input: text) -> (Result);
+   read_account_get_active_game: (team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: opt ActiveGame;
+     });
+   read_account_get_attendance: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventAttendance;
+     });
+   read_account_get_coach_note: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt CoachNote;
+     });
+   read_account_get_event_auto_reminder: (event_id: text) ->
+    (opt record {
+           hours_before: nat16;
+           sent: bool;
+         });
+   read_account_get_event_child: (event_id: text, child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Child;
+     });
+   read_account_get_event_duty_team: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventDutyTeam;
+     });
+   read_account_get_event_group: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventGroup;
+     });
+   read_account_get_event_roster: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec RosterEntry;
+     });
+   read_account_get_event_rosters: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec RosterEntry;
+     });
+   read_account_get_event_sponsors: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
+   read_account_get_event_timer: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventTimer;
+     });
+   read_account_get_event_view_count: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   read_account_get_game_result: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt GameResult;
+     });
+   read_account_get_game_summary: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt GameSummary;
+     });
+   read_account_get_group_edit_access: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_account_get_lineup_snapshot: (event_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: opt LineupSnapshot;
+     });
+   read_account_get_pitch_board_settings: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PitchBoardSettings;
+     });
+   read_account_get_player_stats_report: (club_id: text, team_id: opt text,
+    from_ms: nat64, to_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec PlayerStatRow;
+     });
+   read_account_get_playhq_config_status: () ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          base_url: opt text;
+          configured: bool;
+          updated_at_ms: opt nat64;
+        };
+     });
+   read_account_get_playhq_team_sync: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PlayHQTeamSync;
+     });
+   read_account_get_push_reachable: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok: opt bool;
+     });
+   read_account_get_reminder_log: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             recipients_count: nat32;
+             sent_at_ms: opt nat64;
+           };
+     });
+   read_account_get_rsvp_created_at: (event_id: text, account_id: text) ->
+    (opt nat64);
+   read_account_get_training_default: (club_id: text, team_id: text,
+    child_id: opt text) -> (variant {
+                              Err: text;
+                              Ok: opt text;
+                            });
+   read_account_is_guardian_of: ("principal": principal, child_id: text) ->
+    (bool);
+   read_account_is_paused: (club_id: text, team_id: text, at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_account_is_reachable: (account_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_account_is_team_member: ("principal": principal, club_id: text,
+    team_id: text) -> (bool);
+   read_account_list_association_events: (association_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec AssociationEvent;
+     });
+   read_account_list_child_team_assignments: (club_id: text, team_id:
+    text) -> (variant {
+                Err: text;
+                Ok: vec ChildTeamAssignment;
+              });
+   read_account_list_duties: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Duty;
+     });
+   read_account_list_duties_multi: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Duty;
+     });
+   read_account_list_event_duty_teams: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventDutyTeam;
+     });
+   read_account_list_event_groups: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroup;
+     });
+   read_account_list_event_views: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventView;
+     });
+   read_account_list_events: (club_id: opt text, team_id: opt text) ->
+    (vec Event);
+   read_account_list_events_for_duty_teams: (team_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Event;
+     });
+   read_account_list_events_multi: (club_ids: vec text, team_ids:
+    vec text) -> (variant {
+                    Err: text;
+                    Ok: vec Event;
+                  });
+   read_account_list_favourite_event_titles: () -> (vec text);
+   read_account_list_game_player_stats: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec GamePlayerStat;
+     });
+   read_account_list_group_duties: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroupDuty;
+     });
+   read_account_list_group_players: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroupPlayer;
+     });
+   read_account_list_match_captains: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchCaptainAssignment;
+     });
+   read_account_list_match_goalkeepers: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchGoalkeeperAssignment;
+     });
+   read_account_list_mini_league_rsvps: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueRsvp;
+     });
+   read_account_list_my_viewed_event_ids: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
+   read_account_list_open_duties: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec OpenDuty;
+     });
+   read_account_list_reminders: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ReminderLog;
+     });
+   read_account_list_saved_locations: () -> (vec SavedLocation);
+   read_account_list_series: (club_id: opt text, team_id: opt text) ->
+    (vec EventSeries);
+   read_account_list_series_occurrences: (series_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           deleted: bool;
+           ends_at_ms: nat64;
+           id: text;
+           starts_at_ms: nat64;
+         };
+     });
+   read_account_list_team_training_pauses: (club_id: text, team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamTrainingPause;
+     });
+   read_account_my_attendance: (event_id: opt text) -> (vec EventAttendance);
+   read_account_my_child_rsvps: (event_id: opt text, club_id: opt text) ->
+    (vec RsvpWithChild);
+   read_account_my_child_team_assignments: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ChildTeamAssignment;
+     });
+   read_account_my_children: () -> (vec Child);
+   read_account_my_rsvps: () -> (vec Rsvp);
+   read_account_read_event_club: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_read_event_group_club: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
    /// Location-only lookup for group routing: which club owns this event, if
    /// it lives in this canister. Viewers only; returns null when not held here.
    read_event_club: (event_id: text) ->
     (variant {
        Err: text;
        Ok: opt text;
-     }) query;
+     }) composite_query;
+   read_event_group_club: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) composite_query;
    record_event_view: (event_id: text) -> (variant {
                                              Err: text;
                                              Ok;
@@ -778,6 +1080,11 @@ type Main =
                                                      Ok;
                                                    });
    remove_group_duty: (group_id: text, duty: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_group_duty_slot: (group_id: text, slot_id: text) ->
     (variant {
        Err: text;
        Ok;
@@ -831,6 +1138,11 @@ type Main =
                                       Err: text;
                                       Ok: GameSummary;
                                     });
+   save_group_duty_slot: (group_id: text, slot_id: text, duty: text,
+    account_id: opt text) -> (variant {
+                                Err: text;
+                                Ok: EventGroupDuty;
+                              });
    save_lineup_snapshot: (event_id: text, team_id: opt text, formation:
     opt text, team_size: nat16, ball_x: opt float64, ball_y: opt float64,
     players: vec LineupPlayer) -> (variant {
@@ -931,6 +1243,11 @@ type Main =
                         Err: text;
                         Ok: MatchGoalkeeperAssignment;
                       });
+   set_mini_league_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_mini_league_rsvp: (event_id: text, subject: RsvpSubject, state:
     text) -> (variant {
                 Err: text;
@@ -1009,6 +1326,11 @@ type Main =
        Err: text;
        Ok: ActiveGame;
      });
+   sync_group_state: (group_id: text, expected_revision: nat64, timer_json:
+    opt text, pitch_json: opt text) -> (variant {
+                                          Err: text;
+                                          Ok: EventGroup;
+                                        });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;
@@ -1225,6 +1547,7 @@ type EventGroupDuty =
    account_id: opt text;
    duty: text;
    group_id: text;
+   id: text;
  };
 type EventGroup = 
  record {
@@ -1236,8 +1559,11 @@ type EventGroup =
    id: text;
    name: text;
    pitch_name: opt text;
+   pitch_state_json: opt text;
+   state_revision: nat64;
    team_b_colour: opt text;
    team_letter: opt text;
+   timer_state_json: opt text;
  };
 type EventDutyTeam = 
  record {

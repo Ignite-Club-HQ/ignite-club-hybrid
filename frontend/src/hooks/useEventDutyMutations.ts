@@ -240,7 +240,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
           );
         }
       },
-    });
+    }, writeOnce({ eventId: event.id }));
   };
 
   // Notify the assignee about a duty assignment through the notifications
@@ -267,7 +267,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
           relatedId: id,
         });
       },
-    });
+    }, writeOnce({ eventId: event?.id ?? "" }));
   };
 
   // Instant on-screen status flip (ICP saves take ~1.3s); caller rolls back

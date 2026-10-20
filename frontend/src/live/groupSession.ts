@@ -16,6 +16,14 @@ export type GroupSessionTransport = {
   /** Group of a club the caller may not belong to (e.g. a competition host). Returns location only; destinations keep their own access rules. */
   readHostedAssignment?(clubId: string, revision: bigint): Promise<ClubAssignment>;
 };
+/** A group's clubs use only that group's photo store: shared stores answer to
+ * another group's club service and would refuse (or misjudge) its clubs. */
+export function groupCanisterIds<T extends Record<string, string | undefined>>(shared: T, group: GroupDescriptor): T {
+  const ids: Record<string, string | undefined> = Object.fromEntries(Object.entries(shared).filter(([k]) => !k.startsWith('media_blob_store')));
+  for (const d of group.domains) ids[d.domain] = d.canisterId;
+  if (group.photoStore) ids.media_blob_store = group.photoStore;
+  return ids as T;
+}
 export const APP_WIDE_INDEX_ERROR = /app-wide accounts/i;
 const MAX_CLUBS = 1000;
 const MAX_PAGES = 500;
@@ -25,8 +33,10 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   if (!principal || principal === '2vxsx-fae') throw new Error('Authenticated group session required');
   const sameIdentity = () => { if (context.identity.getPrincipal().toText() !== principal) throw new Error('Group session identity changed'); };
   const registry = await transport.readRegistry();
+  const registryFingerprint = (value: GroupRegistry) => JSON.stringify(value, (_key, v) => typeof v === 'bigint' ? v.toString() : v);
+  const initialRegistry = registryFingerprint(registry);
   sameIdentity();
-  if (registry.revision < 1n || registry.groups.length < 1 || registry.groups.length > 64 ||
+  if (registry.revision < 1n || registry.groups.length < 1 || registry.groups.length > 4096 ||
       registry.deployment.alias !== context.target.alias || registry.deployment.networkKind !== context.target.networkKind ||
       new URL(registry.deployment.host).origin !== new URL(context.target.host).origin ||
       registry.bindings.length !== registry.groups.length || new Set(registry.groups.map(g => g.id)).size !== registry.groups.length ||
@@ -43,9 +53,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const targetFor = (groupId: string) => {
     const group = routing.groups.get(groupId);
     if (!group) throw new Error('Unknown group');
-    return { ...context, target: { ...context.target, canisterIds: {
-      ...context.target.canisterIds, ...Object.fromEntries(group.domains.map(d => [d.domain, d.canisterId])),
-    } } };
+    return { ...context, target: { ...context.target, canisterIds: groupCanisterIds(context.target.canisterIds, group) } };
   };
   const clubs = new Set<string>();
   const claim = (club: string, groupId: string) => {
@@ -110,11 +118,16 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   await validateAssignments([...clubs]);
   let disposed = false;
   const live = () => { if (disposed || context.identity.getPrincipal().toText() !== principal) throw new Error('Group session changed or disposed'); };
+  const assertRegistryUnchanged = async () => {
+    live();
+    const current = await transport.readRegistry();
+    live();
+    if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
+  };
   const revalidate = async (requested: readonly string[]) => {
     live();
     if (requested.length > MAX_CLUBS || requested.some(id => !clubs.has(id))) throw new Error('Club outside discovered membership');
-    const current = await transport.readRegistry();
-    if (current.revision !== registry.revision) throw new Error('Group registry changed; reopen session');
+    await assertRegistryUnchanged();
     await validateAssignments([...new Set(requested)]); live();
   };
   const inflight = new Map<string, Promise<unknown>>();
@@ -123,6 +136,9 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     /** True when this member's club has a group assignment in the registry. */
     isAssigned(clubId: string) { return clubs.has(clubId); },
     dispose() { disposed = true; },
+    /** Checks the full captured registry without rediscovering revoked memberships. */
+    assertRegistryUnchanged,
+    deletionRegistryRevision: registry.revision,
     async readClub<T>(clubId: string, domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       await revalidate([clubId]);
@@ -170,8 +186,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       if (!hostClubId || hostClubId.length > 64) throw new Error('Invalid host club');
       if (clubs.has(hostClubId)) return api.readClub(hostClubId, domain, read);
       if (!transport.readHostedAssignment) throw new Error('Hosted club lookup unavailable');
-      const current = await transport.readRegistry();
-      if (current.revision !== registry.revision) throw new Error('Group registry changed; reopen session');
+      await assertRegistryUnchanged();
       const row = await transport.readHostedAssignment(hostClubId, registry.revision); live();
       if (row.clubId !== hostClubId || !routing.groups.has(row.groupId) || row.revision < 1n || row.revision > registry.revision) throw new Error('Foreign or stale club assignment');
       routing.assignments.set(hostClubId, row);
@@ -196,10 +211,9 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     async readEveryGroup<T>(domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows = 1000): Promise<T[]> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       live();
-      const current = await transport.readRegistry();
-      if (current.revision !== registry.revision) throw new Error('Group registry changed; reopen session');
+      await assertRegistryUnchanged();
       const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
-      live();
+      await assertRegistryUnchanged();
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Cross-group read exceeds row budget');
       return rows;

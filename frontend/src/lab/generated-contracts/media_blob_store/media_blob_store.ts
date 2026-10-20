@@ -58,9 +58,60 @@ export interface FreeUsageRow {
     bytes: bigint;
     club_id: string;
 }
+export interface Cursor {
+    after: string;
+    offset: bigint;
+    phase: Variant_done_legacy_indexed;
+}
+export interface Row {
+    club?: string;
+    path: string;
+    content_hash: string;
+    bytes: bigint;
+    revision: bigint;
+}
+export interface Page__1 {
+    quota_shared: boolean;
+    fence_revision?: bigint;
+    fenced: boolean;
+    next?: Cursor__1;
+    scanned: bigint;
+    entries: Array<Entry>;
+    quota_authority?: Principal;
+    revision: bigint;
+}
+export interface Cursor__1 {
+    after: string;
+    offset: bigint;
+    phase: Phase;
+}
+export interface Health {
+    total_bytes: bigint;
+    version: string;
+    blob_count: bigint;
+}
+export interface Request {
+    account_id: string;
+    inventory_digest: Uint8Array;
+    subjects: Array<Principal>;
+    generation: bigint;
+}
 export interface FinalizedBlob {
     path: string;
     content_hash: string;
+    content_length: bigint;
+}
+export interface Receipt {
+    outstanding: bigint;
+    request: Request;
+    receiver: Principal;
+}
+export interface Entry {
+    unsettled: boolean;
+    kind: Variant_pending_blob_journal;
+    path: string;
+    content_hash: string;
+    upload_id: string;
     content_length: bigint;
 }
 export type ResultUploadId = {
@@ -86,17 +137,16 @@ export interface Usage {
     total_bytes: bigint;
     capacity_limit_bytes: bigint;
 }
-export interface HttpResponse {
-    body: Uint8Array;
-    headers: Array<HeaderField>;
-    streaming_strategy?: {
-        __kind__: "Callback";
-        Callback: {
-            token: StreamToken;
-            callback: [Principal, string];
-        };
-    };
-    status_code: number;
+export interface Page {
+    total: bigint;
+    pending: bigint;
+    cursor: Cursor;
+    next: Cursor;
+    total_bytes: bigint;
+    rows: Array<Row>;
+    authority?: Principal;
+    frozen: boolean;
+    revision: bigint;
 }
 export type ResultFinalized = {
     __kind__: "Ok";
@@ -110,10 +160,17 @@ export interface StreamToken {
     content_hash: string;
     offset: bigint;
 }
-export interface Health {
-    total_bytes: bigint;
-    version: string;
-    blob_count: bigint;
+export interface HttpResponse {
+    body: Uint8Array;
+    headers: Array<HeaderField>;
+    streaming_strategy?: {
+        __kind__: "Callback";
+        Callback: {
+            token: StreamToken;
+            callback: [Principal, string];
+        };
+    };
+    status_code: number;
 }
 export interface MediaUsage {
     count: bigint;
@@ -129,18 +186,52 @@ export interface HttpRequest {
     headers: Array<HeaderField>;
 }
 export type HeaderField = [string, string];
+export enum Phase {
+    pending = "pending",
+    done = "done",
+    journal = "journal",
+    legacy = "legacy",
+    indexed = "indexed"
+}
+export enum Variant_done_legacy_indexed {
+    done = "done",
+    legacy = "legacy",
+    indexed = "indexed"
+}
+export enum Variant_pending_blob_journal {
+    pending = "pending",
+    blob = "blob",
+    journal = "journal"
+}
 export interface media_blob_storeInterface {
     abort_upload(upload_id: string): Promise<Result>;
     begin_upload(path: string, mime: string, total_size: bigint, chunk_count: number): Promise<ResultUploadId>;
+    club_media_inventory_page(club: string, cursor: Cursor__1, expected_revision: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: Page__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     /**
      * / Public: remaining cycles (shown in admin settings).
      */
     cycles_balance(): Promise<bigint>;
     delete_blob(path: string): Promise<Result>;
+    enable_retained_media_quota(): Promise<Result>;
     enable_shared_media_quota(): Promise<Result>;
     enable_stable_media_storage(): Promise<Result>;
     finalize_upload(upload_id: string): Promise<ResultFinalized>;
     freeze_media_quota(): Promise<Result>;
+    freeze_retained_media(): Promise<Result>;
+    /**
+     * / Authoritative per-club media byte count for the Pro allowance UI: the
+     * / same finalized + in-flight figures the admission check enforces.
+     */
+    get_club_media_bytes(club_id: string): Promise<{
+        pending: bigint;
+        finalized: bigint;
+    }>;
     get_club_media_usage(club_id: string): Promise<Array<MediaUsage>>;
     get_content_hash(path: string): Promise<string | null>;
     get_upload_outcome(upload_id: string): Promise<{
@@ -180,6 +271,13 @@ export interface media_blob_storeInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    prepare_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
     quota_snapshot_page(offset: bigint): Promise<{
         total: bigint;
@@ -187,6 +285,57 @@ export interface media_blob_storeInterface {
         rows: Array<FreeUsageRow>;
         offset: bigint;
         frozen: boolean;
+    }>;
+    read_account_get_upload_outcome(upload_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: FinalizedBlob | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_removal_drain(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_pending_test_uploads(prefix: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<{
+            id: string;
+            path: string;
+            size: bigint;
+        }>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_physical_growth_capacity(): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            pending_count: bigint;
+            allocatable_object_slots: bigint;
+            configured_bytes: bigint;
+            allocated_bytes: bigint;
+            pending_slot_bytes: bigint;
+            revision: bigint;
+            legacy_pending_count: bigint;
+            max_object_slot_bytes: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    reconcile_retained_deletions(cursor: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            attempted: bigint;
+            cursor: string;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
     }>;
     reconcile_upload_operations(cursor: string): Promise<{
         __kind__: "Ok";
@@ -205,6 +354,7 @@ export interface media_blob_storeInterface {
         __kind__: "err";
         err: string;
     }>;
+    retained_snapshot_page(cursor: Cursor): Promise<Page>;
     retire_upload_outcomes(cursor: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -217,6 +367,7 @@ export interface media_blob_storeInterface {
     }>;
     set_capacity_limit(limit_bytes: bigint): Promise<Result>;
     set_club_domain_canister(canister_id: Principal): Promise<Result>;
+    set_club_media_transfer_fence(club: string, on: boolean, expected: bigint | null): Promise<Result>;
     stable_storage_status(): Promise<{
         indexed_count: bigint;
         allocated_bytes: bigint;
@@ -224,7 +375,7 @@ export interface media_blob_storeInterface {
         legacy_count: bigint;
     }>;
 }
-import type { FinalizedBlob as _FinalizedBlob, HeaderField as _HeaderField, HttpResponse as _HttpResponse, MediaUsage as _MediaUsage, Result as _Result, ResultFinalized as _ResultFinalized, ResultUploadId as _ResultUploadId, StreamResponse as _StreamResponse, StreamToken as _StreamToken } from "./declarations/media_blob_store.did";
+import type { Cursor as _Cursor, Cursor__1 as _Cursor__1, Entry as _Entry, FinalizedBlob as _FinalizedBlob, HeaderField as _HeaderField, HttpResponse as _HttpResponse, MediaUsage as _MediaUsage, Page as _Page, Page__1 as _Page__1, Phase as _Phase, Receipt as _Receipt, Result as _Result, ResultFinalized as _ResultFinalized, ResultUploadId as _ResultUploadId, Row as _Row, StreamResponse as _StreamResponse, StreamToken as _StreamToken } from "./declarations/media_blob_store.did";
 export class Media_blob_store implements media_blob_storeInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async abort_upload(arg0: string): Promise<Result> {
@@ -235,12 +386,26 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.begin_upload(arg0, arg1, arg2, arg3);
         return from_candid_ResultUploadId_n3(result);
     }
+    async club_media_inventory_page(arg0: string, arg1: Cursor__1, arg2: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: Page__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.club_media_inventory_page(arg0, to_candid_Cursor__1_n5(arg1), to_candid_opt_n9(arg2));
+        return from_candid_variant_n10(result);
+    }
     async cycles_balance(): Promise<bigint> {
         const result = await this.actor.cycles_balance();
         return result;
     }
     async delete_blob(arg0: string): Promise<Result> {
         const result = await this.actor.delete_blob(arg0);
+        return from_candid_Result_n1(result);
+    }
+    async enable_retained_media_quota(): Promise<Result> {
+        const result = await this.actor.enable_retained_media_quota();
         return from_candid_Result_n1(result);
     }
     async enable_shared_media_quota(): Promise<Result> {
@@ -253,19 +418,30 @@ export class Media_blob_store implements media_blob_storeInterface {
     }
     async finalize_upload(arg0: string): Promise<ResultFinalized> {
         const result = await this.actor.finalize_upload(arg0);
-        return from_candid_ResultFinalized_n5(result);
+        return from_candid_ResultFinalized_n24(result);
     }
     async freeze_media_quota(): Promise<Result> {
         const result = await this.actor.freeze_media_quota();
         return from_candid_Result_n1(result);
     }
+    async freeze_retained_media(): Promise<Result> {
+        const result = await this.actor.freeze_retained_media();
+        return from_candid_Result_n1(result);
+    }
+    async get_club_media_bytes(arg0: string): Promise<{
+        pending: bigint;
+        finalized: bigint;
+    }> {
+        const result = await this.actor.get_club_media_bytes(arg0);
+        return result;
+    }
     async get_club_media_usage(arg0: string): Promise<Array<MediaUsage>> {
         const result = await this.actor.get_club_media_usage(arg0);
-        return from_candid_vec_n7(result);
+        return from_candid_vec_n26(result);
     }
     async get_content_hash(arg0: string): Promise<string | null> {
         const result = await this.actor.get_content_hash(arg0);
-        return from_candid_opt_n11(result);
+        return from_candid_opt_n30(result);
     }
     async get_upload_outcome(arg0: string): Promise<{
         __kind__: "Ok";
@@ -275,7 +451,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.get_upload_outcome(arg0);
-        return from_candid_variant_n12(result);
+        return from_candid_variant_n31(result);
     }
     async get_usage(): Promise<Usage> {
         const result = await this.actor.get_usage();
@@ -287,11 +463,11 @@ export class Media_blob_store implements media_blob_storeInterface {
     }
     async http_request(arg0: HttpRequest): Promise<HttpResponse> {
         const result = await this.actor.http_request(arg0);
-        return from_candid_HttpResponse_n14(result);
+        return from_candid_HttpResponse_n33(result);
     }
     async http_request_streaming_callback(arg0: StreamToken): Promise<StreamResponse> {
         const result = await this.actor.http_request_streaming_callback(arg0);
-        return from_candid_StreamResponse_n18(result);
+        return from_candid_StreamResponse_n37(result);
     }
     async memory_stats(): Promise<{
         memory_bytes: bigint;
@@ -309,7 +485,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         err: string;
     }> {
         const result = await this.actor.merge_principal(arg0, arg1, arg2);
-        return from_candid_variant_n21(result);
+        return from_candid_variant_n40(result);
     }
     async migrate_legacy_blob(): Promise<{
         __kind__: "Ok";
@@ -322,7 +498,17 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.migrate_legacy_blob();
-        return from_candid_variant_n22(result);
+        return from_candid_variant_n41(result);
+    }
+    async prepare_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.prepare_account_removal(arg0);
+        return from_candid_variant_n2(result);
     }
     async put_chunk(arg0: string, arg1: number, arg2: Uint8Array): Promise<Result> {
         const result = await this.actor.put_chunk(arg0, arg1, arg2);
@@ -338,6 +524,72 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.quota_snapshot_page(arg0);
         return result;
     }
+    async read_account_get_upload_outcome(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: FinalizedBlob | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_upload_outcome(arg0);
+        return from_candid_variant_n31(result);
+    }
+    async read_account_removal_drain(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_removal_drain(arg0);
+        return from_candid_variant_n42(result);
+    }
+    async read_pending_test_uploads(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<{
+            id: string;
+            path: string;
+            size: bigint;
+        }>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_pending_test_uploads(arg0);
+        return from_candid_variant_n43(result);
+    }
+    async read_physical_growth_capacity(): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            pending_count: bigint;
+            allocatable_object_slots: bigint;
+            configured_bytes: bigint;
+            allocated_bytes: bigint;
+            pending_slot_bytes: bigint;
+            revision: bigint;
+            legacy_pending_count: bigint;
+            max_object_slot_bytes: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_physical_growth_capacity();
+        return from_candid_variant_n44(result);
+    }
+    async reconcile_retained_deletions(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            attempted: bigint;
+            cursor: string;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.reconcile_retained_deletions(arg0);
+        return from_candid_variant_n45(result);
+    }
     async reconcile_upload_operations(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -349,7 +601,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.reconcile_upload_operations(arg0);
-        return from_candid_variant_n23(result);
+        return from_candid_variant_n45(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -359,7 +611,11 @@ export class Media_blob_store implements media_blob_storeInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n21(result);
+        return from_candid_variant_n40(result);
+    }
+    async retained_snapshot_page(arg0: Cursor): Promise<Page> {
+        const result = await this.actor.retained_snapshot_page(to_candid_Cursor_n46(arg0));
+        return from_candid_Page_n49(result);
     }
     async retire_upload_outcomes(arg0: string): Promise<{
         __kind__: "Ok";
@@ -372,7 +628,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.retire_upload_outcomes(arg0);
-        return from_candid_variant_n24(result);
+        return from_candid_variant_n57(result);
     }
     async set_capacity_limit(arg0: bigint): Promise<Result> {
         const result = await this.actor.set_capacity_limit(arg0);
@@ -380,6 +636,10 @@ export class Media_blob_store implements media_blob_storeInterface {
     }
     async set_club_domain_canister(arg0: Principal): Promise<Result> {
         const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_Result_n1(result);
+    }
+    async set_club_media_transfer_fence(arg0: string, arg1: boolean, arg2: bigint | null): Promise<Result> {
+        const result = await this.actor.set_club_media_transfer_fence(arg0, arg1, to_candid_opt_n9(arg2));
         return from_candid_Result_n1(result);
     }
     async stable_storage_status(): Promise<{
@@ -392,14 +652,32 @@ export class Media_blob_store implements media_blob_storeInterface {
         return result;
     }
 }
-function from_candid_HttpResponse_n14(value: _HttpResponse): HttpResponse {
-    return from_candid_record_n15(value);
+function from_candid_Cursor__1_n15(value: _Cursor__1): Cursor__1 {
+    return from_candid_record_n16(value);
 }
-function from_candid_MediaUsage_n8(value: _MediaUsage): MediaUsage {
-    return from_candid_record_n9(value);
+function from_candid_Cursor_n51(value: _Cursor): Cursor {
+    return from_candid_record_n52(value);
 }
-function from_candid_ResultFinalized_n5(value: _ResultFinalized): ResultFinalized {
-    return from_candid_variant_n6(value);
+function from_candid_Entry_n20(value: _Entry): Entry {
+    return from_candid_record_n21(value);
+}
+function from_candid_HttpResponse_n33(value: _HttpResponse): HttpResponse {
+    return from_candid_record_n34(value);
+}
+function from_candid_MediaUsage_n27(value: _MediaUsage): MediaUsage {
+    return from_candid_record_n28(value);
+}
+function from_candid_Page__1_n11(value: _Page__1): Page__1 {
+    return from_candid_record_n12(value);
+}
+function from_candid_Page_n49(value: _Page): Page {
+    return from_candid_record_n50(value);
+}
+function from_candid_Phase_n17(value: _Phase): Phase {
+    return from_candid_variant_n18(value);
+}
+function from_candid_ResultFinalized_n24(value: _ResultFinalized): ResultFinalized {
+    return from_candid_variant_n25(value);
 }
 function from_candid_ResultUploadId_n3(value: _ResultUploadId): ResultUploadId {
     return from_candid_variant_n4(value);
@@ -407,19 +685,31 @@ function from_candid_ResultUploadId_n3(value: _ResultUploadId): ResultUploadId {
 function from_candid_Result_n1(value: _Result): Result {
     return from_candid_variant_n2(value);
 }
-function from_candid_StreamResponse_n18(value: _StreamResponse): StreamResponse {
-    return from_candid_record_n19(value);
+function from_candid_Row_n55(value: _Row): Row {
+    return from_candid_record_n56(value);
 }
-function from_candid_opt_n10(value: [] | [bigint]): bigint | null {
+function from_candid_StreamResponse_n37(value: _StreamResponse): StreamResponse {
+    return from_candid_record_n38(value);
+}
+function from_candid_opt_n13(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n11(value: [] | [string]): string | null {
+function from_candid_opt_n14(value: [] | [_Cursor__1]): Cursor__1 | null {
+    return value.length === 0 ? null : from_candid_Cursor__1_n15(value[0]);
+}
+function from_candid_opt_n23(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n13(value: [] | [_FinalizedBlob]): FinalizedBlob | null {
+function from_candid_opt_n29(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n16(value: [] | [{
+function from_candid_opt_n30(value: [] | [string]): string | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n32(value: [] | [_FinalizedBlob]): FinalizedBlob | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n35(value: [] | [{
         Callback: {
             token: _StreamToken;
             callback: [Principal, string];
@@ -431,12 +721,108 @@ function from_candid_opt_n16(value: [] | [{
         callback: [Principal, string];
     };
 } | null {
-    return value.length === 0 ? null : from_candid_variant_n17(value[0]);
+    return value.length === 0 ? null : from_candid_variant_n36(value[0]);
 }
-function from_candid_opt_n20(value: [] | [_StreamToken]): StreamToken | null {
+function from_candid_opt_n39(value: [] | [_StreamToken]): StreamToken | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n15(value: {
+function from_candid_record_n12(value: {
+    quota_shared: boolean;
+    fence_revision: [] | [bigint];
+    fenced: boolean;
+    next: [] | [_Cursor__1];
+    scanned: bigint;
+    entries: Array<_Entry>;
+    quota_authority: [] | [Principal];
+    revision: bigint;
+}): {
+    quota_shared: boolean;
+    fence_revision?: bigint;
+    fenced: boolean;
+    next?: Cursor__1;
+    scanned: bigint;
+    entries: Array<Entry>;
+    quota_authority?: Principal;
+    revision: bigint;
+} {
+    return {
+        quota_shared: value.quota_shared,
+        fence_revision: record_opt_to_undefined(from_candid_opt_n13(value.fence_revision)),
+        fenced: value.fenced,
+        next: record_opt_to_undefined(from_candid_opt_n14(value.next)),
+        scanned: value.scanned,
+        entries: from_candid_vec_n19(value.entries),
+        quota_authority: record_opt_to_undefined(from_candid_opt_n23(value.quota_authority)),
+        revision: value.revision
+    };
+}
+function from_candid_record_n16(value: {
+    after: string;
+    offset: bigint;
+    phase: _Phase;
+}): {
+    after: string;
+    offset: bigint;
+    phase: Phase;
+} {
+    return {
+        after: value.after,
+        offset: value.offset,
+        phase: from_candid_Phase_n17(value.phase)
+    };
+}
+function from_candid_record_n21(value: {
+    unsettled: boolean;
+    kind: {
+        pending: null;
+    } | {
+        blob: null;
+    } | {
+        journal: null;
+    };
+    path: string;
+    content_hash: string;
+    upload_id: string;
+    content_length: bigint;
+}): {
+    unsettled: boolean;
+    kind: Variant_pending_blob_journal;
+    path: string;
+    content_hash: string;
+    upload_id: string;
+    content_length: bigint;
+} {
+    return {
+        unsettled: value.unsettled,
+        kind: from_candid_variant_n22(value.kind),
+        path: value.path,
+        content_hash: value.content_hash,
+        upload_id: value.upload_id,
+        content_length: value.content_length
+    };
+}
+function from_candid_record_n28(value: {
+    count: bigint;
+    count_limit: bigint;
+    bytes_limit: [] | [bigint];
+    category: string;
+    bytes: bigint;
+}): {
+    count: bigint;
+    count_limit: bigint;
+    bytes_limit?: bigint;
+    category: string;
+    bytes: bigint;
+} {
+    return {
+        count: value.count,
+        count_limit: value.count_limit,
+        bytes_limit: record_opt_to_undefined(from_candid_opt_n29(value.bytes_limit)),
+        category: value.category,
+        bytes: value.bytes
+    };
+}
+function from_candid_record_n34(value: {
     body: Uint8Array;
     headers: Array<_HeaderField>;
     streaming_strategy: [] | [{
@@ -461,11 +847,11 @@ function from_candid_record_n15(value: {
     return {
         body: value.body,
         headers: value.headers,
-        streaming_strategy: record_opt_to_undefined(from_candid_opt_n16(value.streaming_strategy)),
+        streaming_strategy: record_opt_to_undefined(from_candid_opt_n35(value.streaming_strategy)),
         status_code: value.status_code
     };
 }
-function from_candid_record_n19(value: {
+function from_candid_record_n38(value: {
     token: [] | [_StreamToken];
     body: Uint8Array;
 }): {
@@ -473,66 +859,116 @@ function from_candid_record_n19(value: {
     body: Uint8Array;
 } {
     return {
-        token: record_opt_to_undefined(from_candid_opt_n20(value.token)),
+        token: record_opt_to_undefined(from_candid_opt_n39(value.token)),
         body: value.body
     };
 }
-function from_candid_record_n9(value: {
-    count: bigint;
-    count_limit: bigint;
-    bytes_limit: [] | [bigint];
-    category: string;
-    bytes: bigint;
+function from_candid_record_n50(value: {
+    total: bigint;
+    pending: bigint;
+    cursor: _Cursor;
+    next: _Cursor;
+    total_bytes: bigint;
+    rows: Array<_Row>;
+    authority: [] | [Principal];
+    frozen: boolean;
+    revision: bigint;
 }): {
-    count: bigint;
-    count_limit: bigint;
-    bytes_limit?: bigint;
-    category: string;
-    bytes: bigint;
+    total: bigint;
+    pending: bigint;
+    cursor: Cursor;
+    next: Cursor;
+    total_bytes: bigint;
+    rows: Array<Row>;
+    authority?: Principal;
+    frozen: boolean;
+    revision: bigint;
 } {
     return {
-        count: value.count,
-        count_limit: value.count_limit,
-        bytes_limit: record_opt_to_undefined(from_candid_opt_n10(value.bytes_limit)),
-        category: value.category,
-        bytes: value.bytes
+        total: value.total,
+        pending: value.pending,
+        cursor: from_candid_Cursor_n51(value.cursor),
+        next: from_candid_Cursor_n51(value.next),
+        total_bytes: value.total_bytes,
+        rows: from_candid_vec_n54(value.rows),
+        authority: record_opt_to_undefined(from_candid_opt_n23(value.authority)),
+        frozen: value.frozen,
+        revision: value.revision
     };
 }
-function from_candid_variant_n12(value: {
-    Ok: [] | [_FinalizedBlob];
+function from_candid_record_n52(value: {
+    after: string;
+    offset: bigint;
+    phase: {
+        done: null;
+    } | {
+        legacy: null;
+    } | {
+        indexed: null;
+    };
+}): {
+    after: string;
+    offset: bigint;
+    phase: Variant_done_legacy_indexed;
+} {
+    return {
+        after: value.after,
+        offset: value.offset,
+        phase: from_candid_variant_n53(value.phase)
+    };
+}
+function from_candid_record_n56(value: {
+    club: [] | [string];
+    path: string;
+    content_hash: string;
+    bytes: bigint;
+    revision: bigint;
+}): {
+    club?: string;
+    path: string;
+    content_hash: string;
+    bytes: bigint;
+    revision: bigint;
+} {
+    return {
+        club: record_opt_to_undefined(from_candid_opt_n30(value.club)),
+        path: value.path,
+        content_hash: value.content_hash,
+        bytes: value.bytes,
+        revision: value.revision
+    };
+}
+function from_candid_variant_n10(value: {
+    Ok: _Page__1;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: FinalizedBlob | null;
+    Ok: Page__1;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n13(value.Ok)
+        Ok: from_candid_Page__1_n11(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n17(value: {
-    Callback: {
-        token: _StreamToken;
-        callback: [Principal, string];
-    };
-}): {
-    __kind__: "Callback";
-    Callback: {
-        token: StreamToken;
-        callback: [Principal, string];
-    };
-} {
-    return "Callback" in value ? {
-        __kind__: "Callback",
-        Callback: value.Callback
-    } : value;
+function from_candid_variant_n18(value: {
+    pending: null;
+} | {
+    done: null;
+} | {
+    journal: null;
+} | {
+    legacy: null;
+} | {
+    indexed: null;
+}): Phase {
+    return "pending" in value ? Phase.pending : "done" in value ? Phase.done : "journal" in value ? Phase.journal : "legacy" in value ? Phase.legacy : "indexed" in value ? Phase.indexed : value;
 }
 function from_candid_variant_n2(value: {
     Ok: null;
@@ -553,38 +989,22 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n21(value: {
-    ok: bigint;
-} | {
-    err: string;
-}): {
-    __kind__: "ok";
-    ok: bigint;
-} | {
-    __kind__: "err";
-    err: string;
-} {
-    return "ok" in value ? {
-        __kind__: "ok",
-        ok: value.ok
-    } : "err" in value ? {
-        __kind__: "err",
-        err: value.err
-    } : value;
-}
 function from_candid_variant_n22(value: {
-    Ok: {
-        copied_bytes: bigint;
-        remaining: bigint;
-    };
+    pending: null;
+} | {
+    blob: null;
+} | {
+    journal: null;
+}): Variant_pending_blob_journal {
+    return "pending" in value ? Variant_pending_blob_journal.pending : "blob" in value ? Variant_pending_blob_journal.blob : "journal" in value ? Variant_pending_blob_journal.journal : value;
+}
+function from_candid_variant_n25(value: {
+    Ok: _FinalizedBlob;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: {
-        copied_bytes: bigint;
-        remaining: bigint;
-    };
+    Ok: FinalizedBlob;
 } | {
     __kind__: "Err";
     Err: string;
@@ -597,54 +1017,40 @@ function from_candid_variant_n22(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n23(value: {
-    Ok: {
-        attempted: bigint;
-        cursor: string;
-    };
+function from_candid_variant_n31(value: {
+    Ok: [] | [_FinalizedBlob];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: {
-        attempted: bigint;
-        cursor: string;
-    };
+    Ok: FinalizedBlob | null;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_opt_n32(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n24(value: {
-    Ok: {
-        cursor: string;
-        removed: bigint;
+function from_candid_variant_n36(value: {
+    Callback: {
+        token: _StreamToken;
+        callback: [Principal, string];
     };
-} | {
-    Err: string;
 }): {
-    __kind__: "Ok";
-    Ok: {
-        cursor: string;
-        removed: bigint;
+    __kind__: "Callback";
+    Callback: {
+        token: StreamToken;
+        callback: [Principal, string];
     };
-} | {
-    __kind__: "Err";
-    Err: string;
 } {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
+    return "Callback" in value ? {
+        __kind__: "Callback",
+        Callback: value.Callback
     } : value;
 }
 function from_candid_variant_n4(value: {
@@ -666,13 +1072,38 @@ function from_candid_variant_n4(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n6(value: {
-    Ok: _FinalizedBlob;
+function from_candid_variant_n40(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n41(value: {
+    Ok: {
+        copied_bytes: bigint;
+        remaining: bigint;
+    };
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: FinalizedBlob;
+    Ok: {
+        copied_bytes: bigint;
+        remaining: bigint;
+    };
 } | {
     __kind__: "Err";
     Err: string;
@@ -685,8 +1116,242 @@ function from_candid_variant_n6(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n7(value: Array<_MediaUsage>): Array<MediaUsage> {
-    return value.map((x)=>from_candid_MediaUsage_n8(x));
+function from_candid_variant_n42(value: {
+    Ok: _Receipt;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Receipt;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n43(value: {
+    Ok: Array<{
+        id: string;
+        path: string;
+        size: bigint;
+    }>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<{
+        id: string;
+        path: string;
+        size: bigint;
+    }>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n44(value: {
+    Ok: {
+        pending_count: bigint;
+        allocatable_object_slots: bigint;
+        configured_bytes: bigint;
+        allocated_bytes: bigint;
+        pending_slot_bytes: bigint;
+        revision: bigint;
+        legacy_pending_count: bigint;
+        max_object_slot_bytes: bigint;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        pending_count: bigint;
+        allocatable_object_slots: bigint;
+        configured_bytes: bigint;
+        allocated_bytes: bigint;
+        pending_slot_bytes: bigint;
+        revision: bigint;
+        legacy_pending_count: bigint;
+        max_object_slot_bytes: bigint;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n45(value: {
+    Ok: {
+        attempted: bigint;
+        cursor: string;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        attempted: bigint;
+        cursor: string;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n53(value: {
+    done: null;
+} | {
+    legacy: null;
+} | {
+    indexed: null;
+}): Variant_done_legacy_indexed {
+    return "done" in value ? Variant_done_legacy_indexed.done : "legacy" in value ? Variant_done_legacy_indexed.legacy : "indexed" in value ? Variant_done_legacy_indexed.indexed : value;
+}
+function from_candid_variant_n57(value: {
+    Ok: {
+        cursor: string;
+        removed: bigint;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        cursor: string;
+        removed: bigint;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_vec_n19(value: Array<_Entry>): Array<Entry> {
+    return value.map((x)=>from_candid_Entry_n20(x));
+}
+function from_candid_vec_n26(value: Array<_MediaUsage>): Array<MediaUsage> {
+    return value.map((x)=>from_candid_MediaUsage_n27(x));
+}
+function from_candid_vec_n54(value: Array<_Row>): Array<Row> {
+    return value.map((x)=>from_candid_Row_n55(x));
+}
+function to_candid_Cursor__1_n5(value: Cursor__1): _Cursor__1 {
+    return to_candid_record_n6(value);
+}
+function to_candid_Cursor_n46(value: Cursor): _Cursor {
+    return to_candid_record_n47(value);
+}
+function to_candid_Phase_n7(value: Phase): _Phase {
+    return to_candid_variant_n8(value);
+}
+function to_candid_opt_n9(value: bigint | null): [] | [bigint] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_record_n47(value: {
+    after: string;
+    offset: bigint;
+    phase: Variant_done_legacy_indexed;
+}): {
+    after: string;
+    offset: bigint;
+    phase: {
+        done: null;
+    } | {
+        legacy: null;
+    } | {
+        indexed: null;
+    };
+} {
+    return {
+        after: value.after,
+        offset: value.offset,
+        phase: to_candid_variant_n48(value.phase)
+    };
+}
+function to_candid_record_n6(value: {
+    after: string;
+    offset: bigint;
+    phase: Phase;
+}): {
+    after: string;
+    offset: bigint;
+    phase: _Phase;
+} {
+    return {
+        after: value.after,
+        offset: value.offset,
+        phase: to_candid_Phase_n7(value.phase)
+    };
+}
+function to_candid_variant_n48(value: Variant_done_legacy_indexed): {
+    done: null;
+} | {
+    legacy: null;
+} | {
+    indexed: null;
+} {
+    return value == Variant_done_legacy_indexed.done ? {
+        done: null
+    } : value == Variant_done_legacy_indexed.legacy ? {
+        legacy: null
+    } : value == Variant_done_legacy_indexed.indexed ? {
+        indexed: null
+    } : value;
+}
+function to_candid_variant_n8(value: Phase): {
+    pending: null;
+} | {
+    done: null;
+} | {
+    journal: null;
+} | {
+    legacy: null;
+} | {
+    indexed: null;
+} {
+    return value == Phase.pending ? {
+        pending: null
+    } : value == Phase.done ? {
+        done: null
+    } : value == Phase.journal ? {
+        journal: null
+    } : value == Phase.legacy ? {
+        legacy: null
+    } : value == Phase.indexed ? {
+        indexed: null
+    } : value;
 }
 export interface CreateActorOptions {
     agent?: Agent;

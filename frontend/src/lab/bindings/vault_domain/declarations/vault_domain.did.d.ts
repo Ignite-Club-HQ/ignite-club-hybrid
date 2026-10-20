@@ -169,12 +169,92 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  'read_account_get_backup' : ActorMethod<
+    [string],
+    { 'Ok' : Backup } |
+      { 'Err' : string }
+  >,
+  'read_account_get_file' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [VaultFile] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_folder' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [VaultFolder] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_pinned_vault' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [PinnedVault] } |
+      { 'Err' : string }
+  >,
+  'read_account_list_backups' : ActorMethod<
+    [],
+    { 'Ok' : Array<BackupSummary> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_club_files' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_club_files_with_folder' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_files' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_files_with_folder' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_folders' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<VaultFolder> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_trashed_files' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_trashed_files_with_folder' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
+  'read_club_media_references' : ActorMethod<
+    [string, bigint, [] | [bigint]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
+  >,
+  'read_resource_club' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'register_file' : ActorMethod<
     [
       string,
@@ -258,6 +338,12 @@ export interface Main {
       { 'Err' : string }
   >,
 }
+export interface Page {
+  'references' : Array<Reference>,
+  'next' : [] | [bigint],
+  'scanned' : bigint,
+  'revision' : bigint,
+}
 export interface PinnedVault {
   'root_id' : [] | [string],
   'root_scope' : [] | [string],
@@ -269,6 +355,24 @@ export interface PinnedVault {
   'chat_id' : string,
   'vault_file_id' : [] | [string],
   'chat_type' : string,
+}
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Reference {
+  'url' : string,
+  'path' : [] | [string],
+  'content_hash' : [] | [string],
+  'store' : [] | [string],
+  'resource_id' : string,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface VaultFile {
   'id' : string,

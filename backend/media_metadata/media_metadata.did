@@ -16,12 +16,27 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
+type Reference = 
+ record {
+   content_hash: opt text;
+   path: opt text;
+   resource_id: text;
+   store: opt text;
+   url: text;
+ };
 type Reaction = 
  record {
    asset_id: text;
    created_at_ms: nat64;
    kind: text;
    user: principal;
+ };
+type Page = 
+ record {
+   next: opt nat;
+   references: vec Reference;
+   revision: nat;
+   scanned: nat;
  };
 type Main = 
  service {
@@ -105,6 +120,19 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_account_get_asset: (asset_id: text) -> (opt Asset);
+   read_account_get_gallery_chat_card: (card_id: text) ->
+    (opt GalleryChatCard);
+   read_account_list_assets: (club_id: text) -> (vec Asset);
+   read_account_list_comments: (asset_id: text) -> (vec Comment);
+   read_account_list_gallery_chat_cards: (club_id: text, team_id: text) ->
+    (vec GalleryChatCard);
+   read_account_list_reactions: (asset_id: text) -> (vec Reaction);
+   read_club_media_references: (club: text, offset: nat, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: Page;
+                 });
    register_asset: (club_id: text, kind: text, mime: text, checksum: 
     text, storage_path: text, visibility: text, expires_at_ms: nat64) ->
     (variant {

@@ -1,0 +1,97 @@
+name: Test larger photo store (isolated mainnet)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Unique test id, e.g. media-smoke-001 (never reuse an interrupted id)'
+        required: true
+      scenario:
+        description: 'Each run creates ONE separate store; start with smoke'
+        type: choice
+        options: [smoke, smoke64, mixed, tiny]
+        default: smoke
+      budget_t:
+        description: 'Maximum upfront funding INCLUDING fee, whole T cycles (2–20); no top-ups'
+        required: true
+        default: '5'
+      confirm:
+        description: 'Type TEST ISOLATED STORE to approve spending; leaves a paid test store running'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      TEST_RUN_ID: ${{ inputs.run_id }}
+      TEST_SCENARIO: ${{ inputs.scenario }}
+      TEST_BUDGET_T: ${{ inputs.budget_t }}
+      TEST_CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Validate explicit paid scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TEST_CONFIRM" == 'TEST ISOLATED STORE' ]]
+          [[ "$TEST_RUN_ID" =~ ^[a-z0-9][a-z0-9-]{2,47}$ ]]
+          [[ "$TEST_BUDGET_T" =~ ^([2-9]|1[0-9]|20)$ ]]
+          [[ "$TEST_SCENARIO" =~ ^(smoke|smoke64|mixed|tiny)$ ]]
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Install frontend dependencies (preserve project installer)
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Run isolated-test safety checks
+        run: node --test frontend/scripts/media-stage-two-policy.test.mjs frontend/scripts/media-stage-two-recovery.test.mjs frontend/scripts/media-stage-two-github.test.mjs scripts/media-stage-two-workflow.test.mjs
+      - name: Install pinned ICP build tool
+        run: npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
+      - name: Build only the photo-store module (no deployment)
+        working-directory: deploy/mainnet
+        run: |
+          set -euo pipefail
+          icp build media_blob_store
+          test -s ../../backend/media_blob_store/.mops/.build/media_blob_store.wasm
+          cp ../../backend/media_blob_store/.mops/.build/media_blob_store.wasm "$RUNNER_TEMP/media-test.wasm"
+      - name: Write temporary signing key
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM" || { echo '::error::DEPLOYER_PEM secret missing'; exit 1; }
+          umask 077
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/media-test-operator.pem"
+          test -s "$RUNNER_TEMP/media-test-operator.pem"
+      - name: Run one separate paid test store
+        working-directory: frontend
+        env:
+          TEST_REPORT_DIR: ${{ runner.temp }}/media-stage-two
+          GH_TOKEN: ${{ github.token }}
+          OPERATOR_PEM_PATH: ${{ runner.temp }}/media-test-operator.pem
+          TEST_WASM_PATH: ${{ runner.temp }}/media-test.wasm
+        run: npx --yes tsx@4 scripts/test-media-stage-two-mainnet.ts
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/media-test-operator.pem"
+      - name: Preserve complete or failed evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-stage-two-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/media-stage-two/
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Report where evidence is saved
+        if: always()
+        run: |
+          printf '%s\n' 'Evidence: artifact above and branch ignite-media-test-receipts, deploy/media-tests/.' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' 'No live group was changed. Do not repeat interrupted creation/install; reconcile the saved target and pending intent first. Test stores retain fuel and incur ongoing upkeep until separately cleaned up.' >> "$GITHUB_STEP_SUMMARY"

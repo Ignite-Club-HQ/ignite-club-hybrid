@@ -42,7 +42,7 @@ export const FEATURE_GROUP_DOMAIN: Record<FeatureArea, GroupDomain | null> = {
 };
 /** Club scope for a call. writeKey marks a write (idempotency key); attempts
  * 1 = never auto-retry (creates without a canister idempotency key). */
-export type ClubScope = ({ clubId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string }
+export type ClubScope = ({ clubId: string } | { photoId: string } | { galleryCardId: string } | { newsId: string } | { competitionId: string } | { competitionMatchId: string } | { eoiId: string } | { seasonId: string } | { vaultFileId: string } | { vaultFolderId: string } | { notificationId: string } | { scheduledMessageId: string } | { eventGroupId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string }
   /** Not club data: person-to-person (DMs, blocks, presence) or app-wide
    * settings. Always served by the shared canisters, never by a group. */
   | { shared: 'person' | 'app' }
@@ -73,7 +73,7 @@ export async function withFeatureBackend<T>(
     const target = tryGetActiveIcpTarget();
     if (target && isFeatureCanisterConfigured(target, feature)) {
       const iiIdentity = await getCurrentInternetIdentity().catch(() => null);
-      if (iiIdentity) return providers.icp({ identity: iiIdentity, target });
+      if (iiIdentity) return dispatchIcp(feature, providers, { identity: iiIdentity, target }, scope);
     }
     return providers.supabase();
   }
@@ -91,12 +91,18 @@ export async function withFeatureBackend<T>(
         "but there is no active Internet Identity session. Sign in again to continue.",
     );
   }
+  return dispatchIcp(feature, providers, { identity, target: getActiveIcpTarget() }, scope);
+}
+
+/** Both ICP sign-in paths obey the same scope/activation boundary. */
+async function dispatchIcp<T>(feature: FeatureArea, providers: FeatureBackendProviders<T>, context: FeatureBackendContext, scope?: ClubScope): Promise<T> {
+  const { identity } = context;
   // Group routing switch-on lock: shipped off, so every club uses the shared
   // canisters. If ever switched on without the club-scoped dispatcher, fail
   // closed instead of silently sending a moved club to the old group.
   if (activationStatus(SHIPPED_GATES).active && !scope?.legacy) {
     const domain = FEATURE_GROUP_DOMAIN[feature];
-    if (scope && 'shared' in scope) return providers.icp({ identity, target: getActiveIcpTarget() });
+    if (scope && 'shared' in scope) return providers.icp(context);
     if (scope && 'newClubId' in scope) return clubDispatch.forNewClub(feature, scope.newClubId, async ctx => providers.icp(ctx));
     if (scope && 'inviteToken' in scope) return clubDispatch.forInvite(feature, scope.inviteToken, async ctx => providers.icp(ctx));
     if (scope && domain && 'everyGroup' in scope) {
@@ -111,7 +117,7 @@ export async function withFeatureBackend<T>(
     // Unscoped club data would reach the shared canisters even for a moved club.
     if (domain) throw new Error(`"${feature}" call has no club scope; group routing cannot place it.`);
   }
-  return providers.icp({ identity, target: getActiveIcpTarget() });
+  return providers.icp(context);
 }
 
 function hasSupabaseSession(): boolean {

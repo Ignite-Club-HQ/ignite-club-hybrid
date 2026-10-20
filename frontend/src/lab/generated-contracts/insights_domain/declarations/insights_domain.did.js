@@ -423,6 +423,172 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'read_account_ad_event_summary' : IDL.Func(
+        [IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AdEventSummary), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_client_perf_aggregate' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : ClientPerfAggregate, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_club_engagement_active_users' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EngagementDayPoint), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_club_engagement_benchmarks' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : EngagementBenchmarks, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_club_engagement_message_volume' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EngagementDayPoint), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_club_engagement_rsvp_completion_series' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EngagementDayPoint), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_club_engagement_sponsor_performance' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'clicks' : IDL.Vec(EngagementDayPoint),
+              'impressions' : IDL.Vec(EngagementDayPoint),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_club_engagement_total_unique_reach' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_club_engagement_totals' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : EngagementTotals, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_count_photos' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_benchmarks' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Benchmark), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_sponsor_benchmarks' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(SponsorBenchmarkRow),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_sponsor_performance' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : SponsorPerformance, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_is_app_admin' : IDL.Func([], [IDL.Bool], []),
+    'read_account_list_ad_settings' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AppAdSetting), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_admin_alerts' : IDL.Func(
+        [IDL.Opt(AlertStatus)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AdminAlert), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_ads' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AppAd), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_app_admins' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_audit_logs' : IDL.Func(
+        [
+          IDL.Opt(IDL.Principal),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Nat32,
+          IDL.Nat32,
+        ],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'total' : IDL.Nat32,
+              'items' : IDL.Vec(AuditLog),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_feedback' : IDL.Func(
+        [IDL.Opt(FeedbackStatus), IDL.Nat32, IDL.Nat32],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'total' : IDL.Nat32,
+              'items' : IDL.Vec(Feedback),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_memory_reports' : IDL.Func(
+        [IDL.Nat],
+        [
+          IDL.Vec(
+            IDL.Record({
+              'at' : IDL.Int,
+              'analysis_json' : IDL.Text,
+              'source' : IDL.Text,
+              'readings_json' : IDL.Text,
+            })
+          ),
+        ],
+        [],
+      ),
+    'read_account_list_user_activity' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(UserActivityEntry), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_my_feedback' : IDL.Func([], [IDL.Vec(Feedback)], []),
+    'read_account_perf_aggregate' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : PerfAggregate, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_photo_engagement_totals' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(PhotoEngagementTotal),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'record_active_user' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

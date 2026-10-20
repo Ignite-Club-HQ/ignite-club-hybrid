@@ -32,7 +32,7 @@ try {
     const mapped = domains.map((domain, i) => ({ domain, canister: i === 0 ? fixture.canisterId : Principal.fromUint8Array(Uint8Array.from([i + 20, id.charCodeAt(0), 1])) }));
     let revision = await router.actor.version();
     revision = ok(await router.actor.register_group({ id, target_alias: 'local', domains: mapped, accepting: true, max_clubs: 100,
-      assigned_clubs: 0, heap_budget_bytes: 1_000_000_000n, heap_bytes: 0n, min_cycles: 1n, cycles: 0n, observed_at_ns: 0n }, revision));
+      assigned_clubs: 0, heap_budget_bytes: 1_000_000_000n, heap_bytes: 0n, min_cycles: 1n, cycles: 0n, observed_at_ns: 0n, photo_store: [] }, revision));
     revision = ok(await router.actor.register_group_placement({ group_id: id, deployment_id: 'local-replica', deployment_revision: 1n,
       host: 'https://isolated.invalid', network_kind: 'public_mainnet', primary_subnet: subnet, approved_subnets: [subnet],
       additional_subnets_enabled: false, domains: mapped.map(d => ({ ...d, subnet })) }, revision));

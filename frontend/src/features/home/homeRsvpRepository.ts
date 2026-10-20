@@ -1,4 +1,5 @@
 import { withFeatureBackend } from "@/live/featureRouter";
+import { acrossLists } from "@/live/featureScopes";
 import { getLiveHomeSnapshot } from "@/live/features/home";
 
 export interface HomeUserRsvp {
@@ -23,7 +24,7 @@ export async function fetchHomeUserRsvps(
 ): Promise<HomeUserRsvp[]> {
   if (eventIds.length === 0) return [];
 
-  return withFeatureBackend("home", {
+  return withFeatureBackend("events", {
     supabase: async () => {
       const { data, error } = await client
         .from("rsvps")
@@ -42,5 +43,5 @@ export async function fetchHomeUserRsvps(
         .filter((rsvp) => rsvp.account_id === userId && wanted.has(rsvp.event_id))
         .map((rsvp) => ({ event_id: rsvp.event_id, status: rsvp.state }));
     },
-  });
+  }, acrossLists);
 }

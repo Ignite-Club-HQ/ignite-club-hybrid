@@ -11,6 +11,11 @@ import { IDL } from '@icp-sdk/core/candid';
 export const idlFactory = ({ IDL }) => {
   const Init = IDL.Record({ 'governor' : IDL.Principal });
   const Result = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
+  const DeletionLock = IDL.Record({
+    'account_id' : IDL.Text,
+    'revision' : IDL.Nat64,
+  });
+  const Result_1 = IDL.Variant({ 'Ok' : DeletionLock, 'Err' : IDL.Text });
   const AssignRequest = IDL.Record({
     'shard' : IDL.Principal,
     'expected_revision' : IDL.Nat64,
@@ -22,7 +27,7 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
   });
   const AssignResult = IDL.Record({ 'revision' : IDL.Nat64, 'route' : Route });
-  const Result_1 = IDL.Variant({ 'Ok' : AssignResult, 'Err' : IDL.Text });
+  const Result_2 = IDL.Variant({ 'Ok' : AssignResult, 'Err' : IDL.Text });
   const AssignDomainRequest = IDL.Record({
     'domain' : IDL.Text,
     'shard' : IDL.Principal,
@@ -39,13 +44,13 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
     'route' : DomainRoute,
   });
-  const Result_2 = IDL.Variant({ 'Ok' : AssignDomainResult, 'Err' : IDL.Text });
+  const Result_3 = IDL.Variant({ 'Ok' : AssignDomainResult, 'Err' : IDL.Text });
   const GroupAssignment = IDL.Record({
     'group_id' : IDL.Text,
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
-  const Result_3 = IDL.Variant({ 'Ok' : GroupAssignment, 'Err' : IDL.Text });
+  const Result_4 = IDL.Variant({ 'Ok' : GroupAssignment, 'Err' : IDL.Text });
   const DomainMigration = IDL.Record({
     'destination' : IDL.Principal,
     'domain' : IDL.Text,
@@ -54,7 +59,7 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'migration_revision' : IDL.Nat64,
   });
-  const Result_4 = IDL.Variant({ 'Ok' : DomainMigration, 'Err' : IDL.Text });
+  const Result_5 = IDL.Variant({ 'Ok' : DomainMigration, 'Err' : IDL.Text });
   const Migration = IDL.Record({
     'destination' : IDL.Principal,
     'source' : IDL.Principal,
@@ -62,21 +67,25 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'migration_revision' : IDL.Nat64,
   });
-  const Result_5 = IDL.Variant({ 'Ok' : Migration, 'Err' : IDL.Text });
-  const Result_6 = IDL.Variant({
+  const Result_6 = IDL.Variant({ 'Ok' : Migration, 'Err' : IDL.Text });
+  const Result_7 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
+  const Result_8 = IDL.Variant({
     'Ok' : IDL.Opt(DomainMigration),
     'Err' : IDL.Text,
   });
-  const Result_7 = IDL.Variant({
+  const Result_9 = IDL.Variant({
     'Ok' : IDL.Opt(DomainRoute),
     'Err' : IDL.Text,
   });
-  const Result_8 = IDL.Variant({
+  const Result_10 = IDL.Variant({
     'Ok' : IDL.Opt(GroupAssignment),
     'Err' : IDL.Text,
   });
-  const Result_9 = IDL.Variant({ 'Ok' : IDL.Opt(Migration), 'Err' : IDL.Text });
-  const Result_10 = IDL.Variant({ 'Ok' : IDL.Opt(Route), 'Err' : IDL.Text });
+  const Result_11 = IDL.Variant({
+    'Ok' : IDL.Opt(Migration),
+    'Err' : IDL.Text,
+  });
+  const Result_12 = IDL.Variant({ 'Ok' : IDL.Opt(Route), 'Err' : IDL.Text });
   const DomainCanister = IDL.Record({
     'domain' : IDL.Text,
     'canister' : IDL.Principal,
@@ -86,6 +95,7 @@ export const idlFactory = ({ IDL }) => {
     'max_clubs' : IDL.Nat32,
     'observed_at_ns' : IDL.Nat64,
     'accepting' : IDL.Bool,
+    'photo_store' : IDL.Opt(IDL.Principal),
     'heap_budget_bytes' : IDL.Nat64,
     'cycles' : IDL.Nat64,
     'assigned_clubs' : IDL.Nat32,
@@ -94,7 +104,7 @@ export const idlFactory = ({ IDL }) => {
     'min_cycles' : IDL.Nat64,
     'heap_bytes' : IDL.Nat64,
   });
-  const Result_11 = IDL.Variant({
+  const Result_13 = IDL.Variant({
     'Ok' : IDL.Vec(ShardGroup),
     'Err' : IDL.Text,
   });
@@ -103,7 +113,7 @@ export const idlFactory = ({ IDL }) => {
     'routes' : IDL.Vec(Route),
     'revision' : IDL.Nat64,
   });
-  const Result_12 = IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text });
+  const Result_14 = IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text });
   const MemoryStats = IDL.Record({
     'memory_bytes' : IDL.Nat,
     'stable_bytes' : IDL.Nat,
@@ -130,12 +140,18 @@ export const idlFactory = ({ IDL }) => {
     'placements' : IDL.Vec(GroupPlacement),
     'revision' : IDL.Nat64,
   });
-  const Result_13 = IDL.Variant({
+  const Result_15 = IDL.Variant({
     'Ok' : GroupRegistrySnapshot,
     'Err' : IDL.Text,
   });
-  const Result_15 = IDL.Variant({ 'Ok' : GroupAssignment, 'Err' : IDL.Text });
-  const Result_14 = IDL.Variant({
+  const GroupRegistryPage = IDL.Record({
+    'groups' : IDL.Vec(ShardGroup),
+    'placements' : IDL.Vec(GroupPlacement),
+    'next_cursor' : IDL.Opt(IDL.Text),
+    'revision' : IDL.Nat64,
+  });
+  const Result_16 = IDL.Variant({ 'Ok' : GroupRegistryPage, 'Err' : IDL.Text });
+  const Result_17 = IDL.Variant({
     'Ok' : IDL.Vec(GroupAssignment),
     'Err' : IDL.Text,
   });
@@ -147,56 +163,87 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'abort_migration' : IDL.Func([IDL.Text, IDL.Nat64], [Result], []),
-    'assign' : IDL.Func([AssignRequest], [Result_1], []),
-    'assign_domain' : IDL.Func([AssignDomainRequest], [Result_2], []),
+    'acquire_deletion_lock' : IDL.Func([IDL.Text, IDL.Nat64], [Result_1], []),
+    'assign' : IDL.Func([AssignRequest], [Result_2], []),
+    'assign_domain' : IDL.Func([AssignDomainRequest], [Result_3], []),
     'assign_new_club_group' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
-        [Result_3],
+        [Result_4],
         [],
       ),
     'begin_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Principal, IDL.Nat64],
-        [Result_4],
+        [Result_5],
         [],
       ),
     'begin_migration' : IDL.Func(
         [IDL.Text, IDL.Principal, IDL.Nat64],
-        [Result_5],
+        [Result_6],
         [],
       ),
     'commit_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
-        [Result_2],
+        [Result_3],
         [],
       ),
-    'commit_migration' : IDL.Func([IDL.Text, IDL.Nat64], [Result_1], []),
+    'commit_migration' : IDL.Func([IDL.Text, IDL.Nat64], [Result_2], []),
+    'configure_group_media_growth' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Nat64,
+          IDL.Nat64,
+          IDL.Nat64,
+          IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat64)),
+          IDL.Nat64,
+        ],
+        [Result_7],
+        [],
+      ),
+    'configure_store_media_growth' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Principal,
+          IDL.Nat64,
+          IDL.Nat64,
+          IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat64)),
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
+        [Result_7],
+        [],
+      ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'get_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text],
-        [Result_6],
+        [Result_8],
         ['query'],
       ),
-    'get_domain_route' : IDL.Func([IDL.Text, IDL.Text], [Result_7], ['query']),
-    'get_group_assignment' : IDL.Func([IDL.Text], [Result_8], ['query']),
-    'get_migration' : IDL.Func([IDL.Text], [Result_9], ['query']),
-    'get_route' : IDL.Func([IDL.Text], [Result_10], ['query']),
-    'list_groups' : IDL.Func([], [Result_11], ['query']),
+    'get_domain_route' : IDL.Func([IDL.Text, IDL.Text], [Result_9], ['query']),
+    'get_group_assignment' : IDL.Func([IDL.Text], [Result_10], ['query']),
+    'get_migration' : IDL.Func([IDL.Text], [Result_11], ['query']),
+    'get_route' : IDL.Func([IDL.Text], [Result_12], ['query']),
+    'list_groups' : IDL.Func([], [Result_13], ['query']),
     'list_routes' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Nat16],
-        [Result_12],
+        [Result_14],
         ['query'],
       ),
     'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
-    'place_my_new_club' : IDL.Func([IDL.Text, IDL.Text], [Result_3], []),
-    'read_group_registry' : IDL.Func([IDL.Text], [Result_13], []),
+    'place_my_new_club' : IDL.Func([IDL.Text, IDL.Text], [Result_4], []),
+    'read_group_registry' : IDL.Func([IDL.Text], [Result_15], []),
+    'read_group_registry_page' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Opt(IDL.Text), IDL.Nat32],
+        [Result_16],
+        [],
+      ),
     'read_hosted_club_assignment' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
-        [Result_15],
+        [Result_4],
         [],
       ),
     'read_my_group_assignments' : IDL.Func(
         [IDL.Vec(IDL.Text), IDL.Text, IDL.Nat64],
-        [Result_14],
+        [Result_17],
         [],
       ),
     'record_group_health' : IDL.Func(
@@ -210,6 +257,13 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'release_deletion_lock' : IDL.Func([IDL.Text, IDL.Nat64], [Result_7], []),
+    'reserve_group_media_growth' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat64],
+        [Result],
+        [],
+      ),
+    'set_deletion_authority' : IDL.Func([IDL.Principal], [Result_7], []),
     'version' : IDL.Func([], [IDL.Nat64], ['query']),
   });
 };

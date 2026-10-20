@@ -66,12 +66,16 @@ describe("media_blob_store contract", () => {
     expect([...fields.keys()].sort()).toEqual([
       "abort_upload",
       "begin_upload",
+      "club_media_inventory_page",
       "cycles_balance",
       "delete_blob",
+      "enable_retained_media_quota",
       "enable_shared_media_quota",
       "enable_stable_media_storage",
       "finalize_upload",
       "freeze_media_quota",
+      "freeze_retained_media",
+      "get_club_media_bytes",
       "get_club_media_usage",
       "get_content_hash",
       "get_upload_outcome",
@@ -82,13 +86,21 @@ describe("media_blob_store contract", () => {
       "memory_stats",
       "merge_principal",
       "migrate_legacy_blob",
+      "prepare_account_removal",
       "put_chunk",
       "quota_snapshot_page",
+      "read_account_get_upload_outcome",
+      "read_account_removal_drain",
+      "read_pending_test_uploads",
+      "read_physical_growth_capacity",
+      "reconcile_retained_deletions",
       "reconcile_upload_operations",
       "rekey_principal",
+      "retained_snapshot_page",
       "retire_upload_outcomes",
       "set_capacity_limit",
       "set_club_domain_canister",
+      "set_club_media_transfer_fence",
       "stable_storage_status",
     ]);
   });
@@ -98,6 +110,12 @@ describe("media_blob_store contract", () => {
     expect(fields.get("put_chunk")?.argTypes).toHaveLength(3); // upload_id, index, data
     expect(fields.get("finalize_upload")?.argTypes).toHaveLength(1);
     expect(fields.get("abort_upload")?.argTypes).toHaveLength(1);
+  });
+  it("uses consensus for operator inventory and fence changes", () => {
+    expect(fields.get("club_media_inventory_page")?.argTypes).toHaveLength(3);
+    expect(fields.get("club_media_inventory_page")?.annotations).toEqual([]);
+    expect(fields.get("set_club_media_transfer_fence")?.argTypes).toHaveLength(3);
+    expect(fields.get("set_club_media_transfer_fence")?.annotations).toEqual([]);
   });
 
   it("serves reads as queries so media delivery skips consensus", () => {

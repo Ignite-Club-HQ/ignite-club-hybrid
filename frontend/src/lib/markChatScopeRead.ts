@@ -1,3 +1,4 @@
+import { acrossVoid } from "@/live/featureScopes";
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -162,6 +163,11 @@ export function markChatScopeNotificationsRead({
             return { data: matches.length, error: null };
           },
         },
+        { everyGroup: true, merge: (parts: Array<{ data: unknown; error: unknown }>) => {
+          const failed = parts.find(p => p.error);
+          if (failed) throw failed.error;
+          return { data: parts.reduce((n, p) => n + Number(p.data ?? 0), 0), error: null };
+        } },
       );
 
       if (error) {

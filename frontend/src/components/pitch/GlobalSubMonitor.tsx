@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect, useRef, useCallback, useState, Suspense } from "react";
 import { playSubAlertBeep, playTimerBeep } from "./GameTimer";
 import SubConfirmDialog from "./SubConfirmDialog";
@@ -224,7 +225,7 @@ export default function GlobalSubMonitor() {
                   idempotencyKeyPrefix: `pitch-board-${dedupeKey ?? source}`,
                   relatedId: teamId,
                 }),
-            });
+            }, writeOnce({ clubId }));
           }
         } catch (error) {
           console.warn("[SYNC] ICP pitch board fan-out failed:", error);
@@ -644,7 +645,7 @@ export default function GlobalSubMonitor() {
                 idempotencyKeyPrefix: `pitch-board-${type}-${Date.now()}`,
                 relatedId: teamId ?? null,
               }),
-          });
+          }, writeOnce({ clubId }));
         }
       } catch (error) {
         console.log("ICP notification creation failed:", error);

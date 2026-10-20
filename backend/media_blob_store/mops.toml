@@ -4,6 +4,7 @@ sha2 = "0.2.5"
 
 [toolchain]
 moc = "1.16.1"
+pocket-ic = "15.0.0"
 
 [package]
 name = "media_blob_store"

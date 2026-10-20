@@ -1,0 +1,11 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { attestDeployKey, verifyDeployKey } from './media-key-deploy-rules.mjs';
+const binding = { deploymentId: 'd', environment: 'ic', host: 'https://icp-api.io', canisterId: 'p', governor: 'g', keyName: 'key_1' };
+function fixture() { let saved; const d = { status: async () => ({ moduleHash: 'a'.repeat(64), controllers: ['g'] }), originalKey: async () => '01'.repeat(96), configuredKey: async () => '01'.repeat(96), save: async r => { saved = r; } }; return { d, saved: () => saved }; }
+test('configured production key is attested before upgrade and verified afterwards', async () => { const f = fixture(); const r = await attestDeployKey(binding, f.d); assert.equal(f.saved().keyName, 'key_1'); await verifyDeployKey(binding, r, f.d); });
+test('wrong legacy key blocks before saving', async () => { const f = fixture(); f.d.configuredKey = async () => '02'.repeat(96); await assert.rejects(attestDeployKey(binding, f.d), /differs/); assert.equal(f.saved(), undefined); });
+test('other controllers block unverifiable exclusive deployment', async () => { const f = fixture(); f.d.status = async () => ({ moduleHash: 'a'.repeat(64), controllers: ['g', 'other'] }); await assert.rejects(attestDeployKey(binding, f.d), /Exclusive/); });
+test('changed modules during preflight block', async () => { const f = fixture(); let n = 0; f.d.status = async () => ({ moduleHash: (++n === 1 ? 'a' : 'b').repeat(64), controllers: ['g'] }); await assert.rejects(attestDeployKey(binding, f.d), /changed/); });
+test('missing durable save never claims success', async () => { const f = fixture(); f.d.save = async () => { throw new Error('disk'); }; await assert.rejects(attestDeployKey(binding, f.d), /disk/); });
+test('changed post-upgrade key blocks', async () => { const f = fixture(); const r = await attestDeployKey(binding, f.d); f.d.originalKey = async () => '02'.repeat(96); await assert.rejects(verifyDeployKey(binding, r, f.d), /not preserved/); });

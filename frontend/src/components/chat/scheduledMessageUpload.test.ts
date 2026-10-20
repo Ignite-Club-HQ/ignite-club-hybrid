@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/features/vault/clubMediaAllowance", () => ({ uploadWithinClubMediaAllowance: (_club: unknown, _bytes: unknown, upload: () => Promise<unknown>) => upload() }));
 
 const { upload, getPublicUrl, compressImage, measureImageDimensions, appendDimensionsToUrl, setCachedImageAspectRatio } = vi.hoisted(() => ({
   upload: vi.fn(), getPublicUrl: vi.fn(), compressImage: vi.fn(),
@@ -75,7 +76,7 @@ describe("uploadScheduledImage", () => {
   it.runIf(!icpMode)("uses the original file when compression fails", async () => {
     const original = imageFile();
     compressImage.mockRejectedValue(new Error("compression unavailable"));
-    await uploadScheduledImage(original, { teamId: "team-1" });
+    await uploadScheduledImage(original, { clubId: "club-1", teamId: "team-1" });
     expect(upload.mock.calls[0][1]).toBe(original);
   });
 

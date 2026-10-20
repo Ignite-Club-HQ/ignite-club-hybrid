@@ -1,8 +1,10 @@
 """Offline deployment safety regressions; never contact a live canister."""
+import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+import shutil
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,7 +12,7 @@ GOVERNOR = "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae"
 
 
 class DeploySafetyTests(unittest.TestCase):
-    def run_deploy(self, modern):
+    def run_deploy(self, modern, deployed=False, key_safe=True):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             log = temp / "calls"
@@ -22,27 +24,58 @@ case "$*" in
     if [ "$MODERN" = 1 ]; then echo '--wasm-memory-persistence keep'; fi ;;
   '--version') echo 'icp 1.7.0' ;;
   'identity principal') printf '%s\\n' "$TEST_GOVERNOR" ;;
-  deploy*) exit 42 ;;
+  deploy*) if [ "$DEPLOYED" = 1 ]; then exit 0; else exit 42; fi ;;
+  canister?call*) echo '(variant { Ok })' ;;
   *) exit 99 ;;
 esac
 ''')
             executable.chmod(0o755)
-            environment = dict(os.environ, PATH=f"{temp}:{os.environ['PATH']}",
-                               CALL_LOG=str(log), MODERN=str(int(modern)),
+            preflight = temp / "node"
+            preflight.write_text('''#!/usr/bin/env bash
+if [[ "$1" != *media-key-deploy-preflight.mjs ]]; then exec "$REAL_NODE" "$@"; fi
+printf 'key-preflight %s\n' "$2" >> "$CALL_LOG"
+if [ "$KEY_SAFE" != 1 ]; then exit 43; fi
+exit 0
+''')
+            preflight.chmod(0o755)
+            environment = dict(os.environ, PATH=f"{temp}:{os.environ['PATH']}", REAL_NODE=shutil.which("node"),
+                               CALL_LOG=str(log), MODERN=str(int(modern)), DEPLOYED=str(int(deployed)), ICP_PUSH_WORKER_SEED="",
                                TEST_GOVERNOR=GOVERNOR, GOVERNOR=GOVERNOR,
+                               KEY_SAFE=str(int(key_safe)),
                                DEPLOY_TARGET="mainnet", ICP_ENV="ic")
             result = subprocess.run(["bash", str(ROOT / "scripts/deploy-mainnet.sh")],
                                     env=environment, capture_output=True, text=True)
             return result, log.read_text().splitlines()
+
+    def test_league_parent_authorities_are_wired_reciprocally(self):
+        result, calls = self.run_deploy(True, deployed=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = json.loads((ROOT / "deploy/mainnet/.icp/data/mappings/ic.ids.json").read_text())
+        self.assertIn(f'canister call events_domain set_mini_league_domain_canister (principal "{ids["mini_league_domain"]}") -e ic', calls)
+        self.assertIn(f'canister call mini_league_domain set_events_domain_canister (principal "{ids["events_domain"]}") -e ic', calls)
 
     def test_old_cli_is_rejected_before_deploy(self):
         result, calls = self.run_deploy(False)
         self.assertEqual(result.returncode, 1)
         self.assertFalse(any(call.startswith("deploy") for call in calls))
 
+    def test_competition_participant_authorities_are_wired_reciprocally(self):
+        result, calls = self.run_deploy(True, deployed=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = json.loads((ROOT / "deploy/mainnet/.icp/data/mappings/ic.ids.json").read_text())
+        self.assertIn(f'canister call club_domain set_competition_authorities (vec {{ principal "{ids["competition_domain"]}" }}) -e ic', calls)
+        self.assertIn(f'canister call competition_domain set_participant_club_authorities (vec {{ principal "{ids["club_domain"]}" }}) -e ic', calls)
+
     def test_eop_aware_cli_uses_state_preserving_auto_mode(self):
         _, calls = self.run_deploy(True)
         self.assertIn("deploy -e ic -y --mode auto --cycles 1000000000000", calls)
+        self.assertLess(calls.index("key-preflight before"), calls.index("deploy -e ic -y --mode auto --cycles 1000000000000"))
+
+    def test_unverified_original_photo_key_blocks_every_upgrade(self):
+        result, calls = self.run_deploy(True, key_safe=False)
+        self.assertEqual(result.returncode, 43)
+        self.assertFalse(any(call.startswith("deploy") for call in calls))
+        self.assertFalse(any(call.startswith("canister call") for call in calls))
 
     def test_failed_upgrade_stops_without_destructive_retry_or_wiring(self):
         result, calls = self.run_deploy(True)

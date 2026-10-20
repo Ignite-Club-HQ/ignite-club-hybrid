@@ -1,3 +1,16 @@
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
 type PiiDeleteResult = 
  record {
    key_destroyed: bool;
@@ -74,8 +87,12 @@ type Main =
        err: text;
        ok: nat;
      });
-   my_guardian_children: () -> (vec text) query;
+   my_guardian_children: () -> (vec text) composite_query;
    pii_vetkey_verification_key: () -> (blob);
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_grants: (club_id: text) -> (variant {
                                             Err: text;
                                             Ok: nat32;
@@ -84,6 +101,27 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_account_audit_access: (filter: AuditFilter) -> (vec AuditRecord);
+   read_account_my_guardian_children: () -> (vec text);
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   read_club_media_authority: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubMediaAuthority;
+     });
+   read_private_media_authority: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             competition: opt principal;
+             move_id: text;
+             revision: nat;
+           };
+     });
    register_pii: (pii_id: text, field_id: text, ciphertext: vec nat8,
     domain_owner: principal) -> (variant {
                                    Err: text;
@@ -119,10 +157,26 @@ type Main =
        Err: text;
        Ok;
      });
+   set_club_media_authority: (club: text, authority: opt principal, move_id:
+    text, expected_revision: nat) ->
+    (variant {
+       Err: text;
+       Ok: ClubMediaAuthority;
+     });
    set_competition_domain_canister: (canister: principal) ->
     (variant {
        Err: text;
        Ok;
+     });
+   set_private_media_authority: (club: text, competition: opt principal,
+    move_id: text, expected: nat) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             competition: opt principal;
+             move_id: text;
+             revision: nat;
+           };
      });
    set_transfer_fence: (club: text, fenced: bool) ->
     (variant {
@@ -142,6 +196,12 @@ type EncryptedPii =
    master_key_id: text;
    nonce: vec nat8;
    pii_id: text;
+ };
+type ClubMediaAuthority = 
+ record {
+   authority: opt principal;
+   move_id: text;
+   revision: nat;
  };
 type AuditRecord = 
  record {

@@ -9,7 +9,13 @@ use ic_stable_structures::{
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 mod groups;
+mod group_index;
+#[cfg(feature = "scale-probe")]
+mod scale_probe;
+#[cfg(feature = "scale-probe")]
+use scale_probe::Probe;
 mod discovery;
+mod media_growth;
 use discovery::GroupPlacement;
 use groups::{GroupAssignment, ShardGroup};
 
@@ -17,6 +23,43 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
 const MAX_CLUB_ID_BYTES: usize = 64;
 const MAX_PAGE: u16 = 100;
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeletionLock { pub account_id: String, pub revision: u64 }
+fn registry_writable() -> Outcome<()> {
+    if DELETION_LOCKS.with(|m| m.borrow().len()) > 0 { return Err("Deletion registry locked".into()); }
+    Ok(())
+}
+fn deletion_authority() -> Option<Principal> {
+    DELETION_AUTHORITY.with(|m| { let b=m.borrow().get().clone(); if b.is_empty() {None} else {Some(Principal::from_slice(&b))} })
+}
+#[ic_cdk::update]
+fn set_deletion_authority(authority: Principal) -> Outcome<()> {
+    require_governor()?; registry_writable()?; validate_shard(authority)?;
+    if deletion_authority().is_some_and(|p| p != authority) { return Err("Deletion authority immutable".into()); }
+    DELETION_AUTHORITY.with(|m| m.borrow_mut().set(authority.as_slice().to_vec())); Ok(())
+}
+#[ic_cdk::update]
+fn acquire_deletion_lock(account_id: String, expected_revision: u64) -> Outcome<DeletionLock> {
+    if deletion_authority() != Some(caller()) { return Err("Deletion authority required".into()); }
+    if account_id.is_empty() || account_id.len()>128 { return Err("Invalid account id".into()); }
+    if current_revision()!=expected_revision { return Err("Deletion registry revision changed".into()); }
+    let lock=DeletionLock { account_id:account_id.clone(), revision:expected_revision };
+    if let Some(bytes)=DELETION_LOCKS.with(|m| m.borrow().get(&account_id)) {
+        if decode::<DeletionLock>(&bytes)!=lock { return Err("Deletion lock conflict".into()); }
+        return Ok(lock);
+    }
+    if DELETION_LOCKS.with(|m| m.borrow().len())>=10000 { return Err("Deletion lock capacity".into()); }
+    DELETION_LOCKS.with(|m| m.borrow_mut().insert(account_id,encode(&lock))); Ok(lock)
+}
+#[ic_cdk::update]
+fn release_deletion_lock(account_id: String, expected_revision: u64) -> Outcome<()> {
+    if deletion_authority()!=Some(caller()) { return Err("Deletion authority required".into()); }
+    if let Some(bytes)=DELETION_LOCKS.with(|m| m.borrow().get(&account_id)) {
+        if decode::<DeletionLock>(&bytes).revision!=expected_revision { return Err("Deletion lock conflict".into()); }
+        DELETION_LOCKS.with(|m| m.borrow_mut().remove(&account_id));
+    }
+    Ok(())
+}
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Route {
@@ -117,8 +160,99 @@ thread_local! {
     static GROUP_ASSIGNMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(7)));
     // Additive partition; never reuse IDs belonging to existing deployments.
     static GROUP_PLACEMENTS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(8)));
+    // Additive permanent partitions: no expiry or governor unlock bypass.
+    static DELETION_AUTHORITY: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(10), Vec::new()));
+    static DELETION_LOCKS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(11)));
     // Per-principal count of self-service new-club placements (abuse cap).
     static PLACERS: RefCell<StableBTreeMap<Vec<u8>, u64, Memory>> = RefCell::new(StableBTreeMap::init(memory(9)));
+    static MEDIA_GROWTH: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(12)));
+    // Additive store-principal partition; never reinterpret legacy group bytes.
+    static GROUP_INDEX: RefCell<Option<group_index::GroupIndex>> = const { RefCell::new(None) };
+    static STORE_GROWTH: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(13)));
+}
+
+fn media_growth_local() -> bool {
+    #[cfg(test)] { TEST_GROWTH.with(|v| *v.borrow()) }
+    #[cfg(not(test))] { ic_cdk::api::env_var_name_exists("IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL") && ic_cdk::api::env_var_value("IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL") == "1" }
+}
+#[cfg(test)]
+thread_local! { static TEST_GROWTH: RefCell<bool> = const { RefCell::new(false) }; }
+fn growth_budget(group: &str) -> Option<media_growth::Budget> {
+    MEDIA_GROWTH.with(|m| m.borrow().get(&group.as_bytes().to_vec()).map(|b| decode(&b)))
+}
+fn save_growth(b: &media_growth::Budget) {
+    MEDIA_GROWTH.with(|m| m.borrow_mut().insert(b.group_id.as_bytes().to_vec(), encode(b)));
+}
+fn verified_store_growth(group: &str) -> Option<media_growth::StoreBudget> {
+    let g = group_for(group)?;
+    let store = g.photo_store?;
+    if GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).any(|other| other.id != group && other.photo_store == Some(store))) {
+        return None;
+    }
+    let authority = g.domains.iter().find(|d| d.domain == "club_domain")?.canister;
+    let b: media_growth::StoreBudget = STORE_GROWTH.with(|m| m.borrow().get(&store.as_slice().to_vec()).map(|raw| decode(&raw)))?;
+    b.matches(group, &g.target_alias, authority, store).then_some(b)
+}
+fn save_store_growth(b: &media_growth::StoreBudget) {
+    STORE_GROWTH.with(|m| m.borrow_mut().insert(b.store.as_slice().to_vec(), encode(b)));
+}
+#[ic_cdk::update]
+fn configure_store_media_growth(group_id: String, store: Principal, usable: u64, fixed: u64,
+    baseline: Vec<(String, u64)>, expected_revision: u64, evidence_revision: u64) -> Outcome<()> {
+    require_governor()?; registry_writable()?;
+    if !media_growth_local() { return Err("Local media growth only".into()); }
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    let group = group_for(&group_id).ok_or("Unknown group")?;
+    if group.photo_store != Some(store) || STORE_GROWTH.with(|m| m.borrow().contains_key(&store.as_slice().to_vec())) {
+        return Err("Immutable unique store baseline required".into());
+    }
+    // A physical store cannot fund two independent group budgets.
+    if GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).any(|g| g.id != group_id && g.photo_store == Some(store))) {
+        return Err("Store belongs to another group".into());
+    }
+    let legacy = growth_budget(&group_id).ok_or("Missing exact club baseline")?;
+    let authority = group.domains.iter().find(|d| d.domain == "club_domain").ok_or("Missing authority")?.canister;
+    if legacy.authority != authority || legacy.target_alias != group.target_alias { return Err("Growth binding changed".into()); }
+    let assigned: Vec<String> = GROUP_ASSIGNMENTS.with(|m| m.borrow().iter().map(|e| decode::<GroupAssignment>(&e.value()))
+        .filter(|a| a.group_id == group_id).map(|a| a.club_id).collect());
+    if assigned.len() != legacy.commitments.len() || assigned.iter().any(|id| !legacy.commitments.contains_key(id)) {
+        return Err("Exact assigned-club baseline required".into());
+    }
+    let b = media_growth::StoreBudget::import(store, evidence_revision, &legacy, usable, fixed, baseline)?;
+    save_store_growth(&b); Ok(())
+}
+#[ic_cdk::update]
+fn configure_group_media_growth(group_id: String, usable: u64, fixed: u64, free_club: u64, baseline: Vec<(String, u64)>, expected_revision: u64) -> Outcome<()> {
+    require_governor()?; registry_writable()?;
+    if !media_growth_local() { return Err("Local media growth only".into()); }
+    if current_revision() != expected_revision || growth_budget(&group_id).is_some() { return Err("Immutable growth baseline required".into()); }
+    let group = group_for(&group_id).ok_or("Unknown group")?;
+    let authority = group.domains.iter().find(|d| d.domain == "club_domain").ok_or("Missing club authority")?.canister;
+    if usable == 0 || usable > 64 * 34_359_738_368 || fixed > usable || free_club == 0 || baseline.len() > 100_000 {
+        return Err("Invalid physical baseline".into());
+    }
+    let assigned: Vec<GroupAssignment> = GROUP_ASSIGNMENTS.with(|m| m.borrow().iter().map(|e| decode::<GroupAssignment>(&e.value())).filter(|a| a.group_id == group_id).collect());
+    if assigned.len() != baseline.len() { return Err("Exact assigned-club baseline required".into()); }
+    let mut b = media_growth::Budget { group_id, target_alias: group.target_alias, authority, usable, fixed, free_club, commitments: Default::default() };
+    for (club, bytes) in baseline {
+        if b.commitments.contains_key(&club) || !assigned.iter().any(|a| a.club_id == club) { return Err("Baseline club mismatch".into()); }
+        b.reserve(&club, bytes)?;
+    }
+    save_growth(&b); Ok(())
+}
+fn reserve_growth_for(user: Principal, group_id: &str, target_alias: &str, club: &str, bytes: u64) -> Outcome<u64> {
+    registry_writable()?;
+    if !media_growth_local() { return Err("Local media growth only".into()); }
+    let mut store = verified_store_growth(group_id).ok_or("Verified per-store growth baseline required")?;
+    let b = &mut store.budget;
+    if user != b.authority || b.target_alias != target_alias || group_assignment_for(club).is_none_or(|a| a.group_id != group_id) {
+        return Err("Assigned club authority required".into());
+    }
+    let result = b.reserve(club, bytes)?; save_growth(b); save_store_growth(&store); Ok(result)
+}
+#[ic_cdk::update]
+fn reserve_group_media_growth(group_id: String, target_alias: String, club: String, bytes: u64) -> Outcome<u64> {
+    reserve_growth_for(caller(), &group_id, &target_alias, &club, bytes)
 }
 
 /// Self-service placements one principal may make; each consumes a group slot.
@@ -287,7 +421,7 @@ fn list_routes(start_after: Option<String>, limit: u16) -> Outcome<Page> {
 
 #[ic_cdk::update]
 fn assign(request: AssignRequest) -> Outcome<AssignResult> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&request.club_id)?;
     if group_assignment_for(&request.club_id).is_some() { return Err("Club has an immutable group assignment".into()); }
     validate_shard(request.shard)?;
@@ -325,7 +459,7 @@ fn begin_migration(
     destination: Principal,
     expected_route_revision: u64,
 ) -> Outcome<Migration> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     if group_assignment_for(&club_id).is_some() { return Err("Group migration requires verified group-wide copy and cutover".into()); }
     validate_shard(destination)?;
@@ -360,7 +494,7 @@ fn begin_migration(
 
 #[ic_cdk::update]
 fn commit_migration(club_id: String, expected_migration_revision: u64) -> Outcome<AssignResult> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     let migration = migration_for(&club_id).ok_or("No migration in progress")?;
     if migration.migration_revision != expected_migration_revision {
@@ -389,7 +523,7 @@ fn commit_migration(club_id: String, expected_migration_revision: u64) -> Outcom
 
 #[ic_cdk::update]
 fn abort_migration(club_id: String, expected_migration_revision: u64) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     let migration = migration_for(&club_id).ok_or("No migration in progress")?;
     if migration.migration_revision != expected_migration_revision {
@@ -411,7 +545,7 @@ fn get_migration(club_id: String) -> Outcome<Option<Migration>> {
 
 #[ic_cdk::update]
 fn assign_domain(request: AssignDomainRequest) -> Outcome<AssignDomainResult> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&request.club_id)?;
     if group_assignment_for(&request.club_id).is_some() { return Err("Club has an immutable group assignment".into()); }
     validate_club_id(&request.domain)?;
@@ -449,7 +583,7 @@ fn begin_domain_migration(
     destination: Principal,
     expected_route_revision: u64,
 ) -> Outcome<DomainMigration> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     if group_assignment_for(&club_id).is_some() { return Err("Group migration requires verified group-wide copy and cutover".into()); }
     validate_club_id(&domain)?;
@@ -487,7 +621,7 @@ fn commit_domain_migration(
     domain: String,
     expected_migration_revision: u64,
 ) -> Outcome<AssignDomainResult> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     validate_club_id(&domain)?;
     let migration =
@@ -520,7 +654,7 @@ fn abort_domain_migration(
     domain: String,
     expected_migration_revision: u64,
 ) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     validate_club_id(&club_id)?;
     validate_club_id(&domain)?;
     let migration =
@@ -554,6 +688,26 @@ fn version() -> u64 {
 fn group_for(id: &str) -> Option<ShardGroup> {
     GROUPS.with(|items| items.borrow().get(&id.as_bytes().to_vec()).map(|bytes| decode(&bytes)))
 }
+fn save_group(group: &ShardGroup) {
+    GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(group)));
+    GROUP_INDEX.with(|index| { if let Some(index) = index.borrow_mut().as_mut() { index.upsert(group); } });
+}
+fn indexed_group(target: &str, club: &str, now: u64) -> Option<ShardGroup> {
+    GROUP_INDEX.with(|index| {
+        let mut index = index.borrow_mut();
+        if index.is_none() {
+            let mut rebuilt = group_index::GroupIndex::default();
+            GROUPS.with(|rows| { for row in rows.borrow().iter() { rebuilt.upsert(&decode::<ShardGroup>(&row.value())); } });
+            *index = Some(rebuilt);
+        }
+        index.as_ref()?.pick(target, |id| {
+            let group = group_for(id)?;
+            if !groups::has_headroom(&group, target, now) || !groups::below_rollover(&group) { return None; }
+            if media_growth_local() && !verified_store_growth(id).is_some_and(|s| s.budget.fits(club, s.budget.free_club)) { return None; }
+            Some(group)
+        })
+    })
+}
 fn group_assignment_for(id: &str) -> Option<GroupAssignment> {
     GROUP_ASSIGNMENTS.with(|items| items.borrow().get(&id.as_bytes().to_vec()).map(|bytes| decode(&bytes)))
 }
@@ -563,7 +717,7 @@ pub struct GroupRegistrySnapshot { pub revision: u64, pub groups: Vec<ShardGroup
 
 #[ic_cdk::update]
 fn register_group_placement(placement: GroupPlacement, expected_revision: u64) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     if current_revision() != expected_revision { return Err("Revision conflict".into()); }
     let group = group_for(&placement.group_id).ok_or("Unknown group")?;
     discovery::validate(&placement, &group)?;
@@ -583,11 +737,40 @@ fn register_group_placement(placement: GroupPlacement, expected_revision: u64) -
 // account IDs, memberships or health receipts. This does not activate routing.
 #[ic_cdk::update]
 fn read_group_registry(target_alias: String) -> Outcome<GroupRegistrySnapshot> {
+    let page = read_group_registry_page(target_alias, None, None, 64)?;
+    if page.next_cursor.is_some() { return Err("Registry exceeds legacy reply; use read_group_registry_page".into()); }
+    Ok(GroupRegistrySnapshot { revision: page.revision, groups: page.groups, placements: page.placements })
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct GroupRegistryPage {
+    pub revision: u64, pub groups: Vec<ShardGroup>, pub placements: Vec<GroupPlacement>,
+    pub next_cursor: Option<String>,
+}
+
+// Cursor advances over at most 64 stable keys, including foreign targets: no
+// message scans an unbounded registry. Empty nonterminal pages are valid.
+#[ic_cdk::update]
+fn read_group_registry_page(target_alias: String, expected_revision: Option<u64>, cursor: Option<String>, limit: u32) -> Outcome<GroupRegistryPage> {
     if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
-    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
-    let groups: Vec<ShardGroup> = GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).filter(|g| g.target_alias == target_alias).collect());
+    if target_alias.is_empty() || target_alias.len() > 64 || limit == 0 || limit > 64 || cursor.as_ref().is_some_and(|c| c.len()>64) {
+        return Err("Invalid registry page".into());
+    }
+    let revision = current_revision();
+    if expected_revision.is_some_and(|r| r != revision) { return Err("Revision conflict".into()); }
+    if cursor.is_some() && expected_revision.is_none() { return Err("Paged continuation requires revision".into()); }
+    use std::ops::Bound::{Excluded, Unbounded};
+    let rows = GROUPS.with(|m| {
+        let m = m.borrow();
+        let start = cursor.map(|c| Excluded(c.into_bytes())).unwrap_or(Unbounded);
+        m.range((start, Unbounded)).take(limit as usize + 1).map(|e| (e.key().clone(), e.value())).collect::<Vec<_>>()
+    });
+    let next_cursor = if rows.len() > limit as usize {
+        Some(String::from_utf8(rows[limit as usize - 1].0.clone()).map_err(|_| "Invalid group key")?)
+    } else { None };
+    let groups: Vec<ShardGroup> = rows.into_iter().take(limit as usize).map(|(_,v)| decode::<ShardGroup>(&v)).filter(|g| g.target_alias == target_alias).collect();
     let placements = groups.iter().map(|g| GROUP_PLACEMENTS.with(|m| m.borrow().get(&g.id.as_bytes().to_vec()).map(|b| decode(&b))).ok_or_else(|| "Incomplete group placement registry".to_string())).collect::<Outcome<Vec<_>>>()?;
-    Ok(GroupRegistrySnapshot { revision: current_revision(), groups, placements })
+    Ok(GroupRegistryPage { revision, groups, placements, next_cursor })
 }
 
 #[ic_cdk::update]
@@ -637,12 +820,12 @@ fn hosted_assignment(club_id: &str, target_alias: &str, expected_revision: u64, 
 
 #[ic_cdk::update]
 fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     let mut group = group;
     if current_revision() != expected_revision { return Err("Revision conflict".into()); }
     let prior = group_for(&group.id);
     if let Some(ref old) = prior {
-        if old.target_alias != group.target_alias || old.domains != group.domains {
+        if old.target_alias != group.target_alias || old.domains != group.domains || (growth_budget(&group.id).is_some() && old.photo_store != group.photo_store) {
             return Err("Group endpoints are immutable; register a new group".into());
         }
         group.assigned_clubs = old.assigned_clubs;
@@ -659,21 +842,21 @@ fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
     }
     groups::validate(&group)?;
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
-    GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+    save_group(&group);
     REVISION.with(|stored| stored.borrow_mut().set(revision));
     Ok(revision)
 }
 
 #[ic_cdk::update]
 fn record_group_health(group_id: String, heap_bytes: u64, cycles: u64, expected_revision: u64) -> Outcome<u64> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     if current_revision() != expected_revision { return Err("Revision conflict".into()); }
     let mut group = group_for(&group_id).ok_or("Unknown group")?;
     // Report the largest heap and smallest cycle balance across ALL group
     // canisters. This is an operator observation, never browser authorization.
     group.heap_bytes = heap_bytes; group.cycles = cycles; group.observed_at_ns = ic_cdk::api::time();
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
-    GROUPS.with(|items| items.borrow_mut().insert(group_id.into_bytes(), encode(&group)));
+    save_group(&group);
     REVISION.with(|stored| stored.borrow_mut().set(revision));
     Ok(revision)
 }
@@ -693,7 +876,7 @@ fn get_group_assignment(club_id: String) -> Outcome<Option<GroupAssignment>> {
 
 #[ic_cdk::update]
 fn assign_new_club_group(club_id: String, target_alias: String, expected_revision: u64) -> Outcome<GroupAssignment> {
-    require_governor()?;
+    require_governor()?; registry_writable()?;
     assign_group_record(club_id, target_alias, expected_revision, ic_cdk::api::time())
 }
 
@@ -705,6 +888,7 @@ fn place_my_new_club(club_id: String, target_alias: String) -> Outcome<GroupAssi
 }
 
 fn assign_group_record(club_id: String, target_alias: String, expected_revision: u64, now: u64) -> Outcome<GroupAssignment> {
+    registry_writable()?;
     validate_club_id(&club_id)?;
     // Retrying an acknowledged assignment never consumes a second slot.
     if let Some(assignment) = group_assignment_for(&club_id) {
@@ -718,13 +902,19 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
             .is_some_and(|entry| entry.key().starts_with(&domain_key(&club_id, "")))) {
         return Err("Existing club routes require a verified migration".into());
     }
-    let rows: Vec<ShardGroup> = GROUPS.with(|items| items.borrow().iter().map(|entry| decode(&entry.value())).collect());
-    let mut group = groups::select(&rows, &target_alias, now).cloned().ok_or("No healthy group with capacity")?;
+    let mut group = indexed_group(&target_alias, &club_id, now).ok_or("No healthy group with capacity")?;
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
     group.assigned_clubs += 1;
     let assignment = GroupAssignment { club_id: club_id.clone(), group_id: group.id.clone(), revision };
+    // Reserve physical growth and assign in the same message. A lost reply
+    // retains one immutable assignment and one monotonic commitment.
+    if media_growth_local() {
+        let mut store = verified_store_growth(&group.id).ok_or("Verified per-store growth baseline required")?;
+        store.budget.reserve(&club_id, store.budget.free_club)?;
+        save_growth(&store.budget); save_store_growth(&store);
+    }
     // Both maps update in one synchronous message; no await/reentrancy window.
-    GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+    save_group(&group);
     GROUP_ASSIGNMENTS.with(|items| items.borrow_mut().insert(club_id.into_bytes(), encode(&assignment)));
     REVISION.with(|stored| stored.borrow_mut().set(revision));
     Ok(assignment)
@@ -733,6 +923,70 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn priority_index_rebuild_rollover_health_and_immutable_retry() {
+        let mut a = groups::tests::group("index-a", 79);
+        let b = groups::tests::group("index-b", 0);
+        save_group(&a); save_group(&b);
+        let first = assign_group_record("index-club-a".into(), "mainnet".into(), current_revision(), 1).unwrap();
+        assert_eq!(first.group_id, "index-a");
+        assert_eq!(assign_group_record("index-club-b".into(), "mainnet".into(), current_revision(), 1).unwrap().group_id, "index-b");
+        assert_eq!(assign_group_record("index-club-a".into(), "mainnet".into(), 0, u64::MAX).unwrap(), first);
+        a.assigned_clubs = 10; a.observed_at_ns = 0; save_group(&a);
+        assert_eq!(indexed_group("mainnet", "new", groups::MAX_READING_AGE_NS + 1).unwrap().id, "index-b");
+        GROUP_INDEX.with(|m| *m.borrow_mut() = None);
+        assert_eq!(indexed_group("mainnet", "new", 1).unwrap().id, "index-a");
+        a.accepting = false; save_group(&a);
+        assert_eq!(indexed_group("mainnet", "new", 1).unwrap().id, "index-b");
+    }
+
+    #[test]
+    fn growth_is_group_bound_and_reserved_with_assignment() {
+        TEST_GROWTH.with(|v| *v.borrow_mut() = true);
+        let mut g = groups::tests::group("growth-g", 0);
+        g.target_alias = "growth-local".into();
+        g.photo_store = Some(Principal::from_slice(&[240]));
+        GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(), encode(&g)));
+        let authority = g.domains[0].canister;
+        save_growth(&media_growth::Budget { group_id:g.id.clone(),target_alias:g.target_alias.clone(),authority,usable:100,fixed:20,free_club:40,commitments:Default::default() });
+        assert!(assign_group_record("growth-a".into(),g.target_alias.clone(),current_revision(),1).is_err());
+        let store = g.photo_store.unwrap();
+        save_store_growth(&media_growth::StoreBudget::import(store,1,&growth_budget(&g.id).unwrap(),100,20,vec![]).unwrap());
+        let a = assign_group_record("growth-a".into(),g.target_alias.clone(),current_revision(),1).unwrap();
+        assert_eq!(growth_budget(&g.id).unwrap().committed(),Ok(60));
+        assert_eq!(assign_group_record("growth-a".into(),g.target_alias.clone(),0,1).unwrap(),a);
+        assert!(reserve_growth_for(Principal::anonymous(),&g.id,&g.target_alias,"growth-a",50).is_err());
+        assert!(reserve_growth_for(authority,&g.id,"foreign","growth-a",50).is_err());
+        assert!(reserve_growth_for(authority,&g.id,&g.target_alias,"unassigned",50).is_err());
+        assert_eq!(reserve_growth_for(authority,&g.id,&g.target_alias,"growth-a",80),Ok(80));
+        assert!(assign_group_record("growth-b".into(),g.target_alias.clone(),current_revision(),1).is_err());
+        assert!(group_assignment_for("growth-b").is_none());
+        assert_eq!(growth_budget(&g.id).unwrap().committed(),Ok(100));
+        let original = g.photo_store;
+        g.photo_store = Some(Principal::from_slice(&[241]));
+        GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(),encode(&g)));
+        assert!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80).is_err());
+        assert!(verified_store_growth(&g.id).is_none());
+        g.photo_store = original;
+        GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(),encode(&g)));
+        assert_eq!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80),Ok(80));
+        let mut duplicate = g.clone(); duplicate.id = "duplicate-store-group".into();
+        GROUPS.with(|m| m.borrow_mut().insert(duplicate.id.as_bytes().to_vec(),encode(&duplicate)));
+        assert!(verified_store_growth(&g.id).is_none());
+        assert!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80).is_err());
+        GROUPS.with(|m| m.borrow_mut().remove(&duplicate.id.as_bytes().to_vec()));
+        assert!(verified_store_growth(&g.id).is_some());
+        TEST_GROWTH.with(|v| *v.borrow_mut() = false);
+    }
+    #[test]
+    fn reservation_blocks_registry_mutations_and_self_placement_until_settled() {
+        let lock=DeletionLock {account_id:"account".into(),revision:4};
+        DELETION_LOCKS.with(|m|m.borrow_mut().insert(lock.account_id.clone(),encode(&lock)));
+        assert_eq!(registry_writable(),Err("Deletion registry locked".into()));
+        assert!(assign_group_record("club".into(),"mainnet".into(),4,0).is_err());
+        DELETION_LOCKS.with(|m|m.borrow_mut().remove(&lock.account_id));
+        assert!(registry_writable().is_ok());
+    }
 
     #[test]
     fn ids_and_pages_are_bounded() {
@@ -761,7 +1015,7 @@ mod tests {
         let group = ShardGroup {
             id: "test-group".into(), target_alias: "mainnet".into(), domains: vec![],
             accepting: true, max_clubs: 1, assigned_clubs: 0,
-            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1, photo_store: None,
         };
         GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
         let revision = current_revision();
@@ -779,7 +1033,7 @@ mod tests {
         let group = ShardGroup {
             id: "self-group".into(), target_alias: "selftest".into(), domains: vec![],
             accepting: true, max_clubs: 100, assigned_clubs: 0,
-            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1, photo_store: None,
         };
         GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
         let user = Principal::from_slice(&[7; 29]);
@@ -798,7 +1052,7 @@ mod tests {
         let group = ShardGroup {
             id: "host-group".into(), target_alias: "mainnet".into(), domains: vec![],
             accepting: true, max_clubs: 5, assigned_clubs: 0,
-            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1,
+            heap_budget_bytes: 1_000, heap_bytes: 1, min_cycles: 1, cycles: 2, observed_at_ns: 1, photo_store: None,
         };
         GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
         let assigned = assign_group_record("host-club".into(), "mainnet".into(), current_revision(), 1).unwrap();

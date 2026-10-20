@@ -26,6 +26,11 @@ export interface AuditRecord {
   'field_id' : string,
   'purpose' : string,
 }
+export interface ClubMediaAuthority {
+  'move_id' : string,
+  'authority' : [] | [Principal],
+  'revision' : bigint,
+}
 export interface EncryptedPii {
   'master_key_id' : string,
   'ciphertext' : Uint8Array,
@@ -102,6 +107,11 @@ export interface Main {
   >,
   'my_guardian_children' : ActorMethod<[], Array<string>>,
   'pii_vetkey_verification_key' : ActorMethod<[], Uint8Array>,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_grants' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -110,6 +120,29 @@ export interface Main {
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'read_account_audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
+  'read_account_my_guardian_children' : ActorMethod<[], Array<string>>,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
+  'read_club_media_authority' : ActorMethod<
+    [string],
+    { 'Ok' : ClubMediaAuthority } |
+      { 'Err' : string }
+  >,
+  'read_private_media_authority' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'move_id' : string,
+          'competition' : [] | [Principal],
+          'revision' : bigint,
+        }
+      } |
       { 'Err' : string }
   >,
   'register_pii' : ActorMethod<
@@ -147,9 +180,25 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_club_media_authority' : ActorMethod<
+    [string, [] | [Principal], string, bigint],
+    { 'Ok' : ClubMediaAuthority } |
+      { 'Err' : string }
+  >,
   'set_competition_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_private_media_authority' : ActorMethod<
+    [string, [] | [Principal], string, bigint],
+    {
+        'Ok' : {
+          'move_id' : string,
+          'competition' : [] | [Principal],
+          'revision' : bigint,
+        }
+      } |
       { 'Err' : string }
   >,
   'set_transfer_fence' : ActorMethod<
@@ -166,6 +215,17 @@ export interface Main {
 export interface PiiDeleteResult {
   'shredded_at' : bigint,
   'key_destroyed' : boolean,
+}
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

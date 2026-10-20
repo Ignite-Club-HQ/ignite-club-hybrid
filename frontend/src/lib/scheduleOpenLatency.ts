@@ -123,7 +123,7 @@ export async function logScheduleOpenLatency(args: LogArgs): Promise<void> {
         icp: async (ctx) => {
           await recordLivePerfSample(ctx, "schedule_open", args.source, tap_to_paint_ms, args.cacheHit, platform);
         },
-      }).catch(() => {});
+      }, { shared: "app" }).catch(() => {});
     };
     const supabaseInsert = () => {
       void (supabase as any).from("schedule_open_perf").insert({

@@ -1,0 +1,23 @@
+{
+  "_note": "CONSERVATIVE PLANNING LIMITS (20 Oct 2026), not load-tested. Set to ~50% of estimated usable memory per service so the 70%/80% capacity triggers fire early, leaving headroom for existing clubs' growth and allocation overhead (local tests showed ~24% overhead on mixed file sizes). Replace with real load-test figures when available.",
+  "deploymentId": "mainnet",
+  "groupId": "g1",
+  "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+  "clubCount": 18,
+  "storageLimitBytes": {
+    "media_blob_store": 8000000000,
+    "messaging_domain": 1000000000,
+    "media_metadata": 1000000000,
+    "notification_queue": 1000000000,
+    "events_domain": 1000000000,
+    "insights_domain": 1000000000,
+    "identity_access": 1000000000,
+    "club_domain": 1000000000,
+    "vault_domain": 1000000000,
+    "pii_access_control": 1000000000,
+    "club_points_domain": 500000000,
+    "competition_domain": 500000000,
+    "mini_league_domain": 500000000,
+    "timer_jobs": 500000000
+  }
+}

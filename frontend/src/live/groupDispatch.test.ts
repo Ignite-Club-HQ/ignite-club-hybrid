@@ -3,7 +3,7 @@ import { createClubDispatcher, clearGroupDispatchCache, clubDispatch } from './g
 import { OFF } from './groupActivation';
 import { GROUP_DOMAINS } from './groupRouting';
 
-const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n };
+const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n, removalWiring: { revision: 1n, groupIds: ["a"], checkedAtMs: 0 } };
 function deps(gates = OFF, principal = 'p1') {
   const session = { readClub: vi.fn(async () => 'group'), writeClub: vi.fn(async () => 'group'), isAssigned: (c: string) => c === 'moved', dispose: vi.fn() };
   const d = { gates: () => gates, legacy: vi.fn(async () => 'legacy') as never,
@@ -13,6 +13,31 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it.each([
+    ['media', 'media_metadata', { photoId: 'photo-a' }, 'photo'],
+    ['media', 'media_metadata', { galleryCardId: 'card-a' }, 'galleryCard'],
+    ['news', 'club_domain', { newsId: 'article-a' }, 'news'],
+  ] as const)('routes %s content actions only to the authorized owner', async (feature, domain, scope, kind) => {
+    const { d, session } = deps(ON);
+    const lookup = vi.fn(async () => 'moved');
+    const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
+    const dispatcher = createClubDispatcher({ ...d, lookup, open: async () => ({ ...session, readEveryGroup }) } as never);
+    await dispatcher.writeFor(feature, scope, domain, 'once', async () => 'saved', 1);
+    expect(lookup).toHaveBeenCalledWith({}, kind, Object.values(scope)[0]);
+    expect(session.writeClub).toHaveBeenCalledWith('moved', domain, 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
+  it('resolves competition writes to the host club and never retries a mutation', async () => {
+    const { d, session } = deps(ON);
+    const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
+    const lookup = vi.fn(async () => 'moved');
+    const dispatch = createClubDispatcher({ ...d, lookup, open: async () => ({ ...session, readEveryGroup }) } as never);
+    await dispatch.writeFor('competitions', { competitionId: 'comp-a' }, 'competition_domain', 'once', async () => 'saved', 1);
+    expect(lookup).toHaveBeenCalledWith({}, 'competition', 'comp-a');
+    expect(readEveryGroup).toHaveBeenCalledWith('competition_domain', expect.any(Function), 2);
+    expect(session.writeClub).toHaveBeenCalledWith('moved', 'competition_domain', 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   it.each([
     ['mini_leagues', 'mini_league_domain'],
     ['points', 'club_points_domain'],
@@ -53,6 +78,23 @@ describe('club-scoped dispatcher', () => {
 });
 
 describe('entity scopes', () => {
+  it('routes a foreign-host invitation once without granting host membership', async () => {
+    const { d, session } = deps(ON);
+    const readHosted = vi.fn(async (_club, _domain, action) => action({ target: 'foreign' }));
+    const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
+    const action = vi.fn(async () => 'accepted');
+    const dispatcher = createClubDispatcher({ ...d, lookup: async () => 'foreign-host', open: async () => ({ ...session, readHosted, readEveryGroup }) } as never);
+    expect(await dispatcher.writeFor('competitions', { competitionId: 'cup' }, 'competition_domain', 'once', action, 3)).toBe('accepted');
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(session.writeClub).not.toHaveBeenCalled();
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
+  it('does not cache a denied EOI as permission to fall back on a later request', async () => {
+    const { d, session } = deps(ON);
+    const dispatcher = createClubDispatcher({ ...d, lookup: async () => null, open: async () => ({ ...session, readEveryGroup: async () => [] }) } as never);
+    for (let i = 0; i < 2; i++) await expect(dispatcher.writeFor('competitions', { eoiId: 'private' }, 'competition_domain', 'once', async () => 'bad', 1)).rejects.toThrow('not authorized');
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   function world(claims: Record<string, string[]>) {
     const { d, session } = deps(ON);
     const s2 = { ...session, readEveryGroup: vi.fn(async (_d: string, r: (ctx: never) => Promise<string[]>) => (await Promise.all(Object.keys(claims).map(g => r(g as never)))).flat()) };
@@ -128,5 +170,47 @@ describe('membership entity routing', () => {
     expect(lookup).toHaveBeenCalledWith(expect.anything(), kind, kind === 'clubLink' ? 'link-a' : 'request-a');
     expect(session.writeClub).toHaveBeenCalledWith('moved', 'club_domain', 'once', expect.any(Function), 1);
     expect(d.legacy).not.toHaveBeenCalled();
+  });
+});
+
+describe('mini-league entity routing', () => {
+  it('discovers the league owner and saves once in that club group', async () => {
+    const { d, session } = deps(ON);
+    const s = { ...session, readEveryGroup: vi.fn(async (_domain, read) => read({} as never)) };
+    const lookup = vi.fn(async () => 'moved');
+    const dispatcher = createClubDispatcher({ ...d, open: async () => s, lookup } as never);
+    await dispatcher.writeFor('mini_leagues', { miniLeagueId: 'league-a' }, 'mini_league_domain', 'once', async () => 'saved', 1);
+    expect(lookup).toHaveBeenCalledWith(expect.anything(), 'miniLeague', 'league-a');
+    expect(s.readEveryGroup).toHaveBeenCalledWith('mini_league_domain', expect.any(Function), 2);
+    expect(session.writeClub).toHaveBeenCalledWith('moved', 'mini_league_domain', 'once', expect.any(Function), 1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
+  it('does not dispatch after ownership discovery loses a group', async () => {
+    const { d, session } = deps(ON);
+    const s = { ...session, readEveryGroup: vi.fn(async () => { throw new Error('Group unavailable'); }) };
+    const dispatcher = createClubDispatcher({ ...d, open: async () => s, lookup: vi.fn() } as never);
+    await expect(dispatcher.readFor('mini_leagues', { miniLeagueId: 'league-a' }, 'mini_league_domain', async () => 1)).rejects.toThrow('Group unavailable');
+    expect(session.readClub).not.toHaveBeenCalled();
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
+  it('rejects conflicting league ownership', async () => {
+    const { d, session } = deps(ON);
+    const s = { ...session, readEveryGroup: vi.fn(async () => ['moved', 'other']) };
+    const dispatcher = createClubDispatcher({ ...d, open: async () => s, lookup: vi.fn() } as never);
+    await expect(dispatcher.readFor('mini_leagues', { miniLeagueId: 'league-a' }, 'mini_league_domain', async () => 1)).rejects.toThrow('more than one group');
+    expect(session.readClub).not.toHaveBeenCalled();
+  });
+});
+
+describe('event group ownership', () => {
+  it('resolves unseen group clocks through events and pins the write once', async () => {
+    const { d, session } = deps(ON);
+    const lookup = vi.fn(async () => 'moved');
+    const readEveryGroup = vi.fn(async (_domain, probe) => probe({}));
+    const dispatcher = createClubDispatcher({ ...d, lookup, open: async () => ({ ...session, readEveryGroup }) } as never);
+    await dispatcher.writeFor('events', { eventGroupId: 'g' }, 'events_domain', 'cas', async () => 1, 1);
+    expect(lookup).toHaveBeenCalledWith({}, 'eventGroup', 'g');
+    expect(readEveryGroup).toHaveBeenCalledWith('events_domain', expect.any(Function), 2);
+    expect(session.writeClub).toHaveBeenCalledWith('moved', 'events_domain', 'cas', expect.any(Function), 1);
   });
 });

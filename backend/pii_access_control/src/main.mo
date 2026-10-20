@@ -1,3 +1,6 @@
+import AccountAdmission "../../shared/AccountAdmission";
+import RemovalReceiver "../../shared/RemovalReceiver";
+import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 /// PII Access Control Canister
 /// Mediates access to personally identifiable information (PII) with
@@ -35,13 +38,34 @@ import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
+import Map "mo:core/Map";
+import Iter "mo:core/Iter";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 import ManagementCanister "mo:ic-vetkeys/ManagementCanister";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
+  // Opt-in local rehearsal only; production deploy scripts must never set these.
+  transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
+  transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
+    case (?id) ?Principal.fromText(id); case null null
+  };
+  var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
+  var removal_subjects : Map.Map<Principal, Text>;
+  var removal_active : Map.Map<Principal, Nat>;
+  transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
+  transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  func admitAccount(subject : Principal) : async () {
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
+    let eligible = await accountAdmission.eligible(subject);
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
+  };
+  func denyLegacyAccountQuery() {
+    if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
+  };
+
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -144,7 +168,7 @@ persistent actor class Main(governorInit : Principal) {
   // undecryptable. Read per call (system capability is only available
   // inside shared methods).
   func vetkdKeyId<system>() : ManagementCanister.VetKdKeyid {
-    let keyName = Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1";
+    let keyName = establishedVetkdKeyName ?? Runtime.trap("vetKD key name not established");
     { curve = #bls12_381_g2; name = keyName }
   };
 
@@ -152,6 +176,11 @@ persistent actor class Main(governorInit : Principal) {
   // may contain the separator (ids are UUIDs / "prefix:..." slugs).
   func ibeIdentity(pii_id : Text, field_id : Text) : Blob {
     Text.encodeUtf8(pii_id # "\u{1F}" # field_id)
+  };
+  // The shared photo identity is accessible ONLY through its membership
+  // relay. Generic records must never alias it, even with separator injection.
+  func reservedMediaIdentity(pii_id : Text, field_id : Text) : Bool {
+    Text.startsWith(pii_id, #text "clubmedia:") or Text.contains(pii_id, #char '\u{1F}') or Text.contains(field_id, #char '\u{1F}')
   };
 
   // ==================== State ====================
@@ -187,6 +216,17 @@ persistent actor class Main(governorInit : Principal) {
   // set_club_domain_canister; while unset, club grants never authorize.
   var club_domain_canister : ?Principal;
   var competition_domain_canister : ?Principal;
+  type ClubMediaAuthority = { authority : ?Principal; revision : Nat; move_id : Text };
+  var clubMediaAuthorities : Map.Map<Text, ClubMediaAuthority>;
+  var mediaAuthEpoch : Nat;
+  var establishedVetkdKeyName : ?Text;
+  var privateMediaAuthorities : Map.Map<Text, { competition : ?Principal; revision : Nat; move_id : Text }>;
+  // A legacy upgrade captures its existing environment key, so the operator
+  // must attest it matches the original deployment BEFORE that first upgrade.
+  // All subsequent upgrades ignore environment changes and preserve the key.
+  if (establishedVetkdKeyName == null) {
+    establishedVetkdKeyName := ?(Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1");
+  };
 
   // ==================== Helper Functions ====================
 
@@ -208,6 +248,7 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
+    mediaAuthEpoch += 1;
     transferFences := transferFences.filter(func(c) = c != club);
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
@@ -223,7 +264,10 @@ persistent actor class Main(governorInit : Principal) {
   func fenceDrop(c : Text) {
     let rootG = club_read_grants.filter(func(x) = x.club_id == c);
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
-    club_read_grants := club_read_grants.filter(func(x) = not (x.club_id == c));
+    mediaAuthEpoch += 1;
+    // Existing private files still derive at this ORIGINAL key authority.
+    // Keep their grant, but evaluate staff at the destination authority.
+    club_read_grants := club_read_grants.filter(func(x) = x.club_id != c or (x.field_id == "blob" and mediaAuthority(c).authority != null));
   };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
@@ -239,15 +283,19 @@ persistent actor class Main(governorInit : Principal) {
     let rootG = s.grants;
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
     if (s.grants.any(func(x) = not (x.club_id == c))
+        or s.records.any(func(x) = reservedMediaIdentity(x.pii_id, x.field_id))
         or s.records.any(func(x) = not (inG(x.pii_id)))
         or s.guardians.any(func(x) = not (x.children.any(inG)))) return #Err("Snapshot contains foreign records");
     if (s.records.any(func(e) = pii_records.any(func(x) = x.pii_id == e.pii_id and x.field_id == e.field_id and x.ciphertext != e.ciphertext))) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
+    mediaAuthEpoch += 1;
     club_read_grants := club_read_grants.concat(s.grants);
+    mediaAuthEpoch += 1;
     pii_records := pii_records.filter(func(y) = not s.records.any(func(x) = y.pii_id == x.pii_id and y.field_id == x.field_id)).concat(s.records);
     // Guardian links merge: add the moved children to each guardian's set.
     for (g in s.guardians.values()) {
       let kids = g.children.filter(inG);
+      mediaAuthEpoch += 1;
       guardian_relationships := switch (guardian_relationships.find(func(y) = y.guardian.equal(g.guardian))) {
         case (?cur) guardian_relationships.map(func(y) = if (y.guardian.equal(g.guardian)) { { y with children = y.children.concat(kids.filter(func(k) = not y.children.any(func(z) = z == k))) } } else y);
         case null guardian_relationships.concat([{ g with children = kids }]);
@@ -289,7 +337,24 @@ persistent actor class Main(governorInit : Principal) {
   // rights over the whole id space; guardian relationships grant the same
   // access without requiring an explicit per-field grant.
   func can_read(caller : Principal, r : PiiRecord) : Bool {
-    isGovernor(caller) or caller.equal(r.domain_owner) or r.readers.any(func(p) = p.equal(caller)) or isVerifiedGuardian(caller, r.pii_id)
+    isGovernor(caller) or caller.equal(r.domain_owner) or r.readers.any(func(p) = p.equal(caller))
+  };
+
+  // A stored guardian mirror alone is never proof of current parent access.
+  func currentGuardian(caller : Principal, child : Text) : async Bool {
+    switch (club_domain_canister) {
+      case null false;
+      case (?cid) {
+        let domain : actor { read_has_child_guardian : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+        try { await (with timeout = 10) domain.read_has_child_guardian(caller, child) } catch (_) { false }
+      };
+    }
+  };
+
+  func directRead(caller : Principal, r : PiiRecord) : async Bool {
+    if (can_read(caller, r)) return true;
+    if (not isVerifiedGuardian(caller, r.pii_id)) return false;
+    await currentGuardian(caller, r.pii_id)
   };
 
   // Club ids holding a club-scoped read grant for this record (deduped).
@@ -308,21 +373,22 @@ persistent actor class Main(governorInit : Principal) {
   // authorized clubs, so a misconfigured deployment denies rather than
   // leaks.
   func clubsWhereStaff(caller : Principal, clubIds : [Text]) : async [Text] {
-    switch (club_domain_canister) {
-      case null { [] };
+    var ok : [Text] = [];
+    for (club_id in clubIds.values()) {
+      let authority = switch (mediaAuthority(club_id).authority) { case (?p) ?p; case null club_domain_canister };
+      switch (authority) {
+      case null {};
       case (?cid) {
-        let clubDomain : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
-        var ok : [Text] = [];
-        for (club_id in clubIds.values()) {
+        let clubDomain : actor { read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
           try {
-            if (await clubDomain.has_club_staff_role(caller, club_id)) {
+            if (not isFenced(club_id) and (await (with timeout = 10) clubDomain.read_has_club_staff_role(caller, club_id))) {
               ok := ok.concat([club_id]);
             };
           } catch (_) {};
-        };
-        ok
       };
-    }
+      };
+    };
+    ok
   };
 
   func canReadViaClub(r : PiiRecord, allowedClubs : [Text]) : Bool {
@@ -344,14 +410,26 @@ persistent actor class Main(governorInit : Principal) {
   func resolveAllowedCompetitions(caller : Principal, pii_ids : [Text], field_id : Text) : async [Text] {
     let competitionIds = competitionIdsForRecords(pii_ids, field_id);
     if (competitionIds.size() == 0 or competitionIds.size() > 25) return [];
-    switch (competition_domain_canister) {
-      case null { [] };
+    var allowed : [Text] = [];
+    for (competitionId in competitionIds.values()) {
+      // Path selects the authority ONLY for an already verified competition
+      // grant; it never creates an entitlement from a browser path.
+      let grant = competition_read_grants.find(func(g) = g.competition_id == competitionId and g.field_id == field_id and pii_ids.any(func(id) = id == g.pii_id));
+      let authority = switch (grant) {
+        case null competition_domain_canister;
+        case (?g) {
+          let parts = Iter.toArray(Text.split(g.pii_id, #char '/'));
+          if (parts.size() >= 4 and parts[0] == "clubs" and parts[2] == "competitions" and parts[3] == competitionId) {
+            switch (privateMediaAuthorities.get(parts[1])) { case (?a) { switch (a.competition) { case (?p) ?p; case null competition_domain_canister } }; case null competition_domain_canister }
+          } else competition_domain_canister
+        };
+      };
+      switch (authority) {
+      case null {};
       case (?canister) {
         let competitionDomain : actor {
           get_vault_access : shared (Text, Principal) -> async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text };
         } = actor (Principal.toText(canister));
-        var allowed : [Text] = [];
-        for (competitionId in competitionIds.values()) {
           let result = try {
             await competitionDomain.get_vault_access(competitionId, caller)
           } catch (_) {
@@ -363,10 +441,10 @@ persistent actor class Main(governorInit : Principal) {
             };
             case (#Err(_)) {};
           };
-        };
-        allowed
       };
-    }
+      };
+    };
+    allowed
   };
 
   func canReadViaCompetition(r : PiiRecord, allowedCompetitions : [Text]) : Bool {
@@ -436,21 +514,38 @@ persistent actor class Main(governorInit : Principal) {
     field_id : Text,
     transport_public_key : Blob
   ) : async { #Ok : [?Blob]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
     if (pii_ids.size() > 25) return #Err("Batch too large");
     if (transport_public_key.size() == 0) return #Err("Invalid transport key");
+    if (pii_ids.any(func(id) = reservedMediaIdentity(id, field_id))) return #Err("Reserved or invalid PII identity");
+    let epoch = mediaAuthEpoch;
     let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
     let allowedCompetitions = await resolveAllowedCompetitions(caller, pii_ids, field_id);
+    if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     var out : [?Blob] = [];
     for (pii_id in pii_ids.values()) {
       switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
         case (?r) {
-          let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs) or canReadViaCompetition(r, allowedCompetitions);
+          let direct = await directRead(caller, r);
+          if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
+          let allowed = direct or canReadViaClub(r, allowedClubs) or canReadViaCompetition(r, allowedCompetitions);
           log_audit(caller, pii_id, field_id, "vetkey_derive", allowed, "PII vetKey derivation");
           if (allowed) {
             let encryptedKey = await ManagementCanister.vetKdDeriveKey(
               ibeIdentity(pii_id, field_id), vetkdContext(), vetkdKeyId<system>(), transport_public_key
             );
+            // Never return a key authorized by a revoked record, stale club
+            // role, removed guardian, changed authority or intervening fence.
+            await admitAccount(caller);
+            let freshClubs = await resolveAllowedClubs(caller, [pii_id], field_id);
+            let freshCompetitions = await resolveAllowedCompetitions(caller, [pii_id], field_id);
+            let freshDirect = await directRead(caller, r);
+            await admitAccount(caller);
+            if (epoch != mediaAuthEpoch or not (freshDirect or canReadViaClub(r, freshClubs) or canReadViaCompetition(r, freshCompetitions)))
+              return #Err("PII authorization changed");
             out := out.concat([?encryptedKey]);
           } else {
             out := out.concat([null]);
@@ -462,7 +557,11 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
+    await admitAccount(caller);
+    if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     #Ok(out)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ==================== Per-club photo key ====================
@@ -475,31 +574,96 @@ persistent actor class Main(governorInit : Principal) {
   // errors.
   public query func club_media_lock_version() : async Nat { 1 };
 
+  func validMediaClub(club : Text) : Bool {
+    club.size() > 0 and club.size() <= 64 and not Text.contains(club, #char '\u{1F}') and not Text.contains(club, #char '/')
+  };
+  func mediaAuthority(club : Text) : ClubMediaAuthority {
+    clubMediaAuthorities.get(club) ?? ({ authority = null; revision = 0; move_id = "" })
+  };
+  // Consensus operator receipt, never browser membership evidence.
+  public shared ({ caller }) func read_club_media_authority(club : Text) : async { #Ok : ClubMediaAuthority; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not validMediaClub(club)) return #Err("Invalid club");
+    #Ok(mediaAuthority(club))
+  };
+  public shared ({ caller }) func read_private_media_authority(club : Text) : async { #Ok : { competition : ?Principal; revision : Nat; move_id : Text }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(privateMediaAuthorities.get(club) ?? ({ competition = null; revision = 0; move_id = "" }))
+  };
+  public shared ({ caller }) func set_private_media_authority(club : Text, competition : ?Principal, move_id : Text, expected : Nat) : async { #Ok : { competition : ?Principal; revision : Nat; move_id : Text }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not validMediaClub(club) or not isFenced(club) or move_id == "" or move_id.size() > 128) return #Err("Fenced valid private-media binding required");
+    switch (competition) { case (?p) { if (p.equal(Principal.anonymous())) return #Err("Invalid competition authority") }; case null {} };
+    let previous = privateMediaAuthorities.get(club) ?? ({ competition = null; revision = 0; move_id = "" });
+    if (previous.revision != expected) return #Err("Private media authority revision changed");
+    let next = { competition; move_id; revision = previous.revision + 1 };
+    privateMediaAuthorities.add(club, next); mediaAuthEpoch += 1; #Ok(next)
+  };
+  // Only changes authorization. The original canister continues deriving
+  // the original IBE identity; no key, ciphertext or PII grants are copied.
+  // The operator must independently prove destination/deployment ownership.
+  public shared ({ caller }) func set_club_media_authority(
+    club : Text, authority : ?Principal, move_id : Text, expected_revision : Nat
+  ) : async { #Ok : ClubMediaAuthority; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (not validMediaClub(club) or move_id.size() == 0 or move_id.size() > 128) return #Err("Invalid media authority binding");
+    if (not isFenced(club)) return #Err("Club must be fenced before changing media authority");
+    switch (authority) { case (?p) { if (p.equal(Principal.anonymous())) return #Err("Invalid authority") }; case null {} };
+    let previous = mediaAuthority(club);
+    if (previous.revision != expected_revision) return #Err("Media authority revision changed");
+    let next = { authority; move_id; revision = previous.revision + 1 };
+    clubMediaAuthorities.add(club, next);
+    mediaAuthEpoch += 1;
+    #Ok(next)
+  };
+
   public shared ({ caller }) func get_club_media_vetkey(
     club_id : Text,
     transport_public_key : Blob
   ) : async { #Ok : Blob; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
-    if (club_id.size() == 0 or club_id.size() > 64 or Text.contains(club_id, #char '\u{1F}')) return #Err("Invalid club");
-    if (transport_public_key.size() == 0) return #Err("Invalid transport key");
+    if (not validMediaClub(club_id)) return #Err("Invalid club");
+    if (transport_public_key.size() != 48) return #Err("Invalid transport key");
+    let binding = mediaAuthority(club_id);
+    let configured = club_domain_canister;
+    let epoch = mediaAuthEpoch;
+    let authority = switch (binding.authority) { case (?p) ?p; case null configured };
+    let unchanged = func() : Bool {
+      not isFenced(club_id) and mediaAuthEpoch == epoch and mediaAuthority(club_id) == binding and club_domain_canister == configured
+    };
     var allowed = isGovernor(caller);
     if (not allowed) {
-      switch (club_domain_canister) {
+      switch (authority) {
         case null {};
         case (?cid) {
-          let clubDomain : actor { is_club_member : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
-          try { allowed := await clubDomain.is_club_member(caller, club_id) } catch (_) {};
+          let clubDomain : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+          try { allowed := await (with timeout = 10) clubDomain.read_has_club_membership(caller, club_id) } catch (_) {};
         };
       };
     };
+    if (not unchanged()) return #Err("Media authority or transfer fence changed");
     let pii_id = "clubmedia:" # club_id;
     log_audit(caller, pii_id, "blob", "vetkey_derive", allowed, "Club media vetKey derivation");
     if (not allowed) return #Err("Not a member of this club");
     let encryptedKey = await ManagementCanister.vetKdDeriveKey(
       ibeIdentity(pii_id, "blob"), vetkdContext(), vetkdKeyId<system>(), transport_public_key
     );
+    await admitAccount(caller);
+    if (not isGovernor(caller)) {
+      let cid = switch (authority) { case null return #Err("Club authority unavailable"); case (?id) id };
+      let clubDomain : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(cid.toText());
+      let member = try { await clubDomain.read_has_club_membership(caller, club_id) } catch (_) { false };
+      if (not member) return #Err("Club membership changed");
+    };
+    await admitAccount(caller);
+    if (not unchanged()) return #Err("Media authority or transfer fence changed");
     #Ok(encryptedKey)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ==================== Public Methods ====================
@@ -508,6 +672,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Only governor can transfer governorship");
     if (new_governor.equal(Principal.anonymous())) return #Err("New governor cannot be anonymous");
+    mediaAuthEpoch += 1;
     governor := new_governor;
     #Ok
   };
@@ -523,16 +688,26 @@ persistent actor class Main(governorInit : Principal) {
     ciphertext : [Nat8],
     domain_owner : Principal
   ) : async { #Ok : EncryptedPii; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
 
     if (pii_id == "" or field_id == "") {
       return #Err("Invalid pii_id or field_id");
     };
+    if (reservedMediaIdentity(pii_id, field_id)) return #Err("Reserved or invalid PII identity");
     if (domain_owner.equal(Principal.anonymous())) {
       return #Err("Invalid domain owner");
     };
     if (not isGovernor(caller) and not caller.equal(domain_owner)) {
       return #Err("Domain owner authorization required");
+    };
+    switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
+      case (?existing) {
+        if (not isGovernor(caller) and not caller.equal(existing.domain_owner)) return #Err("Existing domain owner authorization required");
+      };
+      case null {};
     };
 
     let now = now_ns();
@@ -551,6 +726,7 @@ persistent actor class Main(governorInit : Principal) {
     };
 
     // Remove existing if any, then append
+    mediaAuthEpoch += 1;
     pii_records := Array.filter<PiiRecord>(pii_records, func(r) {
       not (r.pii_id == pii_id and r.field_id == field_id)
     }).concat([record]);
@@ -564,6 +740,8 @@ persistent actor class Main(governorInit : Principal) {
       nonce = [];
       master_key_id = vetkeySchemeId();
     })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Batch read of encrypted PII fields. The canister returns ciphertext only
@@ -576,15 +754,22 @@ persistent actor class Main(governorInit : Principal) {
     operation : Text,
     purpose : Text
   ) : async { #Ok : [EncryptedPii]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
     if (pii_ids.size() > 100) return #Err("Batch too large");
+    let epoch = mediaAuthEpoch;
     let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
     let allowedCompetitions = await resolveAllowedCompetitions(caller, pii_ids, field_id);
+    if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     var out : [EncryptedPii] = [];
     for (pii_id in pii_ids.values()) {
       switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
         case (?r) {
-          let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs) or canReadViaCompetition(r, allowedCompetitions);
+          let direct = await directRead(caller, r);
+          if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
+          let allowed = direct or canReadViaClub(r, allowedClubs) or canReadViaCompetition(r, allowedCompetitions);
           log_audit(caller, pii_id, field_id, operation, allowed, purpose);
           if (allowed) {
             out := out.concat([{
@@ -601,7 +786,11 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
+    await admitAccount(caller);
+    if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     #Ok(out)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Grants a reader read access to a record. The caller must be the
@@ -610,20 +799,28 @@ persistent actor class Main(governorInit : Principal) {
   // lets a verified guardian extend read access (e.g. to a co-guardian)
   // without needing domain-owner rights over the whole id space.
   public shared ({ caller }) func grant_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
     if (reader.equal(Principal.anonymous())) return #Err("Invalid reader");
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case null { #Err("PII not found") };
       case (?r) {
-        let authorized = isGovernor(caller) or caller.equal(r.domain_owner) or isVerifiedGuardian(caller, pii_id);
+        let epoch = mediaAuthEpoch;
+        let authorized = isGovernor(caller) or caller.equal(r.domain_owner) or (isVerifiedGuardian(caller, pii_id) and (await currentGuardian(caller, pii_id)));
+        if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
         if (not authorized) return #Err("Domain owner or verified guardian authorization required");
         if (not r.readers.any(func(p) = p.equal(reader))) {
+          mediaAuthEpoch += 1;
           pii_records := pii_records.map(func(rec) = if (rec.pii_id == pii_id and rec.field_id == field_id) { { rec with readers = rec.readers.concat([reader]) } } else { rec });
         };
         log_audit(caller, pii_id, field_id, "grant_read", true, "Reader access granted");
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Registers a verified guardian relationship: `guardian` may thereafter
@@ -633,63 +830,91 @@ persistent actor class Main(governorInit : Principal) {
   // guardian (self-registration — a caller can never claim guardianship on
   // another principal's behalf).
   public shared ({ caller }) func add_guardian_relationship(guardian : Principal, child_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
     if (guardian.equal(Principal.anonymous())) return #Err("Invalid guardian");
     if (child_id == "") return #Err("Invalid child_id");
     if (not isGovernor(caller) and not caller.equal(guardian)) {
       return #Err("Only the governor or the guardian themself may register this relationship");
     };
+    let epoch = mediaAuthEpoch;
+    if (not isGovernor(caller) and not (await currentGuardian(guardian, child_id))) return #Err("Verified guardian relationship required");
+    if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
     let existing = guardian_relationships.find(func(g) = g.guardian.equal(guardian));
     switch (existing) {
       case (?g) {
         if (not g.children.any(func(c) = c == child_id)) {
+          mediaAuthEpoch += 1;
           guardian_relationships := guardian_relationships.map(func(rec) = if (rec.guardian.equal(guardian)) { { rec with children = rec.children.concat([child_id]) } } else { rec });
         };
       };
       case null {
+        mediaAuthEpoch += 1;
         guardian_relationships := guardian_relationships.concat([{ guardian = guardian; children = [child_id] }]);
       };
     };
     log_audit(caller, child_id, "guardian_relationship", "add", true, "Guardian relationship registered");
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Removes a guardian relationship. Callable by the governor, or by the
   // guardian themself (a guardian may always revoke their own standing
   // link, e.g. after a custody change).
   public shared ({ caller }) func remove_guardian_relationship(guardian : Principal, child_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
     if (not isGovernor(caller) and not caller.equal(guardian)) {
       return #Err("Only the governor or the guardian themself may remove this relationship");
     };
+    mediaAuthEpoch += 1;
     guardian_relationships := Array.filter<GuardianRelationship>(
       guardian_relationships.map(func(g) = if (g.guardian.equal(guardian)) { { g with children = g.children.filter(func(c) = c != child_id) } } else { g }),
       func(g) = g.children.size() > 0
     );
     log_audit(caller, child_id, "guardian_relationship", "remove", true, "Guardian relationship removed");
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Lists the pii_ids (children) the caller is a verified guardian of.
-  public shared query ({ caller }) func my_guardian_children() : async [Text] {
+  public composite query ({ caller }) func my_guardian_children() : async [Text] {
+    denyLegacyAccountQuery();
     auth(caller);
-    switch (guardian_relationships.find(func(g) = g.guardian.equal(caller))) {
-      case (?g) { g.children };
-      case null { [] };
-    }
+    let id = switch (club_domain_canister) { case null return []; case (?id) id };
+    let service : actor { has_child_guardian : shared query (Principal, Text) -> async Bool } = actor(id.toText());
+    let candidates = switch (guardian_relationships.find(func(g) = g.guardian.equal(caller))) { case (?g) g.children; case null [] };
+    var out : [Text] = [];
+    for (child in candidates.values()) {
+      let allowed = try { await service.has_child_guardian(caller, child) } catch (_) { false };
+      if (allowed and club_domain_canister == ?id) out := out.concat([child]);
+    };
+    out
   };
 
   public shared ({ caller }) func revoke_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case null { #Err("PII not found") };
       case (?r) {
         if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
+        mediaAuthEpoch += 1;
         pii_records := pii_records.map(func(rec) = if (rec.pii_id == pii_id and rec.field_id == field_id) { { rec with readers = rec.readers.filter(func(p) = not p.equal(reader)) } } else { rec });
         log_audit(caller, pii_id, field_id, "revoke_read", true, "Reader access revoked");
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Sets the club_domain canister used to verify club membership for
@@ -700,6 +925,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller)) return #Err("Governor only");
     if (canister.equal(Principal.anonymous())) return #Err("Invalid canister");
     club_domain_canister := ?canister;
+    mediaAuthEpoch += 1;
     #Ok
   };
 
@@ -707,11 +933,15 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
     if (canister.equal(Principal.anonymous())) return #Err("Invalid canister");
+    mediaAuthEpoch += 1;
     competition_domain_canister := ?canister;
     #Ok
   };
 
   public shared ({ caller }) func grant_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
     if (field_id != "blob" or competition_id == "" or competition_id.size() > 128) return #Err("Invalid competition grant");
     switch (pii_records.find(func(record) = record.pii_id == pii_id and record.field_id == field_id)) {
@@ -725,11 +955,13 @@ persistent actor class Main(governorInit : Principal) {
         let competitionDomain : actor {
           get_vault_access : shared (Text, Principal) -> async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text };
         } = actor (Principal.toText(canister));
+        let epoch = mediaAuthEpoch;
         let access = try {
           await competitionDomain.get_vault_access(competition_id, caller)
         } catch (_) {
           return #Err("Competition authorization unavailable");
         };
+        if (epoch != mediaAuthEpoch) return #Err("PII authorization changed");
         let organizer = switch (access) {
           case (#Err(_)) { return #Err("Competition authorization unavailable") };
           case (#Ok(value)) {
@@ -740,31 +972,43 @@ persistent actor class Main(governorInit : Principal) {
         let prefix = "clubs/" # organizer # "/competitions/" # competition_id # "/";
         if (not Text.startsWith(pii_id, #text prefix)) return #Err("PII record is outside the competition vault");
         if (not competition_read_grants.any(func(grant) = grant.pii_id == pii_id and grant.field_id == field_id and grant.competition_id == competition_id)) {
+          mediaAuthEpoch += 1;
           competition_read_grants := competition_read_grants.concat([{ pii_id; field_id; competition_id }]);
         };
         log_audit(caller, pii_id, field_id, "grant_read_competition", true, "Competition vault grant created");
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func revoke_pii_read_competition(pii_id : Text, field_id : Text, competition_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
     switch (pii_records.find(func(record) = record.pii_id == pii_id and record.field_id == field_id)) {
       case null { #Err("PII not found") };
       case (?record) {
         if (not isGovernor(caller) and not caller.equal(record.domain_owner)) return #Err("Domain owner authorization required");
+        mediaAuthEpoch += 1;
         competition_read_grants := competition_read_grants.filter(func(grant) = not (grant.pii_id == pii_id and grant.field_id == field_id and grant.competition_id == competition_id));
         log_audit(caller, pii_id, field_id, "revoke_read_competition", true, "Competition vault grant revoked");
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Grants every member of `club_id` (verified via club_domain at read
   // time) read access to one record — e.g. a child's name so coaches can
   // render event rosters. Governor or the record's domain owner only.
   public shared ({ caller }) func grant_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (club_id == "") return #Err("Invalid club_id");
@@ -773,27 +1017,36 @@ persistent actor class Main(governorInit : Principal) {
       case (?r) {
         if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
         if (not club_read_grants.any(func(g) = g.pii_id == pii_id and g.field_id == field_id and g.club_id == club_id)) {
+          mediaAuthEpoch += 1;
           club_read_grants := club_read_grants.concat([{ pii_id; field_id; club_id }]);
         };
         log_audit(caller, pii_id, field_id, "grant_read_club", true, "Club read access granted");
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Removes a club-scoped read grant. Governor or domain owner only.
   public shared ({ caller }) func revoke_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case null { #Err("PII not found") };
       case (?r) {
         if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
+        mediaAuthEpoch += 1;
         club_read_grants := club_read_grants.filter(func(g) = not (g.pii_id == pii_id and g.field_id == field_id and g.club_id == club_id));
         log_audit(caller, pii_id, field_id, "revoke_read_club", true, "Club read access revoked");
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Removes every club-scoped read grant for a permanently deleted club.
@@ -810,7 +1063,12 @@ persistent actor class Main(governorInit : Principal) {
     };
     if (club_id == "") return #Err("Invalid club_id");
     let before = club_read_grants.size();
+    mediaAuthEpoch += 1;
     club_read_grants := club_read_grants.filter(func(g) = g.club_id != club_id);
+    privateMediaAuthorities.remove(club_id);
+    // Permanent deletion is not a transfer: neither authority may survive
+    // identifier reuse. Existing owner records remain independently owned.
+    clubMediaAuthorities.remove(club_id);
     log_audit(caller, club_id, "*", "purge_club_grants", true, "Club read grants purged for deleted club");
     #Ok(Nat.toNat32(before - club_read_grants.size()))
   };
@@ -819,6 +1077,9 @@ persistent actor class Main(governorInit : Principal) {
     pii_id : Text,
     field_id : Text
   ) : async { #Ok : PiiDeleteResult; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
     auth(caller);
 
     let match_record = pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id);
@@ -830,6 +1091,7 @@ persistent actor class Main(governorInit : Principal) {
         };
 
         // Remove the record (cryptographic erasure)
+        mediaAuthEpoch += 1;
         pii_records := Array.filter<PiiRecord>(pii_records, func(rec) {
           not (rec.pii_id == pii_id and rec.field_id == field_id)
         });
@@ -846,9 +1108,12 @@ persistent actor class Main(governorInit : Principal) {
         #Err("PII record not found")
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared query ({ caller }) func audit_access(filter : AuditFilter) : async [AuditRecord] {
+    denyLegacyAccountQuery();
     auth(caller);
     if (not isGovernor(caller)) Runtime.trap("Governor only");
 
@@ -884,10 +1149,14 @@ persistent actor class Main(governorInit : Principal) {
     // Zeroize state. There are no canister-held keys to destroy — vetKeys
     // live with the subnet — so wiping the records and grants is the
     // complete erasure.
+    mediaAuthEpoch += 1;
     pii_records := [];
     audit_log := [];
+    mediaAuthEpoch += 1;
     guardian_relationships := [];
+    mediaAuthEpoch += 1;
     club_read_grants := [];
+    mediaAuthEpoch += 1;
     competition_read_grants := [];
 
     log_audit(caller, "system", "emergency", "shutdown", true, "Emergency shutdown executed");
@@ -917,6 +1186,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Removed identity cannot be rekeyed or merged");
     if (old.equal(new)) return #err("old and new principal must differ");
     if (isGovernor(old)) return #err("Cannot rekey the governor");
 
@@ -981,11 +1251,77 @@ persistent actor class Main(governorInit : Principal) {
     };
 
     if (not dry_run) {
+      mediaAuthEpoch += 1;
       pii_records := newPiiRecords;
       audit_log := newAuditLog;
+      mediaAuthEpoch += 1;
       guardian_relationships := newGuardianRelationships;
     };
 
     #ok(changed)
   };
-}
+
+  // Protected consensus reads for the opt-in local account-removal rehearsal.
+  public shared ({ caller }) func read_account_my_guardian_children() : async [Text] {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
+    auth(caller);
+    let id = switch (club_domain_canister) { case null return []; case (?id) id };
+    let service : actor { read_has_child_guardian : shared (Principal, Text) -> async Bool } = actor(id.toText());
+    let candidates = switch (guardian_relationships.find(func(g) = g.guardian.equal(caller))) { case (?g) g.children; case null [] };
+    var out : [Text] = [];
+    for (child in candidates.values()) {
+      let allowed = try { await service.read_has_child_guardian(caller, child) } catch (_) { false };
+      if (allowed and club_domain_canister == ?id) out := out.concat([child]);
+    };
+    out
+  
+    } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func read_account_audit_access(filter : AuditFilter) : async [AuditRecord] {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
+    auth(caller);
+    if (not isGovernor(caller)) Runtime.trap("Governor only");
+
+    Array.filter<AuditRecord>(audit_log, func(record) {
+      let principal_match = switch (filter.opt_principal) {
+        case (?p) { record.requesting_principal.equal(p) };
+        case null { true };
+      };
+      let field_match = switch (filter.opt_field_id) {
+        case (?f) { record.field_id == f };
+        case null { true };
+      };
+      let pii_match = switch (filter.opt_pii_id) {
+        case (?pii) { record.pii_id == pii };
+        case null { true };
+      };
+      let time_from_match = switch (filter.opt_from_ts) {
+        case (?ts) { record.timestamp >= ts };
+        case null { true };
+      };
+      let time_to_match = switch (filter.opt_to_ts) {
+        case (?ts) { record.timestamp <= ts };
+        case null { true };
+      };
+      principal_match and field_match and pii_match and time_from_match and time_to_match
+    })
+  
+    } finally { removalReceiver.leave(caller) };
+  };
+  
+  public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
+    let fresh = removal_intents.get(request.account_id) == null;
+    switch (removalReceiver.prepare(caller, request)) {
+      case (#Err(message)) #Err(message);
+      case (#Ok) { if (fresh) mediaAuthEpoch += 1; #Ok }
+    }
+  };
+  public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    removalReceiver.receipt(caller, request, Principal.fromActor(this), 0)
+  };
+};

@@ -14,6 +14,7 @@ const live = vi.hoisted(() => ({ files: vi.fn().mockResolvedValue([]), teams: vi
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => supabaseMode ? p.supabase() : p.icp(live.context) }));
 vi.mock("@/live/features/vault", () => ({ listLiveVaultClubFiles: live.files }));
 vi.mock("@/live/features/club", () => ({ listLiveTeams: live.teams }));
+vi.mock("@/live/blobStoreUpload", () => ({ getLiveClubMediaBytes: vi.fn().mockResolvedValue({ finalized: 0, pending: 0 }) }));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type Call = { table: string; method: string; args: unknown[] };
@@ -35,7 +36,7 @@ function scriptedClient(script: Record<string, unknown[]>) {
       Promise.resolve(take()).then(resolve, reject);
     return query;
   };
-  return { client: { from } as unknown as IgniteSupabaseClient, calls };
+  return { client: { from, storage: { from: () => ({ list: async () => ({ data: [], error: null }) }) } } as unknown as IgniteSupabaseClient, calls };
 }
 
 describe("Vault storage accounting", () => {
@@ -145,6 +146,24 @@ describe("Vault storage accounting", () => {
     }
     expect(fake.calls.some((call) => call.table === "mini_leagues" && call.method === "is")).toBe(false);
   });
+  it.runIf(supabaseMode)("indicator includes chat bytes and counts a gallery/vault mirror only once", async () => {
+    const fake = scriptedClient({
+      photos: [[{ file_size: 100, team_id: "team-a", mini_league_id: null }]],
+      vault_files: [[{ file_size: 100, name: "gallery.jpg", team_id: "team-a", mini_league_id: null }]],
+      teams: [[{ id: "team-a", name: "Team A" }]], mini_leagues: [[]],
+    });
+    fake.client.storage.from = ((bucket: string) => ({ list: async (folder: string) => ({ data:
+      folder === "clubs/club-a" && bucket !== "competition-vault"
+        ? [{ id: null, name: "teams", metadata: null }]
+        : folder.endsWith("/teams") ? [{ id: null, name: "team-a", metadata: null }]
+        : bucket === "photos" ? [{ id: "photo", name: "gallery.jpg", metadata: { size: 100 } }]
+        : bucket === "chat-attachments" ? [{ id: "chat", name: "chat.jpg", metadata: { size: 200 } }, { id: "file", name: "policy.pdf", metadata: { size: 300 } }]
+        : [], error: null,
+    }) })) as typeof fake.client.storage.from;
+    const result = await fetchVaultStorageBreakdown("club-a", fake.client);
+    expect(result).toMatchObject({ photos: 300, documents: 300, total: 600 });
+    expect(result.byTeam).toEqual([{ teamId: "team-a", teamName: "Team A", photosSize: 300, documentsSize: 300, size: 600 }]);
+  });
 });
 
 describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () => {
@@ -169,5 +188,18 @@ describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () =>
     });
     expect(fake.calls).toEqual([]);
     expect(live.files).toHaveBeenCalledWith(live.context, "club-a", null, null);
+  });
+
+  it("uses the photo store's combined club media bytes as the authoritative club total", async () => {
+    const { getLiveClubMediaBytes } = await import("@/live/blobStoreUpload");
+    vi.mocked(getLiveClubMediaBytes).mockResolvedValue({ finalized: 5_000, pending: 20 });
+    await expect(fetchVaultStorageBreakdown("club-a", scriptedClient({}).client)).resolves.toMatchObject({ total: 5_020 });
+    expect(getLiveClubMediaBytes).toHaveBeenCalledWith(live.context.target, live.context.identity, "club-a");
+  });
+
+  it("falls back to vault-file bytes when the store predates the club-bytes query", async () => {
+    const { getLiveClubMediaBytes } = await import("@/live/blobStoreUpload");
+    vi.mocked(getLiveClubMediaBytes).mockResolvedValue({ finalized: 0, pending: 0 });
+    await expect(fetchVaultStorageBreakdown("club-a", scriptedClient({}).client)).resolves.toMatchObject({ total: 0 });
   });
 });

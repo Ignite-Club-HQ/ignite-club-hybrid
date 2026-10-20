@@ -62,7 +62,7 @@ async function sendMetric(metric: Metric) {
           window.location.pathname,
         );
       },
-    });
+    }, { shared: "app" });
   } catch (e) {
     // Silently fail — never impact user experience for analytics
     console.debug("[WebVitals] Failed to report metric:", e);

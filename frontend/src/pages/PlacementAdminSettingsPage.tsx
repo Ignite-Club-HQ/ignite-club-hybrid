@@ -1,5 +1,6 @@
 import { writeOnce } from "@/live/clubScope";
 import { Textarea } from "@/components/ui/textarea";
+import { enginePreparationIssues, type DeploymentPreparation } from '@/live/enginePreparation';
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -62,7 +63,7 @@ import {
 
 type CanisterRow = { key: string; id: string };
 type CountryRuleRow = { country: string; eligibility: BackendEligibility; targetId: string };
-type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean; host: string; canisterIdsText: string };
+type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean; host: string; canisterIdsText: string; preparation?: DeploymentPreparation };
 
 /** Accepts the deploy script's ID table as JSON ({"name":"id"}) or "name id" / "name: id" lines. */
 function parseCanisterIdsText(text: string): Record<string, string> {
@@ -79,6 +80,9 @@ function parseCanisterIdsText(text: string): Record<string, string> {
     else if (line.trim()) throw new Error(`Could not read canister line: "${line.trim()}"`);
   }
   return out;
+}
+function patchPreparation(current: DeploymentPreparation | undefined, patch: Partial<DeploymentPreparation>): DeploymentPreparation {
+  return { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...current, ...patch };
 }
 type ClubOverrideRow = { clubId: string; backend: BackendProvider };
 
@@ -390,6 +394,7 @@ export default function PlacementAdminSettingsPage() {
         enabled: t.enabled,
         host: t.host ?? "",
         canisterIdsText: t.canisterIds ? JSON.stringify(t.canisterIds, null, 2) : "",
+        preparation: t.preparation,
       })),
     );
     setClubOverrideRows(
@@ -505,6 +510,7 @@ export default function PlacementAdminSettingsPage() {
       current.map((row, i) => {
         if (i !== index) return row;
         const next = { ...row, ...patch };
+        if (patch.kind === 'icp-cloud-engine' || (patch.backend === 'icp' && next.kind === 'icp-cloud-engine')) next.enabled = false;
         // Keep the target kind valid when the backend changes.
         if (patch.backend && !KINDS_FOR_BACKEND[next.backend].includes(next.kind)) {
           next.kind = KINDS_FOR_BACKEND[next.backend][0];
@@ -580,6 +586,7 @@ export default function PlacementAdminSettingsPage() {
             version: row.version,
             region: row.region,
             enabled: row.enabled,
+            preparation: row.backend === 'icp' ? row.preparation : undefined,
             host: isEngine ? row.host : undefined,
             canisterIds,
           });
@@ -624,7 +631,7 @@ export default function PlacementAdminSettingsPage() {
         return (before?.kind === "icp-cloud-engine" || after?.kind === "icp-cloud-engine") && before?.id !== after?.id;
       });
       if (moved.length > 0 && !window.confirm(
-        `Changing the ICP deployment for ${moved.map(countryName).join(", ")} does not move existing data. Members there will see a fresh deployment until data is migrated. Save anyway?`,
+        `Changing the ICP deployment for ${moved.map(countryName).join(", ")} does not move existing data. Existing clubs must retain their original group; engine activation is blocked pending verified new-club routing. Save preparation anyway?`,
       )) return;
       routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets, clubBackendOverrides });
     } catch (error) {
@@ -963,9 +970,10 @@ export default function PlacementAdminSettingsPage() {
                     <Switch
                       id={`target-enabled-${index}`}
                       checked={row.enabled}
+                      disabled={row.kind === 'icp-cloud-engine'}
                       onCheckedChange={(checked) => updateTargetRow(index, { enabled: checked })}
                     />
-                    <Label htmlFor={`target-enabled-${index}`}>Enabled</Label>
+                    <Label htmlFor={`target-enabled-${index}`}>{row.kind === 'icp-cloud-engine' ? 'Activation blocked' : 'Enabled'}</Label>
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => removeTargetRow(index)} aria-label="Remove target">
                     <Trash2 className="h-4 w-4" />
@@ -1000,8 +1008,25 @@ export default function PlacementAdminSettingsPage() {
                     />
                   </div>
                 </div>
+                {row.backend === 'icp' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor={`deployment-id-${index}`}>Deployment ID</Label>
+                      <Input id={`deployment-id-${index}`} value={row.preparation?.deploymentId ?? ''} onChange={e => updateTargetRow(index, { preparation: patchPreparation(row.preparation, { deploymentId: e.target.value }) })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`deployment-subnet-${index}`}>Primary subnet ID</Label>
+                      <Input id={`deployment-subnet-${index}`} value={row.preparation?.primarySubnet ?? ''} onChange={e => updateTargetRow(index, { preparation: patchPreparation(row.preparation, { primarySubnet: e.target.value }) })} />
+                    </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <Label htmlFor={`deployment-groups-${index}`}>Planned group IDs (comma separated)</Label>
+                      <Input id={`deployment-groups-${index}`} value={row.preparation?.groupIds.join(', ') ?? ''} onChange={e => updateTargetRow(index, { preparation: patchPreparation(row.preparation, { groupIds: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }) })} />
+                    </div>
+                  </div>
+                )}
                 {row.kind === "icp-cloud-engine" && (
                   <div className="space-y-2">
+                    <Badge variant="secondary">Preparation only · not verified</Badge>
                     <div className="space-y-1">
                       <Label htmlFor={`target-host-${index}`}>Engine address</Label>
                       <Input
@@ -1010,6 +1035,10 @@ export default function PlacementAdminSettingsPage() {
                         onChange={(e) => updateTargetRow(index, { host: e.target.value })}
                         placeholder="https://eu-engine.example.com"
                       />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`engine-proxy-${index}`}>Console encryption proxy ID</Label>
+                      <Input id={`engine-proxy-${index}`} value={row.preparation?.proxyCanisterId ?? ''} onChange={e => updateTargetRow(index, { preparation: patchPreparation(row.preparation, { proxyCanisterId: e.target.value }) })} />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor={`target-canisters-${index}`}>Canister IDs on this engine</Label>
@@ -1025,6 +1054,12 @@ export default function PlacementAdminSettingsPage() {
                         Assign countries to this engine below. If it's disabled or incomplete, those countries use Supabase — never public mainnet.
                       </p>
                     </div>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      {(() => {
+                        try { return enginePreparationIssues({ host: row.host, preparation: row.preparation, canisterIds: parseCanisterIdsText(row.canisterIdsText) }).map(issue => <li key={issue}>{issue}</li>); }
+                        catch { return <li>Canister ID table cannot be read</li>; }
+                      })()}
+                    </ul>
                   </div>
                 )}
               </div>

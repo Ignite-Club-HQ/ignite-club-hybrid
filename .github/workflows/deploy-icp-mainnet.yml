@@ -25,6 +25,10 @@ permissions:
   # already-created canisters instead of paying to create new ones.
   contents: write
 
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -191,7 +195,18 @@ jobs:
       - name: Deploy + wire all 18 canisters
         env:
           ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
-        run: bash scripts/deploy-mainnet.sh
+          DEPLOYER_PEM_FILE: ${{ github.workspace }}/.icp-home/identity/keys/ignite-governor.pem
+        run: |
+          node scripts/ensure-frontend-deps.mjs
+          bash scripts/deploy-mainnet.sh
+
+      - name: Retain original photo-key attestation (public material only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: photo-key-attestation
+          path: deploy/mainnet/.icp/data/media-key-attestations/ic.json
+          if-no-files-found: ignore
 
       - name: Print paste-ready canister ID table
         if: always()

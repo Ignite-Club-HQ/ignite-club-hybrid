@@ -1,6 +1,8 @@
 import type { Identity } from "@icp-sdk/core/agent";
 import type { Principal } from "@icp-sdk/core/principal";
 import { createLiveActor } from "./icpAgent";
+import { IDL } from '@icp-sdk/core/candid';
+import { adaptLocalAccountReads, isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
 import type { IcpTargetConfig } from "./targetRegistry";
 
 import { idlFactory as clubDomainIdl } from "../lab/bindings/club_domain/declarations/club_domain.did.js";
@@ -85,7 +87,11 @@ async function connect<T>(
   domainKey: string,
   idlFactory: Parameters<typeof createLiveActor<T>>[4],
 ): Promise<LiveDomainConnection<T>> {
-  return createLiveActor<T>(target, identity, domainKey, DOMAIN_LABELS[domainKey] ?? domainKey, idlFactory);
+  const connection = await createLiveActor<T>(target, identity, domainKey, DOMAIN_LABELS[domainKey] ?? domainKey, idlFactory);
+  // No live UI flag: remote targets and published builds retain original actors.
+  if (!import.meta.env.DEV || !isLoopbackRehearsalHost(target.host)) return connection;
+  if (typeof connection.actor !== 'object' || connection.actor === null) throw new Error('Invalid local rehearsal actor');
+  return { ...connection, actor: adaptLocalAccountReads(connection.actor, idlFactory({ IDL }), target.host) };
 }
 
 export const connectLiveClubDomain = (target: IcpTargetConfig, identity: Identity) =>

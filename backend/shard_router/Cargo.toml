@@ -6,6 +6,10 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+# Isolated measurement only: never deploy this feature.
+scale-probe = []
+
 [dependencies]
 candid = "0.10"
 ic-cdk = "0.19"

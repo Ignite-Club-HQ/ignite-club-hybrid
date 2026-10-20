@@ -36,6 +36,22 @@ export const idlFactory = ({ IDL }) => {
     'nonce' : IDL.Vec(IDL.Nat8),
     'field_id' : IDL.Text,
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
+  const ClubMediaAuthority = IDL.Record({
+    'move_id' : IDL.Text,
+    'authority' : IDL.Opt(IDL.Principal),
+    'revision' : IDL.Nat,
+  });
   const Main = IDL.Service({
     'add_guardian_relationship' : IDL.Func(
         [IDL.Principal, IDL.Text],
@@ -116,8 +132,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
-    'my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+    'my_guardian_children' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Text)],
+        ['composite_query'],
+      ),
     'pii_vetkey_verification_key' : IDL.Func([], [IDL.Vec(IDL.Nat8)], []),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_club_grants' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
@@ -126,6 +151,36 @@ export const idlFactory = ({ IDL }) => {
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_audit_access' : IDL.Func(
+        [AuditFilter],
+        [IDL.Vec(AuditRecord)],
+        [],
+      ),
+    'read_account_my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], []),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_club_media_authority' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubMediaAuthority, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_private_media_authority' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'move_id' : IDL.Text,
+              'competition' : IDL.Opt(IDL.Principal),
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'register_pii' : IDL.Func(
@@ -163,9 +218,28 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_media_authority' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Principal), IDL.Text, IDL.Nat],
+        [IDL.Variant({ 'Ok' : ClubMediaAuthority, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_competition_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_private_media_authority' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Principal), IDL.Text, IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'move_id' : IDL.Text,
+              'competition' : IDL.Opt(IDL.Principal),
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'set_transfer_fence' : IDL.Func(

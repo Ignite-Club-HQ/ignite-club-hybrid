@@ -51,6 +51,34 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
+export interface VaultFileWithFolder {
+    folder_name?: string;
+    folder_path: Array<string>;
+    file: VaultFile;
+}
+export interface Receipt {
+    outstanding: bigint;
+    request: Request;
+    receiver: Principal;
+}
+export interface VaultFile {
+    id: string;
+    mini_league_id?: string;
+    club: string;
+    mime: string;
+    name: string;
+    size: bigint;
+    team?: string;
+    file_url: string;
+    created_at_ms: bigint;
+    blob_ref?: BlobRef;
+    deleted_by?: Principal;
+    folder_id: string;
+    competition_id?: string;
+    is_external_link: boolean;
+    deleted_at_ms?: bigint;
+    uploaded_by: Principal;
+}
 export interface MainInterface {
     clear_pinned_vault(chat_type: string, chat_id: string): Promise<{
         __kind__: "Ok";
@@ -236,6 +264,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    prepare_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     purge_club_snapshot(club: string): Promise<{
         __kind__: "Ok";
         Ok: bigint;
@@ -246,6 +281,111 @@ export interface MainInterface {
     purge_my_data(): Promise<{
         __kind__: "Ok";
         Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_backup(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Backup;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_file(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_folder(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFolder | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_get_pinned_vault(chat_type: string, chat_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: PinnedVault | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_backups(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<BackupSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_club_files(club: string, team: string | null, mini_league_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_club_files_with_folder(club: string, team: string | null, mini_league_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_files(folder_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_files_with_folder(folder_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_folders(club: string, team: string | null, mini_league_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_trashed_files(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_list_trashed_files_with_folder(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_account_removal_drain(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_club_media_references(club: string, offset: bigint, expected: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: Page;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_resource_club(kind: string, id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -335,23 +475,11 @@ export interface MainInterface {
         Err: string;
     }>;
 }
-export interface VaultFile {
-    id: string;
-    mini_league_id?: string;
-    club: string;
-    mime: string;
-    name: string;
-    size: bigint;
-    team?: string;
-    file_url: string;
-    created_at_ms: bigint;
-    blob_ref?: BlobRef;
-    deleted_by?: Principal;
-    folder_id: string;
-    competition_id?: string;
-    is_external_link: boolean;
-    deleted_at_ms?: bigint;
-    uploaded_by: Principal;
+export interface Page {
+    references: Array<Reference>;
+    next?: bigint;
+    scanned: bigint;
+    revision: bigint;
 }
 export interface BackupSummary {
     id: string;
@@ -391,6 +519,13 @@ export interface BlobRef {
     content_hash: string;
     canister: string;
 }
+export interface Reference {
+    url: string;
+    path?: string;
+    content_hash?: string;
+    store?: string;
+    resource_id: string;
+}
 export interface PinnedVault {
     root_id?: string;
     root_scope?: string;
@@ -403,14 +538,15 @@ export interface PinnedVault {
     vault_file_id?: string;
     chat_type: string;
 }
-export interface VaultFileWithFolder {
-    folder_name?: string;
-    folder_path: Array<string>;
-    file: VaultFile;
+export interface Request {
+    account_id: string;
+    inventory_digest: Uint8Array;
+    subjects: Array<Principal>;
+    generation: bigint;
 }
 export interface vault_domainInterface extends MainInterface {
 }
-import type { Backup as _Backup, BackupSummary as _BackupSummary, BlobRef as _BlobRef, PinnedVault as _PinnedVault, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
+import type { Backup as _Backup, BackupSummary as _BackupSummary, BlobRef as _BlobRef, Page as _Page, PinnedVault as _PinnedVault, Receipt as _Receipt, Reference as _Reference, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
 export class Vault_domain implements vault_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async clear_pinned_vault(arg0: string, arg1: string): Promise<{
@@ -675,6 +811,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.move_file(arg0, arg1);
         return from_candid_variant_n34(result);
     }
+    async prepare_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.prepare_account_removal(arg0);
+        return from_candid_variant_n1(result);
+    }
     async purge_club_snapshot(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: bigint;
@@ -695,6 +841,156 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.purge_my_data();
         return from_candid_variant_n35(result);
     }
+    async read_account_get_backup(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Backup;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_backup(arg0);
+        return from_candid_variant_n2(result);
+    }
+    async read_account_get_file(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_file(arg0);
+        return from_candid_variant_n20(result);
+    }
+    async read_account_get_folder(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFolder | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_folder(arg0);
+        return from_candid_variant_n18(result);
+    }
+    async read_account_get_pinned_vault(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: PinnedVault | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_get_pinned_vault(arg0, arg1);
+        return from_candid_variant_n22(result);
+    }
+    async read_account_list_backups(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<BackupSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_backups();
+        return from_candid_variant_n27(result);
+    }
+    async read_account_list_club_files(arg0: string, arg1: string | null, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_club_files(arg0, to_candid_opt_n15(arg1), to_candid_opt_n15(arg2));
+        return from_candid_variant_n28(result);
+    }
+    async read_account_list_club_files_with_folder(arg0: string, arg1: string | null, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_club_files_with_folder(arg0, to_candid_opt_n15(arg1), to_candid_opt_n15(arg2));
+        return from_candid_variant_n29(result);
+    }
+    async read_account_list_files(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_files(arg0);
+        return from_candid_variant_n28(result);
+    }
+    async read_account_list_files_with_folder(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_files_with_folder(arg0);
+        return from_candid_variant_n29(result);
+    }
+    async read_account_list_folders(arg0: string, arg1: string | null, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_folders(arg0, to_candid_opt_n15(arg1), to_candid_opt_n15(arg2));
+        return from_candid_variant_n33(result);
+    }
+    async read_account_list_trashed_files(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_trashed_files(arg0);
+        return from_candid_variant_n28(result);
+    }
+    async read_account_list_trashed_files_with_folder(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<VaultFileWithFolder>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_list_trashed_files_with_folder(arg0);
+        return from_candid_variant_n29(result);
+    }
+    async read_account_removal_drain(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_removal_drain(arg0);
+        return from_candid_variant_n36(result);
+    }
+    async read_club_media_references(arg0: string, arg1: bigint, arg2: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: Page;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_club_media_references(arg0, arg1, to_candid_opt_n37(arg2));
+        return from_candid_variant_n38(result);
+    }
+    async read_resource_club(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_resource_club(arg0, arg1);
+        return from_candid_variant_n45(result);
+    }
     async register_file(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string, arg5: string, arg6: bigint, arg7: string, arg8: boolean, arg9: BlobRef | null, arg10: string | null, arg11: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -702,7 +998,7 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n15(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n36(arg9), to_candid_opt_n15(arg10), to_candid_opt_n15(arg11));
+        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n15(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n46(arg9), to_candid_opt_n15(arg10), to_candid_opt_n15(arg11));
         return from_candid_variant_n34(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
@@ -713,7 +1009,7 @@ export class Vault_domain implements vault_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n37(result);
+        return from_candid_variant_n47(result);
     }
     async rename_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -773,7 +1069,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n15(arg3), to_candid_opt_n15(arg4), to_candid_opt_n15(arg5), to_candid_opt_n15(arg6), arg7);
-        return from_candid_variant_n38(result);
+        return from_candid_variant_n48(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -819,8 +1115,14 @@ export class Vault_domain implements vault_domainInterface {
 function from_candid_Backup_n3(value: _Backup): Backup {
     return from_candid_record_n4(value);
 }
+function from_candid_Page_n39(value: _Page): Page {
+    return from_candid_record_n40(value);
+}
 function from_candid_PinnedVault_n24(value: _PinnedVault): PinnedVault {
     return from_candid_record_n25(value);
+}
+function from_candid_Reference_n42(value: _Reference): Reference {
+    return from_candid_record_n43(value);
 }
 function from_candid_VaultFileWithFolder_n31(value: _VaultFileWithFolder): VaultFileWithFolder {
     return from_candid_record_n32(value);
@@ -845,6 +1147,9 @@ function from_candid_opt_n21(value: [] | [_VaultFile]): VaultFile | null {
 }
 function from_candid_opt_n23(value: [] | [_PinnedVault]): PinnedVault | null {
     return value.length === 0 ? null : from_candid_PinnedVault_n24(value[0]);
+}
+function from_candid_opt_n44(value: [] | [bigint]): bigint | null {
+    return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n8(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
@@ -976,6 +1281,45 @@ function from_candid_record_n4(value: {
         folders: from_candid_vec_n12(value.folders),
         created_by: value.created_by,
         created_at_ms: value.created_at_ms
+    };
+}
+function from_candid_record_n40(value: {
+    references: Array<_Reference>;
+    next: [] | [bigint];
+    scanned: bigint;
+    revision: bigint;
+}): {
+    references: Array<Reference>;
+    next?: bigint;
+    scanned: bigint;
+    revision: bigint;
+} {
+    return {
+        references: from_candid_vec_n41(value.references),
+        next: record_opt_to_undefined(from_candid_opt_n44(value.next)),
+        scanned: value.scanned,
+        revision: value.revision
+    };
+}
+function from_candid_record_n43(value: {
+    url: string;
+    path: [] | [string];
+    content_hash: [] | [string];
+    store: [] | [string];
+    resource_id: string;
+}): {
+    url: string;
+    path?: string;
+    content_hash?: string;
+    store?: string;
+    resource_id: string;
+} {
+    return {
+        url: value.url,
+        path: record_opt_to_undefined(from_candid_opt_n8(value.path)),
+        content_hash: record_opt_to_undefined(from_candid_opt_n8(value.content_hash)),
+        store: record_opt_to_undefined(from_candid_opt_n8(value.store)),
+        resource_id: value.resource_id
     };
 }
 function from_candid_record_n7(value: {
@@ -1298,7 +1642,64 @@ function from_candid_variant_n35(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n37(value: {
+function from_candid_variant_n36(value: {
+    Ok: _Receipt;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Receipt;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n38(value: {
+    Ok: _Page;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Page;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_Page_n39(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n45(value: {
+    Ok: [] | [string];
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: string | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_opt_n8(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n47(value: {
     ok: bigint;
 } | {
     err: string;
@@ -1317,7 +1718,7 @@ function from_candid_variant_n37(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n38(value: {
+function from_candid_variant_n48(value: {
     Ok: _PinnedVault;
 } | {
     Err: string;
@@ -1342,13 +1743,19 @@ function from_candid_vec_n12(value: Array<_VaultFolder>): Array<VaultFolder> {
 function from_candid_vec_n30(value: Array<_VaultFileWithFolder>): Array<VaultFileWithFolder> {
     return value.map((x)=>from_candid_VaultFileWithFolder_n31(x));
 }
+function from_candid_vec_n41(value: Array<_Reference>): Array<Reference> {
+    return value.map((x)=>from_candid_Reference_n42(x));
+}
 function from_candid_vec_n5(value: Array<_VaultFile>): Array<VaultFile> {
     return value.map((x)=>from_candid_VaultFile_n6(x));
 }
 function to_candid_opt_n15(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n36(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n37(value: bigint | null): [] | [bigint] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n46(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

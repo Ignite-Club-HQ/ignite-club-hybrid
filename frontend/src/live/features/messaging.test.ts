@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  get_mini_league_chat: vi.fn(),
   can_dm_user: vi.fn(),
   dm_attachments_disabled: vi.fn(),
   get_group_metadata: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../domains", () => ({
   connectLiveMessagingDomain: vi.fn(async () => ({
     actor: {
+      get_mini_league_chat: mocks.get_mini_league_chat,
       can_dm_user: mocks.can_dm_user,
       dm_attachments_disabled: mocks.dm_attachments_disabled,
       get_group_metadata: mocks.get_group_metadata,
@@ -23,6 +25,7 @@ vi.mock("../domains", () => ({
 }));
 
 import {
+  getLiveMiniLeagueChat,
   canLiveDmUser,
   isLiveDmAttachmentsDisabled,
   getLiveGroupMetadata,
@@ -189,5 +192,16 @@ describe("submitLiveContentReport", () => {
       "Spam",
       ["extra info"]
     );
+  });
+});
+
+describe('private league chat lookup', () => {
+  it('unwraps the authorized conversation instead of returning a fabricated missing chat', async () => {
+    mocks.get_mini_league_chat.mockResolvedValue({ Ok: [{ conversation_id: 'chat-a' }] });
+    expect(await getLiveMiniLeagueChat(ctx, 'club-a', 'league-a')).toEqual({ id: 'chat-a' });
+  });
+  it('preserves denial from the private chat lookup', async () => {
+    mocks.get_mini_league_chat.mockResolvedValue({ Err: 'Forbidden' });
+    await expect(getLiveMiniLeagueChat(ctx, 'club-a', 'league-a')).rejects.toThrow('Forbidden');
   });
 });

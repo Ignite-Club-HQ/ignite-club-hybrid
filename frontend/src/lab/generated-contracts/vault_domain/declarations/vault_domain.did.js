@@ -82,6 +82,30 @@ export const idlFactory = ({ IDL }) => {
     'folder_path' : IDL.Vec(IDL.Text),
     'file' : VaultFile,
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
+  const Reference = IDL.Record({
+    'url' : IDL.Text,
+    'path' : IDL.Opt(IDL.Text),
+    'content_hash' : IDL.Opt(IDL.Text),
+    'store' : IDL.Opt(IDL.Text),
+    'resource_id' : IDL.Text,
+  });
+  const Page = IDL.Record({
+    'references' : IDL.Vec(Reference),
+    'next' : IDL.Opt(IDL.Nat),
+    'scanned' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
   const Main = IDL.Service({
     'clear_pinned_vault' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -252,6 +276,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
         [],
       ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
@@ -260,6 +289,96 @@ export const idlFactory = ({ IDL }) => {
     'purge_my_data' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_backup' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Backup, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_file' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(VaultFile), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_folder' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(VaultFolder), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_pinned_vault' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(PinnedVault), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_backups' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(BackupSummary), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_club_files' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_club_files_with_folder' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(VaultFileWithFolder),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_files' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_files_with_folder' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(VaultFileWithFolder),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_folders' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFolder), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_trashed_files' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_trashed_files_with_folder' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(VaultFileWithFolder),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_club_media_references' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_resource_club' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         [],
       ),
     'register_file' : IDL.Func(

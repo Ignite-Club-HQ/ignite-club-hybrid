@@ -1192,11 +1192,10 @@ export async function acceptPendingLiveInvite(ctx: FeatureBackendContext, invite
  */
 export async function getLivePendingInvite(ctx: FeatureBackendContext, inviteId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  try {
-    return await unwrapCandid(actor.get_pending_invite(inviteId), "Get pending invite");
-  } catch {
-    return null;
-  }
+  const result = await actor.get_pending_invite(inviteId);
+  if ('Ok' in result) return result.Ok;
+  if (result.Err === 'Invite not found' || result.Err === 'Invite revoked') return null;
+  throw new Error(`Get pending invite failed: ${result.Err}`);
 }
 
 /** Redeem a shareable team-invite link token (grants the link's role, idempotent). */

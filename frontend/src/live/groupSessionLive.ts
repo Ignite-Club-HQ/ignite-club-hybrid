@@ -1,18 +1,21 @@
 /** Lazy-load this explicit rehearsal API; nothing installs it in featureRouter.
  * Governor placement attestation is not independent subnet measurement.
  */
+import { readPinnedGroupRegistry } from './groupRegistryPager';
 import type { FeatureBackendContext } from './featureRouter';
 import { openGroupSession, type GroupRegistry } from './groupSession';
 import { GROUP_DOMAINS, type GroupDomain } from './groupRouting';
+import type { EntityKind } from './groupDispatch';
 
 export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   const { connectLiveShardRouter, connectLiveClubDomain } = await import('./domains');
   const { actor: router } = await connectLiveShardRouter(ctx.target, ctx.identity);
   return openGroupSession(ctx, {
     async readRegistry(): Promise<GroupRegistry> {
-      const reply = await router.read_group_registry(ctx.target.alias);
-      if ('Err' in reply) throw new Error(reply.Err);
-      const snapshot = reply.Ok; const first = snapshot.placements[0];
+      const principal = ctx.identity.getPrincipal().toText();
+      const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => router.read_group_registry_page(ctx.target.alias, revision, cursor, limit), undefined,
+        () => { if (ctx.identity.getPrincipal().toText() !== principal) throw new Error('Registry identity changed'); });
+      const first = snapshot.placements[0];
       if (!first) throw new Error('No complete group placement');
       for (const p of snapshot.placements) {
         if (p.deployment_id !== first.deployment_id || p.deployment_revision !== first.deployment_revision || p.host !== first.host ||
@@ -25,7 +28,7 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
         groups: snapshot.groups.map(g => ({ id: g.id, targetAlias: g.target_alias, domains: g.domains.map(d => {
           if (!(GROUP_DOMAINS as readonly string[]).includes(d.domain)) throw new Error('Unknown group domain');
           return { domain: d.domain as GroupDomain, canisterId: d.canister.toText() };
-        }) })),
+        }), photoStore: g.photo_store?.[0]?.toText() })),
         deployment: { id: first.deployment_id, alias: ctx.target.alias, networkKind: first.network_kind, host: first.host,
           revision: first.deployment_revision, enabled: true, additionalSubnetsEnabled: first.additional_subnets_enabled,
           primarySubnet: first.primary_subnet.toText(), approvedSubnets: first.approved_subnets.map(s => s.toText()) },
@@ -61,10 +64,47 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   });
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
-export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event' | 'conversation' | 'team' | 'clubLink' | 'roleRequest', id: string): Promise<string | null> {
+export async function lookupEntityClub(ctx: FeatureBackendContext, kind: EntityKind, id: string): Promise<string | null> {
+  if (kind === 'news') {
+    const { listLiveMembershipClubs } = await import('./features/membership');
+    const { listLiveNewsMulti } = await import('./features/club');
+    const { listMyLiveMiniLeagues } = await import('./features/miniLeagues');
+    const [clubs, leagues] = await Promise.all([listLiveMembershipClubs(ctx), listMyLiveMiniLeagues(ctx)]);
+    const ids = [...new Set([...clubs.map(c => c.id), ...leagues.map(l => l.club_id)])];
+    if (!ids.length) return null;
+    return (await listLiveNewsMulti(ctx, ids)).find(p => p.id === id)?.club_id ?? null;
+  }
+  if (kind === 'photo' || kind === 'galleryCard') {
+    const m = await import('./features/media');
+    const row = kind === 'photo' ? await m.getLiveAsset(ctx, id) : await m.getLiveGalleryChatCard(ctx, id);
+    return row?.club_id ?? null;
+  }
+  if (kind === 'miniLeague') return (await import('./miniLeagueOwner')).lookupMiniLeagueOwner(ctx, id);
   if (kind === 'roleRequest') return (await import('./roleRequestOwner')).lookupRoleRequestOwner(ctx, id);
   const d = await import('./domains');
   const unwrap = (r: { Ok: [] | [string] } | { Err: string }) => { if ('Err' in r) throw new Error(r.Err); return r.Ok[0] ?? null; };
+  if (kind === 'competitionMatch' || kind === 'eoi') return unwrap(await (await d.connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_resource_club(kind === 'competitionMatch' ? 'match' : 'eoi', id));
+  if (kind === 'vaultFile' || kind === 'vaultFolder') {
+    const { actor } = await d.connectLiveVaultDomain(ctx.target, ctx.identity);
+    return unwrap(await actor.read_resource_club(kind === 'vaultFile' ? 'file' : 'folder', id));
+  }
+  if (kind === 'notification') {
+    const { actor } = await d.connectLiveNotificationQueue(ctx.target, ctx.identity);
+    const row = await actor.get_notification(id);
+    return row[0]?.club || null;
+  }
+  if (kind === 'scheduledMessage') {
+    const { listLiveScheduledMessages } = await import('./features/notifications');
+    const row = (await listLiveScheduledMessages(ctx, ctx.identity.getPrincipal().toText())).find(r => r.id === id);
+    return row?.clubId || null;
+  }
+  if (kind === 'season') {
+    const { actor } = await d.connectLiveClubDomain(ctx.target, ctx.identity);
+    const row = await actor.read_season_club(id);
+    return unwrap(row);
+  }
+  if (kind === 'competition') return unwrap(await (await d.connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_competition_club(id));
+  if (kind === 'eventGroup') return unwrap(await (await d.connectLiveEventsDomain(ctx.target, ctx.identity)).actor.read_event_group_club(id));
   if (kind === 'event') return unwrap(await (await d.connectLiveEventsDomain(ctx.target, ctx.identity)).actor.read_event_club(id));
   if (kind === 'conversation') return unwrap(await (await d.connectLiveMessagingDomain(ctx.target, ctx.identity)).actor.read_conversation_club(id));
   if (kind === 'clubLink') {
@@ -80,15 +120,37 @@ export async function lookupEntityClub(ctx: FeatureBackendContext, kind: 'event'
  * (pending invite, team invite link, shell-team claim token or short code).
  * Location only: the token itself is the invitee's proof, as on the shared canisters. */
 export async function groupHoldsInvite(ctx: FeatureBackendContext, token: string): Promise<boolean> {
+  if (ctx.target.canisterIds.competition_domain) {
+    const { connectLiveCompetitionDomain } = await import('./domains');
+    const reply = await (await connectLiveCompetitionDomain(ctx.target, ctx.identity)).actor.read_token_club(token);
+    if ('Err' in reply) throw new Error(reply.Err);
+    if (reply.Ok.length) return true;
+  }
   const c = await import('./features/club');
   const probes: Array<() => Promise<unknown>> = [
     () => c.getLivePendingInvite(ctx, token),
+    () => c.getLiveParentInvite(ctx, token),
     () => c.getLiveTeamInviteLinkByToken(ctx, token),
     () => c.getLiveShellTeamByToken(ctx, token),
     () => c.resolveLiveInviteShortCode(ctx, token),
   ];
   for (const p of probes) {
-    try { const r = await p(); if (r && !(Array.isArray(r) && r.length === 0)) return true; } catch { /* not this kind */ }
+    try { const r = await p(); if (r && !(Array.isArray(r) && r.length === 0)) return true; }
+    catch (error) {
+      // Only explicit domain absence is negative evidence. A timeout or
+      // denied/expired token must never redirect acceptance to shared state.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/failed: (Invite not found|Invite link not found|Shell invite not found|Short code not found)$/.test(message)) throw error;
+    }
   }
-  return false;
+  const { connectLiveMiniLeagueDomain } = await import('./domains');
+  if (!ctx.target.canisterIds.mini_league_domain) return false;
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  const preview = await actor.get_player_invite_preview(token);
+  if ('Err' in preview) throw new Error(preview.Err);
+  if (preview.Ok.length) return true;
+  const reply = await actor.get_join_link_by_token(token);
+  if ('Ok' in reply) return true;
+  if (reply.Err === 'Join link not found') return false;
+  throw new Error(reply.Err);
 }

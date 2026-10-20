@@ -1,3 +1,4 @@
+import AccountAdmission "../../shared/AccountAdmission";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -13,7 +14,19 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
+  // Local rehearsal only. Eligibility never grants resource permissions.
+  transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
+  transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
+    case (?id) ?Principal.fromText(id); case null null
+  };
+  transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  func admitAccount(subject : Principal) : async () {
+    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+  };
+  func denyLegacyAccountQuery() {
+    if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
+  };
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -44,6 +57,7 @@ persistent actor class Main(governorInit : Principal) {
   var children : [Types.MiniLeagueChild];
   var guardians : [Types.MiniLeagueGuardian];
   var clubDomainCanister : ?Principal;
+  var eventsDomainCanister : ?Principal;
   var transferFences : [Text];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
@@ -163,6 +177,19 @@ persistent actor class Main(governorInit : Principal) {
   func isClubAdmin(caller : Principal, club_id : Text) : Bool {
     isGovernor(caller) or hasRole(caller, "club_admin", club_id, null)
   };
+  // Creation must use current club authority, not a manually populated mirror.
+  func currentClubAdmin(caller : Principal, club : Text) : async* Bool {
+    if (isGovernor(caller)) return true;
+    let id = switch (clubDomainCanister) { case null return false; case (?id) id };
+    let domain : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor(id.toText());
+    let fresh = try { await (with timeout = 10) domain.read_account_list_user_club_roles(caller, club) } catch (_) { return false };
+    await admitAccount(caller);
+    if (clubDomainCanister != ?id or isFenced(club)) return false;
+    roles := roles.filter(func(r) = not (r.user.equal(caller) and r.club_id == club)).concat(
+      fresh.map(func((role, team)) : Types.RoleGrant = { user = caller; role; club_id = club; team_id = team })
+    );
+    fresh.any(func((role, _)) = role == "club_admin")
+  };
   // League-admin = club admin OR the league creator OR explicitly granted via
   // mini_league_admins — mirrors can_view_mini_league / the admin-management
   // semantics of ManageMiniLeagueAdminsSheet.
@@ -174,11 +201,54 @@ persistent actor class Main(governorInit : Principal) {
   };
   // Mirrors can_view_mini_league(): league admins, club members, or the
   // parent/claimant of a player enrolled in the league can view it.
-  func canViewLeague(caller : Principal, league : Types.MiniLeague) : Bool {
-    if (caller.equal(Principal.anonymous())) return false;
-    if (isLeagueAdmin(caller, league)) return true;
-    if (isClubMember(caller, league.club_id)) return true;
-    players.any(func(p) = p.mini_league_id == league.id and p.claimed_by == ?caller)
+  // Mirrors are candidates, never child-link authority. Query callers use
+  // composite reads; writes use consensus and recheck local rows after await.
+  public composite query ({ caller }) func verify_child_guardian(user : Principal, child : Text) : async Bool {
+    denyLegacyAccountQuery();
+    if (caller != Principal.fromActor(this)) return false;
+    let id = switch (clubDomainCanister) { case null return false; case (?id) id };
+    let domain : actor { has_child_guardian : shared query (Principal, Text) -> async Bool } = actor(id.toText());
+    let allowed = try { await domain.has_child_guardian(user, child) } catch (_) { false };
+    allowed and clubDomainCanister == ?id
+  };
+  func currentGuardianWrite(user : Principal, child : Text) : async* Bool {
+    let id = switch (clubDomainCanister) { case null return false; case (?id) id };
+    let domain : actor { read_has_child_guardian : shared (Principal, Text) -> async Bool } = actor(id.toText());
+    let allowed = try { await (with timeout = 10) domain.read_has_child_guardian(user, child) } catch (_) { false };
+    allowed and clubDomainCanister == ?id
+  };
+  public composite query ({ caller }) func verify_player_access(user : Principal, player : Types.MiniLeaguePlayer) : async Bool {
+    denyLegacyAccountQuery();
+    if (caller != Principal.fromActor(this)) return false;
+    switch (player.child_id) {
+      case (?child) await this.verify_child_guardian(user, child);
+      case null player.claimed_by == ?user or player.parent_user_id == ?user.toText();
+    }
+  };
+  func playerAccessWrite(user : Principal, player : Types.MiniLeaguePlayer) : async* Bool {
+    switch (player.child_id) {
+      case (?child) await* currentGuardianWrite(user, child);
+      case null player.claimed_by == ?user or player.parent_user_id == ?user.toText();
+    }
+  };
+  public composite query ({ caller = origin }) func verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
+    denyLegacyAccountQuery();
+    if (origin != Principal.fromActor(this)) return false;
+    let caller = viewer;
+    if (Principal.isAnonymous(caller)) return false;
+    if (isLeagueAdmin(caller, league) or isClubMember(caller, league.club_id)) return true;
+    for (p in players.values()) {
+      if (p.mini_league_id == league.id and (await this.verify_player_access(caller, p))) return true;
+    };
+    false
+  };
+  public composite query ({ caller = origin }) func filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
+    denyLegacyAccountQuery();
+    if (origin != Principal.fromActor(this)) return [];
+    let caller = viewer;
+    var out : [Types.MiniLeague] = [];
+    for (league in candidates.values()) if (await this.verify_league_access(caller, league)) out := out.concat([league]);
+    out
   };
   func findLeague(id : Text) : ?Types.MiniLeague { leagues.find(func(item) = item.id == id) };
   func requireLeagueAdmin(caller : Principal, id : Text) : { #Ok : Types.MiniLeague; #Err : Text } {
@@ -257,7 +327,39 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  public shared ({ caller }) func set_events_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (Principal.isAnonymous(id)) return #Err("Invalid canister id");
+    eventsDomainCanister := ?id;
+    #Ok
+  };
+  // Trusted events authority supplies the original signed caller. No user may impersonate a parent.
+  public composite query ({ caller }) func can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
+    denyLegacyAccountQuery();
+    if (eventsDomainCanister != ?caller or Principal.isAnonymous(viewer)) return false;
+    switch (findLeague(league_id)) {
+      case null false;
+      case (?league) league.club_id == club_id and league.status == "active" and (await this.verify_league_access(viewer, league));
+    }
+  };
+
+  public shared ({ caller }) func read_can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
+    await admitAccount(viewer);
+    if (eventsDomainCanister != ?caller or Principal.isAnonymous(viewer)) return false;
+    let league = switch (findLeague(league_id)) { case null return false; case (?l) l };
+    if (league.club_id != club_id or league.status != "active") return false;
+    if (isLeagueAdmin(viewer, league) or isClubMember(viewer, club_id)) return true;
+    for (p in players.values()) {
+      if (p.mini_league_id == league_id and (await* playerAccessWrite(viewer, p))) {
+        return eventsDomainCanister == ?caller and findLeague(league_id) == ?league and findPlayer(p.id) == ?p and not leagueFenced(league_id);
+      };
+    };
+    false
+  };
+
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");
     if (not roles.any(func(item) = item.user.equal(principal) and item.role == role and item.club_id == club_id and item.team_id == team_id)) {
@@ -269,10 +371,11 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Mini-leagues ----------------
 
   public shared ({ caller }) func create_mini_league(club_id : Text, name : Text, description : ?Text, logo_url : ?Text, team_size : Nat16, min_players_per_side : Nat16, minutes_per_half : Nat16, bib_colors : [Text], show_matches_to_members : Bool) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not validOpt(description, 2000) or not validOpt(logo_url, 512)) return #Err("Invalid mini-league");
-    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    if (not (await* currentClubAdmin(caller, club_id))) return #Err("Club admin required");
     let now = nowMs();
     let created : Types.MiniLeague = {
       id = nextId("mlg-" # club_id, leagues.size()); club_id; name; description; logo_url;
@@ -284,6 +387,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_mini_league(id : Text, name : Text, description : ?Text, logo_url : ?Text, team_size : Nat16, min_players_per_side : Nat16, minutes_per_half : Nat16, bib_colors : [Text], show_matches_to_members : Bool) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, id)) {
@@ -298,6 +402,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_mini_league_status(id : Text, status : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validLeagueStatus(status)) return #Err("Invalid status");
@@ -311,15 +416,17 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+  public composite query ({ caller }) func get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findLeague(id)) {
       case null #Err("Mini-league not found");
-      case (?league) { if (not canViewLeague(caller, league)) #Err("Forbidden") else #Ok(league) };
+      case (?league) { if (not (await this.verify_league_access(caller, league))) #Err("Forbidden") else #Ok(league) };
     }
   };
 
-  public query ({ caller }) func list_mini_leagues_by_club(club_id : Text) : async [Types.MiniLeague] {
-    leagues.filter(func(item) = item.club_id == club_id and canViewLeague(caller, item))
+  public composite query ({ caller }) func list_mini_leagues_by_club(club_id : Text) : async [Types.MiniLeague] {
+    denyLegacyAccountQuery();
+    await this.filter_visible_leagues(caller, leagues.filter(func(item) = item.club_id == club_id))
   };
 
   func addNewsRecipient(recipients : [Principal], candidate : ?Principal) : [Principal] {
@@ -332,7 +439,8 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func get_news_audience(mini_league_id : Text, requester : Principal) : async { #Ok : Types.MiniLeagueNewsAudience; #Err : Text } {
+  public composite query ({ caller }) func get_news_audience(mini_league_id : Text, requester : Principal) : async { #Ok : Types.MiniLeagueNewsAudience; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (clubDomainCanister) {
       case null { return #Err("club_domain canister not configured") };
       case (?clubDomain) { if (not caller.equal(clubDomain)) return #Err("club_domain only") };
@@ -353,18 +461,18 @@ persistent actor class Main(governorInit : Principal) {
         };
         for (player in players.values()) {
           if (player.mini_league_id == mini_league_id) {
-            recipients := addNewsRecipient(recipients, player.claimed_by);
+            switch (player.claimed_by) { case (?u) { if (await this.verify_player_access(u, player)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
             switch (player.child_id) {
               case (?childId) {
                 switch (findChild(childId)) {
                   case (?child) {
-                    recipients := addNewsRecipient(recipients, child.parent_user_id);
-                    recipients := addNewsRecipient(recipients, child.claimed_by);
+                    switch (child.parent_user_id) { case (?u) { if (await this.verify_child_guardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+                    switch (child.claimed_by) { case (?u) { if (await this.verify_child_guardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
                   };
                   case null {};
                 };
                 for (guardian in guardians.values()) {
-                  if (guardian.child_id == childId) recipients := addNewsRecipient(recipients, ?guardian.guardian_user_id);
+                  if (guardian.child_id == childId and (await this.verify_child_guardian(guardian.guardian_user_id, childId))) recipients := addNewsRecipient(recipients, ?guardian.guardian_user_id);
                 };
               };
               case null {};
@@ -378,20 +486,65 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // ---- Batched reads (same canViewLeague visibility; capped) ----
-  public query ({ caller }) func get_mini_leagues(ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+  public composite query ({ caller }) func get_mini_leagues(ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (ids.size() > 300) return #Err("Too many ids");
-    #Ok(leagues.filter(func(item) = ids.any(func(i) = i == item.id) and canViewLeague(caller, item)))
+    #Ok(await this.filter_visible_leagues(caller, leagues.filter(func(item) = ids.any(func(i) = i == item.id))))
   };
 
-  public query ({ caller }) func list_mini_leagues_by_clubs(club_ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+  public composite query ({ caller }) func list_mini_leagues_by_clubs(club_ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (club_ids.size() > 200) return #Err("Too many ids");
-    #Ok(leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id) and canViewLeague(caller, item)))
+    #Ok(await this.filter_visible_leagues(caller, leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id))))
   };
 
   // Caller-scoped: leagues the caller administers, belongs to via a club
   // role grant, or has a claimed player in.
-  public query ({ caller }) func my_leagues() : async [Types.MiniLeague] {
-    leagues.filter(func(item) = canViewLeague(caller, item))
+  public composite query ({ caller }) func my_leagues() : async [Types.MiniLeague] {
+    denyLegacyAccountQuery();
+    await this.filter_visible_leagues(caller, leagues)
+  };
+
+  // UI permissions use the same authoritative checks as league mutations.
+  // This is caller-scoped, not an arbitrary-user permission oracle.
+  public composite query ({ caller }) func get_my_league_access(ids : [Text]) : async { #Ok : [{ id : Text; can_manage : Bool; can_delete : Bool; is_club_admin : Bool }]; #Err : Text } {
+    denyLegacyAccountQuery();
+    if (ids.size() > 200) return #Err("Too many ids");
+    #Ok((await this.filter_visible_leagues(caller, leagues.filter(func(l) = ids.any(func(id) = id == l.id)))).map(func(l) = {
+      id = l.id; can_manage = isLeagueAdmin(caller, l); can_delete = isLeagueAdmin(caller, l); is_club_admin = isClubAdmin(caller, l.club_id)
+    }))
+  };
+
+  // Same visibility as list_players; never expose unrelated club members.
+  // Parent/guardian links and scoped admins travel in the league snapshot.
+  public composite query ({ caller }) func get_league_members(id : Text) : async { #Ok : [{ user_id : Text; is_staff : Bool; is_parent : Bool }]; #Err : Text } {
+    denyLegacyAccountQuery();
+    let league = switch (findLeague(id)) { case null return #Err("Mini-league not found"); case (?l) l };
+    if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
+    var parentIds : [Text] = [];
+    var staffIds : [Text] = [league.created_by.toText()];
+    let add = func(ids : [Text], id : Text) : [Text] {
+      if (id == "" or ids.any(func(x) = x == id)) ids else ids.concat([id])
+    };
+    for (p in players.values()) {
+      if (p.mini_league_id == id) {
+        switch (p.parent_user_id) { case (?u) { let user = Principal.fromText(u); if (await this.verify_player_access(user, p)) parentIds := add(parentIds, u) }; case null {} };
+        switch (p.claimed_by) { case (?u) { if (await this.verify_player_access(u, p)) parentIds := add(parentIds, u.toText()) }; case null {} };
+        switch (p.child_id) {
+          case (?child) {
+            for (g in guardians.values()) { if (g.child_id == child and (await this.verify_child_guardian(g.guardian_user_id, child))) parentIds := add(parentIds, g.guardian_user_id.toText()) };
+          };
+          case null {};
+        };
+        if (parentIds.size() > 500) return #Err("League member list exceeds 500");
+      };
+    };
+    for (a in admins.values()) { if (a.mini_league_id == id) staffIds := add(staffIds, a.user_id.toText()) };
+    for (r in roles.values()) { if (r.club_id == league.club_id and (r.role == "league_admin" or r.role == "club_admin") and r.team_id == null) staffIds := add(staffIds, r.user.toText()) };
+    var all = parentIds;
+    for (u in staffIds.values()) { all := add(all, u) };
+    if (all.size() > 500) return #Err("League member list exceeds 500");
+    #Ok(all.map(func(u) = { user_id = u; is_staff = staffIds.any(func(x) = x == u); is_parent = parentIds.any(func(x) = x == u) }))
   };
 
   // Public: unauthenticated directory listing for the home page "browse
@@ -404,6 +557,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Sessions ----------------
 
   public shared ({ caller }) func create_session(mini_league_id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -423,6 +577,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_session(id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    await admitAccount(caller);
     if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, id)) {
@@ -439,6 +594,7 @@ persistent actor class Main(governorInit : Principal) {
   // Cancellation kept separate from update_session, mirroring
   // set_event_cancelled, so cancelling cannot clobber other fields.
   public shared ({ caller }) func cancel_session(id : Text) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    await admitAccount(caller);
     if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, id)) {
@@ -452,6 +608,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_session_status(id : Text, status : Text) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    await admitAccount(caller);
     if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validSessionStatus(status)) return #Err("Invalid status");
@@ -465,11 +622,12 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func list_sessions(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueSession]; #Err : Text } {
+  public composite query ({ caller }) func list_sessions(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueSession]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findLeague(mini_league_id)) {
       case null #Err("Mini-league not found");
       case (?league) {
-        if (not canViewLeague(caller, league)) return #Err("Forbidden");
+        if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
         #Ok(sessions.filter(func(item) = item.mini_league_id == mini_league_id))
       };
     }
@@ -478,6 +636,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Players ----------------
 
   public shared ({ caller }) func add_player(mini_league_id : Text, name : Text, child_id : ?Text, parent_user_id : ?Text, ability_rating : ?Nat16, notes : ?Text) : async { #Ok : Types.MiniLeaguePlayer; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -506,6 +665,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_player(id : Text, name : Text, ability_rating : ?Nat16, notes : ?Text) : async { #Ok : Types.MiniLeaguePlayer; #Err : Text } {
+    await admitAccount(caller);
     if (playerFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (findPlayer(id)) {
@@ -525,6 +685,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_player(id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (playerFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (findPlayer(id)) {
@@ -557,11 +718,12 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func list_players(mini_league_id : Text) : async { #Ok : [Types.MiniLeaguePlayer]; #Err : Text } {
+  public composite query ({ caller }) func list_players(mini_league_id : Text) : async { #Ok : [Types.MiniLeaguePlayer]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findLeague(mini_league_id)) {
       case null #Err("Mini-league not found");
       case (?league) {
-        if (not canViewLeague(caller, league)) return #Err("Forbidden");
+        if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
         #Ok(players.filter(func(item) = item.mini_league_id == mini_league_id))
       };
     }
@@ -584,10 +746,13 @@ persistent actor class Main(governorInit : Principal) {
   // Mirrors the `child_guardians` insert AddSecondParentDialog performs on
   // the Supabase branch; idempotent on (child_id, guardian_user_id).
   public shared ({ caller }) func link_mini_league_guardian(child_id : Text, guardian_user_id : Principal) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     if (not valid(child_id)) return #Err("Invalid child");
     if (guardian_user_id.equal(Principal.anonymous())) return #Err("Invalid guardian principal");
     if (not isChildLeagueAdmin(caller, child_id)) return #Err("Mini-league admin required");
+    if (not (await* currentGuardianWrite(guardian_user_id, child_id))) return #Err("Verified child guardian required");
+    if (not isChildLeagueAdmin(caller, child_id) or players.any(func(p) = p.child_id == ?child_id and leagueFenced(p.mini_league_id))) return #Err("Child authority changed");
     if (findChild(child_id) == null) {
       children := children.concat([{ id = child_id; parent_user_id = null; claimed_by = null; created_at_ms = nowMs(); updated_at_ms = nowMs() }]);
     };
@@ -600,24 +765,28 @@ persistent actor class Main(governorInit : Principal) {
   // Matches exactly what ManagePlayersDialog computes client-side from
   // Supabase: pending when the player has no parent_user_id AND (no linked
   // child OR the child has no parent_id AND no child_guardians rows).
-  public query ({ caller }) func get_player_guardian_status(player_id : Text) : async { #Ok : Types.PlayerGuardianStatus; #Err : Text } {
+  public composite query ({ caller }) func get_player_guardian_status(player_id : Text) : async { #Ok : Types.PlayerGuardianStatus; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findPlayer(player_id)) {
       case null #Err("Player not found");
       case (?player) {
         switch (findLeague(player.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not canViewLeague(caller, league)) return #Err("Forbidden");
-            let childParent : ?Principal = switch (player.child_id) {
-              case (?cid) { switch (findChild(cid)) { case (?child) child.parent_user_id; case null null } };
-              case null null;
+            if (not isLeagueAdmin(caller, league) and not (await this.verify_player_access(caller, player))) return #Err("Forbidden");
+            var guardianCount : Nat = 0;
+            var parentLinked = false;
+            switch (player.child_id) {
+              case null { parentLinked := player.parent_user_id != null or player.claimed_by != null };
+              case (?cid) {
+                var candidates : [Principal] = [];
+                switch (player.claimed_by) { case (?u) candidates := candidates.concat([u]); case null {} };
+                switch (player.parent_user_id) { case (?u) candidates := candidates.concat([Principal.fromText(u)]); case null {} };
+                for (g in guardians.values()) if (g.child_id == cid and not candidates.any(func(u) = u == g.guardian_user_id)) candidates := candidates.concat([g.guardian_user_id]);
+                for (u in candidates.values()) if (await this.verify_child_guardian(u, cid)) { guardianCount += 1; parentLinked := true };
+              };
             };
-            let guardianCount : Nat = switch (player.child_id) {
-              case (?cid) guardians.filter(func(item) = item.child_id == cid).size();
-              case null 0;
-            };
-            let parentLinked = player.parent_user_id != null or childParent != null;
-            let pending = player.parent_user_id == null and (player.child_id == null or (childParent == null and guardianCount == 0));
+            let pending = not parentLinked and guardianCount == 0;
             #Ok({ parent_linked = parentLinked; guardian_count = guardianCount; pending })
           };
         }
@@ -632,13 +801,14 @@ persistent actor class Main(governorInit : Principal) {
   // player row (second-parent invites); otherwise a new player is created on
   // claim (primary parent join-link flow).
   public shared ({ caller }) func create_invite(mini_league_id : Text, player_id : ?Text, label_text : ?Text) : async { #Ok : Types.MiniLeagueInvite; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) {
         switch (player_id) {
-          case (?pid) { if (findPlayer(pid) == null) return #Err("Player not found") };
+          case (?pid) { switch (findPlayer(pid)) { case null return #Err("Player not found"); case (?p) { if (p.mini_league_id != mini_league_id) return #Err("Player belongs to another league"); if (p.claimed_by != null or p.parent_user_id != null) return #Err("Player already linked") } } };
           case null {};
         };
         if (not validOpt(label_text, 256)) return #Err("Invalid invite");
@@ -646,6 +816,9 @@ persistent actor class Main(governorInit : Principal) {
           token = await randomToken("mli"); mini_league_id; player_id; label_text;
           status = "pending"; claimed_by = null; created_by = caller; created_at_ms = nowMs(); claimed_at_ms = null;
         };
+        if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
+        switch (requireLeagueAdmin(caller, mini_league_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+        switch (player_id) { case (?pid) { switch (findPlayer(pid)) { case null return #Err("Player not found"); case (?p) { if (p.mini_league_id != mini_league_id or p.claimed_by != null or p.parent_user_id != null) return #Err("Player no longer eligible") } } }; case null {} };
         invites := invites.concat([created]);
         #Ok(created)
       };
@@ -657,11 +830,16 @@ persistent actor class Main(governorInit : Principal) {
   // player_name when the invite has no pre-bound player), and returns the
   // (mini_league_id, club_id, player_id) triple like the Postgres function.
   public shared ({ caller }) func claim_invite(token : Text, player_name : Text) : async { #Ok : Types.ClaimedInvite; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     switch (invites.find(func(item) = item.token == token)) {
       case null #Err("Invite not found");
       case (?invite) {
-        if (invite.status != "pending") return #Err("Invite already claimed");
+        if (leagueFenced(invite.mini_league_id)) return #Err("Club is temporarily locked for a transfer");
+        if (invite.status != "pending") {
+          if (invite.claimed_by == ?caller) switch (invite.player_id, findLeague(invite.mini_league_id)) { case (?pid, ?league) return #Ok({ mini_league_id = league.id; club_id = league.club_id; player_id = pid }); case _ {} };
+          return #Err("Invite already claimed")
+        };
         switch (findLeague(invite.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
@@ -670,6 +848,8 @@ persistent actor class Main(governorInit : Principal) {
                 switch (findPlayer(pid)) {
                   case null return #Err("Player not found");
                   case (?player) {
+                    if (player.mini_league_id != invite.mini_league_id) return #Err("Player belongs to another league");
+                    if (player.claimed_by != null or player.parent_user_id != null) return #Err("Player already linked");
                     players := players.map(func(item) = if (item.id == pid) { { item with claimed_by = ?caller; updated_at_ms = nowMs() } } else item);
                     pid
                   };
@@ -687,7 +867,7 @@ persistent actor class Main(governorInit : Principal) {
                 created.id
               };
             };
-            invites := invites.map(func(item) = if (item.token == token) { { item with status = "claimed"; claimed_by = ?caller; claimed_at_ms = ?nowMs() } } else item);
+            invites := invites.map(func(item) = if (item.token == token) { { item with status = "claimed"; player_id = ?playerId; claimed_by = ?caller; claimed_at_ms = ?nowMs() } } else item);
             #Ok({ mini_league_id = league.id; club_id = league.club_id; player_id = playerId })
           };
         }
@@ -695,7 +875,16 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // Bearer preview contains no parent/email/child identifier. Claim binds caller atomically.
+  public query func get_player_invite_preview(token : Text) : async { #Ok : ?{ token : Text; mini_league_id : Text; club_id : Text; league_name : Text; player_name : ?Text; status : Text }; #Err : Text } {
+    let invite = switch (invites.find(func(i) = i.token == token)) { case null return #Ok(null); case (?i) i };
+    let league = switch (findLeague(invite.mini_league_id)) { case null return #Ok(null); case (?l) l };
+    let name = switch (invite.player_id) { case (?id) switch (findPlayer(id)) { case (?p) ?p.name; case null null }; case null null };
+    #Ok(?{ token; mini_league_id = league.id; club_id = league.club_id; league_name = league.name; player_name = name; status = invite.status })
+  };
+
   public query ({ caller }) func list_invites(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueInvite]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(invites.filter(func(item) = item.mini_league_id == mini_league_id));
@@ -705,6 +894,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Groups ----------------
 
   public shared ({ caller }) func create_group(session_id : Text, name : Text, ability_band : ?Text, display_order : Nat16, target_size : Nat16, pitch_name : ?Text) : async { #Ok : Types.MiniLeagueGroup; #Err : Text } {
+    await admitAccount(caller);
     if (sessionFenced(session_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, session_id)) {
@@ -723,6 +913,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_group(id : Text, name : Text, ability_band : ?Text, display_order : Nat16, target_size : Nat16, pitch_name : ?Text) : async { #Ok : Types.MiniLeagueGroup; #Err : Text } {
+    await admitAccount(caller);
     if (groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, id)) {
@@ -737,6 +928,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func assign_player_to_group(group_id : Text, player_id : Text, jersey_number : ?Nat16) : async { #Ok : Types.MiniLeagueGroupPlayer; #Err : Text } {
+    await admitAccount(caller);
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
@@ -752,6 +944,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func unassign_player_from_group(group_id : Text, player_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
@@ -763,7 +956,8 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func list_group_players(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupPlayer]; #Err : Text } {
+  public composite query ({ caller }) func list_group_players(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupPlayer]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findGroup(group_id)) {
       case null #Err("Group not found");
       case (?group) {
@@ -773,7 +967,7 @@ persistent actor class Main(governorInit : Principal) {
             switch (findLeague(leagueId)) {
               case null #Err("Mini-league not found");
               case (?league) {
-                if (not canViewLeague(caller, league)) return #Err("Forbidden");
+                if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
                 #Ok(groupPlayers.filter(func(item) = item.group_id == group_id))
               };
             }
@@ -783,14 +977,15 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func list_groups(session_id : Text) : async { #Ok : [Types.MiniLeagueGroup]; #Err : Text } {
+  public composite query ({ caller }) func list_groups(session_id : Text) : async { #Ok : [Types.MiniLeagueGroup]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findSession(session_id)) {
       case null #Err("Session not found");
       case (?session) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not canViewLeague(caller, league)) return #Err("Forbidden");
+            if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
             #Ok(groups.filter(func(item) = item.session_id == session_id))
           };
         }
@@ -801,6 +996,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Group duties ----------------
 
   public shared ({ caller }) func create_duty(group_id : Text, name : Text, points : ?Nat16) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    await admitAccount(caller);
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
@@ -822,6 +1018,7 @@ persistent actor class Main(governorInit : Principal) {
   // claim an open duty for a player — mirrors the member-facing duty claim
   // flow in EventDutiesSection/MatchDutiesDialog.
   public shared ({ caller }) func claim_duty(id : Text, player_id : Text) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    await admitAccount(caller);
     if (dutyFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (duties.find(func(item) = item.id == id)) {
@@ -837,9 +1034,11 @@ persistent actor class Main(governorInit : Principal) {
                   case null #Err("Mini-league not found");
                   case (?league) {
                     let player = findPlayer(player_id);
-                    let isPlayerClaimant = switch (player) { case (?p) p.claimed_by == ?caller; case null false };
+                    let isPlayerClaimant = switch (player) { case (?p) p.mini_league_id == league.id and (await* playerAccessWrite(caller, p)); case null false };
                     if (not (isLeagueAdmin(caller, league) or isPlayerClaimant)) return #Err("Forbidden");
-                    if (player == null) return #Err("Player not found");
+                    if (player == null or player != findPlayer(player_id) or (switch (player) { case (?p) p.mini_league_id != league.id; case null true })) return #Err("Player authority changed");
+                    if (leagueFenced(league.id)) return #Err("Club is temporarily locked for a transfer");
+                    if (findLeague(league.id) != ?league or duties.find(func(d) = d.id == id) != ?current) return #Err("Duty authority changed");
                     let updated : Types.MiniLeagueGroupDuty = { current with assigned_to = ?player_id; status = "claimed"; updated_at_ms = nowMs() };
                     duties := duties.map(func(item) = if (item.id == id) updated else item);
                     #Ok(updated)
@@ -854,6 +1053,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func complete_duty(id : Text, points_awarded : Bool) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    await admitAccount(caller);
     if (dutyFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (duties.find(func(item) = item.id == id)) {
@@ -871,7 +1071,8 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func list_duties(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupDuty]; #Err : Text } {
+  public composite query ({ caller }) func list_duties(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupDuty]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findGroup(group_id)) {
       case null #Err("Group not found");
       case (?group) {
@@ -881,7 +1082,7 @@ persistent actor class Main(governorInit : Principal) {
             switch (findLeague(leagueId)) {
               case null #Err("Mini-league not found");
               case (?league) {
-                if (not canViewLeague(caller, league)) return #Err("Forbidden");
+                if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
                 #Ok(duties.filter(func(item) = item.group_id == group_id))
               };
             }
@@ -897,6 +1098,7 @@ persistent actor class Main(governorInit : Principal) {
   // a player) or the claimed parent of that player, mirroring the
   // events_domain set_rsvp guard shape.
   public shared ({ caller }) func set_availability(session_id : Text, player_id : Text, status : Text) : async { #Ok : Types.MiniLeagueSessionAvailability; #Err : Text } {
+    await admitAccount(caller);
     if (sessionFenced(session_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validAvailabilityStatus(status)) return #Err("Invalid availability status");
@@ -907,9 +1109,11 @@ persistent actor class Main(governorInit : Principal) {
           case null #Err("Mini-league not found");
           case (?league) {
             let player = findPlayer(player_id);
-            let isPlayerClaimant = switch (player) { case (?p) p.claimed_by == ?caller; case null false };
+            let isPlayerClaimant = switch (player) { case (?p) p.mini_league_id == league.id and (await* playerAccessWrite(caller, p)); case null false };
             if (not (isLeagueAdmin(caller, league) or isPlayerClaimant)) return #Err("Forbidden");
-            if (player == null) return #Err("Player not found");
+            if (player == null or player != findPlayer(player_id) or (switch (player) { case (?p) p.mini_league_id != league.id; case null true })) return #Err("Player authority changed");
+                    if (leagueFenced(league.id)) return #Err("Club is temporarily locked for a transfer");
+            if (findLeague(league.id) != ?league or findSession(session_id) != ?session) return #Err("Session authority changed");
             let now = nowMs();
             let existing = availability.find(func(item) = item.session_id == session_id and item.player_id == player_id);
             let value : Types.MiniLeagueSessionAvailability = {
@@ -927,14 +1131,15 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func get_availability(session_id : Text, player_id : Text) : async { #Ok : ?Types.MiniLeagueSessionAvailability; #Err : Text } {
+  public composite query ({ caller }) func get_availability(session_id : Text, player_id : Text) : async { #Ok : ?Types.MiniLeagueSessionAvailability; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findSession(session_id)) {
       case null #Err("Session not found");
       case (?session) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not canViewLeague(caller, league)) return #Err("Forbidden");
+            if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
             #Ok(availability.find(func(item) = item.session_id == session_id and item.player_id == player_id))
           };
         }
@@ -942,14 +1147,15 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public query ({ caller }) func list_session_availability(session_id : Text) : async { #Ok : [Types.MiniLeagueSessionAvailability]; #Err : Text } {
+  public composite query ({ caller }) func list_session_availability(session_id : Text) : async { #Ok : [Types.MiniLeagueSessionAvailability]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (findSession(session_id)) {
       case null #Err("Session not found");
       case (?session) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not canViewLeague(caller, league)) return #Err("Forbidden");
+            if (not (await this.verify_league_access(caller, league))) return #Err("Forbidden");
             #Ok(availability.filter(func(item) = item.session_id == session_id))
           };
         }
@@ -958,14 +1164,17 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // Caller-scoped: availability rows for players the caller has claimed.
-  public query ({ caller }) func my_availability() : async [Types.MiniLeagueSessionAvailability] {
-    let myPlayerIds = players.filter(func(p) = p.claimed_by == ?caller).map(func(p) = p.id);
+  public composite query ({ caller }) func my_availability() : async [Types.MiniLeagueSessionAvailability] {
+    denyLegacyAccountQuery();
+    var myPlayerIds : [Text] = [];
+    for (p in players.values()) if (await this.verify_player_access(caller, p)) myPlayerIds := myPlayerIds.concat([p.id]);
     availability.filter(func(item) = myPlayerIds.any(func(pid) = pid == item.player_id))
   };
 
   // ---------------- Admins ----------------
 
   public shared ({ caller }) func add_admin(mini_league_id : Text, user_id : Principal) : async { #Ok : Types.MiniLeagueAdmin; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -981,6 +1190,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_admin(mini_league_id : Text, user_id : Principal) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -993,6 +1203,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_admins(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueAdmin]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(admins.filter(func(item) = item.mini_league_id == mini_league_id));
@@ -1006,6 +1217,7 @@ persistent actor class Main(governorInit : Principal) {
   func validJoinLinkRole(value : Text) : Bool { value == "player" or value == "admin" };
 
   public shared ({ caller }) func create_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1029,6 +1241,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func rotate_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1048,6 +1261,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func revoke_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1072,6 +1286,7 @@ persistent actor class Main(governorInit : Principal) {
   // Claims an admin join link: grants the caller league-admin rights instead
   // of minting a roster player.
   public shared ({ caller }) func claim_admin_join_link(token : Text) : async { #Ok : { mini_league_id : Text; club_id : Text }; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     switch (joinLinks.find(func(item) = item.token == token)) {
       case null #Err("Join link not found");
@@ -1094,6 +1309,7 @@ persistent actor class Main(governorInit : Principal) {
   // Mirrors join_competition_by_token but mints a fresh player record,
   // since mini-league join links are not pre-bound to an existing player.
   public shared ({ caller }) func join_mini_league_by_token(token : Text, player_name : Text) : async { #Ok : Types.ClaimedInvite; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     switch (joinLinks.find(func(item) = item.token == token)) {
       case null #Err("Join link not found");
@@ -1126,6 +1342,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_mini_league_join_links(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueJoinLink]; #Err : Text } {
+    denyLegacyAccountQuery();
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(joinLinks.filter(func(item) = item.mini_league_id == mini_league_id));
@@ -1138,6 +1355,7 @@ persistent actor class Main(governorInit : Principal) {
   // and their players/duties, availability, invites, admins, join links).
   // Mirrors the Supabase mini_leagues delete, which cascades via FK.
   public shared ({ caller }) func delete_mini_league(mini_league_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1171,6 +1389,7 @@ persistent actor class Main(governorInit : Principal) {
   // id. Sessions, groups, duties and availability are not copied — they are
   // per-session state, same as the Supabase duplicateLeagueMutation.
   public shared ({ caller }) func duplicate_mini_league(mini_league_id : Text, new_name : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    await admitAccount(caller);
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1311,4 +1530,337 @@ persistent actor class Main(governorInit : Principal) {
 
     #ok(changed)
   };
-}
+
+
+  // Additive protected consensus reads; live UI rollout is a separate release gate.
+  public shared ({ caller }) func read_account_verify_child_guardian(user : Principal, child : Text) : async Bool {
+    if (caller != Principal.fromActor(this)) return false;
+    if (not (await accountAdmission.eligible(user))) return false;
+    await* currentGuardianWrite(user, child)
+  };
+
+  public shared ({ caller }) func read_account_verify_player_access(user : Principal, player : Types.MiniLeaguePlayer) : async Bool {
+    if (caller != Principal.fromActor(this)) return false;
+    if (not (await accountAdmission.eligible(user))) return false;
+    let current = switch (findPlayer(player.id)) { case null return false; case (?p) p };
+    if (current != player) return false;
+    let allowed = await* playerAccessWrite(user, current);
+    allowed and findPlayer(player.id) == ?current and not playerFenced(player.id)
+  };
+
+  public shared ({ caller = origin }) func read_account_verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
+    if (origin != Principal.fromActor(this)) return false;
+    await admitAccount(viewer);
+    let caller = viewer;
+    if (Principal.isAnonymous(caller)) return false;
+    if (isLeagueAdmin(caller, league) or isClubMember(caller, league.club_id)) return true;
+    for (p in players.values()) {
+      if (p.mini_league_id == league.id and (await this.read_account_verify_player_access(caller, p))) return true;
+    };
+    false
+  };
+
+  public shared ({ caller = origin }) func read_account_filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
+    if (origin != Principal.fromActor(this)) return [];
+    await admitAccount(viewer);
+    let caller = viewer;
+    var out : [Types.MiniLeague] = [];
+    for (league in candidates.values()) if (await this.read_account_verify_league_access(caller, league)) out := out.concat([league]);
+    out
+  };
+
+  public shared ({ caller }) func read_account_can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
+    await admitAccount(viewer);
+    if (eventsDomainCanister != ?caller or Principal.isAnonymous(viewer)) return false;
+    switch (findLeague(league_id)) {
+      case null false;
+      case (?league) league.club_id == club_id and league.status == "active" and (await this.read_account_verify_league_access(viewer, league));
+    }
+  };
+
+  public shared ({ caller }) func read_account_get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    await admitAccount(caller);
+    switch (findLeague(id)) {
+      case null #Err("Mini-league not found");
+      case (?league) { if (not (await this.read_account_verify_league_access(caller, league))) #Err("Forbidden") else #Ok(league) };
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_mini_leagues_by_club(club_id : Text) : async [Types.MiniLeague] {
+    await admitAccount(caller);
+    await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = item.club_id == club_id))
+  };
+
+  public shared ({ caller }) func read_account_get_news_audience(mini_league_id : Text, requester : Principal) : async { #Ok : Types.MiniLeagueNewsAudience; #Err : Text } {
+    await admitAccount(requester);
+    switch (clubDomainCanister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?clubDomain) { if (not caller.equal(clubDomain)) return #Err("club_domain only") };
+    };
+    if (requester.equal(Principal.anonymous())) return #Err("Authenticated requester required");
+    switch (findLeague(mini_league_id)) {
+      case null { #Err("Mini-league not found") };
+      case (?league) {
+        // The caller is the configured club_domain canister, which checks the
+        // user's club-admin role before asking for this recipient snapshot.
+        if (requester.equal(Principal.anonymous())) return #Err("Authenticated requester required");
+        var recipients = addNewsRecipient([], ?league.created_by);
+        for (admin in admins.values()) {
+          if (admin.mini_league_id == mini_league_id) recipients := addNewsRecipient(recipients, ?admin.user_id);
+        };
+        for (grant in roles.values()) {
+          if (grant.club_id == league.club_id and grant.role == "club_admin") recipients := addNewsRecipient(recipients, ?grant.user);
+        };
+        for (player in players.values()) {
+          if (player.mini_league_id == mini_league_id) {
+            switch (player.claimed_by) { case (?u) { if (await this.read_account_verify_player_access(u, player)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+            switch (player.child_id) {
+              case (?childId) {
+                switch (findChild(childId)) {
+                  case (?child) {
+                    switch (child.parent_user_id) { case (?u) { if (await this.read_account_verify_child_guardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+                    switch (child.claimed_by) { case (?u) { if (await this.read_account_verify_child_guardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+                  };
+                  case null {};
+                };
+                for (guardian in guardians.values()) {
+                  if (guardian.child_id == childId and (await this.read_account_verify_child_guardian(guardian.guardian_user_id, childId))) recipients := addNewsRecipient(recipients, ?guardian.guardian_user_id);
+                };
+              };
+              case null {};
+            };
+            if (recipients.size() > 500) return #Err("Mini-league news audience exceeds 500 members");
+          };
+        };
+        #Ok({ club_id = league.club_id; recipients })
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_get_mini_leagues(ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+    await admitAccount(caller);
+    if (ids.size() > 300) return #Err("Too many ids");
+    #Ok(await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = ids.any(func(i) = i == item.id))))
+  };
+
+  public shared ({ caller }) func read_account_list_mini_leagues_by_clubs(club_ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+    await admitAccount(caller);
+    if (club_ids.size() > 200) return #Err("Too many ids");
+    #Ok(await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id))))
+  };
+
+  public shared ({ caller }) func read_account_my_leagues() : async [Types.MiniLeague] {
+    await admitAccount(caller);
+    await this.read_account_filter_visible_leagues(caller, leagues)
+  };
+
+  public shared ({ caller }) func read_account_get_my_league_access(ids : [Text]) : async { #Ok : [{ id : Text; can_manage : Bool; can_delete : Bool; is_club_admin : Bool }]; #Err : Text } {
+    await admitAccount(caller);
+    if (ids.size() > 200) return #Err("Too many ids");
+    #Ok((await this.read_account_filter_visible_leagues(caller, leagues.filter(func(l) = ids.any(func(id) = id == l.id)))).map(func(l) = {
+      id = l.id; can_manage = isLeagueAdmin(caller, l); can_delete = isLeagueAdmin(caller, l); is_club_admin = isClubAdmin(caller, l.club_id)
+    }))
+  };
+
+  public shared ({ caller }) func read_account_get_league_members(id : Text) : async { #Ok : [{ user_id : Text; is_staff : Bool; is_parent : Bool }]; #Err : Text } {
+    await admitAccount(caller);
+    let league = switch (findLeague(id)) { case null return #Err("Mini-league not found"); case (?l) l };
+    if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+    var parentIds : [Text] = [];
+    var staffIds : [Text] = [league.created_by.toText()];
+    let add = func(ids : [Text], id : Text) : [Text] {
+      if (id == "" or ids.any(func(x) = x == id)) ids else ids.concat([id])
+    };
+    for (p in players.values()) {
+      if (p.mini_league_id == id) {
+        switch (p.parent_user_id) { case (?u) { let user = Principal.fromText(u); if (await this.read_account_verify_player_access(user, p)) parentIds := add(parentIds, u) }; case null {} };
+        switch (p.claimed_by) { case (?u) { if (await this.read_account_verify_player_access(u, p)) parentIds := add(parentIds, u.toText()) }; case null {} };
+        switch (p.child_id) {
+          case (?child) {
+            for (g in guardians.values()) { if (g.child_id == child and (await this.read_account_verify_child_guardian(g.guardian_user_id, child))) parentIds := add(parentIds, g.guardian_user_id.toText()) };
+          };
+          case null {};
+        };
+        if (parentIds.size() > 500) return #Err("League member list exceeds 500");
+      };
+    };
+    for (a in admins.values()) { if (a.mini_league_id == id) staffIds := add(staffIds, a.user_id.toText()) };
+    for (r in roles.values()) { if (r.club_id == league.club_id and (r.role == "league_admin" or r.role == "club_admin") and r.team_id == null) staffIds := add(staffIds, r.user.toText()) };
+    var all = parentIds;
+    for (u in staffIds.values()) { all := add(all, u) };
+    if (all.size() > 500) return #Err("League member list exceeds 500");
+    #Ok(all.map(func(u) = { user_id = u; is_staff = staffIds.any(func(x) = x == u); is_parent = parentIds.any(func(x) = x == u) }))
+  };
+
+  public shared ({ caller }) func read_account_list_sessions(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueSession]; #Err : Text } {
+    await admitAccount(caller);
+    switch (findLeague(mini_league_id)) {
+      case null #Err("Mini-league not found");
+      case (?league) {
+        if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+        #Ok(sessions.filter(func(item) = item.mini_league_id == mini_league_id))
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_players(mini_league_id : Text) : async { #Ok : [Types.MiniLeaguePlayer]; #Err : Text } {
+    await admitAccount(caller);
+    switch (findLeague(mini_league_id)) {
+      case null #Err("Mini-league not found");
+      case (?league) {
+        if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+        #Ok(players.filter(func(item) = item.mini_league_id == mini_league_id))
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_get_player_guardian_status(player_id : Text) : async { #Ok : Types.PlayerGuardianStatus; #Err : Text } {
+    await admitAccount(caller);
+    switch (findPlayer(player_id)) {
+      case null #Err("Player not found");
+      case (?player) {
+        switch (findLeague(player.mini_league_id)) {
+          case null #Err("Mini-league not found");
+          case (?league) {
+            if (not isLeagueAdmin(caller, league) and not (await this.read_account_verify_player_access(caller, player))) return #Err("Forbidden");
+            var guardianCount : Nat = 0;
+            var parentLinked = false;
+            switch (player.child_id) {
+              case null { parentLinked := player.parent_user_id != null or player.claimed_by != null };
+              case (?cid) {
+                var candidates : [Principal] = [];
+                switch (player.claimed_by) { case (?u) candidates := candidates.concat([u]); case null {} };
+                switch (player.parent_user_id) { case (?u) candidates := candidates.concat([Principal.fromText(u)]); case null {} };
+                for (g in guardians.values()) if (g.child_id == cid and not candidates.any(func(u) = u == g.guardian_user_id)) candidates := candidates.concat([g.guardian_user_id]);
+                for (u in candidates.values()) if (await this.read_account_verify_child_guardian(u, cid)) { guardianCount += 1; parentLinked := true };
+              };
+            };
+            let pending = not parentLinked and guardianCount == 0;
+            #Ok({ parent_linked = parentLinked; guardian_count = guardianCount; pending })
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_invites(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueInvite]; #Err : Text } {
+    await admitAccount(caller);
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) #Ok(invites.filter(func(item) = item.mini_league_id == mini_league_id));
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_group_players(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupPlayer]; #Err : Text } {
+    await admitAccount(caller);
+    switch (findGroup(group_id)) {
+      case null #Err("Group not found");
+      case (?group) {
+        switch (groupLeagueId(group)) {
+          case null #Err("Session not found");
+          case (?leagueId) {
+            switch (findLeague(leagueId)) {
+              case null #Err("Mini-league not found");
+              case (?league) {
+                if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+                #Ok(groupPlayers.filter(func(item) = item.group_id == group_id))
+              };
+            }
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_groups(session_id : Text) : async { #Ok : [Types.MiniLeagueGroup]; #Err : Text } {
+    await admitAccount(caller);
+    switch (findSession(session_id)) {
+      case null #Err("Session not found");
+      case (?session) {
+        switch (findLeague(session.mini_league_id)) {
+          case null #Err("Mini-league not found");
+          case (?league) {
+            if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+            #Ok(groups.filter(func(item) = item.session_id == session_id))
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_duties(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupDuty]; #Err : Text } {
+    await admitAccount(caller);
+    switch (findGroup(group_id)) {
+      case null #Err("Group not found");
+      case (?group) {
+        switch (groupLeagueId(group)) {
+          case null #Err("Session not found");
+          case (?leagueId) {
+            switch (findLeague(leagueId)) {
+              case null #Err("Mini-league not found");
+              case (?league) {
+                if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+                #Ok(duties.filter(func(item) = item.group_id == group_id))
+              };
+            }
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_get_availability(session_id : Text, player_id : Text) : async { #Ok : ?Types.MiniLeagueSessionAvailability; #Err : Text } {
+    await admitAccount(caller);
+    switch (findSession(session_id)) {
+      case null #Err("Session not found");
+      case (?session) {
+        switch (findLeague(session.mini_league_id)) {
+          case null #Err("Mini-league not found");
+          case (?league) {
+            if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+            #Ok(availability.find(func(item) = item.session_id == session_id and item.player_id == player_id))
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_session_availability(session_id : Text) : async { #Ok : [Types.MiniLeagueSessionAvailability]; #Err : Text } {
+    await admitAccount(caller);
+    switch (findSession(session_id)) {
+      case null #Err("Session not found");
+      case (?session) {
+        switch (findLeague(session.mini_league_id)) {
+          case null #Err("Mini-league not found");
+          case (?league) {
+            if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+            #Ok(availability.filter(func(item) = item.session_id == session_id))
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func read_account_my_availability() : async [Types.MiniLeagueSessionAvailability] {
+    await admitAccount(caller);
+    var myPlayerIds : [Text] = [];
+    for (p in players.values()) if (await this.read_account_verify_player_access(caller, p)) myPlayerIds := myPlayerIds.concat([p.id]);
+    availability.filter(func(item) = myPlayerIds.any(func(pid) = pid == item.player_id))
+  };
+
+  public shared ({ caller }) func read_account_list_admins(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueAdmin]; #Err : Text } {
+    await admitAccount(caller);
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) #Ok(admins.filter(func(item) = item.mini_league_id == mini_league_id));
+    }
+  };
+
+  public shared ({ caller }) func read_account_list_mini_league_join_links(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueJoinLink]; #Err : Text } {
+    await admitAccount(caller);
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) #Ok(joinLinks.filter(func(item) = item.mini_league_id == mini_league_id));
+    }
+  };
+};

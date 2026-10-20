@@ -51,6 +51,12 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity required"); },
+          icp: async ctx => (await import("@/live/leagueInviteTargets")).readLiveInviteTargets(ctx),
+        }, { shared: "person" });
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("team_id, club_id, role")
@@ -106,7 +112,7 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
           // round trip — no canister equivalent for that shape. ICP-routed
           // sessions see no scoped leagues rather than a partial result.
           icp: async () => [] as string[],
-        }),
+        }, { everyGroup: true, merge: (parts: string[][]) => [...new Set(parts.flat())] }),
         supabase
           .from("competition_roles")
           .select("competition_id")
@@ -193,7 +199,7 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
               },
               // Gated: same combined-query reasoning as above.
               icp: async () => ({ data: [] as any[] }),
-            })
+            }, { shared: "person" })
           : Promise.resolve({ data: [] as any[] }),
         scopedLeagueIds.length
           ? withFeatureBackend("mini_leagues", {
@@ -206,7 +212,7 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
               },
               // Gated: same combined-query reasoning as above.
               icp: async () => ({ data: [] as any[] }),
-            })
+            }, { shared: "person" })
           : Promise.resolve({ data: [] as any[] }),
         // Competitions organised by clubs the user admins (or all if app_admin)
         isAppAdmin && !icpRoutedForInvites

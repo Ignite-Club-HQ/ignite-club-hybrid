@@ -1296,7 +1296,7 @@ export default function TeamDetailPage() {
               notificationError = e instanceof Error ? e.message : String(e);
             }
           }
-        });
+        }, writeOnce({ teamId: id ?? "" }));
       }
 
       queryClient.invalidateQueries({ queryKey: ["team", id] });

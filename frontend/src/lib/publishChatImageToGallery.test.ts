@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+vi.mock("@/features/vault/clubMediaAllowance", () => ({ uploadWithinClubMediaAllowance: (_club: unknown, _bytes: unknown, upload: () => Promise<unknown>) => upload() }));
 
 const liveMocks = vi.hoisted(() => ({
   backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
@@ -55,7 +56,7 @@ vi.mock("@/integrations/supabase/client", () => {
   return {
     supabase: {
       from: (_table: string) => ({
-        select: (..._args: any[]) => makeSelectBuilder(state.lookup).select(),
+        select: (..._args: any[]) => makeSelectBuilder(_table === "teams" ? { data: { club_id: "c1" } as any, error: null } : state.lookup).select(),
         insert: (payload: any) => {
           state.insertPayload = payload;
           return makeInsertBuilder(state.insert);
@@ -250,7 +251,7 @@ describe("publishChatImageToGallery", () => {
       clubId: null,
     });
 
-    expect(state.uploaded[0].path.startsWith("teams/t1/u1/")).toBe(true);
+    expect(state.uploaded[0].path.startsWith("clubs/c1/teams/t1/u1/")).toBe(true);
     expect(state.uploaded[0].path.endsWith(".png")).toBe(true);
   });
 

@@ -3,16 +3,16 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { shouldApplyRemoteTimerState, shouldWriteLocalTimerState, type LocalEventGroupTimer } from "@/lib/eventGroupTimerGuard";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 
 const SYNC_INTERVAL = 5000; // Fallback polling interval
 
-// Event group sync (realtime channel + CAS writes) is Supabase-only. When
-// auth is ICP or the events feature is ICP-routed, this hook must not open a
-// Supabase Realtime channel or perform Supabase reads/writes — the pitch
-// board keeps working locally without cross-device sync.
+// Supabase uses realtime; canister boards use revision CAS and polling.
+// Never open Supabase channels for Internet Identity users.
 const isSupabaseEventGroupSyncDisabled = () =>
   resolveAuthBackend() === "icp" || isFeatureRoutedToIcp("events");
 const PITCH_STATE_KEY = "ignite-pitch-board-state";
@@ -47,6 +47,8 @@ export function useEventGroupSync(
 
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncedStateRef = useRef<string | null>(null);
+  const icpRevisionRef = useRef<bigint | null>(null);
+  const icpBusyRef = useRef(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const lastSignalVersionRef = useRef<number>(0);
 
@@ -67,6 +69,17 @@ export function useEventGroupSync(
     } catch {
       return { pitchState: null, timerState: null };
     }
+  }, [teamId]);
+
+  const clearCanisterState = useCallback(() => {
+    icpRevisionRef.current = null;
+    lastSyncedStateRef.current = null;
+    localStorage.removeItem(getPitchStateKeyForTeam(teamId));
+    localStorage.removeItem(getTeamTimerStorageKey(teamId));
+    for (const key of [PITCH_STATE_KEY, "pitch-board-timer-state"]) {
+      try { if (JSON.parse(localStorage.getItem(key) ?? "null")?.teamId === teamId) localStorage.removeItem(key); } catch { /* malformed global state is not this board's */ }
+    }
+    window.dispatchEvent(new CustomEvent("game-state-changed"));
   }, [teamId]);
 
   /**
@@ -93,7 +106,35 @@ export function useEventGroupSync(
    */
   const loadFromDatabase = useCallback(async (force = false) => {
     if (!actualGroupId) return;
-    if (isSupabaseEventGroupSyncDisabled()) return;
+    if (isSupabaseEventGroupSyncDisabled()) {
+      try {
+        const row = await withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: ctx => import("@/live/features/events").then(api => api.getLiveEventGroup(ctx, actualGroupId)),
+        }, { eventGroupId: actualGroupId });
+        if (!row) { clearCanisterState(); return; }
+        const changed = icpRevisionRef.current !== row.state_revision;
+        icpRevisionRef.current = row.state_revision;
+        const local = loadLocalState();
+        const pitch = row.pitch_state_json[0] ? JSON.parse(row.pitch_state_json[0]) : null;
+        const timer = row.timer_state_json[0] ? JSON.parse(row.timer_state_json[0]) : null;
+        if (pitch && (force || changed || !local.pitchState)) {
+          const value = JSON.stringify({ ...pitch, teamId });
+          localStorage.setItem(getPitchStateKeyForTeam(teamId), value);
+          localStorage.setItem(PITCH_STATE_KEY, value);
+        }
+        if (shouldApplyRemoteTimerState({ remote: timer, local: local.timerState, force }).apply) {
+          const value = JSON.stringify({ ...timer, teamId });
+          localStorage.setItem(getTeamTimerStorageKey(teamId), value);
+          localStorage.setItem("pitch-board-timer-state", value);
+        }
+        if (force) window.dispatchEvent(new CustomEvent("game-state-changed"));
+      } catch (error) {
+        if (error instanceof Error && /forbidden|not visible|not found/i.test(error.message)) clearCanisterState();
+        console.error("[EventGroupSync] Canister read failed", error);
+      }
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -147,12 +188,32 @@ export function useEventGroupSync(
     } catch (err) {
       console.error("[EventGroupSync] Load error:", err);
     }
-  }, [actualGroupId, loadLocalState, teamId]);
+  }, [actualGroupId, loadLocalState, teamId, clearCanisterState]);
 
   const syncToDatabase = useCallback(async () => {
     if (!actualGroupId) return;
     if (readOnly) return; // spectators never write
-    if (isSupabaseEventGroupSyncDisabled()) return;
+    if (isSupabaseEventGroupSyncDisabled()) {
+      if (icpBusyRef.current) return;
+      icpBusyRef.current = true;
+      try {
+        if (icpRevisionRef.current === null) { await loadFromDatabase(false); return; }
+        const { pitchState, timerState } = loadLocalState();
+        if (!pitchState && !timerState) return;
+        const hash = JSON.stringify({ pitchState, timerState });
+        if (hash === lastSyncedStateRef.current) { await loadFromDatabase(true); return; }
+        const revision = icpRevisionRef.current;
+        const row = await withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: ctx => import("@/live/features/events").then(api => api.syncLiveGroupState(ctx, actualGroupId, revision, timerState, pitchState)),
+        }, writeOnce({ eventGroupId: actualGroupId }));
+        if (row) { icpRevisionRef.current = row.state_revision; lastSyncedStateRef.current = hash; }
+      } catch (error) {
+        console.error("[EventGroupSync] Canister sync failed", error);
+        await loadFromDatabase(true);
+      } finally { icpBusyRef.current = false; }
+      return;
+    }
 
     const { pitchState, timerState } = loadLocalState();
 
@@ -271,7 +332,9 @@ export function useEventGroupSync(
     loadFromDatabase(false);
 
     // Fallback polling sync (writers only — spectators just read)
-    if (!readOnly) {
+    if (isSupabaseEventGroupSyncDisabled()) {
+      syncIntervalRef.current = setInterval(() => { if (readOnly) void loadFromDatabase(true); else void syncToDatabase(); }, SYNC_INTERVAL);
+    } else if (!readOnly) {
       syncIntervalRef.current = setInterval(syncToDatabase, SYNC_INTERVAL);
     }
     console.log("[EventGroupSync] Started sync for event group:", actualGroupId, readOnly ? "(read-only)" : "");
@@ -298,6 +361,8 @@ export function useEventGroupSync(
 
   // Auto-start sync when component mounts with an event group
   useEffect(() => {
+    icpRevisionRef.current = null;
+    lastSyncedStateRef.current = "";
     if (actualGroupId) {
       startSync();
     }

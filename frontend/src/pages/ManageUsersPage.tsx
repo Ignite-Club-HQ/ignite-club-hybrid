@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { toast } from "sonner";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -841,7 +842,7 @@ function SupabaseManageUsersPage() {
                 idempotencyKeyPrefix: `role-assign-${role}-${clubId || "none"}-${teamId || "none"}-${Date.now()}`,
               });
             },
-          });
+          }, clubId ? writeOnce({ clubId }) : teamId ? writeOnce({ teamId }) : { shared: "app" });
         } catch (e) {
           throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
         }
@@ -928,7 +929,7 @@ function SupabaseManageUsersPage() {
                 idempotencyKeyPrefix: `role-remove-${role}-${clubId || "none"}-${teamId || "none"}-${Date.now()}`,
               });
             },
-          });
+          }, clubId ? writeOnce({ clubId }) : teamId ? writeOnce({ teamId }) : { shared: "app" });
         } catch (e) {
           throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
         }
@@ -1035,7 +1036,7 @@ function SupabaseManageUsersPage() {
             relatedId: clubId,
           });
         }
-      });
+      }, writeOnce({ clubId }));
 
       // Check reward threshold
       let rewardName: string | undefined;

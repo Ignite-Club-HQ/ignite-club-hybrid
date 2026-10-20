@@ -50,4 +50,7 @@ jobs:
           PUSH_WORKER_NODE_PATH: ${{ runner.temp }}/icp-push-deps/node_modules
           ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
           FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+          # Empty retains the legacy singleton. Populate only after approved
+          # upgrades/wiring; this does not activate group routing in the app.
+          ICP_PUSH_QUEUE_IDS_JSON: ${{ vars.ICP_PUSH_QUEUE_IDS_JSON }}
         run: node scripts/icp-push-deliver.mjs

@@ -1,3 +1,4 @@
+import { acrossLists } from "@/live/featureScopes";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Trophy, Plus, ChevronRight, Inbox } from "lucide-react";
@@ -191,7 +192,7 @@ function SupabaseCompetitionsPage() {
             competition_entries: [],
           }));
         },
-      }),
+      }, acrossLists),
   });
 
   const competitions = useMemo(() => {

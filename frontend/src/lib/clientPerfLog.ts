@@ -133,7 +133,7 @@ export function maybeLogSlowFetch(opts: {
           },
         ]);
       },
-    }).catch(() => { /* swallow */ });
+    }, { shared: "app" }).catch(() => { /* swallow */ });
   } catch {
     /* swallow */
   }

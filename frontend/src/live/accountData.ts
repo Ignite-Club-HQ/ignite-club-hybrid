@@ -86,43 +86,64 @@ export async function eraseMyIcpAccount(
     throw new Error(`Identity access canister is not configured for ICP target ${target.alias}.`);
   }
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  let inventory: Awaited<ReturnType<typeof import('./accountDeletionInventory').openAccountDeletionInventory>> | undefined;
   try {
     const account = await client.whoami();
+    const [{ openAccountDeletionInventory }, domains] = await Promise.all([
+      import('./accountDeletionInventory'), import('./domains'),
+    ]);
+    inventory = await openAccountDeletionInventory(target, identity,
+      ['club_domain', 'vault_domain', 'events_domain', 'messaging_domain']);
+    if (inventory.revision !== undefined) await client.prepareAccountDeletion(account.id, inventory.revision);
     // Revoke the independent club authorization source before erasing the
     // identity profile. Partial failure is surfaced and safe to retry.
-    const { connectLiveClubDomain } = await import("./domains");
-    const { actor } = await connectLiveClubDomain(target, identity);
-    const revoked = await actor.erase_my_membership();
-    if ("Err" in revoked) throw new Error(revoked.Err);
+    for (const t of inventory.targetsFor('club_domain')) {
+      await inventory.validate();
+      const { actor } = await domains.connectLiveClubDomain(t, identity);
+      await inventory.validate();
+      const revoked = await actor.erase_my_membership();
+      if ("Err" in revoked) throw new Error(revoked.Err);
+      await inventory.validate();
+    }
     // Purge the caller's own content on each domain before erasing the
     // identity. Failures are collected and disclosed, never silently dropped.
     const purgeFailures: string[] = [];
-    for (const [label, connect] of [
-      ["vault", "connectLiveVaultDomain"],
-      ["events", "connectLiveEventsDomain"],
-      ["messaging", "connectLiveMessagingDomain"],
+    for (const [label, connect, domain] of [
+      ["vault", "connectLiveVaultDomain", "vault_domain"],
+      ["events", "connectLiveEventsDomain", "events_domain"],
+      ["messaging", "connectLiveMessagingDomain", "messaging_domain"],
     ] as const) {
+      for (const t of inventory.targetsFor(domain)) {
+      await inventory.validate();
       try {
-        const domains = await import("./domains");
-        const domainActor = (await domains[connect](target, identity)).actor as { purge_my_data: () => Promise<{ Ok?: unknown; Err?: string }> };
+        const domainActor = (await domains[connect](t, identity)).actor as { purge_my_data: () => Promise<{ Ok?: unknown; Err?: string }> };
+        await inventory.validate();
         const purged = await domainActor.purge_my_data();
         if ("Err" in purged) throw new Error(purged.Err);
       } catch (error) {
         console.error(`[account-erase] ${label} purge failed`, error);
-        purgeFailures.push(label);
+        if (!purgeFailures.includes(label)) purgeFailures.push(label);
+      }
+      // Registry failure must propagate, never become a tolerated purge failure.
+      await inventory.validate();
       }
     }
-    await client.eraseAccount(account.id);
+    await inventory.validate();
+    if (inventory.revision !== undefined) {
+      await client.commitAccountDeletion(account.id);
+      await client.settleAccountDeletion(account.id);
+    } else await client.eraseAccount(account.id);
     return {
       note:
         "Your identity_access account has been erased and club/team role access revoked. " +
-        "Your vault files, chat messages and event records have been permanently removed. " +
+        (purgeFailures.length === 0 ? "Your vault files, chat messages and event records have been permanently removed. " : "Some personal content could not be removed. ") +
         "Shared club records and parent-owned children are retained." +
         (purgeFailures.length > 0
           ? ` The ${purgeFailures.join(", ")} purge could not be completed — please contact support to finish removing that content.`
           : ""),
     };
   } finally {
+    inventory?.dispose();
     client.dispose();
   }
 }

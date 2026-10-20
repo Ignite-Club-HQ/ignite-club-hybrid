@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -82,7 +83,7 @@ export function useChatPinnedVault(
           const pin = await getLivePinnedVault(ctx, chatType, chatId);
           return pin ? livePinToRecord(pin) : null;
         },
-      });
+      }, clubIdOpt ? { clubId: clubIdOpt } : { conversationId: chatId });
     },
     staleTime: 60 * 1000,
     refetchInterval: isIcp && subscribeOpt ? 30000 : false,
@@ -146,7 +147,7 @@ export function useChatPinnedVault(
             enabled: input.enabled ?? false,
           });
         },
-      });
+      }, writeOnce(clubIdOpt ? { clubId: clubIdOpt } : { conversationId: chatId }));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: pinnedVaultKey(chatType, chatId ?? "") });
@@ -181,7 +182,7 @@ export function useChatPinnedVault(
             enabled,
           });
         },
-      });
+      }, writeOnce(clubIdOpt ? { clubId: clubIdOpt } : { conversationId: chatId }));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: pinnedVaultKey(chatType, chatId ?? "") });
@@ -206,7 +207,7 @@ export function useChatPinnedVault(
         icp: async (ctx) => {
           await clearLivePinnedVault(ctx, chatType, chatId);
         },
-      });
+      }, writeOnce(clubIdOpt ? { clubId: clubIdOpt } : { conversationId: chatId }));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: pinnedVaultKey(chatType, chatId ?? "") });

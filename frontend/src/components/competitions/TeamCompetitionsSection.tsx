@@ -1,3 +1,5 @@
+import { acrossLists } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -80,7 +82,7 @@ export default function TeamCompetitionsSection({ teamId, canManage }: Props) {
               }),
           );
         },
-      }),
+      }, acrossLists),
   });
 
   const respond = async (entryId: string, status: "accepted" | "declined") => {
@@ -99,7 +101,7 @@ export default function TeamCompetitionsSection({ teamId, canManage }: Props) {
           const [competitionId, entryTeamId] = entryId.split(":");
           await respondLiveEntryInvite(ctx, competitionId, entryTeamId, status === "accepted");
         },
-      });
+      }, writeOnce({ competitionId: entryId.split(":")[0] }));
     } catch (err: any) {
       setRespondingId(null);
       toast({ title: "Could not respond", description: err.message, variant: "destructive" });

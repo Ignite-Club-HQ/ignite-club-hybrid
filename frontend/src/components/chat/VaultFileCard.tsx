@@ -88,7 +88,7 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
           const team = (f as { team?: string[] }).team;
           return { id: f.id, name: f.name, club_id: f.club, team_id: team?.[0] ?? null };
         },
-      });
+      }, { vaultFolderId: folderId });
     },
     enabled: !!folderId,
     staleTime: 60 * 1000,
@@ -127,7 +127,7 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
             deleted_at: null,
           };
         },
-      });
+      }, { vaultFileId: fileId });
     },
     enabled: !!fileId,
     staleTime: 60 * 1000,

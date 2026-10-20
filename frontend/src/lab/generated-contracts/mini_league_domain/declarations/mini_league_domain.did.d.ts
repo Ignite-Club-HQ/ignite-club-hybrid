@@ -38,6 +38,7 @@ export interface Main {
     { 'Ok' : MiniLeagueGroupPlayer } |
       { 'Err' : string }
   >,
+  'can_read_league_matches' : ActorMethod<[Principal, string, string], boolean>,
   'cancel_session' : ActorMethod<
     [string],
     { 'Ok' : MiniLeagueSession } |
@@ -131,6 +132,10 @@ export interface Main {
     { 'Ok' : Uint8Array } |
       { 'Err' : string }
   >,
+  'filter_visible_leagues' : ActorMethod<
+    [Principal, Array<MiniLeague>],
+    Array<MiniLeague>
+  >,
   'get_availability' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [MiniLeagueSessionAvailability] } |
@@ -139,6 +144,15 @@ export interface Main {
   'get_join_link_by_token' : ActorMethod<
     [string],
     { 'Ok' : MiniLeagueJoinLink } |
+      { 'Err' : string }
+  >,
+  'get_league_members' : ActorMethod<
+    [string],
+    {
+        'Ok' : Array<
+          { 'user_id' : string, 'is_parent' : boolean, 'is_staff' : boolean }
+        >
+      } |
       { 'Err' : string }
   >,
   'get_mini_league' : ActorMethod<
@@ -151,6 +165,20 @@ export interface Main {
     { 'Ok' : Array<MiniLeague> } |
       { 'Err' : string }
   >,
+  'get_my_league_access' : ActorMethod<
+    [Array<string>],
+    {
+        'Ok' : Array<
+          {
+            'id' : string,
+            'can_manage' : boolean,
+            'is_club_admin' : boolean,
+            'can_delete' : boolean,
+          }
+        >
+      } |
+      { 'Err' : string }
+  >,
   'get_news_audience' : ActorMethod<
     [string, Principal],
     { 'Ok' : MiniLeagueNewsAudience } |
@@ -159,6 +187,22 @@ export interface Main {
   'get_player_guardian_status' : ActorMethod<
     [string],
     { 'Ok' : PlayerGuardianStatus } |
+      { 'Err' : string }
+  >,
+  'get_player_invite_preview' : ActorMethod<
+    [string],
+    {
+        'Ok' : [] | [
+          {
+            'status' : string,
+            'token' : string,
+            'mini_league_id' : string,
+            'player_name' : [] | [string],
+            'league_name' : string,
+            'club_id' : string,
+          }
+        ]
+      } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -244,6 +288,137 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_account_can_read_league_matches' : ActorMethod<
+    [Principal, string, string],
+    boolean
+  >,
+  'read_account_filter_visible_leagues' : ActorMethod<
+    [Principal, Array<MiniLeague>],
+    Array<MiniLeague>
+  >,
+  'read_account_get_availability' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [MiniLeagueSessionAvailability] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_league_members' : ActorMethod<
+    [string],
+    {
+        'Ok' : Array<
+          { 'user_id' : string, 'is_parent' : boolean, 'is_staff' : boolean }
+        >
+      } |
+      { 'Err' : string }
+  >,
+  'read_account_get_mini_league' : ActorMethod<
+    [string],
+    { 'Ok' : MiniLeague } |
+      { 'Err' : string }
+  >,
+  'read_account_get_mini_leagues' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<MiniLeague> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_my_league_access' : ActorMethod<
+    [Array<string>],
+    {
+        'Ok' : Array<
+          {
+            'id' : string,
+            'can_manage' : boolean,
+            'is_club_admin' : boolean,
+            'can_delete' : boolean,
+          }
+        >
+      } |
+      { 'Err' : string }
+  >,
+  'read_account_get_news_audience' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : MiniLeagueNewsAudience } |
+      { 'Err' : string }
+  >,
+  'read_account_get_player_guardian_status' : ActorMethod<
+    [string],
+    { 'Ok' : PlayerGuardianStatus } |
+      { 'Err' : string }
+  >,
+  'read_account_list_admins' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueAdmin> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_duties' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueGroupDuty> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_group_players' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueGroupPlayer> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_groups' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueGroup> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_invites' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueInvite> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_mini_league_join_links' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueJoinLink> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_mini_leagues_by_club' : ActorMethod<
+    [string],
+    Array<MiniLeague>
+  >,
+  'read_account_list_mini_leagues_by_clubs' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<MiniLeague> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_players' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeaguePlayer> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_session_availability' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueSessionAvailability> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_sessions' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueSession> } |
+      { 'Err' : string }
+  >,
+  'read_account_my_availability' : ActorMethod<
+    [],
+    Array<MiniLeagueSessionAvailability>
+  >,
+  'read_account_my_leagues' : ActorMethod<[], Array<MiniLeague>>,
+  'read_account_verify_child_guardian' : ActorMethod<
+    [Principal, string],
+    boolean
+  >,
+  'read_account_verify_league_access' : ActorMethod<
+    [Principal, MiniLeague],
+    boolean
+  >,
+  'read_account_verify_player_access' : ActorMethod<
+    [Principal, MiniLeaguePlayer],
+    boolean
+  >,
+  'read_can_read_league_matches' : ActorMethod<
+    [Principal, string, string],
+    boolean
+  >,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
@@ -271,6 +446,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_events_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -339,6 +519,9 @@ export interface Main {
     { 'Ok' : MiniLeagueSession } |
       { 'Err' : string }
   >,
+  'verify_child_guardian' : ActorMethod<[Principal, string], boolean>,
+  'verify_league_access' : ActorMethod<[Principal, MiniLeague], boolean>,
+  'verify_player_access' : ActorMethod<[Principal, MiniLeaguePlayer], boolean>,
 }
 export interface MiniLeague {
   'id' : string,

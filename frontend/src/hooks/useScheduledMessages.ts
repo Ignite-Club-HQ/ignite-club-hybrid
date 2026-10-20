@@ -1,3 +1,5 @@
+import { scheduleTargetScope, acrossLists } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import {
   keepPreviousData,
   useMutation,
@@ -176,7 +178,7 @@ export function useThreadScheduledMessages(target: ScheduleTarget | null) {
             .sort((a, b) => a.scheduledForMs - b.scheduledForMs)
             .map(rowFromLiveScheduledMessage);
         },
-      });
+      }, scheduleTargetScope(target));
     },
     enabled: !!user?.id && !!target,
     staleTime: 30 * 1000,
@@ -230,7 +232,7 @@ export function useAllScheduledMessages(statuses: ScheduledMessageStatus[] = ["p
             .sort((a, b) => a.scheduledForMs - b.scheduledForMs)
             .map(rowFromLiveScheduledMessage);
         },
-      });
+      }, acrossLists);
     },
     enabled: !!user?.id,
     staleTime: 30 * 1000,
@@ -322,7 +324,7 @@ export function useCreateScheduledMessage() {
           });
           return rowFromLiveScheduledMessage(row);
         },
-      });
+      }, writeOnce(scheduleTargetScope(input)));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-messages-thread"] });
@@ -372,7 +374,7 @@ export function useUpdateScheduledMessage() {
           });
           return rowFromLiveScheduledMessage(row);
         },
-      });
+      }, writeOnce({ scheduledMessageId: input.id }));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-messages-thread"] });
@@ -395,7 +397,7 @@ export function useCancelScheduledMessage() {
           const author = ctx.identity.getPrincipal().toText();
           await cancelLiveScheduledMessage(ctx, id, author);
         },
-      });
+      }, writeOnce({ scheduledMessageId: id }));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-messages-thread"] });

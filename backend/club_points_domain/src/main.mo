@@ -1,3 +1,4 @@
+import AccountAdmission "../../shared/AccountAdmission";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -15,6 +16,18 @@ import Types "types";
 import RewardRoleMirror "rewardRoleMirror";
 
 persistent actor class Main(governorInit : Principal) {
+  // Local rehearsal only. Eligibility never grants resource permissions.
+  transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
+  transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
+    case (?id) ?Principal.fromText(id); case null null
+  };
+  transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  func admitAccount(subject : Principal) : async () {
+    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+  };
+  func denyLegacyAccountQuery() {
+    if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
+  };
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -142,9 +155,11 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubDomainCanister) {
       case null #Err("Club membership service is not configured");
       case (?cid) {
-        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
+        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)]; read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
         try {
-          let fresh = await cd.list_user_club_roles(caller, club_id);
+          let fresh = if (accountAdmissionEnabled) await cd.read_account_list_user_club_roles(caller, club_id) else await cd.list_user_club_roles(caller, club_id);
+          await admitAccount(caller);
+          if (clubDomainCanister != ?cid or isFenced(club_id)) return #Err("Reward authority changed");
           roles := RewardRoleMirror.replace(roles, caller, club_id, fresh);
           #Ok
         } catch (_) { #Err("Could not verify club membership. Please try again.") };
@@ -153,6 +168,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func refresh_club_roles(club_id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
@@ -217,6 +233,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");
     if (not roles.any(func(item) = item.user.equal(principal) and item.role == role and item.club_id == club_id and item.team_id == team_id)) {
@@ -248,6 +265,7 @@ persistent actor class Main(governorInit : Principal) {
     season_id : ?Text,
     daily_cap : ?Nat32,
   ) : async { #Ok : Types.PointsHistoryEntry; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(action_type) or not valid(scope_id) or not validDesc(description) or amount == 0) return #Err("Invalid award");
@@ -308,6 +326,7 @@ persistent actor class Main(governorInit : Principal) {
     source_id : ?Text,
     season_id : ?Text,
   ) : async { #Ok : Types.PointsHistoryEntry; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(action_type) or not valid(scope_id) or not validDesc(description) or amount == 0) return #Err("Invalid award");
@@ -329,6 +348,7 @@ persistent actor class Main(governorInit : Principal) {
   // get_engagement_streak RPC. Engagement sources mirror the frontend's
   // ENGAGEMENT_SOURCE_TYPES set.
   public query ({ caller }) func get_engagement_streak(club_id : Text, user_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not canReadSubject(caller, club_id, #User(user_id))) return #Err("Forbidden");
     var days : [Nat64] = [];
     for (item in pointsHistory.values()) {
@@ -360,6 +380,7 @@ persistent actor class Main(governorInit : Principal) {
   // display name drive UI rendering for everyone) — mirrors the public
   // select policies on club_subscriptions/clubs.
   public query ({ caller }) func get_club_points_settings(club_id : Text) : async { #Ok : ?Types.ClubPointsSettings; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubMember(caller, club_id)) return #Err("Club membership required");
     #Ok(clubPointsSettings.find(func(item) = item.club_id == club_id))
   };
@@ -371,6 +392,7 @@ persistent actor class Main(governorInit : Principal) {
     points_icon_url : ?Text,
     disable_team_pom_rewards : Bool,
   ) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
@@ -389,11 +411,13 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------------------------------------------------------------
 
   public query ({ caller }) func get_user_points(club_id : Text, user_id : Text) : async { #Ok : Int32; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not canReadSubject(caller, club_id, #User(user_id))) return #Err("Forbidden");
     #Ok(findUserPoints(club_id, user_id))
   };
 
   public query ({ caller }) func get_child_points(club_id : Text, child_id : Text) : async { #Ok : Int32; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not canReadSubject(caller, club_id, #Child(child_id))) return #Err("Forbidden");
     #Ok(findChildPoints(club_id, child_id))
   };
@@ -404,6 +428,7 @@ persistent actor class Main(governorInit : Principal) {
   // sees balances they could already read one at a time — no new visibility.
 
   public query ({ caller }) func get_user_points_all_clubs(user_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     #Ok(userClubPoints
       .filter(func(item) = item.user_id == user_id and canReadSubject(caller, item.club_id, #User(user_id)))
@@ -411,6 +436,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_child_points_all_clubs(child_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     #Ok(childClubPoints
       .filter(func(item) = item.child_id == child_id and canReadSubject(caller, item.club_id, #Child(child_id)))
@@ -418,6 +444,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func get_child_points_batch(club_id : Text, child_ids : [Text]) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    denyLegacyAccountQuery();
     auth(caller);
     if (child_ids.size() > 500) return #Err("At most 500 child ids per batch");
     #Ok(childClubPoints
@@ -442,6 +469,7 @@ persistent actor class Main(governorInit : Principal) {
   // role grant in the club); opted-out members are filtered by the caller
   // (profiles.leaderboard_opt_out has no canister-side mirror here).
   public query ({ caller }) func get_leaderboard(club_id : Text, subjectKind : { #User; #Child }, window : Text, top_n : Nat) : async { #Ok : [LeaderboardEntry]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubMember(caller, club_id)) return #Err("Forbidden");
     let start = windowStartMs(window, nowMs());
     let relevant = pointsHistory.filter(func(item) = item.club_id == club_id and item.created_at_ms >= start);
@@ -476,6 +504,7 @@ persistent actor class Main(governorInit : Principal) {
   public type HistoryPage = { items : [Types.PointsHistoryEntry]; total : Nat };
 
   public query ({ caller }) func list_points_history(club_id : Text, subject : ?Types.Subject, offset : Nat, limit : Nat) : async { #Ok : HistoryPage; #Err : Text } {
+    denyLegacyAccountQuery();
     let allowed = switch (subject) {
       case (?s) canReadSubject(caller, club_id, s);
       case null isClubAdminOrCoach(caller, club_id);
@@ -506,6 +535,7 @@ persistent actor class Main(governorInit : Principal) {
     is_default : Bool, reward_type : Text, logo_url : ?Text, show_qr_code : Bool,
     sponsor_id : ?Text, team_id : ?Text,
   ) : async { #Ok : Types.ClubReward; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not valid(reward_type)) return #Err("Invalid reward");
@@ -527,6 +557,7 @@ persistent actor class Main(governorInit : Principal) {
     is_default : Bool, is_active : Bool, reward_type : Text, logo_url : ?Text,
     qr_code_url : ?Text, show_qr_code : Bool, sponsor_id : ?Text, team_id : ?Text,
   ) : async { #Ok : Types.ClubReward; #Err : Text } {
+    await admitAccount(caller);
     auth(caller);
     switch (clubRewards.find(func(item) = item.id == id)) {
       case null #Err("Reward not found");
@@ -542,6 +573,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func delete_reward(id : Text) : async { #Ok; #Err : Text } {
+    await admitAccount(caller);
     if (rewardFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (clubRewards.find(func(item) = item.id == id)) {
@@ -556,6 +588,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_rewards(club_id : Text, team_id : ?Text, active_only : Bool) : async { #Ok : [Types.ClubReward]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not isClubMember(caller, club_id)) return #Err("Forbidden");
     #Ok(clubRewards.filter(func(item) =
       item.club_id == club_id
@@ -575,6 +608,7 @@ persistent actor class Main(governorInit : Principal) {
   // "pending" pending admin verification (verified_by/verified_at/redeemed_at
   // mirror the Supabase columns).
   public shared ({ caller }) func redeem_reward(club_id : Text, subject : Types.Subject, reward_id : Text, idempotency_key : ?Text) : async { #Ok : Types.RewardRedemption; #Err : Text } {
+    await admitAccount(caller);
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     let selfOk = switch (subject) {
@@ -634,6 +668,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func approve_redemption(id : Text) : async { #Ok : Types.RewardRedemption; #Err : Text } {
+    await admitAccount(caller);
     if (redemptionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireRedemptionAdmin(caller, id)) {
@@ -648,6 +683,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func fulfill_redemption(id : Text) : async { #Ok : Types.RewardRedemption; #Err : Text } {
+    await admitAccount(caller);
     if (redemptionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireRedemptionAdmin(caller, id)) {
@@ -665,6 +701,7 @@ persistent actor class Main(governorInit : Principal) {
   // Cancelling refunds the spent points back to the subject's balance and
   // logs a compensating positive points_history entry.
   public shared ({ caller }) func cancel_redemption(id : Text) : async { #Ok : Types.RewardRedemption; #Err : Text } {
+    await admitAccount(caller);
     if (redemptionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireRedemptionAdmin(caller, id)) {
@@ -693,6 +730,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public query ({ caller }) func list_redemptions(club_id : Text, subject : ?Types.Subject) : async { #Ok : [Types.RewardRedemption]; #Err : Text } {
+    denyLegacyAccountQuery();
     let isAdmin = isClubAdminOrCoach(caller, club_id);
     switch (subject) {
       case null { if (not isAdmin) return #Err("Forbidden") };
@@ -834,4 +872,154 @@ persistent actor class Main(governorInit : Principal) {
     #ok(changed)
   };
 
+
+
+  // Additive protected consensus reads; live UI rollout is a separate release gate.
+  public shared ({ caller }) func read_account_get_engagement_streak(club_id : Text, user_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    await admitAccount(caller);
+    if (not canReadSubject(caller, club_id, #User(user_id))) return #Err("Forbidden");
+    var days : [Nat64] = [];
+    for (item in pointsHistory.values()) {
+      if (item.club_id == club_id and item.user_id == ?user_id and
+          (item.source_type == "chat_engagement" or item.source_type == "photo_upload" or item.source_type == "photo_comment")) {
+        let d = item.created_at_ms / 86_400_000;
+        if (not days.any(func(x) = x == d)) { days := days.concat([d]) };
+      };
+    };
+    var cursor = nowMs() / 86_400_000;
+    if (not days.any(func(x) = x == cursor)) {
+      if (cursor == 0) return #Ok(0);
+      cursor -= 1;
+    };
+    var streak : Nat32 = 0;
+    while (days.any(func(x) = x == cursor)) {
+      streak += 1;
+      if (cursor == 0) return #Ok(streak);
+      cursor -= 1;
+    };
+    #Ok(streak)
+  };
+
+  public shared ({ caller }) func read_account_get_club_points_settings(club_id : Text) : async { #Ok : ?Types.ClubPointsSettings; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubMember(caller, club_id)) return #Err("Club membership required");
+    #Ok(clubPointsSettings.find(func(item) = item.club_id == club_id))
+  };
+
+  public shared ({ caller }) func read_account_get_user_points(club_id : Text, user_id : Text) : async { #Ok : Int32; #Err : Text } {
+    await admitAccount(caller);
+    if (not canReadSubject(caller, club_id, #User(user_id))) return #Err("Forbidden");
+    #Ok(findUserPoints(club_id, user_id))
+  };
+
+  public shared ({ caller }) func read_account_get_child_points(club_id : Text, child_id : Text) : async { #Ok : Int32; #Err : Text } {
+    await admitAccount(caller);
+    if (not canReadSubject(caller, club_id, #Child(child_id))) return #Err("Forbidden");
+    #Ok(findChildPoints(club_id, child_id))
+  };
+
+  public shared ({ caller }) func read_account_get_user_points_all_clubs(user_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    #Ok(userClubPoints
+      .filter(func(item) = item.user_id == user_id and canReadSubject(caller, item.club_id, #User(user_id)))
+      .map(func(item) = (item.club_id, item.points)))
+  };
+
+  public shared ({ caller }) func read_account_get_child_points_all_clubs(child_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    #Ok(childClubPoints
+      .filter(func(item) = item.child_id == child_id and canReadSubject(caller, item.club_id, #Child(child_id)))
+      .map(func(item) = (item.club_id, item.points)))
+  };
+
+  public shared ({ caller }) func read_account_get_child_points_batch(club_id : Text, child_ids : [Text]) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    await admitAccount(caller);
+    auth(caller);
+    if (child_ids.size() > 500) return #Err("At most 500 child ids per batch");
+    #Ok(childClubPoints
+      .filter(func(item) = item.club_id == club_id and child_ids.any(func(id) = id == item.child_id) and canReadSubject(caller, club_id, #Child(item.child_id)))
+      .map(func(item) = (item.child_id, item.points)))
+  };
+
+  public shared ({ caller }) func read_account_get_leaderboard(club_id : Text, subjectKind : { #User; #Child }, window : Text, top_n : Nat) : async { #Ok : [LeaderboardEntry]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubMember(caller, club_id)) return #Err("Forbidden");
+    let start = windowStartMs(window, nowMs());
+    let relevant = pointsHistory.filter(func(item) = item.club_id == club_id and item.created_at_ms >= start);
+    var ids : [Text] = [];
+    var totals : [Int32] = [];
+    for (item in relevant.values()) {
+      let idOpt : ?Text = switch (subjectKind, item.user_id, item.child_id) {
+        case (#User, ?uid, _) ?uid;
+        case (#Child, _, ?cid) ?cid;
+        case (_, _, _) null;
+      };
+      switch (idOpt) {
+        case null {};
+        case (?id) {
+          switch (ids.findIndex(func(x) = x == id)) {
+            case (?index) { totals := Array.tabulate<Int32>(totals.size(), func(i) = if (i == index) totals[i] + item.amount else totals[i]) };
+            case null { ids := ids.concat([id]); totals := totals.concat([item.amount]) };
+          };
+        };
+      };
+    };
+    var entries = Array.tabulate<LeaderboardEntry>(ids.size(), func(i) = { subject_id = ids[i]; points = totals[i] });
+    entries := entries.sort(func(a, b) = Int32.compare(b.points, a.points));
+    let limit = Nat.min(top_n, entries.size());
+    #Ok(Array.tabulate<LeaderboardEntry>(limit, func(i) = entries[i]))
+  };
+
+  public shared ({ caller }) func read_account_list_points_history(club_id : Text, subject : ?Types.Subject, offset : Nat, limit : Nat) : async { #Ok : HistoryPage; #Err : Text } {
+    await admitAccount(caller);
+    let allowed = switch (subject) {
+      case (?s) canReadSubject(caller, club_id, s);
+      case null isClubAdminOrCoach(caller, club_id);
+    };
+    if (not allowed) return #Err("Forbidden");
+    let matches = pointsHistory.filter(func(item) =
+      item.club_id == club_id and (
+        switch (subject) {
+          case null true;
+          case (?(#User(uid))) item.user_id == ?uid;
+          case (?(#Child(cid))) item.child_id == ?cid;
+        }
+      )
+    );
+    let sorted = matches.sort(func(a, b) = Nat64.compare(b.created_at_ms, a.created_at_ms));
+    let total = sorted.size();
+    if (offset >= total) return #Ok({ items = []; total });
+    let count = Nat.min(limit, total - offset);
+    #Ok({ items = Array.tabulate<Types.PointsHistoryEntry>(count, func(i) = sorted[offset + i]); total })
+  };
+
+  public shared ({ caller }) func read_account_list_rewards(club_id : Text, team_id : ?Text, active_only : Bool) : async { #Ok : [Types.ClubReward]; #Err : Text } {
+    await admitAccount(caller);
+    if (not isClubMember(caller, club_id)) return #Err("Forbidden");
+    #Ok(clubRewards.filter(func(item) =
+      item.club_id == club_id
+        and (team_id == null or item.team_id == null or item.team_id == team_id)
+        and (not active_only or item.is_active)
+    ))
+  };
+
+  public shared ({ caller }) func read_account_list_redemptions(club_id : Text, subject : ?Types.Subject) : async { #Ok : [Types.RewardRedemption]; #Err : Text } {
+    await admitAccount(caller);
+    let isAdmin = isClubAdminOrCoach(caller, club_id);
+    switch (subject) {
+      case null { if (not isAdmin) return #Err("Forbidden") };
+      case (?s) { if (not isAdmin and not canReadSubject(caller, club_id, s)) return #Err("Forbidden") };
+    };
+    #Ok(redemptions.filter(func(item) =
+      item.club_id == club_id and (
+        switch (subject) {
+          case null true;
+          case (?(#User(uid))) item.user_id == ?uid;
+          case (?(#Child(cid))) item.child_id == ?cid;
+        }
+      )
+    ))
+  };
 };

@@ -35,7 +35,7 @@ export function useNewsAudienceTargets(clubId: string | null) {
               name: c.name,
               organizer_club_id: c.club_id,
             })),
-        }),
+        }, { clubId: clubId ?? "" }),
       );
       const miniLeagues = await safe<Option>(() =>
         withFeatureBackend("mini_leagues", {
@@ -48,7 +48,7 @@ export function useNewsAudienceTargets(clubId: string | null) {
               id: m.id,
               name: m.name,
             })),
-        }),
+        }, { clubId: clubId ?? "" }),
       );
       return { competitions, miniLeagues };
     },

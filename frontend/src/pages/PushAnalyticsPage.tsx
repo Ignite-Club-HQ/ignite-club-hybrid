@@ -199,7 +199,7 @@ function SupabasePushAnalyticsPage() {
           if (!localSettings) setLocalSettings(settings);
           return settings;
         },
-      });
+      }, { shared: "person" });
     },
     enabled: isAdmin === true,
   });
@@ -230,7 +230,7 @@ function SupabasePushAnalyticsPage() {
             missed_notifications: 0,
           };
         },
-      });
+      }, { shared: "person" });
       if (icpHealth) return icpHealth;
       const { data, error } = await supabase.rpc("get_push_notification_health");
       if (error) throw error;
@@ -280,7 +280,7 @@ function SupabasePushAnalyticsPage() {
           };
           await upsertLivePushAlertSettings(ctx, merged);
         },
-      });
+      }, { shared: "person" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["push-alert-settings"] });
@@ -343,7 +343,7 @@ function SupabasePushAnalyticsPage() {
           const removed = await cleanupLiveStaleDeviceTokens(ctx, Date.now(), 60 * 24 * 60 * 60 * 1000);
           return { subscriptions_removed: removed };
         },
-      });
+      }, { shared: "person" });
       
       toast({
         title: "Cleanup Complete",

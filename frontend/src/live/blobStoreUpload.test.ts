@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
-  begin_upload: vi.fn(), put_chunk: vi.fn(), finalize_upload: vi.fn(), abort_upload: vi.fn(),
+  begin_upload: vi.fn(), put_chunk: vi.fn(), finalize_upload: vi.fn(), abort_upload: vi.fn(), get_club_media_bytes: vi.fn(),
 }));
 vi.mock("./icpAgent", () => ({ createLiveActor: vi.fn(async () => ({ actor: mocks, canisterId: { toText: () => "store" } })) }));
 vi.mock("./mediaStorage", () => ({
@@ -47,5 +47,18 @@ describe("recoverable shared-quota uploads", () => {
     await expect(uploadBytesToBlobStore(target, identity, path, bytes, "image/jpeg")).rejects.toThrow("chunk failed");
     expect(mocks.abort_upload).toHaveBeenCalledWith("upload-1");
     expect(mocks.finalize_upload).not.toHaveBeenCalled();
+  });
+});
+describe("Pro media allowance", () => {
+  it("maps a full club media allowance to a friendly message", async () => {
+    const { freeLimitMessage } = await import("./blobStoreUpload");
+    expect(freeLimitMessage(new Error("Begin blob upload: StorageAllowanceFull"))).toMatch(/used all of its storage/);
+    expect(freeLimitMessage(new Error("StorageAllowanceUnavailable"))).toMatch(/couldn't check/);
+  });
+  it("sums finalized and pending club media bytes from the store", async () => {
+    const { getLiveClubMediaBytes } = await import("./blobStoreUpload");
+    mocks.get_club_media_bytes.mockResolvedValue({ finalized: 10n, pending: 2n });
+    await expect(getLiveClubMediaBytes(target, identity, "club-a")).resolves.toEqual({ finalized: 10, pending: 2 });
+    expect(mocks.get_club_media_bytes).toHaveBeenCalledWith("club-a");
   });
 });

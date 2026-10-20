@@ -1,6 +1,7 @@
 import { connectLiveNotificationQueue } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { unwrapCandid, unwrapCandidOpt } from "./candid";
+import { notificationRecipients } from '../notificationRecipients';
 
 /**
  * Notifications feature -> notification_queue canister.
@@ -61,7 +62,7 @@ export async function fanOutLiveNotifications(
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandid(
     actor.fan_out(
-      input.userIds,
+      notificationRecipients(input.userIds),
       input.clubId,
       input.kind,
       input.body,
@@ -112,6 +113,7 @@ export async function markAllLiveNotificationsRead(
   userId: string,
   clubId: string | null,
 ) {
+  if (await mutateOwnedInbox(userId, clubId, 'read')) return;
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandid(
     actor.mark_all_read(userId, clubId ? [clubId] : []),
@@ -129,11 +131,34 @@ export async function clearLiveInbox(
   userId: string,
   clubId: string | null,
 ) {
+  if (await mutateOwnedInbox(userId, clubId, 'delete')) return;
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandid(
     actor.clear_inbox(userId, clubId ? [clubId] : []),
     "Clear inbox",
   );
+}
+
+async function mutateOwnedInbox(userId: string, clubId: string | null, action: 'read' | 'delete'): Promise<boolean> {
+  const { activationStatus, SHIPPED_GATES } = await import('../groupActivation');
+  if (!activationStatus(SHIPPED_GATES).active) return false;
+  const { withFeatureBackend } = await import('../featureRouter');
+  const { acrossLists } = await import('../featureScopes');
+  const { writeOnce } = await import('../clubScope');
+  const rows = await withFeatureBackend('notifications', {
+    supabase: async () => { throw new Error('ICP inbox required'); },
+    icp: ctx => listLiveInbox(ctx, userId, clubId, 500),
+  }, acrossLists);
+  const selected = rows.filter(row => action === 'delete' || !row.read);
+  // Each ID resolves its actual queue and executes once. Failed writes never
+  // become blanket success; callers refetch after partial completion.
+  const results = await Promise.allSettled(selected.map(row => withFeatureBackend('notifications', {
+    supabase: async () => { throw new Error('ICP inbox required'); },
+    icp: ctx => action === 'read' ? markLiveNotificationRead(ctx, row.id) : deleteLiveNotification(ctx, row.id),
+  }, writeOnce({ notificationId: row.id }))));
+  const failed = results.filter(r => r.status === 'rejected').length;
+  if (failed) throw new Error(`${failed} notification actions failed; refresh and retry remaining items`);
+  return true;
 }
 
 // ---------------------------------------------------------------------------

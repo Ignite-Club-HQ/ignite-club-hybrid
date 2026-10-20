@@ -1,3 +1,4 @@
+import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { mergeMemberships } from "@/live/membershipMerge";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
@@ -56,6 +57,7 @@ import { ScheduleDateStrip } from "@/components/events/ScheduleDateStrip";
 import { ClubDaySummary } from "@/components/events/ClubDaySummary";
 import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
 import { fetchViewableCompetitionMatchIds, makeCompetitionFixtureVisibility } from "@/features/events/competitionFixtureVisibility";
+import { readScheduleEvents } from "@/features/events/scheduleReadRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { getLiveAccountRosterScope, listLiveEventDutyTeams, listLiveEvents } from "@/live/features/events";
@@ -527,7 +529,7 @@ export default function EventsPage() {
             const leagues = await listMyLiveMiniLeagues(ctx);
             return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
           },
-        }),
+        }, { everyGroup: true, merge: (parts) => ({ data: [...new Map(parts.flatMap(p => p.data ?? []).map(r => [r.mini_league_id, r])).values()], error: null }) }),
         withFeatureBackend<{ data: { mini_league_id: string }[] | null; error: any }>("mini_leagues", {
           supabase: async () =>
             supabase
@@ -535,7 +537,7 @@ export default function EventsPage() {
               .select("mini_league_id")
               .eq("user_id", user!.id),
           icp: async () => ({ data: [] as { mini_league_id: string }[], error: null as any }),
-        }),
+        }, { shared: "person" }),
         leagueAdminClubIds.size > 0
           ? withFeatureBackend<{ data: { id: string }[] | null; error: any }>("mini_leagues", {
               supabase: async () =>
@@ -546,12 +548,12 @@ export default function EventsPage() {
               icp: async (ctx) => {
                 const leagues = (
                   await Promise.all(
-                    Array.from(leagueAdminClubIds).map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)),
+                    Array.from(leagueAdminClubIds).map((clubId) => readMiniLeagueInScope(ctx, { clubId }, scoped => listLiveMiniLeaguesByClub(scoped, clubId))),
                   )
                 ).flat();
                 return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
               },
-            })
+            }, { shared: "person" })
           : Promise.resolve({ data: [], error: null } as any),
       ]);
       diagLog("memberships:mini_leagues", {
@@ -681,14 +683,14 @@ export default function EventsPage() {
           return data || [];
         },
         icp: async (ctx) => {
-          const leagues = await Promise.all(ids.map((leagueId) => getLiveMiniLeague(ctx, leagueId).catch(() => null)));
+          const leagues = await Promise.all(ids.map((leagueId) => readMiniLeagueInScope(ctx, { miniLeagueId: leagueId }, scoped => getLiveMiniLeague(scoped, leagueId))));
           return leagues
             .filter((l): l is NonNullable<typeof l> => !!l)
             .filter((l) => !clubFilter || l.club_id === clubFilter)
             .map((l) => ({ id: l.id, name: l.name, club_id: l.club_id }))
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      });
+      }, { shared: "person" });
     },
     enabled: (!!user || useIcpLab) && !!userMemberships,
     staleTime: 30 * 60 * 1000,
@@ -940,60 +942,27 @@ export default function EventsPage() {
       const upperBound = new Date();
       upperBound.setDate(upperBound.getDate() + upperDays);
 
-      let query = supabase
-        .from("events")
-        .select(`
-          id,
-          title,
-          type,
-          event_date,
-          start_time,
-          end_time,
-          description,
-          address,
-          suburb,
-          state,
-          postcode,
-          location_name,
-          club_id,
-          team_id,
-          competition_match_id,
-          mini_league_id,
-          target_team_ids,
-          is_cancelled,
-          is_bye,
-          is_recurring,
-          parent_event_id,
-          opponent,
-          arrival_minutes_before,
-          duty_team_id,
-          rsvp_audience,
-          adults_only,
-          updated_at,
-          teams (name, default_match_arrival_minutes, default_rsvp_audience),
-          clubs!club_id (name, sport)
-
-        `)
-        .gte("event_date", thirtyDaysAgo.toISOString().split('T')[0])
-        .lte("event_date", upperBound.toISOString().split('T')[0])
-        .order("event_date", { ascending: true });
-
       // teamFilter may encode either a real team id or a mini-league id (`ml:<uuid>`).
       const selectedMiniLeagueId = teamFilter && teamFilter.startsWith("ml:")
         ? teamFilter.slice(3)
         : null;
       const selectedTeamIdFilter = teamFilter && !selectedMiniLeagueId ? teamFilter : null;
 
-      if (filter !== "all") query = query.eq("type", filter);
-      if (clubFilter) query = query.eq("club_id", clubFilter);
-      if (selectedTeamIdFilter) query = query.eq("team_id", selectedTeamIdFilter);
-      if (selectedMiniLeagueId) query = query.eq("mini_league_id", selectedMiniLeagueId);
-
       const queryStart = performance.now();
       let data: any[] | null = null;
       let error: any = null;
       try {
-        const res = await query;
+        const res = await readScheduleEvents(supabase, (baseQuery) => {
+          let query = baseQuery
+            .gte("event_date", thirtyDaysAgo.toISOString().split('T')[0])
+            .lte("event_date", upperBound.toISOString().split('T')[0])
+            .order("event_date", { ascending: true });
+          if (filter !== "all") query = query.eq("type", filter);
+          if (clubFilter) query = query.eq("club_id", clubFilter);
+          if (selectedTeamIdFilter) query = query.eq("team_id", selectedTeamIdFilter);
+          if (selectedMiniLeagueId) query = query.eq("mini_league_id", selectedMiniLeagueId);
+          return query;
+        });
         data = res.data as any[] | null;
         error = res.error;
       } catch (e: any) {

@@ -1,0 +1,13 @@
+{
+  "commit": "0c3c74ae7463c837b62fa3fd494aadbd3e2b23f8",
+  "sha256": {
+    "src/backend/migrations/20260913_000000.mo": "0e5b1d1b633283acff7a9d5ee3c5a520f3428da0748d930a4e3dd095127f3145",
+    "src/backend/migrations/20260929_000000.mo": "5fff1a65f26a829d722fb4c3a60871280ff25a5070e2b59eb0eb02cefd824df9",
+    "src/backend/migrations/20260930_000000.mo": "2a2bda5d6e20f3ab121d7e2fda5dd4ffe2a02f96424beef17df39021030edab6",
+    "src/backend/migrations/20261002_094048.mo": "3c1318ac76409f26901e285652a864707e59ef9dd7aa9494dc3a1045caa377c5",
+    "src/backend/migrations/20261002_100000.mo": "ce6cbfccfb15884ea27450b59913788e74ecd9ad973f8499e2dcf1e7aebf95c1",
+    "src/backend/migrations/20261012_000000.mo": "68f35b28c93e2303e283f1a5e5bc6278d2e04e46ea8d7800dd3a624e6802fa25",
+    "src/backend/migrations/20261028_000000.mo": "3352fcd0bbbfc1a9525d473bf5cb5efc3535107d26e98719eb6f2f572ae41333",
+    "src/main.mo": "195ec2525ce71f3a5281bfe4c81337a7b2aa5fd082c34dd9a1b17a2d10477551"
+  }
+}

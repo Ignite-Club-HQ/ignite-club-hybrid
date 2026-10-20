@@ -25,3 +25,29 @@ assert Policy.withinFreeQuota(8, 0, 1, 0, 1, 10, null);
 assert not Policy.withinFreeQuota(9, 0, 1, 0, 1, 10, null);
 assert Policy.withinFreeQuota(0, 25_165_824, 0, 0, 1_048_576, 10, ?26_214_400);
 assert not Policy.withinFreeQuota(0, 25_165_824, 1, 1, 1_048_576, 10, ?26_214_400);
+// Pro media allowance: 5 GiB base plus purchased GB, counting vault, gallery
+// and chat bytes combined, including in-flight uploads.
+assert Policy.withinProMediaAllowance(5_368_709_119, 0, 1, 0);
+assert not Policy.withinProMediaAllowance(5_368_709_119, 1, 1, 0);
+assert Policy.withinProMediaAllowance(6_442_450_944, 0, 0, 1);
+assert not Policy.withinProMediaAllowance(6_442_450_944, 0, 1, 1);
+// Large capacity is opt-in: default ceiling unchanged, large mode 64 GiB.
+assert Policy.effectiveCapacityFor(42_949_672_960, false) == 2_147_483_648;
+assert Policy.effectiveCapacityFor(42_949_672_960, true) == 42_949_672_960;
+assert Policy.ceilingFor(true) == 68_719_476_736;
+assert Policy.effectiveCapacityFor(68_719_476_737, true) == 68_719_476_736;
+assert Policy.thresholdFor(68_719_476_736, true) == 54_975_581_388;
+assert Policy.canAdmitFor(68_719_476_736, 54_975_581_387, 0, 1, 0, true);
+assert not Policy.canAdmitFor(68_719_476_736, 54_975_581_387, 1, 1, 0, true);
+assert not Policy.canAdmitFor(68_719_476_736, 54_975_581_388, 0, 1, 0, true);
+assert Policy.thresholdFor(34_359_738_368, true) == 27_487_790_694;
+assert Policy.canAdmitFor(34_359_738_368, 20_000_000_000, 0, 1_000, 0, true);
+assert not Policy.canAdmitFor(34_359_738_368, 20_000_000_000, 0, 1_000, 0, false);
+// Exact large-store admission boundary still reserves 20% and in-flight bytes.
+assert Policy.canAdmitFor(34_359_738_368, 27_487_790_693, 0, 1, 0, true);
+assert not Policy.canAdmitFor(34_359_738_368, 27_487_790_693, 1, 1, 0, true);
+assert not Policy.canAdmitFor(34_359_738_368, 0, 0, 10, Policy.heapBudget - 159, true);
+// Five full base Pro commitments fit the byte-only large-store threshold;
+// six do not. Allocator/metadata/processing headroom must be measured separately.
+assert Policy.proMediaBaseBytes * 5 <= Policy.thresholdFor(34_359_738_368, true);
+assert Policy.proMediaBaseBytes * 6 > Policy.thresholdFor(34_359_738_368, true);

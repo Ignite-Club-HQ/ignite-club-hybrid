@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UserPlus, Plus, X, Copy, Mail, Loader2, Check, Link2 } from "lucide-react";
@@ -198,7 +199,7 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
           const inviteLink = inviteId ? `${window.location.origin}/join/p/${inviteId}` : "";
           return { link: inviteLink, emailFailed: false, emailErrorMsg: undefined as string | undefined };
         },
-      });
+      }, writeOnce({ clubId }));
 
       if (emailFailed) {
         patch(row.tempId, { status: "sent", link, errorMsg: emailErrorMsg });

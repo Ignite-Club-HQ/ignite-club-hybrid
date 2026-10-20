@@ -49,7 +49,7 @@ export function clearPiiVetKeyCache(): void {
   verificationKeyCache = null;
   vetKeyCache.clear();
   clubMediaKeyCache.clear();
-  clubMediaLockSupported = null;
+  clubMediaLockSupported.clear();
   void clearDeviceMediaCaches();
 }
 
@@ -58,7 +58,7 @@ export function clearPiiVetKeyCache(): void {
 /** Field id of media blobs — must equal MEDIA_BLOB_PII_FIELD. */
 const CLUB_MEDIA_FIELD = "blob";
 const clubMediaKeyCache = new Map<string, Promise<VetKey>>();
-let clubMediaLockSupported: Promise<boolean> | null = null;
+const clubMediaLockSupported = new Map<string, Promise<boolean>>();
 
 /** pii id whose IBE identity locks every photo of a club. Mirrors main.mo. */
 export function clubMediaPiiId(clubId: string): string {
@@ -75,8 +75,10 @@ export function clubIdFromMediaPath(path: string): string | null {
  * (older canisters lack club_media_lock_version). Checked once per session.
  */
 export function isClubMediaLockSupported(ctx: FeatureBackendContext): Promise<boolean> {
-  if (!clubMediaLockSupported) {
-    clubMediaLockSupported = (async () => {
+  const scope = `${ctx.target.host}|${ctx.target.canisterIds.pii_access_control ?? ""}`;
+  let supported = clubMediaLockSupported.get(scope);
+  if (!supported) {
+    supported = (async () => {
       try {
         const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
         await (actor as unknown as { club_media_lock_version: () => Promise<bigint> }).club_media_lock_version();
@@ -85,8 +87,9 @@ export function isClubMediaLockSupported(ctx: FeatureBackendContext): Promise<bo
         return false;
       }
     })();
+    clubMediaLockSupported.set(scope, supported);
   }
-  return clubMediaLockSupported;
+  return supported;
 }
 
 /** Encrypts photo bytes to the club's shared photo identity. */
@@ -99,7 +102,8 @@ export function encryptClubMedia(ctx: FeatureBackendContext, clubId: string, byt
  * concurrent callers share the in-flight request. Failures are not cached.
  */
 export function fetchClubMediaVetKey(ctx: FeatureBackendContext, clubId: string): Promise<VetKey> {
-  let pending = clubMediaKeyCache.get(clubId);
+  const cacheKey = `${ctx.target.host}|${ctx.target.canisterIds.pii_access_control ?? ""}|${ctx.identity.getPrincipal().toText()}|${clubId}`;
+  let pending = clubMediaKeyCache.get(cacheKey);
   if (!pending) {
     pending = (async () => {
       const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
@@ -130,8 +134,8 @@ export function fetchClubMediaVetKey(ctx: FeatureBackendContext, clubId: string)
       storeClubKey(cid, principal, clubId, key.serialize());
       return key;
     })();
-    clubMediaKeyCache.set(clubId, pending);
-    pending.catch(() => clubMediaKeyCache.delete(clubId));
+    clubMediaKeyCache.set(cacheKey, pending);
+    pending.catch(() => clubMediaKeyCache.delete(cacheKey));
   }
   return pending;
 }
@@ -211,9 +215,10 @@ export async function fetchPiiVetKeys(
   const principal = ctx.identity.getPrincipal().toText();
   // Device-stored keys (7 days, cleared on sign-out) skip the paid
   // derivation — previously every app open re-derived every visible name.
+  const memoryKey = (id: string) => `${ctx.target.host}|${cid}|${principal}|${fieldId}\u001f${id}`;
   const storeKey = (id: string) => `pii:${fieldId}:${id}`;
   for (const id of piiIds) {
-    const memKey = `${fieldId}${id}`;
+    const memKey = memoryKey(id);
     if (vetKeyCache.has(memKey)) continue;
     const stored = loadStoredClubKey(cid, principal, storeKey(id));
     if (!stored) continue;
@@ -223,9 +228,9 @@ export async function fetchPiiVetKeys(
       forgetStoredClubKey(cid, principal, storeKey(id));
     }
   }
-  const missing = piiIds.filter((id) => !vetKeyCache.has(`${fieldId}${id}`));
+  const missing = piiIds.filter((id) => !vetKeyCache.has(memoryKey(id)));
   if (missing.length === 0) {
-    for (const id of piiIds) out.set(id, vetKeyCache.get(`${fieldId}${id}`)!);
+    for (const id of piiIds) { const key = vetKeyCache.get(memoryKey(id)); if (key) out.set(id, key); }
     return out;
   }
 
@@ -248,12 +253,12 @@ export async function fetchPiiVetKeys(
         verificationKey,
         piiIbeIdentity(chunk[i], fieldId),
       );
-      vetKeyCache.set(`${fieldId}${chunk[i]}`, vetKey);
+      vetKeyCache.set(memoryKey(chunk[i]), vetKey);
     }
   }
 
   for (const id of piiIds) {
-    const cached = vetKeyCache.get(`${fieldId}${id}`);
+    const cached = vetKeyCache.get(memoryKey(id));
     if (cached) out.set(id, cached);
   }
   return out;

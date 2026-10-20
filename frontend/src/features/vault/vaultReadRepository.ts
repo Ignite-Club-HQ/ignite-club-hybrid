@@ -1,3 +1,4 @@
+import { vaultViewScope } from "@/live/featureScopes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -265,7 +266,7 @@ export async function fetchVaultSubfolders(
         );
       return filterVisibleVaultFolders(children, visibility);
     },
-  });
+  }, vaultViewScope(view));
 }
 
 export async function fetchVaultItems(
@@ -328,7 +329,7 @@ export async function fetchVaultItems(
       const rows = (files as any[]).map(unwrapLiveVaultFileWithFolder).map(mapLiveVaultFile);
       return scope.folderId ? rows : rows.filter((row) => !row.folder_id);
     },
-  });
+  }, vaultViewScope(view));
 }
 
 export async function fetchVaultFolderTree(
@@ -485,7 +486,7 @@ export async function listVaultPickerFolders(
         return teamId ? folder.team_id === null || folder.team_id === teamId : folder.team_id === null;
       });
     },
-  });
+  }, { clubId });
 }
 
 export async function listVaultPickerFiles(
@@ -528,7 +529,7 @@ export async function listVaultPickerFiles(
         return teamId ? file.team_id === null || file.team_id === teamId : file.team_id === null;
       });
     },
-  });
+  }, { clubId });
 }
 
 /**
@@ -592,7 +593,7 @@ export async function listVaultPickerFolderChildCounts(
       }
       return counts;
     },
-  });
+  }, { clubId });
 }
 
 export async function fetchVaultTrash(
@@ -627,5 +628,5 @@ export async function fetchVaultTrash(
         (trashed as any[]).map(unwrapLiveVaultFileWithFolder).map(mapLiveVaultFile),
       );
     },
-  });
+  }, vaultViewScope(view));
 }

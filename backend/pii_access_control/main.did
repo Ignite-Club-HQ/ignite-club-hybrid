@@ -1,0 +1,224 @@
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
+type PiiDeleteResult = 
+ record {
+   key_destroyed: bool;
+   shredded_at: nat64;
+ };
+type Main = 
+ service {
+   add_guardian_relationship: (guardian: principal, child_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   audit_access: (filter: AuditFilter) -> (vec AuditRecord) query;
+   club_media_lock_version: () -> (nat) query;
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
+   delete_pii: (pii_id: text, field_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PiiDeleteResult;
+     });
+   emergency_shutdown: () -> (variant {
+                                Err: text;
+                                Ok;
+                              });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
+   get_club_media_vetkey: (club_id: text, transport_public_key: blob) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     });
+   get_encrypted_pii_batch: (pii_ids: vec text, field_id: text, operation:
+    text, purpose: text) -> (variant {
+                               Err: text;
+                               Ok: vec EncryptedPii;
+                             });
+   get_encrypted_pii_vetkeys_batch: (pii_ids: vec text, field_id: text,
+    transport_public_key: blob) -> (variant {
+                                      Err: text;
+                                      Ok: vec opt blob;
+                                    });
+   grant_pii_read: (pii_id: text, field_id: text, reader: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   grant_pii_read_club: (pii_id: text, field_id: text, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   grant_pii_read_competition: (pii_id: text, field_id: text, competition_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
+   my_guardian_children: () -> (vec text) composite_query;
+   pii_vetkey_verification_key: () -> (blob);
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   purge_club_grants: (club_id: text) -> (variant {
+                                            Err: text;
+                                            Ok: nat32;
+                                          });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
+   read_account_audit_access: (filter: AuditFilter) -> (vec AuditRecord);
+   read_account_my_guardian_children: () -> (vec text);
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   read_club_media_authority: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubMediaAuthority;
+     });
+   read_private_media_authority: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             competition: opt principal;
+             move_id: text;
+             revision: nat;
+           };
+     });
+   register_pii: (pii_id: text, field_id: text, ciphertext: vec nat8,
+    domain_owner: principal) -> (variant {
+                                   Err: text;
+                                   Ok: EncryptedPii;
+                                 });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
+   remove_guardian_relationship: (guardian: principal, child_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_pii_read: (pii_id: text, field_id: text, reader: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_pii_read_club: (pii_id: text, field_id: text, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_pii_read_competition: (pii_id: text, field_id: text,
+    competition_id: text) -> (variant {
+                                Err: text;
+                                Ok;
+                              });
+   set_club_domain_canister: (canister: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_club_media_authority: (club: text, authority: opt principal, move_id:
+    text, expected_revision: nat) ->
+    (variant {
+       Err: text;
+       Ok: ClubMediaAuthority;
+     });
+   set_competition_domain_canister: (canister: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_private_media_authority: (club: text, competition: opt principal,
+    move_id: text, expected: nat) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             competition: opt principal;
+             move_id: text;
+             revision: nat;
+           };
+     });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+ };
+type EncryptedPii = 
+ record {
+   ciphertext: vec nat8;
+   field_id: text;
+   master_key_id: text;
+   nonce: vec nat8;
+   pii_id: text;
+ };
+type ClubMediaAuthority = 
+ record {
+   authority: opt principal;
+   move_id: text;
+   revision: nat;
+ };
+type AuditRecord = 
+ record {
+   allowed: bool;
+   field_id: text;
+   operation: text;
+   pii_id: text;
+   purpose: text;
+   requesting_principal: principal;
+   timestamp: nat64;
+ };
+type AuditFilter = 
+ record {
+   opt_field_id: opt text;
+   opt_from_ts: opt nat64;
+   opt_pii_id: opt text;
+   opt_principal: opt principal;
+   opt_to_ts: opt nat64;
+ };
+service : (governorInit: principal) -> Main

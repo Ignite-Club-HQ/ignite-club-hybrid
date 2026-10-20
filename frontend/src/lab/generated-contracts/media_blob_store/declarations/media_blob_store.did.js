@@ -11,6 +11,40 @@ import { IDL } from '@icp-sdk/core/candid';
 export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
   const ResultUploadId = IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text });
+  const Phase = IDL.Variant({
+    'pending' : IDL.Null,
+    'done' : IDL.Null,
+    'journal' : IDL.Null,
+    'legacy' : IDL.Null,
+    'indexed' : IDL.Null,
+  });
+  const Cursor__1 = IDL.Record({
+    'after' : IDL.Text,
+    'offset' : IDL.Nat,
+    'phase' : Phase,
+  });
+  const Entry = IDL.Record({
+    'unsettled' : IDL.Bool,
+    'kind' : IDL.Variant({
+      'pending' : IDL.Null,
+      'blob' : IDL.Null,
+      'journal' : IDL.Null,
+    }),
+    'path' : IDL.Text,
+    'content_hash' : IDL.Text,
+    'upload_id' : IDL.Text,
+    'content_length' : IDL.Nat,
+  });
+  const Page__1 = IDL.Record({
+    'quota_shared' : IDL.Bool,
+    'fence_revision' : IDL.Opt(IDL.Nat),
+    'fenced' : IDL.Bool,
+    'next' : IDL.Opt(Cursor__1),
+    'scanned' : IDL.Nat,
+    'entries' : IDL.Vec(Entry),
+    'quota_authority' : IDL.Opt(IDL.Principal),
+    'revision' : IDL.Nat,
+  });
   const FinalizedBlob = IDL.Record({
     'path' : IDL.Text,
     'content_hash' : IDL.Text,
@@ -66,12 +100,50 @@ export const idlFactory = ({ IDL }) => {
     ),
     'status_code' : IDL.Nat16,
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
   const FreeUsageRow = IDL.Record({
     'count' : IDL.Nat,
     'cycle' : IDL.Nat,
     'category' : IDL.Text,
     'bytes' : IDL.Nat64,
     'club_id' : IDL.Text,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
+  const Cursor = IDL.Record({
+    'after' : IDL.Text,
+    'offset' : IDL.Nat,
+    'phase' : IDL.Variant({
+      'done' : IDL.Null,
+      'legacy' : IDL.Null,
+      'indexed' : IDL.Null,
+    }),
+  });
+  const Row = IDL.Record({
+    'club' : IDL.Opt(IDL.Text),
+    'path' : IDL.Text,
+    'content_hash' : IDL.Text,
+    'bytes' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Page = IDL.Record({
+    'total' : IDL.Nat,
+    'pending' : IDL.Nat,
+    'cursor' : Cursor,
+    'next' : Cursor,
+    'total_bytes' : IDL.Nat,
+    'rows' : IDL.Vec(Row),
+    'authority' : IDL.Opt(IDL.Principal),
+    'frozen' : IDL.Bool,
+    'revision' : IDL.Nat,
   });
   
   return IDL.Service({
@@ -81,12 +153,24 @@ export const idlFactory = ({ IDL }) => {
         [ResultUploadId],
         [],
       ),
+    'club_media_inventory_page' : IDL.Func(
+        [IDL.Text, Cursor__1, IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Page__1, 'Err' : IDL.Text })],
+        [],
+      ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_blob' : IDL.Func([IDL.Text], [Result], []),
+    'enable_retained_media_quota' : IDL.Func([], [Result], []),
     'enable_shared_media_quota' : IDL.Func([], [Result], []),
     'enable_stable_media_storage' : IDL.Func([], [Result], []),
     'finalize_upload' : IDL.Func([IDL.Text], [ResultFinalized], []),
     'freeze_media_quota' : IDL.Func([], [Result], []),
+    'freeze_retained_media' : IDL.Func([], [Result], []),
+    'get_club_media_bytes' : IDL.Func(
+        [IDL.Text],
+        [IDL.Record({ 'pending' : IDL.Nat, 'finalized' : IDL.Nat })],
+        ['query'],
+      ),
     'get_club_media_usage' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(MediaUsage)],
@@ -135,6 +219,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'put_chunk' : IDL.Func(
         [IDL.Text, IDL.Nat32, IDL.Vec(IDL.Nat8)],
         [Result],
@@ -149,6 +238,77 @@ export const idlFactory = ({ IDL }) => {
             'rows' : IDL.Vec(FreeUsageRow),
             'offset' : IDL.Nat,
             'frozen' : IDL.Bool,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_upload_outcome' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(FinalizedBlob), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_pending_test_uploads' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'id' : IDL.Text,
+                'path' : IDL.Text,
+                'size' : IDL.Nat64,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_pending_uploads' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'id' : IDL.Text,
+                'path' : IDL.Text,
+                'size' : IDL.Nat64,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_physical_growth_capacity' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'pending_count' : IDL.Nat,
+              'allocatable_object_slots' : IDL.Nat,
+              'configured_bytes' : IDL.Nat,
+              'allocated_bytes' : IDL.Nat,
+              'pending_slot_bytes' : IDL.Nat,
+              'revision' : IDL.Nat,
+              'legacy_pending_count' : IDL.Nat,
+              'max_object_slot_bytes' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'reconcile_retained_deletions' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'attempted' : IDL.Nat, 'cursor' : IDL.Text }),
+            'Err' : IDL.Text,
           }),
         ],
         [],
@@ -168,6 +328,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
+    'retained_snapshot_page' : IDL.Func([Cursor], [Page], []),
     'retire_upload_outcomes' : IDL.Func(
         [IDL.Text],
         [
@@ -180,6 +341,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),
     'set_club_domain_canister' : IDL.Func([IDL.Principal], [Result], []),
+    'set_club_media_transfer_fence' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Opt(IDL.Nat)],
+        [Result],
+        [],
+      ),
     'stable_storage_status' : IDL.Func(
         [],
         [

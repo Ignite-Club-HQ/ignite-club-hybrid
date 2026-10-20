@@ -69,7 +69,7 @@ export function WelcomeEmailSettingsCard({
           const row = await getLiveCompetitionWelcomeEmail(ctx, scopeId);
           return row ? { id: null, enabled: row.enabled, subject: row.subject, message: row.message } : null;
         },
-      });
+      }, { competitionId: scopeId });
     },
   });
 
@@ -110,7 +110,7 @@ export function WelcomeEmailSettingsCard({
             await setLiveCompetitionWelcomeEmail(ctx, scopeId, { enabled, subject: values.subject, message: values.message });
             return true;
           },
-        });
+        }, writeOnce({ competitionId: scopeId }));
         if (handled) return;
       }
       if (data?.id) {

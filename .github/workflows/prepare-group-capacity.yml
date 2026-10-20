@@ -1,0 +1,100 @@
+# Reads live usage (no deploy key), turns it into capacity evidence against the
+# owner's tested limits, and queues CLOSED preparation requests at 70%.
+# Never creates, installs or opens a group. When a request is newly queued the
+# run opens a GitHub issue and fails with a clear message, so the owner is
+# emailed and sees the red badge. Repeat runs with an already-queued request
+# stay silent and green.
+name: Prepare group capacity (closed requests)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: ignite-capacity-preparation-queue
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require tested limits
+        id: limits
+        run: |
+          if test -f deploy/groups/tested-limits.json; then echo 'present=true' >> "$GITHUB_OUTPUT"
+          else echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::Add deploy/groups/tested-limits.json (see docs/scaling-capacity-policy.md); nothing queued.'
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.limits.outputs.present == 'true'
+        with:
+          node-version: '22.12.0'
+      - name: Read live usage
+        if: steps.limits.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/agentdeps" --no-fund --no-audit \
+            @dfinity/agent@2.4.1 @dfinity/candid@2.4.1 @dfinity/principal@2.4.1
+          NODE_PATH="$RUNNER_TEMP/agentdeps/node_modules" HEALTH_JSON_OUT="$RUNNER_TEMP/health.json" \
+            node scripts/canister-health.mjs
+      - name: Install frontend dependencies
+        if: steps.limits.outputs.present == 'true'
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Build evidence and queue closed requests
+        if: steps.limits.outputs.present == 'true'
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npx --yes tsx@4 scripts/collect-group-capacity.ts "$RUNNER_TEMP/health.json" ../deploy/groups/tested-limits.json "$RUNNER_TEMP/evidence.json"
+          npx --yes tsx@4 scripts/prepare-group-capacity.ts "$RUNNER_TEMP/evidence.json" ../deploy/groups/capacity-requests.json
+      - name: Detect newly queued requests
+        id: alert
+        if: steps.limits.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          REQ=deploy/groups/capacity-requests.json
+          if git cat-file -e "HEAD:$REQ" 2>/dev/null; then
+            git show "HEAD:$REQ" > "$RUNNER_TEMP/prev-requests.json"
+          else
+            echo '[]' > "$RUNNER_TEMP/prev-requests.json"
+          fi
+          node scripts/capacity-alert.mjs "$RUNNER_TEMP/prev-requests.json" "$REQ" --github-output "$GITHUB_OUTPUT"
+      - name: Save requests
+        if: steps.limits.outputs.present == 'true'
+        run: |
+          git config user.name 'ignite-capacity'
+          git config user.email 'capacity@users.noreply.github.com'
+          git add deploy/groups/capacity-requests.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Queue closed capacity preparation'
+            git push
+          fi
+      - name: Alert when a request is newly queued
+        if: steps.limits.outputs.present == 'true' && steps.alert.outputs.added != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE='Prepare new group requested (70% capacity reached)'
+          BODY=$(cat <<EOF
+          The scheduled capacity check measured the current group at or above the 70% prepare threshold and queued a **closed** preparation request: ${{ steps.alert.outputs.summary }}.
+
+          Nothing has been created, installed or opened. Next steps, in your control:
+          1. Review \`deploy/groups/capacity-requests.json\` in this commit.
+          2. When you are ready, run **Install new group (closed)** (costs real cycles).
+          3. Opening the new group stays an owner decision after the release checks.
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+          )
+          ISSUE=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number' || true)
+          if test -n "$ISSUE"; then
+            gh issue comment "$ISSUE" --body "$BODY" || echo '::warning::Could not comment on the alert issue.'
+          else
+            gh issue create --title "$TITLE" --body "$BODY" || echo '::warning::Could not open a GitHub issue; check Actions permissions.'
+          fi
+          echo "::error::70% reached and a closed preparation request was queued (${{ steps.alert.outputs.summary }}). A GitHub issue was opened; next step when you approve it is the 'Install new group (closed)' workflow."
+          exit 1

@@ -35,7 +35,7 @@ import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/membership";
-import { getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink, joinLiveMiniLeagueByToken } from "@/live/features/miniLeagues";
+import { getLivePlayerInvitePreview, claimLiveInvite, getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink, joinLiveMiniLeagueByToken } from "@/live/features/miniLeagues";
 import { getLivePendingInvite, getLiveTeamInviteLinkByToken, acceptLiveTeamInviteLink, getLiveClubProfile, getLiveTeam } from "@/live/features/club";
 import { acceptIcpInviteAndWelcome } from "@/features/membership/acceptIcpInviteAndWelcome";
 
@@ -246,7 +246,9 @@ function SupabaseJoinTeamPage() {
               },
             };
           }
-          const link = await getLiveJoinLinkByToken(ctx, token!);
+          const named = await getLivePlayerInvitePreview(ctx, token ?? "");
+          if (named) return { id: named.token, club_id: named.club_id, team_id: null, team_name: named.league_name, team_logo_url: null, club_name: "", club_logo_url: null, role: "parent", invited_label: named.player_name[0] ?? null, invited_email: null, invited_by_user_id: null, status: named.status, metadata: { mini_league_id: named.mini_league_id, kind: "mini_league_named_player_invite" } };
+          const link = await getLiveJoinLinkByToken(ctx, token ?? "");
           if (!link || link.revoked) return null;
           const league = await getLiveMiniLeague(ctx, link.mini_league_id);
           const isAdmin = link.role === "admin";
@@ -1509,6 +1511,10 @@ function SupabaseJoinTeamPage() {
       // step itself only needs to let the flow through.
       const isIcpParentJoinLink =
         (pendingInviteData?.metadata as { kind?: string } | null)?.kind === "mini_league_parent_join_link";
+      const isIcpNamedPlayerInvite = (pendingInviteData?.metadata as { kind?: string } | null)?.kind === "mini_league_named_player_invite";
+      if (membershipIcpRouted && isIcpNamedPlayerInvite) {
+        return withFeatureBackend("mini_leagues", { supabase: async () => ["parent" as AppRole], icp: async ctx => { await claimLiveInvite(ctx, token ?? "", pendingInviteData?.invited_label ?? "Player"); return ["parent" as AppRole]; } }, writeOnce({ inviteToken: token ?? "" }));
+      }
       if (membershipIcpRouted && targetsMiniLeague && !isIcpAdminJoinLink && !isIcpParentJoinLink) {
         throw new Error(
           "Joining a mini-league isn't available for Internet Identity accounts yet. Please sign in with email/password to accept this invite.",
@@ -2015,7 +2021,7 @@ function SupabaseJoinTeamPage() {
               relatedId: invite.team_id,
             });
           },
-        });
+        }, writeOnce({ teamId: invite.team_id }));
       } else {
         await supabase.from("notifications").insert(rows);
       }
@@ -2101,7 +2107,7 @@ function SupabaseJoinTeamPage() {
                 await joinLiveMiniLeagueByToken(ctx, token!, addedLabel);
                 return true;
               },
-            })
+            }, writeOnce({ inviteToken: token ?? "" }))
           : invite?.team_id
             // ICP team link: create the child on club_domain and keep its
             // name on pii_access_control — same as the auto-create path.

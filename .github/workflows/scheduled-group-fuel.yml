@@ -1,0 +1,46 @@
+name: Plan registered group fuel
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+jobs:
+  fuel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - uses: oven-sh/setup-bun@v2
+      - name: Test offline planner
+        run: node --test scripts/scheduled-fuel-policy.test.mjs
+      - name: Install dependencies and pinned CLI
+        run: |
+          node scripts/ensure-frontend-deps.mjs
+          npm install -g @icp-sdk/icp-cli@1.7.0 --no-fund --no-audit
+      - name: Collect balances, report and apply budgeted existing-balance deposits
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          FUEL_MONTHLY_CEILING_CYCLES: ${{ secrets.FUEL_MONTHLY_CEILING_CYCLES || vars.FUEL_MONTHLY_CEILING_CYCLES || '0' }}
+          ICP_HOME: ${{ runner.temp }}/scheduled-fuel-identity
+          GH_TOKEN: ${{ github.token }}
+          DO_NOT_TRACK: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$DEPLOYER_PEM"
+          mkdir -p "$ICP_HOME"
+          trap 'rm -rf "$ICP_HOME"' EXIT
+          export FUEL_PEM="$ICP_HOME/operator.pem"
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$FUEL_PEM"
+          icp identity import --from-pem "$FUEL_PEM" --storage plaintext ignite-card-deployer
+          unset DEPLOYER_PEM
+          cd "$RUNNER_TEMP"
+          bun "$GITHUB_WORKSPACE/scripts/scheduled-fuel.mjs"

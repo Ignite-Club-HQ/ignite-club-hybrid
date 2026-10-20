@@ -1,6 +1,6 @@
 import { useState, Suspense } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, isToday, parseISO, startOfDay, nextSaturday } from "date-fns";
 import {
   ArrowLeft,
@@ -32,6 +32,8 @@ const MiniLeagueSettingsDialog = lazyWithRetry(() => import("@/components/mini-l
 const ManageMiniLeagueAdminsSheet = lazyWithRetry(() => import("@/components/mini-league/ManageMiniLeagueAdminsSheet").then(m => ({ default: m.ManageMiniLeagueAdminsSheet })));
 import PendingInvitesList from "@/components/PendingInvitesList";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { toast } from "sonner";
+import { writeOnce } from "@/live/clubScope";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
@@ -52,6 +54,7 @@ export default function MiniLeagueDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [playersOpen, setPlayersOpen] = useState(false);
   const [addPlayersOpen, setAddPlayersOpen] = useState(false);
@@ -72,26 +75,28 @@ export default function MiniLeagueDetailPage() {
           return data;
         },
         icp: async (ctx) => {
-          const canisterLeague = await getLiveMiniLeague(ctx, id!);
-          // Provisional: club display name is not available from
-          // mini_league_domain; this leaves `club.name` blank under ICP
-          // until club_domain membership lookups are wired in here too.
+          if (!id) throw new Error("League id required");
+          const canisterLeague = await getLiveMiniLeague(ctx, id);
+          const { readLeagueClub } = await import("@/live/leagueReads");
+          const club = await readLeagueClub(ctx, canisterLeague.club_id);
+          // Club display metadata comes from its assigned club group.
           return {
             ...canisterLeague,
             description: canisterLeague.description[0] ?? null,
             logo_url: canisterLeague.logo_url[0] ?? null,
             created_at: new Date(Number(canisterLeague.created_at_ms)).toISOString(),
             updated_at: new Date(Number(canisterLeague.updated_at_ms)).toISOString(),
-            club: { id: canisterLeague.club_id, name: "" },
+            club: { id: canisterLeague.club_id, name: club?.name ?? "" },
           } as any;
         },
-      }),
+      }, { miniLeagueId: id ?? "" }),
     enabled: !!id,
   });
 
   const { data: leagueChatGroup } = useQuery({
     queryKey: ["mini-league-chat-group", id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("messaging")) return withFeatureBackend("messaging", { supabase: async () => null, icp: ctx => import("@/live/features/messaging").then(api => api.getLiveMiniLeagueChat(ctx, league?.club_id ?? "", id ?? "")) }, { clubId: league?.club_id ?? "" });
       const { data } = await supabase
         .from("chat_groups")
         .select("id")
@@ -99,13 +104,16 @@ export default function MiniLeagueDetailPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!id,
+    enabled: !!id && !!league?.club_id,
   });
 
   // Check Pro Football subscription for the league's club
   const { data: hasProFootball, isLoading: proLoading } = useQuery({
     queryKey: ["club-pro-football", league?.club_id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", { supabase: async () => { throw new Error("Internet Identity required"); }, icp: async (ctx) => { if (!league?.club_id) return false; const { resolveLiveProFootballAccess } = await import("@/live/features/proAccess"); return resolveLiveProFootballAccess(ctx, { clubId: league.club_id }); } }, { clubId: league?.club_id ?? "" });
+      }
       // Check if user is app_admin (bypasses subscription)
       const { data: appAdminRole } = await supabase
         .from("user_roles")
@@ -132,6 +140,9 @@ export default function MiniLeagueDetailPage() {
   const { data: canManageLeague } = useQuery({
     queryKey: ["can-manage-league", id, league?.club_id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return withFeatureBackend("mini_leagues", { supabase: async () => { throw new Error("Internet Identity required"); }, icp: async (ctx) => { if (!id) throw new Error("League id required"); return (await (await import("@/live/leagueReads")).readLeagueAccess(ctx, id)).can_manage; } }, { miniLeagueId: id ?? "" });
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("role")
@@ -157,6 +168,9 @@ export default function MiniLeagueDetailPage() {
   const { data: isClubAdmin } = useQuery({
     queryKey: ["is-club-admin", league?.club_id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return withFeatureBackend("mini_leagues", { supabase: async () => { throw new Error("Internet Identity required"); }, icp: async (ctx) => { if (!id) throw new Error("League id required"); return (await (await import("@/live/leagueReads")).readLeagueAccess(ctx, id)).is_club_admin; } }, { miniLeagueId: id ?? "" });
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("role")
@@ -173,6 +187,9 @@ export default function MiniLeagueDetailPage() {
   const { data: canDeleteLeague } = useQuery({
     queryKey: ["can-delete-league", id, league?.club_id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return withFeatureBackend("mini_leagues", { supabase: async () => { throw new Error("Internet Identity required"); }, icp: async (ctx) => { if (!id) throw new Error("League id required"); return (await (await import("@/live/leagueReads")).readLeagueAccess(ctx, id)).can_delete; } }, { miniLeagueId: id ?? "" });
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("role")
@@ -197,6 +214,9 @@ export default function MiniLeagueDetailPage() {
   const { data: players } = useQuery({
     queryKey: ["mini-league-players", id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return withFeatureBackend("mini_leagues", { supabase: async () => { throw new Error("Internet Identity required"); }, icp: async (ctx) => { if (!id) throw new Error("League id required"); const rows = await (await import("@/live/features/miniLeagues")).listLivePlayers(ctx, id); return rows.map(p => ({ ...p, child_id: p.child_id[0] ?? null, parent_user_id: p.parent_user_id[0] ?? p.claimed_by[0]?.toText() ?? null, ability_rating: p.ability_rating[0] ?? null, notes: p.notes[0] ?? null })).sort((a,b) => (b.ability_rating ?? 0) - (a.ability_rating ?? 0)); } }, { miniLeagueId: id ?? "" });
+      }
       const { data, error } = await supabase
         .from("mini_league_players")
         .select("*")
@@ -209,8 +229,11 @@ export default function MiniLeagueDetailPage() {
   });
 
   const { data: events, isLoading: eventsLoading } = useQuery({
-    queryKey: ["mini-league-events", id],
+    queryKey: ["mini-league-events", id, league?.club_id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return withFeatureBackend("mini_leagues", { supabase: async () => { throw new Error("Internet Identity required"); }, icp: async (ctx) => { if (!id || !league?.club_id) return []; return (await import("@/live/leagueReads")).readLeagueEvents(ctx, id, league.club_id); } }, { miniLeagueId: id ?? "" });
+      }
       const { data, error } = await supabase
         .from("events")
         .select("id, title, event_date, start_time, end_time, location_name, is_cancelled, final_score_home, final_score_away")
@@ -244,12 +267,15 @@ export default function MiniLeagueDetailPage() {
 
       return (data || []).map(e => ({ ...e, _allocatedPlayers: 0 })) as MiniLeagueEvent[];
     },
-    enabled: !!id,
+    enabled: !!id && !!league?.club_id,
   });
 
   const { data: userPlayerIds } = useQuery({
     queryKey: ["mini-league-user-players", id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return withFeatureBackend("mini_leagues", { supabase: async () => { throw new Error("Internet Identity required"); }, icp: async (ctx) => { if (!id) return []; const rows = await (await import("@/live/features/miniLeagues")).listLivePlayers(ctx,id); const principal = ctx.identity.getPrincipal().toText(); return rows.filter(p => p.claimed_by[0]?.toText() === principal || p.parent_user_id[0] === user?.id || p.parent_user_id[0] === principal || p.parent_user_id[0] === "principal:" + principal).map(p => ({ id: p.id, name: p.name })); } }, { miniLeagueId: id ?? "" });
+      }
       const { data } = await supabase
         .from("mini_league_players")
         .select("id, name")
@@ -267,6 +293,9 @@ export default function MiniLeagueDetailPage() {
   const { data: leagueMembers } = useQuery({
     queryKey: ["mini-league-members", id, league?.club_id, parentUserIds, childIdsForMembers],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return withFeatureBackend("mini_leagues", { supabase: async () => { throw new Error("Internet Identity required"); }, icp: async (ctx) => { if (!id) throw new Error("League id required"); const rows = await (await import("@/live/leagueReads")).readLeagueMembers(ctx,id); return { parents: rows.filter(r => r.role === "parent"), staff: rows.filter(r => r.role === "league_admin") }; } }, { miniLeagueId: id ?? "" });
+      }
       // Staff = club-wide league_admin holders + per-mini-league grants
       // (mini_league_admins). Team-level coaches are NOT included — there
       // is no `coach ↔ mini_league` link in the schema, so showing them
@@ -357,6 +386,12 @@ export default function MiniLeagueDetailPage() {
     // Supabase-only table: in ICP mode pending invites live on the
     // club_domain canister, and this unguarded read PostgREST-400s.
     enabled: !!league?.club_id && !!id && !!canManageLeague && !isFeatureRoutedToIcp("membership"),
+  });
+
+  const { data: namedPlayerInvites } = useQuery({
+    queryKey: ["mini-league-named-player-invites", id],
+    queryFn: () => withFeatureBackend("mini_leagues", { supabase: async () => [], icp: ctx => import("@/live/features/miniLeagues").then(api => api.listLiveInvites(ctx, id ?? "")) }, { miniLeagueId: id ?? "" }),
+    enabled: !!id && !!canManageLeague && isFeatureRoutedToIcp("mini_leagues"),
   });
 
   const nonCancelledEvents = events?.filter(e => !e.is_cancelled) || [];
@@ -553,6 +588,20 @@ export default function MiniLeagueDetailPage() {
         </CardContent>
       </Card>
 
+      {isFeatureRoutedToIcp("messaging") && !leagueChatGroup && isClubAdmin && <Button variant="outline" onClick={async () => {
+        try {
+          const created = await withFeatureBackend("messaging", { supabase: async () => null, icp: async ctx => {
+            const members = await (await import("@/live/leagueReads")).readLeagueMembers(ctx, id ?? "");
+            return (await import("@/live/features/messaging")).ensureLiveMiniLeagueChat(ctx, league?.club_id ?? "", id ?? "", league?.name ?? "League chat", members.map(m => m.id));
+          } }, writeOnce({ clubId: league?.club_id ?? "" }));
+          await queryClient.invalidateQueries({ queryKey: ["mini-league-chat-group", id] });
+          if (created) navigate(`/groups/${created.id}`);
+        } catch (error) { toast.error(error instanceof Error ? error.message : "Couldn't create league chat"); }
+      }}><MessageSquare className="h-4 w-4 mr-2" />Create league chat</Button>}
+      {namedPlayerInvites?.filter(i => i.status === "pending").map(invite => <div key={invite.token} className="flex items-center justify-between gap-2 border-b py-3">
+        <span>{invite.label_text[0] ?? "Player invitation"}</span>
+        <Button size="sm" variant="outline" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/join/p/${invite.token}`); toast.success("Invite link copied"); } catch { toast.error("Couldn't copy invite"); } }}>Copy link</Button>
+      </div>)}
       {/* League Chat — primary action */}
       {leagueChatGroup?.id && (
         <button

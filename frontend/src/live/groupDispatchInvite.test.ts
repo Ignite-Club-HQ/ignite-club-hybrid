@@ -3,7 +3,7 @@ import { createClubDispatcher, clearGroupDispatchCache } from './groupDispatch';
 import { OFF } from './groupActivation';
 import { GROUP_DOMAINS } from './groupRouting';
 
-const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n };
+const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n, removalWiring: { revision: 1n, groupIds: ["a"], checkedAtMs: 0 } };
 function world(groups: Record<string, string[]>, gates = ON) {
   const ctxs = Object.keys(groups).map(g => ({ group: g, identity: { getPrincipal: () => ({ toText: () => 'p1' }) } }));
   const s = { readClub: vi.fn(), writeClub: vi.fn(), isAssigned: () => false, dispose: vi.fn(),
@@ -37,5 +37,20 @@ describe('invite routing', () => {
     const { d, s } = world({ g1: ['tok'] }); const x = createClubDispatcher(d as never);
     await x.forInvite('membership', 'tok', async () => 1);
     expect(s.dispose).toHaveBeenCalled();
+  });
+  it('league joins execute once on the token-owning group and refresh membership', async () => {
+    const { d, s } = world({ g1: [], g2: ['league-token'] });
+    const join = vi.fn(async (c: any) => c.group);
+    expect(await createClubDispatcher(d as never).forInvite('mini_leagues', 'league-token', join)).toBe('g2');
+    expect(join).toHaveBeenCalledTimes(1);
+    expect(s.dispose).toHaveBeenCalledTimes(1);
+  });
+  it('does not execute a league join when token discovery fails', async () => {
+    const { d } = world({ g1: [] });
+    d.holdsInvite = async () => { throw new Error('Group unavailable'); };
+    const join = vi.fn();
+    await expect(createClubDispatcher(d as never).forInvite('mini_leagues', 'league-token', join)).rejects.toThrow('Group unavailable');
+    expect(join).not.toHaveBeenCalled();
+    expect(d.legacy).not.toHaveBeenCalled();
   });
 });

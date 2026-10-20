@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
@@ -166,7 +167,7 @@ export async function updateCompetitionMatch(
         return { error: { message: e instanceof Error ? e.message : String(e) } };
       }
     },
-  });
+  }, writeOnce({ competitionMatchId: matchId }));
 }
 
 /**
@@ -214,7 +215,7 @@ export async function createGeneratedMatches(
         return { error: { message: e instanceof Error ? e.message : String(e) } };
       }
     },
-  });
+  }, writeOnce({ competitionId: String(rows[0]?.competition_id ?? "") }));
 }
 
 export async function deleteCompetitionMatch(
@@ -236,7 +237,7 @@ export async function deleteCompetitionMatch(
         return { error: { message: e instanceof Error ? e.message : String(e) } };
       }
     },
-  });
+  }, writeOnce({ competitionMatchId: matchId }));
 }
 
 export async function trimCompetitionRounds(
@@ -260,5 +261,5 @@ export async function trimCompetitionRounds(
         return { error: { message: e instanceof Error ? e.message : String(e) } };
       }
     },
-  });
+  }, writeOnce({ competitionId }));
 }

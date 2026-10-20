@@ -43,7 +43,7 @@ export default function IcpManageBackupsPage() {
             }))
             .sort((a, b) => b.createdAt - a.createdAt);
         },
-      }),
+      }, { shared: "app" }),
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["icp-vault-backups"] });
@@ -56,7 +56,7 @@ export default function IcpManageBackupsPage() {
           const { createLiveVaultBackup } = await import("@/live/features/vault");
           await createLiveVaultBackup(ctx, label.trim() || `Backup ${format(new Date(), "d MMM yyyy HH:mm")}`);
         },
-      }),
+      }, { shared: "app" }),
     onSuccess: () => { setLabel(""); toast.success("Backup created"); refresh(); },
     onError: (e: Error) => toast.error(e.message || "Backup failed"),
   });
@@ -94,7 +94,7 @@ export default function IcpManageBackupsPage() {
             refresh();
           }
         },
-      });
+      }, { shared: "app" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -160,7 +160,7 @@ export default function IcpManageBackupsPage() {
               const payload = await withFeatureBackend("vault", {
                 supabase: async () => { throw new Error("Internet Identity connection required"); },
                 icp: async ctx => (await import("@/live/adminBackupExport")).exportAdminDomain(ctx, domain),
-              });
+              }, { shared: "app" });
               const url = URL.createObjectURL(new Blob([JSON.stringify(payload, jsonSafe, 2)], { type: "application/json" }));
               const a = document.createElement("a"); a.href = url; a.download = `${domain}-${new Date().toISOString().slice(0, 10)}.json`; a.click();
               setTimeout(() => URL.revokeObjectURL(url), 5000); toast.success("Export downloaded");

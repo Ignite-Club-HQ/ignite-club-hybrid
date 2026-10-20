@@ -129,7 +129,7 @@ export const fetchVaultFolderContents = async (
 
       return toLiveFolderContents(all, childFolders, path);
     },
-  });
+  }, competitionId ? { competitionId } : clubId ? { clubId } : { teamId: teamId ?? "" });
 };
 
 /** Depth-first recursive collection with per-folder breakdown counts. */

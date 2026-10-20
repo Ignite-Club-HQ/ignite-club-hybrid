@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -104,7 +105,7 @@ export function SeasonEoiConfigCard({ seasonId, clubName, season }: Props) {
         );
         try { sessionStorage.setItem(key, "1"); } catch { /* ignore */ }
       },
-    }).catch(() => undefined);
+    }, writeOnce({ seasonId })).catch(() => undefined);
   }, [seasonId, season]);
 
   const saveMut = useMutation({
@@ -161,7 +162,7 @@ export function SeasonEoiConfigCard({ seasonId, clubName, season }: Props) {
             "Save public form settings",
           );
         },
-      }),
+      }, writeOnce({ seasonId })),
     onSuccess: () => {
       toast.success("EOI settings saved");
       qc.invalidateQueries({ queryKey: ["season", seasonId] });

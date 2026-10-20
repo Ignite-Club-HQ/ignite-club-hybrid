@@ -247,7 +247,7 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
             (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
           );
         },
-      });
+      }, { competitionId });
     },
   });
 
@@ -1985,7 +1985,7 @@ export function CompetitionLadderPanel({
               { win: pointsWin, draw: pointsDraw, loss: pointsLoss },
             );
           },
-        });
+        }, { competitionId });
       }
 
       const [ladderRes, entriesRes] = await Promise.all([

@@ -9,3 +9,6 @@ assert StableBytes.validSlice(65_536, { offset = 0; length = 1; slot = 65_536 })
 assert not StableBytes.validSlice(65_536, { offset = 0; length = 65_537; slot = 65_536 });
 assert not StableBytes.validSlice(65_536, { offset = 1; length = 1; slot = 65_536 });
 assert not StableBytes.validSlice(65_536, { offset = 65_536; length = 1; slot = 65_536 });
+assert StableBytes.limitFor(false) == 2_147_483_648;
+assert StableBytes.limitFor(true) == 68_719_476_736;
+assert StableBytes.physicalLimit == 68_652_367_872;

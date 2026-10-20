@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadWithinClubMediaAllowance } from "@/features/vault/clubMediaAllowance";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -357,7 +359,7 @@ export function UploadPhotoSheet({
         return withFeatureBackend("mini_leagues", {
           supabase: async () => [] as MiniLeague[],
           icp: async (ctx) => (await listLiveMiniLeaguesByClub(ctx, selectedClubId)).map((l) => ({ id: l.id, name: l.name })),
-        });
+        }, { clubId: selectedClubId });
       }
       
       const isClubAdmin = userRoles?.some(r => r.role === "club_admin" && r.club_id === selectedClubId);
@@ -526,20 +528,13 @@ export function UploadPhotoSheet({
     // clubs receive a competition-specific read grant.
     if (clubId && isFeatureRoutedToIcp("media")) {
       const mime = file.type || "application/octet-stream";
-      const blobUpload = await tryUploadMediaToBlobStore({
-        storagePath: blobStoragePath,
-        file,
-        mime,
-        competitionId: competitionId || undefined,
-      });
-      if (!blobUpload) {
-        throw new Error("Photo uploads are not available for Internet Identity members until the media canisters are configured");
-      }
-      const asset = await withFeatureBackend("media", {
+      const saved = await withFeatureBackend("media", {
         supabase: () => {
           throw new Error("unreachable: media routing checked above");
         },
         icp: async (ctx) => {
+          const blobUpload = await tryUploadMediaToBlobStore({ context: ctx, storagePath: blobStoragePath, file, mime, competitionId: competitionId || undefined });
+          if (!blobUpload) throw new Error("Media upload canisters are not configured");
           const registered = await registerLiveAsset(ctx, {
             clubId,
             kind: "photo",
@@ -551,15 +546,15 @@ export function UploadPhotoSheet({
             blobRef: blobUpload.blobRef,
           });
           if (competitionId) await setLiveAssetScope(ctx, registered.id, { competitionId });
-          return registered;
+          return { url: blobUpload.url, photoId: registered.id };
         },
-      });
-      return { url: blobUpload.url, photoId: asset.id };
+      }, writeOnce({ clubId }));
+      return saved;
     }
 
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await uploadWithinClubMediaAllowance(clubId, file.size, () => supabase.storage
       .from("photos")
-      .upload(storagePath, file, { cacheControl: "31536000" });
+      .upload(storagePath, file, { cacheControl: "31536000" }));
     if (uploadError) throw uploadError;
     const storageUrl = `${"REDACTED_LAB_VALUE"}/storage/v1/object/public/photos/${storagePath}`;
 

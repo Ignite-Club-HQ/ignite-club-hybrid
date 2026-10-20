@@ -4,6 +4,7 @@
 import type { openGroupSession } from './groupSession';
 import type { LiveEventInput } from './features/events';
 import type { LiveMessageAttachment } from './features/messaging';
+import { notificationRecipients } from './notificationRecipients';
 export const NOTIFY_CHUNK = 200;
 type Session = Awaited<ReturnType<typeof openGroupSession>>;
 
@@ -13,16 +14,16 @@ export function groupWriteFeatures(session: Session) {
      * with deterministic per-chunk keys so a retried chunk is idempotent per
      * recipient and one failed chunk never re-notifies earlier chunks. */
     notifyClub: async (clubId: string, input: { userIds: string[]; kind: string; body: string; keyPrefix: string; relatedId?: string | null }) => {
-      const ids = [...new Set(input.userIds)];
+      const ids = notificationRecipients(input.userIds);
       if (!input.keyPrefix || input.keyPrefix.length > 100) throw new Error('Notification key prefix required');
       let queued = 0;
       for (let i = 0; i < ids.length; i += NOTIFY_CHUNK) {
         const chunk = ids.slice(i, i + NOTIFY_CHUNK); const key = `${input.keyPrefix}.${i / NOTIFY_CHUNK}`;
-        await session.writeClub(clubId, 'notification_queue', key, async (ctx, k) => {
+        const created = await session.writeClub(clubId, 'notification_queue', key, async (ctx, k) => {
           const { fanOutLiveNotifications } = await import('./features/notifications');
           return fanOutLiveNotifications(ctx, { userIds: chunk, clubId, kind: input.kind, body: input.body, idempotencyKeyPrefix: k, relatedId: input.relatedId });
         });
-        queued += chunk.length;
+        queued += created;
       }
       return { queued }; // queued, not delivered
     },

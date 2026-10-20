@@ -125,7 +125,7 @@ export default function CompetitionOfficialJoinPage() {
             }
             return { status: "invalid", competitionId: null, competitionName: null, role: null } satisfies LinkInfo;
           },
-        });
+        }, { inviteToken: token ?? "" });
         if (active) setInfo(result);
       } catch {
         if (active) setInfo({ status: "invalid", competitionId: null, competitionName: null, role: null });
@@ -170,7 +170,7 @@ export default function CompetitionOfficialJoinPage() {
             }
             return { status: "joined", competition_id: grant.competition_id, role: grant.role };
           },
-        });
+        }, { inviteToken: token ?? "" });
         if (!result || !["joined", "already"].includes(result.status)) {
           const errors: Record<string, string> = {
             email_unverified: "Verify your invited email address before joining.",
@@ -195,7 +195,7 @@ export default function CompetitionOfficialJoinPage() {
           if (!row || !["joined", "already"].includes(row.status)) throw new Error("This official link is no longer valid.");
         },
         icp: async (ctx) => { await acceptLiveRoleLink(ctx, token); },
-      });
+      }, { inviteToken: token ?? "" });
       setJoined(true);
       navigate(`/competitions/${info.competitionId}`, { replace: true });
     } catch (joinError) {

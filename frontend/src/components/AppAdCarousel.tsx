@@ -102,7 +102,7 @@ export function AppAdCarousel({ location, hasSponsorAds, suppressUpgradeAdsForPr
               }
             : null;
         },
-      }),
+      }, { shared: "app" }),
   });
 
   // Fetch active ads
@@ -135,7 +135,7 @@ export function AppAdCarousel({ location, hasSponsorAds, suppressUpgradeAdsForPr
             bg_color: a.bg_color[0] ?? null,
             text_color: a.text_color[0] ?? null,
           })),
-      }),
+      }, { shared: "app" }),
     enabled: !!settings?.is_enabled,
   });
 

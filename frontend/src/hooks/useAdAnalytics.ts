@@ -25,7 +25,7 @@ async function recordAdEvent(adId: string, eventType: EventType, context: Contex
     icp: async (ctx) => {
       await recordLiveAdEvent(ctx, adId, eventType, context);
     },
-  });
+  }, { shared: "app" });
 }
 
 export function useAdAnalytics() {

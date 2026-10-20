@@ -1,3 +1,4 @@
+import { writeOnce } from "@/live/clubScope";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -52,7 +53,7 @@ export function CompetitionMemberChatCard({ competitionId }: Props) {
             revision: Number(settings.revision),
           };
         },
-      }),
+      }, { competitionId }),
   });
 
   const enabled = !!data?.enabled;
@@ -80,7 +81,7 @@ export function CompetitionMemberChatCard({ competitionId }: Props) {
             data?.revision ?? 0,
           );
         },
-      });
+      }, writeOnce({ competitionId }));
     } catch (err: any) {
       toast({ title: "Could not update", description: err.message, variant: "destructive" });
       return;

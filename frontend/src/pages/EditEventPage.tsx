@@ -407,7 +407,7 @@ function SupabaseEditEventPage() {
         const league = await withFeatureBackend("mini_leagues", {
           supabase: async () => null,
           icp: async (ctx) => getLiveMiniLeague(ctx, miniLeagueId).catch(() => null),
-        }) as any;
+        }, { miniLeagueId }) as any;
         return { ...detail, mini_leagues: league ? { id: league.id, name: league.name } : null };
       }
       return withFeatureBackend("mini_leagues", {
@@ -435,7 +435,7 @@ function SupabaseEditEventPage() {
           const league = await getLiveMiniLeague(ctx, miniLeagueId) as any;
           return { ...data, mini_leagues: league ? { id: league.id, name: league.name } : null };
         },
-      });
+      }, { eventId: id ?? "" });
     },
     enabled: !!id,
   });
@@ -514,7 +514,7 @@ function SupabaseEditEventPage() {
             const myPrincipal = ctx.identity.getPrincipal().toText();
             return admins.some((a) => a.user_id?.toText?.() === myPrincipal || String(a.user_id) === myPrincipal);
           },
-        });
+        }, { miniLeagueId: (event as any).mini_league_id });
         if (isLeagueAdmin) return true;
       }
 

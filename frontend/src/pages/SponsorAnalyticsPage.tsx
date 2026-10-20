@@ -135,7 +135,7 @@ function IcpSponsorAnalyticsPage() {
       withFeatureBackend("analytics", {
         supabase: async () => [],
         icp: (ctx) => getLiveSponsorBenchmarks(ctx, sponsorIds, "current", "previous"),
-      }),
+      }, { shared: "app" }),
     enabled: isAppAdmin === true && sponsorIds.length > 0,
   });
 
@@ -145,7 +145,7 @@ function IcpSponsorAnalyticsPage() {
       withFeatureBackend("analytics", {
         supabase: async () => [],
         icp: (ctx) => getLiveBenchmarks(ctx, ["sponsor_impressions", "sponsor_clicks"]),
-      }),
+      }, { shared: "app" }),
     enabled: isAppAdmin === true,
   });
 

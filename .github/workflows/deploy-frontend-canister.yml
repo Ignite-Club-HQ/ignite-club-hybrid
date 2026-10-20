@@ -15,7 +15,7 @@ on:
   workflow_dispatch: {}
   push:
     branches: [main]
-    paths: ["frontend/**", "deploy/frontend/**"]
+    paths: ["frontend/**", "deploy/frontend/**", "!frontend/scripts/**", "!frontend/**/*.test.*", "!frontend/**/*.md"]
 
 concurrency:
   group: deploy-frontend-canister
@@ -104,8 +104,17 @@ jobs:
           set -euo pipefail
           # Make sure the canister has room to install/upload (it ran dry once).
           # Try smaller amounts if the deploy account is short on cycles.
+          # Only spend deploy-account cycles when the website canister is actually low;
+          # topping up on every push drained the account shared with tests and group funding.
+          FUEL=$(icp canister status frontend -e ic --json 2>/dev/null | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>{let v=null;const walk=o=>{if(o&&typeof o==="object")for(const[k,x]of Object.entries(o)){if(v===null&&/^(cycles|balance|cycles_balance)$/i.test(k)&&/^\d[\d_]*$/.test(String(x).replace(/ cycles$/,"")))v=String(x).replace(/[_ a-z]/gi,"");else walk(x)}};try{walk(JSON.parse(t))}catch{};console.log(v??"")})' || true)
           TOPPED=""
-          for A in 0.3T 0.15T 0.1T 0.05T; do
+          AMOUNTS="0.3T 0.15T 0.1T 0.05T"
+          if [ -n "$FUEL" ] && [ "$FUEL" -ge 2000000000000 ] 2>/dev/null; then
+            echo "Website canister holds $FUEL cycles; no top-up needed."; AMOUNTS=""; TOPPED="skipped"
+          elif [ -z "$FUEL" ]; then
+            echo "::warning::Could not read website canister fuel; topping up minimally."; AMOUNTS="0.05T"
+          fi
+          for A in $AMOUNTS; do
             if icp canister top-up frontend --amount "$A" -e ic; then TOPPED="$A"; echo "Topped up $A"; break; fi
           done
           [ -n "$TOPPED" ] || echo "::warning::Top-up skipped — the deploy account needs more cycles (send ICP to it)."

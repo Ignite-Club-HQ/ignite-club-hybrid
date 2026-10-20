@@ -1,0 +1,323 @@
+type Usage = 
+ record {
+   accepting_uploads: bool;
+   capacity_limit_bytes: nat64;
+   total_bytes: nat64;
+ };
+type StreamToken = 
+ record {
+   content_hash: text;
+   offset: nat;
+   path: text;
+ };
+type StreamResponse = 
+ record {
+   body: blob;
+   token: opt StreamToken;
+ };
+type Row = 
+ record {
+   bytes: nat;
+   club: opt text;
+   content_hash: text;
+   path: text;
+   revision: nat;
+ };
+type ResultUploadId = 
+ variant {
+   Err: text;
+   Ok: text;
+ };
+type ResultFinalized = 
+ variant {
+   Err: text;
+   Ok: FinalizedBlob;
+ };
+type Result = 
+ variant {
+   Err: text;
+   Ok;
+ };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
+type Phase = 
+ variant {
+   done;
+   indexed;
+   journal;
+   legacy;
+   pending;
+ };
+type Page__1 = 
+ record {
+   entries: vec Entry;
+   fence_revision: opt nat;
+   fenced: bool;
+   next: opt Cursor__1;
+   quota_authority: opt principal;
+   quota_shared: bool;
+   revision: nat;
+   scanned: nat;
+ };
+type Page = 
+ record {
+   authority: opt principal;
+   cursor: Cursor;
+   frozen: bool;
+   next: Cursor;
+   pending: nat;
+   revision: nat;
+   rows: vec Row;
+   total: nat;
+   total_bytes: nat;
+ };
+type MediaUsage = 
+ record {
+   bytes: nat64;
+   bytes_limit: opt nat64;
+   category: text;
+   count: nat;
+   count_limit: nat;
+ };
+type HttpResponse = 
+ record {
+   body: blob;
+   headers: vec HeaderField;
+   status_code: nat16;
+   streaming_strategy:
+    opt
+     variant {
+       Callback:
+        record {
+          callback: func (StreamToken) -> (StreamResponse) query;
+          token: StreamToken;
+        };};
+ };
+type HttpRequest = 
+ record {
+   body: blob;
+   headers: vec HeaderField;
+   method: text;
+   url: text;
+ };
+type Health = 
+ record {
+   blob_count: nat64;
+   total_bytes: nat64;
+   version: text;
+ };
+type HeaderField = 
+ record {
+   text;
+   text;
+ };
+type FreeUsageRow = 
+ record {
+   bytes: nat64;
+   category: text;
+   club_id: text;
+   count: nat;
+   cycle: nat;
+ };
+type FinalizedBlob = 
+ record {
+   content_hash: text;
+   content_length: nat64;
+   path: text;
+ };
+type Entry = 
+ record {
+   content_hash: text;
+   content_length: nat;
+   kind: variant {
+           "blob";
+           journal;
+           pending;
+         };
+   path: text;
+   unsettled: bool;
+   upload_id: text;
+ };
+type Cursor__1 = 
+ record {
+   after: text;
+   offset: nat;
+   phase: Phase;
+ };
+type Cursor = 
+ record {
+   after: text;
+   offset: nat;
+   phase: variant {
+            done;
+            indexed;
+            legacy;
+          };
+ };
+service : {
+  abort_upload: (upload_id: text) -> (Result);
+  begin_upload: (path: text, mime: text, total_size: nat64, chunk_count:
+   nat32) -> (ResultUploadId);
+  club_media_inventory_page: (club: text, cursor: Cursor__1,
+   expected_revision: opt nat) -> (variant {
+                                     Err: text;
+                                     Ok: Page__1;
+                                   });
+  /// Public: remaining cycles (shown in admin settings).
+  cycles_balance: () -> (nat) query;
+  delete_blob: (path: text) -> (Result);
+  enable_retained_media_quota: () -> (Result);
+  enable_shared_media_quota: () -> (Result);
+  enable_stable_media_storage: () -> (Result);
+  finalize_upload: (upload_id: text) -> (ResultFinalized);
+  freeze_media_quota: () -> (Result);
+  freeze_retained_media: () -> (Result);
+  /// Authoritative per-club media byte count for the Pro allowance UI: the
+  /// same finalized + in-flight figures the admission check enforces.
+  get_club_media_bytes: (club_id: text) ->
+   (record {
+      finalized: nat;
+      pending: nat;
+    }) query;
+  get_club_media_usage: (club_id: text) -> (vec MediaUsage) query;
+  get_content_hash: (path: text) -> (opt text) query;
+  get_upload_outcome: (upload_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt FinalizedBlob;
+    }) query;
+  get_usage: () -> (Usage) query;
+  health: () -> (Health) query;
+  http_request: (request: HttpRequest) -> (HttpResponse) query;
+  http_request_streaming_callback: (token: StreamToken) ->
+   (StreamResponse) query;
+  memory_stats: () ->
+   (record {
+      heap_bytes: nat;
+      memory_bytes: nat;
+      stable_bytes: nat;
+    }) query;
+  merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
+  /// Copy one legacy file per call, without awaits or an upgrade-time loop.
+  /// Publish only after exact SHA-256 read-back; preserve path/owner/timestamp.
+  migrate_legacy_blob: () ->
+   (variant {
+      Err: text;
+      Ok: record {
+            copied_bytes: nat;
+            remaining: nat;
+          };
+    });
+  prepare_account_removal: (request: Request) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
+  put_chunk: (upload_id: text, index: nat32, data: blob) -> (Result);
+  quota_snapshot_page: (offset: nat) ->
+   (record {
+      frozen: bool;
+      offset: nat;
+      pending: nat;
+      rows: vec FreeUsageRow;
+      total: nat;
+    });
+  read_account_get_upload_outcome: (upload_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt FinalizedBlob;
+    });
+  read_account_removal_drain: (request: Request) ->
+   (variant {
+      Err: text;
+      Ok: Receipt;
+    });
+  read_pending_test_uploads: (prefix: text) ->
+   (variant {
+      Err: text;
+      Ok: vec record {
+                id: text;
+                path: text;
+                size: nat64;
+              };
+    });
+  read_pending_uploads: () ->
+   (variant {
+      Err: text;
+      Ok: vec record {
+                id: text;
+                path: text;
+                size: nat64;
+              };
+    });
+  read_physical_growth_capacity: () ->
+   (variant {
+      Err: text;
+      Ok:
+       record {
+         allocatable_object_slots: nat;
+         allocated_bytes: nat;
+         configured_bytes: nat;
+         legacy_pending_count: nat;
+         max_object_slot_bytes: nat;
+         pending_count: nat;
+         pending_slot_bytes: nat;
+         revision: nat;
+       };
+    });
+  reconcile_retained_deletions: (cursor: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            attempted: nat;
+            cursor: text;
+          };
+    });
+  reconcile_upload_operations: (cursor: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            attempted: nat;
+            cursor: text;
+          };
+    });
+  rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
+  retained_snapshot_page: (cursor: Cursor) -> (Page);
+  retire_upload_outcomes: (cursor: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            cursor: text;
+            removed: nat;
+          };
+    });
+  set_capacity_limit: (limit_bytes: nat64) -> (Result);
+  set_club_domain_canister: (canister_id: principal) -> (Result);
+  set_club_media_transfer_fence: (club: text, on: bool, expected: opt nat) ->
+   (Result);
+  stable_storage_status: () ->
+   (record {
+      allocated_bytes: nat64;
+      enabled: bool;
+      indexed_count: nat;
+      legacy_count: nat;
+    }) query;
+}

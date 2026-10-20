@@ -41,6 +41,27 @@ type VaultFile =
    team: opt text;
    uploaded_by: principal;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Reference = 
+ record {
+   content_hash: opt text;
+   path: opt text;
+   resource_id: text;
+   store: opt text;
+   url: text;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
 type PinnedVault = 
  record {
    chat_id: text;
@@ -53,6 +74,13 @@ type PinnedVault =
    updated_at_ms: nat64;
    vault_file_id: opt text;
    vault_folder_id: opt text;
+ };
+type Page = 
+ record {
+   next: opt nat;
+   references: vec Reference;
+   revision: nat;
+   scanned: nat;
  };
 type Main = 
  service {
@@ -183,6 +211,10 @@ type Main =
        Err: text;
        Ok: VaultFile;
      });
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -191,6 +223,81 @@ type Main =
                            Err: text;
                            Ok: nat32;
                          });
+   read_account_get_backup: (id: text) -> (variant {
+                                             Err: text;
+                                             Ok: Backup;
+                                           });
+   read_account_get_file: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFile;
+     });
+   read_account_get_folder: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFolder;
+     });
+   read_account_get_pinned_vault: (chat_type: text, chat_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PinnedVault;
+     });
+   read_account_list_backups: () ->
+    (variant {
+       Err: text;
+       Ok: vec BackupSummary;
+     });
+   read_account_list_club_files: (club: text, team: opt text, mini_league_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec VaultFile;
+                  });
+   read_account_list_club_files_with_folder: (club: text, team: opt text,
+    mini_league_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
+   read_account_list_files: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     });
+   read_account_list_files_with_folder: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
+   read_account_list_folders: (club: text, team: opt text, mini_league_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec VaultFolder;
+                  });
+   read_account_list_trashed_files: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     });
+   read_account_list_trashed_files_with_folder: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   read_club_media_references: (club: text, offset: nat, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: Page;
+                 });
+   read_resource_club: (kind: text, id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
    register_file: (id: text, folder_id: text, club: text, team: opt text,
     name: text, file_url: text, size: nat64, mime: text, is_external_link:
     bool, blob_ref: opt BlobRef, mini_league_id: opt text, competition_id:

@@ -23,6 +23,8 @@ import { runTransfer } from '../src/live/groupTransferRunner.ts';
 import { approveProvision, runProvision, PER_GROUP_DOMAINS } from '../src/live/groupProvisioner.ts';
 import { routerProvisionSteps } from '../src/live/groupProvisionRouter.ts';
 import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
+import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
+import { wireAccountGroupAuthorities } from '../src/live/accountGroupAuthorities.ts';
 import { liveTransferAdapter } from '../src/live/groupTransferLiveAdapter.ts';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -36,26 +38,37 @@ const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
   const groups = { a: {}, b: {} };
+  const canisterIdsA = {};
   const argFor = c => c === 'timer_jobs' ? IDL.encode([], []) : IDL.encode([IDL.Principal], [governor]);
   for (const c of Object.keys(idls)) {
-    const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], arg: argFor(c) });
-    f.actor.setPrincipal(governor); groups.a[c] = f.actor;
+    const f = await pic.setupCanister({ idlFactory: idls[c], wasm: wasm(c), sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: argFor(c) });
+    f.actor.setPrincipal(governor); groups.a[c] = f.actor; canisterIdsA[c] = f.canisterId.toText();
     if (c === 'timer_jobs') ok(await f.actor.initialize());
   }
   // Group B is built by the production provisioner on real canisters, with a crash mid-build.
   const appSubnet = (await pic.getApplicationSubnets())[0].id.toText();
-  const routerF = await pic.setupCanister({ idlFactory: routerIdl, wasm: process.env.SHARD_ROUTER_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/shard_router.wasm'), sender: governor, controllers: [governor],
+  const routerF = await pic.setupCanister({ idlFactory: routerIdl, wasm: process.env.SHARD_ROUTER_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/shard_router.wasm'), sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }],
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   const router = routerF.actor; router.setPrincipal(governor);
   const globalWid = (await pic.createCanister({ sender: governor, controllers: [governor], targetSubnetId: Principal.fromText(appSubnet) })).toText();
+  const identityFixture = await pic.setupCanister({ idlFactory: identityIdl,
+    wasm: process.env.IDENTITY_ACCESS_WASM ?? resolve(root, 'target/wasm32-unknown-unknown/release/identity_access.wasm'), sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }],
+    arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
+  identityFixture.actor.setPrincipal(governor);
+  const authorityActors = {
+    club: id => { const actor = pic.createActor(clubIdl, Principal.fromText(id)); actor.setPrincipal(governor); return actor; },
+    identity: () => identityFixture.actor,
+  };
   const routerSteps = routerProvisionSteps(router, { secret_workload_identity: globalWid },
     { targetAlias: 'local', deploymentId: 'local', deploymentRevision: 1n, host: 'https://icp-api.io', networkKind: 'public_mainnet', primarySubnet: appSubnet, approvedSubnets: [appSubnet], additionalSubnetsEnabled: false },
-    { maxClubs: 500, heapBudgetBytes: 3n * 1024n ** 3n, minCycles: 1_000_000_000n });
+    { maxClubs: 500, heapBudgetBytes: 3n * 1024n ** 3n, minCycles: 1_000_000_000n },
+    async p => wireAccountGroupAuthorities([{ groupId: 'a', clubDomain: canisterIdsA.club_domain }, { groupId: p.groupId, clubDomain: p.canisters.club_domain }], identityFixture.canisterId.toText(), authorityActors), true);
   let creates = 0; let provSaved = null;
   const provAdapter = {
     createCanister: async (_p, d) => {
       if (++creates === 3) throw new Error('Request timed out (injected)');
       const id = await pic.createCanister({ sender: governor, controllers: [governor], targetSubnetId: Principal.fromText(appSubnet) });
+      await pic.updateCanisterSettings({ canisterId: id, sender: governor, environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }] });
       return { canisterId: id.toText(), subnetId: (await pic.getCanisterSubnetId(id)).toText() };
     },
     install: async (_p, d, id) => { if (!idls[d]) return; await pic.installCode({ canisterId: Principal.fromText(id), wasm: wasm(d), arg: argFor(d), sender: governor }); },
@@ -65,7 +78,9 @@ try {
   const approval = approveProvision({ kind: 'provision', deploymentId: 'local', subnetId: appSubnet, reason: 'full' }, { operator: governor.toText(), proposalId: 'p1', deploymentId: 'local', subnetId: appSubnet }, 'b', await router.version());
   const failed = await runProvision(approval, provAdapter);
   assert.equal(failed.phase, 'failed'); assert.deepEqual(ok(await router.list_groups()), [], 'incomplete group never registered');
-  const provDone = await runProvision({ ...provSaved, phase: 'approved', error: undefined }, provAdapter);
+  // The injected failure occurred before the management call; explicitly
+  // reconcile that known non-commit rather than blindly replaying an intent.
+  const provDone = await runProvision({ ...provSaved, pending: undefined, phase: 'approved', error: undefined }, provAdapter);
   assert.equal(provDone.phase, 'enabled', provDone.error);
   const listed = ok(await router.list_groups()); assert.equal(listed.length, 1); assert.equal(listed[0].id, 'b'); assert.equal(listed[0].accepting, true);
   const snap = ok(await router.read_group_registry('local')); assert.ok(JSON.stringify(snap, (_k, v) => typeof v === 'bigint' ? String(v) : v).includes('"b"'), 'placement recorded');
@@ -118,6 +133,10 @@ try {
   const link = ok(await A.club_domain.create_team_invite_link(CLUB, team, 'player'));
   const inflight = new Map(); let registryRev = 1n; let assignment = 'a'; const blocked = {}; const saved = [];
   const base = liveTransferAdapter({
+    // Isolated fixtures below contain no ICP ciphertext/blob refs or pending
+    // uploads; this is NOT a production inventory reader or activation proof.
+    mediaInventory: async (fromGroup, toGroup, clubId) => ({ fromGroup, toGroup, clubId, complete: true,
+      encryptedObjects: 0, pendingUploads: 0, sharedQuotaReady: true }),
     actors: g => groups[g], fenceRevision: 1n, targetFor: async club => inflight.get(club) ?? null,
     clubSponsorIds: async () => ['sp-legacy'],
     sameDeployment: async () => true,
@@ -135,6 +154,14 @@ try {
       blocked.league = await refused(A.mini_league_domain.update_mini_league(league.id, 'Hacked', [], [], 5, 3, 10, [], true));
       blocked.comp = await refused(A.competition_domain.create_competition(CLUB, 'Sneaky Cup', '2026'));
       blocked.media = await refused(A.media_metadata.register_asset(CLUB, 'photo', 'image/jpeg', 'sum2', `clubs/${CLUB}/p2.jpg`, 'club', 99_999_999_999_999n));
+      for (const name of ['media_metadata', 'messaging_domain', 'vault_domain', 'club_domain']) {
+        const inventory = ok(await A[name].read_club_media_references(CLUB, 0n, []));
+        assert.ok(inventory.scanned <= 200n, `${name} metadata page is bounded`);
+        assert.equal(ok(await A[name].read_club_media_references(CLUB, 0n, [inventory.revision])).revision, inventory.revision);
+        assert.ok('Err' in await A[name].read_club_media_references(CLUB, 0n, [inventory.revision + 1n]), `${name} stale revision denied`);
+        assert.ok('Err' in await refused(as(A[name], staff, () => A[name].read_club_media_references(CLUB, 0n, []))), `${name} inventory operator-only`);
+      }
+      assert.equal(ok(await A.media_metadata.read_club_media_references(CLUB, 0n, [])).references[0].resource_id, asset.id);
       blocked.insights = await refused(A.insights_domain.record_photo_upload(CLUB, 'p2'));
       blocked.sponsor = await refused(A.insights_domain.record_club_sponsor_metric(CLUB, 'sp1', 'impressions', 1, []));
       blocked.notify = await refused(A.notification_queue.enqueue('n2', 'u1', CLUB, 'news', 'Sneaky', 'nk2'));
@@ -148,6 +175,8 @@ try {
   const done = await runTransfer(planTransfer(CLUB, 'a', 'b', 1n), adapter);
   assert.equal(done.phase, 'released'); assert.equal(assignment, 'b');
   assert.deepEqual(saved, ['fenced', 'copied', 'verified', 'cutover', 'released']);
+  for (const name of ['media_metadata', 'messaging_domain', 'vault_domain', 'club_domain'])
+    assert.ok('Err' in await B[name].read_club_media_references(CLUB, 0n, []), `${name} inventories require a held fence after move`);
   for (const [k, r] of Object.entries(blocked)) assert.ok('Err' in r, `${k} write must be refused while fenced`);
 
   // Target now serves the club in every domain; bystander club untouched.

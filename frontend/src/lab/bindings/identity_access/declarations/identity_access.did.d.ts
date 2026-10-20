@@ -19,12 +19,43 @@ export interface Access {
 }
 export interface Account {
   'id' : string,
+  /**
+   * `#[serde(default)]` keeps accounts stored before this field existed
+   * decodable as `Active`.
+   */
   'status' : AccountStatus,
   'version' : bigint,
   'principals' : Array<Principal>,
 }
+/**
+ * Account status: `Suspended` accounts are rejected by caller-authenticated
+ * self-service write paths (profile/theme/link/consent/terms — see
+ * `account_for_write`); admin-gated writes on other accounts (role grants,
+ * family links, exclusions, erase_account) still work so an admin can
+ * manage/clean up a suspended account.
+ */
 export type AccountStatus = { 'Active' : null } |
   { 'Suspended' : null };
+export interface Binding {
+  'registry_revision' : bigint,
+  'host' : string,
+  'network_kind' : string,
+  'deployment_revision' : bigint,
+  'target_alias' : string,
+  'registry' : Principal,
+  'deployment_id' : string,
+}
+export type DenialReason = { 'Erased' : null } |
+  { 'Rekeyed' : null } |
+  { 'Unlinked' : null };
+export interface Domain { 'domain' : string, 'canister' : Principal }
+export interface DomainPlacement {
+  'domain' : string,
+  'subnet' : Principal,
+  'canister' : Principal,
+}
+export type EligibilityDecision = { 'Eligible' : null } |
+  { 'Denied' : null };
 /**
  * A Pro entitlement granted to a principal from an IAP (App Store) receipt
  * or a governor/verifier write. `transaction_id` is the Apple transaction
@@ -40,6 +71,11 @@ export interface Entitlement {
   'granted_at_ms' : bigint,
   'expires_at_ms' : bigint,
 }
+export interface Evidence {
+  'snapshot' : Snapshot,
+  'binding' : Binding,
+  'history_revision' : bigint,
+}
 export interface Exclusion {
   'account_id' : string,
   'club' : string,
@@ -53,7 +89,21 @@ export interface ExternalSiteBinding {
   'site_id' : string,
 }
 export interface FamilyLink { 'account_id' : string, 'child_id' : string }
+export interface Group {
+  'id' : string,
+  'domains' : Array<Domain>,
+  'target_alias' : string,
+}
 export interface Init { 'governor' : Principal }
+export interface Intent {
+  'account_id' : string,
+  'account_version' : bigint,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'inventory' : RemovalInventory,
+  'generation' : bigint,
+  'targets' : Array<Principal>,
+}
 export interface LinkChallenge {
   'id' : bigint,
   'account_id' : string,
@@ -62,6 +112,43 @@ export interface LinkChallenge {
   'accepted' : boolean,
   'expires_at_ns' : bigint,
   'expected_version' : bigint,
+}
+export interface MediaEvidence {
+  'club_authority' : Principal,
+  'registry' : MediaRegistry,
+}
+export interface MediaRegistry {
+  'stores' : Array<Principal>,
+  'active' : boolean,
+}
+export interface MemoryStats {
+  'memory_bytes' : bigint,
+  'stable_bytes' : bigint,
+  'heap_bytes' : bigint,
+}
+export interface Placement {
+  'host' : string,
+  'network_kind' : string,
+  'deployment_revision' : bigint,
+  'approved_subnets' : Array<Principal>,
+  'additional_subnets_enabled' : boolean,
+  'group_id' : string,
+  'domains' : Array<DomainPlacement>,
+  'deployment_id' : string,
+  'primary_subnet' : Principal,
+}
+export interface PrincipalDenial {
+  'account_id' : string,
+  'reauthorized_version' : [] | [bigint],
+  'rekey_destination' : [] | [Principal],
+  'version' : bigint,
+  'reason' : DenialReason,
+}
+export interface PrincipalEligibility {
+  'account_version' : [] | [bigint],
+  'decision' : EligibilityDecision,
+  'subject' : Principal,
+  'denied_through_version' : [] | [bigint],
 }
 export interface PrivacyConsent {
   'account_id' : string,
@@ -98,39 +185,92 @@ export interface ProfileSearchResult {
   'avatar_ref' : [] | [string],
   'display_name' : string,
 }
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export type RemovalHistoryCursor = { 'ErasedAccounts' : [] | [string] } |
+  { 'Done' : null } |
+  { 'PendingIntents' : bigint } |
+  { 'PrincipalDenials' : [] | [string] };
+export interface RemovalHistoryManifest {
+  'erased_accounts' : bigint,
+  'pending_intents' : bigint,
+  'principal_denials' : bigint,
+  'service_readers' : Array<Principal>,
+  'revision' : bigint,
+  'club_authorities' : Array<Principal>,
+}
+export interface RemovalHistoryPage {
+  'pending' : Array<UnlinkIntent>,
+  'denials' : Array<[string, PrincipalDenial]>,
+  'erased' : Array<[string, bigint]>,
+  'next' : RemovalHistoryCursor,
+  'revision' : bigint,
+}
+export interface RemovalInventory {
+  'media' : Array<MediaEvidence>,
+  'groups' : Evidence,
+  'supplemental' : Array<Supplemental>,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
+}
 export type Result = { 'Ok' : Account } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : Access } |
   { 'Err' : string };
-export type Result_10 = { 'Ok' : [] | [TermsAcceptance] } |
+export type Result_10 = { 'Ok' : Array<Entitlement> } |
   { 'Err' : string };
-export type Result_11 = { 'Ok' : Array<RoleGrant> } |
+export type Result_11 = { 'Ok' : Profile } |
   { 'Err' : string };
-export type Result_12 = { 'Ok' : Entitlement } |
+export type Result_12 = { 'Ok' : [] | [TermsAcceptance] } |
   { 'Err' : string };
-export type Result_13 = { 'Ok' : bigint } |
+export type Result_13 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
-export type Result_14 = { 'Ok' : Array<ProfileSearchResult> } |
+export type Result_14 = { 'Ok' : Ticket } |
   { 'Err' : string };
-export type Result_15 = { 'Ok' : PrivacyConsent } |
+export type Result_15 = { 'Ok' : Evidence } |
   { 'Err' : string };
-export type Result_16 = { 'Ok' : TermsAcceptance } |
+export type Result_16 = { 'Ok' : Array<PrincipalEligibility> } |
+  { 'Err' : string };
+export type Result_17 = { 'Ok' : PrincipalEligibility } |
+  { 'Err' : string };
+export type Result_18 = { 'Ok' : RemovalHistoryManifest } |
+  { 'Err' : string };
+export type Result_19 = { 'Ok' : RemovalHistoryPage } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_3 = { 'Ok' : LinkChallenge } |
+export type Result_20 = { 'Ok' : RemovalInventory } |
   { 'Err' : string };
-export type Result_4 = { 'Ok' : ExternalSiteBinding } |
+export type Result_21 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_5 = { 'Ok' : boolean } |
+export type Result_22 = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_6 = { 'Ok' : State } |
+export type Result_23 = { 'Ok' : Array<ProfileSearchResult> } |
   { 'Err' : string };
-export type Result_7 = { 'Ok' : Array<ExternalSiteBinding> } |
+export type Result_24 = { 'Ok' : PrivacyConsent } |
   { 'Err' : string };
-export type Result_8 = { 'Ok' : Array<Entitlement> } |
+export type Result_25 = { 'Ok' : TermsAcceptance } |
   { 'Err' : string };
-export type Result_9 = { 'Ok' : Profile } |
+export type Result_3 = { 'Ok' : Receipt } |
+  { 'Err' : string };
+export type Result_4 = { 'Ok' : Intent } |
+  { 'Err' : string };
+export type Result_5 = { 'Ok' : LinkChallenge } |
+  { 'Err' : string };
+export type Result_6 = { 'Ok' : ExternalSiteBinding } |
+  { 'Err' : string };
+export type Result_7 = { 'Ok' : boolean } |
+  { 'Err' : string };
+export type Result_8 = { 'Ok' : State } |
+  { 'Err' : string };
+export type Result_9 = { 'Ok' : Array<ExternalSiteBinding> } |
   { 'Err' : string };
 export interface RoleGrant {
   'account_id' : string,
@@ -138,6 +278,11 @@ export interface RoleGrant {
   'role' : string,
   'team' : [] | [string],
   'site_id' : [] | [string],
+}
+export interface Snapshot {
+  'groups' : Array<Group>,
+  'placements' : Array<Placement>,
+  'revision' : bigint,
 }
 export interface State {
   'privacy_consents' : Array<PrivacyConsent>,
@@ -185,10 +330,24 @@ export interface State {
   'terms_acceptances' : Array<TermsAcceptance>,
   'next_challenge' : bigint,
 }
+export interface Supplemental {
+  'domain' : string,
+  'group_id' : string,
+  'subnet' : Principal,
+  'canister' : Principal,
+}
 export interface TermsAcceptance {
   'account_id' : string,
   'terms_version' : number,
   'accepted_at_ms' : bigint,
+}
+export interface Ticket { 'binding' : Binding, 'account' : Account }
+export interface UnlinkIntent {
+  'account_id' : string,
+  'principal' : Principal,
+  'acknowledged' : Array<Principal>,
+  'version' : bigint,
+  'authorities' : Array<Principal>,
 }
 export interface _SERVICE {
   'accept_link' : ActorMethod<[bigint], Result>,
@@ -206,25 +365,32 @@ export interface _SERVICE {
    * identity, once one is established).
    */
   'add_verifier' : ActorMethod<[Principal], Result_2>,
-  'begin_link' : ActorMethod<[Principal], Result_3>,
-  'bind_external_site' : ActorMethod<[string, string, string], Result_4>,
-  'check_field_access' : ActorMethod<[string, string], Result_5>,
+  'advance_account_removal_receiver' : ActorMethod<
+    [string, Principal],
+    Result_3
+  >,
+  'begin_account_removal' : ActorMethod<[string, bigint], Result_4>,
+  'begin_link' : ActorMethod<[Principal], Result_5>,
+  'bind_external_site' : ActorMethod<[string, string, string], Result_6>,
+  'check_field_access' : ActorMethod<[string, string], Result_7>,
+  'cancel_account_deletion' : ActorMethod<[string], Result_2>,
+  'commit_account_deletion' : ActorMethod<[string], Result_2>,
   /**
    * Public: remaining cycles (shown in admin settings).
    */
   'cycles_balance' : ActorMethod<[], bigint>,
   'erase_account' : ActorMethod<[string], Result_2>,
-  'export_state' : ActorMethod<[], Result_6>,
-  'get_external_bindings' : ActorMethod<[string], Result_7>,
+  'export_state' : ActorMethod<[], Result_8>,
+  'get_external_bindings' : ActorMethod<[string], Result_9>,
   /**
    * The caller's own entitlement records (active and expired).
    */
-  'get_my_entitlements' : ActorMethod<[], Result_8>,
-  'get_privacy_consent' : ActorMethod<[string, string], Result_5>,
+  'get_my_entitlements' : ActorMethod<[], Result_10>,
+  'get_privacy_consent' : ActorMethod<[string, string], Result_7>,
   /**
    * The caller's own profile, or an error when none has been set yet.
    */
-  'get_profile' : ActorMethod<[], Result_9>,
+  'get_profile' : ActorMethod<[], Result_11>,
   /**
    * Batch profile lookup by account id (principal text / user id), used by
    * the frontend profile cache to resolve many ids in one round trip.
@@ -235,7 +401,7 @@ export interface _SERVICE {
    * The terms acceptance record for an arbitrary account: the account owner
    * or the governor only.
    */
-  'get_terms_acceptance' : ActorMethod<[string], Result_10>,
+  'get_terms_acceptance' : ActorMethod<[string], Result_12>,
   'grant_role' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
     Result_2
@@ -248,21 +414,49 @@ export interface _SERVICE {
    * True when `principal` holds any non-expired Pro entitlement. Callable by
    * any authenticated principal (boolean only, no entitlement detail leaked).
    */
-  'is_pro' : ActorMethod<[Principal], Result_5>,
-  'memory_stats' : ActorMethod<
-    [],
-    { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
-  >,
+  'is_pro' : ActorMethod<[Principal], Result_7>,
+  /**
+   * Public: live memory reading for the admin health page.
+   */
+  'memory_stats' : ActorMethod<[], MemoryStats>,
   /**
    * Every role grant held by the caller, across all clubs/teams.
    */
-  'my_roles' : ActorMethod<[], Result_11>,
+  'my_roles' : ActorMethod<[], Result_13>,
   /**
    * The caller's own terms acceptance record, or `None` when they have never
    * accepted (used by the legal re-acceptance gate for Internet Identity
    * users).
    */
-  'my_terms_acceptance' : ActorMethod<[], Result_10>,
+  'my_terms_acceptance' : ActorMethod<[], Result_12>,
+  'prepare_account_deletion' : ActorMethod<[string, bigint], Result_14>,
+  'read_account_removal_intent' : ActorMethod<[string], Result_4>,
+  'read_group_inventory_evidence' : ActorMethod<[bigint], Result_15>,
+  /**
+   * Only configured canisters may ask for another caller's links. No browser
+   * supplies an account id or a principal list; the index is authoritative.
+   */
+  'read_linked_account' : ActorMethod<[Principal], Result>,
+  'read_principal_eligibilities' : ActorMethod<[Array<Principal>], Result_16>,
+  /**
+   * Consensus reads; never create an account or grant resource permissions.
+   * Versions are account-scoped evidence, NOT globally atomic access tokens.
+   */
+  'read_principal_eligibility' : ActorMethod<[Principal], Result_17>,
+  /**
+   * Local-only consensus recovery evidence. Reader lists/club receipts are NOT
+   * a complete deployment inventory or an in-flight drain acknowledgement.
+   */
+  'read_removal_history_manifest' : ActorMethod<[], Result_18>,
+  'read_removal_history_page' : ActorMethod<
+    [bigint, RemovalHistoryCursor, number],
+    Result_19
+  >,
+  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_20>,
+  /**
+   * Subject-bound consensus ownership read; never implicitly registers an account.
+   */
+  'read_service_account' : ActorMethod<[Principal], Result>,
   /**
    * Caller-authenticated: redeems a signed attestation minted by the
    * session-free IAP verification endpoint after it confirms an Apple
@@ -278,7 +472,7 @@ export interface _SERVICE {
    */
   'redeem_entitlement' : ActorMethod<
     [string, string, bigint, string, string],
-    Result_12
+    Result_21
   >,
   'register_account' : ActorMethod<[], Result>,
   /**
@@ -291,16 +485,22 @@ export interface _SERVICE {
    * number of records changed (or that would change when `dry_run`).
    * Any NEW stored principal / principal-text field must be added here.
    */
-  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_13>,
+  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_22>,
   /**
    * Governor-only: revokes a verifier principal.
    */
   'remove_verifier' : ActorMethod<[Principal], Result_2>,
   'revoke' : ActorMethod<[Principal, bigint], Result>,
+  /**
+   * Mirrors `grant_role`'s auth (governor-only).
+   */
   'revoke_role' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
     Result_2
   >,
+  /**
+   * Mirrors `grant_role_scoped`'s auth (governor-only).
+   */
   'revoke_role_scoped' : ActorMethod<
     [string, string, [] | [string], [] | [string], [] | [string]],
     Result_2
@@ -313,22 +513,27 @@ export interface _SERVICE {
    * can grant roles without a second lookup. Profiles without an account or
    * with a blank name are skipped.
    */
-  'search_profiles' : ActorMethod<[string, number], Result_14>,
+  'search_profiles' : ActorMethod<[string, number], Result_23>,
+  /**
+   * Admin-gated (governor or an account holding the `app_admin` role):
+   * suspends or reactivates an account. `Suspended` accounts are rejected by
+   * `account_for_write`-gated self-service writes (see its doc comment);
+   * admin-gated writes on their behalf keep working.
+   */
+  'set_account_status' : ActorMethod<[string, AccountStatus], Result>,
   /**
    * Governor-only: sets (or rotates) the shared HMAC secret used to verify
    * `redeem_entitlement` attestations. Must match the secret held by the
    * session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
-   * Admin-gated (governor or app_admin role): suspends or reactivates an
-   * account.
    */
-  'set_account_status' : ActorMethod<[string, AccountStatus], Result>,
   'set_attestation_secret' : ActorMethod<[Uint8Array], Result_2>,
+  'set_club_authorities' : ActorMethod<[Array<Principal>], Result_2>,
   /**
    * Records that the caller has dismissed the club switcher coach-mark, so
    * it stays dismissed across devices. Creates a blank profile entry if the
    * caller has never called `set_profile`.
    */
-  'set_club_switcher_hint_seen' : ActorMethod<[], Result_9>,
+  'set_club_switcher_hint_seen' : ActorMethod<[], Result_11>,
   /**
    * Governor- or verifier-only: records a Pro entitlement for an arbitrary
    * principal. Used by a trusted server-side writer; client-submitted IAP
@@ -336,7 +541,7 @@ export interface _SERVICE {
    */
   'set_entitlement' : ActorMethod<
     [Principal, string, string, bigint, string],
-    Result_12
+    Result_21
   >,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_2>,
   'set_exclusion_scoped' : ActorMethod<
@@ -344,25 +549,32 @@ export interface _SERVICE {
     Result_2
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_15>,
+  'set_group_inventory_binding' : ActorMethod<[Binding, bigint], Result_2>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_24>,
   /**
    * Sets (or replaces) the caller's profile. The account must already exist —
    * sign-in provisioning calls register_account first.
    */
-  'set_profile' : ActorMethod<[string, [] | [string]], Result_9>,
+  'set_profile' : ActorMethod<[string, [] | [string]], Result_11>,
+  'set_removal_supplemental_inventory' : ActorMethod<
+    [Array<Supplemental>, bigint],
+    Result_2
+  >,
+  'set_service_authorities' : ActorMethod<[Array<Principal>], Result_2>,
   /**
    * Sets (records) the caller's acceptance of the current terms/privacy
    * version. Monotonic per-account: a version lower than (or equal to) the
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_16>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_25>,
   /**
    * Sets (or clears) the caller's UI theme preference, so it follows the
    * account across devices. Creates a blank profile entry if the caller has
    * never called `set_profile`.
    */
-  'set_theme_preference' : ActorMethod<[[] | [string]], Result_9>,
+  'set_theme_preference' : ActorMethod<[[] | [string]], Result_11>,
+  'settle_account_deletion' : ActorMethod<[string], Result_2>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

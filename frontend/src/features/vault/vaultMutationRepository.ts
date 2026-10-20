@@ -1,3 +1,5 @@
+import { vaultViewScope } from "@/live/featureScopes";
+import { writeOnce } from "@/live/clubScope";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -64,7 +66,7 @@ export function renameVaultFolder(
       // reset to empty here — verify against the live canister post-deploy.
       await updateLiveVaultFolder(ctx, folderId, newName, []);
     },
-  });
+  }, writeOnce({ vaultFolderId: folderId }));
 }
 
 export function renameVaultItem(
@@ -77,7 +79,7 @@ export function renameVaultItem(
     icp: async (ctx) => {
       await renameLiveVaultFile(ctx, fileId, newName);
     },
-  });
+  }, writeOnce({ vaultFileId: fileId }));
 }
 
 export async function moveVaultFile(
@@ -107,7 +109,7 @@ export async function moveVaultFile(
       // the empty folder id. Verify against the live canister post-deploy.
       await moveLiveVaultFile(ctx, options.fileId, options.targetFolderId ?? "");
     },
-  });
+  }, writeOnce({ vaultFileId: options.fileId }));
 }
 
 export async function createVaultFolder(
@@ -160,7 +162,7 @@ export async function createVaultFolder(
         competitionId,
       );
     },
-  });
+  }, writeOnce(vaultViewScope(options.view)));
 }
 
 /**
@@ -224,7 +226,7 @@ export async function createVaultLinkFile(
         competitionId,
       );
     },
-  });
+  }, writeOnce(vaultViewScope(options.view)));
 }
 
 export async function deleteVaultFolder(
@@ -239,7 +241,7 @@ export async function deleteVaultFolder(
     icp: async (ctx) => {
       await deleteLiveVaultFolder(ctx, folderId);
     },
-  });
+  }, writeOnce({ vaultFolderId: folderId }));
 }
 
 export async function softDeleteVaultItem(
@@ -263,7 +265,7 @@ export async function softDeleteVaultItem(
       await trashLiveVaultFile(ctx, itemId);
       return itemId;
     },
-  });
+  }, writeOnce({ vaultFileId: itemId }));
 }
 
 export async function restoreVaultItem(
@@ -283,7 +285,7 @@ export async function restoreVaultItem(
       await restoreLiveVaultFile(ctx, itemId);
       return itemId;
     },
-  });
+  }, writeOnce({ vaultFileId: itemId }));
 }
 
 export async function permanentlyDeleteVaultPhoto(
@@ -322,7 +324,7 @@ export async function permanentlyDeleteVaultPhoto(
       await permanentlyDeleteLiveVaultFile(ctx, itemId);
       return itemId;
     },
-  });
+  }, writeOnce({ vaultFileId: itemId }));
 }
 
 export async function permanentlyDeleteVaultFile(
@@ -343,5 +345,5 @@ export async function permanentlyDeleteVaultFile(
       // cleanup stays with the storage layer — provisional.
       await permanentlyDeleteLiveVaultFile(ctx, itemId);
     },
-  });
+  }, writeOnce({ vaultFileId: itemId }));
 }

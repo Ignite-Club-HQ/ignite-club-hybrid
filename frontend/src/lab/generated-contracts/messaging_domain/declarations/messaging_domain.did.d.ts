@@ -254,6 +254,11 @@ export interface Main {
     { 'Ok' : Conversation } |
       { 'Err' : string }
   >,
+  'ensure_mini_league_chat' : ActorMethod<
+    [string, string, string, Array<Principal>],
+    { 'Ok' : GroupSummary } |
+      { 'Err' : string }
+  >,
   'export_club_snapshot_page' : ActorMethod<
     [string, bigint, bigint],
     { 'Ok' : Uint8Array } |
@@ -293,6 +298,11 @@ export interface Main {
   'get_group_metadata_multi' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<GroupMetadata> } |
+      { 'Err' : string }
+  >,
+  'get_mini_league_chat' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [GroupSummary] } |
       { 'Err' : string }
   >,
   'get_minimum_app_versions' : ActorMethod<
@@ -440,7 +450,7 @@ export interface Main {
   >,
   'list_read_receipts' : ActorMethod<
     [string],
-    { 'Ok' : Array<Receipt> } |
+    { 'Ok' : Array<Receipt__1> } |
       { 'Err' : string }
   >,
   'list_typing' : ActorMethod<
@@ -450,7 +460,7 @@ export interface Main {
   >,
   'mark_read' : ActorMethod<
     [string, string],
-    { 'Ok' : Receipt } |
+    { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
   'memory_stats' : ActorMethod<
@@ -489,6 +499,11 @@ export interface Main {
     { 'Ok' : PinnedMessage } |
       { 'Err' : string }
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'presence_heartbeat' : ActorMethod<
     [[] | [string]],
     { 'Ok' : null } |
@@ -501,6 +516,201 @@ export interface Main {
   >,
   'purge_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'purge_my_data' : ActorMethod<[], { 'Ok' : number } | { 'Err' : string }>,
+  'read_account_can_dm_user' : ActorMethod<[Principal], boolean>,
+  'read_account_can_read_digest' : ActorMethod<[Principal, string], boolean>,
+  'read_account_dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
+  'read_account_export_state' : ActorMethod<
+    [],
+    { 'Ok' : State } |
+      { 'Err' : string }
+  >,
+  'read_account_get_group_join_policy' : ActorMethod<
+    [string],
+    { 'join_policy' : string, 'category' : [] | [string] }
+  >,
+  'read_account_get_group_metadata' : ActorMethod<
+    [string],
+    { 'Ok' : GroupMetadata } |
+      { 'Err' : string }
+  >,
+  'read_account_get_group_metadata_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<GroupMetadata> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_mini_league_chat' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [GroupSummary] } |
+      { 'Err' : string }
+  >,
+  'read_account_get_mute_preference' : ActorMethod<[string], boolean>,
+  'read_account_get_mute_preferences' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<[string, boolean]> } |
+      { 'Err' : string }
+  >,
+  'read_account_get_poll_results' : ActorMethod<
+    [string],
+    { 'Ok' : PollResults } |
+      { 'Err' : string }
+  >,
+  'read_account_get_user_messaging_settings' : ActorMethod<
+    [],
+    UserMessagingSettings
+  >,
+  'read_account_has_blocked' : ActorMethod<[Principal], boolean>,
+  'read_account_is_competition_admin' : ActorMethod<[string], boolean>,
+  'read_account_list_all_online_users' : ActorMethod<
+    [],
+    { 'Ok' : Array<OnlineUser> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_blocked_users' : ActorMethod<[], Array<Principal>>,
+  'read_account_list_club_dm_settings' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubDmSettings> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_content_reports' : ActorMethod<
+    [[] | [string]],
+    { 'Ok' : Array<ContentReport> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_deleted_groups' : ActorMethod<
+    [],
+    { 'Ok' : Array<GroupMetadata> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_dm_attachments_disabled' : ActorMethod<
+    [],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_groups_by_club' : ActorMethod<
+    [string],
+    { 'Ok' : Array<GroupSummary> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_groups_by_clubs' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<GroupSummary> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_groups_by_team' : ActorMethod<
+    [string],
+    { 'Ok' : Array<GroupSummary> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_join_requests' : ActorMethod<
+    [string],
+    { 'Ok' : Array<JoinRequest> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_latest_messages_page' : ActorMethod<
+    [string, [] | [bigint], number],
+    { 'Ok' : MessagePage } |
+      { 'Err' : string }
+  >,
+  'read_account_list_messages' : ActorMethod<
+    [string, [] | [bigint]],
+    Array<Message>
+  >,
+  'read_account_list_messages_page' : ActorMethod<
+    [string, [] | [bigint], number],
+    { 'Ok' : MessagePage } |
+      { 'Err' : string }
+  >,
+  'read_account_list_open_groups' : ActorMethod<
+    [string],
+    {
+        'Ok' : Array<
+          {
+            'requested' : boolean,
+            'join_policy' : string,
+            'summary' : GroupSummary,
+            'category' : [] | [string],
+          }
+        >
+      } |
+      { 'Err' : string }
+  >,
+  'read_account_list_pinned_messages' : ActorMethod<
+    [string],
+    { 'Ok' : Array<PinnedMessage> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_reactions' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Reaction> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_read_receipts' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Receipt__1> } |
+      { 'Err' : string }
+  >,
+  'read_account_list_typing' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TypingUser> } |
+      { 'Err' : string }
+  >,
+  'read_account_messages_since' : ActorMethod<
+    [string, bigint],
+    { 'Ok' : Array<MessageWithReactions> } |
+      { 'Err' : string }
+  >,
+  'read_account_my_unread_counts' : ActorMethod<[], Array<UnreadSummary>>,
+  'read_account_online_count' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'read_account_open_conversation' : ActorMethod<
+    [string, number],
+    {
+        'Ok' : {
+          'page' : MessagePage,
+          'pins' : [] | [Array<PinnedMessage>],
+          'reactions' : Array<Reaction>,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'read_account_read_conversation_club' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_account_recent_conversations' : ActorMethod<
+    [Principal, number],
+    { 'Ok' : Array<RecentConversation> } |
+      { 'Err' : string }
+  >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
+  'read_account_search_messages' : ActorMethod<
+    [string, string, number],
+    { 'Ok' : Array<Message> } |
+      { 'Err' : string }
+  >,
+  'read_account_unread_count' : ActorMethod<
+    [string],
+    { 'Ok' : Unread } |
+      { 'Err' : string }
+  >,
+  'read_account_unread_count_by_club' : ActorMethod<
+    [Principal],
+    { 'Ok' : Array<ClubUnreadSummary> } |
+      { 'Err' : string }
+  >,
+  'read_club_media_references' : ActorMethod<
+    [string, bigint, [] | [bigint]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
+  >,
   /**
    * / Location-only lookup for group routing: which club owns this chat, if
    * / it lives in this canister. Participants only; null when not held here.
@@ -793,6 +1003,12 @@ export interface OnlineUser {
   'user' : Principal,
   'platform' : [] | [string],
 }
+export interface Page {
+  'references' : Array<Reference>,
+  'next' : [] | [bigint],
+  'scanned' : bigint,
+  'revision' : bigint,
+}
 export interface PinnedMessage {
   'id' : string,
   'pinned_by' : Principal,
@@ -832,6 +1048,11 @@ export interface RecapConfig {
   'endpoint_url' : string,
 }
 export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Receipt__1 {
   'conversation_id' : string,
   'read' : boolean,
   'user' : Principal,
@@ -842,6 +1063,19 @@ export interface RecentConversation {
   'conversation_id' : string,
   'kind' : string,
   'last_message_at_ms' : [] | [bigint],
+}
+export interface Reference {
+  'url' : string,
+  'path' : [] | [string],
+  'content_hash' : [] | [string],
+  'store' : [] | [string],
+  'resource_id' : string,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface RoleGrant {
   'role' : string,
@@ -887,7 +1121,7 @@ export interface State {
   'attachmentMetadata' : Array<AttachmentMetadata>,
   'dmLinks' : Array<DmLink>,
   'userMessagingSettings' : Array<UserMessagingSettings>,
-  'receipts' : Array<Receipt>,
+  'receipts' : Array<Receipt__1>,
   'reactions' : Array<Reaction>,
   'roles' : Array<RoleGrant>,
   'competitionAdmins' : Array<CompetitionAdmin>,

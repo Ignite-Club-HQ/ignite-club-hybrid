@@ -5,6 +5,7 @@
  * Snapshots are opaque Candid blobs — never decoded or decrypted here. */
 import type { DomainDigest } from './groupTransfer';
 import type { TransferAdapter } from './groupTransferRunner';
+import { assertMediaTransferSafe, type MediaTransferInventory } from './mediaTransferSafety';
 
 type R<T> = { Ok: T } | { Err: string };
 const ok = <T>(r: R<T>): T => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
@@ -52,9 +53,27 @@ export type LiveAdapterDeps = {
   fenceRevision: bigint;
   /** Destination group of the club's persisted in-flight transfer — durable, so a restarted operator still unlocks it. */
   targetFor(clubId: string): Promise<string | null>;
+  /** Authenticated complete inventory including chat/vault/article blobs and
+   * pending operations; unavailable readers fail closed, including on resume. */
+  mediaInventory?(fromGroup: string, toGroup: string, clubId: string): Promise<MediaTransferInventory>;
+  /** Opt-in durable media preparation. Fence metadata domains before the
+   * inventory callback scans blob stores. Failed checks retain all locks. */
+  mediaPreparation?: { release(): Promise<void> };
+  /** Opt-in operator hooks backed by durable key journals and authenticated
+   * deployment/placement/provenance/fence readers. Not move permission. */
+  mediaKeyRecovery?: {
+    prepareCutover: NonNullable<TransferAdapter['prepareCutover']>;
+    beforeAbortUnlock: NonNullable<TransferAdapter['beforeAbortUnlock']>;
+    verifyReleased(t: import('./groupTransfer').Transfer): Promise<void>;
+  };
 };
 
 export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
+  const verifyMedia = async (from: string, to: string, club: string) => {
+    if (!d.mediaInventory) throw new Error('Authenticated media inventory reader required; club move blocked');
+    if (d.mediaPreparation) await fenceAll(from, club, true);
+    assertMediaTransferSafe(await d.mediaInventory(from, to, club), club, from, to);
+  };
   const live = (domain: string) => (LIVE_DOMAINS as readonly string[]).includes(domain);
   const global = (domain: string) => (GLOBAL_DOMAINS as readonly string[]).includes(domain);
   // Both sides are fenced: source blocks writes, target accepts imports only.
@@ -80,8 +99,9 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
   };
   return {
     sameDeployment: d.sameDeployment,
+    verifyMedia,
     async setFence(group, club, on) {
-      await fenceAll(group, club, on);
+      if (on) await fenceAll(group, club, true);
       if (on) { // locked first, so no new sponsor-only count can land after the fold
         const sponsors = await d.clubSponsorIds(group, club);
         for (let i = 0; i < sponsors.length; i += 500)
@@ -93,6 +113,7 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
         for (const dom of LIVE_DOMAINS) ok(await d.actors(target)[dom].purge_club_snapshot(club));
         await fenceAll(target, club, false);
       }
+      if (!on) await fenceAll(group, club, false); // target cleanup precedes source unlock
     },
     async exportPage(group, club, domain, cursor) {
       if (global(domain)) return { rows: [], next: null };
@@ -128,6 +149,13 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
     readRegistryRevision: d.readRegistryRevision,
     swapAssignment: d.swapAssignment,
     async purgeSource(group, club) {
+      const destination = await d.targetFor(club);
+      if (!destination || destination === group) throw new Error('Persisted destination required before media-safe purge');
+      await verifyMedia(group, destination, club);
+      // Key-state proof must precede irreversible purge AND either group's
+      // unlock, not merely the later terminal blob-fence release.
+      await d.mediaKeyRecovery?.verifyReleased({ clubId: club, fromGroup: group, toGroup: destination,
+        registryRevision: await d.readRegistryRevision(), phase: 'cutover', log: ['cutover'] });
       const a = d.actors(group);
       for (const dom of LIVE_DOMAINS) ok(await a[dom].purge_club_snapshot(club));
       await fenceAll(group, club, false);
@@ -135,5 +163,12 @@ export function liveTransferAdapter(d: LiveAdapterDeps): TransferAdapter {
       if (target && target !== group) await fenceAll(target, club, false);
     },
     save: d.save,
+    prepareCutover: d.mediaKeyRecovery?.prepareCutover,
+    beforeAbortUnlock: d.mediaKeyRecovery?.beforeAbortUnlock,
+    async cleanupTerminal(t) {
+      if (t.phase !== 'released' && t.phase !== 'aborted') throw new Error('Durable terminal transfer required');
+      if (t.phase === 'released') await d.mediaKeyRecovery?.verifyReleased(t);
+      await d.mediaPreparation?.release();
+    },
   };
 }

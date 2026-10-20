@@ -4,6 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubStoragePurchasedGb } from "@/live/features/promoCodes";
+import { listStoredClubMedia } from "./clubMediaAllowance";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -139,7 +140,7 @@ export async function fetchVaultStorageSubscription(
     const gb = await withFeatureBackend("membership", {
       supabase: async () => 0,
       icp: (ctx) => getLiveClubStoragePurchasedGb(ctx, clubId),
-    }, { clubId: clubId! }).catch(() => 0);
+    }, { clubId }).catch(() => 0);
     return { storage_purchased_gb: gb, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
   }
   const { data } = await client
@@ -158,22 +159,26 @@ export async function fetchVaultStorageBreakdown(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultStorageBreakdown> {
-  // Secure sign-in: total the vault files stored on the vault canister (no
-  // Supabase reads). Gallery photos are not counted there yet.
+  // Secure sign-in: total club media straight from the photo store (no
+  // Supabase reads). The on-chain Pro allowance covers vault, gallery and
+  // chat combined, so the store's own club-bytes reading is authoritative;
+  // vault-file accounting is the fallback for stores that predate it.
   if (resolveAuthBackend() === "icp") {
     const { withFeatureBackend } = await import("@/live/featureRouter");
     return withFeatureBackend("vault", {
       supabase: async () => emptyVaultStorageBreakdown(),
       icp: async (ctx) => {
-        const [{ listLiveVaultClubFiles }, { listLiveTeams }] = await Promise.all([
+        const [{ listLiveVaultClubFiles }, { listLiveTeams }, { getLiveClubMediaBytes }] = await Promise.all([
           import("@/live/features/vault"),
           import("@/live/features/club"),
+          import("@/live/blobStoreUpload"),
         ]);
-        const [files, teams] = await Promise.all([
+        const [files, teams, storeBytes] = await Promise.all([
           listLiveVaultClubFiles(ctx, clubId, null, null),
           listLiveTeams(ctx, clubId).catch(() => [] as any[]),
+          getLiveClubMediaBytes(ctx.target, ctx.identity, clubId).catch(() => ({ finalized: 0, pending: 0 })),
         ]);
-        return calculateVaultStorageBreakdown({
+        const breakdown = calculateVaultStorageBreakdown({
           photos: [],
           files: (files as any[])
             .filter((file) => !file.is_external_link)
@@ -186,33 +191,53 @@ export async function fetchVaultStorageBreakdown(
           teams: (teams as any[]).map((team) => ({ id: team.id, name: team.name })),
           miniLeagues: [],
         });
+        const storeTotal = storeBytes.finalized + storeBytes.pending;
+        return storeTotal > breakdown.total ? { ...breakdown, total: storeTotal } : breakdown;
       },
-    });
+    }, { clubId });
   }
-  const { data: photos } = await client
+  const { error: photosError } = await client
     .from("photos")
     .select("file_size, team_id, mini_league_id")
     .eq("club_id", clubId)
     .is("deleted_at", null);
-  const { data: files } = await client
+  const { error: filesError } = await client
     .from("vault_files")
     .select("*")
     .eq("club_id", clubId)
     .is("deleted_at", null);
-  const { data: teams } = await client
+  const { data: teams, error: teamsError } = await client
     .from("teams")
     .select("id, name")
     .eq("club_id", clubId)
     .is("deleted_at", null);
-  const { data: miniLeagues } = await client
+  const { data: miniLeagues, error: leaguesError } = await client
     .from("mini_leagues")
     .select("id, name")
     .eq("club_id", clubId);
 
-  return calculateVaultStorageBreakdown({
-    photos: photos ?? [],
-    files: files ?? [],
+  if (photosError || filesError || teamsError || leaguesError) throw photosError || filesError || teamsError || leaguesError;
+  const objects = await listStoredClubMedia(clubId, client);
+  const physicalPhotos = objects.filter((object) => isVaultStorageImageFilename(object.path));
+  const physicalFiles = objects.filter((object) => !isVaultStorageImageFilename(object.path));
+  const breakdown = calculateVaultStorageBreakdown({
+    photos: [],
+    files: objects.map(object => {
+      const parts = object.path.split("/");
+      return {
+        file_size: object.size,
+        name: object.path,
+        team_id: parts[2] === "teams" ? parts[3] ?? null : null,
+        mini_league_id: parts[2] === "mini-leagues" ? parts[3] ?? null : null,
+      };
+    }),
     teams: teams ?? [],
     miniLeagues: miniLeagues ?? [],
   });
+  return {
+    ...breakdown,
+    photos: physicalPhotos.reduce((sum, object) => sum + object.size, 0),
+    documents: physicalFiles.reduce((sum, object) => sum + object.size, 0),
+    total: objects.reduce((sum, object) => sum + object.size, 0),
+  };
 }

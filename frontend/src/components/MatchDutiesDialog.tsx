@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { setLiveGroupDuty, removeLiveGroupDuty, listLiveGroupDuties } from "@/live/features/events";
+import { saveLiveGroupDutySlot, removeLiveGroupDutySlot, listLiveGroupDuties } from "@/live/features/events";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -77,15 +77,21 @@ export function MatchDutiesDialog({
         // resolvable without a canister-side profile lookup.
         icp: async (ctx) => {
           const rows = await listLiveGroupDuties(ctx, groupId);
+          const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+          const profiles = await withFeatureBackend("membership", {
+            supabase: async () => { throw new Error("Internet Identity required"); },
+            icp: shared => listLiveProfilesByIds(shared, rows.flatMap(r => r.account_id)),
+          }, { shared: "person" });
+          const names = new Map(profiles.map(p => [p.account_id, p.display_name]));
           return rows.map((row) => {
             const assignedTo = row.account_id[0] ?? null;
             return {
-              id: row.duty,
+              id: row.id,
               name: row.duty,
               assigned_to: assignedTo,
               status: assignedTo ? "confirmed" : "pending",
               points: 0,
-              assignee: null,
+              assignee: assignedTo ? { display_name: names.get(assignedTo) ?? "Member" } : null,
             } satisfies GroupDuty;
           });
         },
@@ -148,12 +154,8 @@ export function MatchDutiesDialog({
 
           return (profiles || []).slice().sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
         },
-        // Gated: resolving duty assignees requires joining club_admin/
-        // league_admin roles (user_roles) and Supabase profile rows by uuid,
-        // neither of which has a canister equivalent. Rather than invent
-        // data, ICP-routed sessions see an empty assignee list here.
-        icp: async () => [] as Array<{ id: string; display_name: string | null; avatar_url: string | null }>,
-      }),
+        icp: async (ctx) => (await import("@/live/leagueReads")).readLeagueMembers(ctx, miniLeagueId),
+      }, { miniLeagueId }),
     enabled: open && !!miniLeagueId,
   });
 
@@ -166,7 +168,7 @@ export function MatchDutiesDialog({
       const addedOnIcp = await withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
-          await setLiveGroupDuty(ctx, groupId, name, null);
+          await saveLiveGroupDutySlot(ctx, groupId, crypto.randomUUID(), name, null);
           return true;
         },
       }, writeOnce({ eventId }));
@@ -197,7 +199,7 @@ export function MatchDutiesDialog({
         icp: async (ctx) => {
           const duty = duties?.find((candidate) => candidate.id === dutyId);
           if (!duty?.name) throw new Error("Duty not found");
-          await setLiveGroupDuty(ctx, groupId, duty.name, assignedTo);
+          await saveLiveGroupDutySlot(ctx, groupId, duty.id, duty.name, assignedTo);
           return true;
         },
       }, writeOnce({ eventId }));
@@ -234,7 +236,7 @@ export function MatchDutiesDialog({
         const removedOnIcp = await withFeatureBackend("events", {
           supabase: () => false,
           icp: async (ctx) => {
-            await removeLiveGroupDuty(ctx, groupId, duty.name);
+            await removeLiveGroupDutySlot(ctx, groupId, duty.id);
             return true;
           },
         }, writeOnce({ eventId }));

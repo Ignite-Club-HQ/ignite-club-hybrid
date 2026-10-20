@@ -372,7 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const inbox = await listLiveInbox(ctx, userId, null, 500);
           return (inbox as any[]).filter((n) => !n.read).length;
         },
-      }),
+      }, { everyGroup: true, merge: (parts: number[]) => parts.reduce((a, b) => a + b, 0) }),
       withFeatureBackend("messaging", {
         supabase: async () => fetchUnreadMessageCounts(userId),
         icp: async (ctx) => {
@@ -567,7 +567,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         setSession(currentSession);
-        setUser(currentSession?.user ?? null);
+        // Keep the same user object for the same account: every session event
+        // (initial restore, token refresh, resume) used to hand React a new
+        // object, re-running everything keyed on it and reloading the home page.
+        setUser((prev) => {
+          const next = currentSession?.user ?? null;
+          return prev && next && prev.id === next.id ? prev : next;
+        });
         setSessionRestoration(currentSession?.user ? "authenticated" : "signed_out");
         currentUserIdRef.current = incomingUserId;
         // Keep client-perf logger in sync so slow-query rows are attributed.
