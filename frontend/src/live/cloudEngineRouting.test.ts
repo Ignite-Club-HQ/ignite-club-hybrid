@@ -8,11 +8,12 @@ const engine = normalizeApprovedTarget({
 
 describe("cloud engine routing", () => {
   it("round-trips engine address and canister ids", () => {
-    const cfg = parseBackendRoutingConfig({ ...DEFAULT_BACKEND_ROUTING_CONFIG, targets: [engine], countryTargets: { DE: engine.id } })!;
+    const cfg = parseBackendRoutingConfig({ ...DEFAULT_BACKEND_ROUTING_CONFIG, targets: [engine], countryTargets: { DE: engine.id } });
+    if (!cfg) throw new Error('Expected config');
     expect(cfg.targets[0].host).toBe("https://eu.example.com");
     expect(resolveIcpEngineForCountry(cfg, "de")?.alias).toBe("eu-engine");
     expect(resolveIcpEngineForCountry(cfg, "AU")).toBeNull();
-    expect(isCloudEngineUsable(cfg.targets[0])).toBe(true);
+    expect(isCloudEngineUsable(cfg.targets[0])).toBe(false);
     expect(isCloudEngineUsable({ ...cfg.targets[0], enabled: false })).toBe(false);
   });
   it("rejects bad canister ids and non-https hosts", () => {

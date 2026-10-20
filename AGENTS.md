@@ -44,4 +44,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
 - Cross-group accounts/admission stay local-only: no live UI/deploy flags. Identity uses durable unlink denials and consensus eligibility, never resource grants. Activation requires complete all-service fences/inventory/drain/mirror proof; follow backend/AGENTS.md for evidence. Why: eligibility and fan-out cannot prove global revocation or deny unreached groups.
 
-- Mainnet key preflight: offline SDK derivation, signed controller checks, durable upgrade receipts; other targets fail closed (vetKD rejects ingress).
+- Mainnet keys: SDK derivation, signed controllers, durable receipts. Engines stay blocked: zero-cycle install/health and bounded proxy calls need acceptance.
