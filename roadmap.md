@@ -9,7 +9,7 @@
 
 - [x] Owner request 20 Oct 19:43 UTC: minimum local 64 GiB assessment complete—real sparse allocator tests across 32 GiB and near 64 GiB, bounded refusal/read/delete/reuse; 10 existing Motoko files plus new boundary fixture pass; actual current-store upgrade/pending/accounting and real combined Pro allowance checks pass; media/club compile. Production remains at 32 GiB; no candidate 64 GiB version or live change. Evidence: docs/media-minimum-64gib-validation-2026-10-20.md.
 - [x] Owner request 20 Oct 21:29 UTC: 200 GiB production candidate on standard Motoko 1.16.1 — app ceiling 200 GiB (80% admission ~160 GiB), photo-store build page cap 240 GiB, extra Regions live in large mode, 1,000,000 file records/store, enlarge workflow 3–200. 13 Motoko tests, real 64→200 upgrade, multi-Region boundary/actor/upgrade, Pro allowance and storage replica tests pass. Evidence: docs/media-200gib-candidate-2026-10-21.md.
-- [ ] Live deploy and Group 1 enlargement to 200 GiB: waits on the owner's GitHub runs (signing identity in GitHub secrets); run smoke64 small live check first. No paid full fill required.
+- [ ] Live deploy and Group 1 enlargement to 200 GiB: waits on the owner's GitHub runs (signing identity in GitHub secrets); run the smoke200 small live check first. No paid full fill required.
 
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 

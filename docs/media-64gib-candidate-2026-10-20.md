@@ -30,6 +30,7 @@ POCKET_IC_BIN=/root/.cache/mops/pocket-ic/15.0.0/pocket-ic node frontend/scripts
 ## GitHub release order — not executed here
 
 1. On the branch containing this change, run **Test larger photo store (isolated mainnet)**: unique ID `media-64-smoke-001` (change it if already used), scenario **smoke64**, budget **3**, confirmation **TEST ISOLATED STORE**. Budget is a maximum 3T upfront funding including fee, not expected consumed cost. It creates one separate store, uses only a few MiB, verifies read/delete/abort and pending-upload upgrade plus persisted 64 GiB setting; it never fills 64 GiB or alters a group. The remaining test object/fuel stays until separately cleaned up. Do not replay an interrupted run under a new ID without reconciling its receipt.
+   *Superseded 21 Oct 2026: the 64 GiB step was never run live and the candidate moved to 200 GiB. The `smoke64` scenario was removed from the workflow; use `smoke200` (see docs/media-200gib-candidate-2026-10-21.md).*
 2. Review its successful report before running **Deploy ICP canisters (mainnet)** with the existing deploy identity. This upgrade does not itself enlarge the store.
 3. Run **Enlarge Group 1 photo store**: size **64**, confirmation **ENLARGE GROUP 1 PHOTO STORE**. This changes only Group 1's configured size. Existing migration/unfinished-upload handling and deployment lock are retained.
 4. Check the reported exact configured size and accepting-upload status. No group opening, club move or new placement flag is authorized by this work.
