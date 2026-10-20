@@ -112,7 +112,7 @@ pub fn immutable_route(existing: Option<Principal>, requested: Principal) -> Res
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     #[test]
     fn photo_store_must_be_distinct() {

@@ -1,3 +1,4 @@
+// @testmode replica
 import Region "mo:core/Region";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";

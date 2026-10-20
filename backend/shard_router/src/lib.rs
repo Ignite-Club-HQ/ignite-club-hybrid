@@ -164,9 +164,11 @@ thread_local! {
 }
 
 fn media_growth_local() -> bool {
-    #[cfg(test)] { true }
+    #[cfg(test)] { TEST_GROWTH.with(|v| *v.borrow()) }
     #[cfg(not(test))] { ic_cdk::api::env_var_name_exists("IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL") && ic_cdk::api::env_var_value("IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL") == "1" }
 }
+#[cfg(test)]
+thread_local! { static TEST_GROWTH: RefCell<bool> = const { RefCell::new(false) }; }
 fn growth_budget(group: &str) -> Option<media_growth::Budget> {
     MEDIA_GROWTH.with(|m| m.borrow().get(&group.as_bytes().to_vec()).map(|b| decode(&b)))
 }
@@ -826,6 +828,26 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn growth_is_group_bound_and_reserved_with_assignment() {
+        TEST_GROWTH.with(|v| *v.borrow_mut() = true);
+        let mut g = groups::tests::group("growth-g", 0);
+        g.target_alias = "growth-local".into();
+        GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(), encode(&g)));
+        let authority = g.domains[0].canister;
+        save_growth(&media_growth::Budget { group_id:g.id.clone(),target_alias:g.target_alias.clone(),authority,usable:100,fixed:20,free_club:40,commitments:Default::default() });
+        let a = assign_group_record("growth-a".into(),g.target_alias.clone(),current_revision(),1).unwrap();
+        assert_eq!(growth_budget(&g.id).unwrap().committed(),Ok(60));
+        assert_eq!(assign_group_record("growth-a".into(),g.target_alias.clone(),0,1).unwrap(),a);
+        assert!(reserve_growth_for(Principal::anonymous(),&g.id,&g.target_alias,"growth-a",50).is_err());
+        assert!(reserve_growth_for(authority,&g.id,"foreign","growth-a",50).is_err());
+        assert!(reserve_growth_for(authority,&g.id,&g.target_alias,"unassigned",50).is_err());
+        assert_eq!(reserve_growth_for(authority,&g.id,&g.target_alias,"growth-a",80),Ok(80));
+        assert!(assign_group_record("growth-b".into(),g.target_alias,current_revision(),1).is_err());
+        assert!(group_assignment_for("growth-b").is_none());
+        assert_eq!(growth_budget(&g.id).unwrap().committed(),Ok(100));
+        TEST_GROWTH.with(|v| *v.borrow_mut() = false);
+    }
     #[test]
     fn reservation_blocks_registry_mutations_and_self_placement_until_settled() {
         let lock=DeletionLock {account_id:"account".into(),revision:4};
