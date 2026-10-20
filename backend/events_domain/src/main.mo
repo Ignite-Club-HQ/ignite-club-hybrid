@@ -140,6 +140,7 @@ persistent actor class Main(governorInit : Principal) {
   var individualDutyReminderSent : [Text];
   var competitionDomainCanister : ?Principal;
   var competitionEventOperations : [Types.CompetitionEventOperation];
+  var competitionMatchLinks : [Types.CompetitionEventLink];
   // Per-caller favourite event titles / saved locations / training defaults /
   // RSVP created_at preservation (events UX extras, migration 20261015_000000).
   var favouriteEventTitles : [Types.FavouriteEventTitle];
@@ -553,6 +554,36 @@ persistent actor class Main(governorInit : Principal) {
     let eventIds = created.map(func(event) = event.id);
     competitionEventOperations := competitionEventOperations.concat([{ operation_id; competition_id; event_ids = eventIds }]);
     #Ok(eventIds)
+  };
+
+  public shared ({caller}) func upsert_competition_match_events(input : Types.MatchEventInput) : async {#Ok:[Text];#Err:Text} {
+    let authority=competitionDomainCanister;
+    if(authority!=?caller) return #Err("Trusted competition canister only");
+    auth(input.creator);await admitAccount(input.creator);
+    if(authority!=competitionDomainCanister or input.teams.size()!=2 or input.starts_at_ms>=input.ends_at_ms or input.title.size()>256) return #Err("Invalid fixture or changed authority");
+    if(input.teams[0].team_id==input.teams[1].team_id or input.teams.any(func(t)=not valid(t.team_id) or not valid(t.club_id) or isFenced(t.club_id))) return #Err("Invalid or locked fixture teams");
+    var ids:[Text]=[];
+    for(target in input.teams.values()) {
+      let previous=competitionMatchLinks.find(func(l)=l.match_id==input.match_id and l.team_id==target.team_id);
+      let id=switch(previous){case null "evt-"#target.club_id#"-"#Nat.toText(events.size());case(?link)link.event_id};
+      let current=events.find(func(e)=e.id==id);
+      if(switch(current){case(?e)e.club_id!=target.club_id or e.team_id!=?target.team_id;case null false}) return #Err("Fixture link ownership mismatch");
+      let row:Types.Event={id;club_id=target.club_id;team_id=?target.team_id;title=input.title;description="Competition fixture";event_type="game";location=input.venue;cancelled=false;creator=input.creator;starts_at_ms=input.starts_at_ms;ends_at_ms=input.ends_at_ms;series_id=null;revision=switch(current){case null 1;case(?e)e.revision+1};deleted=false;opponent=?input.teams[if(target.team_id==input.teams[0].team_id)1 else 0].team_id;address=null;mini_league_id=null;updated_at_ms=nowMs();rsvp_audience=null;adults_only=false;restricted_to_roles=null;target_team_ids=null};
+      events:=events.filter(func(e)=e.id!=id).concat([row]);
+      competitionMatchLinks:=competitionMatchLinks.filter(func(l)=l.event_id!=id).concat([{event_id=id;competition_id=input.competition_id;match_id=input.match_id;team_id=target.team_id}]);
+      ids:=ids.concat([id]);
+    };
+    #Ok(ids)
+  };
+
+  func matchHistoryAccess(caller:Principal,event:Types.Event,managerOnly:Bool) : async {#Ok:Bool;#Err:Text} {
+    let link=switch(competitionMatchLinks.find(func(l)=l.event_id==event.id)){case null return #Ok(true);case(?l)l};
+    if(event.team_id!=?link.team_id) return #Err("History association mismatch");
+    let authority=switch(competitionDomainCanister){case null return #Err("Competition authority unavailable");case(?id)id};
+    let service:actor{read_match_score_access:shared(Text,Text,Text,Principal,Bool)->async{#Ok:Bool;#Err:Text}}=actor(authority.toText());
+    let result=try{await(with timeout=10) service.read_match_score_access(link.competition_id,link.match_id,link.team_id,caller,managerOnly)}catch(_){return #Err("Competition authority unavailable")};
+    if(competitionDomainCanister!=?authority or eventFenced(event.id) or not competitionMatchLinks.any(func(l)=l==link)) return #Err("History authority changed or locked");
+    result
   };
 
   // Association panel read (Phase 3, F5): parents for one association,
@@ -2262,7 +2293,7 @@ persistent actor class Main(governorInit : Principal) {
       case (#Err(e)) #Err(e);
       case (#Ok(result)) {
         let hidden = switch (result) {
-          case null competitionEventOperations.any(func(operation) = operation.event_ids.any(func(id) = id == event_id));
+          case null competitionEventOperations.any(func(operation) = operation.event_ids.any(func(id) = id == event_id)) or competitionMatchLinks.any(func(l)=l.event_id==event_id);
           case (?r) r.scores_hidden
         };
         #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id).map(func(item : Types.GamePlayerStat) : Types.GamePlayerStat {
@@ -2342,6 +2373,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not (await* canViewMatch(caller, event))) return #Err("Event access forbidden");
     let authority = competitionDomainCanister;
     var hidden = false;
+    switch(await matchHistoryAccess(caller,event,false)){case(#Err(e))return #Err(e);case(#Ok(visible))hidden:=not visible};
     for (operation in competitionEventOperations.values()) {
       if (operation.event_ids.any(func(id) = id == event_id)) {
         let id = switch (authority) { case null return #Err("Competition authority unavailable"); case (?id) id };

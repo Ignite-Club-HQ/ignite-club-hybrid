@@ -42,6 +42,8 @@ module {
   public type EventDutyTeam = { event_id : Text; team_id : Text };
   public type CompetitionEventTarget = { team_id : Text; club_id : Text };
   public type CompetitionEventOperation = { operation_id : Text; competition_id : Text; event_ids : [Text] };
+  public type CompetitionEventLink = { event_id : Text; competition_id : Text; match_id : Text; team_id : Text };
+  public type MatchEventInput = { match_id : Text; competition_id : Text; creator : Principal; teams : [CompetitionEventTarget]; starts_at_ms : Nat64; ends_at_ms : Nat64; title : Text; venue : ?Text };
   public type RosterEntry = { event_id : Text; account_id : Text; child_id : ?Text };
   public type Recurrence = { event_id : Text; frequency : Text; until_ms : Nat64 };
   // A recurring series: one record plus generated child events linked by

@@ -1964,12 +1964,40 @@ persistent actor class Main(governorInit : Principal) {
     if (not competitions.any(func(c) = c.id == competition_id)) return #Err("Competition not found");
     if (canManageCompetition(requester, competition_id)) return #Ok(true);
     if (manager_only) return #Ok(false);
-    let candidates = matches.filter(func(m) = m.competition_id == competition_id and
-      (m.home_team == team_id or m.away_team == team_id) and m.scheduled_at_ms == ?starts_at_ms);
-    if (candidates.size() == 1) return #Ok(not ScorePrivacy.hidden(scorePrivacySettings, competition_id, candidates[0].division_id));
-    // Older competition-wide events do not identify a match/division. Never
-    // guess a division-show override when the association is ambiguous.
+    // Legacy competition-wide events have no verified match association.
+    // Timestamp/team coincidences must never grant a division-show override.
+    ignore team_id; ignore starts_at_ms;
     #Ok(not scorePrivacySettings.any(func(s) = s.competition_id == competition_id and s.hide_scores))
+  };
+
+  public shared ({caller}) func read_match_score_access(competition_id : Text, match_id : Text, team_id : Text, requester : Principal, manager_only : Bool) : async { #Ok : Bool; #Err : Text } {
+    let authority = eventsDomainCanister;
+    if (authority != ?caller) return #Err("Trusted events canister only");
+    auth(requester); await admitAccount(requester); await syncForCompetition(requester,competition_id);
+    if (authority != eventsDomainCanister or compFenced(competition_id)) return #Err("Competition authority changed or locked");
+    let game = switch(matches.find(func(m)=m.id==match_id and m.competition_id==competition_id)) {
+      case null return #Err("Match not found"); case (?m) m
+    };
+    if(game.home_team!=team_id and game.away_team!=team_id) return #Err("Match team mismatch");
+    if(canManageCompetition(requester,competition_id)) return #Ok(true);
+    if(manager_only) return #Ok(false);
+    #Ok(not ScorePrivacy.hidden(scorePrivacySettings,competition_id,game.division_id))
+  };
+
+  public shared ({caller}) func materialize_match_events(match_id : Text) : async { #Ok : [Text]; #Err : Text } {
+    auth(caller); await admitAccount(caller);
+    let original=switch(matches.find(func(m)=m.id==match_id)){case null return #Err("Match not found");case(?m)m};
+    await syncForCompetition(caller,original.competition_id);
+    if(matchFenced(match_id) or not canManageCompetition(caller,original.competition_id)) return #Err("Competition manager required");
+    let game=switch(matches.find(func(m)=m.id==match_id and m.revision==original.revision)){case null return #Err("Match changed");case(?m)m};
+    let starts=switch(game.scheduled_at_ms){case null return #Err("Schedule the match first");case(?s)s};
+    let teams=entries.filter(func(e)=e.competition_id==game.competition_id and (e.team_id==game.home_team or e.team_id==game.away_team)).map(func(e)={team_id=e.team_id;club_id=e.club_id});
+    if(teams.size()!=2) return #Err("Both teams must be registered");
+    let authority=switch(eventsDomainCanister){case null return #Err("Events authority unavailable");case(?id)id};
+    let service : actor { upsert_competition_match_events : shared ({match_id:Text;competition_id:Text;creator:Principal;teams:[{team_id:Text;club_id:Text}];starts_at_ms:Nat64;ends_at_ms:Nat64;title:Text;venue:?Text}) -> async {#Ok:[Text];#Err:Text} }=actor(authority.toText());
+    let result=try{await (with timeout=10) service.upsert_competition_match_events({match_id;competition_id=game.competition_id;creator=caller;teams;starts_at_ms=starts;ends_at_ms=starts+Nat64.fromNat(Nat16.toNat(game.duration_minutes??90))*60_000;title=game.home_team#" vs "#game.away_team;venue=game.venue})}catch(_){return #Err("Fixture synchronization failed; retry the same match")};
+    if(eventsDomainCanister!=?authority or matchFenced(match_id)) return #Err("Fixture authority changed or locked");
+    result
   };
 
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {
