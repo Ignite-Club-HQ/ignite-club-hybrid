@@ -51,7 +51,7 @@ jobs:
       - name: Install frontend dependencies (preserve project installer)
         run: node scripts/ensure-frontend-deps.mjs
       - name: Run isolated-test safety checks
-        run: node --test frontend/scripts/media-stage-two-policy.test.mjs frontend/scripts/media-stage-two-github.test.mjs scripts/media-stage-two-workflow.test.mjs
+        run: node --test frontend/scripts/media-stage-two-policy.test.mjs frontend/scripts/media-stage-two-recovery.test.mjs frontend/scripts/media-stage-two-github.test.mjs scripts/media-stage-two-workflow.test.mjs
       - name: Install pinned ICP build tool
         run: npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
       - name: Build only the photo-store module (no deployment)
