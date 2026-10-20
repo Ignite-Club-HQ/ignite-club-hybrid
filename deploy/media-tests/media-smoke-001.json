@@ -12,10 +12,7 @@
     "capacityBytes": 5368709120
   },
   "phase": "upgrade-mid-upload",
-  "pending": {
-    "kind": "upgrade-mid-upload",
-    "time": "2026-10-20T05:56:03.797Z"
-  },
+  "pending": null,
   "receipts": [
     {
       "phase": "create",
@@ -61,9 +58,23 @@
         "abortVerified": true
       },
       "time": "2026-10-20T05:56:01.987Z"
+    },
+    {
+      "phase": "upgrade-mid-upload",
+      "result": {
+        "recovered": true,
+        "previousVersion": "75",
+        "upgradedVersion": "76"
+      },
+      "time": "2026-10-20T05:56:35.591Z"
     }
   ],
-  "objects": {},
+  "objects": {
+    "users/network-test/media-smoke-001/interrupted": {
+      "size": 2097152,
+      "hash": "c406296b30d433e27c08e2989ad557c7e9ae7825d1bea14c42aa4ef53c9e8a9d"
+    }
+  },
   "previousUnpaidAttempts": [
     {
       "error": "Deploy identity lacks approved funding plus ledger fee",
