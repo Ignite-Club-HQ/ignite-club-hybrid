@@ -21,6 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { listHistory, type HistoryResult } from "@/features/competitions/history/historyRepository";
+import { resultOutcome } from "@/features/competitions/history/resultVisibility";
 
 const GameSummaryDialog = lazyWithRetry(() => import("@/components/scoreboard/GameSummaryDialog"));
 
@@ -31,23 +33,7 @@ interface TeamGameHistoryTabProps {
   canManage: boolean;
 }
 
-interface GameResultRow {
-  id: string;
-  team_id: string;
-  event_id: string | null;
-  sport: "basketball" | "netball";
-  home_label: string;
-  away_label: string;
-  home_score: number;
-  away_score: number;
-  period_scores: PerQuarterScore[];
-  player_stats: SummaryPlayerStat[];
-  mvp_player_id: string | null;
-  mvp_player_name: string | null;
-  played_at: string;
-  saved_by: string;
-  events?: { id: string; title: string | null; start_time: string | null } | null;
-}
+type GameResultRow = HistoryResult;
 
 type SportFilter = "all" | "basketball" | "netball";
 
@@ -67,16 +53,7 @@ export default function TeamGameHistoryTab({
 
   const { data, isLoading } = useQuery({
     queryKey: ["game_results", teamId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("game_results")
-        .select("*, events:event_id ( id, title, start_time )")
-        .eq("team_id", teamId)
-        .order("played_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return (data ?? []) as unknown as GameResultRow[];
-    },
+    queryFn: () => listHistory({ teamId }),
   });
 
   const counts = useMemo(() => {
@@ -173,12 +150,7 @@ export default function TeamGameHistoryTab({
         </p>
       ) : (
         visible.map((row) => {
-          const result =
-            row.home_score > row.away_score
-              ? "WIN"
-              : row.home_score < row.away_score
-                ? "LOSS"
-                : "DRAW";
+          const result = resultOutcome(row.home_score, row.away_score);
           const resultClass =
             result === "WIN"
               ? "bg-primary/15 text-primary"
@@ -209,7 +181,7 @@ export default function TeamGameHistoryTab({
                           resultClass
                         )}
                       >
-                        {result}
+                        {row.scores_hidden ? "Scores hidden" : result ?? "Result pending"}
                       </span>
                       <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
                         <Calendar className="h-2.5 w-2.5" />
@@ -219,7 +191,7 @@ export default function TeamGameHistoryTab({
                     <p className="text-sm font-semibold truncate">
                       {row.home_label}{" "}
                       <span className="tabular-nums">
-                        {row.home_score}–{row.away_score}
+                        {row.scores_hidden ? "—" : `${row.home_score ?? "—"}–${row.away_score ?? "—"}`}
                       </span>{" "}
                       {row.away_label}
                     </p>
@@ -269,6 +241,7 @@ export default function TeamGameHistoryTab({
             awayLabel={openRow.away_label}
             homeScore={openRow.home_score}
             awayScore={openRow.away_score}
+            scoresHidden={openRow.scores_hidden}
             perQuarter={openRow.period_scores ?? []}
             players={openRow.player_stats ?? []}
             mvpPlayerId={openRow.mvp_player_id}

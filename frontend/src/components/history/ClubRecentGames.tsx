@@ -11,6 +11,8 @@ import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { listHistory, type HistoryResult } from "@/features/competitions/history/historyRepository";
+import { resultOutcome } from "@/features/competitions/history/resultVisibility";
 
 const GameSummaryDialog = lazyWithRetry(() => import("@/components/scoreboard/GameSummaryDialog"));
 
@@ -20,21 +22,7 @@ interface ClubRecentGamesProps {
   limit?: number;
 }
 
-interface ClubGameRow {
-  id: string;
-  team_id: string;
-  sport: "basketball" | "netball";
-  home_label: string;
-  away_label: string;
-  home_score: number;
-  away_score: number;
-  period_scores: PerQuarterScore[];
-  player_stats: SummaryPlayerStat[];
-  mvp_player_id: string | null;
-  mvp_player_name: string | null;
-  played_at: string;
-  teams?: { id: string; name: string } | null;
-}
+type ClubGameRow = HistoryResult;
 
 const sportLabel = (s: string) => (s === "basketball" ? "Basketball" : "Netball");
 
@@ -43,26 +31,7 @@ export default function ClubRecentGames({ clubId, limit = 5 }: ClubRecentGamesPr
 
   const { data, isLoading } = useQuery({
     queryKey: ["club-recent-games", clubId, limit],
-    queryFn: async () => {
-      // Fetch team ids for this club, then results for those teams.
-      const { data: teamRows, error: teamErr } = await supabase
-        .from("teams")
-        .select("id")
-        .eq("club_id", clubId)
-        .is("deleted_at", null);
-      if (teamErr) throw teamErr;
-      const teamIds = (teamRows ?? []).map((t) => t.id);
-      if (teamIds.length === 0) return [];
-
-      const { data, error } = await supabase
-        .from("game_results")
-        .select("*, teams:team_id ( id, name )")
-        .in("team_id", teamIds)
-        .order("played_at", { ascending: false })
-        .limit(limit);
-      if (error) throw error;
-      return (data ?? []) as unknown as ClubGameRow[];
-    },
+    queryFn: () => listHistory({ clubId }, limit),
   });
 
   const rows = useMemo(() => data ?? [], [data]);
@@ -100,12 +69,7 @@ export default function ClubRecentGames({ clubId, limit = 5 }: ClubRecentGamesPr
       </CardHeader>
       <CardContent className="space-y-1.5 pt-0">
         {rows.map((row) => {
-          const result =
-            row.home_score > row.away_score
-              ? "WIN"
-              : row.home_score < row.away_score
-                ? "LOSS"
-                : "DRAW";
+          const result = resultOutcome(row.home_score, row.away_score);
           const resultClass =
             result === "WIN"
               ? "bg-primary/15 text-primary"
@@ -126,7 +90,7 @@ export default function ClubRecentGames({ clubId, limit = 5 }: ClubRecentGamesPr
                     {sportLabel(row.sport)}
                   </Badge>
                   <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", resultClass)}>
-                    {result}
+                    {row.scores_hidden ? "Scores hidden" : result ?? "Result pending"}
                   </span>
                   {row.teams?.name && (
                     <Link
@@ -144,7 +108,7 @@ export default function ClubRecentGames({ clubId, limit = 5 }: ClubRecentGamesPr
                 <p className="text-xs font-semibold truncate">
                   {row.home_label}{" "}
                   <span className="tabular-nums">
-                    {row.home_score}–{row.away_score}
+                    {row.scores_hidden ? "—" : `${row.home_score ?? "—"}–${row.away_score ?? "—"}`}
                   </span>{" "}
                   {row.away_label}
                 </p>
@@ -171,6 +135,7 @@ export default function ClubRecentGames({ clubId, limit = 5 }: ClubRecentGamesPr
             awayLabel={openRow.away_label}
             homeScore={openRow.home_score}
             awayScore={openRow.away_score}
+            scoresHidden={openRow.scores_hidden}
             perQuarter={openRow.period_scores ?? []}
             players={openRow.player_stats ?? []}
             mvpPlayerId={openRow.mvp_player_id}
