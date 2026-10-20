@@ -65,3 +65,32 @@ Test-only seed migrations and compiler flags must never be copied into a deploym
 A reviewed compiler/runtime implementation supporting **more than 256 GiB aggregate Region memory**, with safe growth failure and upgrade compatibility for existing Region metadata, is required before 500 GiB physical boundary testing or activation. Simply adding banks, changing `--max-stable-pages`, or upgrading blindly to a newer compiler does not resolve this. Once that runtime exists, rerun sparse aggregate-growth/upgrade/accounting checks; no paid full-volume fill is required by this work.
 
 Even then 500 GiB is the canister-wide platform ceiling, not 500 GiB of guaranteed photo payload; runtime metadata, indexes, block rounding and other stable data must fit too. This redesign does not certify full-volume performance, maximum club count or international group activation.
+
+## Replacement-runtime assessment — 20 October 2026, 21:00 UTC request
+
+The latest published Motoko release was **2.0.0** (published 6 October 2026). Its Region manager does **not** lift this constraint. Current upstream master at `6c754715a34c1ba4c9ad86e8d91f5f789929d4ed` has the same Region source as 2.0.0. No supporting released replacement was identified; compiler pins and photo-store capacity remain unchanged. No aggregate 500 GiB growth, boundary read/write retest, mainnet operation or paid test was attempted in this assessment.
+
+Reviewed sources:
+- [2.0.0 release](https://github.com/caffeinelabs/motoko/releases/tag/2.0.0).
+- [2.0.0 Region manager](https://github.com/caffeinelabs/motoko/blob/2.0.0/rts/motoko-rts/src/region.rs), particularly lines 240–298 and 833–925.
+- [Pinned master Region manager](https://github.com/caffeinelabs/motoko/blob/6c754715a34c1ba4c9ad86e8d91f5f789929d4ed/rts/motoko-rts/src/region.rs).
+- [Version 2 migration guide](https://github.com/caffeinelabs/motoko/blob/2.0.0/doc/md/moc-v2-migration.md).
+
+Direct source arithmetic for 1.16.1, 2.0.0 and master gives the same result: `32,768 blocks × 128 pages/block × 65,536 bytes/page = 274,877,906,944 bytes = 256 GiB`. The source's `region_grow` computes aggregate `new_total_blocks`, grows underlying memory, then commits the aggregate count and table associations without an explicit aggregate table bound. Underlying growth failure is handled, but does not substitute for a table-exhaustion guard. Raising `--max-stable-pages` to 500 GiB remains unsafe.
+
+Source SHA-256 fingerprints:
+- 1.16.1 `region.rs`: `24c83f1dafd8a76afc10a91c94e4f5428078ce16f42ecab811d7a8b55d74cb3e`.
+- 2.0.0 and reviewed master `region.rs`: `de574ee543173ed686f33430a2735daae8adcde6f8234a0165c33ba219dc047c`.
+
+### Exact outstanding work
+
+This now requires a maintained custom compiler/runtime candidate or an upstream fix, not a released-version substitution. A layout-preserving patch may be feasible: 500 GiB requires 64,000 eight-MiB blocks, which fit the existing 16-bit block IDs; the corresponding 704,000-byte association table appears to fit below the existing 1 MiB low block base. That arithmetic is a design observation, **not compatibility or safety proof**. Enlarging a constant alone is insufficient.
+
+Before changing the application pin or capacity gate, the candidate must:
+1. Add an aggregate block-table exhaustion check **before** physical growth, count changes or table writes, with bounded refusal and no partial mutation.
+2. Validate old Region metadata recovery, table slack, all index bounds, block-ID arithmetic, and stable heap/runtime headroom. Preserve old pointers and bank-zero bytes; analyze and restrict downgrade after new blocks are allocated.
+3. Produce a reproducible, hash-pinned compiler/runtime artifact with explicit source revision and a supported build/distribution path. Keep it local-only until verified.
+4. Pass runtime-level exhaustion tests, sparse aggregate growth above 256 GiB and near the platform ceiling, boundary read/write/reuse tests, and actual 1.16.1 → candidate memory-preserving actor upgrades with pending uploads and exact accounting. Virtual-address tests do not satisfy this requirement.
+5. Budget photo payload below the canister-wide ceiling, preserving the existing 80% admission rule and actual-size club allowances. Region metadata, stable actor state and other overhead share that ceiling.
+
+The runtime candidate and those aggregate/upgrade tests remain **unfinished engineering**. No compatible replacement artifact exists in this project and no 500 GiB capacity acceptance is claimed. Updating all app compiler pins to 2.0.0 would introduce unrelated migration work while leaving the blocker unchanged, so it was not done.
