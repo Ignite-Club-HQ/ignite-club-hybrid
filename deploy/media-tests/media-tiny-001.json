@@ -17679,15 +17679,80 @@
     "users/network-test/media-tiny-001/4402": {
       "size": 1024,
       "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4406": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4405": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4407": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4404": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4408": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4410": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4411": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4409": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4413": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4414": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4415": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4412": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4416": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4419": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4418": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
+    },
+    "users/network-test/media-tiny-001/4417": {
+      "size": 1024,
+      "hash": "7142d4166632b2d118bca6301456178185c234d7e1e1a302b38165521bcbff4d"
     }
   },
   "createdAtNs": "1792488516767000000",
   "canisterId": "2wj3v-faaaa-aaaal-qxpwa-cai",
   "initialCycles": "2394972243347",
   "lastFuel": {
-    "cycles": "1712009496909",
+    "cycles": "1708934778869",
     "freezeReserve": "458968721430",
     "reserved": "0",
     "memory": "565012302"
-  }
+  },
+  "error": "Fuel safety floor reached (1.71T left, 0.46T frozen reserve); no automatic top-up"
 }
