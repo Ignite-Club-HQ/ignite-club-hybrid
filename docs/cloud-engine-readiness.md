@@ -50,4 +50,4 @@ Billing safety: authoritative guidance warns exhausted engine balance can cause 
 6. Verify actual rental alerts and encrypted backup/restore under the original proxy/key identity. Ciphertext backups alone do not prove readable recovery; proxy replacement can change keys. Existing photo-bearing clubs stay put.
 7. Complete existing authority/account/group gates and obtain owner opening approval. Country links and offline policy results cannot bypass these requirements.
 
-Validation: 111 focused checks passed in each backend mode; the optional full-service replica test was skipped because its opt-in environment was not enabled. No real engine connection, independent acceptance, delivered alerts or actual encrypted restore is claimed. No live operation or placement change occurred.
+Validation: 113 focused checks passed in each backend mode; the optional full-service replica test was not enabled. No real engine connection, independent acceptance, delivered alerts or actual encrypted restore is claimed. No live operation or placement change occurred.
