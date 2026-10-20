@@ -790,7 +790,7 @@ persistent actor MediaBlobStore {
   };
 
   func canReserve(size : Nat64) : Bool {
-    UploadPolicy.canAdmitFor(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
+    UploadPolicy.canAdmitWithCeiling(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), mediaCapacityCeiling()) and
     // Removing the local flag with pending extents must fail closed, not
     // silently allocate a second slice for an already reserved upload.
     (physicalReservationRehearsal or upload_slots.size() == 0) and
@@ -1353,7 +1353,10 @@ persistent actor MediaBlobStore {
   // Sharding: the app reads this to skip full stores and to show fullness in
   // Placement Settings. Public query — reveals only byte totals.
   public query func get_usage() : async Usage {
-    { total_bytes; capacity_limit_bytes = UploadPolicy.effectiveCapacityFor(capacity_limit_bytes, largeMode()); accepting_uploads = quota_mode != #frozen and not retainedBlocked() and canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
+    { total_bytes; capacity_limit_bytes = if (capacity_limit_bytes > mediaCapacityCeiling()) mediaCapacityCeiling() else capacity_limit_bytes; accepting_uploads = quota_mode != #frozen and not retainedBlocked() and canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
+  };
+  func mediaCapacityCeiling() : Nat64 {
+    if (multiRegionRehearsal and largeMode()) MultiBytes.runtimeBytes.toNat64() else UploadPolicy.ceilingFor(largeMode())
   };
 
   // Governor-only. Setting a limit at or below the current total closes the
@@ -1361,7 +1364,7 @@ persistent actor MediaBlobStore {
   public shared ({ caller }) func set_capacity_limit(limit_bytes : Nat64) : async Result {
     auth(caller);
     if (not isGovernor<system>(caller)) return #Err("Governor required");
-    if (limit_bytes > UploadPolicy.ceilingFor(largeMode())) return #Err(if (largeMode()) "Store capacity cannot exceed 64 GiB" else "Heap-backed store capacity cannot exceed 2 GiB");
+    if (limit_bytes > mediaCapacityCeiling()) return #Err(if (multiRegionRehearsal and largeMode()) "Multi-Region rehearsal cannot exceed 200 GiB; 500 GiB requires a compatible runtime" else if (largeMode()) "Store capacity cannot exceed 64 GiB" else "Heap-backed store capacity cannot exceed 2 GiB");
     capacity_limit_bytes := limit_bytes;
     #Ok
   };

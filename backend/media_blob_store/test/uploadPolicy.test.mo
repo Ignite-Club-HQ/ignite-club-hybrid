@@ -51,3 +51,8 @@ assert not Policy.canAdmitFor(34_359_738_368, 0, 0, 10, Policy.heapBudget - 159,
 // six do not. Allocator/metadata/processing headroom must be measured separately.
 assert Policy.proMediaBaseBytes * 5 <= Policy.thresholdFor(34_359_738_368, true);
 assert Policy.proMediaBaseBytes * 6 > Policy.thresholdFor(34_359_738_368, true);
+// Multi-bank rehearsal uses an explicit runtime-bound ceiling, never the
+// platform's 500 GiB figure; 80% admission and heap checks remain mandatory.
+assert Policy.canAdmitWithCeiling(214_748_364_800, 171_798_691_839, 0, 1, 0, 214_748_364_800);
+assert not Policy.canAdmitWithCeiling(214_748_364_800, 171_798_691_839, 1, 1, 0, 214_748_364_800);
+assert not Policy.canAdmitWithCeiling(536_870_912_000, 171_798_691_840, 0, 1, 0, 214_748_364_800);
