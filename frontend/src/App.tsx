@@ -384,6 +384,18 @@ const App = () => {
     let cancelled = false;
     void (async () => {
       try {
+        await loadPlacementOnce();
+      } finally {
+        if (!cancelled) setPlacementReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    // (placement load above; kept as its own effect for hook-order stability)
+    if (true as boolean) return;
+    void (async () => {
+      try {
         const [overrides, routing, country] = await Promise.all([
           import("./live/loadIcpAdminOverrides"),
           import("./live/loadBackendRouting"),
