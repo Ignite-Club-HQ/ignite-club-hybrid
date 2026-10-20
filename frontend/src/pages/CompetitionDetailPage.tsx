@@ -730,7 +730,7 @@ function SupabaseCompetitionDetailPage() {
 
         {(competition.source === "playhq" || isIcp) && (
           <TabsContent value="stats" className="space-y-2 mt-2">
-            <CompetitionPlayerStatsPanel competitionId={id!} sport={(competition as any).sport} />
+            <CompetitionPlayerStatsPanel competitionId={id ?? ""} sport={(competition as any).sport} canManage={canManage} />
           </TabsContent>
         )}
 

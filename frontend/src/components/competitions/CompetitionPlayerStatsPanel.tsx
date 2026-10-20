@@ -20,7 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { toast } from "sonner";
-import { readCompetitionPlayHQ, claimCompetitionPlayHQ } from "@/features/competitions/playhqRepository";
+import { readCompetitionPlayHQ, claimCompetitionPlayHQ, syncCompetitionPlayHQ } from "@/features/competitions/playhqRepository";
+import { Input } from "@/components/ui/input";
 
 type StatRow = {
   playhq_game_id: string;
@@ -42,13 +43,16 @@ const NUMERIC = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v
 export default function CompetitionPlayerStatsPanel({
   competitionId,
   sport,
+  canManage = false,
 }: {
   competitionId: string;
   sport?: string | null;
+  canManage?: boolean;
 }) {
   const { user } = useAuth();
   const isCricket = (sport ?? "").toLowerCase() === "cricket";
   const isIcp = resolveAuthBackend() === "icp";
+  const [tenant,setTenant]=useState("");const [grade,setGrade]=useState("");const [syncing,setSyncing]=useState(false);
   const {data:protectedData,isLoading:protectedLoading,error:protectedError,refetch:refetchProtected}=useQuery({
     queryKey:["competition-playhq-protected",competitionId,user?.id,isIcp],
     queryFn:()=>readCompetitionPlayHQ(competitionId),
@@ -318,20 +322,25 @@ export default function CompetitionPlayerStatsPanel({
     );
   }
 
+  const syncControls = isIcp && canManage ? <form className="flex flex-wrap gap-2" onSubmit={async e=>{e.preventDefault();setSyncing(true);try{await syncCompetitionPlayHQ(competitionId,tenant.trim(),grade.trim());await refetchProtected();toast.success("PlayHQ synchronized");}catch(error){toast.error(error instanceof Error?error.message:String(error));}finally{setSyncing(false);}}}>
+    <Input aria-label="PlayHQ tenant" placeholder="PlayHQ tenant" value={tenant} onChange={e=>setTenant(e.target.value)} required className="w-40" />
+    <Input aria-label="PlayHQ grade ID" placeholder="Grade ID" value={grade} onChange={e=>setGrade(e.target.value)} required className="w-48" />
+    <Button type="submit" disabled={syncing}>{syncing?<Loader2 className="h-4 w-4 animate-spin"/>:"Sync PlayHQ"}</Button>
+  </form> : null;
   if (gameIds.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
+      <div className="space-y-3">{syncControls}<div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
         No PlayHQ-sourced matches in this competition yet. Once the next sync runs,
         player stats will appear here.
-      </div>
+      </div></div>
     );
   }
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
+      <div className="space-y-3">{syncControls}<div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
         Matches synced, but no per-player stats have been published by PlayHQ yet.
-      </div>
+      </div></div>
     );
   }
 
@@ -341,6 +350,7 @@ export default function CompetitionPlayerStatsPanel({
 
   return (
     <div className="space-y-3">
+      {syncControls}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Trophy className="h-4 w-4" />

@@ -16,3 +16,9 @@ export async function claimCompetitionPlayHQ(competitionId:string,playerId:strin
   icp:async(ctx)=>{const {claimLiveCompetitionPlayHQ}=await import("@/live/features/competitions");await claimLiveCompetitionPlayHQ(ctx,competitionId,tenant,playerId);},
  },{competitionId,writeKey:"once",attempts:1});
 }
+export async function syncCompetitionPlayHQ(competitionId:string,tenant:string,grade:string){
+ return withFeatureBackend("competitions",{
+  supabase:async()=>{const {data,error}=await supabase.functions.invoke("playhq-sync",{body:{competition_id:competitionId,tenant,grade_id:grade}});if(error)throw error;return data;},
+  icp:async(ctx)=>{const {syncLiveCompetitionPlayHQ}=await import("@/live/features/competitions");return syncLiveCompetitionPlayHQ(ctx,competitionId,tenant,grade);},
+ },{competitionId,writeKey:"once",attempts:1});
+}
