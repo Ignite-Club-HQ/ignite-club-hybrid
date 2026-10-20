@@ -35,7 +35,7 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets/access.
-- Local media: memory 13 preserves promises; owned roots/packed pages use shared monotonic tokens/free-only allocation (fixtures only). Keep paired retirement/revisions/aligned buddies. Why: replay/overselling. Live needs approval.
+- Local media: owned roots/packed segments use shared tokens/free-only allocation (trusted fixtures only); memory 13 preserves promises. Keep paired retirement/revisions/aligned buddies. Why: replay/overselling. Live needs approval.
 - II paths enforce club scope; uploads verify membership to prevent revocation bypass.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
