@@ -1,5 +1,6 @@
 import { writeOnce } from "@/live/clubScope";
 import { Textarea } from "@/components/ui/textarea";
+import { enginePreparationIssues, type DeploymentPreparation } from '@/live/enginePreparation';
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -62,7 +63,7 @@ import {
 
 type CanisterRow = { key: string; id: string };
 type CountryRuleRow = { country: string; eligibility: BackendEligibility; targetId: string };
-type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean; host: string; canisterIdsText: string };
+type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean; host: string; canisterIdsText: string; preparation?: DeploymentPreparation };
 
 /** Accepts the deploy script's ID table as JSON ({"name":"id"}) or "name id" / "name: id" lines. */
 function parseCanisterIdsText(text: string): Record<string, string> {
@@ -390,6 +391,7 @@ export default function PlacementAdminSettingsPage() {
         enabled: t.enabled,
         host: t.host ?? "",
         canisterIdsText: t.canisterIds ? JSON.stringify(t.canisterIds, null, 2) : "",
+        preparation: t.preparation,
       })),
     );
     setClubOverrideRows(
@@ -505,6 +507,7 @@ export default function PlacementAdminSettingsPage() {
       current.map((row, i) => {
         if (i !== index) return row;
         const next = { ...row, ...patch };
+        if (patch.kind === 'icp-cloud-engine' || (patch.backend === 'icp' && next.kind === 'icp-cloud-engine')) next.enabled = false;
         // Keep the target kind valid when the backend changes.
         if (patch.backend && !KINDS_FOR_BACKEND[next.backend].includes(next.kind)) {
           next.kind = KINDS_FOR_BACKEND[next.backend][0];
@@ -580,6 +583,7 @@ export default function PlacementAdminSettingsPage() {
             version: row.version,
             region: row.region,
             enabled: row.enabled,
+            preparation: row.backend === 'icp' ? row.preparation : undefined,
             host: isEngine ? row.host : undefined,
             canisterIds,
           });
