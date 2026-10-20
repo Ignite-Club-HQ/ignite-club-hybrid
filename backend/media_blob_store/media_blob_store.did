@@ -246,6 +246,15 @@ service : {
       Err: text;
       Ok: Receipt;
     });
+  read_pending_test_uploads: (prefix: text) ->
+   (variant {
+      Err: text;
+      Ok: vec record {
+                id: text;
+                path: text;
+                size: nat64;
+              };
+    });
   read_physical_growth_capacity: () ->
    (variant {
       Err: text;

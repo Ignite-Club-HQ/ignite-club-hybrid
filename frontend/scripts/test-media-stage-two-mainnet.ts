@@ -15,6 +15,7 @@ import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/me
 import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, isResumableFill, isTransientReject, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { DEPLOY_PRINCIPAL } from '../../scripts/media-card-funding-policy.mjs';
+import { recoveryBinding, drainTestUploads, reconcileFill, settledBatch } from './media-stage-two-recovery.mjs';
 
 console.log('Media store test starting');
 process.on('exit', code => console.log(`Media store test exiting with code ${code}`));
@@ -26,10 +27,12 @@ if (identity.getPrincipal().toText() !== DEPLOY_PRINCIPAL) throw new Error(`Load
 const source = readFileSync(process.env.TEST_WASM_PATH ?? '');
 const wasm = source[0] === 31 && source[1] === 139 ? gunzipSync(source) : source;
 const hash = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
-const binding = approveTest({ runId: process.env.TEST_RUN_ID, scenario: process.env.TEST_SCENARIO,
+let binding = approveTest({ runId: process.env.TEST_RUN_ID, scenario: process.env.TEST_SCENARIO,
   budgetT: process.env.TEST_BUDGET_T, confirm: process.env.TEST_CONFIRM,
   governor: identity.getPrincipal().toText(), subnetId: JSON.parse(readFileSync(join(root, 'deploy/groups/tested-limits.json'), 'utf8')).subnetId,
   wasmSha256: hash(wasm) });
+const candidateBinding = binding;
+let expectedModule = binding.wasmSha256;
 const repo = process.env.GITHUB_REPOSITORY;
 if (!repo || !process.env.GH_TOKEN) throw new Error('GitHub durable journal access required before any paid call');
 const branch = 'ignite-media-test-receipts';
@@ -58,6 +61,11 @@ let state: any = { binding, phase: 'approved', pending: null, receipts: [], obje
 if (entries.tree.some((e: any) => e.path === file)) {
   const r = readJournal(file); sha = r.sha;
   const saved = JSON.parse(r.text);
+  const original = recoveryBinding(saved, candidateBinding);
+  if (original && (isResumableFill(saved, original) || saved.phase === 'complete')) {
+    binding = original;
+    expectedModule = saved.recoveryUpdate?.status === 'complete' ? candidateBinding.wasmSha256 : original.wasmSha256;
+  }
   if (isUnpaidAttempt(saved)) {
     // Earlier attempt stopped before creation (e.g. unfunded deploy account): nothing was paid, restart cleanly.
     console.log(`Earlier attempt of ${binding.runId} never created a canister (${saved.error ?? 'no error recorded'}); restarting.`);
@@ -113,9 +121,9 @@ const managementIdl = ({ IDL: I }: { IDL: typeof IDL }) => I.Service({
     canister_id: I.Principal, wasm_module: I.Vec(I.Nat8), arg: I.Vec(I.Nat8), sender_canister_version: I.Opt(I.Nat64) })], [], []),
 });
 let m: any, a: any;
-async function proof(expectedModule: string | null = binding.wasmSha256) {
+async function proof(module: string | null = expectedModule) {
   const s = await calls.status(state.canisterId);
-  assertTarget(binding, state.canisterId, s, await calls.subnetOf(state.canisterId), protectedIds, expectedModule);
+  assertTarget(binding, state.canisterId, s, await calls.subnetOf(state.canisterId), protectedIds, module);
   const status = await m.canister_status({ canister_id: pid(state.canisterId) });
   assert.deepEqual(status.settings.controllers.map((p: Principal) => p.toText()), [binding.governor]);
   assert.deepEqual([...status.settings.environment_variables].sort((x: any, y: any) => x.name.localeCompare(y.name)),
@@ -191,7 +199,27 @@ try {
     return { wasmSha256: binding.wasmSha256, environment: environmentFor(binding) };
   });
   a = Actor.createActor(idlFactory, { agent, canisterId: state.canisterId });
-  state.initialCycles = (await proof()).cycles.toString();
+  if (!state.initialCycles) state.initialCycles = (await proof()).cycles.toString();
+  if (state.resumedFill?.length && candidateBinding.wasmSha256 !== binding.wasmSha256) {
+    assert.ok(recoveryBinding(state, candidateBinding), 'Only the approved interrupted target may receive recovery code');
+    const current = (await calls.status(state.canisterId)).moduleHash;
+    if (current === candidateBinding.wasmSha256) {
+      assert.equal(state.recoveryUpdate?.to, candidateBinding.wasmSha256, 'New module requires a saved upgrade intent');
+      await proof(candidateBinding.wasmSha256);
+    } else {
+      assert.equal(current, binding.wasmSha256, 'Unexpected recovery target module');
+      if (state.recoveryUpdate?.status === 'pending') throw new Error('Unresolved recovery upgrade; operator reconciliation required before retry');
+      await fuel();
+      state.recoveryUpdate = { from: binding.wasmSha256, to: candidateBinding.wasmSha256, status: 'pending' }; await save();
+      if (wasm.length > 1_900_000) throw new Error('Recovery module exceeds bounded direct upgrade size');
+      await m.install_code({ mode: { upgrade: [{ skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] }] },
+        canister_id: pid(state.canisterId), wasm_module: wasm, arg: IDL.encode([], []), sender_canister_version: [] });
+      await proof(candidateBinding.wasmSha256);
+    }
+    expectedModule = candidateBinding.wasmSha256;
+    state.recoveryUpdate = { ...state.recoveryUpdate, status: 'complete' }; await save();
+    console.log(`Recovery update verified on existing isolated store ${state.canisterId}`);
+  }
   await phase('configure-empty', async () => {
     assert.equal((await a.health()).blob_count, 0n); assert.equal((await a.get_usage()).total_bytes, 0n);
     ok(await a.enable_stable_media_storage()); ok(await a.set_capacity_limit(BigInt(binding.capacityBytes)));
@@ -213,25 +241,19 @@ try {
     await phase('fill', async () => {
       const sizes = binding.scenario === 'tiny' ? [1024] : [MiB, 2 * MiB, 400 * 1024, 4 * MiB, 8 * MiB, 2 * MiB];
       const max = binding.scenario === 'tiny' ? 10000 : 4000; const start = performance.now(); let sawRefusal = false;
-      let from = 0;
       if (state.resumedFill?.length) {
-        // Rebuild the object list from the store itself: each deterministic path is present with the exact
-        // expected hash, or absent. Anything else, or a byte-total mismatch, stops for operator reconciliation.
-        const rebuilt: Record<string, any> = {}; let misses = 0;
-        for (let i = 0; i < max && misses < 16; i++) {
-          const size = sizes[i % sizes.length], h = await a.get_content_hash(prefix + i);
-          if (!h.length) { misses++; continue; }
-          const want = hash(Buffer.alloc(size, size % 251));
-          if (h[0] !== want) throw new Error(`Resume reconciliation: ${prefix + i} hash differs; operator reconciliation required`);
-          rebuilt[prefix + i] = { size, hash: want }; from = i + 1; misses = 0;
-        }
-        state.objects = rebuilt; from = Math.ceil(from / 4) * 4;
-        const stored = (await a.get_usage()).total_bytes;
-        if (stored !== BigInt(total())) throw new Error(`Resume reconciliation: store holds ${stored} bytes, paths account for ${total()}; operator reconciliation required`);
-        console.log(`Reconciled ${Object.keys(rebuilt).length} stored objects (${total()} bytes); continuing fill at ${from}`); await save();
+        await fuel();
+        const cleared = await drainTestUploads({ actor: a, prefix, sizes, max,
+          saveIntent: async (row: unknown) => { state.pendingRecoveryAbort = row; await save(); },
+          saveReceipt: async (row: unknown) => { (state.recoveredAborts ??= []).push(row); state.pendingRecoveryAbort = null; await save(); } });
+        state.pendingRecoveryAbort = null;
+        state.objects = await reconcileFill({ actor: a, prefix, sizes, max, digest: (size: number) => hash(Buffer.alloc(size, size % 251)) });
+        console.log(`Cleared ${cleared} unfinished test uploads; reconciled ${Object.keys(state.objects).length} stored objects (${total()} bytes)`); await save();
       }
-      for (let i = from; i < max; i += 4) {
-        await fuel(); const results = await Promise.all(Array.from({ length: 4 }, (_, j) => upload(prefix + (i + j), sizes[(i + j) % sizes.length])));
+      for (let i = 0; i < max; i += 4) {
+        const missing = Array.from({ length: Math.min(4, max - i) }, (_, j) => i + j).filter(index => !state.objects[prefix + index]);
+        if (!missing.length) continue;
+        await fuel(); const results = await settledBatch(missing.map(index => upload(prefix + index, sizes[index % sizes.length])));
         if (i % 200 === 0) { await save(); console.log(`Fill ${Object.keys(state.objects).length} objects, ${total()} bytes`); }
         if (results.every(x => !x)) { sawRefusal = true; break; }
       }
@@ -245,8 +267,8 @@ try {
       const chosen = Object.entries(state.objects).filter((_, i) => i % 2 === 0);
       for (let round = 0; round < 2; round++) for (let i = 0; i < chosen.length; i += 4) {
         await fuel(); const batch = chosen.slice(i, i + 4);
-        await Promise.all(batch.map(async ([path]) => { ok(await a.delete_blob(path)); delete state.objects[path]; }));
-        await Promise.all(batch.map(async ([path, f]: any) => assert.equal(await upload(path, f.size), true)));
+        await settledBatch(batch.map(async ([path]) => { ok(await a.delete_blob(path)); delete state.objects[path]; }));
+        await settledBatch(batch.map(async ([path, f]: any) => assert.equal(await upload(path, f.size), true)));
         if (i % 200 === 0) { await save(); console.log(`Churn ${round + 1}: ${i}/${chosen.length}`); }
       }
       assert.equal(total(), state.fillPayload); assert.equal((await a.get_usage()).total_bytes, BigInt(total()));

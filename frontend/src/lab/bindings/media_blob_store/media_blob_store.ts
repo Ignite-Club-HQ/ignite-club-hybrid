@@ -300,6 +300,17 @@ export interface media_blob_storeInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_pending_test_uploads(prefix: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<{
+            id: string;
+            path: string;
+            size: bigint;
+        }>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_physical_growth_capacity(): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -533,6 +544,20 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.read_account_removal_drain(arg0);
         return from_candid_variant_n42(result);
     }
+    async read_pending_test_uploads(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<{
+            id: string;
+            path: string;
+            size: bigint;
+        }>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_pending_test_uploads(arg0);
+        return from_candid_variant_n43(result);
+    }
     async read_physical_growth_capacity(): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -550,7 +575,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.read_physical_growth_capacity();
-        return from_candid_variant_n43(result);
+        return from_candid_variant_n44(result);
     }
     async reconcile_retained_deletions(arg0: string): Promise<{
         __kind__: "Ok";
@@ -563,7 +588,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.reconcile_retained_deletions(arg0);
-        return from_candid_variant_n44(result);
+        return from_candid_variant_n45(result);
     }
     async reconcile_upload_operations(arg0: string): Promise<{
         __kind__: "Ok";
@@ -576,7 +601,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.reconcile_upload_operations(arg0);
-        return from_candid_variant_n44(result);
+        return from_candid_variant_n45(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -589,8 +614,8 @@ export class Media_blob_store implements media_blob_storeInterface {
         return from_candid_variant_n40(result);
     }
     async retained_snapshot_page(arg0: Cursor): Promise<Page> {
-        const result = await this.actor.retained_snapshot_page(to_candid_Cursor_n45(arg0));
-        return from_candid_Page_n48(result);
+        const result = await this.actor.retained_snapshot_page(to_candid_Cursor_n46(arg0));
+        return from_candid_Page_n49(result);
     }
     async retire_upload_outcomes(arg0: string): Promise<{
         __kind__: "Ok";
@@ -603,7 +628,7 @@ export class Media_blob_store implements media_blob_storeInterface {
         Err: string;
     }> {
         const result = await this.actor.retire_upload_outcomes(arg0);
-        return from_candid_variant_n56(result);
+        return from_candid_variant_n57(result);
     }
     async set_capacity_limit(arg0: bigint): Promise<Result> {
         const result = await this.actor.set_capacity_limit(arg0);
@@ -630,8 +655,8 @@ export class Media_blob_store implements media_blob_storeInterface {
 function from_candid_Cursor__1_n15(value: _Cursor__1): Cursor__1 {
     return from_candid_record_n16(value);
 }
-function from_candid_Cursor_n50(value: _Cursor): Cursor {
-    return from_candid_record_n51(value);
+function from_candid_Cursor_n51(value: _Cursor): Cursor {
+    return from_candid_record_n52(value);
 }
 function from_candid_Entry_n20(value: _Entry): Entry {
     return from_candid_record_n21(value);
@@ -645,8 +670,8 @@ function from_candid_MediaUsage_n27(value: _MediaUsage): MediaUsage {
 function from_candid_Page__1_n11(value: _Page__1): Page__1 {
     return from_candid_record_n12(value);
 }
-function from_candid_Page_n48(value: _Page): Page {
-    return from_candid_record_n49(value);
+function from_candid_Page_n49(value: _Page): Page {
+    return from_candid_record_n50(value);
 }
 function from_candid_Phase_n17(value: _Phase): Phase {
     return from_candid_variant_n18(value);
@@ -660,8 +685,8 @@ function from_candid_ResultUploadId_n3(value: _ResultUploadId): ResultUploadId {
 function from_candid_Result_n1(value: _Result): Result {
     return from_candid_variant_n2(value);
 }
-function from_candid_Row_n54(value: _Row): Row {
-    return from_candid_record_n55(value);
+function from_candid_Row_n55(value: _Row): Row {
+    return from_candid_record_n56(value);
 }
 function from_candid_StreamResponse_n37(value: _StreamResponse): StreamResponse {
     return from_candid_record_n38(value);
@@ -838,7 +863,7 @@ function from_candid_record_n38(value: {
         body: value.body
     };
 }
-function from_candid_record_n49(value: {
+function from_candid_record_n50(value: {
     total: bigint;
     pending: bigint;
     cursor: _Cursor;
@@ -862,16 +887,16 @@ function from_candid_record_n49(value: {
     return {
         total: value.total,
         pending: value.pending,
-        cursor: from_candid_Cursor_n50(value.cursor),
-        next: from_candid_Cursor_n50(value.next),
+        cursor: from_candid_Cursor_n51(value.cursor),
+        next: from_candid_Cursor_n51(value.next),
         total_bytes: value.total_bytes,
-        rows: from_candid_vec_n53(value.rows),
+        rows: from_candid_vec_n54(value.rows),
         authority: record_opt_to_undefined(from_candid_opt_n23(value.authority)),
         frozen: value.frozen,
         revision: value.revision
     };
 }
-function from_candid_record_n51(value: {
+function from_candid_record_n52(value: {
     after: string;
     offset: bigint;
     phase: {
@@ -889,10 +914,10 @@ function from_candid_record_n51(value: {
     return {
         after: value.after,
         offset: value.offset,
-        phase: from_candid_variant_n52(value.phase)
+        phase: from_candid_variant_n53(value.phase)
     };
 }
-function from_candid_record_n55(value: {
+function from_candid_record_n56(value: {
     club: [] | [string];
     path: string;
     content_hash: string;
@@ -1111,30 +1136,20 @@ function from_candid_variant_n42(value: {
     } : value;
 }
 function from_candid_variant_n43(value: {
-    Ok: {
-        pending_count: bigint;
-        allocatable_object_slots: bigint;
-        configured_bytes: bigint;
-        allocated_bytes: bigint;
-        pending_slot_bytes: bigint;
-        revision: bigint;
-        legacy_pending_count: bigint;
-        max_object_slot_bytes: bigint;
-    };
+    Ok: Array<{
+        id: string;
+        path: string;
+        size: bigint;
+    }>;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: {
-        pending_count: bigint;
-        allocatable_object_slots: bigint;
-        configured_bytes: bigint;
-        allocated_bytes: bigint;
-        pending_slot_bytes: bigint;
-        revision: bigint;
-        legacy_pending_count: bigint;
-        max_object_slot_bytes: bigint;
-    };
+    Ok: Array<{
+        id: string;
+        path: string;
+        size: bigint;
+    }>;
 } | {
     __kind__: "Err";
     Err: string;
@@ -1149,6 +1164,43 @@ function from_candid_variant_n43(value: {
 }
 function from_candid_variant_n44(value: {
     Ok: {
+        pending_count: bigint;
+        allocatable_object_slots: bigint;
+        configured_bytes: bigint;
+        allocated_bytes: bigint;
+        pending_slot_bytes: bigint;
+        revision: bigint;
+        legacy_pending_count: bigint;
+        max_object_slot_bytes: bigint;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        pending_count: bigint;
+        allocatable_object_slots: bigint;
+        configured_bytes: bigint;
+        allocated_bytes: bigint;
+        pending_slot_bytes: bigint;
+        revision: bigint;
+        legacy_pending_count: bigint;
+        max_object_slot_bytes: bigint;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n45(value: {
+    Ok: {
         attempted: bigint;
         cursor: string;
     };
@@ -1172,7 +1224,7 @@ function from_candid_variant_n44(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n52(value: {
+function from_candid_variant_n53(value: {
     done: null;
 } | {
     legacy: null;
@@ -1181,7 +1233,7 @@ function from_candid_variant_n52(value: {
 }): Variant_done_legacy_indexed {
     return "done" in value ? Variant_done_legacy_indexed.done : "legacy" in value ? Variant_done_legacy_indexed.legacy : "indexed" in value ? Variant_done_legacy_indexed.indexed : value;
 }
-function from_candid_variant_n56(value: {
+function from_candid_variant_n57(value: {
     Ok: {
         cursor: string;
         removed: bigint;
@@ -1212,14 +1264,14 @@ function from_candid_vec_n19(value: Array<_Entry>): Array<Entry> {
 function from_candid_vec_n26(value: Array<_MediaUsage>): Array<MediaUsage> {
     return value.map((x)=>from_candid_MediaUsage_n27(x));
 }
-function from_candid_vec_n53(value: Array<_Row>): Array<Row> {
-    return value.map((x)=>from_candid_Row_n54(x));
+function from_candid_vec_n54(value: Array<_Row>): Array<Row> {
+    return value.map((x)=>from_candid_Row_n55(x));
 }
 function to_candid_Cursor__1_n5(value: Cursor__1): _Cursor__1 {
     return to_candid_record_n6(value);
 }
-function to_candid_Cursor_n45(value: Cursor): _Cursor {
-    return to_candid_record_n46(value);
+function to_candid_Cursor_n46(value: Cursor): _Cursor {
+    return to_candid_record_n47(value);
 }
 function to_candid_Phase_n7(value: Phase): _Phase {
     return to_candid_variant_n8(value);
@@ -1227,7 +1279,7 @@ function to_candid_Phase_n7(value: Phase): _Phase {
 function to_candid_opt_n9(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_record_n46(value: {
+function to_candid_record_n47(value: {
     after: string;
     offset: bigint;
     phase: Variant_done_legacy_indexed;
@@ -1245,7 +1297,7 @@ function to_candid_record_n46(value: {
     return {
         after: value.after,
         offset: value.offset,
-        phase: to_candid_variant_n47(value.phase)
+        phase: to_candid_variant_n48(value.phase)
     };
 }
 function to_candid_record_n6(value: {
@@ -1263,7 +1315,7 @@ function to_candid_record_n6(value: {
         phase: to_candid_Phase_n7(value.phase)
     };
 }
-function to_candid_variant_n47(value: Variant_done_legacy_indexed): {
+function to_candid_variant_n48(value: Variant_done_legacy_indexed): {
     done: null;
 } | {
     legacy: null;
