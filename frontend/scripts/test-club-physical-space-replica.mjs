@@ -1,5 +1,4 @@
 // Isolated local allocator fixture: never deploys or activates real stores.
-import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -31,7 +30,6 @@ try {
   await pic.upgradeCanister({ canisterId: persistent.canisterId, wasm, sender: governor,
     upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   await persistent.actor.verifyUpgrade();
-  assert.ok(true, 'All fixture calls returned without traps');
   console.log('PASS: owned roots, no shared-tail borrowing, stale-generation refusal and actual upgrade persistence.');
   console.log('PASS: tiny-file/fragmented-root counterexample retained; payload-byte lifetime guarantee is NOT certified.');
 } finally {
