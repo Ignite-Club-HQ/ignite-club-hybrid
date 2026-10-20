@@ -12,10 +12,7 @@
     "capacityBytes": 68719476736
   },
   "phase": "upgrade-mid-upload",
-  "pending": {
-    "kind": "upgrade-mid-upload",
-    "time": "2026-10-20T19:59:59.321Z"
-  },
+  "pending": null,
   "receipts": [
     {
       "phase": "create",
@@ -61,17 +58,31 @@
         "abortVerified": true
       },
       "time": "2026-10-20T19:59:57.373Z"
+    },
+    {
+      "phase": "upgrade-mid-upload",
+      "result": {
+        "recovered": true,
+        "previousVersion": "74",
+        "upgradedVersion": "75"
+      },
+      "time": "2026-10-20T20:00:31.543Z"
     }
   ],
-  "objects": {},
+  "objects": {
+    "users/network-test/medua-smoke-002/interrupted": {
+      "size": 2097152,
+      "hash": "c406296b30d433e27c08e2989ad557c7e9ae7825d1bea14c42aa4ef53c9e8a9d"
+    }
+  },
   "createdAtNs": "1792526314296000000",
   "canisterId": "2ylw5-6qaaa-aaaal-qxpxa-cai",
   "initialCycles": "2394966280610",
   "lastFuel": {
-    "cycles": "2385473049687",
-    "freezeReserve": "70896733980",
+    "cycles": "2383365889567",
+    "freezeReserve": "72403618740",
     "reserved": "0",
-    "memory": "58682561"
+    "memory": "60648641"
   },
   "pendingUpload": {
     "id": "upload-3",
