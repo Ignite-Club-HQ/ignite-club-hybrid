@@ -71,7 +71,9 @@ try {
    ok(await a.put_chunk(id,0,bytes.subarray(0,1000000)));
    await pic.upgradeCanister({canisterId:fixture.canisterId,wasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
    for(let i=1;i<Math.ceil(f.size/1000000);i++) ok(await a.put_chunk(id,i,bytes.subarray(i*1000000,(i+1)*1000000)));
-   const final=ok(await a.finalize_upload(id));assert.equal(final.content_hash,hash(bytes));assert.deepEqual(ok(await a.finalize_upload(id)),final);
+   const final=ok(await a.finalize_upload(id));assert.equal(final.content_hash,hash(bytes));
+   if(scenario.stable) assert.deepEqual(ok(await a.finalize_upload(id)),final);
+   else assert.ok('Err' in await a.finalize_upload(id), 'legacy completion removes the upload; read-back verifies publication');
    live.set(pendingPath,{size:f.size,hash:final.content_hash});await verify(pendingPath);
    for(const path of samples) if(live.has(path)) await verify(path);
    assert.equal((await a.get_usage()).total_bytes,usage.total_bytes);
