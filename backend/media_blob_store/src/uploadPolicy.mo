@@ -51,8 +51,12 @@ module {
   };
 
   public func canAdmitFor(configured : Nat64, finalized : Nat64, reserved : Nat, requested : Nat64, heap : Nat, large : Bool) : Bool {
+    canAdmitWithCeiling(configured, finalized, reserved, requested, heap, ceilingFor(large))
+  };
+  public func canAdmitWithCeiling(configured : Nat64, finalized : Nat64, reserved : Nat, requested : Nat64, heap : Nat, ceiling : Nat64) : Bool {
     let pending = reserved + requested.toNat();
-    finalized.toNat() + pending <= thresholdFor(configured, large) and
+    let effective = if (configured > ceiling) ceiling else configured;
+    finalized.toNat() + pending <= effective.toNat() * 8 / 10 and
     heap + pending * 16 <= heapBudget
   };
 
