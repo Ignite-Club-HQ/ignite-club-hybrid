@@ -6,6 +6,7 @@ import Stable "../src/stableBytes";
 import Map "mo:core/Map";
 import Region "mo:core/Region";
 import Nat "mo:core/Nat";
+import Nat64 "mo:core/Nat64";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 persistent actor {
