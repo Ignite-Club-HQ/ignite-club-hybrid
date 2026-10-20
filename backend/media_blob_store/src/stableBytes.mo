@@ -57,6 +57,26 @@ module {
   public func reserveWithin(store : Store, length : Nat, cap : Nat) : ?Slice {
     let slot = slotFor(length);
     if (slot > 16_777_216) return null;
+    switch (reserveFreeWithin(store, length, cap)) { case (?slice) return ?slice; case null {} };
+    let aligned = ((store.end.toNat() + slot - 1) / slot) * slot;
+    if (aligned + slot > cap) return null;
+    let requiredPages = (aligned + slot + 65_535) / 65_536;
+    let pages = Region.size(store.region).toNat();
+    if (requiredPages > pages and Region.grow(store.region, Nat64.fromNat(requiredPages - pages)) == 18_446_744_073_709_551_615) return null;
+    var padding = store.end.toNat();
+    while (padding < aligned) {
+      var size = 65_536;
+      while (size * 2 <= aligned - padding and padding % (size * 2) == 0) { size *= 2 };
+      addFree(store, size, Nat64.fromNat(padding)); padding += size
+    };
+    store.end := Nat64.fromNat(aligned + slot);
+    ?{ offset = Nat64.fromNat(aligned); length; slot }
+  };
+  // Club arenas must never fall back to the shared tail. This primitive
+  // consumes only already-owned free extents, even when their list is empty.
+  public func reserveFreeWithin(store : Store, length : Nat, cap : Nat) : ?Slice {
+    let slot = slotFor(length);
+    if (slot > 16_777_216) return null;
     let offset = switch (availableClass(store, slot, cap)) {
       case (?(size, offset)) {
         let ?offsets = store.free.get(size) else return null;
@@ -68,22 +88,7 @@ module {
         };
         offset
       };
-      case null {
-        let aligned = ((store.end.toNat() + slot - 1) / slot) * slot;
-        if (aligned + slot > cap) return null;
-        let requiredPages = (aligned + slot + 65_535) / 65_536;
-        let pages = Region.size(store.region).toNat();
-        if (requiredPages > pages and Region.grow(store.region, Nat64.fromNat(requiredPages - pages)) == 18_446_744_073_709_551_615) return null;
-        // Preserve alignment for buddy merges; padding remains reusable.
-        var padding = store.end.toNat();
-        while (padding < aligned) {
-          var size = 65_536;
-          while (size * 2 <= aligned - padding and padding % (size * 2) == 0) { size *= 2 };
-          addFree(store, size, Nat64.fromNat(padding)); padding += size
-        };
-        store.end := Nat64.fromNat(aligned + slot);
-        Nat64.fromNat(aligned)
-      }
+      case null return null
     };
     ?{ offset; length; slot }
   };
