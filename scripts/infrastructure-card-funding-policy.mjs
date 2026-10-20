@@ -10,7 +10,7 @@ export function cyclesAmount(value) {
 }
 export function statusEvidence(text, id) {
   const r = JSON.parse(text);
-  if (r.id !== id || !r.controllers?.includes(DEPLOY_PRINCIPAL) || typeof r.cycles !== 'string' || !/^\d[\d_]*$/.test(r.cycles)) throw new Error('Missing actual fuel/controller evidence; no top-up allowed');
+  if (r.id !== id || !r.settings?.controllers?.includes(DEPLOY_PRINCIPAL) || typeof r.cycles !== 'string' || !/^\d[\d_]*$/.test(r.cycles)) throw new Error('Missing actual fuel/controller evidence; no top-up allowed');
   return { id, cycles: BigInt(r.cycles.replaceAll('_', '')).toString() };
 }
 export function infrastructurePlan({ paymentId, purpose, groupId, principal, confirm, balance, readings = [], targetT = '3', fee = 0n, existingGroup = false }) {
