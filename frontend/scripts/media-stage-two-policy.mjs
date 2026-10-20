@@ -21,10 +21,25 @@ export function assertTarget(binding, id, status, subnet, protectedIds, expected
   if (subnet !== binding.subnetId || status.controllers.length !== 1 || status.controllers[0] !== binding.governor) throw new Error('Exact subnet and sole governor proof required');
   if (status.moduleHash !== expectedModule) throw new Error('Unexpected target module; never reinstall');
 }
-export function assertFuel(binding, current, initial) {
-  if (current < FUEL_FLOOR + CALL_RESERVE) throw new Error('Fuel safety floor reached; no automatic top-up');
-  if (initial - current + CALL_RESERVE > BigInt(binding.budgetCycles) - LEDGER_FEE) throw new Error('Approved funding bound reached');
+// Mainnet charges the receiving store per uploaded byte (13-node subnet: 2,000 cycles/byte, ~2.15T per GiB).
+// The 20% margin covers hashing/stable-memory execution and per-message fees measured on the mixed run.
+export const INGRESS_BYTE_CYCLES = 2_000n;
+export function uploadCycles(bytes) { return BigInt(Math.ceil(bytes)) * INGRESS_BYTE_CYCLES * 12n / 10n; }
+const T = c => (Number(c) / 1e12).toFixed(2) + 'T';
+// freezeReserve: cycles the network keeps untouchable (idle burn × freezing threshold); it grows with stored data.
+export function assertFuel(binding, current, initial, nextBytes = 0, freezeReserve = 0n) {
+  const next = uploadCycles(nextBytes);
+  if (current < FUEL_FLOOR + CALL_RESERVE + freezeReserve + next) throw new Error(`Fuel safety floor reached (${T(current)} left, ${T(freezeReserve)} frozen reserve); no automatic top-up`);
+  if (initial - current + CALL_RESERVE + next > BigInt(binding.budgetCycles) - LEDGER_FEE) throw new Error('Approved funding bound reached');
 }
+// Refuse up front when the remaining uploads cannot be paid for, instead of spending fuel and stopping mid-way.
+export function assertAffordable(binding, current, initial, remainingBytes, freezeReserve = 0n) {
+  const need = uploadCycles(remainingBytes) + FUEL_FLOOR + CALL_RESERVE + freezeReserve;
+  const budgetLeft = BigInt(binding.budgetCycles) - LEDGER_FEE - (initial - current);
+  if (need > current || uploadCycles(remainingBytes) + CALL_RESERVE > budgetLeft)
+    throw new Error(`Not enough fuel to finish ${binding.scenario}: remaining uploads (${(remainingBytes / GiB).toFixed(2)} GiB) need about ${T(need)} on the store; it holds ${T(current)}. Nothing was uploaded.`);
+}
+export function isOutOfCycles(error) { return /IC0207|out of cycles/i.test(String(error?.message ?? error)); }
 export function assertResume(saved, binding) {
   if (JSON.stringify(saved.binding) !== JSON.stringify(binding)) throw new Error('Saved test binding differs');
   if (saved.pending) throw new Error('Unresolved mutation: report and reconcile; never automatically repeat');
@@ -57,5 +72,6 @@ export function isResumableFill(saved, binding) {
 // Rejections raised before the store ran the call (busy queue, failed self-call) change nothing and may be retried.
 export function isTransientReject(error) {
   const t = String(error?.message ?? error);
+  if (isOutOfCycles(t)) return false; // shares error code IC0406 but is a fuel stop, never "busy"
   return /IC0406|could not perform self call|IC0515|queue (is )?full/i.test(t);
 }
