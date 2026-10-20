@@ -10,7 +10,7 @@
 <!-- LOVABLE:END -->
 
 - Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
-- Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html to dist/index.html for static hosting/SPA fallback.
+- Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
 - Read nested AGENTS.md for scoped rules; scripts/ covers media recovery and paid-replay safety.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
@@ -44,6 +44,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
 - Cross-group accounts/admission stay local-only: no live UI/deploy flags. Identity uses durable unlink denials and consensus eligibility, never resource grants. Activation requires complete all-service fences/inventory/drain/mirror proof; follow backend/AGENTS.md for evidence. Why: eligibility and fan-out cannot prove global revocation or deny unreached groups.
 
-- Keys: SDK derivation, signed controllers, receipts; engines stay offline. Why: fixtures never authorize release.
+- Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 
 - Router index rebuilds from stable rows; writes refresh it, picks recheck gates. scale-probe never deploys. Why: preserve admission.
