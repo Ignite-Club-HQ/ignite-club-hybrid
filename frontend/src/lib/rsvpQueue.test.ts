@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { waitFor } from "@testing-library/react";
 
 const liveMocks = vi.hoisted(() => ({
   backend: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
@@ -294,6 +295,19 @@ describe.runIf(supabaseMode)("syncQueuedRsvps (Defect 2 - concurrency safety)", 
 });
 
 describe.runIf(!supabaseMode)("syncQueuedRsvps ICP adapter", () => {
+  beforeEach(() => {
+    liveMocks.setLiveEventRsvp.mockReset().mockResolvedValue(undefined);
+    liveMocks.adminUpsertLiveRsvp.mockReset().mockResolvedValue(undefined);
+    liveMocks.setLiveMiniLeagueRsvp.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("performs no canister calls for an empty queue", async () => {
+    await expect(syncQueuedRsvps()).resolves.toEqual({ synced: 0, failed: 0 });
+    expect(liveMocks.setLiveEventRsvp).not.toHaveBeenCalled();
+    expect(liveMocks.adminUpsertLiveRsvp).not.toHaveBeenCalled();
+    expect(liveMocks.setLiveMiniLeagueRsvp).not.toHaveBeenCalled();
+  });
+
   it("syncs self and child RSVPs through events_domain without Supabase writes", async () => {
     queueRsvp({ eventId: "event-self", userId: "principal-1", status: "going" });
     queueRsvp({ eventId: "event-child", userId: "principal-1", childId: "child-1", status: "maybe", notes: "late" });
@@ -318,5 +332,53 @@ describe.runIf(!supabaseMode)("syncQueuedRsvps ICP adapter", () => {
     expect(liveMocks.supabaseFromCalls).toEqual([]);
     expect(liveMocks.setLiveEventRsvp).not.toHaveBeenCalled();
     expect(liveMocks.adminUpsertLiveRsvp).not.toHaveBeenCalled();
+  });
+
+  it("preserves a new RSVP queued while a canister sync is in flight", async () => {
+    queueRsvp({ eventId: "event-1", userId: "principal-1", status: "going" });
+    let resolveWrite!: () => void;
+    liveMocks.setLiveEventRsvp.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveWrite = resolve;
+    }));
+
+    const syncing = syncQueuedRsvps();
+    await waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
+    queueRsvp({ eventId: "event-2", userId: "principal-1", status: "maybe" });
+    resolveWrite();
+
+    await expect(syncing).resolves.toEqual({ synced: 1, failed: 0 });
+    expect(getQueuedRsvps()).toEqual([expect.objectContaining({ eventId: "event-2", status: "maybe" })]);
+    expect(liveMocks.supabaseFromCalls).toEqual([]);
+  });
+
+  it("increments only a failed canister RSVP while removing successful entries", async () => {
+    queueRsvp({ eventId: "event-fail", userId: "principal-1", status: "going" });
+    queueRsvp({ eventId: "event-success", userId: "principal-1", status: "going" });
+    liveMocks.setLiveEventRsvp.mockRejectedValueOnce(new Error("temporary canister failure"));
+
+    await expect(syncQueuedRsvps()).resolves.toEqual({ synced: 1, failed: 0 });
+    expect(getQueuedRsvps()).toEqual([
+      expect.objectContaining({ eventId: "event-fail", retryCount: 1 }),
+    ]);
+    expect(liveMocks.supabaseFromCalls).toEqual([]);
+  });
+
+  it("shares one in-flight canister replay between simultaneous sync calls", async () => {
+    queueRsvp({ eventId: "event-1", userId: "principal-1", status: "going" });
+    let resolveWrite!: () => void;
+    liveMocks.setLiveEventRsvp.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveWrite = resolve;
+    }));
+
+    const first = syncQueuedRsvps();
+    const second = syncQueuedRsvps();
+    await waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
+    resolveWrite();
+    const results = await Promise.all([first, second]);
+
+    expect(results).toEqual([{ synced: 1, failed: 0 }, { synced: 1, failed: 0 }]);
+    expect(liveMocks.setLiveEventRsvp).toHaveBeenCalledTimes(1);
+    expect(getQueuedRsvps()).toEqual([]);
+    expect(liveMocks.supabaseFromCalls).toEqual([]);
   });
 });

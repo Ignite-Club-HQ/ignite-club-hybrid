@@ -135,4 +135,38 @@ describe.runIf(!supabaseMode)("lookupInvitableUserByEmail — ICP privacy fallba
     expect(pendingLookup).toHaveBeenCalledWith(context, "club-1", expect.stringMatching(/^[a-f0-9]{64}$/));
     expect(rpcMock).not.toHaveBeenCalled();
   });
+
+  it("uses the normalized email hash to find an existing pending club invite", async () => {
+    pendingLookup.mockResolvedValueOnce([{ invite_id: "pending-invite-1" }]);
+
+    await expect(lookupInvitableUserByEmail({
+      email: "  Parent@Example.Invalid  ",
+      clubId: "club-1",
+      teamId: "team-1",
+    })).resolves.toEqual({
+      user_id: "pending-invite-1",
+      display_name: null,
+      avatar_url: null,
+      already_in_club: true,
+      already_in_team: false,
+      already_in_mini_league: false,
+    });
+    expect(pendingLookup).toHaveBeenCalledWith(context, "club-1", expect.stringMatching(/^[a-f0-9]{64}$/));
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("does not perform hash lookup without a club scope", async () => {
+    await expect(lookupInvitableUserByEmail({ email: "parent@example.invalid", teamId: "team-1" }))
+      .resolves.toBeNull();
+    expect(pendingLookup).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a normal invite when the pending-hash lookup fails", async () => {
+    pendingLookup.mockRejectedValueOnce(new Error("canister unavailable"));
+
+    await expect(lookupInvitableUserByEmail({ email: "parent@example.invalid", clubId: "club-1" }))
+      .resolves.toBeNull();
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
 });

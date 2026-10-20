@@ -6,6 +6,14 @@ const mocks = vi.hoisted(() => ({
   getActiveIcpTarget: vi.fn(() => ({ alias: "test-target" })),
   tryGetActiveIcpTarget: vi.fn<() => unknown>(() => null),
   isSignedInWithEmail: vi.fn(() => false),
+  activationStatus: vi.fn(() => ({ active: false, missing: [] })),
+  clubDispatch: {
+    forNewClub: vi.fn(),
+    forInvite: vi.fn(),
+    readAcross: vi.fn(),
+    readFor: vi.fn(),
+    writeFor: vi.fn(),
+  },
 }));
 
 vi.mock("./loadBackendRouting", () => ({
@@ -22,6 +30,11 @@ vi.mock("./internetIdentityAuth", () => ({
 vi.mock("./targetRegistry", () => ({
   getActiveIcpTarget: mocks.getActiveIcpTarget,
 }));
+vi.mock("./groupActivation", () => ({
+  activationStatus: mocks.activationStatus,
+  SHIPPED_GATES: {},
+}));
+vi.mock("./groupDispatch", () => ({ clubDispatch: mocks.clubDispatch }));
 
 import { withFeatureBackend } from "./featureRouter";
 
@@ -31,6 +44,8 @@ describe("withFeatureBackend", () => {
     mocks.getCurrentInternetIdentity.mockReset();
     mocks.tryGetActiveIcpTarget.mockReturnValue(null);
     mocks.isSignedInWithEmail.mockReturnValue(false);
+    mocks.activationStatus.mockReset().mockReturnValue({ active: false, missing: [] });
+    for (const dispatch of Object.values(mocks.clubDispatch)) dispatch.mockReset();
   });
 
   it("reads Supabase for an email sign-in even when a club pin routes the feature to ICP", async () => {
@@ -91,5 +106,47 @@ describe("withFeatureBackend", () => {
       withFeatureBackend("messaging", { supabase: supabaseFn, icp: vi.fn() }),
     ).rejects.toThrow(/Internet Identity session/);
     expect(supabaseFn).not.toHaveBeenCalled();
+  });
+
+  it("dispatches an event-scoped read through its grouped domain when group routing is active", async () => {
+    mocks.getEffectiveBackendForFeature.mockReturnValue("icp");
+    mocks.getCurrentInternetIdentity.mockResolvedValue({ getPrincipal: () => ({}) });
+    mocks.activationStatus.mockReturnValue({ active: true, missing: [] });
+    const groupContext = { identity: {}, target: { canisterIds: { events_domain: "group-events" } } };
+    mocks.clubDispatch.readFor.mockImplementation(async (
+      _feature: string,
+      _scope: unknown,
+      _domain: string,
+      read: (ctx: unknown) => Promise<string>,
+    ) => read(groupContext));
+    const supabaseFn = vi.fn(async () => "supabase-result");
+    const icpFn = vi.fn(async (ctx: { target: { canisterIds: { events_domain: string } } }) =>
+      ctx.target.canisterIds.events_domain);
+
+    await expect(withFeatureBackend("events", { supabase: supabaseFn, icp: icpFn }, { eventId: "event-1" }))
+      .resolves.toBe("group-events");
+
+    expect(mocks.clubDispatch.readFor).toHaveBeenCalledWith(
+      "events",
+      { eventId: "event-1" },
+      "events_domain",
+      expect.any(Function),
+    );
+    expect(icpFn).toHaveBeenCalledWith(groupContext);
+    expect(supabaseFn).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for an unscoped club-data call when group routing is active", async () => {
+    mocks.getEffectiveBackendForFeature.mockReturnValue("icp");
+    mocks.getCurrentInternetIdentity.mockResolvedValue({ getPrincipal: () => ({}) });
+    mocks.activationStatus.mockReturnValue({ active: true, missing: [] });
+    const icpFn = vi.fn();
+
+    await expect(withFeatureBackend("events", { supabase: vi.fn(), icp: icpFn }))
+      .rejects.toThrow('"events" call has no club scope');
+
+    expect(mocks.clubDispatch.readFor).not.toHaveBeenCalled();
+    expect(mocks.clubDispatch.writeFor).not.toHaveBeenCalled();
+    expect(icpFn).not.toHaveBeenCalled();
   });
 });

@@ -210,4 +210,47 @@ describe("useChatPinnedVault", () => {
     expect(clearLivePinnedVault).toHaveBeenCalledWith(expect.anything(), "club", "club-1");
     expect(toastSuccess).toHaveBeenCalledWith("Pinned vault removed");
   });
+
+  it.runIf(mode === "icp")("toggles the existing pin using its exact chat scope and target", async () => {
+    routeViaIcp.value = true;
+    getLivePinnedVault.mockResolvedValue({
+      chat_type: "team",
+      chat_id: "team-1",
+      club: "club-1",
+      vault_file_id: ["file-1"],
+      vault_folder_id: [],
+      root_scope: ["team"],
+      root_id: ["team-1"],
+      enabled: true,
+    });
+    setLivePinnedVault.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useChatPinnedVault("team", "team-1", { clubId: "club-1" }));
+
+    await act(async () => result.current.toggleEnabled(false));
+
+    expect(getLivePinnedVault).toHaveBeenCalledWith(expect.anything(), "team", "team-1");
+    expect(setLivePinnedVault).toHaveBeenCalledWith(expect.anything(), "team", "team-1", {
+      clubId: "club-1",
+      vaultFileId: "file-1",
+      vaultFolderId: null,
+      rootScope: "team",
+      rootId: "team-1",
+      enabled: false,
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: pinnedVaultKey("team", "team-1") });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(mode === "icp")("reports a canister removal failure without claiming success", async () => {
+    routeViaIcp.value = true;
+    clearLivePinnedVault.mockRejectedValueOnce(new Error("pin removal denied"));
+    const { result } = renderHook(() => useChatPinnedVault("group", "group-1"));
+
+    await act(async () => result.current.remove());
+
+    expect(toastError).toHaveBeenCalledWith("Couldn't remove pinned vault", { description: "pin removal denied" });
+    expect(toastSuccess).not.toHaveBeenCalledWith("Pinned vault removed");
+    expect(invalidateQueries).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
 });

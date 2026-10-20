@@ -277,4 +277,46 @@ describe("useScheduleProAccess", () => {
     await waitFor(() => expect(result.current).toEqual({ hasAccess: false, isLoading: false }));
     expect(from).not.toHaveBeenCalled();
   });
+
+  it.runIf(icpMode)("denies a team whose owning club is Free despite unrelated Pro access", async () => {
+    getLiveTeam.mockResolvedValue([{ club_id: "club-free" }]);
+    clubProResponses["club-free"] = { hasPro: false, isLoading: false };
+    anyClubProResponse.hasAnyClubPro = true;
+    const { result } = renderHook(
+      () => useScheduleProAccess({ chat_type: "team", team_id: "team-free" }),
+      { wrapper: wrap() },
+    );
+
+    await waitFor(() => expect(result.current).toEqual({ hasAccess: false, isLoading: false }));
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(icpMode)("keeps access closed while canister team ownership is loading", async () => {
+    let resolveTeam!: (value: Array<{ club_id: string }>) => void;
+    getLiveTeam.mockImplementationOnce(() => new Promise((resolve) => { resolveTeam = resolve; }));
+    anyClubProResponse.hasAnyClubPro = true;
+    const { result } = renderHook(
+      () => useScheduleProAccess({ chat_type: "team", team_id: "team-loading" }),
+      { wrapper: wrap() },
+    );
+
+    expect(result.current).toEqual({ hasAccess: false, isLoading: true });
+    await waitFor(() => expect(resolveTeam).toBeTypeOf("function"));
+    resolveTeam([{ club_id: "club-pro" }]);
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.hasAccess).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(icpMode)("fails closed when the team ownership canister lookup rejects", async () => {
+    getLiveTeam.mockRejectedValueOnce(new Error("team lookup unavailable"));
+    anyClubProResponse.hasAnyClubPro = true;
+    const { result } = renderHook(
+      () => useScheduleProAccess({ chat_type: "team", team_id: "team-error" }),
+      { wrapper: wrap() },
+    );
+
+    await waitFor(() => expect(result.current).toEqual({ hasAccess: false, isLoading: false }));
+    expect(from).not.toHaveBeenCalled();
+  });
 });

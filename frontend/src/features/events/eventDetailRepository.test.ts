@@ -102,4 +102,23 @@ describe.runIf(backendMocks.mode === "icp")("event detail repository ICP mapping
     expect(backendMocks.events).toHaveBeenCalledWith(backendMocks.context);
     expect(client.from).not.toHaveBeenCalled();
   });
+
+  it("returns null when the canister confirms the event is absent", async () => {
+    backendMocks.events.mockResolvedValue([]);
+    const client = { from: vi.fn() };
+
+    await expect(fetchEventDetail(client, "missing-event")).resolves.toBeNull();
+    expect(backendMocks.getTeam).not.toHaveBeenCalled();
+    expect(backendMocks.getClubName).not.toHaveBeenCalled();
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("propagates canister event lookup failure rather than presenting not found", async () => {
+    const denied = new Error("event read unavailable");
+    backendMocks.events.mockRejectedValueOnce(denied);
+    const client = { from: vi.fn() };
+
+    await expect(fetchEventDetail(client, "event-icp")).rejects.toBe(denied);
+    expect(client.from).not.toHaveBeenCalled();
+  });
 });

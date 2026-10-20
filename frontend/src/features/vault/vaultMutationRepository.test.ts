@@ -544,12 +544,128 @@ describe.runIf(!supabaseMode)("Vault mutation repository — ICP", () => {
     expect(fake.writes).toEqual([]);
   });
 
+  it.each([
+    {
+      name: "root",
+      view: { type: "root" as const },
+      clubId: "",
+      teamId: null,
+      miniLeagueId: null,
+      competitionId: null,
+    },
+    {
+      name: "club",
+      view: { type: "club" as const, clubId: "club-a", clubName: "Club A" },
+      clubId: "club-a",
+      teamId: null,
+      miniLeagueId: null,
+      competitionId: null,
+    },
+    {
+      name: "team",
+      view: {
+        type: "team" as const,
+        clubId: "club-a",
+        clubName: "Club A",
+        teamId: "team-a",
+        teamName: "Team A",
+      },
+      clubId: "club-a",
+      teamId: "team-a",
+      miniLeagueId: null,
+      competitionId: null,
+    },
+    {
+      name: "mini-league",
+      view: {
+        type: "mini-league" as const,
+        clubId: "club-a",
+        clubName: "Club A",
+        miniLeagueId: "league-a",
+        miniLeagueName: "League A",
+      },
+      clubId: "",
+      teamId: null,
+      miniLeagueId: "league-a",
+      competitionId: null,
+    },
+    {
+      name: "competition",
+      view: {
+        type: "competition" as const,
+        clubId: "club-a",
+        clubName: "Club A",
+        competitionId: "competition-a",
+        competitionName: "Competition A",
+      },
+      clubId: "club-a",
+      teamId: null,
+      miniLeagueId: null,
+      competitionId: "competition-a",
+    },
+  ])("maps $name scope to vault_domain for folders and links", async ({
+    view,
+    clubId,
+    teamId,
+    miniLeagueId,
+    competitionId,
+  }) => {
+    const fake = lifecycleClient();
+    await createVaultFolder({ name: "Policies", userId: "principal-a", parentFolderId: null, view }, fake.client);
+    await createVaultLinkFile({
+      url: "https://reference.invalid/doc",
+      name: "Handbook",
+      userId: "principal-a",
+      folderId: null,
+      view,
+    }, fake.client);
+
+    expect(vaultMocks.createFolder).toHaveBeenCalledWith(
+      icpContext,
+      expect.any(String),
+      clubId,
+      teamId,
+      null,
+      "Policies",
+      [],
+      miniLeagueId,
+      competitionId,
+    );
+    expect(vaultMocks.createFile).toHaveBeenCalledWith(
+      icpContext,
+      expect.any(String),
+      "",
+      clubId,
+      teamId,
+      "Handbook",
+      "https://reference.invalid/doc",
+      0,
+      "link/external",
+      true,
+      null,
+      miniLeagueId,
+      competitionId,
+    );
+    expect(fake.writes).toEqual([]);
+  });
+
   it("hard-deletes the exact Vault metadata record through vault_domain", async () => {
     const fake = mutationClient();
     await expect(permanentlyDeleteVaultFile("file-a", fake.client)).resolves.toBeUndefined();
     await expect(permanentlyDeleteVaultPhoto("photo-a", fake.client)).resolves.toBe("photo-a");
     expect(vaultMocks.deleteFile).toHaveBeenNthCalledWith(1, icpContext, "file-a");
     expect(vaultMocks.deleteFile).toHaveBeenNthCalledWith(2, icpContext, "photo-a");
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("propagates a canister mutation denial without reporting success or using Supabase", async () => {
+    const denied = new Error("Vault rename denied");
+    vaultMocks.renameFile.mockRejectedValueOnce(denied);
+    const fake = mutationClient();
+
+    await expect(renameVaultItem("file-a", "Denied", fake.client)).rejects.toBe(denied);
+
+    expect(vaultMocks.renameFile).toHaveBeenCalledWith(icpContext, "file-a", "Denied");
     expect(fake.writes).toEqual([]);
   });
 });

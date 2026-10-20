@@ -271,6 +271,31 @@ describe("CompetitionFixturesPanel characterization — permissions and generati
     expect(mocks.toast).toHaveBeenCalledWith({ title: "Saved 3 fixtures" });
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["competition-matches", "competition-1"] });
   });
+
+  it.runIf(!supabaseMode)("keeps a rejected fixture generation retryable and refreshes only after success", async () => {
+    mocks.recordLiveMatch
+      .mockRejectedValueOnce(new Error("temporary canister failure"))
+      .mockResolvedValue({ id: "match-icp", revision: 1n });
+    renderPanel();
+    await previewWithVenue();
+    fireEvent.click(screen.getByRole("button", { name: /save fixtures/i }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Couldn't save fixtures",
+      description: expect.stringMatching(/something went wrong/i),
+      variant: "destructive",
+    })));
+    expect(screen.getByText("Fixture preview")).toBeInTheDocument();
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /save fixtures/i }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({ title: "Saved 3 fixtures" }));
+    expect(mocks.recordLiveMatch).toHaveBeenCalledTimes(4);
+    expect(mocks.updateLiveMatchDetails).toHaveBeenCalledTimes(3);
+    expect(mocks.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["competition-matches", "competition-1"] });
+  });
 });
 
 describe("CompetitionFixturesPanel characterization — existing fixture actions", () => {

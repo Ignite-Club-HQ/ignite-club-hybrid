@@ -254,4 +254,23 @@ describe.runIf(!supabaseMode)("ICP unread message count mapping", () => {
     expect(mockSupabase.rpc).not.toHaveBeenCalled();
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
+
+  it("returns empty counters when the caller has no unread canister messages", async () => {
+    liveUnreadCounts.mockResolvedValue([]);
+
+    await expect(fetchUnreadMessageCounts("principal-1")).resolves.toEqual(
+      createEmptyUnreadMessageCounts(),
+    );
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
+  it("surfaces unread-count canister failures instead of returning zero", async () => {
+    const denied = new Error("unread counts unavailable");
+    liveUnreadCounts.mockRejectedValue(denied);
+
+    await expect(fetchUnreadMessageCounts("principal-1")).rejects.toBe(denied);
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
 });

@@ -673,6 +673,72 @@ describe.runIf(!supabaseMode)("Vault read repository — ICP", () => {
     expect(fake.calls).toEqual([]);
   });
 
+  it.each([
+    {
+      scope: "club",
+      view: clubView,
+      clubId: "club-a",
+      teamId: null,
+      competitionId: null,
+    },
+    {
+      scope: "team",
+      view: {
+        type: "team" as const,
+        clubId: "club-a",
+        clubName: "Club A",
+        teamId: "team-a",
+        teamName: "Team A",
+      },
+      clubId: "club-a",
+      teamId: "team-a",
+      competitionId: null,
+    },
+    {
+      scope: "competition",
+      view: {
+        type: "competition" as const,
+        clubId: "club-a",
+        clubName: "Club A",
+        competitionId: "competition-a",
+        competitionName: "Competition A",
+      },
+      clubId: "club-a",
+      teamId: null,
+      competitionId: "competition-a",
+    },
+  ])("loads the $scope folder tree from vault_domain", async ({ view, clubId, teamId, competitionId }) => {
+    readMocks.folders.mockResolvedValue([
+      { id: "parent", name: "Policies", club: clubId, team: teamId ? [teamId] : [], mini_league_id: [], competition_id: competitionId ? [competitionId] : [], parent_id: [], restricted_roles: [], created_at_ms: 1_000n, deleted_at_ms: [] },
+      { id: "child", name: "Rules", club: clubId, team: teamId ? [teamId] : [], mini_league_id: [], competition_id: competitionId ? [competitionId] : [], parent_id: ["parent"], restricted_roles: [], created_at_ms: 1_000n, deleted_at_ms: [] },
+    ]);
+    const fake = treeClient([]);
+
+    const tree = await fetchVaultFolderTree({
+      view,
+      isPrivilegedViewer: true,
+      clubRoles: new Set(),
+    }, fake.client);
+
+    expect(readMocks.folders).toHaveBeenCalledWith(icpContext, clubId, teamId, null, competitionId);
+    expect(tree.descendantIds).toEqual(["parent", "child"]);
+    expect(tree.pathById.get("child")).toBe("Policies / Rules");
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("does not load a club folder tree without a privileged role or club role", async () => {
+    const fake = treeClient([]);
+
+    await expect(fetchVaultFolderTree({
+      view: clubView,
+      isPrivilegedViewer: false,
+      clubRoles: new Set(),
+    }, fake.client)).resolves.toMatchObject({ descendants: [], descendantIds: [] });
+
+    expect(readMocks.folders).not.toHaveBeenCalled();
+    expect(fake.calls).toEqual([]);
+  });
+
   it("maps canister club files into the shared photo/document rows", async () => {
     readMocks.clubFiles.mockResolvedValue([{
       file: {
@@ -706,6 +772,117 @@ describe.runIf(!supabaseMode)("Vault read repository — ICP", () => {
       files: [],
     });
     expect(readMocks.trash).toHaveBeenCalledWith(icpContext, "club-a");
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("searches scoped canister files and visible descendants without querying Supabase", async () => {
+    const withFile = (id: string, folderId: string, teamId: string | null = null) => ({
+      file: {
+        id,
+        folder_id: [folderId],
+        club: "club-a",
+        team: teamId ? [teamId] : [],
+        mini_league_id: [],
+        competition_id: [],
+        name: "Match plan.pdf",
+        file_url: `${id}.pdf`,
+        size: 12n,
+        mime: "application/pdf",
+        uploaded_by: { toText: () => "principal-a" },
+        created_at_ms: 1_000n,
+        deleted_at_ms: [],
+        deleted_by: [],
+        is_external_link: false,
+      },
+      folder_name: ["Match folder"],
+      folder_path: ["Parent", "Match folder"],
+    });
+    readMocks.clubFiles.mockResolvedValue([
+      withFile("visible-child", "child"),
+      withFile("selected-folder", "parent"),
+      withFile("hidden-folder", "hidden"),
+      withFile("team-file", "child", "team-a"),
+    ]);
+    const fake = searchClient([]);
+    const tree = {
+      descendants: [{ id: "child", name: "Match folder", parent_id: "parent", restricted_roles: null }],
+      pathById: new Map([["child", "Parent / Match folder"]]),
+      descendantIds: ["child"],
+    };
+
+    const result = await searchVaultContents({
+      view: { ...clubView, folderId: "parent" },
+      searchQuery: " match ",
+      tree,
+      isClubAdmin: true,
+      isCoachOrTeamAdmin: false,
+    }, fake.client);
+
+    expect(readMocks.clubFiles).toHaveBeenCalledWith(icpContext, "club-a", null, null, null);
+    expect(result.folders.map((folder) => folder.id)).toEqual(["child"]);
+    expect(result.files.map((file) => file.id)).toEqual(["visible-child", "selected-folder"]);
+    expect(result.files[0]?.folder_path).toBe("Parent / Match folder");
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("does not search club files without an admin or coach role", async () => {
+    const fake = searchClient([]);
+
+    await expect(searchVaultContents({
+      view: clubView,
+      searchQuery: "policy",
+      tree: { descendants: [], pathById: new Map(), descendantIds: [] },
+      isClubAdmin: false,
+      isCoachOrTeamAdmin: false,
+    }, fake.client)).resolves.toEqual({ folders: [], files: [] });
+
+    expect(readMocks.clubFiles).not.toHaveBeenCalled();
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("keeps team recursive search restricted to the selected team", async () => {
+    const withTeamFile = (id: string, teamId: string | null) => ({
+      file: {
+        id,
+        folder_id: [],
+        club: "club-a",
+        team: teamId ? [teamId] : [],
+        mini_league_id: [],
+        competition_id: [],
+        name: "Training notes.pdf",
+        file_url: `${id}.pdf`,
+        size: 12n,
+        mime: "application/pdf",
+        uploaded_by: { toText: () => "principal-a" },
+        created_at_ms: 1_000n,
+        deleted_at_ms: [],
+        deleted_by: [],
+        is_external_link: false,
+      },
+      folder_name: [],
+      folder_path: [],
+    });
+    readMocks.clubFiles.mockResolvedValue([
+      withTeamFile("team-a-file", "team-a"),
+      withTeamFile("team-b-file", "team-b"),
+      withTeamFile("club-file", null),
+    ]);
+    const fake = searchClient([]);
+
+    const result = await searchVaultContents({
+      view: {
+        type: "team",
+        clubId: "club-a",
+        clubName: "Club A",
+        teamId: "team-a",
+        teamName: "Team A",
+      },
+      searchQuery: "training",
+      tree: { descendants: [], pathById: new Map(), descendantIds: [] },
+    }, fake.client);
+
+    expect(readMocks.clubFiles).toHaveBeenCalledWith(icpContext, "club-a", "team-a", null, null);
+    expect(result.files.map((file) => file.id)).toEqual(["team-a-file"]);
     expect(fake.calls).toEqual([]);
   });
 });

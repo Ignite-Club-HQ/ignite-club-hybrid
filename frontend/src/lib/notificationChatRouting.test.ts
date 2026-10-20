@@ -119,9 +119,26 @@ describe.runIf(backendMocks.mode === "icp")("ICP chat-target resolution boundary
     expect(await resolveChatTargetResult("chat-7")).toEqual({ status: "found", target: { kind: "team", targetId: "team-7", messageId: "chat-7", path: "/messages/team-7?message=chat-7" } });
     expect(backendMocks.lookups).toEqual([]);
   });
+  it.each([
+    ["club", { kind: "club", clubId: "club-4" }, "/messages/club/club-4?message=chat-4"],
+    ["group", { kind: "group" }, "/groups/chat-4?message=chat-4"],
+  ] as const)("resolves an on-chain %s conversation to its safe route", async (_kind, group, path) => {
+    metadata.mockResolvedValueOnce(group);
+
+    await expect(resolveChatTargetResult("chat-4")).resolves.toMatchObject({
+      status: "found",
+      target: { kind: group.kind, messageId: "chat-4", path },
+    });
+    expect(backendMocks.lookups).toEqual([]);
+  });
   it("reports an unavailable on-chain read as unreachable, not deleted", async () => {
     metadata.mockRejectedValueOnce(new Error("network unavailable"));
     expect(await resolveChatTargetResult("chat-7")).toEqual({ status: "unreachable", target: null });
+  });
+  it("uses the safe fallback for an empty conversation id without a canister lookup", async () => {
+    await expect(resolveChatTargetResult("")).resolves.toEqual({ status: "not_found", target: null });
+    expect(metadata).not.toHaveBeenCalled();
+    expect(backendMocks.lookups).toEqual([]);
   });
 });
 

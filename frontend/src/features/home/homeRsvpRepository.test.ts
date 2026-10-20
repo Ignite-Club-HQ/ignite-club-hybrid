@@ -84,4 +84,15 @@ describe("fetchHomeUserRsvps", () => {
     expect(backendMocks.snapshot).toHaveBeenCalledWith(backendMocks.context);
     expect(client.from).not.toHaveBeenCalled();
   });
+
+  it.runIf(backendMocks.mode === "icp")("returns early for no visible events and propagates snapshot failures", async () => {
+    const client = { from: vi.fn() };
+    await expect(fetchHomeUserRsvps(client, "principal-a", [])).resolves.toEqual([]);
+    expect(backendMocks.snapshot).not.toHaveBeenCalled();
+
+    const denied = new Error("home snapshot unavailable");
+    backendMocks.snapshot.mockRejectedValueOnce(denied);
+    await expect(fetchHomeUserRsvps(client, "principal-a", ["event-1"])).rejects.toBe(denied);
+    expect(client.from).not.toHaveBeenCalled();
+  });
 });

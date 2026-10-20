@@ -4,10 +4,21 @@ const mockSupabase = await vi.hoisted(async () => {
   const { createMockSupabaseClient } = await import("@/test/mockSupabaseClient");
   return createMockSupabaseClient();
 });
-const mockIcpMode = vi.hoisted(() => process.env.IGNITE_TEST_BACKEND_MODE === "icp");
+const { mockIcpMode, currentIdentity, sendLiveMessage } = vi.hoisted(() => ({
+  mockIcpMode: process.env.IGNITE_TEST_BACKEND_MODE === "icp",
+  currentIdentity: vi.fn(),
+  sendLiveMessage: vi.fn(),
+}));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: mockSupabase }));
 vi.mock("@/live/loadBackendRouting", () => ({
   isFeatureRoutedToIcp: () => mockIcpMode,
+}));
+vi.mock("@/live/internetIdentityAuth", () => ({
+  getCurrentInternetIdentityConfirmed: (...args: unknown[]) => currentIdentity(...args),
+}));
+vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: () => ({ alias: "test" }) }));
+vi.mock("@/live/features/messaging", () => ({
+  sendLiveMessage: (...args: unknown[]) => sendLiveMessage(...args),
 }));
 
 import {
@@ -140,6 +151,13 @@ describe("offline message queue", () => {
 });
 
 describe.runIf(mockIcpMode)("offline message queue — ICP replay boundary", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    currentIdentity.mockResolvedValue(null);
+    sendLiveMessage.mockReset().mockResolvedValue(undefined);
+  });
+
   it("retains queued messages without attempting Supabase replay", async () => {
     enqueue("team", "team-1");
 
@@ -148,5 +166,40 @@ describe.runIf(mockIcpMode)("offline message queue — ICP replay boundary", () 
     expect(getQueuedMessages()).toEqual([
       expect.objectContaining({ type: "team", targetId: "team-1", retryCount: 1 }),
     ]);
+  });
+
+  it("replays a queued canister message with its original id, attachment and reply", async () => {
+    const identity = { principal: "principal-1" };
+    currentIdentity.mockResolvedValue(identity);
+    const queued = enqueue("dm", "conversation-1");
+
+    await expect(syncQueuedMessages()).resolves.toEqual({ synced: 1, failed: 0 });
+
+    expect(sendLiveMessage).toHaveBeenCalledWith(
+      { identity, target: { alias: "test" } },
+      "conversation-1",
+      "Synthetic message",
+      queued.id,
+      { kind: "image", refId: queued.id, url: "https://example.invalid/image.jpg" },
+      "reply-1",
+    );
+    expect(getQueuedMessages()).toEqual([]);
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
+  it("retains failed canister replays twice and discards after the third failure", async () => {
+    currentIdentity.mockResolvedValue({ principal: "principal-1" });
+    sendLiveMessage.mockRejectedValue(new Error("temporary canister failure"));
+    enqueue("team", "team-1");
+
+    await expect(syncQueuedMessages()).resolves.toEqual({ synced: 0, failed: 0 });
+    expect(getQueuedMessages()[0]?.retryCount).toBe(1);
+    await expect(syncQueuedMessages()).resolves.toEqual({ synced: 0, failed: 0 });
+    expect(getQueuedMessages()[0]?.retryCount).toBe(2);
+    await expect(syncQueuedMessages()).resolves.toEqual({ synced: 0, failed: 1 });
+
+    expect(sendLiveMessage).toHaveBeenCalledTimes(3);
+    expect(getQueuedMessages()).toEqual([]);
+    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 });

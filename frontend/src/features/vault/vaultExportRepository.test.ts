@@ -188,10 +188,13 @@ describe.runIf(liveMocks.mode === "supabase")("Vault export folder reads — Sup
 });
 
 describe.runIf(liveMocks.mode === "icp")("Vault export folder reads — ICP", () => {
-  it("uses competition-specific canister folder and file reads", async () => {
-    liveMocks.listLiveVaultFolders.mockResolvedValue([]);
-    liveMocks.listLiveVaultFilesWithFolder.mockResolvedValue([]);
+  beforeEach(() => {
+    liveMocks.listLiveVaultFolders.mockReset().mockResolvedValue([]);
+    liveMocks.listLiveVaultClubFilesWithFolder.mockReset().mockResolvedValue([]);
+    liveMocks.listLiveVaultFilesWithFolder.mockReset().mockResolvedValue([]);
+  });
 
+  it("uses competition-specific canister folder and file reads", async () => {
     const result = await fetchVaultFolderContents({
       folderId: null,
       clubId: CLUB,
@@ -203,5 +206,91 @@ describe.runIf(liveMocks.mode === "icp")("Vault export folder reads — ICP", ()
     expect(liveMocks.listLiveVaultFolders).toHaveBeenCalledWith({}, CLUB, null, null, "comp-a");
     expect(liveMocks.listLiveVaultFilesWithFolder).toHaveBeenCalledWith({}, "", "comp-a");
     expect(liveMocks.listLiveVaultClubFilesWithFolder).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["club", null],
+    ["team", "team-1"],
+  ] as const)("maps %s canister files into export photos and documents", async (_scope, teamId) => {
+    liveMocks.listLiveVaultClubFilesWithFolder.mockResolvedValue([
+      {
+        file: {
+          id: "photo-1", folder_id: [], club: CLUB, team: teamId ? [teamId] : [], mini_league_id: [], competition_id: [],
+          name: "Photo.jpg", file_url: "clubs/club-1/photo.jpg", size: 24n, mime: "image/jpeg",
+          uploaded_by: { toText: () => "principal-a" }, created_at_ms: 1_000n, deleted_at_ms: [], deleted_by: [], is_external_link: false,
+        },
+        folder_name: [], folder_path: [],
+      },
+      {
+        file: {
+          id: "doc-1", folder_id: [], club: CLUB, team: teamId ? [teamId] : [], mini_league_id: [], competition_id: [],
+          name: "Rules.pdf", file_url: "clubs/club-1/rules.pdf", size: 12n, mime: "application/pdf",
+          uploaded_by: { toText: () => "principal-a" }, created_at_ms: 1_000n, deleted_at_ms: [], deleted_by: [], is_external_link: false,
+        },
+        folder_name: [], folder_path: [],
+      },
+    ]);
+    const client = makeClient({ vault_files: [], vault_folders: [] });
+
+    const result = await fetchVaultFolderContents({ folderId: null, clubId: CLUB, teamId }, "", client);
+
+    expect(result.photos).toEqual([expect.objectContaining({
+      id: "photo-1",
+      path: "",
+      image_url: "clubs/club-1/photo.jpg",
+      title: "Photo.jpg",
+      file_size: 24,
+    })]);
+    expect(result.files).toEqual([expect.objectContaining({ id: "doc-1", path: "" })]);
+    expect(liveMocks.listLiveVaultClubFilesWithFolder).toHaveBeenCalledWith({}, CLUB, teamId);
+    expect(client.calls).toEqual([]);
+  });
+
+  it("recursively exports nested canister files with stable paths and per-folder counts", async () => {
+    liveMocks.listLiveVaultFolders.mockResolvedValue([{
+      id: "folder-1", name: "Gallery Uploads", club: CLUB, team: [], mini_league_id: [], competition_id: [],
+      parent_id: [], restricted_roles: [], created_at_ms: 1_000n, deleted_at_ms: [],
+    }]);
+    liveMocks.listLiveVaultClubFilesWithFolder.mockResolvedValue([
+      {
+        file: {
+          id: "photo-1", folder_id: [], club: CLUB, team: [], mini_league_id: [], competition_id: [],
+          name: "Photo.jpg", file_url: "photo.jpg", size: 24n, mime: "image/jpeg",
+          uploaded_by: { toText: () => "principal-a" }, created_at_ms: 1_000n, deleted_at_ms: [], deleted_by: [], is_external_link: false,
+        },
+        folder_name: [], folder_path: [],
+      },
+      {
+        file: {
+          id: "doc-1", folder_id: ["folder-1"], club: CLUB, team: [], mini_league_id: [], competition_id: [],
+          name: "Rules.pdf", file_url: "rules.pdf", size: 12n, mime: "application/pdf",
+          uploaded_by: { toText: () => "principal-a" }, created_at_ms: 1_000n, deleted_at_ms: [], deleted_by: [], is_external_link: false,
+        },
+        folder_name: ["Gallery Uploads"], folder_path: ["Gallery Uploads"],
+      },
+    ]);
+    const client = makeClient({ vault_files: [], vault_folders: [] });
+
+    const result = await collectVaultExportContents({ folderId: null, clubId: CLUB, teamId: null }, "", [], client);
+
+    expect(result.photos.map(photo => photo.id)).toEqual(["photo-1"]);
+    expect(result.files.map(file => ({ id: file.id, path: file.path }))).toEqual([
+      { id: "doc-1", path: "Gallery Uploads" },
+    ]);
+    expect(result.folderBreakdown).toEqual([
+      { path: "(current folder)", photoCount: 1, fileCount: 0 },
+      { path: "Gallery Uploads", photoCount: 0, fileCount: 1 },
+    ]);
+    expect(liveMocks.listLiveVaultClubFilesWithFolder).toHaveBeenCalledTimes(2);
+    expect(client.calls).toEqual([]);
+  });
+
+  it("fails closed without an export scope before querying canisters", async () => {
+    const result = await collectVaultExportContents({ folderId: null, clubId: null, teamId: null }, "");
+
+    expect(result).toEqual({ photos: [], files: [], subfolders: [], folderBreakdown: [] });
+    expect(liveMocks.listLiveVaultFolders).not.toHaveBeenCalled();
+    expect(liveMocks.listLiveVaultClubFilesWithFolder).not.toHaveBeenCalled();
+    expect(liveMocks.listLiveVaultFilesWithFolder).not.toHaveBeenCalled();
   });
 });

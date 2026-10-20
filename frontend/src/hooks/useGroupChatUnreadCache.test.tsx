@@ -148,4 +148,13 @@ describe("useGroupChatUnreadCache realtime scoping", () => {
     expect(channel).not.toHaveBeenCalled();
     expect(result.current.data).toEqual({});
   });
+
+  it.runIf(mode === "icp")("surfaces canister unread-count failures for polling retries", async () => {
+    const denied = new Error("unread-count read denied");
+    liveUnreadCounts.mockRejectedValueOnce(denied);
+    renderHook(() => useGroupChatUnreadCache("principal-1"));
+
+    await expect(queryOptions.current.queryFn()).rejects.toBe(denied);
+    expect(channel).not.toHaveBeenCalled();
+  });
 });

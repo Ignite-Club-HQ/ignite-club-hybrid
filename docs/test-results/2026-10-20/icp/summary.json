@@ -1,0 +1,14 @@
+{
+  "startedAt": "2026-10-20T01:58:58.236Z",
+  "finishedAt": "2026-10-20T02:13:31.052Z",
+  "status": "completed",
+  "results": [
+    {
+      "backendMode": "icp",
+      "status": "failed",
+      "exitCode": 1,
+      "signal": null,
+      "log": "/workspaces/ignite-club-hybrid/docs/test-results/2026-10-20/icp/icp.log"
+    }
+  ]
+}

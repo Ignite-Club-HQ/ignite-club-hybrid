@@ -228,4 +228,54 @@ describe.runIf(icpMocks.mode === "icp")("CreateCompetitionPage — ICP organizer
     expect(rpcMock).not.toHaveBeenCalled();
     expect(fromInsertMock).not.toHaveBeenCalled();
   });
+
+  it("does not navigate or claim success when competition_domain rejects creation", async () => {
+    icpMocks.roleGrants.mockResolvedValue([{ role: "club_admin", club: ["club-icp"] }]);
+    icpMocks.clubProfile.mockResolvedValue([{ id: "club-icp", name: "ICP Club", kind: "full", deleted_at_ms: [] }]);
+    icpMocks.createCompetition.mockRejectedValueOnce(new Error("competition denied"));
+    await renderPage("club-icp");
+    await fillNameAndSubmit("Denied Cup");
+
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: expect.stringMatching(/could not create competition/i),
+    })));
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(fromInsertMock).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate or claim success when the canister returns no competition id", async () => {
+    icpMocks.roleGrants.mockResolvedValue([{ role: "club_admin", club: ["club-icp"] }]);
+    icpMocks.clubProfile.mockResolvedValue([{ id: "club-icp", name: "ICP Club", kind: "full", deleted_at_ms: [] }]);
+    icpMocks.createCompetition.mockResolvedValue({ id: "" });
+    await renderPage("club-icp");
+    await fillNameAndSubmit("Malformed Cup");
+
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: expect.stringMatching(/could not create competition/i),
+    })));
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(fromInsertMock).not.toHaveBeenCalled();
+  });
+
+  it("prevents duplicate canister creation while a submission is in flight", async () => {
+    icpMocks.roleGrants.mockResolvedValue([{ role: "club_admin", club: ["club-icp"] }]);
+    icpMocks.clubProfile.mockResolvedValue([{ id: "club-icp", name: "ICP Club", kind: "full", deleted_at_ms: [] }]);
+    let resolveCreate!: (value: { id: string }) => void;
+    icpMocks.createCompetition.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveCreate = resolve;
+    }));
+    await renderPage("club-icp");
+    await fillNameAndSubmit("Twilight Cup");
+
+    await waitFor(() => expect(icpMocks.createCompetition).toHaveBeenCalledOnce());
+    const submit = screen.getByRole("button", { name: /create competition/i });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    expect(icpMocks.createCompetition).toHaveBeenCalledOnce();
+
+    resolveCreate({ id: "competition-icp" });
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/competitions/competition-icp"));
+  });
 });

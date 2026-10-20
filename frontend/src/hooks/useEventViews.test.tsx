@@ -320,6 +320,49 @@ describe.runIf(!supabaseMode)("ICP event-view adapters", () => {
     expect(state.insertCalls).toBe(0);
   });
 
+  it("does not record a view when event or caller identity is missing", async () => {
+    const { Wrapper } = wrapper();
+    renderHook(() => useEventViewTracking(undefined, "principal-1"), { wrapper: Wrapper });
+    renderHook(() => useEventViewTracking("evt-1", undefined), { wrapper: Wrapper });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(liveMocks.recordLiveEventView).not.toHaveBeenCalled();
+    expect(state.insertCalls).toBe(0);
+    expect(state.maybeSingleCalls).toBe(0);
+  });
+
+  it("invalidates view caches after a successful canister record", async () => {
+    liveMocks.recordLiveEventView.mockResolvedValue(undefined);
+    const { Wrapper, qc } = wrapper();
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    renderHook(() => useEventViewTracking("evt-1", "principal-1"), { wrapper: Wrapper });
+
+    await waitFor(() => expect(liveMocks.recordLiveEventView).toHaveBeenCalledWith(
+      liveMocks.context,
+      "evt-1",
+    ));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(3));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["event-view-check", "evt-1", "principal-1"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["event-views", "evt-1"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["user-event-views"] });
+  });
+
+  it("does not invalidate view caches when canister recording fails", async () => {
+    liveMocks.recordLiveEventView.mockRejectedValueOnce(new Error("view recording denied"));
+    const { Wrapper, qc } = wrapper();
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    renderHook(() => useEventViewTracking("evt-1", "principal-1"), { wrapper: Wrapper });
+
+    await waitFor(() => expect(liveMocks.recordLiveEventView).toHaveBeenCalledWith(
+      liveMocks.context,
+      "evt-1",
+    ));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(state.insertCalls).toBe(0);
+  });
+
   it("maps admin viewer rows from the event canister", async () => {
     liveMocks.listLiveEventViews.mockResolvedValue([{
       viewer: { toText: () => "principal-1" },

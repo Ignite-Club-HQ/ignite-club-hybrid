@@ -5,10 +5,13 @@ const backendMocks = vi.hoisted(() => ({
   mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   context: { identity: {}, target: {} },
   snapshot: vi.fn(),
+  scopes: [] as Array<{ feature: string; scope: unknown }>,
 }));
 vi.mock("@/live/featureRouter", () => ({
-  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
-    backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase(),
+  withFeatureBackend: (feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }, scope?: unknown) => {
+    backendMocks.scopes.push({ feature, scope });
+    return backendMocks.mode === "icp" ? providers.icp(backendMocks.context) : providers.supabase();
+  },
 }));
 vi.mock("@/live/features/events", () => ({
   getLiveEventsSnapshot: (...args: unknown[]) => backendMocks.snapshot(...args),
@@ -47,7 +50,10 @@ function clientWith(options: {
 }
 
 describe("event RSVP repository", () => {
-  beforeEach(() => backendMocks.snapshot.mockReset());
+  beforeEach(() => {
+    backendMocks.snapshot.mockReset();
+    backendMocks.scopes.length = 0;
+  });
 
   it.runIf(backendMocks.mode === "supabase")("isolates the authoritative RSVP read to the requested event", async () => {
     const db = clientWith({ rsvps: [] });
@@ -126,6 +132,18 @@ describe("event RSVP repository", () => {
     ]);
     expect(backendMocks.snapshot).toHaveBeenCalledWith(backendMocks.context);
     expect(loadProfiles).toHaveBeenCalledWith(["principal-a"]);
+    expect(backendMocks.scopes).toEqual([{ feature: "events", scope: { eventId: "event-icp" } }]);
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(backendMocks.mode === "icp")("propagates snapshot failure before profile enrichment", async () => {
+    const denied = new Error("RSVP snapshot unavailable");
+    backendMocks.snapshot.mockRejectedValueOnce(denied);
+    const client = { from: vi.fn() };
+    const loadProfiles = vi.fn();
+
+    await expect(fetchEventRsvps(client, "event-icp", loadProfiles)).rejects.toBe(denied);
+    expect(loadProfiles).not.toHaveBeenCalled();
     expect(client.from).not.toHaveBeenCalled();
   });
 });

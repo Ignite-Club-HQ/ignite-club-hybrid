@@ -1,10 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
-const { from, queryResult, showNotification } = vi.hoisted(() => ({
+const { from, queryResult, showNotification, listInbox } = vi.hoisted(() => ({
   from: vi.fn(),
   queryResult: { data: [] as any[], error: null as any },
   showNotification: vi.fn(),
+  listInbox: vi.fn(),
 }));
 const icpMode = vi.hoisted(() => process.env.IGNITE_TEST_BACKEND_MODE === "icp");
 
@@ -16,7 +17,7 @@ vi.mock("@/live/authBackendMode", () => ({
 }));
 
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => icpMode ? h.icp({}) : h.supabase() }));
-vi.mock("@/live/features/notifications", () => ({ listLiveInbox: async () => [] }));
+vi.mock("@/live/features/notifications", () => ({ listLiveInbox: (...args: unknown[]) => listInbox(...args) }));
 
 import { useMissedNotificationSync } from "./useMissedNotificationSync";
 
@@ -204,6 +205,14 @@ describe.runIf(icpMode)("useMissedNotificationSync ICP boundary", () => {
     vi.setSystemTime(new Date("2026-07-19T12:00:00Z"));
     localStorage.clear();
     vi.clearAllMocks();
+    listInbox.mockReset().mockResolvedValue([]);
+    showNotification.mockReset().mockResolvedValue(undefined);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    Object.defineProperty(window, "Notification", { configurable: true, value: { permission: "granted" } });
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: { ready: Promise.resolve({ showNotification }) },
+    });
   });
 
   afterEach(() => vi.useRealTimers());
@@ -213,5 +222,40 @@ describe.runIf(icpMode)("useMissedNotificationSync ICP boundary", () => {
     await manuallySync(result);
     expect(from).not.toHaveBeenCalled();
     expect(showNotification).not.toHaveBeenCalled();
+  });
+
+  it("filters recent unread canister inbox rows and deduplicates local delivery", async () => {
+    listInbox.mockResolvedValue([
+      { id: "newest", kind: "event_update", body: "Newest", read: false, created_at_ms: BigInt(Date.now() - 60_000) },
+      { id: "already-read", kind: "event_update", body: "Read", read: true, created_at_ms: BigInt(Date.now() - 30_000) },
+      { id: "too-old", kind: "event_update", body: "Old", read: false, created_at_ms: BigInt(Date.now() - 3 * 60 * 60_000) },
+      { id: "older", kind: "event_update", body: "Older", read: false, created_at_ms: BigInt(Date.now() - 2 * 60_000) },
+    ]);
+    const syncStartedAt = Date.now();
+    const { result } = renderHook(() => useMissedNotificationSync("principal-1"));
+
+    await manuallySync(result);
+
+    expect(listInbox).toHaveBeenCalledWith({}, "principal-1", null, 100);
+    expect(showNotification).toHaveBeenCalledTimes(2);
+    expect(showNotification.mock.calls.map((call) => call[1].body)).toEqual(["Newest", "Older"]);
+    const shown = JSON.parse(localStorage.getItem("notifications-last-shown")!);
+    expect(Object.keys(shown).sort()).toEqual(["newest", "older"]);
+    expect(Object.values(shown).every((timestamp: any) => timestamp >= syncStartedAt && timestamp <= syncStartedAt + 2_000)).toBe(true);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("does not mark a canister inbox failure as synced and permits retry", async () => {
+    listInbox.mockRejectedValueOnce(new Error("inbox unavailable"));
+    const { result } = renderHook(() => useMissedNotificationSync("principal-1"));
+
+    await manuallySync(result);
+    expect(localStorage.getItem("notifications-last-sync")).toBeNull();
+
+    listInbox.mockResolvedValueOnce([]);
+    await manuallySync(result);
+    expect(listInbox).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem("notifications-last-sync")).not.toBeNull();
+    expect(from).not.toHaveBeenCalled();
   });
 });

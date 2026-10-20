@@ -127,6 +127,33 @@ describe("useEventGoingAttendees", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
+  it.runIf(backendMocks.mode === "icp")("deduplicates adult and child attendee identities from the canister roster", async () => {
+    backendMocks.getRoster.mockResolvedValue({ rsvps: [
+      { rsvp: { account_id: "principal-adult", child_id: [], state: "going" } },
+      { rsvp: { account_id: "principal-adult", child_id: [], state: "going" } },
+      { rsvp: { account_id: "principal-parent", child_id: ["child-1"], state: "going" } },
+      { rsvp: { account_id: "principal-parent-2", child_id: ["child-1"], state: "going" } },
+      { rsvp: { account_id: "principal-maybe", child_id: [], state: "maybe" } },
+    ] });
+    const { result } = renderHook(() => useEventGoingAttendees("event-icp"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual(new Set(["principal-adult", "child-1"]));
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(backendMocks.mode === "icp")("returns an empty set when no canister RSVP is going", async () => {
+    backendMocks.getRoster.mockResolvedValue({ rsvps: [
+      { rsvp: { account_id: "principal-maybe", child_id: [], state: "maybe" } },
+      { rsvp: { account_id: "principal-no", child_id: ["child-1"], state: "not_going" } },
+    ] });
+    const { result } = renderHook(() => useEventGoingAttendees("event-icp"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual(new Set());
+    expect(from).not.toHaveBeenCalled();
+  });
+
   it.runIf(backendMocks.mode === "icp")("surfaces canister roster failures instead of showing zero attendees", async () => {
     backendMocks.getRoster.mockRejectedValue(new Error("roster unavailable"));
     const { result } = renderHook(() => useEventGoingAttendees("event-icp"), { wrapper });

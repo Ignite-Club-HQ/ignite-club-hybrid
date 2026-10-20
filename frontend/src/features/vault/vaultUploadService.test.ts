@@ -383,4 +383,66 @@ describe.runIf(!supabaseMode)("Vault upload transaction — ICP", () => {
     expect(fake.inserts).toEqual([]);
     expect(fake.dependencies.reserveStorage).not.toHaveBeenCalled();
   });
+
+  it("rejects missing club scope before uploading encrypted bytes", async () => {
+    uploadMocks.mode = "icp";
+    const fake = uploadTransaction();
+    const tryBlobUpload = vi.fn().mockResolvedValue({ url: "https://icp.invalid/blob", blobRef: "blob-ref-a" });
+
+    await expect(uploadVaultItem({
+      kind: "file",
+      file: new File(["x"], "x.txt"),
+      name: "x.txt",
+      userId: "principal-a",
+      folderId: null,
+      view: { type: "root" },
+    }, fake.client, { ...fake.dependencies, tryBlobUpload })).rejects.toThrow(/club scope/i);
+
+    expect(tryBlobUpload).not.toHaveBeenCalled();
+    expect(uploadMocks.registerFile).not.toHaveBeenCalled();
+    expect(fake.upload).not.toHaveBeenCalled();
+    expect(fake.dependencies.reserveStorage).not.toHaveBeenCalled();
+  });
+
+  it("propagates encrypted blob upload failure without Supabase fallback", async () => {
+    uploadMocks.mode = "icp";
+    const denied = new Error("blob upload denied");
+    const fake = uploadTransaction();
+    const tryBlobUpload = vi.fn().mockRejectedValue(denied);
+
+    await expect(uploadVaultItem({
+      kind: "file",
+      file: new File(["x"], "x.txt"),
+      name: "x.txt",
+      userId: "principal-a",
+      folderId: null,
+      view: { type: "club", clubId: "club-a", clubName: "Club A" },
+    }, fake.client, { ...fake.dependencies, tryBlobUpload })).rejects.toBe(denied);
+
+    expect(uploadMocks.registerFile).not.toHaveBeenCalled();
+    expect(fake.upload).not.toHaveBeenCalled();
+    expect(fake.dependencies.reserveStorage).not.toHaveBeenCalled();
+  });
+
+  it("propagates canister metadata registration failure without Supabase fallback", async () => {
+    uploadMocks.mode = "icp";
+    const denied = new Error("vault metadata denied");
+    uploadMocks.registerFile.mockRejectedValueOnce(denied);
+    const fake = uploadTransaction();
+    const tryBlobUpload = vi.fn().mockResolvedValue({ url: "https://icp.invalid/blob", blobRef: "blob-ref-a" });
+
+    await expect(uploadVaultItem({
+      kind: "file",
+      file: new File(["x"], "x.txt"),
+      name: "x.txt",
+      userId: "principal-a",
+      folderId: null,
+      view: { type: "club", clubId: "club-a", clubName: "Club A" },
+    }, fake.client, { ...fake.dependencies, tryBlobUpload })).rejects.toBe(denied);
+
+    expect(uploadMocks.registerFile).toHaveBeenCalledOnce();
+    expect(fake.upload).not.toHaveBeenCalled();
+    expect(fake.inserts).toEqual([]);
+    expect(fake.dependencies.reserveStorage).not.toHaveBeenCalled();
+  });
 });

@@ -224,6 +224,21 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     expect(calls).toEqual([]);
   });
 
+  it("resolves Free when the caller has no role grants or Pro entitlement", async () => {
+    accessMocks.roles.mockResolvedValue([]);
+    accessMocks.clubSubscriptions.mockResolvedValue(new Map());
+    accessMocks.teamSubscriptions.mockResolvedValue(new Map());
+    accessMocks.entitlements.mockResolvedValue({ isPro: false });
+    const { client, calls } = scriptedClient({});
+
+    await expect(fetchVaultAnyProAccess("principal-a", client)).resolves.toBe(false);
+
+    expect(accessMocks.clubSubscriptions).toHaveBeenCalledWith(icpContext, []);
+    expect(accessMocks.teamSubscriptions).toHaveBeenCalledWith(icpContext, []);
+    expect(accessMocks.entitlements).toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
   it("checks competition membership and admin status through ICP domains", async () => {
     accessMocks.vaultFolders.mockResolvedValue([]);
     accessMocks.competitionAdmin.mockResolvedValue(true);
@@ -231,6 +246,27 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     await expect(fetchVaultCompetitionAccess("competition-a", "principal-a", client))
       .resolves.toEqual({ isMember: true, canManage: true });
     expect(accessMocks.vaultFolders).toHaveBeenCalledWith(icpContext, "", null, null, "competition-a");
+    expect(calls).toEqual([]);
+  });
+
+  it("fails closed when competition access cannot be established", async () => {
+    accessMocks.vaultFolders.mockRejectedValue(new Error("competition access unavailable"));
+    const { client, calls } = scriptedClient({});
+
+    await expect(fetchVaultCompetitionAccess("competition-a", "principal-a", client))
+      .resolves.toEqual({ isMember: false, canManage: false });
+
+    expect(accessMocks.competitionAdmin).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
+  it("preserves competition membership but denies management when admin lookup fails", async () => {
+    accessMocks.vaultFolders.mockResolvedValue([]);
+    accessMocks.competitionAdmin.mockRejectedValue(new Error("manager lookup unavailable"));
+    const { client, calls } = scriptedClient({});
+
+    await expect(fetchVaultCompetitionAccess("competition-a", "principal-a", client))
+      .resolves.toEqual({ isMember: true, canManage: false });
     expect(calls).toEqual([]);
   });
 });

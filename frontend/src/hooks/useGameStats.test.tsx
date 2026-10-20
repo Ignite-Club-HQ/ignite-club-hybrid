@@ -267,4 +267,37 @@ describe.runIf(backendMocks.mode === "icp")("useGameStats ICP workflow", () => {
     expect(calls).toEqual([]);
     expect(rpcCalls).toEqual([]);
   });
+
+  it("does not invalidate caches or show success when player-stat persistence fails", async () => {
+    backendMocks.savePlayerStats.mockRejectedValueOnce(new Error("player stats unavailable"));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const localWrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useGameStats(), { wrapper: localWrapper });
+
+    await expect(act(async () => result.current.saveGameStats(baseParams()))).rejects.toThrow("player stats unavailable");
+
+    expect(backendMocks.saveSummary).toHaveBeenCalledOnce();
+    expect(backendMocks.savePlayerStats).toHaveBeenCalledOnce();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(toastSpy).not.toHaveBeenCalledWith(expect.objectContaining({ title: "Game stats saved" }));
+    expect(rpcCalls).toEqual([]);
+  });
+
+  it("invalidates the stats and summary caches only after a successful canister save", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const localWrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useGameStats(), { wrapper: localWrapper });
+
+    await act(async () => result.current.saveGameStats(baseParams()));
+
+    const keys = invalidate.mock.calls.map((call) => (call[0] as { queryKey: string[] }).queryKey[0]);
+    expect(keys).toEqual(["game-stats", "game-summary", "player-stats-report", "game-summary-report"]);
+    expect(rpcCalls).toEqual([]);
+  });
 });

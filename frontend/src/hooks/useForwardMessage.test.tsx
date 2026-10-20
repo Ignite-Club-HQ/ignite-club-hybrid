@@ -296,4 +296,72 @@ describe.runIf(mode === "icp")("useForwardMessage ICP provider", () => {
     }));
     expect(from).not.toHaveBeenCalled();
   });
+
+  it("does not enable destination discovery without a signed-in principal", () => {
+    renderHook(() => useForwardDestinations(undefined, true));
+
+    expect(queryOptions.current.enabled).toBe(false);
+    expect(roleGrants).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("returns no destinations without querying groups when the caller has no role grants", async () => {
+    roleGrants.mockResolvedValueOnce([]);
+    renderHook(() => useForwardDestinations("principal-sender", true));
+
+    await expect(queryOptions.current.queryFn()).resolves.toEqual([]);
+
+    expect(clubGroups).not.toHaveBeenCalled();
+    expect(teamGroups).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("treats an empty destination selection as a successful no-op", async () => {
+    const { result } = renderHook(() => useForwardMessageMutation("principal-sender"));
+
+    await expect(result.current.mutateAsync({ source, destinationGroupIds: [] })).resolves.toEqual({ forwarded: 0 });
+
+    expect(forwardLiveMessage).not.toHaveBeenCalled();
+    expect(notifyLive).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("rejects forwarding without a signed-in sender before canister calls", async () => {
+    const { result } = renderHook(() => useForwardMessageMutation(undefined));
+
+    await expect(
+      result.current.mutateAsync({ source: { ...source, messageId: "source-1" }, destinationGroupIds: ["team-group"] }),
+    ).rejects.toThrow("Not signed in");
+
+    expect(forwardLiveMessage).not.toHaveBeenCalled();
+    expect(notifyLive).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("does not notify the author when forwarding their own message", async () => {
+    const { result } = renderHook(() => useForwardMessageMutation("principal-sender"));
+
+    await expect(result.current.mutateAsync({
+      source: { ...source, authorId: "principal-sender", messageId: "source-1" },
+      destinationGroupIds: ["team-group"],
+    })).resolves.toEqual({ forwarded: 1 });
+
+    expect(forwardLiveMessage).toHaveBeenCalledWith(context, "source-1", "team-group");
+    expect(notifyLive).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("keeps forwarding successful when author notification recording fails", async () => {
+    notifyLive.mockRejectedValueOnce(new Error("notification unavailable"));
+    const { result } = renderHook(() => useForwardMessageMutation("principal-sender"));
+
+    await expect(result.current.mutateAsync({
+      source: { ...source, messageId: "source-1" },
+      destinationGroupIds: ["team-group"],
+    })).resolves.toEqual({ forwarded: 1 });
+
+    expect(forwardLiveMessage).toHaveBeenCalledWith(context, "source-1", "team-group");
+    expect(notifyLive).toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
 });

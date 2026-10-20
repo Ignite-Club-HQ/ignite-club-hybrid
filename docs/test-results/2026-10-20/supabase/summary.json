@@ -1,0 +1,14 @@
+{
+  "startedAt": "2026-10-20T02:13:57.267Z",
+  "finishedAt": "2026-10-20T02:28:46.136Z",
+  "status": "completed",
+  "results": [
+    {
+      "backendMode": "supabase",
+      "status": "passed",
+      "exitCode": 0,
+      "signal": null,
+      "log": "/workspaces/ignite-club-hybrid/docs/test-results/2026-10-20/supabase/supabase.log"
+    }
+  ]
+}

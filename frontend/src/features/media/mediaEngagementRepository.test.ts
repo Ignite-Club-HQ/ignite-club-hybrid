@@ -163,4 +163,18 @@ describe.runIf(!supabaseMode)("Media engagement repository — ICP", () => {
     expect(mediaMocks.addComment).toHaveBeenCalledWith(icpContext, "photo-a", "Hello", expect.any(Number));
     expect(calls).toEqual([]);
   });
+
+  it("propagates ICP reaction and comment write denials without Supabase fallback", async () => {
+    const denied = new Error("media engagement denied");
+    mediaMocks.addReaction.mockRejectedValueOnce(denied);
+    mediaMocks.addComment.mockRejectedValueOnce(denied);
+    const { client, calls } = scriptedClient({});
+
+    await expect(replaceMediaReaction({ photoId: "photo-a", userId: "principal-a", reactionType: "love" }, client))
+      .rejects.toBe(denied);
+    await expect(createMediaComment({ photoId: "photo-a", userId: "principal-a", text: "Denied" }, client))
+      .rejects.toBe(denied);
+
+    expect(calls).toEqual([]);
+  });
 });

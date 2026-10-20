@@ -8,9 +8,9 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-const icp = vi.hoisted(() => ({ identity: vi.fn(), erase: vi.fn() }));
+const icp = vi.hoisted(() => ({ identity: vi.fn(), erase: vi.fn(), export: vi.fn() }));
 vi.mock("@/live/internetIdentityAuth", () => ({ getCurrentInternetIdentity: icp.identity }));
-vi.mock("@/live/accountData", () => ({ eraseMyIcpAccount: icp.erase }));
+vi.mock("@/live/accountData", () => ({ eraseMyIcpAccount: icp.erase, exportMyIcpAccountData: icp.export }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase" }));
 
 // ---- mocks ----------------------------------------------------------------
@@ -67,6 +67,9 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  icp.identity.mockReset();
+  icp.erase.mockReset();
+  icp.export.mockReset();
   toastFn.mockReset();
   invokeFn.mockReset();
   signOutFn.mockReset();
@@ -96,12 +99,81 @@ describe.runIf(!supabaseMode)("AccountPage — ICP erasure", () => {
     expect(icp.erase).toHaveBeenCalledWith(identity);
     expect(invokeFn).not.toHaveBeenCalled();
   });
+  it("does not erase or sign out when the identity is unavailable", async () => {
+    icp.identity.mockResolvedValue(null);
+    await confirmDeletion();
+    await waitFor(() => expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ title: "Session expired" })));
+    expect(icp.erase).not.toHaveBeenCalled();
+    expect(signOutFn).not.toHaveBeenCalled();
+    expect(invokeFn).not.toHaveBeenCalled();
+  });
   it("keeps the user signed in when canister erasure is denied", async () => {
     icp.identity.mockResolvedValue({ principal: "own" });
     icp.erase.mockRejectedValue(new Error("Erasure denied"));
     await confirmDeletion();
     await waitFor(() => expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ title: "Failed to erase account" })));
     expect(signOutFn).not.toHaveBeenCalled();
+  });
+});
+
+describe.runIf(!supabaseMode)("AccountPage — ICP data export", () => {
+  async function clickExport() {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /download my data/i }));
+  }
+
+  it("exports caller-scoped data as JSON and revokes the download URL", async () => {
+    const identity = { principal: "own" };
+    icp.identity.mockResolvedValue(identity);
+    icp.export.mockResolvedValue({ backend: "icp", account: { id: "account-1" } });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    await clickExport();
+
+    await waitFor(() => expect(icp.export).toHaveBeenCalledWith(identity));
+    await waitFor(() => expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ title: "Data exported" })));
+    expect(createUrlFn).toHaveBeenCalledTimes(1);
+    expect(revokeUrlFn).toHaveBeenCalledTimes(1);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(invokeFn).not.toHaveBeenCalled();
+    click.mockRestore();
+  });
+
+  it("does not export or download when the identity is unavailable", async () => {
+    icp.identity.mockResolvedValue(null);
+    await clickExport();
+    await waitFor(() => expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ title: "Session expired" })));
+    expect(icp.export).not.toHaveBeenCalled();
+    expect(createUrlFn).not.toHaveBeenCalled();
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("reports export failures without creating a download", async () => {
+    icp.identity.mockResolvedValue({ principal: "own" });
+    icp.export.mockRejectedValue(new Error("Export denied"));
+    await clickExport();
+    await waitFor(() => expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ title: "Export failed", variant: "destructive" })));
+    expect(createUrlFn).not.toHaveBeenCalled();
+    expect(revokeUrlFn).not.toHaveBeenCalled();
+    expect(signOutFn).not.toHaveBeenCalled();
+  });
+
+  it("revokes the object URL when starting the download throws", async () => {
+    icp.identity.mockResolvedValue({ principal: "own" });
+    icp.export.mockResolvedValue({ backend: "icp" });
+    const append = document.body.appendChild.bind(document.body);
+    const spy = vi.spyOn(document.body, "appendChild").mockImplementation(((node: any) => {
+      if (node?.tagName === "A") throw new Error("download failed");
+      return append(node);
+    }) as any);
+
+    await clickExport();
+
+    await waitFor(() => expect(createUrlFn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(revokeUrlFn).toHaveBeenCalledTimes(1));
+    expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ title: "Export failed", variant: "destructive" }));
+    spy.mockRestore();
   });
 });
 

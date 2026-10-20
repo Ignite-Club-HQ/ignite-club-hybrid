@@ -220,6 +220,9 @@ describe("AttendanceSection permissions and reminder behaviour", () => {
     mocks.listLiveEventViews.mockResolvedValue([{
       viewer: { toText: () => "member-1" },
       viewed_at_ms: BigInt(Date.now()),
+    }, {
+      viewer: { toText: () => "outsider" },
+      viewed_at_ms: BigInt(Date.now()),
     }]);
     renderSection({
       addressableMembers: [
@@ -236,6 +239,37 @@ describe("AttendanceSection permissions and reminder behaviour", () => {
     expect(mocks.from).not.toHaveBeenCalledWith("event_reminder_log");
     expect(mocks.getLiveReminderLog).toHaveBeenCalledWith({}, "event-1");
     expect(mocks.listLiveEventViews).toHaveBeenCalledWith({}, "event-1");
+  });
+
+  it.runIf(mocks.mode === "icp")("sends a per-member reminder only to the selected non-viewer and records delivery", async () => {
+    mocks.listLiveEventViews.mockResolvedValue([{
+      viewer: { toText: () => "member-1" },
+      viewed_at_ms: BigInt(Date.now()),
+    }]);
+    mocks.isLiveReachable.mockResolvedValue(true);
+    renderSection({
+      addressableMembers: [
+        { id: "member-1", display_name: "Alex" },
+        { id: "member-2", display_name: "Blair" },
+      ],
+      notRespondedUserIds: ["member-2"],
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /1 viewed/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remind Blair" }));
+
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("send-event-view-reminder", {
+      body: { eventId: "event-1", userIds: ["member-2"], channels: "push" },
+    }));
+    await waitFor(() => expect(mocks.recordLiveReminderSent).toHaveBeenCalledWith(
+      {},
+      "event-1",
+      "push",
+      "member-2",
+    ));
+    expect(mocks.recordLiveReminderSent).toHaveBeenCalledTimes(1);
+    expect(mocks.from).not.toHaveBeenCalledWith("event_views");
+    expect(mocks.from).not.toHaveBeenCalledWith("event_reminder_log");
   });
 
   it("surfaces an edge-function failure and restores the reminder action", async () => {

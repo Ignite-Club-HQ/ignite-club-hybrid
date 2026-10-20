@@ -226,4 +226,34 @@ describe.runIf(backendMocks.mode === "icp")("StartNewSeasonWizard ICP club-seaso
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.onComplete).toHaveBeenCalledOnce();
   });
+
+  it("does not advance or create a draft when archiving the current canister season fails", async () => {
+    backendMocks.saveLiveSeason.mockRejectedValueOnce(new Error("archive denied"));
+    renderWizard();
+
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("archive denied"));
+    expect(screen.getByText("Archive current season")).toBeInTheDocument();
+    expect(backendMocks.saveLiveSeason).toHaveBeenCalledOnce();
+    expect(mocks.onComplete).not.toHaveBeenCalled();
+  });
+
+  it("does not complete the wizard or invalidate season caches when canister publish fails", async () => {
+    const { invalidate } = renderWizard();
+    await advanceToReturningPlayers();
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await screen.findByText(/Invite into season-new/);
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await screen.findByText("Review");
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await screen.findByRole("heading", { name: /Publish\s+2027 Season\s+\?/ });
+    backendMocks.saveLiveSeason.mockRejectedValueOnce(new Error("publish denied"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Publish/ }));
+
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("publish denied"));
+    expect(mocks.onComplete).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
+  });
 });

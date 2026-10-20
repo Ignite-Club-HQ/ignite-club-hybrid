@@ -231,4 +231,42 @@ describe.runIf(!supabaseMode)("deleteMediaPhoto — ICP adapter", () => {
     expect(client.rpc).not.toHaveBeenCalled();
     expect(client.from).not.toHaveBeenCalled();
   });
+
+  it("applies feed-only deletion through the same canister asset boundary", async () => {
+    const client = makeClient({});
+    deleteLiveAsset.mockResolvedValue(undefined);
+
+    await expect(deleteMediaPhoto(client, { photoId: "asset-1", mode: "feed_only" })).resolves.toEqual({
+      photoId: "asset-1",
+      mode: "feed_only",
+      vaultFileId: null,
+      vaultUpdated: false,
+    });
+
+    expect(deleteLiveAsset).toHaveBeenCalledWith(icpContext, "asset-1");
+    expect(client.rpc).not.toHaveBeenCalled();
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing asset identifiers before calling the canister", async () => {
+    const client = makeClient({});
+
+    await expect(deleteMediaPhoto(client, { photoId: "", mode: "feed_only" })).rejects.toThrow("photoId is required");
+
+    expect(deleteLiveAsset).not.toHaveBeenCalled();
+    expect(client.rpc).not.toHaveBeenCalled();
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("propagates canister deletion failures without falling back to Supabase", async () => {
+    const denied = new Error("asset deletion denied");
+    const client = makeClient({});
+    deleteLiveAsset.mockRejectedValueOnce(denied);
+
+    await expect(deleteMediaPhoto(client, { photoId: "asset-2", mode: "feed_only" })).rejects.toBe(denied);
+
+    expect(deleteLiveAsset).toHaveBeenCalledWith(icpContext, "asset-2");
+    expect(client.rpc).not.toHaveBeenCalled();
+    expect(client.from).not.toHaveBeenCalled();
+  });
 });

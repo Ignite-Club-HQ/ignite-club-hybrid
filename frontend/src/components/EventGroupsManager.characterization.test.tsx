@@ -533,6 +533,38 @@ describe.runIf(!supabaseMode)("EventGroupsManager ICP provider contracts", () =>
     expect(mocks.operations).toEqual([]);
   });
 
+  it("does not assign players when canister group creation is denied", async () => {
+    mocks.createLiveEventGroup.mockRejectedValueOnce(new Error("group denied"));
+    await renderManager();
+
+    await expect(mutation("createGroup").mutationFn({
+      name: "Denied",
+      pitchName: "",
+      teamAPlayerIds: ["player-a"],
+      teamBPlayerIds: [],
+    })).rejects.toThrow("group denied");
+
+    expect(mocks.setLiveEventGroupAppearance).not.toHaveBeenCalled();
+    expect(mocks.addLiveGroupPlayer).not.toHaveBeenCalled();
+    expect(mocks.operations).toEqual([]);
+  });
+
+  it("surfaces canister player-assignment failure after creating the parent group", async () => {
+    mocks.addLiveGroupPlayer.mockRejectedValueOnce(new Error("assignment denied"));
+    await renderManager();
+
+    await expect(mutation("createGroup").mutationFn({
+      name: "Partial",
+      pitchName: "",
+      teamAPlayerIds: ["player-a"],
+      teamBPlayerIds: [],
+    })).rejects.toThrow("assignment denied");
+
+    expect(mocks.createLiveEventGroup).toHaveBeenCalledOnce();
+    expect(mocks.addLiveGroupPlayer).toHaveBeenCalledWith(context, "group-icp", "player-a", "a");
+    expect(mocks.operations).toEqual([]);
+  });
+
   it("moves a player between groups through the canister adapter", async () => {
     await renderManager();
     await mutation("movePlayer").mutationFn({
@@ -550,6 +582,20 @@ describe.runIf(!supabaseMode)("EventGroupsManager ICP provider contracts", () =>
       "b",
     );
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.operations).toEqual([]);
+  });
+
+  it("propagates a denied canister move instead of reporting success", async () => {
+    mocks.moveLiveGroupPlayer.mockRejectedValueOnce(new Error("move denied"));
+    await renderManager();
+
+    await expect(mutation("movePlayer").mutationFn({
+      playerId: "player-a",
+      fromGroupId: "group-1",
+      toGroupId: "group-2",
+      toTeam: "b",
+    })).rejects.toThrow("move denied");
+
     expect(mocks.operations).toEqual([]);
   });
 
@@ -582,6 +628,24 @@ describe.runIf(!supabaseMode)("EventGroupsManager ICP provider contracts", () =>
     );
     expect(result.matchIds).toEqual(["generated-icp"]);
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.operations).toEqual([]);
+  });
+
+  it("propagates canister replacement failure without returning generated matches", async () => {
+    mocks.allPlayers = ["a", "b", "c", "d"].map((id) => ({
+      id: `player-${id}`,
+      name: `Player ${id}`,
+      ability_rating: 3,
+      parent_user_id: null,
+      child_id: null,
+    }));
+    mocks.eventRsvps = mocks.allPlayers.map((player) => ({ mini_league_player_id: player.id }));
+    mocks.replaceLiveEventGroups.mockRejectedValueOnce(new Error("generation denied"));
+    await renderManager();
+
+    await expect(mutation("autoGenerate").mutationFn()).rejects.toThrow("generation denied");
+
+    expect(mocks.replaceLiveEventGroups).toHaveBeenCalledOnce();
     expect(mocks.operations).toEqual([]);
   });
 });

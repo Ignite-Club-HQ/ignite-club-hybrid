@@ -49,7 +49,7 @@ vi.mock("@/live/features/club", () => ({
 }));
 vi.mock("@/live/features/vault", () => ({
   resolveLivePiiTextBatch: vi.fn(async (_ctx: unknown, childIds: string[]) =>
-    new Map(childIds.map((id) => [id, "Ava"])),
+    new Map(childIds.map((id) => [id, id === "child-2" ? "Blair" : "Ava"])),
   ),
 }));
 vi.mock("@/components/ui/responsive-dialog", () => ({
@@ -393,5 +393,151 @@ describe.runIf(!supabaseMode)("QuickRSVPDialog ICP RSVP journeys", () => {
       { childId: "child-1" },
     ));
     expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("updates an existing child RSVP created by another guardian through the canister upsert", async () => {
+    setIcpEvent({ audience: "players_and_parents" });
+    mocks.getLiveMyChildren.mockResolvedValue([{ id: "child-1", parent_id: ["parent-1"] }]);
+    mocks.getLiveMyChildTeamAssignments.mockResolvedValue([{ team_id: "team-1", club_id: "club-1" }]);
+    mocks.getMyLiveChildRsvps.mockResolvedValue([{
+      event_id: "event-1",
+      account_id: "another-parent",
+      child_id: ["child-1"],
+      state: "maybe",
+    }]);
+    renderDialog();
+
+    const childBlock = (await screen.findByText("Ava")).parentElement!;
+    fireEvent.click(within(childBlock).getByRole("button", { name: /Going/i }));
+
+    await waitFor(() => expect(mocks.adminUpsertLiveRsvp).toHaveBeenCalledTimes(1));
+    expect(mocks.adminUpsertLiveRsvp).toHaveBeenCalledWith(
+      context,
+      "event-1",
+      "parent-1",
+      "going",
+      { childId: "child-1" },
+    );
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("does not load event or RSVP data while the dialog is closed", async () => {
+    renderDialog({ open: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.listLiveEvents).not.toHaveBeenCalled();
+    expect(mocks.listLiveMyRsvps).not.toHaveBeenCalled();
+    expect(mocks.getLiveMyChildren).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("shows only child controls for a players-only audience when the caller is a parent", async () => {
+    setIcpEvent({ audience: "players_only" });
+    mocks.getLiveMyChildren.mockResolvedValue([{ id: "child-1", parent_id: ["parent-1"] }]);
+    mocks.getLiveMyChildTeamAssignments.mockResolvedValue([{ team_id: "team-1", club_id: "club-1" }]);
+    mocks.myLiveRoleGrants.mockResolvedValue([{ role: "parent", club: "club-1", team: "team-1" }]);
+    renderDialog();
+
+    expect(await screen.findByText("Children's Response")).toBeInTheDocument();
+    expect(await screen.findByText("Ava")).toBeInTheDocument();
+    expect(screen.queryByText("Your Response")).not.toBeInTheDocument();
+  });
+
+  it("shows the parent response and hides children for a parents-only audience", async () => {
+    setIcpEvent({ audience: "parents_only" });
+    mocks.getLiveMyChildren.mockResolvedValue([{ id: "child-1", parent_id: ["parent-1"] }]);
+    renderDialog();
+
+    expect(await screen.findByText("Your Response")).toBeInTheDocument();
+    expect(screen.queryByText("Children's Response")).not.toBeInTheDocument();
+    expect(mocks.getLiveMyChildren).not.toHaveBeenCalled();
+  });
+
+  it("filters ICP child RSVPs to the selected team assignments", async () => {
+    setIcpEvent({ audience: "players_and_parents" });
+    mocks.getLiveMyChildren.mockResolvedValue([
+      { id: "child-1", parent_id: ["parent-1"] },
+      { id: "child-2", parent_id: ["parent-1"] },
+    ]);
+    mocks.getLiveMyChildTeamAssignments.mockImplementation(async (_ctx: unknown, childId: string) =>
+      childId === "child-1"
+        ? [{ team_id: "team-2", club_id: "club-1" }]
+        : [{ team_id: "team-1", club_id: "club-1" }],
+    );
+    renderDialog();
+
+    expect(await screen.findByText("Blair")).toBeInTheDocument();
+    expect(screen.queryByText("Ava")).not.toBeInTheDocument();
+    expect(mocks.getLiveMyChildTeamAssignments).toHaveBeenCalledWith(context, "child-1");
+    expect(mocks.getLiveMyChildTeamAssignments).toHaveBeenCalledWith(context, "child-2");
+  });
+
+  it("updates an existing self RSVP through events_domain without a duplicate insert", async () => {
+    setIcpEvent({ audience: "players_and_parents" });
+    mocks.listLiveMyRsvps.mockResolvedValue([{
+      event_id: "event-1",
+      account_id: "parent-1",
+      state: "maybe",
+      child_id: [],
+    }]);
+    renderDialog();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Can't Go/i }));
+
+    await waitFor(() => expect(mocks.setLiveEventRsvp).toHaveBeenCalledWith(
+      context,
+      "event-1",
+      "parent-1",
+      "not_going",
+    ));
+    expect(mocks.setLiveEventRsvp).toHaveBeenCalledTimes(1);
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an ICP RSVP denial without awarding points", async () => {
+    setIcpEvent({ audience: "players_and_parents" });
+    mocks.setLiveEventRsvp.mockRejectedValueOnce(new Error("RSVP denied"));
+    renderDialog();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Going/i }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({
+      title: "Error",
+      description: "RSVP denied",
+      variant: "destructive",
+    }));
+    expect(mocks.awardPoints).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("prompts for payment after a successful paid social RSVP", async () => {
+    setIcpEvent({ audience: "players_and_parents" });
+    renderDialog({ eventAmount: 12.5 });
+
+    expect(screen.queryByText("Payment Required")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Going/i }));
+
+    expect(await screen.findByText("Payment Required")).toBeInTheDocument();
+    expect(screen.getByText("$12.50 per person")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Go to Event to Pay/i }));
+    expect(baseProps.onOpenChange).toHaveBeenCalledWith(false);
+    expect(mocks.navigate).toHaveBeenCalledWith("/events/event-1");
+  });
+
+  it("invalidates all RSVP consumers after a successful canister write", async () => {
+    setIcpEvent({ audience: "players_and_parents" });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <QuickRSVPDialog {...baseProps} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Going/i }));
+
+    await waitFor(() => expect(mocks.setLiveEventRsvp).toHaveBeenCalled());
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["event-rsvps", "event-1"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["rsvp-summary", "event-1"] });
   });
 });

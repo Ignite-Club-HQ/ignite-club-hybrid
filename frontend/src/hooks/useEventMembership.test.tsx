@@ -115,4 +115,16 @@ describe.runIf(icpMode)("useEventMembership ICP membership", () => {
     await waitFor(() => expect(result.current.data).toBe(false));
     expect(from).not.toHaveBeenCalled();
   });
+
+  it("surfaces an unavailable membership check without probing Supabase", async () => {
+    checkLiveEventMembership.mockRejectedValueOnce(new Error("membership unavailable"));
+    const { result } = renderHook(
+      () => useEventMembership({ id: "event-icp", team_id: "team-1", club_id: "club-1" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
+    expect(from).not.toHaveBeenCalled();
+  });
 });

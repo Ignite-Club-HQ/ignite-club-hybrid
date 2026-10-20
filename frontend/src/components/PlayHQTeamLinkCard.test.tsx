@@ -150,4 +150,21 @@ describe("PlayHQTeamLinkCard hook-order safety", () => {
     expect(mocks.listLivePlayHQCompetitions).not.toHaveBeenCalled();
     expect(mocks.from).not.toHaveBeenCalled();
   });
+
+  it.runIf(mocks.mode === "icp")("keeps team and competition reads gated while club configuration is loading", async () => {
+    let resolveClub!: (value: any[]) => void;
+    mocks.getLiveClubProfile.mockReturnValueOnce(new Promise((resolve) => {
+      resolveClub = resolve;
+    }));
+    renderCard();
+
+    expect(mocks.getLiveClubProfile).toHaveBeenCalledWith({}, "club-1");
+    expect(screen.queryByText("PlayHQ Link")).not.toBeInTheDocument();
+    expect(mocks.getLiveTeam).not.toHaveBeenCalled();
+    expect(mocks.listLivePlayHQCompetitions).not.toHaveBeenCalled();
+
+    resolveClub([{ playhq_tenant: ["tenant"], playhq_org_id: ["organisation"] }]);
+    expect(await screen.findByText("PlayHQ Link")).toBeInTheDocument();
+    expect(mocks.getLiveTeam).toHaveBeenCalledWith({}, "team-1");
+  });
 });

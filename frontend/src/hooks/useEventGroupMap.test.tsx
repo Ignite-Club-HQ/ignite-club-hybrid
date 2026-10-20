@@ -166,4 +166,48 @@ describe("useEventGroupMap scoping", () => {
     expect(backendMocks.roleGrants).toHaveBeenCalledWith(backendMocks.context);
     expect(backendMocks.supabaseTables).toEqual([]);
   });
+
+  it.runIf(backendMocks.mode === "icp")("merges teams with the same age level and keeps team grouping separate", async () => {
+    const level = renderHook(() => useEventGroupMap(scopedParams), { wrapper });
+    await waitFor(() => expect(level.result.current.isLoading).toBe(false));
+    expect(level.result.current.orderedGroups).toEqual([
+      { key: "level:U8", label: "U8" },
+      { key: "__other__", label: "Other" },
+    ]);
+
+    const byTeam = renderHook(() => useEventGroupMap({ ...scopedParams, grouping: "team" }), { wrapper });
+    await waitFor(() => expect(byTeam.result.current.isLoading).toBe(false));
+    expect(byTeam.result.current.orderedGroups.map((group) => group.label)).toEqual(["U8 Blue", "U8 Red", "Other"]);
+  });
+
+  it.runIf(backendMocks.mode === "icp")("keeps a child outside the selected team scope out of the group map", async () => {
+    const { result } = renderHook(() => useEventGroupMap({
+      ...scopedParams,
+      scopedRosterRows: [{ kind: "child", person_id: "kid-outside", team_ids: ["team-other"] }],
+    }), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.groupOf({ childId: "kid-outside" })).toBeNull();
+  });
+
+  it.runIf(backendMocks.mode === "icp")("keeps whole-club audience members in Other when no team resolves", async () => {
+    const { result } = renderHook(() => useEventGroupMap({
+      ...scopedParams,
+      targetTeamIds: null,
+    }), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isScoped).toBe(false);
+    expect(result.current.groupOf({ childId: "kid-without-team" })).toEqual({ key: "__other__", label: "Other" });
+    expect(result.current.groupOf({ userId: "club-admin-without-team" })).toEqual({ key: "__other__", label: "Other" });
+  });
+
+  it.runIf(backendMocks.mode === "icp")("surfaces a canister team lookup failure", async () => {
+    backendMocks.listTeams.mockRejectedValueOnce(new Error("team lookup denied"));
+    const { result } = renderHook(() => useEventGroupMap(scopedParams), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.orderedGroups).toEqual([{ key: "__other__", label: "Other" }]);
+    expect(backendMocks.supabaseTables).toEqual([]);
+  });
 });

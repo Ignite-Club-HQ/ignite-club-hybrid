@@ -11,7 +11,11 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import { permanentlyDeleteVaultItems, VAULT_DELETE_CHUNK } from "@/lib/vaultDelete";
 
-beforeEach(() => invoke.mockReset());
+beforeEach(() => {
+  invoke.mockReset();
+  live.get.mockReset().mockResolvedValue(null);
+  live.remove.mockReset().mockResolvedValue(undefined);
+});
 
 const ok = (body: any) => ({ data: body, error: null });
 
@@ -210,6 +214,48 @@ describe.runIf(!supabaseMode)("permanentlyDeleteVaultItems — ICP boundary", ()
     await expect(permanentlyDeleteVaultItems({ photoIds: ["p1"], fileIds: ["f1"] }))
       .resolves.toEqual({ photosDeleted: 0, filesDeleted: 1, succeeded: [{ id: "f1", kind: "file" }], failed: [{ id: "p1", kind: "photo", code: "unsupported_on_icp" }] });
     expect(live.remove).toHaveBeenCalledWith(live.context, "f1");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates file IDs and performs no work for an empty selection", async () => {
+    await expect(permanentlyDeleteVaultItems({})).resolves.toEqual({
+      photosDeleted: 0,
+      filesDeleted: 0,
+      succeeded: [],
+      failed: [],
+    });
+    await expect(permanentlyDeleteVaultItems({ fileIds: ["f1", "f1"] })).resolves.toEqual({
+      photosDeleted: 0,
+      filesDeleted: 1,
+      succeeded: [{ id: "f1", kind: "file" }],
+      failed: [],
+    });
+
+    expect(live.remove).toHaveBeenCalledTimes(1);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("continues across ICP file failures and keeps photo-table IDs explicitly unsupported", async () => {
+    live.remove.mockImplementation(async (_ctx: unknown, id: string) => {
+      if (id === "file-b") throw new Error("file denied");
+    });
+
+    await expect(permanentlyDeleteVaultItems({
+      photoIds: ["photo-a"],
+      fileIds: ["file-a", "file-b", "file-c"],
+    })).resolves.toEqual({
+      photosDeleted: 0,
+      filesDeleted: 2,
+      succeeded: [
+        { id: "file-a", kind: "file" },
+        { id: "file-c", kind: "file" },
+      ],
+      failed: [
+        { id: "file-b", kind: "file", code: "file denied" },
+        { id: "photo-a", kind: "photo", code: "unsupported_on_icp" },
+      ],
+    });
+    expect(live.remove.mock.calls.map((call) => call[1])).toEqual(["file-a", "file-b", "file-c"]);
     expect(invoke).not.toHaveBeenCalled();
   });
 });

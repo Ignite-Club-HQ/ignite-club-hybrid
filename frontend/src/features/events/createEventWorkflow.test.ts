@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const eventMocks = vi.hoisted(() => ({
   backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
+  scopes: [] as Array<{ feature: string; scope: unknown }>,
   createLiveEvent: vi.fn(),
   createLiveEventSeries: vi.fn(),
   addLiveSeriesOccurrence: vi.fn(),
@@ -13,8 +14,10 @@ const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 const icpContext = { identity: {}, target: { alias: "test" } };
 
 vi.mock("@/live/featureRouter", () => ({
-  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
-    eventMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase(),
+  withFeatureBackend: (feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }, scope?: unknown) => {
+    eventMocks.scopes.push({ feature, scope });
+    return eventMocks.backend === "icp" ? providers.icp(icpContext) : providers.supabase();
+  },
 }));
 vi.mock("@/live/features/events", () => ({
   createLiveEvent: (...args: unknown[]) => eventMocks.createLiveEvent(...args),
@@ -82,8 +85,18 @@ describe.runIf(supabaseMode)("atomic event create workflow — Supabase", () => 
 });
 
 describe.runIf(!supabaseMode)("atomic event create workflow — ICP", () => {
-  it("creates the event through events_domain without using the Supabase RPC", async () => {
+  beforeEach(() => {
     eventMocks.backend = "icp";
+    eventMocks.scopes.length = 0;
+    eventMocks.createLiveEvent.mockReset();
+    eventMocks.createLiveEventSeries.mockReset();
+    eventMocks.addLiveSeriesOccurrence.mockReset();
+    eventMocks.createLiveOpenDuty.mockReset();
+    eventMocks.setLiveEventAutoReminder.mockReset();
+    eventMocks.setLiveEventDuty.mockReset();
+  });
+
+  it("creates the event through events_domain without using the Supabase RPC", async () => {
     eventMocks.createLiveEvent.mockResolvedValue({ id: "icp-event-1" });
     const rpc = vi.fn();
     const eventDate = "2026-08-20T09:00:00.000Z";
@@ -103,6 +116,77 @@ describe.runIf(!supabaseMode)("atomic event create workflow — ICP", () => {
       startsAtMs: new Date(eventDate).getTime(),
       endsAtMs: new Date(eventDate).getTime() + 3_600_000,
     }));
+    expect(eventMocks.scopes).toEqual([{
+      feature: "events",
+      scope: { clubId: "club-1", writeKey: "once", attempts: 1 },
+    }]);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("creates requested recurring occurrences and schedules duties and reminders", async () => {
+    const firstStart = new Date("2026-08-20T09:00:00.000Z").getTime();
+    const childStart = new Date("2026-08-27T09:00:00.000Z").getTime();
+    eventMocks.createLiveEventSeries.mockResolvedValue({
+      events: [{ id: "first", series_id: ["series-1"] }],
+    });
+    eventMocks.addLiveSeriesOccurrence.mockResolvedValue({ id: "child" });
+    let finishBackground!: (failed: number) => void;
+    const backgroundDone = new Promise<number>((resolve) => {
+      finishBackground = resolve;
+    });
+    const eventId = await createEventTransaction({ rpc: vi.fn() }, {
+      event: {
+        title: "Training",
+        club_id: "club-1",
+        team_id: "team-1",
+        end_time: "2026-08-20T10:30:00.000Z",
+        reminder_hours_before: 12,
+      },
+      eventDate: "2026-08-20T09:00:00.000Z",
+      childDates: ["2026-08-27T09:00:00.000Z"],
+      duties: [
+        { name: "Scorer", assigned_to: "adult-1" },
+        { name: "First Aid", assigned_to: null },
+      ],
+      onBackgroundDone: finishBackground,
+    });
+
+    expect(eventId).toBe("first");
+    await expect(backgroundDone).resolves.toBe(0);
+
+    expect(eventMocks.createLiveEventSeries).toHaveBeenCalledWith(icpContext, expect.objectContaining({
+      clubId: "club-1",
+      teamId: "team-1",
+      firstStartsAtMs: firstStart,
+      firstEndsAtMs: firstStart + 90 * 60_000,
+      untilMs: firstStart,
+    }));
+    expect(eventMocks.addLiveSeriesOccurrence).toHaveBeenCalledWith(
+      icpContext,
+      "series-1",
+      childStart,
+      childStart + 90 * 60_000,
+    );
+    expect(eventMocks.setLiveEventDuty).toHaveBeenCalledWith(icpContext, "first", "adult-1", "Scorer");
+    expect(eventMocks.createLiveOpenDuty).toHaveBeenCalledWith(icpContext, "first", "First Aid");
+    expect(eventMocks.setLiveEventAutoReminder).toHaveBeenCalledWith(icpContext, "first", 12);
+    expect(eventMocks.setLiveEventAutoReminder).toHaveBeenCalledWith(icpContext, "child", 12);
+  });
+
+  it("does not schedule follow-up writes when the primary event creation fails", async () => {
+    const denied = new Error("Event creation denied");
+    eventMocks.createLiveEvent.mockRejectedValue(denied);
+    const rpc = vi.fn();
+
+    await expect(createEventTransaction({ rpc }, {
+      event: { title: "Training", club_id: "club-1" },
+      eventDate: "2026-08-20T09:00:00.000Z",
+      childDates: null,
+      duties: [{ name: "Scorer", assigned_to: "adult-1" }],
+    })).rejects.toBe(denied);
+
+    expect(eventMocks.setLiveEventDuty).not.toHaveBeenCalled();
+    expect(eventMocks.createLiveOpenDuty).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
   });
 });

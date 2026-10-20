@@ -530,4 +530,35 @@ describe.runIf(!supabaseMode)("useActiveGameSync ICP routing", () => {
     expect(JSON.parse(activeGameBackendMocks.sync.mock.calls[0][1].pitchStateJson).players).toHaveLength(1);
     expect(writeLog).toEqual([]);
   });
+
+  it("deactivates a stopped board through events_domain using its team scope", async () => {
+    activeGameBackendMocks.mode = "icp";
+    seedSoccerBoard("team-stopped");
+    const timer = JSON.parse(localStorage.getItem(TIMER_KEY)!);
+    timer.isRunning = false;
+    timer.elapsedSeconds = 0;
+    localStorage.setItem(TIMER_KEY, JSON.stringify(timer));
+    const { result } = renderHook(() => useActiveGameSync());
+
+    await act(async () => result.current.forceSync());
+
+    expect(activeGameBackendMocks.deactivate).toHaveBeenCalledWith(
+      { identity: {}, target: {} },
+      "team-stopped",
+    );
+    expect(activeGameBackendMocks.sync).not.toHaveBeenCalled();
+    expect(writeLog).toEqual([]);
+  });
+
+  it("does not fall back to Supabase when canister active-game sync fails", async () => {
+    activeGameBackendMocks.mode = "icp";
+    activeGameBackendMocks.sync.mockRejectedValueOnce(new Error("active-game write denied"));
+    seedSoccerBoard("team-error");
+    const { result } = renderHook(() => useActiveGameSync());
+
+    await act(async () => result.current.forceSync());
+
+    expect(activeGameBackendMocks.sync).toHaveBeenCalledOnce();
+    expect(writeLog).toEqual([]);
+  });
 });

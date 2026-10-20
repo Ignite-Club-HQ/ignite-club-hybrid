@@ -190,6 +190,8 @@ describe.runIf(mocks.mode === "icp")("ManageRolesDialog ICP role grants", () => 
     ));
     expect(mocks.insert).not.toHaveBeenCalled();
     expect(mocks.deleteIn).not.toHaveBeenCalled();
+    expect(mocks.invalidateRolesCache).toHaveBeenCalledOnce();
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["team-roles", "team-a"] });
   });
 
   it("revokes only the selected role through club_domain", async () => {
@@ -210,5 +212,58 @@ describe.runIf(mocks.mode === "icp")("ManageRolesDialog ICP role grants", () => 
     ));
     expect(mocks.insert).not.toHaveBeenCalled();
     expect(mocks.deleteIn).not.toHaveBeenCalled();
+    expect(mocks.invalidateRolesCache).toHaveBeenCalledOnce();
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["team-roles", "team-a"] });
+  });
+
+  it("does not permit role changes when the viewer cannot manage roles", () => {
+    render(<ManageRolesDialog {...baseProps} canManage={false} />);
+
+    fireEvent.click(screen.getByText("Coach").closest("button")!);
+
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(mocks.addRole).not.toHaveBeenCalled();
+    expect(mocks.removeRole).not.toHaveBeenCalled();
+  });
+
+  it("does not invalidate or close when an ICP role grant is denied", async () => {
+    mocks.addRole.mockRejectedValueOnce(new Error("grant denied"));
+    const onOpenChange = vi.fn();
+    const onSaved = vi.fn();
+    render(<ManageRolesDialog {...baseProps} onOpenChange={onOpenChange} onSaved={onSaved} />);
+    fireEvent.click(screen.getByText("Coach").closest("button")!);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Couldn't update roles",
+      variant: "destructive",
+    })));
+    expect(mocks.removeRole).not.toHaveBeenCalled();
+    expect(mocks.invalidateRolesCache).not.toHaveBeenCalled();
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("does not report success or invalidate caches when an ICP role revoke is denied", async () => {
+    mocks.removeRole.mockRejectedValueOnce(new Error("revoke denied"));
+    const onOpenChange = vi.fn();
+    const onSaved = vi.fn();
+    render(<ManageRolesDialog {...baseProps} userId="2vxsx-fae" currentRoles={[
+      { id: "role-player", role: "player" },
+      { id: "role-coach", role: "coach" },
+    ]} onOpenChange={onOpenChange} onSaved={onSaved} />);
+    fireEvent.click(screen.getByText("Coach").closest("button")!);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Couldn't update roles",
+      variant: "destructive",
+    })));
+    expect(mocks.invalidateRolesCache).not.toHaveBeenCalled();
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

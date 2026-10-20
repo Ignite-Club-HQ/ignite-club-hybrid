@@ -1,10 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { channel, removeChannel, from, onAuthStateChange, channels, mutationCalls, mode, listLiveReadReceipts } = vi.hoisted(() => ({
+const { channel, removeChannel, from, onAuthStateChange, channels, mutationCalls, mutationOptions, mode, listLiveReadReceipts, markLiveRead } = vi.hoisted(() => ({
   channel: vi.fn(), removeChannel: vi.fn(), from: vi.fn(), onAuthStateChange: vi.fn(), channels: new Map<string, any>(), mutationCalls: [] as string[][],
+  mutationOptions: [] as any[],
   mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   listLiveReadReceipts: vi.fn(),
+  markLiveRead: vi.fn(),
 }));
 const supabaseMode = mode === "supabase";
 vi.mock("@/integrations/supabase/client", () => ({
@@ -22,14 +24,17 @@ vi.mock("@/live/featureRouter", () => ({
 }));
 vi.mock("@/live/features/messaging", () => ({
   listLiveReadReceipts: (...args: unknown[]) => listLiveReadReceipts(...args),
-  markLiveConversationRead: vi.fn(),
+  markLiveConversationRead: (...args: unknown[]) => markLiveRead(...args),
 }));
 vi.mock("@/lib/profileCache", () => ({
   selectCachedProfilesByIds: vi.fn().mockResolvedValue({ data: [] }),
   selectCachedProfileById: vi.fn().mockResolvedValue({ data: null }),
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useMutation: (options: any) => ({ mutate: vi.fn((ids: string[]) => { mutationCalls.push(ids); options.onMutate?.(ids); }) }),
+  useMutation: (options: any) => {
+    mutationOptions.push(options);
+    return { mutate: vi.fn((ids: string[]) => { mutationCalls.push(ids); options.onMutate?.(ids); }) };
+  },
 }));
 
 import { useMessageReads } from "./useMessageReads";
@@ -57,6 +62,7 @@ describe.runIf(supabaseMode)("useMessageReads realtime scoping", () => {
     vi.clearAllMocks();
     channels.clear();
     mutationCalls.length = 0;
+    mutationOptions.length = 0;
     channel.mockImplementation(makeChannel);
     from.mockImplementation(() => queryResult());
   });
@@ -169,6 +175,9 @@ describe.runIf(!supabaseMode)("useMessageReads ICP receipt polling", () => {
       { messageId: "message-1", user: { toText: () => "user-2" }, read: true },
       { messageId: "outside-window", user: { toText: () => "user-3" }, read: true },
     ]);
+    mutationCalls.length = 0;
+    mutationOptions.length = 0;
+    markLiveRead.mockReset().mockResolvedValue(undefined);
   });
 
   it("maps only visible canister receipts without subscribing to Supabase realtime", async () => {
@@ -186,5 +195,36 @@ describe.runIf(!supabaseMode)("useMessageReads ICP receipt polling", () => {
     ] });
     expect(channel).not.toHaveBeenCalled();
     expect(from).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates canister receipts and excludes the current user from the read frontier", async () => {
+    listLiveReadReceipts.mockResolvedValue([
+      { messageId: "message-1", user: { toText: () => "user-2" }, read: true },
+      { messageId: "message-1", user: { toText: () => "user-2" }, read: true },
+      { messageId: "message-1", user: { toText: () => "user-1" }, read: true },
+      { messageId: "message-2", user: { toText: () => "user-3" }, read: true },
+    ]);
+    const { result } = renderHook(() => useMessageReads(
+      "team", "team-1", ["message-1", "message-2"], "user-1",
+    ));
+
+    await waitFor(() => expect(result.current.readCounts).toEqual({ "message-1": 2, "message-2": 1 }));
+    expect(result.current.readFrontier).toEqual({
+      "message-1": [{ user_id: "user-2", display_name: null, avatar_url: null }],
+      "message-2": [{ user_id: "user-3", display_name: null, avatar_url: null }],
+    });
+  });
+
+  it("marks the last visible message through the canister read-frontier API", async () => {
+    const { result } = renderHook(() => useMessageReads(
+      "team", "team-1", ["message-1", "message-2"], "user-1",
+    ));
+    const mutation = mutationOptions[0];
+
+    await act(async () => mutation.mutationFn(["message-1", "message-2"]));
+
+    expect(markLiveRead).toHaveBeenCalledWith({ identity: {}, target: {} }, "team-1", "message-2");
+    expect(from).not.toHaveBeenCalled();
+    expect(channel).not.toHaveBeenCalled();
   });
 });

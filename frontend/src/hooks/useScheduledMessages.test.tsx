@@ -367,6 +367,21 @@ describe.runIf(!supabaseMode)("useScheduledMessages ICP adapters", () => {
     expect(invokeSpy).not.toHaveBeenCalled();
   });
 
+  it("filters all canister messages by requested status and sorts by schedule time", async () => {
+    liveMocks.listLiveScheduledMessages.mockResolvedValue([
+      rawScheduledMessage,
+      { ...rawScheduledMessage, id: "sent-1", status: "sent", scheduledForMs: 1_700_000_000_000 },
+      { ...rawScheduledMessage, id: "cancelled-1", status: "cancelled", scheduledForMs: 1_600_000_000_000 },
+    ]);
+    const { result } = renderHook(() => useAllScheduledMessages(["pending", "sent"]), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data?.map((row) => row.id)).toEqual(["sent-1", "scheduled-1"]);
+    expect(liveMocks.listLiveScheduledMessages).toHaveBeenCalledWith(liveMocks.context, "principal-1");
+    expect(invokeSpy).not.toHaveBeenCalled();
+  });
+
   it("creates, updates, and cancels through the notifications canister", async () => {
     const { result: create } = renderHook(() => useCreateScheduledMessage(), { wrapper });
     await act(async () => create.current.mutateAsync({
@@ -440,6 +455,32 @@ describe.runIf(!supabaseMode)("useScheduledMessages ICP adapters", () => {
       await expect(result.current.mutateAsync("scheduled-1")).rejects.toThrow("Author mismatch");
     });
     expect(invalidate).not.toHaveBeenCalled();
+    expect(invokeSpy).not.toHaveBeenCalled();
+  });
+
+  it("invalidates both cache groups after successful create, update, and cancel", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    const localWrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const input = {
+      chat_type: "team" as const,
+      team_id: "team-1",
+      text: "Practice moved",
+      scheduled_for: new Date(rawScheduledMessage.scheduledForMs),
+    };
+
+    const { result: create } = renderHook(() => useCreateScheduledMessage(), { wrapper: localWrapper });
+    await act(async () => create.current.mutateAsync(input));
+    const { result: update } = renderHook(() => useUpdateScheduledMessage(), { wrapper: localWrapper });
+    await act(async () => update.current.mutateAsync({ id: "scheduled-1", text: "Updated" }));
+    const { result: cancel } = renderHook(() => useCancelScheduledMessage(), { wrapper: localWrapper });
+    await act(async () => cancel.current.mutateAsync("scheduled-1"));
+
+    const keys = invalidate.mock.calls.map((call) => (call[0] as { queryKey: string[] }).queryKey[0]);
+    expect(keys.filter((key) => key === "scheduled-messages-thread")).toHaveLength(3);
+    expect(keys.filter((key) => key === "scheduled-messages-all")).toHaveLength(3);
     expect(invokeSpy).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,130 @@
+=== Vitest backend mode: supabase ===
+
+ RUN  v5.0.2 /workspaces/ignite-club-hybrid/frontend
+
+Sourcemap for "/workspaces/ignite-club-hybrid/frontend/node_modules/@adobe/css-tools/dist/esm/adobe-css-tools.mjs" points to missing source files
+·····----····················----···············------··········--------·······························----------·········-----·································----·············-----········-----···························································································································································································································································································································--·····························································································································································································---·····················································-----------········-----··················-------········Not implemented: navigation to another Document
+········Not implemented: navigation to another Document
+·-························································--·········---···························································-------··········Not implemented: navigation to another Document
+·································································------·········································································-··--···································--····················--·························-----················-----·····························---································Error: Failed to fetch dynamically imported module: /assets/EventPage-old.js
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:71:13
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: Failed to fetch dynamically imported module: /assets/EventPage-old.js
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:71:13
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+·········Error: synthetic lazy route render failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:95:22
+    at lazyInitializer (/workspaces/ignite-club-hybrid/frontend/node_modules/react/cjs/react.development.js:1357:20)
+    at mountLazyComponent (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:19973:19)
+    at beginWork (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:21632:16)
+    at beginWork$1 (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at performConcurrentWorkOnRoot (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:25777:74)
+    at flushActQueue (/workspaces/ignite-club-hybrid/frontend/node_modules/react/cjs/react.development.js:2667:24)
+Error: synthetic lazy route render failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:95:22
+    at lazyInitializer (/workspaces/ignite-club-hybrid/frontend/node_modules/react/cjs/react.development.js:1357:20)
+    at mountLazyComponent (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:19973:19)
+    at beginWork (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:21632:16)
+    at beginWork$1 (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at performConcurrentWorkOnRoot (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:25777:74)
+    at flushActQueue (/workspaces/ignite-club-hybrid/frontend/node_modules/react/cjs/react.development.js:2667:24)
+Error: persistent route failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:124:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: persistent route failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:124:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: persistent route failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:124:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: persistent route failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:124:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+··Error: synthetic route crash
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:140:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: synthetic route crash
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:140:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+··········-························------··················································-···························-······-·····································----·································································································-····················--------····--·················-·························---·························································-···································································································---··························································································································································--········---············---···············-······································--·······································································-·········-······················································-··································································----···············-························································································································································································································································································································································································-······-·······································-············-----·······---········------············----························································---································································-··········-·······································-······--·······---····-···························································································--························-··························--··················-·····································-······································---·····················································································-··········································································································································-······························································································································-·····------·····································································································································································································----················································································································--·······································································--------·················································································----······················---------··································································----·············································································································································································································································································-------·······----------------------·································································------··················································---······································································--··························---································································································----················································-···············································--···················---··················---········································---··························································---·········---------········································································································--············---······························································································································································--································································--···········································································-···························································································································································································································································-·····················································································································································································································
+
+ Test Files  631 passed | 2 skipped (633)
+      Tests  5583 passed | 335 skipped (5918)
+   Start at  02:13:58
+   Duration  887.15s (environment 64%, tests 18%, import 8%, setup 5%, transform 4%, worker 1%)
+
+Environment  jsdom was created 633 times · 504.12s total, 64% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+JSON report written to /workspaces/ignite-club-hybrid/docs/test-results/2026-10-20/supabase/vitest.json

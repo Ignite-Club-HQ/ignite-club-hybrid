@@ -391,4 +391,31 @@ describe.runIf(!supabaseMode)("ICP guardian invite creation", () => {
     expect(backendMocks.createLivePendingInvite).not.toHaveBeenCalled();
     expect(calls.inserts).toHaveLength(0);
   });
+
+  it("fails closed when the canister returns a different team id", async () => {
+    backendMocks.getLiveTeam.mockResolvedValue({ id: "other-team", club_id: "club-1" });
+    backendMocks.createLivePendingInvite.mockResolvedValue({ invite: { id: "unexpected-invite" } });
+    renderSheet();
+    await fillAndSubmit();
+
+    expect(backendMocks.createLivePendingInvite).not.toHaveBeenCalled();
+    expect(calls.inserts).toHaveLength(0);
+  });
+
+  it("stores a normalized email on the canister invite without claiming email delivery", async () => {
+    backendMocks.getLiveTeam.mockResolvedValue({ id: "team-1", club_id: "club-1" });
+    backendMocks.createLivePendingInvite.mockResolvedValue({ invite: { id: "pending-icp-2" } });
+
+    renderSheet();
+    await fillAndSubmit({ email: "  Parent@Example.Invalid  " });
+
+    await waitFor(() => expect(backendMocks.createLivePendingInvite).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ email: "parent@example.invalid" }),
+    ));
+    expect(await screen.findByText(/invite link created — share it with them/i)).toBeInTheDocument();
+    expect(screen.queryByText(/invite sent to/i)).not.toBeInTheDocument();
+    expect(calls.inserts).toHaveLength(0);
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
 });

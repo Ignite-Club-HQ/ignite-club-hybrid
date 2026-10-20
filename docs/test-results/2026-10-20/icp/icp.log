@@ -1,0 +1,687 @@
+=== Vitest backend mode: icp ===
+
+ RUN  v5.0.2 /workspaces/ignite-club-hybrid/frontend
+
+Sourcemap for "/workspaces/ignite-club-hybrid/frontend/node_modules/@adobe/css-tools/dist/esm/adobe-css-tools.mjs" points to missing source files
+-----··x·--------------------··x·······---------····x·----------···x······----····---····----------·---·xxxx··xxx··-------·x··x·······················----------···x···----------··x··--------·xxx·················································································································································································································································································-------···--·---·-·······························································································································································································································-------···········································-----------------················--------·····-------------························--------············---···········-------------················································Not implemented: navigation to another Document
+································--····························································································································------··········--------··············----·····---········································-----····-·····-----······································································-----···············------------·········----······------·Error: Failed to fetch dynamically imported module: /assets/EventPage-old.js
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:71:13
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: Failed to fetch dynamically imported module: /assets/EventPage-old.js
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:71:13
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+·········Error: synthetic lazy route render failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:95:22
+    at lazyInitializer (/workspaces/ignite-club-hybrid/frontend/node_modules/react/cjs/react.development.js:1357:20)
+    at mountLazyComponent (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:19973:19)
+    at beginWork (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:21632:16)
+    at beginWork$1 (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at performConcurrentWorkOnRoot (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:25777:74)
+    at flushActQueue (/workspaces/ignite-club-hybrid/frontend/node_modules/react/cjs/react.development.js:2667:24)
+Error: synthetic lazy route render failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:95:22
+    at lazyInitializer (/workspaces/ignite-club-hybrid/frontend/node_modules/react/cjs/react.development.js:1357:20)
+    at mountLazyComponent (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:19973:19)
+    at beginWork (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:21632:16)
+    at beginWork$1 (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at performConcurrentWorkOnRoot (/workspaces/ignite-club-hybrid/frontend/node_modules/react-dom/cjs/react-dom.development.js:25777:74)
+    at flushActQueue (/workspaces/ignite-club-hybrid/frontend/node_modules/react/cjs/react.development.js:2667:24)
+Error: persistent route failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:124:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: persistent route failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:124:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: persistent route failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:124:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: persistent route failure
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:124:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: synthetic route crash
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:140:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+Error: synthetic route crash
+    at /workspaces/ignite-club-hybrid/frontend/src/components/RouteErrorBoundary.routing.test.tsx:140:29
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1628:35
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:26
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3319:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3314:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3299:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3257:10)
+    at file:///workspaces/ignite-club-hybrid/frontend/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:3876:64
+······················---------·······················-----········································------·································································-·-··············---····-·······································-----···----------------·······································································································------··········································································································--·································································································-------··················------------··········-----···················----·--··············································------·······························---------·-------··········-----········------·-----------------·········---------···································································································------········-···-···················----------------····························································································································································································································································································································································································------------······················································-------···································-------··································-···-··································-----········-------------··················--------------········-------······---·-----··--·-·····································································-----·················································------------····························--------························································································································----------------------·········----------·------·--------------··················-------·········--·································------··--·································································---------------·····················································································································---------------·················································································································------------········································---------···········································································································································----------··················································································································································································································································································--··-----------·························································································································---------··································--------·······················································································································································-------··········································································----------················································---··--··············----··-----·············································································································------················································································--························································································································································-·············----··············---·····································-························------·······································----·························································································································································································································································································································································································································································································································································································································································································································----
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 18 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/InviteOtherParentSheet.characterization.test.tsx > ICP guardian invite creation > fails closed when the canister returns a different team id
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "identity": Object {},
+        "target": Object {},
+      },
+      Object {
+        "childId": "child-1",
+        "clubId": "club-1",
+        "email": "",
+        "kind": "guardian",
+        "role": "parent",
+        "teamId": "team-1",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/components/InviteOtherParentSheet.characterization.test.tsx:401:54
+    399|     await fillAndSubmit();
+    400|
+    401|     expect(backendMocks.createLivePendingInvite).not.toHaveBeenCalled(…
+       |                                                      ^
+    402|     expect(calls.inserts).toHaveLength(0);
+    403|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/18]⎯
+
+ FAIL  src/hooks/useForwardMessage.test.tsx > useForwardMessage ICP provider > returns no destinations without querying groups when the caller has no role grants
+AssertionError: promise rejected "TypeError: Cannot read properties of unde…" instead of resolving
+ ❯ src/hooks/useForwardMessage.test.tsx:312:48
+    310|     renderHook(() => useForwardDestinations("principal-sender", true));
+    311|
+    312|     await expect(queryOptions.current.queryFn()).resolves.toEqual([]);
+       |                                                ^
+    313|
+    314|     expect(clubGroups).not.toHaveBeenCalled();
+
+Caused by: TypeError: Cannot read properties of undefined (reading 'flat')
+ ❯ Object.icp src/hooks/useForwardMessage.ts:84:46
+ ❯ src/hooks/useForwardMessage.test.tsx:312:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/18]⎯
+
+ FAIL  src/lib/galleryVaultSync.test.ts > gallery photo to vault synchronization > reuses an existing scoped Gallery Uploads folder
+AssertionError: expected "vi.fn()" to be called with arguments: [ { identity: {}, target: {} }, …(10) ]
+
+Received:
+
+  1st vi.fn() call:
+
+@@ -1,13 +1,13 @@
+  [
+    {
+      "identity": {},
+      "target": {},
+    },
+-   Any<String>,
+-   "team-gallery",
+-   Any<String>,
++   "79f376bc-f46a-474e-931b-c82f9394d195",
++   "club-gallery",
++   "club-5aa61d68-5acb-40cf-8166-5e675b79b121",
+    "team-1",
+    "match-day.jpg",
+    "https://storage.example/photos/photo.jpg",
+    0,
+    "image/jpeg",
+
+
+Number of calls: 1
+
+ ❯ src/lib/galleryVaultSync.test.ts:200:32
+    198|     expect(state.listFolders).toHaveBeenCalledWith(state.context, expe…
+    199|     expect(state.createFolder).not.toHaveBeenCalled();
+    200|     expect(state.registerFile).toHaveBeenCalledWith(
+       |                                ^
+    201|       state.context,
+    202|       expect.any(String),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/18]⎯
+
+ FAIL  src/lib/galleryVaultSync.test.ts > gallery photo to vault synchronization > preserves uploaded file size and MIME type in the Vault record
+AssertionError: expected "vi.fn()" to be called with arguments: [ { identity: {}, target: {} }, …(10) ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    {
+      "identity": {},
+      "target": {},
+    },
+-   Any<String>,
++   "87455674-bc16-4c64-9e42-4d46585207c4",
+    "folder-created",
+    "club-85c3312d-46f8-41a2-b57b-7c82f3bb352b",
+    "team-1",
+    "match-day.jpg",
+    "https://storage.example/photos/photo.jpg",
+-   2048,
+-   "image/webp",
++   0,
++   "image/jpeg",
+    false,
+    null,
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/lib/galleryVaultSync.test.ts:259:32
+    257|     await syncGalleryPhotoToVault(request);
+    258|
+    259|     expect(state.registerFile).toHaveBeenCalledWith(
+       |                                ^
+    260|       state.context,
+    261|       expect.any(String),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/18]⎯
+
+ FAIL  src/lib/inviteEmailDedupe.test.ts > lookupInvitableUserByEmail — ICP privacy fallback > falls back to a normal invite when the pending-hash lookup fails
+AssertionError: promise rejected "Error: canister unavailable" instead of resolving
+ ❯ src/lib/inviteEmailDedupe.test.ts:168:99
+    166|     pendingLookup.mockRejectedValueOnce(new Error("canister unavailabl…
+    167|
+    168|     await expect(lookupInvitableUserByEmail({ email: "parent@example.i…
+       |                                                                                                   ^
+    169|       .resolves.toBeNull();
+    170|     expect(rpcMock).not.toHaveBeenCalled();
+
+Caused by: Error: canister unavailable
+ ❯ src/lib/inviteEmailDedupe.test.ts:166:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/18]⎯
+
+ FAIL  src/lib/rsvpQueue.test.ts > syncQueuedRsvps ICP adapter > increments only a failed canister RSVP while removing successful entries
+AssertionError: promise rejected "Error: temporary canister failure" instead of resolving
+ ❯ src/lib/rsvpQueue.test.ts:359:35
+    357|     liveMocks.setLiveEventRsvp.mockRejectedValueOnce(new Error("tempor…
+    358|
+    359|     await expect(syncQueuedRsvps()).resolves.toEqual({ synced: 1, fail…
+       |                                   ^
+    360|     expect(getQueuedRsvps()).toEqual([
+    361|       expect.objectContaining({ eventId: "event-fail", retryCount: 1 }…
+
+Caused by: Error: temporary canister failure
+ ❯ src/lib/rsvpQueue.test.ts:357:54
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/18]⎯
+
+ FAIL  src/pages/CreateCompetitionPage.test.tsx > CreateCompetitionPage — ICP organizer club > does not navigate or claim success when the canister returns no competition id
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   ObjectContaining {
+-     "title": StringMatching /could not create competition/i,
++   {
++     "title": "Competition created",
+    },
+  ]
+
+
+Number of calls: 1
+
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"container max-w-2xl mx-auto px-4 pt-4 pb-32"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-center gap-2 mb-3"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Back"[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:opacity-80 hover:[@media(hover:hover)]:bg-accent hover:[@media(hover:hover)]:text-accent-foreground active:bg-accent/80 min-h-[2.75rem] min-w-[2.75rem] h-11 w-11 -ml-2 shrink-0"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-arrow-left h-5 w-5"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m12 19-7-7 7-7"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M19 12H5"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+          [36m<svg[39m
+            [33mclass[39m=[32m"lucide lucide-trophy h-5 w-5 text-primary shrink-0"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M6 9H4.5a2.5 2.5 0 0 1 0-5H6"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M18 9h1.5a2.5 2.5 0 0 0 0-5H18"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M4 22h16"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M18 2H6v7a6 6 0 0 0 12 0V2Z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<h1[39m
+            [33mclass[39m=[32m"text-xl font-semibold leading-none"[39m
+          [36m>[39m
+            [0mNew competition[0m
+          [36m</h1>[39m
+        [36m</div>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-[13px] text-muted-foreground mb-5 pl-10"[39m
+        [36m>[39m
+          [0mCreate a competition and invite teams to join.[0m
+        [36m</p>[39m
+        [36m<form[39m
+          [33mclass[39m=[32m"space-y-5"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-1.5"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mclass[39m=[32m"text-[11px] font-medium uppercase tracking-wider text-muted-foreground pl-1"[39m
+              [33mfor[39m=[32m"name"[39m
+            [36m>[39m
+              [0mCompetition name[0m
+            [36m</label>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"flex min-h-[2.5rem] w-full border py-2 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm h-14 rounded-2xl bg-muted/40 border-border/60 px-4 text-base font-medium placeholder:font-normal placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary"[39m
+              [33mid[39m=[32m"name"[39m
+              [33mplaceholder[39m=[32m"e.g. Twilight Twenty 2026"[39m
+              [33mrequired[39m=[32m""[39m
+              [33mvalue[39m=[32m"Malformed Cup"[39m
+            [36m/>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-1.5"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"text-[11px] font-medium uppercase tracking-wider text-muted-foreground pl-1"[39m
+            [36m>[39m
+              [0mDetails[0m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"rounded-2xl bg-muted/40 border border-border/60 overflow-hidden divide-y divide-border/50"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex items-center justify-between gap-3 px-4 min-h-[52px]"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"text-sm text-foreground/80"[39m
+                [36m>[39m
+                  [0mOrganiser[0m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex-1 flex justify-end min-w-0"[39m
+                [36m>[39m
+                  [36m<button[39m
+                    [33maria-autocomplete[39m=[32m"none"[39m
+                    [33maria-controls[39m=[32m"radix-:r16:"[39m
+                    [33maria-expanded[39m=[32m"false"[39m
+                    [33mclass[39m=[32m"flex w-full items-center rounded-md border-input ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:min-w-0 [&>span]:truncate [&>span]:text-left h-9 border-0 bg-transparent px-0 py-0 shadow-none focus:ring-0 focus-visible:ring-0 gap-1.5 [&>svg:last-child]:hidden text-sm font-medium justify-end max-w-full"[39m
+                    [33mdata-state[39m=[32m"closed"[39m
+                    [33mdir[39m=[32m"ltr"[39m
+                    [33mrole[39m=[32m"combobox"[39m
+                    [33mtype[39m=[32m"button"[39m
+                  [36m>[39m
+                    [36m<span[39m
+                      [33mclass[39m=[32...
+ ❯ src/pages/CreateCompetitionPage.test.tsx:254:43
+    252|     await fillNameAndSubmit("Malformed Cup");
+    253|
+    254|     await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.…
+       |                                           ^
+    255|       title: expect.stringMatching(/could not create competition/i),
+    256|     })));
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/18]⎯
+
+ FAIL  src/features/vault/vaultExportRepository.test.ts > Vault export folder reads — ICP > maps club canister files into export photos and documents
+ FAIL  src/features/vault/vaultExportRepository.test.ts > Vault export folder reads — ICP > maps team canister files into export photos and documents
+TypeError: Cannot read properties of undefined (reading '0')
+ ❯ mapLiveVaultFile src/features/vault/vaultReadRepository.ts:62:19
+     60|     folder_id: Array.isArray(file.folder_id) ? file.folder_id[0] ?? nu…
+     61|     club_id: file.club,
+     62|     team_id: file.team[0] ?? null,
+       |                   ^
+     63|     mini_league_id: file.mini_league_id?.[0] ?? null,
+     64|     competition_id: file.competition_id?.[0] ?? null,
+ ❯ Object.icp src/features/vault/vaultExportRepository.ts:122:41
+ ❯ src/features/vault/vaultExportRepository.test.ts:235:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/18]⎯
+
+ FAIL  src/features/vault/vaultExportRepository.test.ts > Vault export folder reads — ICP > recursively exports nested canister files with stable paths and per-folder counts
+TypeError: Cannot read properties of undefined (reading '0')
+ ❯ mapLiveVaultFile src/features/vault/vaultReadRepository.ts:62:19
+     60|     folder_id: Array.isArray(file.folder_id) ? file.folder_id[0] ?? nu…
+     61|     club_id: file.club,
+     62|     team_id: file.team[0] ?? null,
+       |                   ^
+     63|     mini_league_id: file.mini_league_id?.[0] ?? null,
+     64|     competition_id: file.competition_id?.[0] ?? null,
+ ❯ Object.icp src/features/vault/vaultExportRepository.ts:122:41
+ ❯ Module.collectVaultExportContents src/features/vault/vaultExportRepository.ts:146:20
+ ❯ src/features/vault/vaultExportRepository.test.ts:274:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/18]⎯
+
+ FAIL  src/features/vault/vaultReadRepository.test.ts > Vault read repository — ICP > loads the club folder tree from vault_domain
+ FAIL  src/features/vault/vaultReadRepository.test.ts > Vault read repository — ICP > loads the team folder tree from vault_domain
+ FAIL  src/features/vault/vaultReadRepository.test.ts > Vault read repository — ICP > loads the competition folder tree from vault_domain
+AssertionError: expected "vi.fn()" to be called with arguments: [ …(5) ]
+
+Number of calls: 0
+
+ ❯ src/features/vault/vaultReadRepository.test.ts:723:31
+    721|     }, fake.client);
+    722|
+    723|     expect(readMocks.folders).toHaveBeenCalledWith(icpContext, clubId,…
+       |                               ^
+    724|     expect(tree.descendantIds).toEqual(["parent", "child"]);
+    725|     expect(tree.pathById.get("child")).toBe("Policies / Rules");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/18]⎯
+
+ FAIL  src/features/vault/vaultReadRepository.test.ts > Vault read repository — ICP > does not load a club folder tree without a privileged role or club role
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "args": [
++       "id,name,parent_id,restricted_roles",
++     ],
++     "method": "select",
++     "table": "vault_folders",
++   },
++   {
++     "args": [
++       "club_id",
++       "club-a",
++     ],
++     "method": "eq",
++     "table": "vault_folders",
++   },
++   {
++     "args": [
++       "team_id",
++       null,
++     ],
++     "method": "is",
++     "table": "vault_folders",
++   },
++ ]
+
+ ❯ src/features/vault/vaultReadRepository.test.ts:739:24
+    737|
+    738|     expect(readMocks.folders).not.toHaveBeenCalled();
+    739|     expect(fake.calls).toEqual([]);
+       |                        ^
+    740|   });
+    741|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/18]⎯
+
+ FAIL  src/features/vault/vaultReadRepository.test.ts > Vault read repository — ICP > searches scoped canister files and visible descendants without querying Supabase
+AssertionError: expected "vi.fn()" to be called with arguments: [ …(5) ]
+
+Number of calls: 0
+
+ ❯ src/features/vault/vaultReadRepository.test.ts:821:33
+    819|     }, fake.client);
+    820|
+    821|     expect(readMocks.clubFiles).toHaveBeenCalledWith(icpContext, "club…
+       |                                 ^
+    822|     expect(result.folders.map((folder) => folder.id)).toEqual(["child"…
+    823|     expect(result.files.map((file) => file.id)).toEqual(["visible-chil…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/18]⎯
+
+ FAIL  src/features/vault/vaultReadRepository.test.ts > Vault read repository — ICP > does not search club files without an admin or coach role
+AssertionError: expected [ Array(8) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "args": [
++       "id,folder_id,club_id,team_id,mini_league_id,name,file_url,file_size,file_type,uploaded_by,created_at,is_external_link",
++     ],
++     "method": "select",
++     "table": "vault_files",
++   },
++   {
++     "args": [
++       "deleted_at",
++       null,
++     ],
++     "method": "is",
++     "table": "vault_files",
++   },
++   {
++     "args": [
++       "name",
++       "%policy%",
++     ],
++     "method": "ilike",
++     "table": "vault_files",
++   },
++   {
++     "args": [
++       200,
++     ],
++     "method": "limit",
++     "table": "vault_files",
++   },
++   {
++     "args": [
++       "club_id",
++       "club-a",
++     ],
++     "method": "eq",
++     "table": "vault_files",
++   },
++   {
++     "args": [
++       "team_id",
++       null,
++     ],
++     "method": "is",
++     "table": "vault_files",
++   },
++   {
++     "args": [
++       "mini_league_id",
++       null,
++     ],
++     "method": "is",
++     "table": "vault_files",
++   },
++   {
++     "args": [
++       "created_at",
++       {
++         "ascending": false,
++       },
++     ],
++     "method": "order",
++     "table": "vault_files",
++   },
++ ]
+
+ ❯ src/features/vault/vaultReadRepository.test.ts:840:24
+    838|
+    839|     expect(readMocks.clubFiles).not.toHaveBeenCalled();
+    840|     expect(fake.calls).toEqual([]);
+       |                        ^
+    841|   });
+    842|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/18]⎯
+
+ FAIL  src/features/vault/vaultReadRepository.test.ts > Vault read repository — ICP > keeps team recursive search restricted to the selected team
+AssertionError: expected "vi.fn()" to be called with arguments: [ …(5) ]
+
+Number of calls: 0
+
+ ❯ src/features/vault/vaultReadRepository.test.ts:884:33
+    882|     }, fake.client);
+    883|
+    884|     expect(readMocks.clubFiles).toHaveBeenCalledWith(icpContext, "club…
+       |                                 ^
+    885|     expect(result.files.map((file) => file.id)).toEqual(["team-a-file"…
+    886|     expect(fake.calls).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/18]⎯
+
+ FAIL  src/features/vault/vaultUploadService.test.ts > Vault upload transaction — ICP > rejects missing club scope before uploading encrypted bytes
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "competitionId": undefined,
+        "file": File {},
+        "lock": "own",
+        "mime": "application/octet-stream",
+        "storagePath": "unassigned/principal-a/1792461570062-59a58l.txt",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/features/vault/vaultUploadService.test.ts:401:31
+    399|     }, fake.client, { ...fake.dependencies, tryBlobUpload })).rejects.…
+    400|
+    401|     expect(tryBlobUpload).not.toHaveBeenCalled();
+       |                               ^
+    402|     expect(uploadMocks.registerFile).not.toHaveBeenCalled();
+    403|     expect(fake.upload).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/18]⎯
+
+
+ Test Files  9 failed | 623 passed | 1 skipped (633)
+      Tests  18 failed | 5165 passed | 735 skipped (5918)
+   Start at  01:59:04
+   Duration  866.48s (environment 67%, tests 13%, import 9%, setup 5%, transform 4%, worker 1%)
+
+Environment  jsdom was created 633 times · 514.31s total, 67% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+JSON report written to /workspaces/ignite-club-hybrid/docs/test-results/2026-10-20/icp/vitest.json

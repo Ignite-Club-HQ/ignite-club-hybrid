@@ -305,4 +305,27 @@ describe("CompetitionFixturesPanel result management", () => {
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.invalidateQueries).not.toHaveBeenCalled();
   });
+
+  it.runIf(!supabaseMode)("keeps a rejected canister score edit retryable and invalidates only after retry succeeds", async () => {
+    mocks.setLiveMatchResult
+      .mockRejectedValueOnce(new Error("temporary result failure"))
+      .mockResolvedValueOnce(undefined);
+    renderPanel();
+    await editScores("3", "2");
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({
+      title: "Could not save",
+      description: "temporary result failure",
+      variant: "destructive",
+    }));
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(mocks.setLiveMatchResult).toHaveBeenCalledTimes(2));
+    expect(mocks.invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["competition-matches", "competition-1"] });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["competition-ladder", "competition-1"] });
+  });
 });

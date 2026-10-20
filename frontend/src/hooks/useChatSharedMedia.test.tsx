@@ -312,4 +312,31 @@ describe.runIf(!supabaseMode)("useChatSharedMedia — ICP adapter", () => {
     expect(liveMocks.listLiveMessages).toHaveBeenCalledWith(liveMocks.context, "team-1", null);
     expect(liveMocks.supabaseTables).toEqual([]);
   });
+
+  it("normalizes invalid, fractional, and omitted limits for canister media", async () => {
+    liveMocks.listLiveMessages.mockResolvedValue(Array.from({ length: 20 }, (_, index) => ({
+      id: `message-${index}`,
+      created_at_ms: BigInt(1_800_000_000_000 - index * 1000),
+      sender: { toText: () => "principal-author" },
+      body: "",
+      attachment: [{ kind: "image", url: [`https://example.invalid/${index}.jpg`] }],
+    })));
+
+    for (const limit of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, undefined]) {
+      const { result } = renderHook(
+        () => useChatSharedMedia("team", `team-${String(limit)}`, { limit }),
+        { wrapper: wrapper() },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toHaveLength(12);
+    }
+
+    const { result } = renderHook(
+      () => useChatSharedMedia("team", "team-fractional", { limit: 3.7 }),
+      { wrapper: wrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toHaveLength(3);
+    expect(liveMocks.supabaseTables).toEqual([]);
+  });
 });

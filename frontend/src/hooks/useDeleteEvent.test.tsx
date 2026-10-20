@@ -172,6 +172,33 @@ describe.runIf(backendMocks.mode === "icp")("useDeleteEvent ICP provider", () =>
     expect(deleteCallCount).toBe(0);
   });
 
+  it("sends only one canister delete while a confirmation is pending", async () => {
+    let releaseDelete!: () => void;
+    backendMocks.deleteLiveEvent.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    }));
+    const { hook } = setup();
+    let firstDelete!: Promise<void>;
+
+    await act(async () => {
+      firstDelete = hook.result.current.deleteEvent({ id: "event-icp" }, "single");
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(hook.result.current.isPending).toBe(true));
+
+    await act(async () => {
+      await hook.result.current.deleteEvent({ id: "event-icp" }, "single");
+    });
+    expect(backendMocks.deleteLiveEvent).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releaseDelete();
+      await firstDelete;
+    });
+    expect(backendMocks.deleteLiveEvent).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.isPending).toBe(false);
+  });
+
   it("surfaces a canister failure without reporting success", async () => {
     backendMocks.deleteLiveEvent.mockRejectedValueOnce(new Error("canister denied"));
     const onDeleted = vi.fn();

@@ -305,4 +305,45 @@ describe.runIf(!supabaseMode)("useSaveGameResult — ICP adapter", () => {
     }));
     expect(liveMocks.from).not.toHaveBeenCalled();
   });
+
+  it("force saves bypass the successful-write deduplication guard", async () => {
+    liveMocks.saveLiveGameResult.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useSaveGameResult(), { wrapper });
+
+    await act(async () => {
+      await result.current.save(baseInput());
+      await result.current.save(baseInput(), { force: true });
+    });
+
+    expect(liveMocks.saveLiveGameResult).toHaveBeenCalledTimes(2);
+  });
+
+  it("suppresses canister failure toasts in silent mode while returning failure", async () => {
+    liveMocks.saveLiveGameResult.mockRejectedValueOnce(new Error("canister denied"));
+    const { result } = renderHook(() => useSaveGameResult(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.save(baseInput(), { silent: true })).resolves.toBe(false);
+    });
+
+    expect(toastSpy).not.toHaveBeenCalled();
+    expect(result.current.saved).toBe(false);
+  });
+
+  it("invalidates event and team result caches after a successful canister save", async () => {
+    liveMocks.saveLiveGameResult.mockResolvedValue(undefined);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const localWrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSaveGameResult(), { wrapper: localWrapper });
+
+    await act(async () => result.current.save(baseInput()));
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["match-result", "evt-1"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["match-score", "evt-1"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["team-game-events", "team-1"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["player-stats-report-extras", "team-1"] });
+  });
 });

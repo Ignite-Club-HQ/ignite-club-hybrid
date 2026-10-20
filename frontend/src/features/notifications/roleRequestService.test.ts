@@ -102,6 +102,18 @@ describe.runIf(!supabaseMode)("role request service — ICP boundary", () => {
     expect(live.approve).toHaveBeenCalledWith(live.context, "request-a");
     expect(fake.calls).toEqual([]);
   });
+
+  it.each([
+    ["approve", "approve", "approval denied"],
+    ["deny", "reject", "rejection denied"],
+  ] as const)("propagates ICP %s denial without Supabase fallback", async (_action, method, message) => {
+    const denied = new Error(message);
+    live[method].mockRejectedValueOnce(denied);
+    const fake = fakeClient({ request });
+
+    await expect(processRoleRequest("request-a", _action, fake.client, profileLookup)).rejects.toBe(denied);
+    expect(fake.calls).toEqual([]);
+  });
 });
 
 describe("friendly role request errors", () => {

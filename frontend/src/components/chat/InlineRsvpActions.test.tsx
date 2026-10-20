@@ -217,4 +217,59 @@ describe("InlineRsvpActions", () => {
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.getUser).not.toHaveBeenCalled();
   });
+
+  it.runIf(!supabaseMode).each([
+    ["Going", "going"],
+    ["Maybe", "maybe"],
+    ["Can't", "not_going"],
+  ] as const)("submits the ICP %s response for the exact event", async (label, status) => {
+    render(<InlineRsvpActions eventId="event-1" messageId="message-1" />);
+    fireEvent.click(screen.getByRole("button", { name: label }));
+
+    await waitFor(() => expect(mocks.setLiveEventRsvp).toHaveBeenCalledWith(
+      mocks.context,
+      "event-1",
+      "11111111-1111-4111-8111-111111111111",
+      status,
+    ));
+    expect(screen.getByText(`You marked ${label}`)).toBeInTheDocument();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it.runIf(!supabaseMode)("disables other ICP responses and prevents a duplicate while a canister write is pending", async () => {
+    let complete!: () => void;
+    mocks.setLiveEventRsvp.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      complete = resolve;
+    }));
+    render(<InlineRsvpActions eventId="event-1" messageId="message-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Going" }));
+    expect(screen.getByRole("button", { name: "Going" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Maybe" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Can't" })).toBeDisabled();
+    expect(mocks.setLiveEventRsvp).toHaveBeenCalledOnce();
+    complete();
+
+    expect(await screen.findByText("You marked Going")).toBeInTheDocument();
+    expect(mocks.setLiveEventRsvp).toHaveBeenCalledOnce();
+  });
+
+  it.runIf(!supabaseMode)("does not persist a denied ICP RSVP and allows a retry", async () => {
+    mocks.setLiveEventRsvp.mockRejectedValueOnce(new Error("RSVP denied"));
+    render(<InlineRsvpActions eventId="event-1" messageId="message-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Going" }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({
+      title: "Couldn't save RSVP",
+      description: "RSVP denied",
+      variant: "destructive",
+    }));
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(screen.getByRole("button", { name: "Maybe" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Maybe" }));
+    await waitFor(() => expect(mocks.setLiveEventRsvp).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("You marked Maybe")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({ "message-1": "maybe" });
+  });
 });

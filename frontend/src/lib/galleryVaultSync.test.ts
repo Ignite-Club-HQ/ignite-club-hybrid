@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   icpMode: process.env.IGNITE_TEST_BACKEND_MODE === "icp",
+  context: { identity: {}, target: {} },
   rpc: vi.fn(),
   from: vi.fn(),
+  listFolders: vi.fn(),
+  createFolder: vi.fn(),
+  registerFile: vi.fn(),
   existingFile: null as { id: string } | null,
   existingFolder: null as { id: string } | null,
   createdFolder: { id: "folder-created" } as { id: string } | null,
@@ -19,6 +23,15 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 vi.mock("@/live/loadBackendRouting", () => ({
   isFeatureRoutedToIcp: () => state.icpMode,
+}));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    state.icpMode ? providers.icp(state.context) : providers.supabase(),
+}));
+vi.mock("@/live/features/vault", () => ({
+  listLiveVaultFolders: (...args: unknown[]) => state.listFolders(...args),
+  createLiveVaultFolder: (...args: unknown[]) => state.createFolder(...args),
+  registerLiveVaultFile: (...args: unknown[]) => state.registerFile(...args),
 }));
 
 import { syncGalleryPhotoToVault } from "./galleryVaultSync";
@@ -73,6 +86,9 @@ describe("gallery photo to vault synchronization", () => {
     state.folderInsertPayloads = [];
     state.fileInsertPayloads = [];
     state.queries = [];
+    state.listFolders.mockReset().mockResolvedValue([]);
+    state.createFolder.mockReset().mockResolvedValue({ id: "folder-created" });
+    state.registerFile.mockReset().mockResolvedValue(undefined);
     state.rpc.mockResolvedValue({ data: true, error: null });
     state.from.mockImplementation((table: string) => builder(table));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -169,5 +185,89 @@ describe("gallery photo to vault synchronization", () => {
     await syncGalleryPhotoToVault(input());
     expect(state.rpc).not.toHaveBeenCalled();
     expect(state.from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(state.icpMode)("reuses an existing scoped Gallery Uploads folder", async () => {
+    state.listFolders.mockResolvedValue([
+      { id: "club-gallery", name: "Gallery Uploads", parent_id: [], team: [] },
+      { id: "team-gallery", name: "Gallery Uploads", parent_id: [], team: ["team-1"] },
+      { id: "nested-gallery", name: "Gallery Uploads", parent_id: ["parent"] },
+    ]);
+    await syncGalleryPhotoToVault(input());
+
+    expect(state.listFolders).toHaveBeenCalledWith(state.context, expect.any(String), "team-1");
+    expect(state.createFolder).not.toHaveBeenCalled();
+    expect(state.registerFile).toHaveBeenCalledWith(
+      state.context,
+      expect.any(String),
+      "team-gallery",
+      expect.any(String),
+      "team-1",
+      "match-day.jpg",
+      "https://storage.example/photos/photo.jpg",
+      0,
+      "image/jpeg",
+      false,
+      null,
+    );
+    expect(state.from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(state.icpMode)("creates a Gallery Uploads folder when none exists", async () => {
+    const request = input({ teamId: null });
+    await syncGalleryPhotoToVault(request);
+
+    expect(state.createFolder).toHaveBeenCalledWith(
+      state.context,
+      expect.any(String),
+      request.clubId,
+      null,
+      null,
+      "Gallery Uploads",
+      [],
+    );
+    expect(state.registerFile).toHaveBeenCalledWith(
+      state.context,
+      expect.any(String),
+      "folder-created",
+      request.clubId,
+      null,
+      request.fileName,
+      request.fileUrl,
+      0,
+      "image/jpeg",
+      false,
+      null,
+    );
+  });
+
+  it.runIf(state.icpMode)("keeps a gallery upload successful when ICP vault mirroring fails", async () => {
+    const failure = new Error("vault unavailable");
+    state.registerFile.mockRejectedValueOnce(failure);
+
+    await expect(syncGalleryPhotoToVault(input())).resolves.toBeUndefined();
+
+    expect(console.warn).toHaveBeenCalledWith("galleryVaultSync (ICP) error:", failure);
+    expect(state.rpc).not.toHaveBeenCalled();
+    expect(state.from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(state.icpMode)("preserves uploaded file size and MIME type in the Vault record", async () => {
+    const request = input({ fileSize: 2048, fileType: "image/webp" });
+    await syncGalleryPhotoToVault(request);
+
+    expect(state.registerFile).toHaveBeenCalledWith(
+      state.context,
+      expect.any(String),
+      "folder-created",
+      request.clubId,
+      "team-1",
+      request.fileName,
+      request.fileUrl,
+      2048,
+      "image/webp",
+      false,
+      null,
+    );
   });
 });

@@ -188,5 +188,28 @@ describe("useBlockedUsers messaging permission boundary", () => {
     expect(liveBlock).toHaveBeenCalledWith(context, { text: "principal-b" });
     expect(liveUnblock).toHaveBeenCalledWith(context, { text: "principal-b" });
     expect(from).not.toHaveBeenCalled();
+    expect(invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["blocked-users", "user-1"] });
+  });
+
+  it.runIf(mode === "icp")("propagates canister read failures instead of returning an empty block list", async () => {
+    const denied = new Error("blocked-user read denied");
+    liveList.mockRejectedValueOnce(denied);
+    renderHook(() => useBlockedUsers());
+
+    await expect(queryOptions.current.queryFn()).rejects.toBe(denied);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(mode === "icp")("does not invalidate the block list when canister block creation fails", async () => {
+    const denied = new Error("block denied");
+    liveBlock.mockRejectedValueOnce(denied);
+    const { result } = renderHook(() => useBlockedUsers());
+
+    await expect(
+      act(async () => result.current.blockUser.mutateAsync({ blockedId: "principal-b" })),
+    ).rejects.toBe(denied);
+    expect(invalidateQueries).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
   });
 });

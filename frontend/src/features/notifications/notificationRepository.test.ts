@@ -182,4 +182,29 @@ describe.runIf(!supabaseMode)("notification repository — ICP", () => {
     expect(notificationMocks.clearInbox).toHaveBeenCalledWith(expect.anything(), "principal-a", null);
     expect(fake.calls).toEqual([]);
   });
+
+  it.each([
+    ["list", () => {
+      notificationMocks.listInbox.mockRejectedValueOnce(new Error("list denied"));
+      return listNotifications("principal-a", "club-a", fakeClient().client);
+    }],
+    ["mark one", () => {
+      notificationMocks.markRead.mockRejectedValueOnce(new Error("mark denied"));
+      return markNotificationRead("notification-a", fakeClient().client);
+    }],
+    ["mark all", () => {
+      notificationMocks.markAllRead.mockRejectedValueOnce(new Error("mark all denied"));
+      return markAllNotificationsRead("principal-a", "club-a", fakeClient().client);
+    }],
+    ["delete one", () => {
+      notificationMocks.deleteNotification.mockRejectedValueOnce(new Error("delete denied"));
+      return deleteNotification("notification-a", fakeClient().client);
+    }],
+    ["clear", () => {
+      notificationMocks.clearInbox.mockRejectedValueOnce(new Error("clear denied"));
+      return clearNotifications("principal-a", "club-a", fakeClient().client);
+    }],
+  ] as const)("propagates %s canister failures", async (_name, operation) => {
+    await expect(operation()).rejects.toThrow(/denied/);
+  });
 });

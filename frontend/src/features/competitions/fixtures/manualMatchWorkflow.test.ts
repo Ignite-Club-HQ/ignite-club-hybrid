@@ -131,4 +131,25 @@ describe("manual match workflow", () => {
     expect(mocks.recordLiveMatch).toHaveBeenCalledWith(icpContext, "competition-icp", "home-1", "away-1");
     expect(mocks.from).not.toHaveBeenCalled();
   });
+
+  it.runIf(!supabaseMode)("returns canister write failures without issuing a Supabase fallback", async () => {
+    mocks.recordLiveMatch.mockRejectedValueOnce(new Error("competition access denied"));
+    const row = buildManualMatchRow({
+      competitionId: "competition-icp",
+      homeTeamId: "home-1",
+      awayTeamId: "away-1",
+      divisionId: "",
+      scheduledAt: "2026-09-12T09:00",
+      venue: "Riverside Park",
+      pitch: "",
+      round: "",
+      duration: "",
+      arrival: "",
+      notes: "",
+    });
+
+    await expect(createManualMatch(row)).resolves.toEqual({ error: { message: "competition access denied" } });
+    expect(mocks.recordLiveMatch).toHaveBeenCalledWith(icpContext, "competition-icp", "home-1", "away-1");
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
 });
