@@ -2019,7 +2019,7 @@ persistent actor class Main(governorInit : Principal) {
       let old=matches.find(func(m)=m.id==id);
       // Local edits win over refresh; never overwrite a manually changed revision.
       let override=switch(previous,old){case(?p,?m)p.synced_revision!=m.revision;case _ false};
-      let revision=switch(old){case null 1;case(?m)m.revision+1};
+      let revision : Nat64 = switch(old){case null 1;case(?m)m.revision+1};
       let row:Types.Match=switch(old){case(?m)if(override)m else ({m with status=g.status;home_score=g.home_score??m.home_score;away_score=g.away_score??m.away_score;scheduled_at_ms=g.starts_at_ms;venue=g.venue;revision});case null ({id;competition_id;home_team=g.home_id;away_team=g.away_id;status=g.status;home_score=g.home_score??0;away_score=g.away_score??0;division_id=?grade;scheduled_at_ms=g.starts_at_ms;venue=g.venue;pitch_number=null;round_number=null;duration_minutes=null;arrival_minutes_before=null;notes=null;revision})};
       imported:=imported.concat([row]);
       incoming:=incoming.concat([{match_id=id;competition_id;tenant;grade_id=grade;game_id=g.game_id;home_id=g.home_id;away_id=g.away_id;home_name=g.home_name;away_name=g.away_name;synced_revision=if(override)switch(previous){case(?p)p.synced_revision;case null row.revision}else row.revision}]);
