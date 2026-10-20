@@ -1,6 +1,6 @@
 # Stage 2 — separate real-network photo-store rehearsal
 
-Status: dedicated workflow/runner prepared with focused safety checks; NOT deployed or run. Owner requested setup on 20 October 2026. No live expansion or group opening.
+Status: smoke scenario ran successfully on mainnet 20 October 2026 (dedicated test store created, funded, configured and smoke checks passed; receipt on the receipts branch). Mixed and tiny scenarios still to run with fresh IDs. No live expansion or group opening.
 
 ## Scope/access
 
