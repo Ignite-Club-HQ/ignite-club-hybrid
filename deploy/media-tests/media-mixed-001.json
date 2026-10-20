@@ -11,8 +11,11 @@
     "budgetCycles": "5000000000000",
     "capacityBytes": 5368709120
   },
-  "phase": "configure-empty",
-  "pending": null,
+  "phase": "smoke",
+  "pending": {
+    "kind": "smoke",
+    "time": "2026-10-20T06:35:49.996Z"
+  },
   "receipts": [
     {
       "phase": "create",
