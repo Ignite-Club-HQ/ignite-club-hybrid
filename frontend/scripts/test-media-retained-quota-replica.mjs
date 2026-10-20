@@ -125,7 +125,7 @@ try {
  assert.ok(retired > 0);
  c.setPrincipal(stores[0].canisterId);
  denied(await c.reserve_retained_media(gallery,'clubs/c/photos/new',7n));
- denied(await c.cancel_retained_media(gallery,'c','clubs/c/photos/new',7n));
+ assert.equal(ok(await c.cancel_retained_media(gallery,'c','clubs/c/photos/new',7n)).state.released,null);
  ok(await c.acknowledge_retained_media(gallery));
  c.setPrincipal(governor);
  for(const store of stores) { store.actor.setPrincipal(governor); ok(await store.actor.reconcile_upload_operations('')); ok(await store.actor.retire_upload_outcomes('')); }

@@ -5534,13 +5534,13 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func reserve_retained_media(token : Text, path : Text, bytes : Nat) : async MediaRetainedQuota.Result {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
-    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token");
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token absent");
     let segments = Iter.toArray(path.split(#char '/'));
     if (segments.size() < 3 or segments[0] != "clubs") return #Err("Club path required");
     let club = segments[1];
     if (not profiles.any(func(p) = p.id == club) or not path.startsWith(#text("clubs/" # club # "/"))) return #Err("Unknown club path");
     let pro = clubSubscriptions.any(func(s) = s.club_id == club and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial));
-    if (growthRehearsal) {
+    if (growthRehearsal and mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null) {
       let usage = MediaRetainedQuota.usage(mediaRetainedState.ledger, club);
       let commitment = mediaGrowthState.commitments.get(club) ?? 0;
       if (not mediaGrowthState.configured or (usage.finalized + usage.pending + bytes) * 2 > commitment) return #Err("Reserved club growth exhausted")
@@ -5553,17 +5553,17 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func cancel_retained_media(token : Text, club : Text, path : Text, bytes : Nat) : async MediaRetainedQuota.Result {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
-    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token");
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Ok({store=caller;token;path;club;bytes;previous=null;state=#released});
     MediaRetainedQuota.cancel(mediaRetainedState.ledger, caller, token, club, path, bytes)
   };
   public shared ({ caller }) func credit_deleted_retained_media(token : Text, entry : MediaRetainedQuota.Object) : async MediaRetainedQuota.Result {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
-    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token");
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token absent");
     MediaRetainedQuota.deleted(mediaRetainedState.ledger, caller, token, entry)
   };
   public shared ({ caller }) func prepare_deleted_retained_media(token : Text, entry : MediaRetainedQuota.Object) : async MediaRetainedQuota.Result {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
-    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token");
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token absent");
     MediaRetainedQuota.prepareDeleted(mediaRetainedState.ledger, caller, token, entry)
   };
   public shared ({ caller }) func acknowledge_retained_media(token : Text) : async { #Ok; #Err : Text } {
@@ -5668,6 +5668,7 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok({ active = mediaQuotaCutover.active; stores = mediaQuotaStores })
   };
   public shared ({ caller }) func reserve_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
+    switch (MediaJournalToken.epoch(token)) { case (?epoch) { if (epoch != cycle) return #Err("Token cycle mismatch") }; case null {} };
     if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
     // Old-cycle retries are allowed only for an existing immutable token.
     // After terminal retirement, delayed old requests cannot allocate again.
@@ -5682,12 +5683,18 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func cancel_media_quota(token : Text, club_id : Text, category : Text, bytes : Nat, cycle : Nat) : async MediaQuota.Result {
     if (not MediaQuotaCutover.ready(mediaQuotaCutover, caller, mediaQuotaStores)) return #Err("Shared quota inactive or unregistered store");
+    switch (MediaJournalToken.epoch(token)) {
+      case (?epoch) {
+        if (epoch != cycle) return #Err("Token cycle mismatch");
+        if (MediaQuota.status(mediaQuotaCutover.ledger, caller, token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Ok({store=caller;token;club_id;category;bytes;cycle;status=#released})
+      }; case null {}
+    };
     if (MediaQuota.status(mediaQuotaCutover.ledger, caller, token) == null and cycle + 1 < Int.abs(Time.now()) / MediaQuota.cycleNs) return #Err("Expired operation");
     MediaQuota.cancel(mediaQuotaCutover.ledger, caller, token, club_id, category, bytes, cycle)
   };
   public shared ({ caller }) func retire_media_quota_records(reservation_cursor : Text, usage_cursor : Text) : async { #Ok : { removed : Nat; reservation_cursor : Text; usage_cursor : Text }; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
-    #Ok(MediaQuota.retirePage(mediaQuotaCutover.ledger, Int.abs(Time.now()) / MediaQuota.cycleNs, reservation_cursor, usage_cursor))
+    #Ok(MediaQuota.retireCoordinatedPage(mediaQuotaCutover.ledger, Int.abs(Time.now()) / MediaQuota.cycleNs, reservation_cursor, usage_cursor, not mediaRetainedState.active))
   };
 
   public shared ({ caller }) func save_club_subscription(item : Types.ClubSubscription) : async { #Ok : Types.ClubSubscription; #Err : Text } {

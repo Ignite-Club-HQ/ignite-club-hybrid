@@ -62,7 +62,10 @@ module {
   };
   // Retire only old terminal records. Live APIs reject NEW old-cycle tokens;
   // unresolved reservations are never expired or refunded automatically.
-  public func retirePage(ledger : Ledger, cycle : Nat, reservationCursor : Text, usageCursor : Text, retireReservations : Bool = true) : { removed : Nat; reservation_cursor : Text; usage_cursor : Text } {
+  public func retirePage(ledger : Ledger, cycle : Nat, reservationCursor : Text, usageCursor : Text) : { removed : Nat; reservation_cursor : Text; usage_cursor : Text } {
+    retireCoordinatedPage(ledger, cycle, reservationCursor, usageCursor, true)
+  };
+  public func retireCoordinatedPage(ledger : Ledger, cycle : Nat, reservationCursor : Text, usageCursor : Text, retireReservations : Bool) : { removed : Nat; reservation_cursor : Text; usage_cursor : Text } {
     var removed = 0;
     var scanned = 0;
     var nextReservation = "";
