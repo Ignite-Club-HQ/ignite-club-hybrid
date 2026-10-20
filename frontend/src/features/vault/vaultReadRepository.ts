@@ -44,7 +44,7 @@ export function mapLiveVaultFolder(folder: any): VaultFolderRow {
  * carrying folder_name/folder_path along as extra properties, so callers get
  * folder context without a separate folder-id join.
  */
-function unwrapLiveVaultFileWithFolder(entry: any): any {
+export function unwrapLiveVaultFileWithFolder(entry: any): any {
   if (entry && typeof entry === "object" && "file" in entry) {
     return {
       ...entry.file,
