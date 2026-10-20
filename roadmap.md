@@ -4,6 +4,7 @@
 
 ### Current priority — owner decision 20 October 2026, 02:14 UTC
 
+- [ ] Recover the interrupted mixed test's pending uploads on its existing isolated store; test pending-path recovery and exact fill reconciliation without creating/funding another target.
 - [x] Owner request 20 October 05:25 UTC: added **Fund canisters or new group by card**. Fresh actual fuel/controller readings select under-1T canisters, include current withdrawal fees and subtract deploy balance; delivered/sufficient funds trigger journaled non-replayed deposits. New unused groups fund the 13-service default (20.8T) only, no automatic installation/opening. Focused safety tests and actionlint pass; live payment/deposit acceptance requires the owner's GitHub workflow and hosted checkout.
 - [ ] Owner: run the card workflow and pay at the saved checkout link; live delivery and canister deposit acceptance are unverified without the GitHub-held deploy identity. Group installation remains a separate workflow approval.
 - [x] Owner request 20 October 05:20 UTC: card checkout workflow for the existing deploy identity. Requests live balance shortfall to the chosen test ceiling, saves/readbacks order intent, prints exact hosted checkout link/quote, waits for delivery and verifies balance; unresolved payments block repeat purchases. No automated test/deploy or card charge. Owner must run workflow and pay; live checkout remains unverified without GitHub-held signing identity.
