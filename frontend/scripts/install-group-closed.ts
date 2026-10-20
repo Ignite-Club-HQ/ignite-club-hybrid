@@ -72,7 +72,7 @@ const install = closedInstallAdapter(calls, {
   wasm: d => wasms.get(d)!,
   initArg: d => d === 'timer_jobs' ? IDL.encode([], []) : governorArg, // timer_jobs captures its installer as governor
   environment: d => d === 'pii_access_control' ? [{ name: 'VETKD_KEY_NAME', value: 'key_1' }]
-    : (d as string) === 'media_blob_store' ? [{ name: 'GOVERNOR_PRINCIPAL', value: operator }] : [],
+    : (d as string) === 'media_blob_store' ? [{ name: 'GOVERNOR_PRINCIPAL', value: operator }, { name: 'IGNITE_MEDIA_LARGE_CAPACITY', value: '1' }] : [],
 }, { operator, liveCanisters: live, cyclesPerCanister: perCanister, nowNs: () => BigInt(Date.now()) * 1_000_000n });
 
 const never = async () => { throw new Error('Closed installer never registers or opens a group'); };
@@ -96,4 +96,15 @@ p = await runProvision(p, adapter, { stopAt: 'checked' });
 for (const d of PER_GROUP_DOMAINS) console.log(`${d.padEnd(22)} ${p.canisters[d] ?? '-'}`);
 console.log(`${'photo store (own)'.padEnd(22)} ${mediaBlobStore}`);
 if (p.phase !== 'checked') throw new Error(`Stopped at ${p.phase}: ${p.error ?? p.pending?.kind ?? ''}. Re-run to resume.`);
+// New groups start with the larger stable-backed photo store (empty store, so no copy-over needed).
+{
+  const { Actor, HttpAgent } = await import('@icp-sdk/core/agent');
+  const blobIdl = (await import('../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js')).idlFactory;
+  const store: any = Actor.createActor(blobIdl as any, { agent: await HttpAgent.create({ identity, host, shouldFetchRootKey: false }), canisterId: mediaBlobStore });
+  const st = await store.stable_storage_status();
+  if (!st.enabled) { const r = await store.enable_stable_media_storage(); if ('Err' in r) throw new Error(`Larger photo storage: ${r.Err}`); }
+  const size = BigInt(process.env.GROUP_PHOTO_STORE_GIB ?? '16') * 1_073_741_824n;
+  const r = await store.set_capacity_limit(size); if ('Err' in r) throw new Error(`Photo store size: ${r.Err}`);
+  console.log(`Photo store size ${(await store.get_usage()).capacity_limit_bytes} bytes (larger mode)`);
+}
 console.log(`Group ${groupId} installed, configured and healthy. It stays CLOSED: not registered, receives no clubs.`);
