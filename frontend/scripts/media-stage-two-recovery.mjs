@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 export const RECOVERY_TARGET = '2knbe-saaaa-aaaal-qxpua-cai';
 export const RECOVERY_RUN = 'media-mixed-001';
 export const ORIGINAL_MODULE = '8ea0289f54fb5224c1eb1e17da9242e909d34dd333cfb5f7643bbfaaebf76c9b';
-export const RECOVERY_MODULE = 'ccac5c84446250e4e43fd05e579dc765369e6e612e3c88369eeb30da9d141f48';
+export const RECOVERY_MODULE = 'dfd4ab701b82e5e69ed4a4077d737d635ce33fc64faf766fecb4f9774da4a433';
 export function recoveryBinding(saved, candidate) {
   if (saved.canisterId !== RECOVERY_TARGET || saved.binding?.runId !== RECOVERY_RUN || saved.binding.wasmSha256 !== ORIGINAL_MODULE) return null;
   if (candidate.wasmSha256 !== RECOVERY_MODULE) throw new Error('Unapproved recovery build; operator reconciliation required');
