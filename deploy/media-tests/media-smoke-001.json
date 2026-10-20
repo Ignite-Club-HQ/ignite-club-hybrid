@@ -12,10 +12,7 @@
     "capacityBytes": 5368709120
   },
   "phase": "install",
-  "pending": {
-    "kind": "install",
-    "time": "2026-10-20T05:54:52.579Z"
-  },
+  "pending": null,
   "receipts": [
     {
       "phase": "create",
@@ -24,6 +21,23 @@
         "fundedCycles": "2900000000000"
       },
       "time": "2026-10-20T05:41:26.669Z"
+    },
+    {
+      "phase": "install",
+      "result": {
+        "wasmSha256": "8ea0289f54fb5224c1eb1e17da9242e909d34dd333cfb5f7643bbfaaebf76c9b",
+        "environment": [
+          {
+            "name": "GOVERNOR_PRINCIPAL",
+            "value": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae"
+          },
+          {
+            "name": "IGNITE_MEDIA_LARGE_CAPACITY",
+            "value": "1"
+          }
+        ]
+      },
+      "time": "2026-10-20T05:55:12.591Z"
     }
   ],
   "objects": {},
