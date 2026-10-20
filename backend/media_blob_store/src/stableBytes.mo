@@ -21,15 +21,36 @@ module {
     slot
   };
   public func write(store : Store, bytes : Blob) : ?Slice { writeWithin(store, bytes, limit) };
+  // At most nine size classes. Split only free slots; live offsets never move.
+  func availableClass(store : Store, slot : Nat) : ?Nat {
+    if (slot > 16_777_216) return null;
+    var size = slot;
+    while (size <= 16_777_216) {
+      switch (store.free.get(size)) { case (?rows) { if (rows.size() > 0) return ?size }; case null {} };
+      size *= 2
+    };
+    null
+  };
+  func addFree(store : Store, slot : Nat, offset : Nat64) {
+    let rows = switch (store.free.get(slot)) { case (?rows) rows; case null { let rows = Map.empty<Nat64, ()>(); store.free.add(slot, rows); rows } };
+    rows.add(offset, ())
+  };
   public func writeWithin(store : Store, bytes : Blob, cap : Nat) : ?Slice {
     let length = bytes.size();
     let slot = slotFor(length);
     if (slot > 16_777_216) return null;
-    let offsets = switch (store.free.get(slot)) { case (?map) map; case null { let map = Map.empty<Nat64, ()>(); store.free.add(slot, map); map } };
-    let offset = switch (offsets.entries().next()) {
-      case (?(offset, _)) {
-        if (not validSlice(store.end.toNat(), { offset; length; slot })) return null;
-        offsets.remove(offset); offset
+    let offset = switch (availableClass(store, slot)) {
+      case (?size) {
+        let ?offsets = store.free.get(size) else return null;
+        let ?(offset, _) = offsets.entries().next() else return null;
+        if (not validSlice(store.end.toNat(), { offset; length; slot = size })) return null;
+        offsets.remove(offset);
+        var split = size;
+        while (split > slot) {
+          split /= 2;
+          addFree(store, split, offset + Nat64.fromNat(split))
+        };
+        offset
       };
       case null {
         if (store.end.toNat() + slot > cap) return null;
@@ -46,8 +67,17 @@ module {
   };
   public func release(store : Store, slice : Slice) {
     if (not validSlice(store.end.toNat(), slice)) return;
-    let offsets = switch (store.free.get(slice.slot)) { case (?map) map; case null { let map = Map.empty<Nat64, ()>(); store.free.add(slice.slot, map); map } };
-    offsets.add(slice.offset, ())
+    var slot = slice.slot;
+    var offset = slice.offset.toNat();
+    // Merge only aligned free buddies, never live or merely adjacent objects.
+    while (slot < 16_777_216) {
+      let buddy = if ((offset / slot) % 2 == 0) offset + slot else offset - slot;
+      let ?rows = store.free.get(slot) else { addFree(store, slot, Nat64.fromNat(offset)); return };
+      if (not rows.containsKey(Nat64.fromNat(buddy))) { addFree(store, slot, Nat64.fromNat(offset)); return };
+      rows.remove(Nat64.fromNat(buddy));
+      offset := Nat.min(offset, buddy); slot *= 2
+    };
+    addFree(store, slot, Nat64.fromNat(offset))
   };
   public func read(store : Store, slice : Slice, offset : Nat, requested : Nat) : Blob {
     if (not validSlice(store.end.toNat(), slice) or slice.offset.toNat() + slice.slot > Region.size(store.region).toNat() * 65_536 or offset >= slice.length) return "";
@@ -56,7 +86,8 @@ module {
   public func canAllocate(store : Store, length : Nat) : Bool { canAllocateWithin(store, length, limit) };
   public func canAllocateWithin(store : Store, length : Nat, cap : Nat) : Bool {
     let slot = slotFor(length);
-    switch (store.free.get(slot)) { case (?offsets) { if (offsets.size() > 0) return true }; case null {} };
+    if (slot > 16_777_216) return false;
+    if (availableClass(store, slot) != null) return true;
     store.end.toNat() + slot <= cap
   }
 }
