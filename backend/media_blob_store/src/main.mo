@@ -464,7 +464,17 @@ persistent actor MediaBlobStore {
         deletes := deletes.concat([id]); removed += 1
       }
     };
-    for (id in deletes.values()) quota_operations.remove(id);
+    removed := 0;
+    for (id in deletes.values()) {
+      var permitted = retained_mode != #active;
+      if (retained_mode == #active and id.startsWith(#text "r1:")) {
+        switch (retainedService()) {
+          case (?retained) { try { switch (await retained.acknowledge_retained_media(id)) { case (#Ok) permitted := true; case _ {} } } catch (_) {} };
+          case null {}
+        }
+      };
+      if (permitted) { quota_operations.remove(id); removed += 1 }
+    };
     if (scanned < 200) next := "";
     #Ok({ removed; cursor = next })
   };
