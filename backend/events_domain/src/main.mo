@@ -21,6 +21,7 @@ import IC "mo:ic/Types";
 import Types "types";
 import Oql "../../shared/Oql";
 import OqlEvents "oqlEvents";
+import HistoryPrivacy "historyPrivacy";
 
 persistent actor class Main(governorInit : Principal) {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -2298,10 +2299,42 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(value)
   };
 
-  public query ({ caller }) func get_game_result(event_id : Text) : async { #Ok : ?Types.GameResult; #Err : Text } {
-    denyLegacyAccountQuery();
+  func historyResult(caller : Principal, event_id : Text) : async { #Ok : ?HistoryPrivacy.Read; #Err : Text } {
     auth(caller);
-    #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
+    await admitAccount(caller);
+    let event = switch (events.find(func(e) = e.id == event_id and not e.deleted)) {
+      case null return #Err("Event not found"); case (?e) e
+    };
+    await syncRolesFromClubDomain(caller, event.club_id);
+    if (not (await* canViewMatch(caller, event))) return #Err("Event access forbidden");
+    let authority = competitionDomainCanister;
+    var hidden = false;
+    for (operation in competitionEventOperations.values()) {
+      if (operation.event_ids.any(func(id) = id == event_id)) {
+        let id = switch (authority) { case null return #Err("Competition authority unavailable"); case (?id) id };
+        let competition : actor {
+          read_history_score_access : shared (Text, Text, Nat64, Principal) -> async { #Ok : Bool; #Err : Text }
+        } = actor (id.toText());
+        let team = switch (event.team_id) { case null return #Err("Competition team missing"); case (?t) t };
+        try {
+          switch (await (with timeout = 10) competition.read_history_score_access(operation.competition_id, team, event.starts_at_ms, caller)) {
+            case (#Err(e)) return #Err(e);
+            case (#Ok(visible)) { if (not visible) hidden := true }
+          }
+        } catch (_) { return #Err("Competition score authorization unavailable") };
+      }
+    };
+    if (authority != competitionDomainCanister or eventFenced(event_id)) return #Err("Event authority changed or locked");
+    let current = switch (events.find(func(e) = e.id == event_id and not e.deleted)) {
+      case null return #Err("Event no longer available"); case (?e) e
+    };
+    if (current.revision != event.revision or not canView(caller,current)) return #Err("Event access changed");
+    #Ok(switch (gameResults.find(func(item) = item.event_id == ?event_id)) {
+      case null null; case (?row) ?HistoryPrivacy.read(row,hidden)
+    })
+  };
+  public shared ({ caller }) func get_game_result(event_id : Text) : async { #Ok : ?HistoryPrivacy.Read; #Err : Text } {
+    await historyResult(caller,event_id)
   };
 
   // ---- Match captains / goalkeepers / player stats report ----
@@ -4183,10 +4216,8 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id))
   };
 
-  public shared ({ caller }) func read_account_get_game_result(event_id : Text) : async { #Ok : ?Types.GameResult; #Err : Text } {
-    await admitAccount(caller);
-    auth(caller);
-    #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
+  public shared ({ caller }) func read_account_get_game_result(event_id : Text) : async { #Ok : ?HistoryPrivacy.Read; #Err : Text } {
+    await historyResult(caller,event_id)
   };
 
   public shared ({ caller }) func read_account_list_match_captains(event_id : Text) : async { #Ok : [Types.MatchCaptainAssignment]; #Err : Text } {
