@@ -30,8 +30,8 @@ persistent actor {
 
     // Leave 64 MiB for runtime/Region metadata: 64 GiB payload is not promised.
     let near = cap - 67_108_864;
-    let high : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
-    assert Region.grow(high.region, (near / page).toNat64()) != 18_446_744_073_709_551_615;
+    let high = store;
+    assert Region.grow(high.region, (near / page).toNat64() - Region.size(high.region)) != 18_446_744_073_709_551_615;
     high.end := near.toNat64();
     let boundedCap = near + page;
     let ?held = Stable.reserveWithin(high, 8, boundedCap) else { assert false; loop {} };
