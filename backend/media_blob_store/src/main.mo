@@ -22,6 +22,7 @@ import UploadPolicy "uploadPolicy";
 import AssembleChunks "assembleChunks";
 import QuotaOperation "quotaOperation";
 import StableBytes "stableBytes";
+import MultiBytes "multiRegionBytes";
 import RetentionPage "retentionPage";
 import MediaInventory "mediaInventory";
 import RetainedProtocol "retainedProtocol";
@@ -151,6 +152,9 @@ persistent actor MediaBlobStore {
   var quota_snapshot : [FreeUsageRow];
   var quota_operations : Map.Map<Text, QuotaOperation.Operation>;
   var stable_bytes : StableBytes.Store;
+  var media_regions : Map.Map<Nat, StableBytes.Store>;
+  transient let multi_bytes : MultiBytes.Store = { legacy = stable_bytes; regions = media_regions };
+  transient let multiRegionRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_MULTI_REGION_LOCAL_REHEARSAL") == ?"1";
   var stable_blobs : Map.Map<Text, StoredRecord>;
   var stable_writes : Bool;
   var upload_slots : Map.Map<Text, StableBytes.Slice>;
@@ -786,15 +790,15 @@ persistent actor MediaBlobStore {
   };
 
   func canReserve(size : Nat64) : Bool {
-    UploadPolicy.canAdmitFor(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
+    UploadPolicy.canAdmitFor(Nat64.fromNat(Nat.min(capacity_limit_bytes.toNat(), 68_719_476_736)), total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
     // Removing the local flag with pending extents must fail closed, not
     // silently allocate a second slice for an already reserved upload.
     (physicalReservationRehearsal or upload_slots.size() == 0) and
-    (not stable_writes or (stable_blobs.size() + pending_uploads.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), capacity_limit_bytes.toNat())))
+    (not stable_writes or (stable_blobs.size() + pending_uploads.size() < 100_000 and MultiBytes.canAllocateWithin(multi_bytes, size.toNat(), capacity_limit_bytes.toNat(), multiRegionRehearsal)))
   };
   func releaseUploadSlot(id : Text) {
     switch (upload_slots.get(id)) {
-      case (?slice) { upload_slots.remove(id); StableBytes.release(stable_bytes, slice) };
+      case (?slice) { upload_slots.remove(id); MultiBytes.release(multi_bytes, slice) };
       case null {}
     }
   };
@@ -842,7 +846,7 @@ persistent actor MediaBlobStore {
   };
   func readRange(path : Text, offset : Nat) : Blob {
     switch (stable_blobs.get(path)) {
-      case (?r) StableBytes.read(stable_bytes, r.slice, offset, StableBytes.responseChunk);
+      case (?r) MultiBytes.read(multi_bytes, r.slice, offset, StableBytes.responseChunk);
       case null {
         switch (findBlob(path)) {
           case (?r) {
@@ -858,7 +862,7 @@ persistent actor MediaBlobStore {
   func removeStored(path : Text) {
     bumpInventory();
     switch (metadata(path)) { case (?r) { total_bytes := subBytes(total_bytes, r.length) }; case null {} };
-    switch (stable_blobs.get(path)) { case (?r) { StableBytes.release(stable_bytes, r.slice); stable_blobs.remove(path) }; case null {} };
+    switch (stable_blobs.get(path)) { case (?r) { MultiBytes.release(multi_bytes, r.slice); stable_blobs.remove(path) }; case null {} };
     blobs := blobs.filter(func(r) = r.path != path);
     blob_uploaded_at := blob_uploaded_at.filter(func((p, _)) = p != path)
   };
@@ -876,10 +880,10 @@ persistent actor MediaBlobStore {
     if (stable_blobs.size() >= 100_000) return #Err("Stable metadata capacity reached");
     if (old.bytes.size() > UploadPolicy.maxWireBytes.toNat()) return #Err("Legacy file exceeds bounded migration limit");
     if (PrimMem.rts_heap_size() + old.bytes.size() * 16 > UploadPolicy.heapBudget) return #Err("Insufficient heap headroom for verified migration");
-    let ?slice = StableBytes.write(stable_bytes, old.bytes) else return #Err("Stable region capacity reached");
-    let copied = StableBytes.read(stable_bytes, slice, 0, slice.length);
+    let ?slice = MultiBytes.writeWithin(multi_bytes, old.bytes, StableBytes.limit, multiRegionRehearsal) else return #Err("Stable region capacity reached");
+    let copied = MultiBytes.read(multi_bytes, slice, 0, slice.length);
     if (copied.size() != old.bytes.size() or hexDigest(copied) != old.content_hash) {
-      StableBytes.release(stable_bytes, slice); return #Err("Ciphertext integrity check failed")
+      MultiBytes.release(multi_bytes, slice); return #Err("Ciphertext integrity check failed")
     };
     let stamp = switch (blob_uploaded_at.find(func((p, _)) = p == old.path)) { case (?(_, t)) t; case null Time.now() };
     stable_blobs.add(old.path, { path = old.path; owner = old.owner; mime = old.mime; content_hash = old.content_hash; slice; uploaded_at = stamp });
@@ -895,7 +899,7 @@ persistent actor MediaBlobStore {
     #Ok
   };
   public query func stable_storage_status() : async { enabled : Bool; legacy_count : Nat; indexed_count : Nat; allocated_bytes : Nat64 } {
-    { enabled = stable_writes; legacy_count = blobs.size(); indexed_count = stable_blobs.size(); allocated_bytes = stable_bytes.end }
+    { enabled = stable_writes; legacy_count = blobs.size(); indexed_count = stable_blobs.size(); allocated_bytes = MultiBytes.allocated(multi_bytes) }
   };
   // Exact per-store allocator observations, not an aggregate group promise.
   // Authenticated operator/authority only, locally gated; no club paths/PII.
@@ -913,8 +917,8 @@ persistent actor MediaBlobStore {
     };
     if (upload_slots.size() + legacyPending != pending_uploads.size()) return #Err("Physical reservation inventory mismatch");
     #Ok({ revision = media_inventory_revision; configured_bytes = capacity_limit_bytes.toNat();
-      allocated_bytes = stable_bytes.end.toNat(); pending_slot_bytes = held; pending_count = pending_uploads.size();
-      legacy_pending_count = legacyPending; allocatable_object_slots = if (legacyPending > 0) 0 else StableBytes.allocatableRoots(stable_bytes, capacity_limit_bytes.toNat()); max_object_slot_bytes = 16_777_216 })
+      allocated_bytes = MultiBytes.allocated(multi_bytes).toNat(); pending_slot_bytes = held; pending_count = pending_uploads.size();
+      legacy_pending_count = legacyPending; allocatable_object_slots = if (legacyPending > 0) 0 else MultiBytes.allocatableRoots(multi_bytes, capacity_limit_bytes.toNat(), multiRegionRehearsal); max_object_slot_bytes = 16_777_216 })
   };
 
   func findUpload(id : Text) : ?PendingUpload {
@@ -1033,7 +1037,7 @@ persistent actor MediaBlobStore {
     // Reserve the actual class before the authority await or any chunks.
     // Unknown authority replies keep the same extent until settled abort.
     if (physicalReservationRehearsal and stable_writes) {
-      let ?slice = StableBytes.reserveWithin(stable_bytes, total_size.toNat(), capacity_limit_bytes.toNat()) else return #Err("StoreFull");
+      let ?slice = MultiBytes.reserveWithin(multi_bytes, total_size.toNat(), capacity_limit_bytes.toNat(), multiRegionRehearsal) else return #Err("StoreFull");
       upload_slots.add(id, slice)
     };
     let upload : PendingUpload = {
@@ -1141,11 +1145,11 @@ persistent actor MediaBlobStore {
           let slice = switch (upload_slots.get(upload_id)) {
             case (?held) {
               if (not physicalReservationRehearsal) return #Err("Physical reservation rehearsal disabled; restore before finalizing");
-              if (not StableBytes.writeReserved(stable_bytes, held, assembled)) return #Err("Physical reservation mismatch");
+              if (not MultiBytes.writeReserved(multi_bytes, held, assembled)) return #Err("Physical reservation mismatch");
               held
             };
             // Old uploads survive an additive upgrade, but have no promise.
-            case null { let ?fresh = StableBytes.writeWithin(stable_bytes, assembled, capacity_limit_bytes.toNat()) else return #Err("StoreFull"); fresh }
+            case null { let ?fresh = MultiBytes.writeWithin(multi_bytes, assembled, capacity_limit_bytes.toNat(), multiRegionRehearsal) else return #Err("StoreFull"); fresh }
           };
           removeStored(upload.path);
           stable_blobs.add(upload.path, { path = upload.path; mime = upload.mime; owner = upload.owner; content_hash; slice; uploaded_at = Time.now() });

@@ -52,7 +52,7 @@ module {
   };
   public func writeWithin(store : Store, bytes : Blob, cap : Nat) : ?Slice {
     let ?slice = reserveWithin(store, bytes.size(), cap) else return null;
-    if (not writeReserved(store, slice, bytes)) return null;
+    if (not writeReserved(store, slice, bytes)) { release(store, slice); return null };
     ?slice
   };
   // A reservation owns a real extent. No ciphertext is written until finalize;
@@ -124,6 +124,10 @@ module {
     Region.loadBlob(store.region, slice.offset + Nat64.fromNat(offset), Nat.min(requested, slice.length - offset))
   };
   public func canAllocate(store : Store, length : Nat) : Bool { canAllocateWithin(store, length, limit) };
+  public func canReuseWithin(store : Store, length : Nat, configured : Nat) : Bool {
+    let slot = slotFor(length);
+    slot <= 16_777_216 and availableClass(store, slot, Nat.min(configured, physicalLimit)) != null
+  };
   // Bounded proof of reusable *whole* maximum-size roots. Smaller holes
   // deliberately count as zero, even if their aggregate byte sum is large.
   public func allocatableRoots(store : Store, configured : Nat) : Nat {
