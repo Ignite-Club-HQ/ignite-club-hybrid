@@ -121,10 +121,15 @@ export async function updateCompetitionMatch(
 ): Promise<MatchMutationResult> {
   return withFeatureBackend("competitions", {
     supabase: async () => {
-      const { error } = await supabase
-        .from("competition_matches")
-        .update(payload as never)
-        .eq("id", matchId);
+      const { home_score, away_score, ...metadata } = payload;
+      if ("home_score" in payload || "away_score" in payload) {
+        const { error } = await supabase.from("competition_match_results").upsert({
+          match_id: matchId, home_score: home_score as number | null, away_score: away_score as number | null,
+        });
+        if (error) return { error };
+      }
+      if (!Object.keys(metadata).length) return { error: null };
+      const { error } = await supabase.from("competition_matches").update(metadata as never).eq("id", matchId);
       return { error };
     },
     icp: async (ctx) => {

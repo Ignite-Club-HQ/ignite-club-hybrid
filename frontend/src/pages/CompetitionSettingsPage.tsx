@@ -719,7 +719,15 @@ function ScorePrivacyControls({ competitionId, divisions }: { competitionId: str
     queryFn: async () => {
       const { withFeatureBackend } = await import("@/live/featureRouter");
       return withFeatureBackend("competitions", {
-        supabase: async () => [],
+        supabase: async () => {
+          const [competition, divisionRows] = await Promise.all([
+            supabase.from("competitions").select("hide_scores").eq("id", competitionId).single(),
+            supabase.from("competition_divisions").select("name, hide_scores").eq("competition_id", competitionId),
+          ]);
+          if (competition.error) throw competition.error;
+          if (divisionRows.error) throw divisionRows.error;
+          return [{ division: [], hide_scores: competition.data.hide_scores }, ...(divisionRows.data ?? []).filter(d => d.hide_scores != null).map(d => ({ division: [d.name], hide_scores: d.hide_scores }))];
+        },
         icp: async ctx => {
           const { getLiveScorePrivacy } = await import("@/live/features/competitions");
           return getLiveScorePrivacy(ctx, competitionId);
@@ -727,12 +735,17 @@ function ScorePrivacyControls({ competitionId, divisions }: { competitionId: str
       }, { competitionId });
     },
   });
-  if (!isIcpPageMode()) return null;
   const change = async (division: string | null, hide: boolean | null) => {
     try {
       const { withFeatureBackend } = await import("@/live/featureRouter");
       await withFeatureBackend("competitions", {
-        supabase: async () => { throw new Error("Score privacy migration is not available"); },
+        supabase: async () => {
+          const request = division == null
+            ? supabase.from("competitions").update({ hide_scores: hide ?? false }).eq("id", competitionId)
+            : supabase.from("competition_divisions").update({ hide_scores: hide }).eq("competition_id", competitionId).eq("id", divisions.find(d => d.name === division)!.id);
+          const { error } = await request;
+          if (error) throw error;
+        },
         icp: async ctx => {
           const { setLiveScorePrivacy } = await import("@/live/features/competitions");
           await setLiveScorePrivacy(ctx, competitionId, division, hide);

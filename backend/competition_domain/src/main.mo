@@ -171,11 +171,12 @@ persistent actor class Main(governorInit : Principal) {
   };
   func compFenced(id : Text) : Bool = transferFences.size() > 0 and competitions.any(func(x) = x.id == id and isFenced(x.club_id));
   func matchFenced(id : Text) : Bool = transferFences.size() > 0 and matches.any(func(x) = x.id == id and compFenced(x.competition_id));
-  type FenceSnapshot = { competitions : [Types.Competition]; roles : [Types.RoleGrant]; entries : [Types.TeamEntry]; tokens : [Types.JoinToken]; seasons : [Types.Season]; matches : [Types.Match]; chat_settings : [Types.ChatSettings]; welcome : [Welcome.Settings]; invites : [Types.CompetitionInvite]; join_links : [Types.CompetitionJoinLink]; official_invites : [Types.CompetitionOfficialEmailInvite]; welcome_jobs : [Types.CompetitionWelcomeJob]; eoi : [Types.EoiSubmission]; divisions : [Types.DivisionSetting]; ladders : [Types.CompetitionLadderSetting]; broadcasts : [Types.Broadcast]; owners : [(Text, Principal)]; role_links : [Types.RoleLink]; official_chats : [Types.OfficialChat] };
+  type FenceSnapshot = { score_privacy : ?[ScorePrivacy.Setting]; competitions : [Types.Competition]; roles : [Types.RoleGrant]; entries : [Types.TeamEntry]; tokens : [Types.JoinToken]; seasons : [Types.Season]; matches : [Types.Match]; chat_settings : [Types.ChatSettings]; welcome : [Welcome.Settings]; invites : [Types.CompetitionInvite]; join_links : [Types.CompetitionJoinLink]; official_invites : [Types.CompetitionOfficialEmailInvite]; welcome_jobs : [Types.CompetitionWelcomeJob]; eoi : [Types.EoiSubmission]; divisions : [Types.DivisionSetting]; ladders : [Types.CompetitionLadderSetting]; broadcasts : [Types.Broadcast]; owners : [(Text, Principal)]; role_links : [Types.RoleLink]; official_chats : [Types.OfficialChat] };
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
-    { competitions = competitions.filter(func(x) = x.club_id == c);
+    { score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
+      competitions = competitions.filter(func(x) = x.club_id == c);
       roles = roles.filter(func(x) = inC(x.competition_id));
       entries = entries.filter(func(x) = inC(x.competition_id));
       tokens = tokens.filter(func(x) = inC(x.competition_id));
@@ -198,6 +199,7 @@ persistent actor class Main(governorInit : Principal) {
   func fenceDrop(c : Text) {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    scorePrivacySettings := scorePrivacySettings.filter(func(x) = not inC(x.competition_id));
     competitions := competitions.filter(func(x) = not (x.club_id == c));
     roles := roles.filter(func(x) = not (inC(x.competition_id)));
     entries := entries.filter(func(x) = not (inC(x.competition_id)));
@@ -228,10 +230,12 @@ persistent actor class Main(governorInit : Principal) {
     if (not isFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?FenceSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    let privacy = switch (s.score_privacy) { case (?rows) rows; case null [] };
     let c = club;
     let rootC = s.competitions;
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
-    if (s.competitions.any(func(x) = not (x.club_id == c))
+    if (privacy.any(func(x) = not inC(x.competition_id))
+        or s.competitions.any(func(x) = not (x.club_id == c))
         or s.roles.any(func(x) = not (inC(x.competition_id)))
         or s.entries.any(func(x) = not (inC(x.competition_id)))
         or s.tokens.any(func(x) = not (inC(x.competition_id)))
@@ -252,6 +256,7 @@ persistent actor class Main(governorInit : Principal) {
         or s.official_chats.any(func(x) = not (inC(x.competition_id)))) return #Err("Snapshot contains foreign records");
     if (s.competitions.any(func(e) = competitions.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
+    scorePrivacySettings := scorePrivacySettings.concat(privacy);
     competitions := competitions.concat(s.competitions);
     roles := roles.concat(s.roles);
     entries := entries.concat(s.entries);

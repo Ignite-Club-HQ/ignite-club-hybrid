@@ -23,3 +23,18 @@
 - Ladder UI needs explicit “Scores hidden” messaging rather than merely omitting masked results.
 - Privacy settings must be included in the operator club snapshot transfer/export/import/purge contract before cross-group transfers are enabled for competitions using this setting.
 - No local PostgreSQL policy or schema validation was performed.
+
+## Follow-up implementation (not yet production-ready)
+- Added unapplied Supabase migration `20261103000000_competition_score_privacy.sql`: competition/division privacy columns, isolated results with visibility/manager RLS, backfill, permanently-null legacy score constraint, and revoked legacy aggregate view access. Fixture/public reads join protected results; result updates write the new table; ladders derive from visible results. Supabase settings controls are enabled.
+- Added explicit ladder privacy messaging (currently generic in the authenticated ladder, rather than conditional on actual masking).
+- ICP operator snapshot now exports optional `score_privacy`, validates competition ownership on import, restores settings on replacement, and removes settings on purge. Missing optional field imports as empty settings for older snapshots. Snapshot compatibility/round-trip tests remain outstanding.
+- Motoko 1.16.1 `--check` and pure `scorePrivacy.test.mo` passed (existing warnings); Candid drift passed for 17 active contracts.
+- Relevant recorded frontend suites (`CompetitionFixturesPanel.results`, `PublicCompetitionPage.ladder`, `matchWorkflows`) passed: Supabase 29 passed / 3 skipped; ICP 25 passed / 7 skipped. Mutation regression mocks were updated for separate result storage.
+- No competition_domain replica/PocketIC actor integration harness was found; no authenticated actor integration test was added.
+
+### Remaining release blockers
+- Dedicated frontend role/default/inherit/hide/show privacy tests and snapshot transfer compatibility tests are still missing; existing regression tests do not substitute for these.
+- Migration has not been applied or validated against local PostgreSQL. Confirm existing score-trigger dependencies during backfill/nulling, legacy aggregate grants, and manager-role equivalence before application. Audit all database functions/views and external sync writers for raw/derived result disclosure. Legacy score writes intentionally fail the new constraint, so external writers must migrate before release.
+- Result and metadata writes are separate requests, not an atomic result/status transaction; add an authorized atomic RPC if required for consistency.
+- Supabase public ladder currently uses default 3/1/0 points; preserve configured competition scoring before release.
+- No deployment, live network calls, or SQL application was performed.
