@@ -326,10 +326,13 @@ persistent actor class Main(governorInit : Principal) = this {
     let page = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot page") };
     if (page.conversations.any(func(c) = c.club_id != club)) return #Err("Snapshot contains foreign records");
     if (page.conversations.any(func(c) = conversations.any(func(x) = x.id == c.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
-    mediaEvidenceRevision += 1;
-    conversations := conversations.filter(func(c) = not page.conversations.any(func(y) = y.id == c.id)).concat(page.conversations);
-    let known = func(id : Text) : Bool = conversations.any(func(c) = c.id == id and c.club_id == club);
+    if (page.conversations.any(func(c) = c.participants.any(func(p) = removalReceiver.denied(p))) or
+        page.messages.any(func(m) = removalReceiver.denied(m.sender))) return #Err("Snapshot contains removed identities");
+    let staged = conversations.filter(func(c) = not page.conversations.any(func(y) = y.id == c.id)).concat(page.conversations);
+    let known = func(id : Text) : Bool = staged.any(func(c) = c.id == id and c.club_id == club);
     if (page.messages.any(func(m) = not known(m.conversation_id))) return #Err("Message for unknown conversation");
+    mediaEvidenceRevision += 1;
+    conversations := staged;
     // Idempotent per message id: re-importing a page never duplicates.
     mediaEvidenceRevision += 1;
     messages := messages.filter(func(m) = not page.messages.any(func(y) = y.id == m.id)).concat(page.messages);
@@ -699,7 +702,7 @@ persistent actor class Main(governorInit : Principal) = this {
         let configured = clubDomainCanister;
         let admins = await cd.list_club_admins(club_id);
         await admitAccount(caller);
-        if (configured != clubDomainCanister or isFenced(club_id)) Runtime.trap("Club authorization changed");
+        if (configured != clubDomainCanister or isFenced(club_id)) throw Error.reject("Club authorization changed");
         let isMember = caller.equal(member);
         let isAdmin = admins.any(func(p) = p.equal(caller));
         if (not isMember and not isAdmin and not isGovernor(caller)) return #Err("Not permitted");
@@ -820,6 +823,7 @@ persistent actor class Main(governorInit : Principal) = this {
           };
         };
         if (not isMember and not isAdmin and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Competition membership required");
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
         var participants : [Principal] = [member];
         for (p in adminPrincipals.values()) {
           if (not participants.any(func(exist) = exist.equal(p))) {
@@ -882,6 +886,7 @@ persistent actor class Main(governorInit : Principal) = this {
           .filter(func(grant) = grant.role == "competition_admin" or grant.role == "admin" or grant.role == "owner")
           .map(func(grant) = grant.user);
         if (not adminPrincipals.any(func(p) = p.equal(caller)) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return [];
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
         let prefix = competitionAdminConversationId(competition_id) # "-";
         var out : [{ id : Text; member : Principal }] = [];
         for (c in conversations.values()) {
@@ -1082,6 +1087,7 @@ persistent actor class Main(governorInit : Principal) = this {
         case (?cd) { if (not (if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller))) { return #Err("App admin required") } };
       };
     };
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     let settings : PhotoReminderPolicy.Settings = { enabled = true; window_start_hours; window_end_hours; cooldown_days };
     if (not PhotoReminderPolicy.valid(settings)) return #Err("Invalid reminder window or cooldown");
     // Browser clocks cannot advance the persistent cooldown or manufacture eligibility.
@@ -1105,6 +1111,7 @@ persistent actor class Main(governorInit : Principal) = this {
         };
       };
     };
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     if (not PhotoReminderPolicy.valid(settings)) return #Err("Invalid reminder window or cooldown");
     chatPhotoReminderSettings := settings;
     #Ok
@@ -1126,6 +1133,7 @@ persistent actor class Main(governorInit : Principal) = this {
         };
       };
     };
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     #Ok(chatPhotoReminderSettings)
   
     } finally { removalReceiver.leave(caller) };
@@ -1540,11 +1548,11 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func list_messages(conversation_id : Text, after : ?Nat64) : async [Types.Message] {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
-    if (not canReadTeamMessages(caller, conversation_id)) Runtime.trap("Conversation access forbidden");
+    if (not canReadTeamMessages(caller, conversation_id)) throw Error.reject("Conversation access forbidden");
     var filtered : [Types.Message] = [];
     for (m in messages.values()) {
       if (m.conversation_id == conversation_id) {
@@ -1561,10 +1569,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func list_messages_page(conversation_id : Text, after : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let latest = conversationLatestSequence(conversation_id);
@@ -1597,10 +1605,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // (list_messages_page pages forward from the OLDEST message, which is not
   // what a chat screen wants when it first opens.)
   public shared ({ caller }) func list_latest_messages_page(conversation_id : Text, before : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let latest = conversationLatestSequence(conversation_id);
@@ -1644,10 +1652,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // newest matches first. Mirrors the Supabase chat-history search used by
   // chatHistorySearchFetcher.ts so ICP-routed threads get the same feature.
   public shared ({ caller }) func search_messages(conversation_id : Text, needle : Text, limit : Nat16) : async { #Ok : [Types.Message]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
     let lower_needle = Text.toLower(needle);
@@ -1669,10 +1677,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // render "who reacted" and restore reactions on refetch. list_messages_page
   // intentionally stays lightweight; reactions are fetched alongside it.
   public shared ({ caller }) func list_reactions(conversation_id : Text) : async { #Ok : [Types.Reaction]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     var result : [Types.Reaction] = [];
     for (m in messages.values()) {
@@ -1695,9 +1703,9 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok : { page : Types.MessagePage; reactions : [Types.Reaction]; pins : ?[Types.PinnedMessage] };
     #Err : Text;
   } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
-    denyLegacyAccountQuery();
     await* requireChatAccess(caller, conversation_id);
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
@@ -1746,10 +1754,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func unread_count(conversation_id : Text) : async { #Ok : Types.Unread; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(unreadFor(caller, conversation_id))
   
@@ -1907,10 +1915,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func get_group_metadata(conversation_id : Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id) and not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     switch (getGroupMetadataFor(conversation_id)) {
       case (?meta) { #Ok(meta) };
@@ -2022,10 +2030,10 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // A league tag locates an existing private group; it never grants membership.
   public shared ({ caller }) func get_mini_league_chat(club_id : Text, league_id : Text) : async { #Ok : ?Types.GroupSummary; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatClubMember(caller, club_id);
-    denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return #Err("Forbidden");
     let matches = groupMetadata.filter(func(m) = not m.deleted and m.club_id == ?club_id and m.kind == "mini_league:" # league_id and m.members.any(func(p) = p.equal(caller)));
     if (matches.size() > 1) return #Err("Conflicting league chats");
@@ -2060,10 +2068,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func list_groups_by_club(club_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatClubMember(caller, club_id);
-    denyLegacyAccountQuery();
     if (not valid(club_id)) return #Err("Invalid club id");
     if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
     let matches = groupMetadata.filter(func(m) = m.club_id == ?club_id and m.team_id == null and not m.deleted);
@@ -2073,9 +2081,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func list_groups_by_team(team_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
-    denyLegacyAccountQuery();
     if (not valid(team_id)) return #Err("Invalid team id");
     var club_of_team = "";
     for (m in groupMetadata.values()) { if (m.team_id == ?team_id) { club_of_team := Option.get(m.club_id, "") } };
@@ -2094,10 +2102,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // (participants or group members) so a caller only sees who has read
   // messages in conversations they belong to.
   public shared ({ caller }) func list_read_receipts(conversation_id : Text) : async { #Ok : [Types.Receipt]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not canAccessConversation(caller, conversation_id) and not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(receipts.filter(func(r) = r.conversation_id == conversation_id))
   
@@ -2109,9 +2117,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // bucket into {teams, clubs, groups, dms, broadcast} without a second
   // round-trip per conversation.
   public shared ({ caller }) func my_unread_counts() : async [Types.UnreadSummary] {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
-    denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return [];
     var result : [Types.UnreadSummary] = [];
     for (conversation in conversations.values()) {
@@ -2515,10 +2523,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func get_group_join_policy(conversation_id : Text) : async { join_policy : Text; category : ?Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     joinPolicyOf(conversation_id)
   
     } finally { removalReceiver.leave(caller) };
@@ -2527,10 +2535,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // Club-level groups (no team) a club member may discover: open_to_club or
   // request_to_join, not deleted.
   public shared ({ caller }) func list_open_groups(club_id : Text) : async { #Ok : [{ summary : Types.GroupSummary; join_policy : Text; category : ?Text; requested : Bool }]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatClubMember(caller, club_id);
-    denyLegacyAccountQuery();
     if (not valid(club_id)) return #Err("Invalid club id");
     if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
     var out : [{ summary : Types.GroupSummary; join_policy : Text; category : ?Text; requested : Bool }] = [];
@@ -2596,10 +2604,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func list_join_requests(conversation_id : Text) : async { #Ok : [Types.JoinRequest]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
     #Ok(joinRequests.filter(func(r) = r.conversation_id == conversation_id))
   
@@ -2753,9 +2761,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func get_group_metadata_multi(conversation_ids : [Text]) : async { #Ok : [Types.GroupMetadata]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
-    denyLegacyAccountQuery();
     if (conversation_ids.size() > 300) return #Err("Too many ids");
     var out : [Types.GroupMetadata] = [];
     for (id in conversation_ids.values()) {
@@ -2770,9 +2778,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func list_groups_by_clubs(club_ids : [Text]) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
-    denyLegacyAccountQuery();
     if (club_ids.size() > 200) return #Err("Too many ids");
     for (club in club_ids.values()) { await* requireChatClubMember(caller, club) };
     let allowed = club_ids.filter(func(c) = valid(c) and canBrowseClubGroups(caller, c));
@@ -2785,10 +2793,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func get_mute_preference(conversation_id : Text) : async Bool {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return false;
     for (m in mutePreferences.values()) {
       if (m.user.equal(caller) and m.conversation_id == conversation_id) { return m.muted };
@@ -3005,10 +3013,10 @@ persistent actor class Main(governorInit : Principal) = this {
   /// Location-only lookup for group routing: which club owns this chat, if
   /// it lives in this canister. Participants only; null when not held here.
   public shared ({ caller }) func read_conversation_club(conversation_id : Text) : async { #Ok : ?Text; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (Principal.isAnonymous(caller)) return #Err("Sign in required");
     switch (findConversationIndex(conversation_id)) {
       case null { #Ok(null) };
@@ -3035,10 +3043,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func messages_since(conversation_id : Text, since_ms : Nat64) : async { #Ok : [Types.MessageWithReactions]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     var result : [Types.MessageWithReactions] = [];
     for (m in messages.values()) {
@@ -3219,9 +3227,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // ===================== Per-club unread breakdown =====================
 
   public shared ({ caller }) func unread_count_by_club(principal : Principal) : async { #Ok : [Types.ClubUnreadSummary]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
-    denyLegacyAccountQuery();
     if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
     var result : [Types.ClubUnreadSummary] = [];
     for (conversation in conversations.values()) {
@@ -3243,9 +3251,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // ===================== Recent conversations rail =====================
 
   public shared ({ caller }) func recent_conversations(principal : Principal, limit : Nat16) : async { #Ok : [Types.RecentConversation]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
-    denyLegacyAccountQuery();
     if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid limit");
     var entries : [Types.RecentConversation] = [];
@@ -3604,6 +3612,7 @@ persistent actor class Main(governorInit : Principal) = this {
         };
       };
     };
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     if (versions.size() > 16) return #Err("Too many platforms");
     for ((platform, version) in versions.values()) {
       if (not valid(platform) or not valid(version)) return #Err("Invalid version entry");
@@ -3790,10 +3799,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // heartbeat within the last 150 seconds. Mirrors the Supabase presence
   // window so both backends report comparable numbers.
   public shared ({ caller }) func online_count(conversation_id : Text) : async { #Ok : Nat64; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     let now = nowMs();
@@ -3843,10 +3852,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // Live typing users for a conversation, excluding the caller and any ping
   // older than TYPING_TTL_MS. Polled by the frontend on a short interval.
   public shared ({ caller }) func list_typing(conversation_id : Text) : async { #Ok : [Types.TypingUser]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     let now = nowMs();
@@ -3907,10 +3916,10 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func list_pinned_messages(conversation_id : Text) : async { #Ok : [Types.PinnedMessage]; #Err : Text } {
+    denyLegacyAccountQuery();
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await* requireChatAccess(caller, conversation_id);
-    denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(pinnedMessages.filter(func(p) = p.conversation_id == conversation_id))
@@ -4228,7 +4237,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     await* requireChatAccess(caller, conversation_id);
-    if (not canReadTeamMessages(caller, conversation_id)) Runtime.trap("Conversation access forbidden");
+    if (not canReadTeamMessages(caller, conversation_id)) throw Error.reject("Conversation access forbidden");
     var filtered : [Types.Message] = [];
     for (m in messages.values()) {
       if (m.conversation_id == conversation_id) {
@@ -4544,6 +4553,7 @@ persistent actor class Main(governorInit : Principal) = this {
         };
       };
     };
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     result
   
     } finally { removalReceiver.leave(caller) };
@@ -4687,6 +4697,7 @@ persistent actor class Main(governorInit : Principal) = this {
         switch (getGroupMetadataFor(id)) { case (?meta) { out := out.concat([meta]) }; case null {} };
       };
     };
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     #Ok(out)
   
     } finally { removalReceiver.leave(caller) };
@@ -4702,6 +4713,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let matches = groupMetadata.filter(func(m) =
       m.team_id == null and not m.deleted and (switch (m.club_id) { case (?c) allowed.any(func(a) = a == c); case null false })
     );
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     #Ok(Array.map<Types.GroupMetadata, Types.GroupSummary>(matches, func(m) = toGroupSummary(caller, m)))
   
     } finally { removalReceiver.leave(caller) };
@@ -4779,6 +4791,7 @@ persistent actor class Main(governorInit : Principal) = this {
         };
       };
     };
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     #Ok(result)
   
     } finally { removalReceiver.leave(caller) };
@@ -4800,6 +4813,7 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     let sorted = entries.sort(func(a, b) = Nat64.compare(b.last_message_sequence, a.last_message_sequence));
     let take = if (sorted.size() < Nat16.toNat(limit)) sorted.size() else Nat16.toNat(limit);
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
     #Ok(Array.tabulate<Types.RecentConversation>(take, func(i) = sorted[i]))
   
     } finally { removalReceiver.leave(caller) };

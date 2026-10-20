@@ -56,7 +56,7 @@ try {
   const scheduled = ok(await chat.actor.register_scheduled_message(conversation.id, 'pending scheduled', 1n));
   assert.equal(ok(await chat.actor.read_account_list_messages_page(conversation.id, [], 10)).messages.length, 1);
   await pic.upgradeCanister({ canisterId: chat.canisterId, wasm: process.env.MESSAGING_DOMAIN_WASM,
-    sender: governor, upgradeModeOptions: { wasm_memory_persistence: 'keep' } });
+    sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   assert.equal(ok(await chat.actor.read_account_list_messages_page(conversation.id, [], 10)).messages[0].id, original.id);
   const request = { account_id: 'removed-account', generation: 7n, inventory_digest: new Uint8Array(32).fill(9), subjects: [removed] };
   relay.actor.setPrincipal(governor);
@@ -109,7 +109,7 @@ try {
   // Restart/upgrade before coordinator retries must retain denial without
   // touching historical messages, unrelated account or identity authority.
   await pic.upgradeCanister({ canisterId: chat.canisterId, wasm: process.env.MESSAGING_DOMAIN_WASM,
-    sender: governor, upgradeModeOptions: { wasm_memory_persistence: 'keep' } });
+    sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   chat.actor.setPrincipal(removed);
   await denied(() => chat.actor.read_account_list_messages_page(conversation.id, [], 10));
   await denied(() => chat.actor.send_message(conversation.id, 'after restart', 'restart', [], []));
