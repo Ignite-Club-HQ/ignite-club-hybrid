@@ -38,7 +38,7 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
  'home_score',CASE WHEN v.visible THEN CASE WHEN g.competition_id IS NULL THEN g.home_score
  ELSE CASE WHEN g.competition_side='away' THEN r.away_score ELSE r.home_score END END END,
  'away_score',CASE WHEN v.visible THEN CASE WHEN g.competition_id IS NULL THEN g.away_score
- ELSE CASE WHEN g.competition_side='away' THEN r.home_score ELSE r.away_score END END END END,
+ ELSE CASE WHEN g.competition_side='away' THEN r.home_score ELSE r.away_score END END END,
  'scores_hidden',NOT v.visible,'period_scores',CASE WHEN v.visible THEN g.period_scores ELSE '[]'::jsonb END,
  'player_stats',CASE WHEN v.visible THEN g.player_stats ELSE public.mask_history_players(g.player_stats) END,
  'mvp_player_id',g.mvp_player_id,'mvp_player_name',g.mvp_player_name,'notes',CASE WHEN v.visible THEN g.notes END,

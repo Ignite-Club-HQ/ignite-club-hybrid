@@ -12,7 +12,7 @@ export async function readCompetitionPlayHQ(competitionId:string):Promise<PlayHQ
 }
 export async function claimCompetitionPlayHQ(competitionId:string,playerId:string,tenant="default"){
  await withFeatureBackend("competitions",{
-  supabase:async()=>{const {error}=await supabase.from("playhq_player_links").insert({tenant,playhq_player_id:playerId,claimed_by:(await supabase.auth.getUser()).data.user?.id??"",user_id:(await supabase.auth.getUser()).data.user?.id??"",confirmed_at:new Date().toISOString()});if(error)throw error;},
+  supabase:async()=>{const {data,error}=await supabase.auth.getUser();if(error)throw error;if(!data.user)throw new Error("Sign in to claim a player");const {error:claimError}=await supabase.from("playhq_player_links").insert({tenant,playhq_player_id:playerId,claimed_by:data.user.id,user_id:data.user.id,confirmed_at:new Date().toISOString()});if(claimError)throw claimError;},
   icp:async(ctx)=>{const {claimLiveCompetitionPlayHQ}=await import("@/live/features/competitions");await claimLiveCompetitionPlayHQ(ctx,competitionId,tenant,playerId);},
  },{competitionId,writeKey:"once",attempts:1});
 }
