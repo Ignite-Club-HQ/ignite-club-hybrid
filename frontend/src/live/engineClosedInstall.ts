@@ -36,6 +36,7 @@ export function engineInstallBinding(m: EngineInstallManifest): string {
   if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Engine HTTPS origin required');
   if (!m.deploymentId.trim() || !m.groupId.trim()) throw new Error('Deployment and group required');
   [m.subnetId, m.operator, m.proxyCanisterId, m.identityAccess, m.pushWorker, ...m.liveCanisters].forEach(principal);
+  if (new Set(m.liveCanisters).size !== m.liveCanisters.length) throw new Error('Duplicate live engine inventory');
   if (new Set([m.proxyCanisterId, m.identityAccess, m.pushWorker]).size !== 3) throw new Error('Distinct shared services required');
   for (const d of ENGINE_INSTALL_SERVICES) if (!/^[a-f0-9]{64}$/.test(m.moduleHashes[d] ?? '')) throw new Error(`Exact module hash required: ${d}`);
   return JSON.stringify([m.deploymentId, m.groupId, url.origin, m.subnetId, m.operator, m.proxyCanisterId,
@@ -44,6 +45,7 @@ export function engineInstallBinding(m: EngineInstallManifest): string {
 
 export async function runEngineClosedInstall(m: EngineInstallManifest, start: EngineInstallJournal,
   t: EngineClosedTransport, save: (j: EngineInstallJournal) => Promise<void>, operation: () => string): Promise<EngineInstallJournal> {
+  m = structuredClone(m); start = structuredClone(start);
   const binding = engineInstallBinding(m);
   if (start.binding !== binding || start.provision.deploymentId !== m.deploymentId || start.provision.groupId !== m.groupId || start.provision.subnetId !== m.subnetId) throw new Error('Engine install binding changed');
   if (start.provision.registration || ['registered', 'enabled'].includes(start.provision.phase)) throw new Error('Engine installer cannot register or open a group');
@@ -53,6 +55,9 @@ export async function runEngineClosedInstall(m: EngineInstallManifest, start: En
   const verify = async (id: string) => {
     own(id); const s = await t.status(id);
     if (s.subnetId !== m.subnetId || s.controllers.length !== 1 || s.controllers[0] !== m.operator || !s.engineServing || s.cycles !== 0n) throw new Error('Engine controller/subnet/service/zero-cycle evidence invalid');
+    if (s.moduleHash !== null && !/^[a-f0-9]{64}$/.test(s.moduleHash)) throw new Error('Malformed engine module hash');
+    if (typeof s.running !== 'boolean' || typeof s.interfaceVerified !== 'boolean' || s.engineServing !== true ||
+        !Number.isSafeInteger(s.memoryBytes) || s.memoryBytes < 0 || !Number.isSafeInteger(s.capacityBytes) || s.capacityBytes <= s.memoryBytes) throw new Error('Invalid engine capacity/status evidence');
     return s;
   };
   const health = async (id: string, d: EngineInstallService) => {
@@ -67,7 +72,7 @@ export async function runEngineClosedInstall(m: EngineInstallManifest, start: En
     await t.install(id, d, [{ name: '__META_PROJECT', value: m.deploymentId }, { name: '__META_NAME', value: d }, { name: 'PROXY_CANISTER_ID', value: m.proxyCanisterId }]);
     if ((await verify(id)).moduleHash !== m.moduleHashes[d]) throw new Error('Installed module readback mismatch');
   };
-  const checkpoint: ProvisionCheckpoint = p => save({ binding, provision: p });
+  const checkpoint: ProvisionCheckpoint = p => save(structuredClone({ binding, provision: p }));
   // Revalidate every saved ID even on checked resumes. Never trust a phase alone.
   const savedIds = [...Object.values(start.provision.canisters), start.provision.dedicatedBlobStore?.canisterId].filter((id): id is string => !!id);
   if (new Set(savedIds).size !== savedIds.length) throw new Error('Duplicate saved engine inventory');

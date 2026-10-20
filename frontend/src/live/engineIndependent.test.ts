@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Principal } from '@icp-sdk/core/principal';
 import { ENGINE_INSTALL_SERVICES, engineInstallBinding, runEngineClosedInstall, type EngineInstallManifest, type EngineInstallJournal, type EngineClosedTransport, type EngineServiceStatus } from './engineClosedInstall';
-import { collectEngineAcceptance, ENGINE_ACCEPTANCE_CHECKS, type EngineAcceptanceScope } from './engineAcceptance';
+import { collectEngineAcceptance, ENGINE_ACCEPTANCE_CHECKS, MAX_ENGINE_EVIDENCE_BYTES, type EngineAcceptanceScope } from './engineAcceptance';
+import { assessEngineOperationalSafety, type EngineSafetyPolicy } from './engineOperationalSafety';
 import { planClubPlacement } from './engineClubPlacement';
 import { GROUP_DOMAINS } from './groupRouting';
 import { SHIPPED_GATES, activationStatus } from './groupActivation';
@@ -90,6 +91,70 @@ describe('zero-cycle engine closed installation — offline transport', () => {
     }
     expect(w.mutations).toEqual([]);
   });
+  it.each(['domain-install', 'photo-create', 'photo-install', 'configuration'] as const)('retains durable %s intent when acknowledgement persistence fails', async target => {
+    const w = installer(); let armed = false;
+    const save = async (j: EngineInstallJournal) => {
+      const p = j.provision;
+      const hit = target === 'domain-install' ? p.pending?.kind === 'install' && !!p.pending.domain :
+        target === 'photo-create' ? p.pending?.kind === 'create' && !p.pending.domain :
+        target === 'photo-install' ? p.pending?.kind === 'install' && p.pending.operation === 'media_blob_store' :
+        p.pending?.kind === 'configure' && (p.configuration?.completed.length ?? 0) === 5;
+      if (armed && !p.pending) throw new Error('ack disk failure');
+      await w.save(j); if (hit) armed = true;
+    };
+    await expect(runEngineClosedInstall(m, w.start, w.t, save, () => 'op')).rejects.toThrow('ack disk failure');
+    const durable = w.journals.at(-1); if (!durable) throw new Error('missing durable intent');
+    expect(durable.provision.pending).toBeDefined();
+    if (target === 'configuration') expect(durable.provision.configuration?.completed).toHaveLength(5);
+    const before = [...w.mutations];
+    await expect(w.run(durable)).rejects.toThrow('Unresolved'); expect(w.mutations).toEqual(before);
+    expect(durable.provision.registration).toBeUndefined();
+  });
+  it.each(['photo-create', 'photo-install', 'mid-configuration'] as const)('fences %s after a committed mutation with a lost reply', async target => {
+    const w = installer();
+    if (target === 'photo-create') {
+      const original = w.t.create;
+      w.t.create = async a => { const c = await original(a); if (w.status.size === 13) throw new Error('reply lost'); return c; };
+    } else if (target === 'photo-install') {
+      const original = w.t.install;
+      w.t.install = async (...args) => { await original(...args); if (args[1] === 'media_blob_store') throw new Error('reply lost'); };
+    } else {
+      const original = w.t.call; let count = 0;
+      w.t.call = async (...args) => { const reply = await original(...args); if (++count === 6) throw new Error('reply lost'); return reply; };
+    }
+    const stopped = await w.run(); expect(stopped.provision.phase).toBe('failed'); expect(stopped.provision.pending).toBeDefined();
+    if (target === 'mid-configuration') expect(stopped.provision.configuration?.completed).toHaveLength(5);
+    const before = [...w.mutations]; await expect(w.run(stopped)).rejects.toThrow('Unresolved'); expect(w.mutations).toEqual(before);
+  });
+  it.each(['domain-install', 'photo-create', 'photo-install', 'configuration'] as const)('performs no %s mutation when intent persistence fails', async target => {
+    const w = installer(); let before: string[] = [];
+    const save = async (j: EngineInstallJournal) => {
+      const p = j.provision;
+      const hit = target === 'domain-install' ? p.pending?.kind === 'install' && !!p.pending.domain :
+        target === 'photo-create' ? p.pending?.kind === 'create' && !p.pending.domain :
+        target === 'photo-install' ? p.pending?.kind === 'install' && p.pending.operation === 'media_blob_store' : p.pending?.kind === 'configure';
+      if (hit) { before = [...w.mutations]; throw new Error('intent disk failure'); } await w.save(j);
+    };
+    await expect(runEngineClosedInstall(m, w.start, w.t, save, () => 'op')).rejects.toThrow('intent disk failure');
+    expect(w.mutations).toEqual(before);
+  });
+  it('rejects malformed status evidence before installing', async () => {
+    const w = installer(); const original = w.t.status;
+    w.t.status = async id => ({ ...await original(id), moduleHash: 'malformed' });
+    expect((await w.run()).provision.error).toContain('Malformed'); expect(w.mutations).not.toContain('install');
+  });
+  it('refuses a domain ID returned for the dedicated photo store', async () => {
+    const w = installer(); const original = w.t.create;
+    w.t.create = async a => w.status.size === 12 ? { canisterId: id(1), subnetId: a.subnetId } : original(a);
+    const stopped = await w.run(); expect(stopped.provision.error).toContain('Duplicate created');
+    expect(stopped.provision.pending?.kind).toBe('create'); expect(stopped.provision.registration).toBeUndefined();
+    expect(w.mutations.filter(v => v === 'install')).toHaveLength(12);
+  });
+  it('refuses duplicate live inventory before any action', async () => {
+    const w = installer();
+    await expect(runEngineClosedInstall({ ...m, liveCanisters: [id(85), id(85)] }, w.start, w.t, w.save, () => 'op')).rejects.toThrow('Duplicate live');
+    expect(w.mutations).toEqual([]);
+  });
 });
 
 function placement() {
@@ -153,7 +218,9 @@ describe('country/group preparation preserves immutable placement', () => {
 describe('engine acceptance harness', () => {
   const scope: EngineAcceptanceScope = { mode: 'offline', binding: 'fixture-binding', registryRevision: 3n,
     canisterIds: Object.fromEntries(ENGINE_INSTALL_SERVICES.map((d, i) => [d, id(i + 1)])) as EngineAcceptanceScope['canisterIds'] };
-  const good = async (check: typeof ENGINE_ACCEPTANCE_CHECKS[number]) => ({ check, binding: scope.binding, registryRevision: 3n, observedAtMs: 1000, passed: true, evidence: `fixture-${check}` });
+  const good = async (check: typeof ENGINE_ACCEPTANCE_CHECKS[number]) => ({ check, binding: scope.binding, registryRevision: 3n, observedAtMs: 1000, passed: true, evidence: `fixture-${check}`,
+    record: { schema: 1 as const, source: 'fixture' as const, canisterIds: { ...scope.canisterIds }, receipt: `fixture/${check}`,
+      assertions: [{ name: check, expected: 'fixture-pass', observed: 'fixture-pass' }] } });
   it('collects all 19 explicit checks but never authorizes activation', async () => {
     const report = await collectEngineAcceptance(scope, 1000, good);
     expect(report.results).toHaveLength(19); expect(report.offlinePassed).toBe(true);
@@ -169,5 +236,74 @@ describe('engine acceptance harness', () => {
       if (fault === 'unreadable') throw new Error('outage'); return e;
     });
     expect(report.missing).toEqual(['vault-staff-readback']); expect(report.results).toHaveLength(18); expect(report.offlinePassed).toBe(false);
+  });
+  it.each(['oversized', 'empty-assertions', 'mismatch', 'duplicate-assertions', 'foreign-inventory', 'oversized-record'])('rejects %s structured evidence', async fault => {
+    const report = await collectEngineAcceptance(scope, 1000, async check => {
+      const e = await good(check); if (check !== 'vault-staff-readback') return e;
+      if (fault === 'oversized') e.evidence = 'x'.repeat(MAX_ENGINE_EVIDENCE_BYTES + 1);
+      if (fault === 'empty-assertions') e.record.assertions = [];
+      if (fault === 'mismatch') e.record.assertions[0].observed = 'failure';
+      if (fault === 'duplicate-assertions') e.record.assertions.push({ ...e.record.assertions[0] });
+      if (fault === 'foreign-inventory') e.record.canisterIds.club_domain = id(90);
+      if (fault === 'oversized-record') e.record.assertions = Array.from({ length: 20 }, (_, i) => ({ name: `a${i}`, expected: 'x'.repeat(1024), observed: 'x'.repeat(1024) }));
+      return e;
+    });
+    expect(report.missing).toEqual(['vault-staff-readback']); expect(report.activationAuthorized).toBe(false);
+  });
+  it('cannot pass a fixture as real-engine verification', async () => {
+    const report = await collectEngineAcceptance({ ...scope, mode: 'real-engine' }, 1000, good);
+    expect(report.missing).toHaveLength(19); expect(report.independentlyVerified).toBe(false); expect(report.activationAuthorized).toBe(false);
+  });
+  it('never treats structured engine captures as independently verified', async () => {
+    const report = await collectEngineAcceptance({ ...scope, mode: 'real-engine' }, 1000, async check => {
+      const e = await good(check); return { ...e, record: { ...e.record, source: 'engine-capture' as const } };
+    });
+    expect(report.results).toHaveLength(19); expect(report.realEngineVerificationRequired).toBe(true);
+    expect(report.independentlyVerified).toBe(false); expect(report.activationAuthorized).toBe(false);
+  });
+  it.each(['invalid', 'anonymous', 'management', 'duplicate'])('refuses %s inventory before probes', async fault => {
+    const s = structuredClone(scope); let calls = 0;
+    s.canisterIds.club_domain = fault === 'invalid' ? 'not-a-principal' : fault === 'anonymous' ? '2vxsx-fae' : fault === 'management' ? 'aaaaa-aa' : s.canisterIds.vault_domain;
+    await expect(collectEngineAcceptance(s, 1000, async check => { calls++; return good(check); })).rejects.toThrow(); expect(calls).toBe(0);
+  });
+  it('snapshots scope and evidence against caller mutation', async () => {
+    const s = structuredClone(scope); const captured: Awaited<ReturnType<typeof good>>[] = [];
+    const report = await collectEngineAcceptance(s, 1000, async (check, frozen) => {
+      expect(Object.isFrozen(frozen.canisterIds)).toBe(true);
+      s.binding = 'changed'; s.canisterIds.club_domain = id(99);
+      const e = await good(check); captured.push(e); return e;
+    });
+    captured[0].record.assertions[0].observed = 'changed';
+    expect(report.results).toHaveLength(19); expect(report.binding).toBe(scope.binding);
+    expect(report.results[0].record.assertions[0].observed).toBe('fixture-pass');
+  });
+});
+
+describe('offline rental and recovery policy rehearsal', () => {
+  const now = 10_000;
+  const policy: EngineSafetyPolicy = { warningRunwayMs: 3000, urgentRunwayMs: 1000, maxReadingAgeMs: 500, maxBackupAgeMs: 2000, maxRestoreDrillAgeMs: 1000 };
+  const reading = () => ({ binding: 'engine-test', observedAtMs: now, paidThroughMs: now + 4000, serviceRunning: true,
+    automaticPayment: 'healthy' as const, backupAtMs: 9500, restoreDrillAtMs: 9900, backupBinding: 'engine-test', encryptedMediaRecoverable: true });
+  it('assesses an explicit policy without granting activation', () => {
+    const r = assessEngineOperationalSafety('engine-test', now, policy, reading());
+    expect(r.offlinePolicySatisfied).toBe(true); expect(r.activationAuthorized).toBe(false); expect(r.independentlyVerified).toBe(false);
+  });
+  it.each([[3000, 'warning-rental-runway'], [1000, 'urgent-rental-runway'], [0, 'urgent-rental-runway']] as const)('flags exact runway boundary %s', (runway, reason) => {
+    const r = assessEngineOperationalSafety('engine-test', now, policy, { ...reading(), paidThroughMs: now + runway });
+    expect(r.reasons).toContain(reason); expect(r.offlinePolicySatisfied).toBe(false);
+  });
+  it('flags failed automatic payment despite a positive balance', () => {
+    expect(assessEngineOperationalSafety('engine-test', now, policy, { ...reading(), automaticPayment: 'failed' }).reasons).toContain('payment-needs-attention');
+  });
+  it.each(['stale', 'foreign', 'future', 'stopped', 'backup', 'restore', 'keys'] as const)('blocks %s operational evidence', fault => {
+    const r = reading();
+    if (fault === 'stale') r.observedAtMs = now - 501;
+    if (fault === 'foreign') r.binding = 'another-engine';
+    if (fault === 'future') r.observedAtMs = now + 1;
+    if (fault === 'stopped') r.serviceRunning = false;
+    if (fault === 'backup') r.backupBinding = 'another-proxy';
+    if (fault === 'restore') r.restoreDrillAtMs = r.backupAtMs - 1;
+    if (fault === 'keys') r.encryptedMediaRecoverable = false;
+    expect(assessEngineOperationalSafety('engine-test', now, policy, r).offlinePolicySatisfied).toBe(false);
   });
 });

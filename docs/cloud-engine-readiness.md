@@ -33,3 +33,21 @@ Authoritative guidance: ICP skills cloud-engine-canisters and deploy-to-cloud-en
 5. Authority-side immutable new-club placement and existing multi-group release prerequisites, then explicit owner opening approval. No production routing/engine flag was added.
 
 Billing safety: authoritative guidance warns exhausted engine balance can cause **engine deletion with its data**, while failed automatic top-ups can halt it. Urgent rental-runway alerts and tested backup/recovery require real console acceptance before customer placement. Zero canister cycles is normal. Existing photo-bearing clubs stay put. No engine or club was created/moved; no live settings were changed.
+
+## Engine-free hardening — 20 October 2026, 09:12 UTC
+
+- Acceptance now requires versioned fixture/engine-capture records, exact thirteen-canister inventory, receipt locators and bounded unique assertions with matching expected/observed values. Canonical non-anonymous principals and immutable snapshots prevent inventory drift. Fixtures cannot stand in for engine captures. **Suppliers can still fabricate structured captures**: independent verification and activation always remain false, even for complete real-engine reports. Never include secrets or personal data in evidence.
+- Installation snapshots manifest/journal data and rejects malformed module/capacity/status evidence. Interruption tests cover intent-save failure, committed mutation/lost reply and failed acknowledgement persistence across domain installation, dedicated photo-store creation/installation and midway configuration. Unresolved durable intents forbid replay; earlier configuration acknowledgements survive. No automatic reconciliation or pending-intent clearing was added. Configuration acknowledgements still require independent setting readback before release.
+- `engineOperationalSafety.ts` rehearses explicitly supplied rental/backup policies offline: warning/urgent paid-through runway, failed/unknown automatic payment, stale/foreign readings, halted service, stale/foreign backups, restore-drill freshness and recoverable encryption keys. Test thresholds are fixtures, not production defaults or customer guarantees. It reads no console, sends no alerts and authorizes no admission.
+
+### Prepared operator runbook — not an executable installation connection
+
+1. Obtain actual console origin, subnet/API trust, operator identity, proxy/shared IDs and module hashes. Agree rental policy and alert recipients. Never assume the mainnet deploy identity administers the engine.
+2. Connect on the owner's computer for local console sign-in; a remote sandbox needs the documented short-lived delegation first. Do not guess CLI flags or reuse mainnet paid-create commands. The executable console connection remains outstanding and cannot be verified without the engine.
+3. Persist/read back every bound intent before mutation; exclude all live/shared IDs. Install only blank group-owned services, then verify zero cycles, controller, subnet, modules, interfaces and capacity.
+4. Stop on lost replies or journal failures. Reconcile the exact bound create/module/setting receipt through authenticated readback; do not clear pending markers or invent a new operation. Failed disks retain the old durable intent.
+5. Stop checked and unregistered. Independently verify all nineteen real checks, including device notifications, both bounded/cycle-free cross-subnet directions and proxy-bound encrypted readback.
+6. Verify actual rental alerts and encrypted backup/restore under the original proxy/key identity. Ciphertext backups alone do not prove readable recovery; proxy replacement can change keys. Existing photo-bearing clubs stay put.
+7. Complete existing authority/account/group gates and obtain owner opening approval. Country links and offline policy results cannot bypass these requirements.
+
+Validation: 113 focused checks passed in each backend mode; the optional full-service replica test was not enabled. No real engine connection, independent acceptance, delivered alerts or actual encrypted restore is claimed. No live operation or placement change occurred.
