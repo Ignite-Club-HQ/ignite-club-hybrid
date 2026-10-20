@@ -11,7 +11,7 @@
     "budgetCycles": "3000000000000",
     "capacityBytes": 68719476736
   },
-  "phase": "upgrade-mid-upload",
+  "phase": "complete",
   "pending": null,
   "receipts": [
     {
@@ -79,15 +79,38 @@
   "canisterId": "2ylw5-6qaaa-aaaal-qxpxa-cai",
   "initialCycles": "2394966280610",
   "lastFuel": {
-    "cycles": "2383365889567",
-    "freezeReserve": "72403618740",
+    "cycles": "2376352899511",
+    "freezeReserve": "188986417260",
     "reserved": "0",
-    "memory": "60648641"
+    "memory": "212757889"
   },
   "pendingUpload": {
     "id": "upload-3",
     "path": "users/network-test/medua-smoke-002/interrupted",
     "size": 2097152,
     "hash": "c406296b30d433e27c08e2989ad557c7e9ae7825d1bea14c42aa4ef53c9e8a9d"
+  },
+  "summary": {
+    "payloadBytes": 2097152,
+    "objects": 1,
+    "physical": {
+      "indexed_count": "1",
+      "allocated_bytes": "2097152",
+      "enabled": true,
+      "legacy_count": "0"
+    },
+    "realCyclesConsumedSinceInstall": "18613381099",
+    "uploadSamples": 1,
+    "uploadMedianMs": 13531.549369000008,
+    "uploadP95Ms": 13531.549369000008,
+    "verifiedReads": 3,
+    "readP95Ms": 1510.8155939999997,
+    "configuredCapacityBytes": 68719476736,
+    "productionCapacityProven": false,
+    "limitations": [
+      "Synthetic owner paths only; no club entitlement, encryption or UI acceptance.",
+      "Funding ceiling includes retained idle fuel; storage upkeep continues until operator cleanup.",
+      "A configured ceiling and small smoke test do not prove full-volume usable capacity."
+    ]
   }
 }
