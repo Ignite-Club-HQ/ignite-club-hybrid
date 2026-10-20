@@ -12,7 +12,10 @@
     "capacityBytes": 5368709120
   },
   "phase": "fill",
-  "pending": null,
+  "pending": {
+    "kind": "fill",
+    "time": "2026-10-20T07:53:55.886Z"
+  },
   "receipts": [
     {
       "phase": "create",
