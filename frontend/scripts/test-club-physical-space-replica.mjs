@@ -21,7 +21,7 @@ let pic;
 try {
   server = await PocketIcServer.start({ binPath: '/tmp/pocket-ic' });
   pic = await PocketIc.create(server.getUrl());
-  for (const fixture of ['clubPhysicalSpace', 'packedClubBytes']) {
+  for (const fixture of ['clubPhysicalSpace', 'packedClubBytes', 'segmentedClubBytes']) {
     const wasm = join(staging, `${fixture}.wasm`);
     execFileSync(compiler, [...sources, '-o', wasm, `test/${fixture}.test.mo`], { cwd, stdio: 'inherit' });
     const test = await pic.setupCanister({ idlFactory, wasm, sender: governor, controllers: [governor] });
