@@ -14,9 +14,11 @@ import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/dep
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 import { approveTest, assertResume, isUnpaidAttempt, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
 import { createJournalApi } from './media-stage-two-github.mjs';
+import { DEPLOY_PRINCIPAL } from '../../scripts/media-card-funding-policy.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const identity = loadOperatorIdentity(process.env.OPERATOR_PEM_PATH ?? '');
+if (identity.getPrincipal().toText() !== DEPLOY_PRINCIPAL) throw new Error(`Loaded key resolves to ${identity.getPrincipal().toText()}, not the funded deploy identity ${DEPLOY_PRINCIPAL}; nothing was spent`);
 const source = readFileSync(process.env.TEST_WASM_PATH ?? '');
 const wasm = source[0] === 31 && source[1] === 139 ? gunzipSync(source) : source;
 const hash = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');

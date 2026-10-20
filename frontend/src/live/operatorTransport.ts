@@ -8,6 +8,7 @@ import { IDL } from '@icp-sdk/core/candid';
 import { Principal } from '@icp-sdk/core/principal';
 import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
 import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
+import { createPrivateKey } from 'node:crypto';
 import type { ConfigurationTransport } from './groupProvisionConfiguration';
 
 export type OperatorIdentity = Ed25519KeyIdentity | Secp256k1KeyIdentity;
@@ -17,6 +18,16 @@ export type OperatorIdentity = Ed25519KeyIdentity | Secp256k1KeyIdentity;
 export function loadOperatorIdentity(pemPath: string): OperatorIdentity {
   const pem = readFileSync(pemPath, 'utf8');
   if (/BEGIN EC PRIVATE KEY/.test(pem)) return Secp256k1KeyIdentity.fromPem(pem);
+  // PKCS#8 "BEGIN PRIVATE KEY" may hold either curve (icp-cli exports secp256k1 this way);
+  // decode the algorithm instead of assuming Ed25519, which silently yields a different principal.
+  let jwk: { kty?: string; crv?: string; d?: string } | null = null;
+  try { jwk = createPrivateKey(pem).export({ format: 'jwk' }) as typeof jwk; } catch { jwk = null; }
+  if (jwk?.d) {
+    const secret = new Uint8Array(Buffer.from(jwk.d, 'base64url'));
+    if (jwk.kty === 'EC' && jwk.crv === 'secp256k1') return Secp256k1KeyIdentity.fromSecretKey(secret);
+    if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') return Ed25519KeyIdentity.fromSecretKey(secret);
+    throw new Error('Unsupported operator key algorithm');
+  }
   const der = Buffer.from(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64');
   // Raw 32-byte seed; 64-byte secretKey (seed||public) keeps the seed half;
   // SEC1 v2 ("MC4CAQAwBQYDK2VwBCIEIC...") carries the seed as the final 32 bytes.
