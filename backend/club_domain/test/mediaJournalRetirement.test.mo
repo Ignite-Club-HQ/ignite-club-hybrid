@@ -1,0 +1,24 @@
+import Retirement "../src/mediaJournalRetirement";
+import Retained "../src/mediaRetainedQuota";
+import Monthly "../src/mediaQuota";
+import Token "../../shared/MediaJournalToken";
+import Principal "mo:core/Principal";
+let store = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+let ledger = Retained.empty(); let monthly = Monthly.empty(); let state = Retirement.empty();
+assert Retained.register(ledger, store); assert Retained.seal(ledger, store);
+func ok(r : Retained.Result) { switch (r) { case (#Ok(_)) {}; case _ assert false } };
+let token = "r1:1:1:upload";
+ok(Retained.reserve(ledger, store, token, "c", "clubs/c/chat/a", 7, true, 0));
+assert not Retirement.acknowledge(state, ledger, monthly, store, token);
+ok(Retained.settle(ledger, store, token, true));
+assert Retirement.retire(state, ledger, monthly, 4, "").removed == 0; // lost reply
+assert Retirement.acknowledge(state, ledger, monthly, store, token);
+assert Retirement.retire(state, ledger, monthly, 2, "").removed == 0;
+assert Retirement.retire(state, ledger, monthly, 3, "").removed == 1;
+assert Retained.usage(ledger, "c").finalized == 7;
+assert Token.expired(token, 3);
+assert not Token.expired("upload-legacy", 99);
+assert Token.epoch("r1:1:1:upload:extra") == null;
+ok(Retained.cancel(ledger, store, "upload-legacy", "c", "clubs/c/chat/legacy", 1));
+assert not Retirement.acknowledge(state, ledger, monthly, store, "upload-legacy");
+assert Retirement.retire(state, ledger, monthly, 99, "").removed == 0;

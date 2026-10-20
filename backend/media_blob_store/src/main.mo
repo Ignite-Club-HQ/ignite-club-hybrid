@@ -175,6 +175,7 @@ persistent actor MediaBlobStore {
     cancel_retained_media : shared (Text, Text, Text, Nat) -> async RetainedQuota.Result;
     credit_deleted_retained_media : shared (Text, RetainedQuota.Object) -> async RetainedQuota.Result;
     prepare_deleted_retained_media : shared (Text, RetainedQuota.Object) -> async RetainedQuota.Result;
+    acknowledge_retained_media : shared Text -> async Result;
   };
   func retainedService() : ?RetainedService { switch (club_domain_canister) { case (?id) ?(actor(id.toText()) : RetainedService); case null null } };
 
@@ -354,6 +355,7 @@ persistent actor MediaBlobStore {
             case null #Ok;
             case (?latest) {
               if (latest.token != original.token or not latest.removed) return #Err("Deletion receipt changed");
+              switch (await (with timeout = 10) service.acknowledge_retained_media(original.token)) { case (#Err(message)) return #Err(message); case (#Ok) {} };
               retained_deletions.remove(path); bumpInventory(); #Ok
             }
           }
@@ -372,7 +374,7 @@ persistent actor MediaBlobStore {
     let ?club = RetainedProtocol.club(path) else return #Err("Club path required");
     if (retained_deletions.size() >= 100_000) return #Err("Deletion ledger full");
     next_upload_seq += 1;
-    let receipt : RetainedProtocol.Deletion = { token = "delete-" # next_upload_seq.toText(); path; club; bytes = record.length; revision = retained_revisions.get(path) ?? 0; owner = record.owner; removed = false };
+    let receipt : RetainedProtocol.Deletion = { token = "r1:" # currentCycle().toText() # ":" # next_upload_seq.toText() # ":delete"; path; club; bytes = record.length; revision = retained_revisions.get(path) ?? 0; owner = record.owner; removed = false };
     retained_deletions.add(path, receipt);
     await creditDeletion(path)
   };
@@ -560,6 +562,7 @@ persistent actor MediaBlobStore {
           let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
           let ?result = latest.result else return #Err("Missing result");
           quota_operations.add(id, { latest with status = #committed });
+          if (retained_mode == #active) { switch (retainedService()) { case (?retained) { ignore await retained.acknowledge_retained_media(id) }; case null {} } };
           #Ok(result)
         };
         case (#Err(message)) #Err(message)
@@ -595,6 +598,7 @@ persistent actor MediaBlobStore {
           let ?latest = quota_operations.get(id) else return #Err("Missing quota journal");
           quota_operations.add(id, { latest with status = #aborted });
           pending_uploads := pending_uploads.filter(func(u) = u.id != id);
+          if (retained_mode == #active) { switch (retainedService()) { case (?retained) { ignore await retained.acknowledge_retained_media(id) }; case null {} } };
           #Ok
         };
         case (#Err(message)) #Err(message)
@@ -944,7 +948,7 @@ persistent actor MediaBlobStore {
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
     bumpInventory();
     next_upload_seq += 1;
-    let id = "upload-" # Nat64.toText(next_upload_seq);
+    let id = if (retained_mode == #active) "r1:" # currentCycle().toText() # ":" # next_upload_seq.toText() # ":upload" else "upload-" # Nat64.toText(next_upload_seq);
     let upload : PendingUpload = {
       id;
       path;

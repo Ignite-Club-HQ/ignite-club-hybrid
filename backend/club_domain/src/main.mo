@@ -30,6 +30,9 @@ import MediaQuota "mediaQuota";
 import MediaQuotaCutover "mediaQuotaCutover";
 import MediaRetainedQuota "mediaRetainedQuota";
 import MediaRetainedCutover "mediaRetainedCutover";
+import MediaJournalRetirement "mediaJournalRetirement";
+import MediaJournalToken "../../shared/MediaJournalToken";
+import MediaGrowthReservations "mediaGrowthReservations";
 import MembershipPage "membershipPage";
 import MembershipIndex "membershipIndex";
 
@@ -107,6 +110,9 @@ persistent actor class Main(governorInit : Principal) = this {
   var mediaQuotaStores : [Principal];
   var mediaQuotaCutover : MediaQuotaCutover.State;
   var mediaRetainedState : MediaRetainedCutover.State;
+  var mediaJournalState : MediaJournalRetirement.State;
+  var mediaGrowthState : MediaGrowthReservations.State;
+  transient let growthRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL") == ?"1";
   transient let retainedRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL") == ?"1";
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
@@ -4461,6 +4467,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (id == "" or id.size() > 128) return #Err("Invalid club id");
     if (name == "" or name.size() > 160) return #Err("Invalid club name");
     if (profiles.any(func(p) = p.id == id)) return #Err("Club already exists");
+    if (growthRehearsal and not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, id, mediaGrowthState.freeBytes)) return #Err("Verified group growth capacity required");
     let profile : Types.ClubProfile = {
       id; name; slug; description; sport;
       created_at_ms = nowMs();
@@ -5527,6 +5534,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func reserve_retained_media(token : Text, path : Text, bytes : Nat) : async MediaRetainedQuota.Result {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token");
     let segments = Iter.toArray(path.split(#char '/'));
     if (segments.size() < 3 or segments[0] != "clubs") return #Err("Club path required");
     let club = segments[1];
@@ -5540,15 +5548,41 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func cancel_retained_media(token : Text, club : Text, path : Text, bytes : Nat) : async MediaRetainedQuota.Result {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token");
     MediaRetainedQuota.cancel(mediaRetainedState.ledger, caller, token, club, path, bytes)
   };
   public shared ({ caller }) func credit_deleted_retained_media(token : Text, entry : MediaRetainedQuota.Object) : async MediaRetainedQuota.Result {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token");
     MediaRetainedQuota.deleted(mediaRetainedState.ledger, caller, token, entry)
   };
   public shared ({ caller }) func prepare_deleted_retained_media(token : Text, entry : MediaRetainedQuota.Object) : async MediaRetainedQuota.Result {
     if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    if (mediaRetainedState.ledger.operations.get(caller.toText() # "\u{1f}" # token) == null and MediaJournalToken.expired(token, Int.abs(Time.now()) / MediaQuota.cycleNs)) return #Err("Expired retained token");
     MediaRetainedQuota.prepareDeleted(mediaRetainedState.ledger, caller, token, entry)
+  };
+  public shared ({ caller }) func acknowledge_retained_media(token : Text) : async { #Ok; #Err : Text } {
+    if (not retainedRehearsal or not MediaRetainedCutover.ready(mediaRetainedState, caller)) return #Err("Registered retained store required");
+    if (MediaJournalRetirement.acknowledge(mediaJournalState, mediaRetainedState.ledger, mediaQuotaCutover.ledger, caller, token)) #Ok else #Err("Both ledgers must be settled")
+  };
+  public shared ({ caller }) func retire_retained_media_records(cursor : Text) : async { #Ok : { removed : Nat; cursor : Text }; #Err : Text } {
+    if (not retainedRehearsal or not isGovernor(caller) or not mediaRetainedState.active) return #Err("Local retained governor required");
+    #Ok(MediaJournalRetirement.retire(mediaJournalState, mediaRetainedState.ledger, mediaQuotaCutover.ledger, Int.abs(Time.now()) / MediaQuota.cycleNs, cursor))
+  };
+  // Local operator attestation only: exact club list, all-store baseline and
+  // conservative global allocator overhead; never a production capacity flag.
+  public shared ({ caller }) func configure_media_growth(usable : Nat, unassigned : Nat, free_bytes : Nat, clubs : [Text]) : async { #Ok; #Err : Text } {
+    if (not growthRehearsal or not retainedRehearsal or not isGovernor(caller) or not mediaRetainedState.active) return #Err("Local active retained governor required");
+    if (mediaGrowthState.configured or usable == 0 or free_bytes == 0 or clubs.size() != profiles.size() or clubs.size() > 100_000) return #Err("Immutable complete growth baseline required");
+    let candidate = MediaGrowthReservations.empty(); candidate.configured := true; candidate.usable := usable; candidate.unassigned := unassigned; candidate.freeBytes := free_bytes;
+    for (club in clubs.values()) {
+      if (not profiles.any(func(p) = p.id == club) or candidate.commitments.get(club) != null) return #Err("Exact club inventory required");
+      let pro = clubSubscriptions.any(func(s) = s.club_id == club and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial));
+      let allowance = if (pro) MediaRetainedQuota.baseBytes + clubStorageGb(club).toNat() * MediaRetainedQuota.gib else free_bytes;
+      if (not MediaGrowthReservations.reserve(candidate, mediaRetainedState.ledger, club, allowance)) return #Err("Insufficient physical growth capacity")
+    };
+    if (MediaGrowthReservations.committed(candidate) > usable) return #Err("Allocator overhead exceeds capacity");
+    mediaGrowthState := candidate; #Ok
   };
 
   public shared ({ caller }) func register_media_quota_store(store : Principal) : async { #Ok; #Err : Text } {
@@ -5654,6 +5688,11 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     auth(caller);
     if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Platform admin required");
+    if (growthRehearsal) {
+      let pro = item.is_pro or item.admin_pro_override or item.is_pro_football or item.admin_pro_football_override or item.is_trial;
+      let allowance = if (pro) MediaRetainedQuota.baseBytes + clubStorageGb(item.club_id).toNat() * MediaRetainedQuota.gib else mediaGrowthState.freeBytes;
+      if (not profiles.any(func(p) = p.id == item.club_id) or not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, item.club_id, allowance)) return #Err("Verified group growth capacity required")
+    };
     clubSubscriptions := clubSubscriptions.filter(func(s) = s.club_id != item.club_id);
     clubSubscriptions := clubSubscriptions.concat([item]);
     #Ok(item)
@@ -5923,6 +5962,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let gb : Nat32 = switch (promo.storage_gb) { case (?g) g; case null 0 };
     if (gb == 0) return #Err("This promo code does not grant storage");
     let total = clubStorageGb(club_id) + gb;
+    if (growthRehearsal and not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, club_id, MediaRetainedQuota.baseBytes + total.toNat() * MediaRetainedQuota.gib)) return #Err("Verified group growth capacity required");
     clubStorageAddons := clubStorageAddons.filter(func((c, _) : (Text, Nat32)) : Bool = c != club_id).concat([(club_id, total)]);
     promoRedemptions := promoRedemptions.concat([{
       promo_id = promo.id; target_id = "club-storage:" # club_id; redeemed_by = caller; redeemed_at_ms = nowMs(); expires_at_ms = (0 : Nat64);
