@@ -166,6 +166,17 @@ try {
  // Configuration refuses a partial baseline; no silent reserve for omitted clubs.
  denied(await r.configure_group_media_growth('g',overhead+base*2n+2048n,overhead,2048n,[['c',base*2n]],revision));
  ok(await r.configure_group_media_growth('g',overhead+base*2n+2048n,overhead,2048n,[['c',base*2n],['c2',2048n]],revision));
+ // An aggregate budget cannot admit new clubs or publish increased promises.
+ denied(await r.place_my_new_club('00000000-0000-4000-8000-000000000002','local'));
+ const baseline=[['c',base*2n],['c2',2048n]];
+ denied(await r.configure_store_media_growth('g',stores[1].canisterId,overhead+base*2n+2048n,overhead,baseline,revision,1n));
+ denied(await r.configure_store_media_growth('g',stores[0].canisterId,overhead+base*2n+2048n,overhead,[['c',base*2n]],revision,1n));
+ denied(await r.configure_store_media_growth('g',stores[0].canisterId,overhead+base*2n+2048n,overhead,[['c',base*2n-1n],['c2',2048n]],revision,1n));
+ r.setPrincipal(other);
+ denied(await r.configure_store_media_growth('g',stores[0].canisterId,overhead+base*2n+2048n,overhead,baseline,revision,1n));
+ r.setPrincipal(governor);
+ ok(await r.configure_store_media_growth('g',stores[0].canisterId,overhead+base*2n+2048n,overhead,baseline,revision,1n));
+ denied(await r.configure_store_media_growth('g',stores[0].canisterId,overhead+base*4n,overhead,baseline,revision,2n));
  denied(await c.save_club_subscription(subscription)); // binding mandatory
  ok(await c.configure_media_growth_router(router.canisterId,'g','local'));
  denied(await c.configure_media_growth_router(router.canisterId,'foreign','local'));
@@ -190,5 +201,6 @@ try {
  const productionRouter=await pic.setupCanister({idlFactory:routerIdl,wasm:routerWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor}])});
  productionRouter.actor.setPrincipal(governor);
  denied(await productionRouter.actor.configure_group_media_growth('g',100n,0n,1n,[],0n));
+ denied(await productionRouter.actor.configure_store_media_growth('g',stores[0].canisterId,100n,0n,[],0n,1n));
  console.log('PASS: authenticated exact two-store baseline, combined pending/retained accounting, branding, replacement, deletion preparation/outage/upgrade, commit recovery, free monthly limits, retention credits and production activation refusal.');
 } finally {await server.stop();}

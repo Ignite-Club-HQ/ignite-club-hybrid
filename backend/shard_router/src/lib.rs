@@ -872,6 +872,7 @@ mod tests {
         TEST_GROWTH.with(|v| *v.borrow_mut() = true);
         let mut g = groups::tests::group("growth-g", 0);
         g.target_alias = "growth-local".into();
+        g.photo_store = Some(Principal::from_slice(&[240]));
         GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(), encode(&g)));
         let authority = g.domains[0].canister;
         save_growth(&media_growth::Budget { group_id:g.id.clone(),target_alias:g.target_alias.clone(),authority,usable:100,fixed:20,free_club:40,commitments:Default::default() });
