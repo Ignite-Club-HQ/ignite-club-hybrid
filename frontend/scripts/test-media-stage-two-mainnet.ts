@@ -12,7 +12,7 @@ import { loadOperatorIdentity } from '../src/live/operatorTransport';
 import { mainnetInstallCalls } from '../src/live/icpInstallCalls';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
-import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, isResumableFill, isTransientReject, assertTarget, assertFuel, assertAffordable, isOutOfCycles, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
+import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, isResumableFill, isTransientReject, assertTarget, assertFuel, assertAffordable, isOutOfCycles, environmentFor, isSmokeScenario, LEDGER_FEE } from './media-stage-two-policy.mjs';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { DEPLOY_PRINCIPAL } from '../../scripts/media-card-funding-policy.mjs';
 import { recoveryBinding, drainTestUploads, reconcileFill, settledBatch } from './media-stage-two-recovery.mjs';
@@ -249,7 +249,7 @@ try {
     ok(await a.put_chunk(aborted, 0, Buffer.alloc(CHUNK))); ok(await a.abort_upload(aborted));
     assert.equal((await a.get_usage()).total_bytes, 0n); return { hashReadback: true, unauthorizedDeleteDenied: true, abortVerified: true };
   });
-  if (binding.scenario !== 'smoke') {
+  if (!isSmokeScenario(binding.scenario)) {
     await phase('fill', async () => {
       const sizes = binding.scenario === 'tiny' ? [1024] : [MiB, 2 * MiB, 400 * 1024, 4 * MiB, 8 * MiB, 2 * MiB];
       const max = binding.scenario === 'tiny' ? 10000 : 4000; const start = performance.now(); let sawRefusal = false;
@@ -313,6 +313,7 @@ try {
     await m.install_code({ mode: { upgrade: [{ skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] }] }, canister_id: pid(state.canisterId),
       wasm_module: wasm, arg: IDL.encode([], []), sender_canister_version: [] });
     const after = await proof(); assert.ok(after.version > before.version);
+    assert.equal((await a.get_usage()).capacity_limit_bytes, BigInt(binding.capacityBytes));
     for (let i = 1; i < 3; i++) ok(await a.put_chunk(id, i, bytes.subarray(i * CHUNK, (i + 1) * CHUNK)));
     const r = ok(await a.finalize_upload(id)); assert.equal(r.content_hash, hash(bytes)); state.objects[path] = { size: bytes.length, hash: r.content_hash };
     await verify(path); for (const sample of keepSamples) await verify(sample);
@@ -322,7 +323,8 @@ try {
   state.summary = { payloadBytes: total(), objects: Object.keys(state.objects).length, physical: await a.stable_storage_status(),
     realCyclesConsumedSinceInstall: BigInt(state.initialCycles) - (await fuel()).cycles, uploadSamples: uploads.length,
     uploadMedianMs: percentile(uploads, .5), uploadP95Ms: percentile(uploads, .95), verifiedReads: reads.length, readP95Ms: percentile(reads, .95),
-    productionCapacityProven: false, limitations: ['Synthetic owner paths only; no club entitlement, encryption or UI acceptance.', 'Funding ceiling includes retained idle fuel; storage upkeep continues until operator cleanup.', 'This run does not prove full 32 GiB capacity.'] };
+    configuredCapacityBytes: binding.capacityBytes,
+    productionCapacityProven: false, limitations: ['Synthetic owner paths only; no club entitlement, encryption or UI acceptance.', 'Funding ceiling includes retained idle fuel; storage upkeep continues until operator cleanup.', 'A configured ceiling and small smoke test do not prove full-volume usable capacity.'] };
   state.phase = 'complete'; state.pending = null; await save(); console.log(`PASS isolated ${binding.scenario}; report on ${branch}/${file}`);
 } catch (error) {
   state.error = error instanceof Error ? error.message : 'Test failed';

@@ -6,13 +6,14 @@ export const CALL_RESERVE = 250_000_000_000n;
 export const CONFIRM = 'TEST ISOLATED STORE';
 export function approveTest({ runId, scenario, budgetT, confirm, governor, subnetId, wasmSha256 }) {
   if (!/^[a-z0-9][a-z0-9-]{2,47}$/.test(runId ?? '')) throw new Error('Use a unique 3–48 character test id');
-  if (!['smoke', 'mixed', 'tiny'].includes(scenario)) throw new Error('Unknown test scenario');
+  if (!['smoke', 'smoke64', 'mixed', 'tiny'].includes(scenario)) throw new Error('Unknown test scenario');
   if (confirm !== CONFIRM) throw new Error('Explicit isolated-store spending confirmation required');
   if (!/^(?:[2-9]|1[0-9]|20)$/.test(String(budgetT))) throw new Error('Approve a whole-number funding ceiling from 2 to 20T cycles');
   if (!governor || governor === '2vxsx-fae' || !subnetId || !/^[a-f0-9]{64}$/.test(wasmSha256)) throw new Error('Complete operator, subnet and build binding required');
   return { version: 1, runId, scenario, governor, subnetId, wasmSha256, network: 'ic', host: 'https://icp-api.io',
-    budgetCycles: (BigInt(budgetT) * 1_000_000_000_000n).toString(), capacityBytes: scenario === 'tiny' ? 512 * 1024 ** 2 : 5 * GiB };
+    budgetCycles: (BigInt(budgetT) * 1_000_000_000_000n).toString(), capacityBytes: scenario === 'smoke64' ? 64 * GiB : scenario === 'tiny' ? 512 * 1024 ** 2 : 5 * GiB };
 }
+export function isSmokeScenario(scenario) { return scenario === 'smoke' || scenario === 'smoke64'; }
 export function environmentFor(binding) {
   return [{ name: 'GOVERNOR_PRINCIPAL', value: binding.governor }, { name: 'IGNITE_MEDIA_LARGE_CAPACITY', value: '1' }];
 }
@@ -74,7 +75,7 @@ export function isResumableFill(saved, binding) {
   const phases = (saved.receipts ?? []).map(r => r.phase).join(',');
   return saved.phase === 'fill' && saved.pending?.kind === 'fill' && typeof saved.canisterId === 'string'
     && phases === 'create,install,configure-empty,smoke' && saved.receipts[0].result?.canisterId === saved.canisterId
-    && binding.scenario !== 'smoke';
+    && !isSmokeScenario(binding.scenario);
 }
 // Rejections raised before the store ran the call (busy queue, failed self-call) change nothing and may be retried.
 export function isTransientReject(error) {

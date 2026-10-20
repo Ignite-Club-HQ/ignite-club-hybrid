@@ -126,16 +126,16 @@ module {
   public func canAllocate(store : Store, length : Nat) : Bool { canAllocateWithin(store, length, limit) };
   // Bounded proof of reusable *whole* maximum-size roots. Smaller holes
   // deliberately count as zero, even if their aggregate byte sum is large.
-  public func allocatableRoots(store : Store, cap : Nat) : Nat {
-    let cap = Nat.min(cap, physicalLimit);
+  public func allocatableRoots(store : Store, configured : Nat) : Nat {
+    let cap = Nat.min(configured, physicalLimit);
     if (store.end.toNat() > cap) return 0;
     let root = 16_777_216;
     let freeRoots = switch (store.free.get(root)) { case (?rows) rows.size(); case null 0 };
     let aligned = ((store.end.toNat() + root - 1) / root) * root;
     freeRoots + (if (aligned > cap) 0 else (cap - aligned) / root)
   };
-  public func canAllocateWithin(store : Store, length : Nat, cap : Nat) : Bool {
-    let cap = Nat.min(cap, physicalLimit);
+  public func canAllocateWithin(store : Store, length : Nat, configured : Nat) : Bool {
+    let cap = Nat.min(configured, physicalLimit);
     let slot = slotFor(length);
     if (slot > 16_777_216) return false;
     if (availableClass(store, slot, cap) != null) return true;
