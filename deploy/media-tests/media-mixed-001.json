@@ -1102,6 +1102,6 @@
   "recoveryUpdate": {
     "from": "8ea0289f54fb5224c1eb1e17da9242e909d34dd333cfb5f7643bbfaaebf76c9b",
     "to": "dfd4ab701b82e5e69ed4a4077d737d635ce33fc64faf766fecb4f9774da4a433",
-    "status": "pending"
+    "status": "complete"
   }
 }
