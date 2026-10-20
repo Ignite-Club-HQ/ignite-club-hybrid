@@ -16,15 +16,34 @@ const ok = r => { assert.ok('Ok' in r, JSON.stringify(r, (_, v) => typeof v === 
 const hash = b => createHash('sha256').update(b).digest('hex');
 const pct = (v, p) => { const s = [...v].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(s.length * p))] ?? null; };
 const GiB = 1024 ** 3, MiB = 1024 ** 2;
-const server = await PocketIcServer.start({ binPath: process.env.POCKET_IC_BIN || '/tmp/pocket-ic' });
+const selected = (process.env.SCENARIOS || 'large-mixed,large-records').split(',').map(s => s.trim()).filter(Boolean);
+const scenarios = [
+  // Past the old 2 GiB heap ceiling: proves the large mode format at >2 GiB with realistic mixed sizes.
+  { name: 'large-mixed', ceiling: 5 * GiB, sizes: [1 * MiB, 2 * MiB, 400 * 1024, 4 * MiB, 8 * MiB, 2 * MiB], max: 4000 },
+  // Record-count stress: 1 KiB files in 64 KiB slots -> 8,192 records at the 512 MiB ceiling.
+  { name: 'large-records', ceiling: 512 * MiB, sizes: [1024], max: 10000 },
+].filter(s => selected.includes(s.name));
 const results = [];
+const writeReport = () => {
+  let prior = [];
+  try { prior = JSON.parse(readFileSync('/tmp/media-large-store.json', 'utf8')).results || []; } catch { /* first run for this path */ }
+  const merged = [...new Map([...prior, ...results].map(r => [r.name, r])).values()];
+  writeFileSync('/tmp/media-large-store.json', JSON.stringify({
+    environment: 'isolated-pocketic', wasmSha256: hash(readFileSync(wasm)), productionCapacityProven: false, results: merged,
+    limitations: [
+      'Synthetic ciphertext on existing user-path actor methods; not club entitlement, encryption or UI acceptance.',
+      '5 GiB mixed and 512 MiB record-count bounds; not a full 32 GiB fill.',
+      'Assumed workload sizes, not observed customer data; same-size churn only.',
+      '100,000-record actor ceiling not reached (8,192 records max here).',
+      'Local time and simulated aggregate cycles are not mainnet throughput/cost or per-operation instructions.',
+      'No live flags, settings, deployments or club moves changed.',
+    ],
+  }, (_, v) => typeof v === 'bigint' ? String(v) : v, 2) + '\n');
+};
 try {
-  for (const scenario of [
-    // Past the old 2 GiB heap ceiling: proves the large mode format at >2 GiB with realistic mixed sizes.
-    { name: 'large-mixed', ceiling: 5 * GiB, sizes: [1 * MiB, 2 * MiB, 400 * 1024, 4 * MiB, 8 * MiB, 2 * MiB], max: 4000 },
-    // Record-count stress: 1 KiB files in 64 KiB slots -> 8,192 records at the 512 MiB ceiling.
-    { name: 'large-records', ceiling: 512 * MiB, sizes: [1024], max: 10000 },
-  ]) {
+  for (const scenario of scenarios) {
+    // One server per scenario so an earlier scenario's memory cannot pressure the next.
+    const server = await PocketIcServer.start({ binPath: process.env.POCKET_IC_BIN || '/tmp/pocket-ic' });
     const pic = await PocketIc.create(server.getUrl());
     try {
       const fixture = await pic.setupCanister({
@@ -72,6 +91,7 @@ try {
       for (const path of samples) await verify(path);
       for (let round = 0; round < 2; round++) {
         for (let i = 0; i < churn.length; i += 4) {
+          if (i % 200 === 0) console.log(`  ${scenario.name}: churn round ${round + 1}, ${i}/${churn.length} objects`);
           const batch = churn.slice(i, i + 4);
           await Promise.all(batch.map(async ([path]) => { ok(await a.delete_blob(path)); live.delete(path); }));
           await Promise.all(batch.map(async ([path, f]) => assert.equal(await upload(path, f.size), true, 'same-size churn must reuse space')));
@@ -102,18 +122,8 @@ try {
         sameSizeChurnRounds: 2, partialUploadUpgradeRecovered: true,
       });
       console.log(`PASS ${scenario.name}: ${fillObjects} objects; ${usage.total_bytes} payload bytes; ${status.allocated_bytes} physical high-water`);
-    } finally { await pic.tearDown(); }
+    } finally { await pic.tearDown(); await server.stop(); }
   }
-  writeFileSync('/tmp/media-large-store.json', JSON.stringify({
-    environment: 'isolated-pocketic', wasmSha256: hash(readFileSync(wasm)), productionCapacityProven: false, results,
-    limitations: [
-      'Synthetic ciphertext on existing user-path actor methods; not club entitlement, encryption or UI acceptance.',
-      '5 GiB mixed and 512 MiB record-count bounds; not a full 32 GiB fill.',
-      'Assumed workload sizes, not observed customer data; same-size churn only.',
-      '100,000-record actor ceiling not reached (8,192 records max here).',
-      'Local time and simulated aggregate cycles are not mainnet throughput/cost or per-operation instructions.',
-      'No live flags, settings, deployments or club moves changed.',
-    ],
-  }, (_, v) => typeof v === 'bigint' ? String(v) : v, 2) + '\n');
+  writeReport();
   console.log('PASS report /tmp/media-large-store.json; large-store mode NOT certified for mainnet.');
-} finally { await server.stop(); }
+} finally { writeReport(); }
