@@ -20,5 +20,5 @@ Not a full-volume fill or live acceptance.
 
 ## Release
 1. Deploy the new photo store module through the normal mainnet workflow.
-2. Run the small smoke check.
+2. Run **Test larger photo store (isolated mainnet)** with scenario **smoke200**: unique id e.g. `media-200-smoke-001`, budget **3** (maximum upfront funding including fee, not expected spend), confirmation **TEST ISOLATED STORE**. It creates one separate store, sets the 200 GiB ceiling, uploads only a few MiB, verifies read/delete/abort, an unauthorized delete refusal and a memory-preserving upgrade, and checks the 200 GiB setting survived. It never fills the store and never touches a group.
 3. Run `Enlarge Group 1 photo store` with size 200.
