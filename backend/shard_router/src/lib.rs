@@ -180,6 +180,9 @@ fn save_growth(b: &media_growth::Budget) {
 fn verified_store_growth(group: &str) -> Option<media_growth::StoreBudget> {
     let g = group_for(group)?;
     let store = g.photo_store?;
+    if GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).any(|other| other.id != group && other.photo_store == Some(store))) {
+        return None;
+    }
     let authority = g.domains.iter().find(|d| d.domain == "club_domain")?.canister;
     let b: media_growth::StoreBudget = STORE_GROWTH.with(|m| m.borrow().get(&store.as_slice().to_vec()).map(|raw| decode(&raw)))?;
     b.matches(group, &g.target_alias, authority, store).then_some(b)
@@ -897,6 +900,12 @@ mod tests {
         g.photo_store = original;
         GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(),encode(&g)));
         assert_eq!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80),Ok(80));
+        let mut duplicate = g.clone(); duplicate.id = "duplicate-store-group".into();
+        GROUPS.with(|m| m.borrow_mut().insert(duplicate.id.as_bytes().to_vec(),encode(&duplicate)));
+        assert!(verified_store_growth(&g.id).is_none());
+        assert!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80).is_err());
+        GROUPS.with(|m| m.borrow_mut().remove(&duplicate.id.as_bytes().to_vec()));
+        assert!(verified_store_growth(&g.id).is_some());
         TEST_GROWTH.with(|v| *v.borrow_mut() = false);
     }
     #[test]
