@@ -11,8 +11,11 @@
     "budgetCycles": "3000000000000",
     "capacityBytes": 536870912
   },
-  "phase": "approved",
-  "pending": null,
+  "phase": "create",
+  "pending": {
+    "kind": "create",
+    "time": "2026-10-20T09:28:35.279Z"
+  },
   "receipts": [],
   "objects": {}
 }
