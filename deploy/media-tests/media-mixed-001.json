@@ -1225,7 +1225,7 @@
   "transientRejects": 27,
   "error": "The replica returned a rejection error:\n  Request ID: d22406ac3955a7ed6c7baa03e35457a1a29456d0c89236183a24cc31cc8f22de\n  Reject code: 4\n  Reject text: IC0207: Canister 2knbe-saaaa-aaaal-qxpua-cai is out of cycles\n  Error code: IC0406\n\nCall context:\n  Canister ID: 2knbe-saaaa-aaaal-qxpua-cai\n  Method name: finalize_upload\n  HTTP details: {\n  \"ok\": true,\n  \"status\": 200,\n  \"statusText\": \"OK\",\n  \"headers\": [\n    [\n      \"access-control-allow-origin\",\n      \"*\"\n    ],\n    [\n      \"access-control-expose-headers\",\n      \"accept-ranges,content-length,content-range,x-request-id,x-ic-canister-id\"\n    ],\n    [\n      \"content-length\",\n      \"1935\"\n    ],\n    [\n      \"content-type\",\n      \"application/cbor\"\n    ],\n    [\n      \"date\",\n      \"Tue, 20 Oct 2026 08:16:52 GMT\"\n    ],\n    [\n      \"strict-transport-security\",\n      \"max-age=31536000; includeSubDomains\"\n    ],\n    [\n      \"x-content-type-options\",\n      \"nosniff\"\n    ],\n    [\n      \"x-frame-options\",\n      \"DENY\"\n    ],\n    [\n      \"x-ic-canister-id\",\n      \"2knbe-saaaa-aaaal-qxpua-cai\"\n    ],\n    [\n      \"x-request-id\",\n      \"01a15862-77e2-7771-9b3a-b3eaa9224e30\"\n    ]\n  ]\n}",
   "removal": {
-    "phase": "removing",
-    "at": "2026-10-20T18:47:59.463Z"
+    "phase": "removed",
+    "at": "2026-10-20T18:48:15.037Z"
   }
 }
