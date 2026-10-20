@@ -3,17 +3,33 @@
     "version": 1,
     "runId": "media-smoke-001",
     "scenario": "smoke",
-    "governor": "owauw-pbido-zub7z-7tpvl-qf722-6xl7j-i6goi-g4t4g-hh73v-sbvy6-fqe",
+    "governor": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
     "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
     "wasmSha256": "8ea0289f54fb5224c1eb1e17da9242e909d34dd333cfb5f7643bbfaaebf76c9b",
     "network": "ic",
     "host": "https://icp-api.io",
-    "budgetCycles": "5000000000000",
+    "budgetCycles": "3000000000000",
     "capacityBytes": 5368709120
   },
   "phase": "approved",
   "pending": null,
   "receipts": [],
   "objects": {},
-  "error": "Deploy identity lacks approved funding plus ledger fee"
+  "previousUnpaidAttempts": [
+    {
+      "error": "Deploy identity lacks approved funding plus ledger fee",
+      "binding": {
+        "version": 1,
+        "runId": "media-smoke-001",
+        "scenario": "smoke",
+        "governor": "owauw-pbido-zub7z-7tpvl-qf722-6xl7j-i6goi-g4t4g-hh73v-sbvy6-fqe",
+        "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+        "wasmSha256": "8ea0289f54fb5224c1eb1e17da9242e909d34dd333cfb5f7643bbfaaebf76c9b",
+        "network": "ic",
+        "host": "https://icp-api.io",
+        "budgetCycles": "5000000000000",
+        "capacityBytes": 5368709120
+      }
+    }
+  ]
 }
