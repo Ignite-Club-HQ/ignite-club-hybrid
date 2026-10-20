@@ -11,7 +11,7 @@ import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/me
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const wasm = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
-const ok = result => { assert.ok('Ok' in result, JSON.stringify(result)); return result.Ok; };
+const ok = result => { assert.ok('Ok' in result, JSON.stringify(result, (_, v) => typeof v === "bigint" ? String(v) : v)); return result.Ok; };
 const server = await PocketIcServer.start({ binPath: process.env.POCKET_IC_BIN || '/tmp/pocket-ic' });
 try {
   const pic = await PocketIc.create(server.getUrl());

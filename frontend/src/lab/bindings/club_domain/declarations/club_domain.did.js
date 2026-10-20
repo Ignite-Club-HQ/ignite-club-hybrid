@@ -642,6 +642,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
         [],
       ),
+    'acknowledge_retained_media' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'activate_media_quota' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -735,6 +740,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'commit_media_quota' : IDL.Func([IDL.Text], [Result], []),
     'commit_retained_media' : IDL.Func([IDL.Text], [Result__1], []),
+    'configure_media_growth' : IDL.Func(
+        [IDL.Nat, IDL.Nat, IDL.Nat, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_child_for_parent_in_club' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
@@ -2186,6 +2196,16 @@ export const idlFactory = ({ IDL }) => {
               'usage_cursor' : IDL.Text,
               'removed' : IDL.Nat,
             }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'retire_retained_media_records' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'cursor' : IDL.Text, 'removed' : IDL.Nat }),
             'Err' : IDL.Text,
           }),
         ],
