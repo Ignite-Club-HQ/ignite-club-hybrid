@@ -125,8 +125,20 @@ try {
   await denied(() => chat.actor.read_account_list_messages_page(conversation.id, [], 10));
   await denied(() => chat.actor.send_message(conversation.id, 'after restart', 'restart', [], []));
   assert.equal(ok(await drain()).outstanding, 0n);
-  const recoverySnapshot = await pic.takeCanisterSnapshot({ canisterId: chat.canisterId, sender: governor });
-  await pic.loadCanisterSnapshot({ canisterId: chat.canisterId, sender: governor, snapshotId: recoverySnapshot.id });
+  const snapshotType = IDL.Record({ id: IDL.Vec(IDL.Nat8), taken_at_timestamp: IDL.Nat64, total_size: IDL.Nat64 });
+  const management = async (method, type, input, outputs = []) => {
+    const reply = await pic.updateCall({ canisterId: Principal.managementCanister(), sender: governor,
+      method, arg: IDL.encode([type], [input]) });
+    return IDL.decode(outputs, reply);
+  };
+  await pic.stopCanister({ canisterId: chat.canisterId, sender: governor });
+  const [recoverySnapshot] = await management('take_canister_snapshot',
+    IDL.Record({ canister_id: IDL.Principal, replace_snapshot: IDL.Opt(IDL.Vec(IDL.Nat8)) }),
+    { canister_id: chat.canisterId, replace_snapshot: [] }, [snapshotType]);
+  await management('load_canister_snapshot',
+    IDL.Record({ canister_id: IDL.Principal, snapshot_id: IDL.Vec(IDL.Nat8), sender_canister_version: IDL.Opt(IDL.Nat64) }),
+    { canister_id: chat.canisterId, snapshot_id: recoverySnapshot.id, sender_canister_version: [] });
+  await pic.startCanister({ canisterId: chat.canisterId, sender: governor });
   chat.actor.setPrincipal(removed);
   await denied(() => chat.actor.read_account_list_messages_page(conversation.id, [], 10));
   assert.equal(ok(await drain()).outstanding, 0n);
