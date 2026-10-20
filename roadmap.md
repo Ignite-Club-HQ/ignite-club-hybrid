@@ -4,6 +4,8 @@
 
 ### Current priority — owner decision 20 October 2026, 02:14 UTC
 
+- [ ] Owner approved 20 Oct 09:48 UTC — remove fixed scale caps (offline, nothing live): (1) lift 64-group cap with paged registry reads in router/identity/frontend; (2) let account/removal history grow (identity MAX_ACCOUNTS 10k, RemovalReceiver 10k/80k) with bounded paging; (3) load-test router club lookup at large group/club counts; (4) automated fuel top-up planning for many groups (no unattended spending without owner ceiling).
+
 - [x] Audit/fix Supabase Schedule request (20 October 09:34 UTC): confirmed live events.duty_team_id absent; added narrow schema-compatibility retry with unchanged filters and explicit team/club relationship hints. 25 focused checks pass in each backend mode; preview build OK and fallback columns verified against live schema. No schema/permission changes.
 - [ ] Verify corrected Schedule on the owner's signed-in Supabase app after frontend update: authenticated browser verification is unavailable for external unmanaged Supabase; anonymous API reads correctly fail on a protected policy helper and do not verify member results.
 - [x] Engine-free hardening approved 20 October 09:12 UTC: bounded structured evidence, immutable scope/journals, canonical inventory/status checks, domain/photo-store/configuration interruption matrix and explicit rental/backup safety rehearsal. All results non-authorizing and offline; no live placement or opening. Real console transport, independent acceptance, delivered alerts and encrypted restore need the engine and authorized identity; see readiness runbook.
