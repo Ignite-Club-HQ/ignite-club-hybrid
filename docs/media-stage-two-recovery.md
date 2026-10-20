@@ -7,7 +7,8 @@ The workflow's explicit manual confirmation authorizes execution: after the upda
 
 ## Safety boundaries
 - Original module: `8ea0289f54fb5224c1eb1e17da9242e909d34dd333cfb5f7643bbfaaebf76c9b`.
-- Recovery module: `ccac5c84446250e4e43fd05e579dc765369e6e612e3c88369eeb30da9d141f48`.
+- Recovery module: `dfd4ab701b82e5e69ed4a4077d737d635ce33fc64faf766fecb4f9774da4a433`.
+- The recovery fingerprint is the workflow's own pinned build (`icp build media_blob_store` from `deploy/mainnet`, icp-cli 1.7.0, moc 1.16.1). An earlier locally compiled copy differed only in its embedded interface description; program code is byte-identical.
 - Bind original receipt, sole governor, exact subnet, environment and both module hashes; journal upgrade intent before an upgrade that keeps Wasm memory. No reinstall.
 - Inventory is governor-only and refuses configured club services, nonlocal quotas, foreign pending owners/paths and inventories over 64 entries.
 - Validate every pending numeric fill path and declared size before aborting any reservation. Save each exact upload ID before abort and receipt afterward. A lost reply stops; a later run rereads actual inventory rather than guessing IDs.
