@@ -4470,10 +4470,10 @@ persistent actor class Main(governorInit : Principal) = this {
     if (name == "" or name.size() > 160) return #Err("Invalid club name");
     if (profiles.any(func(p) = p.id == id)) return #Err("Club already exists");
     if (growthRehearsal and not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, id, mediaGrowthState.freeBytes)) return #Err("Verified group growth capacity required");
-    if (not (await reserveRouterGrowth(id))) return #Err("Group-wide growth reservation required");
+    if (routerGrowthRehearsal and not (await reserveRouterGrowth(id))) return #Err("Group-wide growth reservation required");
     // The router call can interleave creation/removal; recheck before publish.
     auth(caller);
-    if (removalReceiver.fenced(caller) or profiles.any(func(p) = p.id == id)) return #Err("Club creation changed during reservation");
+    if (removalReceiver.denied(caller) or profiles.any(func(p) = p.id == id)) return #Err("Club creation changed during reservation");
     let profile : Types.ClubProfile = {
       id; name; slug; description; sport;
       created_at_ms = nowMs();
@@ -5738,9 +5738,9 @@ persistent actor class Main(governorInit : Principal) = this {
       if (not profiles.any(func(p) = p.id == item.club_id) or not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, item.club_id, allowance)) return #Err("Verified group growth capacity required")
     };
     let priorSubscriptions = clubSubscriptions;
-    if (not (await reserveRouterGrowth(item.club_id))) return #Err("Group-wide growth reservation required");
+    if (routerGrowthRehearsal and not (await reserveRouterGrowth(item.club_id))) return #Err("Group-wide growth reservation required");
     auth(caller);
-    if (removalReceiver.fenced(caller) or not (isGovernor(caller) or isAppAdmin(caller)) or clubSubscriptions != priorSubscriptions) return #Err("Subscription changed during reservation");
+    if (removalReceiver.denied(caller) or not (isGovernor(caller) or isAppAdmin(caller)) or clubSubscriptions != priorSubscriptions) return #Err("Subscription changed during reservation");
     clubSubscriptions := clubSubscriptions.filter(func(s) = s.club_id != item.club_id);
     clubSubscriptions := clubSubscriptions.concat([item]);
     #Ok(item)
@@ -6012,9 +6012,9 @@ persistent actor class Main(governorInit : Principal) = this {
     let total = clubStorageGb(club_id) + gb;
     if (growthRehearsal and not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, club_id, MediaRetainedQuota.baseBytes + total.toNat() * MediaRetainedQuota.gib)) return #Err("Verified group growth capacity required");
     let priorAddons = clubStorageGb(club_id);
-    if (not (await reserveRouterGrowth(club_id))) return #Err("Group-wide growth reservation required");
+    if (routerGrowthRehearsal and not (await reserveRouterGrowth(club_id))) return #Err("Group-wide growth reservation required");
     auth(caller);
-    if (removalReceiver.fenced(caller) or not (isAdmin(caller, club_id) or isGovernor(caller)) or clubStorageGb(club_id) != priorAddons or not promoCodes.any(func(p) = p == promo)) return #Err("Storage grant changed during reservation");
+    if (removalReceiver.denied(caller) or not (isAdmin(caller, club_id) or isGovernor(caller)) or clubStorageGb(club_id) != priorAddons or not promoCodes.any(func(p) = p == promo)) return #Err("Storage grant changed during reservation");
     clubStorageAddons := clubStorageAddons.filter(func((c, _) : (Text, Nat32)) : Bool = c != club_id).concat([(club_id, total)]);
     promoRedemptions := promoRedemptions.concat([{
       promo_id = promo.id; target_id = "club-storage:" # club_id; redeemed_by = caller; redeemed_at_ms = nowMs(); expires_at_ms = (0 : Nat64);

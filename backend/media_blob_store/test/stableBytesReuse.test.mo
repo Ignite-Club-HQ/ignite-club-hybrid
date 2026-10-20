@@ -6,6 +6,8 @@ import Nat64 "mo:core/Nat64";
 import Blob "mo:core/Blob";
 import Array "mo:core/Array";
 import Stable "../src/stableBytes";
+persistent actor {
+public func runTests() : async () {
 let store : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
 let cap = 262_144;
 let large = Blob.fromArray(Array.repeat<Nat8>(9, cap));
@@ -34,3 +36,5 @@ let ?reused = Stable.writeWithin(store, large, cap) else { assert false; loop {}
 assert reused.offset == 0 and store.end == 262_144;
 assert Stable.read(store, reused, 0, cap) == large;
 assert not Stable.canAllocateWithin(store, 16_777_217, 34_359_738_368);
+};
+};
