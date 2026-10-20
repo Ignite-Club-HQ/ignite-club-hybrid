@@ -209,8 +209,8 @@ async function fetchReportExtrasIcp(
       for (const event of scopedEvents as any[]) {
         const result = await getLiveGameResult(ctx, event.id);
         const gr = result && result.length ? result[0] : null;
-        const homeScore = gr ? Number(gr.home_score) : null;
-        const awayScore = gr ? Number(gr.away_score) : null;
+        const homeScore = gr?.home_score == null ? null : Number(gr.home_score);
+        const awayScore = gr?.away_score == null ? null : Number(gr.away_score);
         const outcome =
           homeScore == null || awayScore == null
             ? null
