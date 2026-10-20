@@ -23,3 +23,6 @@ Run the replica acceptance with the old Wasm at `/tmp/media-stage-two-before.was
 `node frontend/scripts/test-media-stage-two-recovery-replica.mjs`.
 
 This is not proof of successful mainnet recovery or completed mixed/tiny capacity testing. Retain workflow artifacts and durable receipts after execution.
+## Recovery result (2026-10-20 run)
+Recovery executed: upgrade verified, 4 unfinished uploads cleared, 256 objects reconciled, fill continued to 279 objects / 846,168,064 bytes. It then stopped with IC0207 (store out of spendable fuel during a 4-upload burst). The store still holds ~1.44T and accepts calls.
+Cause: uploads cost 2,000 cycles per byte (~2.15T per GiB). A full mixed run (5 GiB fill + two churn rounds ≈ 10 GiB uploaded) needs ~20T+, far above the 5T ceiling. The runner now refuses up front when remaining uploads are unaffordable and counts the frozen reserve.

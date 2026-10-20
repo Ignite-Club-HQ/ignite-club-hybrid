@@ -12,7 +12,7 @@ import { loadOperatorIdentity } from '../src/live/operatorTransport';
 import { mainnetInstallCalls } from '../src/live/icpInstallCalls';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
-import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, isResumableFill, isTransientReject, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
+import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, isResumableFill, isTransientReject, assertTarget, assertFuel, assertAffordable, isOutOfCycles, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { DEPLOY_PRINCIPAL } from '../../scripts/media-card-funding-policy.mjs';
 import { recoveryBinding, drainTestUploads, reconcileFill, settledBatch } from './media-stage-two-recovery.mjs';
@@ -115,8 +115,8 @@ const agent = await HttpAgent.create({ identity, host: binding.host, shouldFetch
 const calls = await mainnetInstallCalls(binding.host, identity);
 const pid = (s: string) => Principal.fromText(s);
 const managementIdl = ({ IDL: I }: { IDL: typeof IDL }) => I.Service({
-  canister_status: I.Func([I.Record({ canister_id: I.Principal })], [I.Record({ cycles: I.Nat, version: I.Nat64,
-    module_hash: I.Opt(I.Vec(I.Nat8)), settings: I.Record({ controllers: I.Vec(I.Principal), environment_variables: I.Vec(I.Record({ name: I.Text, value: I.Text })) }) })], []),
+  canister_status: I.Func([I.Record({ canister_id: I.Principal })], [I.Record({ cycles: I.Nat, version: I.Nat64, idle_cycles_burned_per_day: I.Nat, reserved_cycles: I.Nat, memory_size: I.Nat,
+    module_hash: I.Opt(I.Vec(I.Nat8)), settings: I.Record({ freezing_threshold: I.Nat, controllers: I.Vec(I.Principal), environment_variables: I.Vec(I.Record({ name: I.Text, value: I.Text })) }) })], []),
   install_code: I.Func([I.Record({ mode: I.Variant({ upgrade: I.Opt(I.Record({ skip_pre_upgrade: I.Opt(I.Bool), wasm_memory_persistence: I.Opt(I.Variant({ keep: I.Null, replace: I.Null })) })) }),
     canister_id: I.Principal, wasm_module: I.Vec(I.Nat8), arg: I.Vec(I.Nat8), sender_canister_version: I.Opt(I.Nat64) })], [], []),
 });
@@ -130,8 +130,19 @@ async function proof(module: string | null = expectedModule) {
     [...environmentFor(binding)].sort((x, y) => x.name.localeCompare(y.name)));
   return status;
 }
-async function fuel() {
-  const s = await proof(); assertFuel(binding, s.cycles, BigInt(state.initialCycles)); return s;
+// Cycles the network refuses to spend: idle burn per second × freezing threshold (seconds).
+function freezeReserve(s: any): bigint { return BigInt(s.idle_cycles_burned_per_day) * BigInt(s.settings.freezing_threshold) / 86_400n; }
+let lastFuelLog = 0;
+async function fuel(nextBytes = 0) {
+  const s = await proof(); const reserve = freezeReserve(s);
+  if (Date.now() - lastFuelLog > 60_000) { lastFuelLog = Date.now();
+    console.log(`Fuel ${s.cycles} cycles; frozen reserve ${reserve}; reserved ${s.reserved_cycles}; memory ${s.memory_size} bytes`); }
+  state.lastFuel = { cycles: s.cycles.toString(), freezeReserve: reserve.toString(), reserved: s.reserved_cycles.toString(), memory: s.memory_size.toString() };
+  assertFuel(binding, s.cycles, BigInt(state.initialCycles), nextBytes, reserve); return s;
+}
+async function affordable(remainingBytes: number) {
+  const s = await proof(); assertAffordable(binding, s.cycles, BigInt(state.initialCycles), remainingBytes, freezeReserve(s));
+  console.log(`Fuel ${s.cycles} covers the remaining ~${(remainingBytes / 1024 ** 3).toFixed(2)} GiB of uploads`);
 }
 async function phase(name: string, work: () => Promise<unknown>) {
   const prior = state.receipts.find((r: any) => r.phase === name);
@@ -148,6 +159,7 @@ function total() { return Object.values(state.objects).reduce((s: number, f: any
 async function retry<T>(label: string, call: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try { return await call(); } catch (e) {
+      if (isOutOfCycles(e)) throw new Error(`Test store ran low on fuel during ${label}; stopped (unfinished uploads are cleared on the next resume)`);
       if (!isTransientReject(e) || attempt >= 8) throw e;
       state.transientRejects = (state.transientRejects ?? 0) + 1;
       console.log(`Store busy on ${label} (attempt ${attempt}); retrying`); await new Promise(r => setTimeout(r, 1500 * attempt));
@@ -159,7 +171,7 @@ async function upload(path: string, size: number) {
   const r = await retry('begin_upload', () => a.begin_upload(path, 'application/octet-stream', BigInt(size), Math.ceil(size / CHUNK)));
   if ('Err' in r) { refused[r.Err] = (refused[r.Err] ?? 0) + 1; if (r.Err !== 'StoreFull') throw new Error(`Unexpected refusal: ${r.Err}`); return false; }
   for (let i = 0; i < Math.ceil(size / CHUNK); i++) ok(await retry('put_chunk', () => a.put_chunk(r.Ok, i, bytes.subarray(i * CHUNK, (i + 1) * CHUNK))));
-  const final = await a.finalize_upload(r.Ok);
+  let final; try { final = await a.finalize_upload(r.Ok); } catch (e) { if (isOutOfCycles(e)) throw new Error('Test store ran low on fuel during finalize_upload; stopped (unfinished uploads are cleared on the next resume)'); throw e; }
   if ('Err' in final) { ok(await a.abort_upload(r.Ok)); refused[final.Err] = (refused[final.Err] ?? 0) + 1; if (final.Err !== 'StoreFull') throw new Error(`Unexpected refusal: ${final.Err}`); return false; }
   assert.equal(final.Ok.content_hash, hash(bytes)); assert.equal(final.Ok.content_length, BigInt(size));
   state.objects[path] = { size, hash: final.Ok.content_hash }; uploads.push(performance.now() - started); return true;
@@ -250,10 +262,13 @@ try {
         state.objects = await reconcileFill({ actor: a, prefix, sizes, max, digest: (size: number) => hash(Buffer.alloc(size, size % 251)) });
         console.log(`Cleared ${cleared} unfinished test uploads; reconciled ${Object.keys(state.objects).length} stored objects (${total()} bytes)`); await save();
       }
+      // Fill to capacity, then churn re-uploads half the payload twice (≈ one more full payload).
+      const churnBytes = binding.scenario === 'tiny' ? 0 : binding.capacityBytes;
+      await affordable(Math.max(0, binding.capacityBytes - total()) + churnBytes);
       for (let i = 0; i < max; i += 4) {
         const missing = Array.from({ length: Math.min(4, max - i) }, (_, j) => i + j).filter(index => !state.objects[prefix + index]);
         if (!missing.length) continue;
-        await fuel(); const results = await settledBatch(missing.map(index => upload(prefix + index, sizes[index % sizes.length])));
+        await fuel(missing.reduce((s, index) => s + sizes[index % sizes.length], 0)); const results = await settledBatch(missing.map(index => upload(prefix + index, sizes[index % sizes.length])));
         if (i % 200 === 0) { await save(); console.log(`Fill ${Object.keys(state.objects).length} objects, ${total()} bytes`); }
         if (results.every(x => !x)) { sawRefusal = true; break; }
       }
@@ -265,8 +280,9 @@ try {
     });
     await phase('churn', async () => {
       const chosen = Object.entries(state.objects).filter((_, i) => i % 2 === 0);
+      await affordable(2 * chosen.reduce((s, [, f]: any) => s + f.size, 0));
       for (let round = 0; round < 2; round++) for (let i = 0; i < chosen.length; i += 4) {
-        await fuel(); const batch = chosen.slice(i, i + 4);
+        const batch = chosen.slice(i, i + 4); await fuel(batch.reduce((s, [, f]: any) => s + f.size, 0));
         await settledBatch(batch.map(async ([path]) => { ok(await a.delete_blob(path)); delete state.objects[path]; }));
         await settledBatch(batch.map(async ([path, f]: any) => assert.equal(await upload(path, f.size), true)));
         if (i % 200 === 0) { await save(); console.log(`Churn ${round + 1}: ${i}/${chosen.length}`); }
