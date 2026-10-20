@@ -889,7 +889,7 @@ mod tests {
         assert!(reserve_growth_for(authority,&g.id,"foreign","growth-a",50).is_err());
         assert!(reserve_growth_for(authority,&g.id,&g.target_alias,"unassigned",50).is_err());
         assert_eq!(reserve_growth_for(authority,&g.id,&g.target_alias,"growth-a",80),Ok(80));
-        assert!(assign_group_record("growth-b".into(),g.target_alias,current_revision(),1).is_err());
+        assert!(assign_group_record("growth-b".into(),g.target_alias.clone(),current_revision(),1).is_err());
         assert!(group_assignment_for("growth-b").is_none());
         assert_eq!(growth_budget(&g.id).unwrap().committed(),Ok(100));
         let original = g.photo_store;
