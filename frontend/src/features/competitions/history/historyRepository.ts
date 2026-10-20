@@ -35,11 +35,28 @@ export async function listHistory(scope: { teamId?: string; clubId?: string }, l
   return withFeatureBackend("events", {
     supabase: async () => {
       // The staged SQL introduces this bounded, caller-authorized DTO endpoint.
-      const rpc = supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+      const rpc = supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
       const { data, error } = await rpc("read_game_history", {
         p_team_id: scope.teamId ?? null, p_club_id: scope.clubId ?? null,
         p_limit: Math.max(1, Math.min(limit, 100)),
       });
+      if (error?.code === "PGRST202") {
+        // Compatibility before the preservation migration is installed. This
+        // is still a caller-RLS read, never a retry after authorization denial.
+        let query = supabase.from("game_results")
+          .select("*, events:event_id(id,title,start_time), teams:team_id(id,name,club_id)")
+          .order("played_at", { ascending: false }).limit(Math.min(limit,100));
+        if (scope.teamId) query = query.eq("team_id",scope.teamId);
+        if (!scope.teamId && scope.clubId) {
+          const { data: teams, error: teamError } = await supabase.from("teams").select("id").eq("club_id",scope.clubId);
+          if (teamError) throw teamError;
+          if (!teams?.length) return [];
+          query = query.in("team_id",teams.map((team) => team.id));
+        }
+        const { data: legacy, error: legacyError } = await query;
+        if (legacyError) throw legacyError;
+        return (legacy ?? []).map((row) => ({ ...row, scores_hidden: false })) as unknown as HistoryResult[];
+      }
       if (error) throw new Error(error.message);
       return jsonArray<HistoryResult>(data);
     },
