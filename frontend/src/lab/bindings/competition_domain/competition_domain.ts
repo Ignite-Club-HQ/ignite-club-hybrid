@@ -657,7 +657,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    read_history_score_access(competition_id: string, team_id: string, starts_at_ms: bigint, requester: Principal): Promise<{
+    read_history_score_access(competition_id: string, team_id: string, starts_at_ms: bigint, requester: Principal, manager_only: boolean): Promise<{
         __kind__: "Ok";
         Ok: boolean;
     } | {
@@ -2084,14 +2084,14 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.read_competition_club(arg0);
         return from_candid_variant_n83(result);
     }
-    async read_history_score_access(arg0: string, arg1: string, arg2: bigint, arg3: Principal): Promise<{
+    async read_history_score_access(arg0: string, arg1: string, arg2: bigint, arg3: Principal, arg4: boolean): Promise<{
         __kind__: "Ok";
         Ok: boolean;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.read_history_score_access(arg0, arg1, arg2, arg3);
+        const result = await this.actor.read_history_score_access(arg0, arg1, arg2, arg3, arg4);
         return from_candid_variant_n49(result);
     }
     async read_resource_club(arg0: string, arg1: string): Promise<{

@@ -783,7 +783,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_history_score_access' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Nat64, IDL.Principal],
+        [IDL.Text, IDL.Text, IDL.Nat64, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
         [],
       ),

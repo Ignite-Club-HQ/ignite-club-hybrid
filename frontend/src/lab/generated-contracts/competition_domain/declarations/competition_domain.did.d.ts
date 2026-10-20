@@ -604,7 +604,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_history_score_access' : ActorMethod<
-    [string, string, bigint, Principal],
+    [string, string, bigint, Principal, boolean],
     { 'Ok' : boolean } |
       { 'Err' : string }
   >,

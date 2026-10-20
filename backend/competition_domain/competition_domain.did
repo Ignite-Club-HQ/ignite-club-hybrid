@@ -572,7 +572,7 @@ type Main =
                                            Ok: opt text;
                                          });
    read_history_score_access: (competition_id: text, team_id: text,
-    starts_at_ms: nat64, requester: principal) ->
+    starts_at_ms: nat64, requester: principal, manager_only: bool) ->
     (variant {
        Err: text;
        Ok: bool;
