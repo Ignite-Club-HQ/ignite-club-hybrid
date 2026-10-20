@@ -1890,7 +1890,11 @@ export async function saveLiveGameResult(
 
 export async function getLiveGameResult(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  const result = unwrapCandid(actor.get_game_result(eventId), "Get game result") as unknown as
+  const raw = await unwrapCandid(actor.get_game_result(eventId), "Get game result");
+  const { optionalScore } = await import("@/features/competitions/history/resultVisibility");
+  const result = raw.map((row) => ({ ...row,
+    home_score: optionalScore(row.home_score), away_score: optionalScore(row.away_score),
+  })) as unknown as
     | []
     | [{ mvp_player_name: [] | [string]; player_stats_json?: string; [key: string]: unknown }];
   if (result.length === 0) return result;
