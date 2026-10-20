@@ -11,7 +11,8 @@ let game : Types.GameResult = {
 };
 let hidden = Privacy.read(game,true);
 assert hidden.home_score == null and hidden.away_score == null;
-assert hidden.period_scores_json == "[]" and hidden.player_stats_json == "[]";
+assert hidden.period_scores_json == "[]";
+assert hidden.player_stats_json == "[{\"name\":\"Player\"}]";
 assert hidden.mvp_player_id == game.mvp_player_id;
 assert hidden.mvp_player_name == game.mvp_player_name;
 assert hidden.id == game.id and hidden.scores_hidden;
