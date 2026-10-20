@@ -179,7 +179,7 @@ persistent actor class Main(governorInit : Principal) {
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
-    { score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
+    { playhq_metadata=?playhqMatchMetadata.filter(func(x)=inC(x.competition_id));playhq_stats=?playhqStats.filter(func(x)=inC(x.competition_id));score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
       competitions = competitions.filter(func(x) = x.club_id == c);
       roles = roles.filter(func(x) = inC(x.competition_id));
       entries = entries.filter(func(x) = inC(x.competition_id));
@@ -204,6 +204,8 @@ persistent actor class Main(governorInit : Principal) {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
     scorePrivacySettings := scorePrivacySettings.filter(func(x) = not inC(x.competition_id));
+    playhqMatchMetadata:=playhqMatchMetadata.filter(func(x)=not inC(x.competition_id));
+    playhqStats:=playhqStats.filter(func(x)=not inC(x.competition_id));
     competitions := competitions.filter(func(x) = not (x.club_id == c));
     roles := roles.filter(func(x) = not (inC(x.competition_id)));
     entries := entries.filter(func(x) = not (inC(x.competition_id)));
@@ -235,9 +237,11 @@ persistent actor class Main(governorInit : Principal) {
     let decoded : ?FenceSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
     let privacy = switch (s.score_privacy) { case (?rows) rows; case null [] };
+    let phqMeta=s.playhq_metadata??[];let phqStats=s.playhq_stats??[];
     let c = club;
     let rootC = s.competitions;
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    if(phqMeta.any(func(x)=not inC(x.competition_id) or not s.matches.any(func(m)=m.id==x.match_id and m.competition_id==x.competition_id)) or phqStats.any(func(x)=not phqMeta.any(func(m)=m.match_id==x.match_id and m.game_id==x.game_id and m.tenant==x.tenant and m.competition_id==x.competition_id))) return #Err("Foreign PlayHQ snapshot records");
     if (privacy.any(func(x) = not inC(x.competition_id))
         or s.competitions.any(func(x) = not (x.club_id == c))
         or s.roles.any(func(x) = not (inC(x.competition_id)))
@@ -261,6 +265,7 @@ persistent actor class Main(governorInit : Principal) {
     if (s.competitions.any(func(e) = competitions.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
     scorePrivacySettings := scorePrivacySettings.concat(privacy);
+    playhqMatchMetadata:=playhqMatchMetadata.concat(phqMeta);playhqStats:=playhqStats.concat(phqStats);
     competitions := competitions.concat(s.competitions);
     roles := roles.concat(s.roles);
     entries := entries.concat(s.entries);
@@ -2185,6 +2190,7 @@ persistent actor class Main(governorInit : Principal) {
       if (item.sender.equal(old)) { changed += 1; { item with sender = new } } else item
     });
     var newBulkAccessPrincipals = bulkAccessPrincipals;
+    let newPlayhqClaims=playhqClaims.map(func(c):Types.PlayHQClaim {if(c.user==old){changed+=1;{c with user=new}}else c});
     if (bulkAccessPrincipals.any(func(p) = p.equal(old))) {
       let hasNew = bulkAccessPrincipals.any(func(p) = p.equal(new));
       newBulkAccessPrincipals := bulkAccessPrincipals.filterMap(func(p) : ?Principal {
@@ -2201,6 +2207,7 @@ persistent actor class Main(governorInit : Principal) {
       eoiSubmissions := newEoiSubmissions;
       broadcasts := newBroadcasts;
       bulkAccessPrincipals := newBulkAccessPrincipals;
+      playhqClaims:=newPlayhqClaims;
     };
 
     #ok(changed)
