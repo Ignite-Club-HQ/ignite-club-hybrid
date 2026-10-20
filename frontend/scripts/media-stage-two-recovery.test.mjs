@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recoveryBinding, drainTestUploads, reconcileFill, settledBatch, ORIGINAL_MODULE, RECOVERY_TARGET } from './media-stage-two-recovery.mjs';
+import { recoveryBinding, drainTestUploads, reconcileFill, settledBatch, ORIGINAL_MODULE, RECOVERY_MODULE, RECOVERY_TARGET } from './media-stage-two-recovery.mjs';
 const prefix = 'users/network-test/media-mixed-001/';
 const sizes = [1048576, 2097152, 409600, 4194304, 8388608, 2097152];
 test('only the approved interrupted target accepts matching recovery settings', () => {
   const binding = { runId: 'media-mixed-001', scenario: 'mixed', budgetCycles: '5000000000000', wasmSha256: ORIGINAL_MODULE };
-  const saved = { canisterId: RECOVERY_TARGET, binding }, next = { ...binding, wasmSha256: 'b'.repeat(64) };
+  const saved = { canisterId: RECOVERY_TARGET, binding }, next = { ...binding, wasmSha256: RECOVERY_MODULE };
   assert.deepEqual(recoveryBinding(saved, next), binding);
   assert.equal(recoveryBinding({ ...saved, canisterId: 'live-cai' }, next), null);
   assert.equal(recoveryBinding(saved, { ...next, budgetCycles: '3000000000000' }), null);
+  assert.throws(() => recoveryBinding(saved, { ...next, wasmSha256: 'b'.repeat(64) }), /Unapproved recovery build/);
   assert.throws(() => recoveryBinding({ ...saved, recoveryUpdate: { to: 'c'.repeat(64) } }, next));
 });
 test('unjournaled pending IDs are recovered without losing 256 finalized files', async () => {
