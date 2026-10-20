@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] Owner request 20 Oct 19:43 UTC: minimum 64 GiB checks only—isolated allocator boundary/read/delete/reuse and upgrade/pending/allowance checks; no full paid fill, live resizing or deployment. Report current-ceiling blockers and any missing live acceptance.
+
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 
 ### Current priority — owner decision 20 October 2026, 02:14 UTC
