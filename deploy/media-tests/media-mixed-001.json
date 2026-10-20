@@ -63,7 +63,24 @@
       "time": "2026-10-20T06:36:21.970Z"
     }
   ],
-  "objects": {},
+  "objects": {
+    "users/network-test/media-mixed-001/2": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/0": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/1": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/3": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    }
+  },
   "createdAtNs": "1792478096172000000",
   "canisterId": "2knbe-saaaa-aaaal-qxpua-cai",
   "initialCycles": "4394997667949"
