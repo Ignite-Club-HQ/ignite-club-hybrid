@@ -967,9 +967,10 @@ export default function PlacementAdminSettingsPage() {
                     <Switch
                       id={`target-enabled-${index}`}
                       checked={row.enabled}
+                      disabled={row.kind === 'icp-cloud-engine'}
                       onCheckedChange={(checked) => updateTargetRow(index, { enabled: checked })}
                     />
-                    <Label htmlFor={`target-enabled-${index}`}>Enabled</Label>
+                    <Label htmlFor={`target-enabled-${index}`}>{row.kind === 'icp-cloud-engine' ? 'Activation blocked' : 'Enabled'}</Label>
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => removeTargetRow(index)} aria-label="Remove target">
                     <Trash2 className="h-4 w-4" />
@@ -1004,8 +1005,25 @@ export default function PlacementAdminSettingsPage() {
                     />
                   </div>
                 </div>
+                {row.backend === 'icp' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor={`deployment-id-${index}`}>Deployment ID</Label>
+                      <Input id={`deployment-id-${index}`} value={row.preparation?.deploymentId ?? ''} onChange={e => updateTargetRow(index, { preparation: { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...row.preparation, deploymentId: e.target.value } })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`deployment-subnet-${index}`}>Primary subnet ID</Label>
+                      <Input id={`deployment-subnet-${index}`} value={row.preparation?.primarySubnet ?? ''} onChange={e => updateTargetRow(index, { preparation: { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...row.preparation, primarySubnet: e.target.value } })} />
+                    </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <Label htmlFor={`deployment-groups-${index}`}>Planned group IDs (comma separated)</Label>
+                      <Input id={`deployment-groups-${index}`} value={row.preparation?.groupIds.join(', ') ?? ''} onChange={e => updateTargetRow(index, { preparation: { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...row.preparation, groupIds: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } })} />
+                    </div>
+                  </div>
+                )}
                 {row.kind === "icp-cloud-engine" && (
                   <div className="space-y-2">
+                    <Badge variant="secondary">Preparation only · not verified</Badge>
                     <div className="space-y-1">
                       <Label htmlFor={`target-host-${index}`}>Engine address</Label>
                       <Input
@@ -1014,6 +1032,10 @@ export default function PlacementAdminSettingsPage() {
                         onChange={(e) => updateTargetRow(index, { host: e.target.value })}
                         placeholder="https://eu-engine.example.com"
                       />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`engine-proxy-${index}`}>Console encryption proxy ID</Label>
+                      <Input id={`engine-proxy-${index}`} value={row.preparation?.proxyCanisterId ?? ''} onChange={e => updateTargetRow(index, { preparation: { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...row.preparation, proxyCanisterId: e.target.value } })} />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor={`target-canisters-${index}`}>Canister IDs on this engine</Label>
@@ -1029,6 +1051,12 @@ export default function PlacementAdminSettingsPage() {
                         Assign countries to this engine below. If it's disabled or incomplete, those countries use Supabase — never public mainnet.
                       </p>
                     </div>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      {(() => {
+                        try { return enginePreparationIssues({ host: row.host, preparation: row.preparation, canisterIds: parseCanisterIdsText(row.canisterIdsText) }).map(issue => <li key={issue}>{issue}</li>); }
+                        catch { return <li>Canister ID table cannot be read</li>; }
+                      })()}
+                    </ul>
                   </div>
                 )}
               </div>
