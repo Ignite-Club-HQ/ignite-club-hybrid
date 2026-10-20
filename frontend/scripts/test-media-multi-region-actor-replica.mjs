@@ -43,12 +43,13 @@ try {
   // Keep this fixture's migration tail. A production module predates the
   // local seed migration and cannot be used as a backwards-migration test.
   await pic.upgradeCanister({ canisterId: id, wasm: seeded, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
-  // Turning the rehearsal off must not strand existing bank-one ciphertext.
+  // Production large mode keeps extra-Region writes on without the rehearsal flag.
   assert.equal((await a.http_request({ url: '/users/rollover/file', method: 'GET', headers: [], body: [] })).status_code, 200);
-  assert.ok('Err' in await a.begin_upload('users/rollover/closed', 'application/octet-stream', 1n, 1));
+  const after = ok(await a.begin_upload('users/rollover/production', 'application/octet-stream', 1n, 1));
+  ok(await a.abort_upload(after));
   ok(await a.delete_blob('users/rollover/file'));
   assert.equal((await a.get_usage()).total_bytes, 0n);
-  console.log('PASS: real actor bank-one rollover, reserved slot/pending upgrade, streaming, 200 GiB rehearsal/500 GiB refusal and flag-off read/delete preservation.');
+  console.log('PASS: real actor bank-one rollover, reserved slot/pending upgrade, streaming, 200 GiB production ceiling/500 GiB refusal and flag-off production writes/read/delete.');
 } finally {
   if (pic) await pic.tearDown();
   await server.stop();

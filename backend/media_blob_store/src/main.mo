@@ -751,6 +751,8 @@ persistent actor MediaBlobStore {
   // Larger capacity is opt-in per store and only for stable-backed writes.
   transient let largeCapacityFlag = Runtime.envVar<system>("IGNITE_MEDIA_LARGE_CAPACITY") == ?"1";
   func largeMode() : Bool { largeCapacityFlag and stable_writes };
+  // Extra Regions are production storage in large mode (200 GiB policy).
+  func multiRegionWrites() : Bool { multiRegionRehearsal or largeMode() };
 
   /// Finalized + in-flight bytes under clubs/<club>/ across all categories
   /// (vault, gallery and chat combined). Branding-exempt assets also count:
@@ -794,7 +796,7 @@ persistent actor MediaBlobStore {
     // Removing the local flag with pending extents must fail closed, not
     // silently allocate a second slice for an already reserved upload.
     (physicalReservationRehearsal or upload_slots.size() == 0) and
-    (not stable_writes or (stable_blobs.size() + pending_uploads.size() < 100_000 and MultiBytes.canAllocateWithin(multi_bytes, size.toNat(), capacity_limit_bytes.toNat(), multiRegionRehearsal)))
+    (not stable_writes or (stable_blobs.size() + pending_uploads.size() < UploadPolicy.maxStoredFiles and MultiBytes.canAllocateWithin(multi_bytes, size.toNat(), capacity_limit_bytes.toNat(), multiRegionWrites())))
   };
   func releaseUploadSlot(id : Text) {
     switch (upload_slots.get(id)) {
@@ -877,10 +879,10 @@ persistent actor MediaBlobStore {
     if (pending_uploads.size() != 0) return #Err("Drain uploads before migration");
     if (blobs.size() == 0) return #Ok({ remaining = 0; copied_bytes = 0 });
     let old = blobs[0];
-    if (stable_blobs.size() >= 100_000) return #Err("Stable metadata capacity reached");
+    if (stable_blobs.size() >= UploadPolicy.maxStoredFiles) return #Err("Stable metadata capacity reached");
     if (old.bytes.size() > UploadPolicy.maxWireBytes.toNat()) return #Err("Legacy file exceeds bounded migration limit");
     if (PrimMem.rts_heap_size() + old.bytes.size() * 16 > UploadPolicy.heapBudget) return #Err("Insufficient heap headroom for verified migration");
-    let ?slice = MultiBytes.writeWithin(multi_bytes, old.bytes, StableBytes.limit, multiRegionRehearsal) else return #Err("Stable region capacity reached");
+    let ?slice = MultiBytes.writeWithin(multi_bytes, old.bytes, StableBytes.limit, multiRegionWrites()) else return #Err("Stable region capacity reached");
     let copied = MultiBytes.read(multi_bytes, slice, 0, slice.length);
     if (copied.size() != old.bytes.size() or hexDigest(copied) != old.content_hash) {
       MultiBytes.release(multi_bytes, slice); return #Err("Ciphertext integrity check failed")
@@ -918,7 +920,7 @@ persistent actor MediaBlobStore {
     if (upload_slots.size() + legacyPending != pending_uploads.size()) return #Err("Physical reservation inventory mismatch");
     #Ok({ revision = media_inventory_revision; configured_bytes = capacity_limit_bytes.toNat();
       allocated_bytes = MultiBytes.allocated(multi_bytes).toNat(); pending_slot_bytes = held; pending_count = pending_uploads.size();
-      legacy_pending_count = legacyPending; allocatable_object_slots = if (legacyPending > 0) 0 else MultiBytes.allocatableRoots(multi_bytes, capacity_limit_bytes.toNat(), multiRegionRehearsal); max_object_slot_bytes = 16_777_216 })
+      legacy_pending_count = legacyPending; allocatable_object_slots = if (legacyPending > 0) 0 else MultiBytes.allocatableRoots(multi_bytes, capacity_limit_bytes.toNat(), multiRegionWrites()); max_object_slot_bytes = 16_777_216 })
   };
 
   func findUpload(id : Text) : ?PendingUpload {
@@ -1037,7 +1039,7 @@ persistent actor MediaBlobStore {
     // Reserve the actual class before the authority await or any chunks.
     // Unknown authority replies keep the same extent until settled abort.
     if (physicalReservationRehearsal and stable_writes) {
-      let ?slice = MultiBytes.reserveWithin(multi_bytes, total_size.toNat(), capacity_limit_bytes.toNat(), multiRegionRehearsal) else return #Err("StoreFull");
+      let ?slice = MultiBytes.reserveWithin(multi_bytes, total_size.toNat(), capacity_limit_bytes.toNat(), multiRegionWrites()) else return #Err("StoreFull");
       upload_slots.add(id, slice)
     };
     let upload : PendingUpload = {
@@ -1141,7 +1143,7 @@ persistent actor MediaBlobStore {
         };
         // Replace any prior blob at this path (re-upload by owner/governor).
         if (stable_writes) {
-          if (stable_blobs.size() >= 100_000 and stable_blobs.get(upload.path) == null) return #Err("Stable metadata capacity reached");
+          if (stable_blobs.size() >= UploadPolicy.maxStoredFiles and stable_blobs.get(upload.path) == null) return #Err("Stable metadata capacity reached");
           let slice = switch (upload_slots.get(upload_id)) {
             case (?held) {
               if (not physicalReservationRehearsal) return #Err("Physical reservation rehearsal disabled; restore before finalizing");
@@ -1149,7 +1151,7 @@ persistent actor MediaBlobStore {
               held
             };
             // Old uploads survive an additive upgrade, but have no promise.
-            case null { let ?fresh = MultiBytes.writeWithin(multi_bytes, assembled, capacity_limit_bytes.toNat(), multiRegionRehearsal) else return #Err("StoreFull"); fresh }
+            case null { let ?fresh = MultiBytes.writeWithin(multi_bytes, assembled, capacity_limit_bytes.toNat(), multiRegionWrites()) else return #Err("StoreFull"); fresh }
           };
           removeStored(upload.path);
           stable_blobs.add(upload.path, { path = upload.path; mime = upload.mime; owner = upload.owner; content_hash; slice; uploaded_at = Time.now() });
@@ -1356,7 +1358,7 @@ persistent actor MediaBlobStore {
     { total_bytes; capacity_limit_bytes = if (capacity_limit_bytes > mediaCapacityCeiling()) mediaCapacityCeiling() else capacity_limit_bytes; accepting_uploads = quota_mode != #frozen and not retainedBlocked() and canReserve(1) and pending_uploads.size() < UploadPolicy.maxPending }
   };
   func mediaCapacityCeiling() : Nat64 {
-    if (multiRegionRehearsal and largeMode()) MultiBytes.runtimeBytes.toNat64() else UploadPolicy.ceilingFor(largeMode())
+    UploadPolicy.ceilingFor(largeMode())
   };
 
   // Governor-only. Setting a limit at or below the current total closes the
@@ -1364,7 +1366,7 @@ persistent actor MediaBlobStore {
   public shared ({ caller }) func set_capacity_limit(limit_bytes : Nat64) : async Result {
     auth(caller);
     if (not isGovernor<system>(caller)) return #Err("Governor required");
-    if (limit_bytes > mediaCapacityCeiling()) return #Err(if (multiRegionRehearsal and largeMode()) "Multi-Region rehearsal cannot exceed 200 GiB; 500 GiB requires a compatible runtime" else if (largeMode()) "Store capacity cannot exceed 64 GiB" else "Heap-backed store capacity cannot exceed 2 GiB");
+    if (limit_bytes > mediaCapacityCeiling()) return #Err(if (largeMode()) "Store capacity cannot exceed 200 GiB" else "Heap-backed store capacity cannot exceed 2 GiB");
     capacity_limit_bytes := limit_bytes;
     #Ok
   };

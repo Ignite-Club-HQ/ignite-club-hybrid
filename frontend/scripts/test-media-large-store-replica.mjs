@@ -59,7 +59,7 @@ try {
       // Larger mode cannot be used until stable writes are enabled.
       assert.ok('Err' in await a.set_capacity_limit(BigInt(64 * GiB)), 'stable writes must be enabled first');
       ok(await a.enable_stable_media_storage());
-      assert.ok('Err' in await a.set_capacity_limit(BigInt(64 * GiB) + 1n), 'must refuse above 64 GiB');
+      assert.ok('Err' in await a.set_capacity_limit(BigInt(200 * GiB) + 1n), 'must refuse above 200 GiB');
       ok(await a.set_capacity_limit(BigInt(scenario.ceiling)));
       const baseline = await a.memory_stats(), startCycles = await pic.getCyclesBalance(fixture.canisterId);
       const live = new Map(), uploads = [], reads = []; let refused = 0;

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       size_gib:
-        description: 'Configured photo store size in GiB (3–64; safety headroom applies)'
+        description: 'Configured photo store size in GiB (3–200; safety headroom applies)'
         required: true
         default: '16'
       confirm:

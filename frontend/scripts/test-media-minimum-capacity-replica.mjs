@@ -6,7 +6,7 @@ import { Principal } from '@icp-sdk/core/principal';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 const wasm = resolve('backend/media_blob_store/.mops/.build/media_blob_store.wasm');
 const oldWasm = process.env.MEDIA_PREVIOUS_WASM;
-if (!oldWasm) throw new Error('MEDIA_PREVIOUS_WASM must name the saved 32 GiB module for the upgrade test');
+if (!oldWasm) throw new Error('MEDIA_PREVIOUS_WASM must name the saved previous (64 GiB) module for the upgrade test');
 const governor = Principal.fromUint8Array(new Uint8Array([1, 1]));
 const other = Principal.fromUint8Array(new Uint8Array([2, 1]));
 const ok = result => { assert.ok('Ok' in result, String(result.Err)); return result.Ok; };
@@ -22,7 +22,7 @@ try {
   assert.ok('Err' in await a.set_capacity_limit(34_359_738_368n));
   ok(await a.enable_stable_media_storage());
   ok(await a.set_capacity_limit(34_359_738_368n));
-  assert.ok('Err' in await a.set_capacity_limit(68_719_476_736n), 'current production policy must reject 64 GiB');
+  assert.ok('Err' in await a.set_capacity_limit(214_748_364_800n), 'previous 64 GiB module must reject 200 GiB');
   a.setPrincipal(other);
   assert.ok('Err' in await a.set_capacity_limit(1_000n));
   a.setPrincipal(governor);
@@ -35,14 +35,14 @@ try {
   const allocation = (await a.stable_storage_status()).allocated_bytes;
   await pic.upgradeCanister({ canisterId: f.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   assert.equal((await a.get_usage()).capacity_limit_bytes, 34_359_738_368n);
-  ok(await a.set_capacity_limit(68_719_476_736n));
-  assert.equal((await a.get_usage()).capacity_limit_bytes, 68_719_476_736n);
-  assert.ok('Err' in await a.set_capacity_limit(68_719_476_737n));
+  ok(await a.set_capacity_limit(214_748_364_800n));
+  assert.equal((await a.get_usage()).capacity_limit_bytes, 214_748_364_800n);
+  assert.ok('Err' in await a.set_capacity_limit(214_748_364_801n));
   a.setPrincipal(other);
-  assert.ok('Err' in await a.set_capacity_limit(68_719_476_736n));
+  assert.ok('Err' in await a.set_capacity_limit(214_748_364_800n));
   a.setPrincipal(governor);
   await pic.upgradeCanister({ canisterId: f.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
-  assert.equal((await a.get_usage()).capacity_limit_bytes, 68_719_476_736n);
+  assert.equal((await a.get_usage()).capacity_limit_bytes, 214_748_364_800n);
   assert.equal((await a.get_usage()).total_bytes, 8n);
   assert.equal((await a.stable_storage_status()).allocated_bytes, allocation);
   const response = await a.http_request({ url: '/' + path, method: 'GET', headers: [], body: [] });
@@ -61,7 +61,7 @@ try {
   assert.equal((await a.stable_storage_status()).allocated_bytes, finalizedAllocation);
   ok(await a.abort_upload(retry));
   assert.equal((await a.get_usage()).total_bytes, 8n);
-  console.log('PASS: real 32-to-64 candidate upgrade, unchanged old capacity until explicit enlargement, 64 GiB persistence, above-ceiling/unauthorized rejection, committed and pending bytes, abort/reuse and exact totals. Local evidence, not live acceptance.');
+  console.log('PASS: real 64-to-200 GiB candidate upgrade, unchanged old capacity until explicit enlargement, 200 GiB persistence, above-ceiling/unauthorized rejection, committed and pending bytes, abort/reuse and exact totals. Local evidence, not live acceptance.');
 } finally {
   if (pic) await pic.tearDown();
   await server.stop();
