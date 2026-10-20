@@ -1,0 +1,18 @@
+{
+  "binding": {
+    "version": 1,
+    "runId": "medua-smoke-002",
+    "scenario": "smoke64",
+    "governor": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+    "wasmSha256": "d342467f8a5442a8a26a46f47b0688618e419268fc5b87c5bf769e700118f3a5",
+    "network": "ic",
+    "host": "https://icp-api.io",
+    "budgetCycles": "3000000000000",
+    "capacityBytes": 68719476736
+  },
+  "phase": "approved",
+  "pending": null,
+  "receipts": [],
+  "objects": {}
+}
