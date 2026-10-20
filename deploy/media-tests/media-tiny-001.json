@@ -12,10 +12,7 @@
     "capacityBytes": 536870912
   },
   "phase": "smoke",
-  "pending": {
-    "kind": "smoke",
-    "time": "2026-10-20T09:29:19.687Z"
-  },
+  "pending": null,
   "receipts": [
     {
       "phase": "create",
@@ -52,10 +49,25 @@
         }
       },
       "time": "2026-10-20T09:29:18.241Z"
+    },
+    {
+      "phase": "smoke",
+      "result": {
+        "hashReadback": true,
+        "unauthorizedDeleteDenied": true,
+        "abortVerified": true
+      },
+      "time": "2026-10-20T09:29:49.939Z"
     }
   ],
   "objects": {},
   "createdAtNs": "1792488516767000000",
   "canisterId": "2wj3v-faaaa-aaaal-qxpwa-cai",
-  "initialCycles": "2394972243347"
+  "initialCycles": "2394972243347",
+  "lastFuel": {
+    "cycles": "2394951162119",
+    "freezeReserve": "31817119890",
+    "reserved": "0",
+    "memory": "7694158"
+  }
 }
