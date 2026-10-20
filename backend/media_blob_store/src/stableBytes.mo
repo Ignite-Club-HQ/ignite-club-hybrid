@@ -53,13 +53,20 @@ module {
         offset
       };
       case null {
-        if (store.end.toNat() + slot > cap) return null;
-        let requiredPages = (store.end.toNat() + slot + 65_535) / 65_536;
+        let aligned = ((store.end.toNat() + slot - 1) / slot) * slot;
+        if (aligned + slot > cap) return null;
+        let requiredPages = (aligned + slot + 65_535) / 65_536;
         let pages = Region.size(store.region).toNat();
         if (requiredPages > pages and Region.grow(store.region, Nat64.fromNat(requiredPages - pages)) == 18_446_744_073_709_551_615) return null;
-        let offset = store.end;
-        store.end += Nat64.fromNat(slot);
-        offset
+        // Preserve alignment for buddy merges; padding remains reusable.
+        var padding = store.end.toNat();
+        while (padding < aligned) {
+          var size = 65_536;
+          while (size * 2 <= aligned - padding and padding % (size * 2) == 0) { size *= 2 };
+          addFree(store, size, Nat64.fromNat(padding)); padding += size
+        };
+        store.end := Nat64.fromNat(aligned + slot);
+        Nat64.fromNat(aligned)
       }
     };
     Region.storeBlob(store.region, offset, bytes);
@@ -88,6 +95,6 @@ module {
     let slot = slotFor(length);
     if (slot > 16_777_216) return false;
     if (availableClass(store, slot) != null) return true;
-    store.end.toNat() + slot <= cap
+    ((store.end.toNat() + slot - 1) / slot) * slot + slot <= cap
   }
 }
