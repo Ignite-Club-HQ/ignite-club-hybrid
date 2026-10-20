@@ -20,7 +20,16 @@ console.log(`Store ${target}: larger storage ${status.enabled ? 'already on' : '
 if (!status.enabled) {
   // Unfinished uploads block the switch-over; the deploy identity may abort them.
   // Aborted uploads simply fail for the uploader, who can retry afterwards.
-  const pending = ok(await store.read_pending_uploads(), 'Listing unfinished uploads failed') as { id: string; path: string }[];
+  let listed: any;
+  try {
+    listed = await store.read_pending_uploads();
+  } catch (e: any) {
+    if (/IC0536|has no (update|query) method/.test(String(e?.message ?? e))) {
+      throw new Error('This photo store is still running the old version (it lacks the unfinished-upload cleanup). Nothing was changed. Run the mainnet deploy workflow first, then re-run this.');
+    }
+    throw e;
+  }
+  const pending = ok(listed, 'Listing unfinished uploads failed') as { id: string; path: string }[];
   for (const u of pending) {
     ok(await store.abort_upload(u.id), `Aborting unfinished upload ${u.id} failed`);
     console.log(`Aborted unfinished upload ${u.id} (${u.path})`);
