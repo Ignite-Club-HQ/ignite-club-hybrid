@@ -224,7 +224,8 @@ function SupabaseCreateCompetitionPage() {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
             const created = await createLivePersonalCompetition(ctx, trimmedName, trimmedSeason ?? "");
-            return created.id;
+            if (!created?.id) throw new Error("Unexpected response from server.");
+          return created.id;
           },
         }, { shared: "person" });
         setSaving(false);
@@ -299,6 +300,7 @@ function SupabaseCreateCompetitionPage() {
             trimmedName,
             trimmedSeason ?? "",
           );
+          if (!created?.id) throw new Error("Unexpected response from server.");
           return created.id;
         },
       }, writeOnce({ clubId: organizerClubId }));
