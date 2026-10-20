@@ -1,0 +1,13 @@
+{
+  "plan": {
+    "paymentId": "media-tiny-001",
+    "testId": "media-tiny-001",
+    "scenario": "tiny",
+    "principal": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "targetCycles": "5000000000000",
+    "balanceBefore": "105633832723",
+    "shortfallCycles": "4894366167277"
+  },
+  "phase": "creating-order",
+  "createdAt": "2026-10-20T09:03:15.193Z"
+}
