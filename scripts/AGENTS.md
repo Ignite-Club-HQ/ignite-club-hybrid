@@ -11,3 +11,4 @@
 - Capacity reports persist each completed scenario and merge only exact Wasm/environment evidence; standalone network rehearsals never forward local flags or target live stores. Why: preserve crash evidence without claiming local behaviour is production-safe.
 
 - Isolated mainnet media tests use a manual single-target runner and dedicated GitHub receipts branch; save/read back intents before paid phases and refuse unknown replay. Bind sole controller/subnet/module/environment, cap upfront funding and keep fuel floors. Why: runner loss must not duplicate stores or alter live storage; retained fuel is not consumed cost.
+- Stage 2 GitHub journal requests use the tested media-stage-two-github helper without a trailing slash on repository metadata endpoints. Why: GitHub rejects that address before receipt-branch creation.
