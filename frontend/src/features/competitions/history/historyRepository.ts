@@ -92,3 +92,17 @@ export async function listHistory(scope: { teamId?: string; clubId?: string }, l
     },
   }, scope);
 }
+
+export async function deleteHistory(row: HistoryResult): Promise<void> {
+  return withFeatureBackend("events", {
+    supabase: async () => {
+      const { error } = await supabase.from("game_results").delete().eq("id",row.id);
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      if (!row.event_id) throw new Error("Saved game has no linked event.");
+      const { deleteLiveGameResult } = await import("@/live/features/events");
+      await deleteLiveGameResult(ctx,row.event_id);
+    },
+  }, { teamId: row.team_id, writeKey: "once", attempts: 1 });
+}

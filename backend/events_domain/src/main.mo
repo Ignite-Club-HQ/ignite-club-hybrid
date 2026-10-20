@@ -2261,7 +2261,10 @@ persistent actor class Main(governorInit : Principal) {
     switch (await historyResult(caller,event_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(result)) {
-        let hidden = switch (result) { case null false; case (?r) r.scores_hidden };
+        let hidden = switch (result) {
+          case null competitionEventOperations.any(func(operation) = operation.event_ids.any(func(id) = id == event_id));
+          case (?r) r.scores_hidden
+        };
         #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id).map(func(item : Types.GamePlayerStat) : Types.GamePlayerStat {
           if (hidden) ({ item with goals_scored = 0 : Nat16 }) else item
         }))
@@ -2365,6 +2368,20 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func get_game_result(event_id : Text) : async { #Ok : ?HistoryPrivacy.Read; #Err : Text } {
     await historyResult(caller,event_id)
+  };
+
+  public shared ({ caller }) func delete_game_result(event_id : Text) : async { #Ok; #Err : Text } {
+    switch (await historyResult(caller,event_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(null)) return #Ok;
+      case (#Ok(?row)) { if (row.scores_hidden) return #Err("Competition manager required") }
+    };
+    let event = switch (events.find(func(e) = e.id == event_id and not e.deleted)) {
+      case null return #Err("Event not found"); case (?e) e
+    };
+    if (not manages(caller,event) or eventFenced(event_id)) return #Err("Game result management forbidden");
+    gameResults := gameResults.filter(func(row) = row.event_id != ?event_id);
+    #Ok
   };
 
   // ---- Match captains / goalkeepers / player stats report ----

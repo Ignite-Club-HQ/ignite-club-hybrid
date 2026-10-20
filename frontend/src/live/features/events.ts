@@ -1933,6 +1933,11 @@ export async function getLiveGameResult(ctx: FeatureBackendContext, eventId: str
   return [next];
 }
 
+export async function deleteLiveGameResult(ctx: FeatureBackendContext,eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target,ctx.identity);
+  return unwrapCandid(actor.delete_game_result(eventId),"Delete saved game");
+}
+
 // Pitch-state syncs fire every few seconds during a live game, so PII
 // registration is cached per (ref, name): a player's name is only pushed to
 // pii_access_control the first time it is seen (or when it changes), and the

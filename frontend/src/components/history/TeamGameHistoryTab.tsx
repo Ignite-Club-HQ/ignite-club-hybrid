@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
-import { listHistory, type HistoryResult } from "@/features/competitions/history/historyRepository";
+import { deleteHistory, listHistory, type HistoryResult } from "@/features/competitions/history/historyRepository";
 import { resultOutcome } from "@/features/competitions/history/resultVisibility";
 
 const GameSummaryDialog = lazyWithRetry(() => import("@/components/scoreboard/GameSummaryDialog"));
@@ -73,11 +73,7 @@ export default function TeamGameHistoryTab({
     if (!confirmDelete) return;
     setDeleting(true);
     try {
-      const { error } = await supabase
-        .from("game_results")
-        .delete()
-        .eq("id", confirmDelete.id);
-      if (error) throw error;
+      await deleteHistory(confirmDelete);
       toast({ title: "Deleted", description: "Game removed from history." });
       setConfirmDelete(null);
       qc.invalidateQueries({ queryKey: ["game_results", teamId] });
