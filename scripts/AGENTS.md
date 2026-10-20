@@ -12,3 +12,4 @@
 
 - Isolated mainnet media tests use a manual single-target runner and dedicated GitHub receipts branch; save/read back intents before paid phases and refuse unknown replay. Bind sole controller/subnet/module/environment, cap upfront funding and keep fuel floors. Why: runner loss must not duplicate stores or alter live storage; retained fuel is not consumed cost.
 - Stage 2 GitHub journal requests use the tested media-stage-two-github helper without a trailing slash on repository metadata endpoints. Why: GitHub rejects that address before receipt-branch creation.
+- Card funding uses the existing deploy principal, live balance shortfall to the selected test ceiling, and durable pre-order receipts; unresolved orders block new purchases and tests never auto-start. Why: card quotes are estimates, and lost replies or repeated orders can double-fund the account.
