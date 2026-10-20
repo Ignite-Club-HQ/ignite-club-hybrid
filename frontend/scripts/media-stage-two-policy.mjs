@@ -57,5 +57,5 @@ export function isResumableFill(saved, binding) {
 // Rejections raised before the store ran the call (busy queue, failed self-call) change nothing and may be retried.
 export function isTransientReject(error) {
   const t = String(error?.message ?? error);
-  return /IC0406|could not perform self call|IC0515|queue (is )?full|IC0207|out of cycles for/i.test(t) && !/IC0207/.test(t);
+  return /IC0406|could not perform self call|IC0515|queue (is )?full/i.test(t);
 }
