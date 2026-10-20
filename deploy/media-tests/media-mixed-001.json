@@ -1,0 +1,18 @@
+{
+  "binding": {
+    "version": 1,
+    "runId": "media-mixed-001",
+    "scenario": "mixed",
+    "governor": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+    "wasmSha256": "8ea0289f54fb5224c1eb1e17da9242e909d34dd333cfb5f7643bbfaaebf76c9b",
+    "network": "ic",
+    "host": "https://icp-api.io",
+    "budgetCycles": "5000000000000",
+    "capacityBytes": 5368709120
+  },
+  "phase": "approved",
+  "pending": null,
+  "receipts": [],
+  "objects": {}
+}
