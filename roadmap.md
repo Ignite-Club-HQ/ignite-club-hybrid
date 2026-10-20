@@ -1,5 +1,6 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] Owner request 20 Oct 21:00 UTC: assess and replace the pinned photo-store runtime only with verified upgrade-compatible support above 256 GiB; then run real local aggregate 500 GiB boundary read/write and upgrade tests. Do not treat virtual-address fixtures as physical acceptance or enlarge live stores before compatibility and headroom are established.
 - [x] Owner request 20 Oct 20:33 UTC: additive multi-Region 500 GiB addressing redesign implemented; bank-zero bytes/old pending reservations remain untouched, extra writes local-only. 13 media tests, actual sparse 64/128/192 GiB bank/upgrade and near-500 GiB virtual-address checks, real actor rollover/flag-off read/delete, saved prior actor upgrade, Pro allowance and 17-contract drift pass. Evidence: docs/media-multi-region-redesign-2026-10-20.md. No live changes.
 - [ ] 500 GiB physical-capacity activation blocked by pinned Motoko 1.16.1's **shared 256 GiB Region block table**, not an individual-bank setting. Requires a reviewed compatible runtime with larger aggregate addressing and upgrade-safe Region metadata before aggregate-boundary testing/release; no deployment flag/ceiling changed. Multi-Region alone cannot remove this runtime constraint.
 
