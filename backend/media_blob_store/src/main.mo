@@ -335,7 +335,12 @@ persistent actor MediaBlobStore {
     try {
       if (not original.removed) {
         switch (await (with timeout = 10) service.prepare_deleted_retained_media(original.token, entry)) {
-          case (#Err(message)) return #Err(message);
+          case (#Err(message)) {
+            if (message == "Expired retained token absent") {
+              switch (retained_deletions.get(path)) { case (?current) { if (current.token == original.token and not current.removed) retained_deletions.remove(path) }; case null {} }
+            };
+            return #Err(message)
+          };
           case (#Ok(op)) { if (op.state != #reserved) return #Err("Deletion preparation conflict") }
         };
         if (authority != club_domain_canister or retainedBlocked()) return #Err("Deletion authority changed");
@@ -466,7 +471,7 @@ persistent actor MediaBlobStore {
     };
     removed := 0;
     for (id in deletes.values()) {
-      var permitted = retained_mode != #active;
+      var permitted = retained_mode != #active or id.startsWith(#text "upload-");
       if (retained_mode == #active and id.startsWith(#text "r1:")) {
         switch (retainedService()) {
           case (?retained) { try { switch (await retained.acknowledge_retained_media(id)) { case (#Ok) permitted := true; case _ {} } } catch (_) {} };
@@ -772,7 +777,7 @@ persistent actor MediaBlobStore {
 
   func canReserve(size : Nat64) : Bool {
     UploadPolicy.canAdmitFor(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
-    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), capacity_limit_bytes.toNat()))))
+    (not stable_writes or (stable_blobs.size() < 100_000 and StableBytes.canAllocateWithin(stable_bytes, size.toNat(), capacity_limit_bytes.toNat())))
   };
 
   func storedChunkBytes(upload : PendingUpload) : Nat {
@@ -1460,7 +1465,14 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
     switch (removalReceiver.prepare(caller, request)) {
-      case (#Err(message)) #Err(message);
+        case (#Err(message)) {
+          if (message == "Expired retained token absent" and original.removed) {
+            switch (await service.acknowledge_retained_media(original.token)) {
+              case (#Ok) { switch (retained_deletions.get(path)) { case (?current) { if (current.token == original.token and current.removed) retained_deletions.remove(path) }; case null {} }; #Ok };
+              case (#Err(error)) #Err(error)
+            }
+          } else #Err(message)
+        };
       case (#Ok) {
         // Purely local unfinished uploads can be discarded atomically. Shared
         // quota outcomes retain their journals until cancellation/commit settles.
