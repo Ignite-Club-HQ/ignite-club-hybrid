@@ -484,6 +484,7 @@ export async function searchVaultContents(
         .filter((file) => {
           if (file.deleted_at) return false;
           if (!file.name.toLowerCase().includes(lowerQuery)) return false;
+          if (scope.folderId && file.folder_id !== scope.folderId && !options.tree.descendantIds.includes(file.folder_id ?? "")) return false;
           if (view.type === "club") return !file.team_id && !file.mini_league_id;
           if (view.type === "team") return file.team_id === view.teamId;
           if (view.type === "competition") return (file as any).competition_id === view.competitionId;
