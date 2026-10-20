@@ -45,5 +45,21 @@ legacy.free.add(131_072, holes);
 Stable.release(legacy, { offset = 65_536; length = 1; slot = 131_072 });
 assert not Stable.canAllocateWithin(legacy, 200_000, 393_216);
 assert holes.size() == 2;
+// Two admissions own distinct physical slots even before chunks exist.
+let pending : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
+let ?first = Stable.reserveWithin(pending, 100_000, 262_144) else { assert false; loop {} };
+let ?second = Stable.reserveWithin(pending, 100_000, 262_144) else { assert false; loop {} };
+assert first.offset != second.offset;
+assert Stable.reserveWithin(pending, 1, 262_144) == null;
+let payload = Blob.fromArray(Array.repeat<Nat8>(3, 100_000));
+assert not Stable.writeReserved(pending, first, small);
+assert Stable.writeReserved(pending, second, payload);
+Stable.release(pending, first);
+let ?retry = Stable.reserveWithin(pending, 100_000, 262_144) else { assert false; loop {} };
+assert retry.offset == first.offset;
+assert Stable.read(pending, second, 0, payload.size()) == payload;
+// Reducing a cap cannot reuse a free extent beyond the new cap.
+Stable.release(pending, second);
+assert Stable.reserveWithin(pending, 100_000, 131_072) == null;
 };
 };
