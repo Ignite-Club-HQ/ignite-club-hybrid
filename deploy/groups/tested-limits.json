@@ -5,7 +5,7 @@
   "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
   "clubCount": 18,
   "storageLimitBytes": {
-    "media_blob_store": 800000000,
+    "media_blob_store": 8000000000,
     "messaging_domain": 1000000000,
     "media_metadata": 1000000000,
     "notification_queue": 1000000000,
