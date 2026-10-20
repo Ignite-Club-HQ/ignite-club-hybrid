@@ -1,4 +1,5 @@
 import { isValidCountryCode } from "@/lib/countries";
+import { CLOUD_ENGINE_RELEASED, enginePreparationIssues, validateDeploymentPreparation, type DeploymentPreparation } from './enginePreparation';
 
 /**
  * App-admin backend routing configuration: a global default backend
@@ -40,6 +41,8 @@ export type ApprovedBackendTarget = {
   host?: string;
   /** ICP Cloud Engine only: domain key -> canister id deployed on this engine. */
   canisterIds?: Record<string, string>;
+  /** Planning links only; never registers, opens or relocates a group. */
+  preparation?: DeploymentPreparation;
 };
 
 export type BackendRoutingConfig = {
@@ -110,8 +113,8 @@ const CANISTER_ID_RE = /^[a-z0-9]{5}(-[a-z0-9]{5}){3}-[a-z0-9]{3}$/;
 
 /** True when a Cloud Engine target is enabled and has an address plus at least one canister. */
 export function isCloudEngineUsable(target: ApprovedBackendTarget): boolean {
-  return target.kind === "icp-cloud-engine" && target.enabled && !!target.host
-    && Object.keys(target.canisterIds ?? {}).length > 0;
+  return CLOUD_ENGINE_RELEASED && target.kind === "icp-cloud-engine" && target.enabled
+    && enginePreparationIssues(target).length === 0;
 }
 
 /**
@@ -140,6 +143,7 @@ export function normalizeApprovedTarget(
     version: raw.version.trim(),
     region: raw.region?.trim() || undefined,
     enabled: raw.enabled,
+    preparation: validateDeploymentPreparation(raw.preparation),
     host: raw.host?.trim().replace(/\/$/, "") || undefined,
     canisterIds: raw.canisterIds && Object.keys(raw.canisterIds).length > 0
       ? Object.fromEntries(Object.entries(raw.canisterIds).map(([k, v]) => [k.trim(), String(v).trim()]))
@@ -215,6 +219,7 @@ export function parseBackendRoutingConfig(value: unknown): BackendRoutingConfig 
           version: entry.version,
           region: typeof entry.region === "string" ? entry.region : undefined,
           enabled: entry.enabled,
+          preparation: validateDeploymentPreparation(entry.preparation),
           host: typeof entry.host === "string" ? entry.host : undefined,
           canisterIds: entry.canisterIds && typeof entry.canisterIds === "object" && !Array.isArray(entry.canisterIds)
             ? Object.fromEntries(Object.entries(entry.canisterIds as Record<string, unknown>).map(([k, v]) => {
@@ -294,7 +299,7 @@ function copyConfig(config: BackendRoutingConfig): BackendRoutingConfig {
   return {
     defaultBackend: config.defaultBackend,
     countryRules: { ...config.countryRules },
-    targets: config.targets.map(t => ({ ...t, ...(t.canisterIds ? { canisterIds: { ...t.canisterIds } } : {}) })),
+    targets: config.targets.map(t => ({ ...t, ...(t.canisterIds ? { canisterIds: { ...t.canisterIds } } : {}), ...(t.preparation ? { preparation: { ...t.preparation, groupIds: [...t.preparation.groupIds] } } : {}) })),
     countryTargets: { ...config.countryTargets },
     clubBackendOverrides: { ...config.clubBackendOverrides },
   };
