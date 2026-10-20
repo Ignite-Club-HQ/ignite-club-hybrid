@@ -11,7 +11,7 @@ module {
   // Local prototype bound, not a new customer upload/allowance rule.
   public let maxSegments : Nat = 512;
   public let recordBytes : Nat = 48;
-  public type Handle = { generation : Nat64; length : Nat; segments : Nat; table : Packed.Handle };
+  public type Handle = { generation : Nat64; lastGeneration : Nat; length : Nat; segments : Nat; table : Packed.Handle };
   public type State = { pool : Packed.State; files : Map.Map<Nat64, Handle> };
   public func empty(pool : Packed.State) : State { { pool; files = Map.empty() } };
   func valid(state : State, file : Handle) : Bool {
@@ -43,6 +43,9 @@ module {
     if (segment.length != expected or segment.slot != Packed.slotFor(expected)) return null;
     if (segment.offset % segment.slot != 0 or segment.offset + segment.slot > Packed.pageBytes) return null;
     if (segment.generation == file.table.generation or not Packed.contains(state.pool, segment)) return null;
+    // Reservation has no awaits: no other file's generation can enter this
+    // interval. This binds decoded blocks to this exact file, not just a club.
+    if (segment.generation <= file.generation.toNat() or segment.generation > file.lastGeneration) return null;
     ?segment
   };
   public func reserve(state : State, length : Nat) : ?Handle {
@@ -55,7 +58,7 @@ module {
       Packed.release(state.pool, table); return null
     };
     state.pool.space.nextGeneration += 1;
-    let file : Handle = { generation = state.pool.space.nextGeneration.toNat64(); length; segments = count; table };
+    let file : Handle = { generation = state.pool.space.nextGeneration.toNat64(); lastGeneration = 0; length; segments = count; table };
     var acquired = 0;
     while (acquired < count) {
       let amount = Nat.min(Packed.pageBytes, length - acquired * Packed.pageBytes);
@@ -69,7 +72,8 @@ module {
         }
       }
     };
-    state.files.add(file.generation, file); ?file
+    let published = { file with lastGeneration = state.pool.space.nextGeneration };
+    state.files.add(published.generation, published); ?published
   };
   // Exactly one bounded page per call; never assemble whole ciphertexts.
   public func writeSegment(state : State, file : Handle, index : Nat, bytes : Blob) : Bool {
