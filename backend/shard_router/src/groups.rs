@@ -1,7 +1,9 @@
 use candid::{CandidType, Principal};
 use serde::{Deserialize, Serialize};
 
-pub const MAX_GROUPS: usize = 64;
+// Memory 6 is a stable B-tree, not a serialized heap snapshot. At <8 KiB
+// per validated group, 4096 rows reserve <32 MiB plus B-tree overhead.
+pub const MAX_GROUPS: usize = 4096;
 pub const MAX_CLUBS: u32 = 100_000;
 pub const MAX_READING_AGE_NS: u64 = 15 * 60 * 1_000_000_000;
 pub const PREPARE_PERCENT: u128 = 70;

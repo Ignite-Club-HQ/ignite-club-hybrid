@@ -18,7 +18,7 @@ export type AccountRegistryBinding = {
 /** Consensus registry transport authenticates rows; validation binds the entire
  * inventory to operator-approved deployment evidence. It never enables groups. */
 export function accountAuthoritiesFromRegistry(snapshot: AccountRegistrySnapshot, binding: AccountRegistryBinding) {
-  if (snapshot.revision !== binding.registryRevision || !snapshot.groups.length || snapshot.groups.length > 64 ||
+  if (snapshot.revision !== binding.registryRevision || !snapshot.groups.length || snapshot.groups.length > 4096 ||
       snapshot.groups.length !== snapshot.placements.length || new Set(snapshot.groups.map(g => g.id)).size !== snapshot.groups.length ||
       new Set(snapshot.placements.map(p => p.group_id)).size !== snapshot.placements.length) throw new Error('Incomplete or stale account registry');
   if (!binding.deploymentId || binding.deploymentRevision < 1n || !binding.host.startsWith('https://') ||
@@ -64,7 +64,9 @@ export async function readLiveAccountAuthorityRegistry(
       ctx.target.networkKind !== binding.networkKind || ctx.identity.getPrincipal().isAnonymous()) throw new Error('Account registry target mismatch');
   const { connectLiveShardRouter } = await import('./domains');
   const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
-  const result = await actor.read_group_registry(binding.targetAlias);
-  if ('Err' in result) throw new Error(result.Err);
-  return { revision: result.Ok.revision, groups: accountAuthoritiesFromRegistry(result.Ok, binding) };
+  const { readPinnedGroupRegistry } = await import('./groupRegistryPager');
+  const principal = ctx.identity.getPrincipal().toText();
+  const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => actor.read_group_registry_page(binding.targetAlias, revision, cursor, limit),
+    binding.registryRevision, () => { if (ctx.identity.getPrincipal().toText() !== principal) throw new Error('Registry identity changed'); });
+  return { revision: snapshot.revision, groups: accountAuthoritiesFromRegistry(snapshot, binding) };
 }

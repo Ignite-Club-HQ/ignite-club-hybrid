@@ -53,7 +53,9 @@ const MEM_REMOVAL_INTENTS: u8 = 13;
 const MEM_REMOVAL_SUBJECTS: u8 = 14;
 const MEM_REMOVAL_RECEIPTS: u8 = 15;
 const MEM_DELETION_TICKETS: u8 = 16;
-const MAX_ACCOUNTS: usize = 10_000;
+// Stable B-tree rows grow independently of heap snapshots. Reserve a conservative
+// 8 KiB per account (including eight denial rows) within 32 GiB stable memory.
+const MAX_ACCOUNTS: usize = (32u64 * 1024 * 1024 * 1024 / 8192) as usize;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
 const MAX_FAMILIES: usize = 100_000;
@@ -381,7 +383,7 @@ fn service_authorities() -> Vec<Principal> {
 }
 fn validate_service_authorities(authorities: &[Principal]) -> Outcome<()> {
     let mut unique = authorities.to_vec(); unique.sort(); unique.dedup();
-    if authorities.is_empty() || authorities.len() > 64 || unique.len() != authorities.len() ||
+    if authorities.is_empty() || authorities.len() > 4096 || unique.len() != authorities.len() ||
         authorities.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister()) {
         return Err("Complete bounded service reader inventory required".into());
     }
@@ -411,7 +413,7 @@ fn read_service_account(subject: Principal) -> Outcome<Account> {
 }
 
 fn unlink_targets(job: &UnlinkIntent) -> Outcome<Vec<Principal>> {
-    if job.authorities.is_empty() || job.authorities.len() > 64 {
+    if job.authorities.is_empty() || job.authorities.len() > 4096 {
         return Err("Exact unlink authority snapshot required".into());
     }
     let mut distinct = job.authorities.clone(); distinct.sort(); distinct.dedup();
@@ -574,18 +576,41 @@ async fn read_group_inventory_evidence(expected_history_revision: u64) -> Outcom
     // Reread the authoritative registry to reject a changed snapshot across
     // async work. This is point-in-time evidence, NOT a held removal fence.
     for _ in 0..2 {
-        let reply = ic_cdk::call::Call::bounded_wait(binding.registry, "read_group_registry")
-            .with_arg(&binding.target_alias).await.map_err(|_| "Group inventory registry unavailable".to_string())?;
-        let result: Outcome<group_inventory::Snapshot> = reply.candid().map_err(|_| "Invalid registry reply".to_string())?;
-        let current = result?;
-        if removal_history_revision() != revision || group_inventory_binding().as_ref() != Some(&binding) {
-            return Err("Group inventory binding or history changed during read".into());
-        }
+        let current = read_registry_pages(&binding, || {
+            if removal_history_revision() != revision || group_inventory_binding().as_ref() != Some(&binding) {
+                return Err("Group inventory binding or history changed during read".into());
+            }
+            Ok(())
+        }).await?;
         group_inventory::validate(&current, &binding, &clubs, &readers)?;
         if snapshot.as_ref().is_some_and(|prior| prior != &current) { return Err("Group inventory changed during read".into()); }
         snapshot = Some(current);
     }
     Ok(group_inventory::Evidence { binding, history_revision: revision, snapshot: snapshot.ok_or("Missing registry snapshot")? })
+}
+#[derive(CandidType, Deserialize)]
+struct RegistryPage {
+    revision: u64, groups: Vec<group_inventory::Group>, placements: Vec<group_inventory::Placement>, next_cursor: Option<String>,
+}
+async fn read_registry_pages(binding: &group_inventory::Binding, recheck: impl Fn() -> Outcome<()>) -> Outcome<group_inventory::Snapshot> {
+    let mut snapshot = group_inventory::Snapshot { revision: binding.registry_revision, groups: vec![], placements: vec![] };
+    let mut cursor: Option<String> = None;
+    loop {
+        recheck()?;
+        let reply = ic_cdk::call::Call::bounded_wait(binding.registry, "read_group_registry_page")
+            .with_args(&(&binding.target_alias, Some(binding.registry_revision), &cursor, 64u32))
+            .await.map_err(|_| "Group registry page unavailable".to_string())?;
+        recheck()?;
+        let page: Outcome<RegistryPage> = reply.candid().map_err(|_| "Invalid registry page".to_string())?;
+        let page = page?;
+        if page.revision != binding.registry_revision || page.groups.len()>64 || page.placements.len()!=page.groups.len() ||
+            page.next_cursor.as_ref().is_some_and(|n| cursor.as_ref().is_some_and(|c| n<=c)) {
+            return Err("Registry revision or cursor changed".into());
+        }
+        snapshot.groups.extend(page.groups); snapshot.placements.extend(page.placements);
+        if snapshot.groups.len()>4096 { return Err("Registry safety bound exceeded".into()); }
+        match page.next_cursor { None => return Ok(snapshot), Some(next) => cursor=Some(next) }
+    }
 }
 fn removal_history_revision() -> u64 { REMOVAL_HISTORY_REVISION.with(|m| *m.borrow().get()) }
 fn supplemental_inventory() -> Vec<group_inventory::Supplemental> {
@@ -614,11 +639,8 @@ async fn read_removal_inventory_evidence(expected_history_revision: u64) -> Outc
     if !unchanged() { return Err("History revision changed".into()); }
     let mut prior = None;
     for _ in 0..2 {
-        let reply=ic_cdk::call::Call::bounded_wait(binding.registry,"read_group_registry").with_arg(&binding.target_alias)
-            .await.map_err(|_| "Group registry unavailable".to_string())?;
-        let snapshot: Outcome<group_inventory::Snapshot>=reply.candid().map_err(|_| "Invalid group registry reply".to_string())?;
-        if !unchanged() { return Err("Inventory changed during group read".into()); }
-        let snapshot=snapshot?; group_inventory::validate(&snapshot,&binding,&clubs,&[])?;
+        let snapshot = read_registry_pages(&binding, || if unchanged() { Ok(()) } else { Err("Inventory changed during group read".into()) }).await?;
+        group_inventory::validate(&snapshot,&binding,&clubs,&[])?;
         let mut media=Vec::new();
         for g in &snapshot.groups {
             let authority=g.domains.iter().find(|d|d.domain=="club_domain").ok_or("Missing club authority")?.canister;
@@ -766,7 +788,7 @@ fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {
     if !account_group_rehearsal_enabled() { return Err("Cross-group account lifecycle not released".into()); }
     require_governor(&state(), ic_cdk::api::msg_caller())?;
     if removal_pending() { return Err("Removal barrier pending".into()); }
-    if authorities.is_empty() || authorities.len() > 64 || authorities.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister()) {
+    if authorities.is_empty() || authorities.len() > 4096 || authorities.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister()) {
         return Err("Complete bounded club authority inventory required".into());
     }
     let mut sorted = authorities.clone(); sorted.sort(); sorted.dedup();
@@ -2349,6 +2371,21 @@ fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn history_retains_beyond_old_lifetime_caps() {
+        assert!(MAX_ACCOUNTS > 10_001);
+        for i in 0..80_001u32 {
+            let subject = Principal::from_slice(&i.to_be_bytes());
+            deny_principals(&[subject], "retained-history", 1, DenialReason::Erased).unwrap();
+        }
+        for i in 0..10_001u32 {
+            ERASED_ACCOUNTS.with(|m| m.borrow_mut().insert(format!("retained-{i}"), 1));
+        }
+        assert!(PRINCIPAL_DENIALS.with(|m| m.borrow().len()) > 80_000);
+        assert!(ERASED_ACCOUNTS.with(|m| m.borrow().len()) > 10_000);
+        assert!(principal_denial(Principal::from_slice(&0u32.to_be_bytes())).is_some());
+        assert!(ERASED_ACCOUNTS.with(|m| m.borrow().contains_key(&"retained-0".to_string())));
+    }
     #[test]
     fn removal_intent_survives_restored_accounts_and_cannot_complete_without_receivers() {
         let (snapshot,binding,clubs)=group_inventory::tests::fixture();

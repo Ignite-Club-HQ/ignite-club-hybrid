@@ -353,3 +353,23 @@ encrypted-upload and lost-acknowledgement tests in both backend modes, offline
 media-recipe/cutover safety tests and Candid drift checks.
 These do not establish deployed capacity, live migration compatibility or
 authenticated mainnet behavior.
+## Offline registry and retention scaling
+
+Group rows remain in router stable-memory B-tree 6; the safety bound is 4096
+(<32 MiB at a conservative 8 KiB per validated row plus tree overhead), not 64.
+`read_group_registry_page` scans at most 64 keys per message, includes matching
+placements, and pins continuation to an exact revision. Empty pages may advance
+over another target. Both consensus reads must keep that revision; changes fail
+closed rather than restart into a different inventory. The legacy read errors
+when more than one bounded scan is needed. No live gates change.
+
+Identity denial and erased-account B-trees (memories 6/7) already support direct
+stable growth and revision-pinned history pages. Their safety budget is now
+32 GiB / 8 KiB per account including eight denial rows (4,194,304 accounts),
+not 10,000 accounts / 80,000 denials. Receiver persistent core maps retain
+fences without upgrade serialization; reserve 512 MiB each at 1 KiB per intent
+and 128 B per subject (524,288 intents / 4,194,304 subjects). These are
+conservative accounting budgets, not an assertion of available memory; storage
+exhaustion must refuse and never prune history. Requests still touch at most
+eight subjects, and exact retries, terminal denials, immutable fences, and
+receiver-local (not global-completion) receipts remain unchanged.

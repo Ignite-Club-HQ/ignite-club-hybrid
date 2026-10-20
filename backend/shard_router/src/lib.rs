@@ -711,11 +711,40 @@ fn register_group_placement(placement: GroupPlacement, expected_revision: u64) -
 // account IDs, memberships or health receipts. This does not activate routing.
 #[ic_cdk::update]
 fn read_group_registry(target_alias: String) -> Outcome<GroupRegistrySnapshot> {
+    let page = read_group_registry_page(target_alias, None, None, 64)?;
+    if page.next_cursor.is_some() { return Err("Registry exceeds legacy reply; use read_group_registry_page".into()); }
+    Ok(GroupRegistrySnapshot { revision: page.revision, groups: page.groups, placements: page.placements })
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct GroupRegistryPage {
+    pub revision: u64, pub groups: Vec<ShardGroup>, pub placements: Vec<GroupPlacement>,
+    pub next_cursor: Option<String>,
+}
+
+// Cursor advances over at most 64 stable keys, including foreign targets: no
+// message scans an unbounded registry. Empty nonterminal pages are valid.
+#[ic_cdk::update]
+fn read_group_registry_page(target_alias: String, expected_revision: Option<u64>, cursor: Option<String>, limit: u32) -> Outcome<GroupRegistryPage> {
     if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
-    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
-    let groups: Vec<ShardGroup> = GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).filter(|g| g.target_alias == target_alias).collect());
+    if target_alias.is_empty() || target_alias.len() > 64 || limit == 0 || limit > 64 || cursor.as_ref().is_some_and(|c| c.len()>64) {
+        return Err("Invalid registry page".into());
+    }
+    let revision = current_revision();
+    if expected_revision.is_some_and(|r| r != revision) { return Err("Revision conflict".into()); }
+    if cursor.is_some() && expected_revision.is_none() { return Err("Paged continuation requires revision".into()); }
+    use std::ops::Bound::{Excluded, Unbounded};
+    let rows = GROUPS.with(|m| {
+        let m = m.borrow();
+        let start = cursor.map(|c| Excluded(c.into_bytes())).unwrap_or(Unbounded);
+        m.range((start, Unbounded)).take(limit as usize + 1).map(|e| (e.key().clone(), e.value())).collect::<Vec<_>>()
+    });
+    let next_cursor = if rows.len() > limit as usize {
+        Some(String::from_utf8(rows[limit as usize - 1].0.clone()).map_err(|_| "Invalid group key")?)
+    } else { None };
+    let groups: Vec<ShardGroup> = rows.into_iter().take(limit as usize).map(|(_,v)| decode::<ShardGroup>(&v)).filter(|g| g.target_alias == target_alias).collect();
     let placements = groups.iter().map(|g| GROUP_PLACEMENTS.with(|m| m.borrow().get(&g.id.as_bytes().to_vec()).map(|b| decode(&b))).ok_or_else(|| "Incomplete group placement registry".to_string())).collect::<Outcome<Vec<_>>>()?;
-    Ok(GroupRegistrySnapshot { revision: current_revision(), groups, placements })
+    Ok(GroupRegistryPage { revision, groups, placements, next_cursor })
 }
 
 #[ic_cdk::update]

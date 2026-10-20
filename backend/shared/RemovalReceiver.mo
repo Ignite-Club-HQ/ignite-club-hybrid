@@ -32,7 +32,9 @@ module {
         case (?prior) { return if (prior == request) #Ok else #Err("Immutable removal fence conflict") };
         case null {}
       };
-      if (intents.size() >= 10_000 or subjects.size() + request.subjects.size() > 80_000) return #Err("Removal fence capacity reached");
+      if (// Persistent core maps retain every fence; 512 MiB at a conservative
+      // 1 KiB/intent and 128 B/subject each, rather than lifetime account quotas.
+      intents.size() >= 524_288 or subjects.size() + request.subjects.size() > 4_194_304) return #Err("Removal fence capacity reached");
       var unique = Map.empty<Principal, Bool>();
       for (subject in request.subjects.values()) {
         if (Principal.isAnonymous(subject) or subject == Principal.fromText("aaaaa-aa") or unique.containsKey(subject) or subjects.containsKey(subject)) return #Err("Invalid or previously fenced subject");

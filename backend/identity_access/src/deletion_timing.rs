@@ -54,10 +54,13 @@ pub async fn commit_account_deletion(account_id: String) -> Outcome<()> {
     acquire(&t).await?;
     authorized(&account_id,caller)?;
     if get_account(&account_id).as_ref()!=Some(&t.account) || group_inventory_binding().as_ref()!=Some(&t.binding) { return Err("Deletion account or binding changed; reservation retained".into()); }
-    let response=ic_cdk::call::Call::bounded_wait(t.binding.registry,"read_group_registry").with_arg(&t.binding.target_alias)
-        .await.map_err(|_| "Deletion registry unavailable; reservation retained")?;
-    let snapshot: Outcome<group_inventory::Snapshot>=response.candid().map_err(|_| "Invalid deletion registry")?;
-    let snapshot=snapshot?;
+    let snapshot = read_registry_pages(&t.binding, || {
+        authorized(&account_id, caller)?;
+        if ticket(&account_id).as_ref()!=Some(&t) || get_account(&account_id).as_ref()!=Some(&t.account) || group_inventory_binding().as_ref()!=Some(&t.binding) {
+            return Err("Deletion account or binding changed; reservation retained".into());
+        }
+        Ok(())
+    }).await?;
     group_inventory::validate(&snapshot,&t.binding,&link_lifecycle().authorities,&[])?;
     // Read club-local authorization for every captured alias, not browser receipts.
     for group in &snapshot.groups {

@@ -48,6 +48,12 @@ type GroupPlacement = record {
   deployment_id : text;
   primary_subnet : principal;
 };
+type GroupRegistryPage = record {
+  groups : vec ShardGroup;
+  placements : vec GroupPlacement;
+  next_cursor : opt text;
+  revision : nat64;
+};
 type GroupRegistrySnapshot = record {
   groups : vec ShardGroup;
   placements : vec GroupPlacement;
@@ -75,7 +81,8 @@ type Result_12 = variant { Ok : opt Route; Err : text };
 type Result_13 = variant { Ok : vec ShardGroup; Err : text };
 type Result_14 = variant { Ok : Page; Err : text };
 type Result_15 = variant { Ok : GroupRegistrySnapshot; Err : text };
-type Result_16 = variant { Ok : vec GroupAssignment; Err : text };
+type Result_16 = variant { Ok : GroupRegistryPage; Err : text };
+type Result_17 = variant { Ok : vec GroupAssignment; Err : text };
 type Result_2 = variant { Ok : AssignResult; Err : text };
 type Result_3 = variant { Ok : AssignDomainResult; Err : text };
 type Result_4 = variant { Ok : GroupAssignment; Err : text };
@@ -144,8 +151,9 @@ service : (Init) -> {
   // the healthiest accepting group. Capped per principal; retries are free.
   place_my_new_club : (text, text) -> (Result_4);
   read_group_registry : (text) -> (Result_15);
+  read_group_registry_page : (text, opt nat64, opt text, nat32) -> (Result_16);
   read_hosted_club_assignment : (text, text, nat64) -> (Result_4);
-  read_my_group_assignments : (vec text, text, nat64) -> (Result_16);
+  read_my_group_assignments : (vec text, text, nat64) -> (Result_17);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   register_group : (ShardGroup, nat64) -> (Result);
   register_group_placement : (GroupPlacement, nat64) -> (Result);

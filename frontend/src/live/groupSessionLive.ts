@@ -1,6 +1,7 @@
 /** Lazy-load this explicit rehearsal API; nothing installs it in featureRouter.
  * Governor placement attestation is not independent subnet measurement.
  */
+import { readPinnedGroupRegistry } from './groupRegistryPager';
 import type { FeatureBackendContext } from './featureRouter';
 import { openGroupSession, type GroupRegistry } from './groupSession';
 import { GROUP_DOMAINS, type GroupDomain } from './groupRouting';
@@ -11,9 +12,10 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
   const { actor: router } = await connectLiveShardRouter(ctx.target, ctx.identity);
   return openGroupSession(ctx, {
     async readRegistry(): Promise<GroupRegistry> {
-      const reply = await router.read_group_registry(ctx.target.alias);
-      if ('Err' in reply) throw new Error(reply.Err);
-      const snapshot = reply.Ok; const first = snapshot.placements[0];
+      const principal = ctx.identity.getPrincipal().toText();
+      const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => router.read_group_registry_page(ctx.target.alias, revision, cursor, limit), undefined,
+        () => { if (ctx.identity.getPrincipal().toText() !== principal) throw new Error('Registry identity changed'); });
+      const first = snapshot.placements[0];
       if (!first) throw new Error('No complete group placement');
       for (const p of snapshot.placements) {
         if (p.deployment_id !== first.deployment_id || p.deployment_revision !== first.deployment_revision || p.host !== first.host ||
