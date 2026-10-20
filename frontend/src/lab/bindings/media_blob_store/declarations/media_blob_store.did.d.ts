@@ -223,6 +223,22 @@ export interface _SERVICE {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'read_physical_growth_capacity' : ActorMethod<
+    [],
+    {
+        'Ok' : {
+          'pending_count' : bigint,
+          'allocatable_object_slots' : bigint,
+          'configured_bytes' : bigint,
+          'allocated_bytes' : bigint,
+          'pending_slot_bytes' : bigint,
+          'revision' : bigint,
+          'legacy_pending_count' : bigint,
+          'max_object_slot_bytes' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'reconcile_retained_deletions' : ActorMethod<
     [string],
     { 'Ok' : { 'attempted' : bigint, 'cursor' : string } } |

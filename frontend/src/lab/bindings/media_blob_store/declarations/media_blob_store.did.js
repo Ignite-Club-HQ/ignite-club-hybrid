@@ -252,6 +252,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
+    'read_physical_growth_capacity' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'pending_count' : IDL.Nat,
+              'allocatable_object_slots' : IDL.Nat,
+              'configured_bytes' : IDL.Nat,
+              'allocated_bytes' : IDL.Nat,
+              'pending_slot_bytes' : IDL.Nat,
+              'revision' : IDL.Nat,
+              'legacy_pending_count' : IDL.Nat,
+              'max_object_slot_bytes' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'reconcile_retained_deletions' : IDL.Func(
         [IDL.Text],
         [

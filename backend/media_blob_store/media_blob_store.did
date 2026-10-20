@@ -246,6 +246,21 @@ service : {
       Err: text;
       Ok: Receipt;
     });
+  read_physical_growth_capacity: () ->
+   (variant {
+      Err: text;
+      Ok:
+       record {
+         allocatable_object_slots: nat;
+         allocated_bytes: nat;
+         configured_bytes: nat;
+         legacy_pending_count: nat;
+         max_object_slot_bytes: nat;
+         pending_count: nat;
+         pending_slot_bytes: nat;
+         revision: nat;
+       };
+    });
   reconcile_retained_deletions: (cursor: text) ->
    (variant {
       Err: text;
