@@ -414,6 +414,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    configure_media_growth_router(router: Principal, group: string, target: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     create_child_for_parent_in_club(club_id: string, parent: Principal): Promise<{
         __kind__: "Ok";
         Ok: Child;
@@ -3265,6 +3272,16 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.configure_media_growth(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n17(result);
+    }
+    async configure_media_growth_router(arg0: Principal, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.configure_media_growth_router(arg0, arg1, arg2);
         return from_candid_variant_n17(result);
     }
     async create_child_for_parent_in_club(arg0: string, arg1: Principal): Promise<{

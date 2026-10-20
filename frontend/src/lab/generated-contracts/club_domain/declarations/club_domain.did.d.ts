@@ -364,6 +364,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'configure_media_growth_router' : ActorMethod<
+    [Principal, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'create_child_for_parent_in_club' : ActorMethod<
     [string, Principal],
     { 'Ok' : Child } |
