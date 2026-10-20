@@ -27,7 +27,7 @@ import Types "types";
 import Timer "mo:core/Timer";
 import PhotoReminderPolicy "photoReminderPolicy";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
   transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
   transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
@@ -904,7 +904,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func postMessage(convIndex : Nat, sender : Principal, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : Types.Message {
-    if (removalReceiver.denied(sender)) throw Error.reject("Account removal fenced");
+    if (removalReceiver.denied(sender)) Runtime.trap("Account removal fenced");
     let conv = conversations[convIndex];
     let seq = conv.next_sequence;
     let msg : Types.Message = {
