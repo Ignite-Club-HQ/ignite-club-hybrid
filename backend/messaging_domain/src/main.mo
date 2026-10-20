@@ -1160,7 +1160,8 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { null };
     };
     for (msg in messages.values()) {
-      if (isPhotoAttachment(msg.attachment) and msg.created_at_ms >= oldestEligibleMs and msg.created_at_ms <= newestEligibleMs) {
+      if (isPhotoAttachment(msg.attachment) and msg.created_at_ms >= oldestEligibleMs and msg.created_at_ms <= newestEligibleMs and removalReceiver.enter(msg.sender)) {
+        try {
         var teamId : ?Text = null;
         var clubId : ?Text = null;
         for (c in conversations.values()) {
@@ -1191,7 +1192,7 @@ persistent actor class Main(governorInit : Principal) = this {
                     switch (result) {
                       case (#Ok(count)) {
                         posted += Nat32.fromNat(Nat16.toNat(count));
-                        if (count > 0) recordReminded(team, msg.sender, now_ms) else skipped += 1;
+                        if (count > 0 and not removalReceiver.denied(msg.sender)) recordReminded(team, msg.sender, now_ms) else skipped += 1;
                       };
                       case (#Err(_)) { skipped += 1 };
                     };
@@ -1202,6 +1203,7 @@ persistent actor class Main(governorInit : Principal) = this {
             };
           };
         };
+        } finally { removalReceiver.leave(msg.sender) };
       };
     };
     #Ok({ scanned; posted; skipped });
@@ -3074,6 +3076,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // Local roles are only governor-granted; club admins live on club_domain.
   // Fall back to the authoritative club_domain admin list (fail-closed if unset).
   func requireClubAdminLive(caller : Principal, club_id : Text) : async ?Text {
+    if (removalReceiver.denied(caller)) return ?"Account removal fenced";
     switch (requireClubAdmin(caller, club_id)) {
       case null { return null };
       case (?e) {
@@ -3082,8 +3085,10 @@ persistent actor class Main(governorInit : Principal) = this {
           case null { ?e };
           case (?cd) {
             let admins = try { await cd.list_club_admins(club_id) } catch (_) { [] };
+            if (removalReceiver.denied(caller)) return ?"Account removal fenced";
             if (admins.any(func(p : Principal) : Bool = p.equal(caller))) null else {
               let appAdmin = try { if (accountAdmissionEnabled) await cd.read_account_is_app_admin(caller) else await cd.is_app_admin(caller) } catch (_) { false };
+              if (removalReceiver.denied(caller)) return ?"Account removal fenced";
               if (appAdmin) null else ?e
             }
           };
@@ -4779,6 +4784,9 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
+    if (not removalReceiver.enter(principal)) return #Err("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(principal);
     var result : [Types.ClubUnreadSummary] = [];
     for (conversation in conversations.values()) {
       let visible = try { await* requireChatAccess(principal, conversation.id); true } catch (_) { false };
@@ -4792,7 +4800,9 @@ persistent actor class Main(governorInit : Principal) = this {
       };
     };
     if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
+    if (removalReceiver.denied(principal)) throw Error.reject("Account removal fenced");
     #Ok(result)
+    } finally { removalReceiver.leave(principal) };
   
     } finally { removalReceiver.leave(caller) };
   };
@@ -4802,6 +4812,9 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
+    if (not removalReceiver.enter(principal)) return #Err("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(principal);
     if (limit == 0 or limit > 100) return #Err("Invalid limit");
     var entries : [Types.RecentConversation] = [];
     for (conversation in conversations.values()) {
@@ -4814,7 +4827,9 @@ persistent actor class Main(governorInit : Principal) = this {
     let sorted = entries.sort(func(a, b) = Nat64.compare(b.last_message_sequence, a.last_message_sequence));
     let take = if (sorted.size() < Nat16.toNat(limit)) sorted.size() else Nat16.toNat(limit);
     if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
+    if (removalReceiver.denied(principal)) throw Error.reject("Account removal fenced");
     #Ok(Array.tabulate<Types.RecentConversation>(take, func(i) = sorted[i]))
+    } finally { removalReceiver.leave(principal) };
   
     } finally { removalReceiver.leave(caller) };
   };
@@ -4938,7 +4953,14 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
-    removalReceiver.prepare(caller, request)
+    switch (removalReceiver.prepare(caller, request)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok) {
+        // Cancel only unfinished local schedules; preserve historical messages.
+        scheduledMessages := scheduledMessages.filter(func(s) = s.replayed_at_ms != null or not request.subjects.any(func(p) = p.equal(s.sender)));
+        #Ok
+      }
+    }
   };
   public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
     removalReceiver.receipt(caller, request, Principal.fromActor(this), 0)
