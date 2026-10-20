@@ -38,6 +38,13 @@ function api(path: string, method = 'GET', body?: unknown): any {
   if (r.status !== 0) throw new Error(`GitHub journal request failed (${method} ${path}); no paid replay permitted`);
   return JSON.parse(r.stdout);
 }
+function readJournal(path: string) {
+  const entry = api(`contents/${path}?ref=${branch}`);
+  // Contents responses omit inline content above 1 MiB; tiny-file evidence exceeds that.
+  const blob = api(`git/blobs/${entry.sha}`);
+  if (blob.encoding !== 'base64') throw new Error('Unexpected journal blob encoding');
+  return { sha: entry.sha, text: Buffer.from(blob.content, 'base64').toString() };
+}
 // A dedicated branch keeps frequent evidence updates out of application source history.
 const refs = api('git/matching-refs/heads/ignite-media-test-receipts');
 if (!refs.some((r: any) => r.ref === `refs/heads/${branch}`)) {
@@ -49,8 +56,8 @@ if (entries.truncated) throw new Error('Incomplete journal inventory');
 let sha: string | undefined;
 let state: any = { binding, phase: 'approved', pending: null, receipts: [], objects: {} };
 if (entries.tree.some((e: any) => e.path === file)) {
-  const r = api(`contents/${file}?ref=${branch}`); sha = r.sha;
-  state = JSON.parse(Buffer.from(r.content, 'base64').toString()); assertResume(state, binding);
+  const r = readJournal(file); sha = r.sha;
+  state = JSON.parse(r.text); assertResume(state, binding);
   if (state.phase !== 'complete') throw new Error('Interrupted test requires operator reconciliation; use a new id only after accounting for the old target');
   console.log(`Already complete: ${state.canisterId}`); process.exit(0);
 }
@@ -60,8 +67,8 @@ async function save() {
   const r = api(`contents/${file}`, 'PUT', { message: `Storage test ${binding.runId}: ${state.phase}`, branch,
     content: Buffer.from(text).toString('base64'), ...(sha ? { sha } : {}) });
   sha = r.content.sha;
-  const check = api(`contents/${file}?ref=${branch}`);
-  if (Buffer.from(check.content, 'base64').toString() !== text) throw new Error('Durable checkpoint read-back mismatch');
+  const check = readJournal(file);
+  if (check.text !== text) throw new Error('Durable checkpoint read-back mismatch');
 }
 const protectedIds = new Set<string>(Object.values(LIVE));
 // Include every checked-in group and earlier test target, not just generated group-1 IDs.
@@ -78,7 +85,7 @@ function scan(dir: string) {
 }
 scan(join(root, 'deploy/groups')); scan(join(root, 'deploy/mainnet/.icp/data/mappings'));
 for (const e of entries.tree.filter((e: any) => /^deploy\/media-tests\/[^/]+\.json$/.test(e.path))) {
-  const r = api(`contents/${e.path}?ref=${branch}`); collect(JSON.parse(Buffer.from(r.content, 'base64').toString()));
+  const r = readJournal(e.path); collect(JSON.parse(r.text));
 }
 const agent = await HttpAgent.create({ identity, host: binding.host, shouldFetchRootKey: false });
 const calls = await mainnetInstallCalls(binding.host, identity);
