@@ -879,9 +879,218 @@
     "users/network-test/media-mixed-001/202": {
       "size": 8388608,
       "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/206": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/204": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/205": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/207": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    },
+    "users/network-test/media-mixed-001/210": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/209": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/211": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/208": {
+      "size": 8388608,
+      "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/212": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/215": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/213": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    },
+    "users/network-test/media-mixed-001/214": {
+      "size": 8388608,
+      "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/218": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/216": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/217": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/219": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    },
+    "users/network-test/media-mixed-001/222": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/221": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/223": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/220": {
+      "size": 8388608,
+      "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/224": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/227": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/225": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    },
+    "users/network-test/media-mixed-001/226": {
+      "size": 8388608,
+      "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/230": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/228": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/229": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/231": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    },
+    "users/network-test/media-mixed-001/234": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/235": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/233": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/232": {
+      "size": 8388608,
+      "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/236": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/239": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/237": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    },
+    "users/network-test/media-mixed-001/238": {
+      "size": 8388608,
+      "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/242": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/240": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/241": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/243": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    },
+    "users/network-test/media-mixed-001/246": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/247": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/245": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/244": {
+      "size": 8388608,
+      "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/248": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/251": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/249": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
+    },
+    "users/network-test/media-mixed-001/250": {
+      "size": 8388608,
+      "hash": "7fbc80340f1bdca09d90c6b666047c416d7eee1c285b3bd001bc4c8a162f53df"
+    },
+    "users/network-test/media-mixed-001/254": {
+      "size": 409600,
+      "hash": "078b7cb261bd8f1b52b57aef1430fb4201605526fea349b6112ea6f47054349f"
+    },
+    "users/network-test/media-mixed-001/252": {
+      "size": 1048576,
+      "hash": "46e9ae8b555b531ffc522681c25f21f4ea1f912e18ea6e21a6432567e078290a"
+    },
+    "users/network-test/media-mixed-001/253": {
+      "size": 2097152,
+      "hash": "8a6a533f3d01ce9f0d67bd2b6c0d5a8ecd327e617b46cf707c8e158955c92617"
+    },
+    "users/network-test/media-mixed-001/255": {
+      "size": 4194304,
+      "hash": "98289e6220312a94ae0baeed16ae4eed59f032a86e17d05960b0883a3768aad3"
     }
   },
   "createdAtNs": "1792478096172000000",
   "canisterId": "2knbe-saaaa-aaaal-qxpua-cai",
-  "initialCycles": "4394997667949"
+  "initialCycles": "4394997667949",
+  "error": "The replica returned a rejection error:\n  Request ID: 95541e9b993dde76a7f3679f066ec8843e77caac95d82c4dced331d5a994aa75\n  Reject code: 4\n  Reject text: could not perform self call\n  Error code: IC0406\n\nCall context:\n  Canister ID: 2knbe-saaaa-aaaal-qxpua-cai\n  Method name: begin_upload\n  HTTP details: {\n  \"ok\": true,\n  \"status\": 200,\n  \"statusText\": \"OK\",\n  \"headers\": [\n    [\n      \"access-control-allow-origin\",\n      \"*\"\n    ],\n    [\n      \"access-control-expose-headers\",\n      \"accept-ranges,content-length,content-range,x-request-id,x-ic-canister-id\"\n    ],\n    [\n      \"content-length\",\n      \"1939\"\n    ],\n    [\n      \"content-type\",\n      \"application/cbor\"\n    ],\n    [\n      \"date\",\n      \"Tue, 20 Oct 2026 07:11:39 GMT\"\n    ],\n    [\n      \"strict-transport-security\",\n      \"max-age=31536000; includeSubDomains\"\n    ],\n    [\n      \"x-content-type-options\",\n      \"nosniff\"\n    ],\n    [\n      \"x-frame-options\",\n      \"DENY\"\n    ],\n    [\n      \"x-ic-canister-id\",\n      \"2knbe-saaaa-aaaal-qxpua-cai\"\n    ],\n    [\n      \"x-request-id\",\n      \"01a15826-c586-7660-b202-899707e6df3b\"\n    ]\n  ]\n}"
 }
