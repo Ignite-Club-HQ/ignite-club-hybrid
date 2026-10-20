@@ -13,7 +13,7 @@ export async function openAccountDeletionInventory(target: IcpTargetConfig, iden
     : undefined;
   try {
     const targets = session
-      ? [target, ...await session.readEveryGroup('club_domain', async ctx => [ctx.target], 64)]
+      ? [target, ...await session.readEveryGroup('club_domain', async ctx => [ctx.target], 4096)]
       : [target];
     const byDomain = new Map<DeletionDomain, IcpTargetConfig[]>();
     for (const domain of required) {

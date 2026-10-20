@@ -11,7 +11,7 @@ type Actors = {
 /** Governor-only composition; input must be the complete approved deployment
  * inventory, including legacy/shared groups. Never caller membership discovery. */
 export async function wireAccountGroupAuthorities(groups: readonly AccountAuthorityGroup[], identityId: string, actors: Actors): Promise<void> {
-  if (!groups.length || groups.length > 64) throw new Error('Complete bounded group inventory required');
+  if (!groups.length || groups.length > 4096) throw new Error('Complete bounded group inventory required');
   if (new Set(groups.map(g => g.groupId)).size !== groups.length || new Set(groups.map(g => g.clubDomain)).size !== groups.length) throw new Error('Duplicate account authority');
   const identity = Principal.fromText(identityId);
   const clubs = groups.map(g => Principal.fromText(g.clubDomain));

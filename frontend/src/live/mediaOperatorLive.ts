@@ -1,3 +1,4 @@
+import { readPinnedGroupRegistry } from './groupRegistryPager';
 /** Explicit governor-only live transport, lazy-loaded by operator tooling.
  * Never imports into app boot and never switches routing or permits a move. */
 import type { Identity } from '@icp-sdk/core/agent';
@@ -29,8 +30,9 @@ export async function createLiveMediaOperator(binding: {
   const { actor: router } = await connectLiveShardRouter(d.target, d.identity);
   const at = (domain: string, id: string): IcpTargetConfig => ({ ...d.target, canisterIds: { ...d.target.canisterIds, [domain]: id } });
   const snapshot = async () => {
-    const r = await router.read_group_registry(d.target.alias); if ('Err' in r) throw new Error(r.Err);
-    const p = r.Ok.placements[0]; if (!p || r.Ok.groups.length !== r.Ok.placements.length || r.Ok.groups.length > 1024) throw new Error('Complete bounded group registry required');
+    const r = { Ok: await readPinnedGroupRegistry((revision, cursor, limit) => router.read_group_registry_page(d.target.alias, revision, cursor, limit), undefined,
+      () => { if (d.identity.getPrincipal().toText() !== binding.governor) throw new Error('Governor identity changed'); }) };
+    const p = r.Ok.placements[0]; if (!p || r.Ok.groups.length !== r.Ok.placements.length || r.Ok.groups.length > 4096) throw new Error('Complete bounded group registry required');
     const signature = (v: typeof p) => JSON.stringify({ deployment: v.deployment_id, revision: String(v.deployment_revision), host: v.host,
       network: v.network_kind, primary: v.primary_subnet.toText(), additional: v.additional_subnets_enabled, approved: v.approved_subnets.map(s => s.toText()).sort() });
     if (p.deployment_id !== binding.deploymentId || p.host !== new URL(d.target.host).origin || p.network_kind !== d.target.networkKind ||

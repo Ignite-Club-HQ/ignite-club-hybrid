@@ -63,6 +63,13 @@ export type Result_2 = {
     __kind__: "Err";
     Err: string;
 };
+export type Result_17 = {
+    __kind__: "Ok";
+    Ok: Array<GroupAssignment>;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export type Result_13 = {
     __kind__: "Ok";
     Ok: Array<ShardGroup>;
@@ -93,14 +100,14 @@ export type Result_1 = {
 };
 export type Result_16 = {
     __kind__: "Ok";
-    Ok: Array<GroupAssignment>;
+    Ok: GroupRegistryPage;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type Result_4 = {
+export type Result_11 = {
     __kind__: "Ok";
-    Ok: GroupAssignment;
+    Ok: Migration | null;
 } | {
     __kind__: "Err";
     Err: string;
@@ -109,9 +116,9 @@ export interface AssignResult {
     revision: bigint;
     route: Route;
 }
-export type Result_11 = {
+export type Result_4 = {
     __kind__: "Ok";
-    Ok: Migration | null;
+    Ok: GroupAssignment;
 } | {
     __kind__: "Err";
     Err: string;
@@ -242,16 +249,15 @@ export interface DeletionLock {
     account_id: string;
     revision: bigint;
 }
+export interface GroupRegistryPage {
+    groups: Array<ShardGroup>;
+    placements: Array<GroupPlacement>;
+    next_cursor?: string;
+    revision: bigint;
+}
 export type Result_15 = {
     __kind__: "Ok";
     Ok: GroupRegistrySnapshot;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_3 = {
-    __kind__: "Ok";
-    Ok: AssignDomainResult;
 } | {
     __kind__: "Err";
     Err: string;
@@ -261,6 +267,13 @@ export interface DomainPlacement {
     subnet: Principal;
     canister: Principal;
 }
+export type Result_3 = {
+    __kind__: "Ok";
+    Ok: AssignDomainResult;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export type Result_8 = {
     __kind__: "Ok";
     Ok: DomainMigration | null;
@@ -304,8 +317,9 @@ export interface shard_routerInterface {
     memory_stats(): Promise<MemoryStats>;
     place_my_new_club(arg0: string, arg1: string): Promise<Result_4>;
     read_group_registry(arg0: string): Promise<Result_15>;
+    read_group_registry_page(arg0: string, arg1: bigint | null, arg2: string | null, arg3: number): Promise<Result_16>;
     read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_4>;
-    read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_16>;
+    read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_17>;
     record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result>;
     register_group(arg0: ShardGroup, arg1: bigint): Promise<Result>;
     register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result>;
@@ -314,7 +328,7 @@ export interface shard_routerInterface {
     set_deletion_authority(arg0: Principal): Promise<Result_7>;
     version(): Promise<bigint>;
 }
-import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DeletionLock as _DeletionLock, DomainCanister as _DomainCanister, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, GroupPlacement as _GroupPlacement, GroupRegistrySnapshot as _GroupRegistrySnapshot, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
+import type { AssignDomainResult as _AssignDomainResult, AssignResult as _AssignResult, DeletionLock as _DeletionLock, DomainCanister as _DomainCanister, DomainMigration as _DomainMigration, DomainRoute as _DomainRoute, GroupAssignment as _GroupAssignment, GroupPlacement as _GroupPlacement, GroupRegistryPage as _GroupRegistryPage, GroupRegistrySnapshot as _GroupRegistrySnapshot, Migration as _Migration, Page as _Page, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_17 as _Result_17, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Route as _Route, ShardGroup as _ShardGroup } from "./declarations/shard_router.did";
 export class Shard_router implements shard_routerInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result> {
@@ -409,20 +423,24 @@ export class Shard_router implements shard_routerInterface {
         const result = await this.actor.read_group_registry(arg0);
         return from_candid_Result_15_n44(result);
     }
+    async read_group_registry_page(arg0: string, arg1: bigint | null, arg2: string | null, arg3: number): Promise<Result_16> {
+        const result = await this.actor.read_group_registry_page(arg0, to_candid_opt_n48(arg1), to_candid_opt_n38(arg2), arg3);
+        return from_candid_Result_16_n49(result);
+    }
     async read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_4> {
         const result = await this.actor.read_hosted_club_assignment(arg0, arg1, arg2);
         return from_candid_Result_4_n9(result);
     }
-    async read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_16> {
+    async read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_17> {
         const result = await this.actor.read_my_group_assignments(arg0, arg1, arg2);
-        return from_candid_Result_16_n48(result);
+        return from_candid_Result_17_n53(result);
     }
     async record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result> {
         const result = await this.actor.record_group_health(arg0, arg1, arg2, arg3);
         return from_candid_Result_n1(result);
     }
     async register_group(arg0: ShardGroup, arg1: bigint): Promise<Result> {
-        const result = await this.actor.register_group(to_candid_ShardGroup_n50(arg0), arg1);
+        const result = await this.actor.register_group(to_candid_ShardGroup_n55(arg0), arg1);
         return from_candid_Result_n1(result);
     }
     async register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result> {
@@ -445,6 +463,9 @@ export class Shard_router implements shard_routerInterface {
         const result = await this.actor.version();
         return result;
     }
+}
+function from_candid_GroupRegistryPage_n51(value: _GroupRegistryPage): GroupRegistryPage {
+    return from_candid_record_n52(value);
 }
 function from_candid_GroupRegistrySnapshot_n46(value: _GroupRegistrySnapshot): GroupRegistrySnapshot {
     return from_candid_record_n47(value);
@@ -470,8 +491,11 @@ function from_candid_Result_14_n39(value: _Result_14): Result_14 {
 function from_candid_Result_15_n44(value: _Result_15): Result_15 {
     return from_candid_variant_n45(value);
 }
-function from_candid_Result_16_n48(value: _Result_16): Result_16 {
-    return from_candid_variant_n49(value);
+function from_candid_Result_16_n49(value: _Result_16): Result_16 {
+    return from_candid_variant_n50(value);
+}
+function from_candid_Result_17_n53(value: _Result_17): Result_17 {
+    return from_candid_variant_n54(value);
 }
 function from_candid_Result_1_n3(value: _Result_1): Result_1 {
     return from_candid_variant_n4(value);
@@ -596,6 +620,24 @@ function from_candid_record_n47(value: {
     return {
         groups: from_candid_vec_n34(value.groups),
         placements: value.placements,
+        revision: value.revision
+    };
+}
+function from_candid_record_n52(value: {
+    groups: Array<_ShardGroup>;
+    placements: Array<_GroupPlacement>;
+    next_cursor: [] | [string];
+    revision: bigint;
+}): {
+    groups: Array<ShardGroup>;
+    placements: Array<GroupPlacement>;
+    next_cursor?: string;
+    revision: bigint;
+} {
+    return {
+        groups: from_candid_vec_n34(value.groups),
+        placements: value.placements,
+        next_cursor: record_opt_to_undefined(from_candid_opt_n43(value.next_cursor)),
         revision: value.revision
     };
 }
@@ -865,7 +907,26 @@ function from_candid_variant_n45(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n49(value: {
+function from_candid_variant_n50(value: {
+    Ok: _GroupRegistryPage;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: GroupRegistryPage;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_GroupRegistryPage_n51(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n54(value: {
     Ok: Array<_GroupAssignment>;
 } | {
     Err: string;
@@ -925,13 +986,16 @@ function from_candid_variant_n8(value: {
 function from_candid_vec_n34(value: Array<_ShardGroup>): Array<ShardGroup> {
     return value.map((x)=>from_candid_ShardGroup_n35(x));
 }
-function to_candid_ShardGroup_n50(value: ShardGroup): _ShardGroup {
-    return to_candid_record_n51(value);
+function to_candid_ShardGroup_n55(value: ShardGroup): _ShardGroup {
+    return to_candid_record_n56(value);
 }
 function to_candid_opt_n38(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_record_n51(value: {
+function to_candid_opt_n48(value: bigint | null): [] | [bigint] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_record_n56(value: {
     id: string;
     max_clubs: number;
     observed_at_ns: bigint;

@@ -85,7 +85,7 @@ pub fn validate_binding(b: &Binding) -> Result<(), String> {
 }
 pub fn validate(snapshot: &Snapshot, b: &Binding, clubs: &[Principal], readers: &[Principal]) -> Result<(), String> {
     validate_binding(b)?;
-    if snapshot.revision != b.registry_revision || snapshot.groups.is_empty() || snapshot.groups.len() > 64 ||
+    if snapshot.revision != b.registry_revision || snapshot.groups.is_empty() || snapshot.groups.len() > 4096 ||
         snapshot.groups.len() != snapshot.placements.len() || clubs.is_empty() {
         return Err("Incomplete or stale group inventory".into());
     }

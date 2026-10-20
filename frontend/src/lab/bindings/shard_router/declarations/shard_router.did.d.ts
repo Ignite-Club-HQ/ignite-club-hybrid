@@ -63,6 +63,12 @@ export interface GroupPlacement {
   'deployment_id' : string,
   'primary_subnet' : Principal,
 }
+export interface GroupRegistryPage {
+  'groups' : Array<ShardGroup>,
+  'placements' : Array<GroupPlacement>,
+  'next_cursor' : [] | [string],
+  'revision' : bigint,
+}
 export interface GroupRegistrySnapshot {
   'groups' : Array<ShardGroup>,
   'placements' : Array<GroupPlacement>,
@@ -102,7 +108,9 @@ export type Result_14 = { 'Ok' : Page } |
   { 'Err' : string };
 export type Result_15 = { 'Ok' : GroupRegistrySnapshot } |
   { 'Err' : string };
-export type Result_16 = { 'Ok' : Array<GroupAssignment> } |
+export type Result_16 = { 'Ok' : GroupRegistryPage } |
+  { 'Err' : string };
+export type Result_17 = { 'Ok' : Array<GroupAssignment> } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : AssignResult } |
   { 'Err' : string };
@@ -194,13 +202,17 @@ export interface _SERVICE {
    */
   'place_my_new_club' : ActorMethod<[string, string], Result_4>,
   'read_group_registry' : ActorMethod<[string], Result_15>,
+  'read_group_registry_page' : ActorMethod<
+    [string, [] | [bigint], [] | [string], number],
+    Result_16
+  >,
   'read_hosted_club_assignment' : ActorMethod<
     [string, string, bigint],
     Result_4
   >,
   'read_my_group_assignments' : ActorMethod<
     [Array<string>, string, bigint],
-    Result_16
+    Result_17
   >,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,

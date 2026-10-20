@@ -36,7 +36,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const registryFingerprint = (value: GroupRegistry) => JSON.stringify(value, (_key, v) => typeof v === 'bigint' ? v.toString() : v);
   const initialRegistry = registryFingerprint(registry);
   sameIdentity();
-  if (registry.revision < 1n || registry.groups.length < 1 || registry.groups.length > 64 ||
+  if (registry.revision < 1n || registry.groups.length < 1 || registry.groups.length > 4096 ||
       registry.deployment.alias !== context.target.alias || registry.deployment.networkKind !== context.target.networkKind ||
       new URL(registry.deployment.host).origin !== new URL(context.target.host).origin ||
       registry.bindings.length !== registry.groups.length || new Set(registry.groups.map(g => g.id)).size !== registry.groups.length ||

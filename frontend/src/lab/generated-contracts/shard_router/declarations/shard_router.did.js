@@ -144,7 +144,14 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : GroupRegistrySnapshot,
     'Err' : IDL.Text,
   });
-  const Result_16 = IDL.Variant({
+  const GroupRegistryPage = IDL.Record({
+    'groups' : IDL.Vec(ShardGroup),
+    'placements' : IDL.Vec(GroupPlacement),
+    'next_cursor' : IDL.Opt(IDL.Text),
+    'revision' : IDL.Nat64,
+  });
+  const Result_16 = IDL.Variant({ 'Ok' : GroupRegistryPage, 'Err' : IDL.Text });
+  const Result_17 = IDL.Variant({
     'Ok' : IDL.Vec(GroupAssignment),
     'Err' : IDL.Text,
   });
@@ -224,6 +231,11 @@ export const idlFactory = ({ IDL }) => {
     'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
     'place_my_new_club' : IDL.Func([IDL.Text, IDL.Text], [Result_4], []),
     'read_group_registry' : IDL.Func([IDL.Text], [Result_15], []),
+    'read_group_registry_page' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Opt(IDL.Text), IDL.Nat32],
+        [Result_16],
+        [],
+      ),
     'read_hosted_club_assignment' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [Result_4],
@@ -231,7 +243,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_my_group_assignments' : IDL.Func(
         [IDL.Vec(IDL.Text), IDL.Text, IDL.Nat64],
-        [Result_16],
+        [Result_17],
         [],
       ),
     'record_group_health' : IDL.Func(
