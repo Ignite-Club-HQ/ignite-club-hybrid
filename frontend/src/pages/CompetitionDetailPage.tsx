@@ -296,7 +296,7 @@ function SupabaseCompetitionDetailPage() {
           points_win: Number(found.points_win ?? 3),
           points_draw: Number(found.points_draw ?? 1),
           points_loss: Number(found.points_loss ?? 0),
-          source: null,
+          source: "icp",
           clubs: { id: found.club_id, name: clubName, kind: null },
         };
       }
@@ -701,7 +701,7 @@ function SupabaseCompetitionDetailPage() {
         <TabsList className="w-full">
           <TabsTrigger value="fixtures" className="flex-1">Fixtures</TabsTrigger>
           {canViewLadder && <TabsTrigger value="ladder" className="flex-1">Ladder</TabsTrigger>}
-          {competition.source === "playhq" && (
+          {(competition.source === "playhq" || isIcp) && (
             <TabsTrigger value="stats" className="flex-1">Stats</TabsTrigger>
           )}
           {isAdmin && (
@@ -728,9 +728,9 @@ function SupabaseCompetitionDetailPage() {
           </TabsContent>
         )}
 
-        {competition.source === "playhq" && (
+        {(competition.source === "playhq" || isIcp) && (
           <TabsContent value="stats" className="space-y-2 mt-2">
-            <CompetitionPlayerStatsPanel competitionId={id!} sport={(competition as any).sport} />
+            <CompetitionPlayerStatsPanel competitionId={id ?? ""} sport={(competition as any).sport} canManage={canManage} />
           </TabsContent>
         )}
 

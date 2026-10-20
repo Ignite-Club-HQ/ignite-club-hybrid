@@ -16,6 +16,7 @@ const liveMocks = vi.hoisted(() => ({
   saveLiveGameResult: vi.fn(),
   getUser: vi.fn(),
   from: vi.fn(),
+  preservedSave:vi.fn(),
   context: { identity: {}, target: {} },
 }));
 const supabaseMode = liveMocks.backend === "supabase";
@@ -30,6 +31,7 @@ vi.mock("@/live/featureRouter", () => ({
 vi.mock("@/live/features/events", () => ({
   saveLiveGameResult: (...args: unknown[]) => liveMocks.saveLiveGameResult(...args),
 }));
+vi.mock("@/features/competitions/history/historyRepository",()=>({saveHistoryResult:(...args:unknown[])=>liveMocks.preservedSave(...args)}));
 
 // ---- toast mock --------------------------------------------------------
 const toastSpy = vi.fn();
@@ -103,6 +105,7 @@ const baseInput = (): SaveGameResultInput => ({
 beforeEach(() => {
   liveMocks.backend = supabaseMode ? "supabase" : "icp";
   liveMocks.saveLiveGameResult.mockReset();
+  liveMocks.preservedSave.mockReset().mockResolvedValue(undefined);
   liveMocks.getUser.mockReset().mockImplementation(async () => ({ data: { user: currentUser } }));
   liveMocks.from.mockReset().mockImplementation((table: string) => table === "events" ? { select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => eventResponse) })) })) } : makeFromBuilder());
   eventResponse = { data: { competition_match_id: null }, error: null };
@@ -115,10 +118,8 @@ beforeEach(() => {
 
 // ---- tests -------------------------------------------------------------
 describe.runIf(supabaseMode)("useSaveGameResult — onlyIfMissing fail-closed", () => {
-  it.each(["competition", "denied", "transport"])("refuses history writes on %s and permits retry", async (kind) => {
-    eventResponse = kind === "competition"
-      ? { data: { competition_match_id: "match-1" }, error: null }
-      : { data: { competition_match_id: null }, error: { message: kind } };
+  it.each(["denied", "transport"])("refuses history writes on %s and permits retry", async (kind) => {
+    eventResponse = { data: { competition_match_id: null }, error: { message: kind } };
     const { result } = renderHook(() => useSaveGameResult(), { wrapper });
     await act(async () => { expect(await result.current.save(baseInput())).toBe(false); });
     expect(ops).toEqual([]);
@@ -127,6 +128,15 @@ describe.runIf(supabaseMode)("useSaveGameResult — onlyIfMissing fail-closed", 
     eventResponse = { data: { competition_match_id: null }, error: null };
     await act(async () => { expect(await result.current.save(baseInput())).toBe(true); });
     expect(ops).toEqual(["upsert"]);
+  });
+  it("preserves competition detail through the manager-authorized atomic save",async()=>{
+    eventResponse={data:{competition_match_id:"match-1"},error:null};
+    const {result}=renderHook(()=>useSaveGameResult(),{wrapper});
+    await act(async()=>expect(await result.current.save(baseInput(),{onlyIfMissing:true})).toBe(true));
+    expect(liveMocks.preservedSave).toHaveBeenCalledWith(expect.objectContaining({event_id:"evt-1",home_score:3,away_score:1,period_scores:[],player_stats:[]}),true);
+    expect(ops).toEqual([]);
+    liveMocks.preservedSave.mockRejectedValueOnce(new Error("Competition manager required"));
+    await act(async()=>expect(await result.current.save({...baseInput(),homeScore:4})).toBe(false));
   });
 
   it("performs the upsert when lookup succeeds with no existing row", async () => {

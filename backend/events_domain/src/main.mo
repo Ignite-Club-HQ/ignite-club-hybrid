@@ -22,6 +22,7 @@ import Types "types";
 import Oql "../../shared/Oql";
 import OqlEvents "oqlEvents";
 import HistoryPrivacy "historyPrivacy";
+import PlayhqFeed "playhqFeed";
 
 persistent actor class Main(governorInit : Principal) {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -140,6 +141,7 @@ persistent actor class Main(governorInit : Principal) {
   var individualDutyReminderSent : [Text];
   var competitionDomainCanister : ?Principal;
   var competitionEventOperations : [Types.CompetitionEventOperation];
+  var competitionMatchLinks : [Types.CompetitionEventLink];
   // Per-caller favourite event titles / saved locations / training defaults /
   // RSVP created_at preservation (events UX extras, migration 20261015_000000).
   var favouriteEventTitles : [Types.FavouriteEventTitle];
@@ -267,15 +269,23 @@ persistent actor class Main(governorInit : Principal) {
     eventGroups := eventGroups.filter(func(g) = not gids.any(func(id) = id == g.id));
     eventGroupPlayers := eventGroupPlayers.filter(func(p) = not gids.any(func(id) = id == p.group_id));
     eventGroupDuties := eventGroupDuties.filter(func(d) = not gids.any(func(id) = id == d.group_id));
+    competitionMatchLinks:=competitionMatchLinks.filter(func(l)=not evs.any(func(e)=e.id==l.event_id));
+    gameResults:=gameResults.filter(func(r)=not evs.any(func(e)=r.event_id==?e.id));
+    gamePlayerStats:=gamePlayerStats.filter(func(r)=not evs.any(func(e)=r.event_id==e.id));
+    gameSummaries:=gameSummaries.filter(func(r)=not evs.any(func(e)=r.event_id==e.id));
+    competitionEventOperations:=competitionEventOperations.map(func(o)={o with event_ids=o.event_ids.filter(func(id)=not evs.any(func(e)=e.id==id))});
     #Ok(evs.size())
   };
-  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty] };
+  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty]; match_links : ?[Types.CompetitionEventLink]; operations : ?[Types.CompetitionEventOperation]; results : ?[Types.GameResult]; summaries : ?[Types.GameSummary]; stats : ?[Types.GamePlayerStat] };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before export");
     let evs = events.filter(func(e) = e.club_id == club);
     let snap : EventsSnapshot = { events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
-      series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)); groups = ?eventGroups.filter(func(g) = evs.any(func(e) = e.id == g.event_id)); group_players = ?eventGroupPlayers.filter(func(p) = eventGroups.any(func(g) = g.id == p.group_id and evs.any(func(e) = e.id == g.event_id))); group_duties = ?eventGroupDuties.filter(func(d) = eventGroups.any(func(g) = g.id == d.group_id and evs.any(func(e) = e.id == g.event_id))) };
+      series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)); groups = ?eventGroups.filter(func(g) = evs.any(func(e) = e.id == g.event_id)); group_players = ?eventGroupPlayers.filter(func(p) = eventGroups.any(func(g) = g.id == p.group_id and evs.any(func(e) = e.id == g.event_id))); group_duties = ?eventGroupDuties.filter(func(d) = eventGroups.any(func(g) = g.id == d.group_id and evs.any(func(e) = e.id == g.event_id)));
+      match_links=?competitionMatchLinks.filter(func(l)=evs.any(func(e)=e.id==l.event_id));
+      operations=?competitionEventOperations.filter(func(o)=o.event_ids.any(func(id)=evs.any(func(e)=e.id==id))).map(func(o)={o with event_ids=o.event_ids.filter(func(id)=evs.any(func(e)=e.id==id))});
+      results=?gameResults.filter(func(r)=evs.any(func(e)=r.event_id==?e.id));summaries=?gameSummaries.filter(func(r)=evs.any(func(e)=r.event_id==e.id));stats=?gamePlayerStats.filter(func(r)=evs.any(func(e)=r.event_id==e.id)) };
     #Ok(to_candid (snap))
   };
   public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
@@ -288,6 +298,9 @@ persistent actor class Main(governorInit : Principal) {
     let incomingGroups = snap.groups ?? [];
     let incomingPlayers = snap.group_players ?? [];
     let incomingDuties = snap.group_duties ?? [];
+    let incomingLinks=snap.match_links??[];let incomingResults=snap.results??[];let incomingSummaries=snap.summaries??[];let incomingStats=snap.stats??[];let incomingOperations=snap.operations??[];
+    if(incomingLinks.any(func(l)=not snap.events.any(func(e)=e.id==l.event_id and e.team_id==?l.team_id)) or incomingResults.any(func(r)=not snap.events.any(func(e)=r.event_id==?e.id and e.team_id==?r.team_id)) or incomingStats.any(func(r)=not snap.events.any(func(e)=r.event_id==e.id and e.team_id==?r.team_id)) or incomingSummaries.any(func(r)=not snap.events.any(func(e)=r.event_id==e.id and e.team_id==?r.team_id)) or incomingOperations.any(func(o)=o.event_ids.any(func(id)=not snap.events.any(func(e)=e.id==id)))) return #Err("Foreign History snapshot records");
+    if(incomingOperations.any(func(op)=competitionEventOperations.any(func(old)=old.operation_id==op.operation_id and old.competition_id!=op.competition_id))) return #Err("Competition operation collision");
     if (incomingGroups.any(func(g) = not snap.events.any(func(e) = e.id == g.event_id)) or incomingPlayers.any(func(p) = not incomingGroups.any(func(g) = g.id == p.group_id)) or incomingDuties.any(func(d) = not incomingGroups.any(func(g) = g.id == d.group_id))) return #Err("Snapshot contains foreign group records");
     if (incomingGroups.any(func(g) = eventGroups.any(func(x) = x.id == g.id and not events.any(func(e) = e.id == x.event_id and e.club_id == club)))) return #Err("Group id collides with another club");
     if (incomingDuties.any(func(d) = eventGroupDuties.any(func(x) = x.id == d.id and not events.any(func(e) = e.club_id == club and eventGroups.any(func(g) = g.id == x.group_id and g.event_id == e.id))))) return #Err("Duty id collides with another club");
@@ -296,6 +309,16 @@ persistent actor class Main(governorInit : Principal) {
     eventGroupPlayers := eventGroupPlayers.filter(func(p) = not oldGroups.any(func(id) = id == p.group_id)).concat(incomingPlayers);
     eventGroupDuties := eventGroupDuties.filter(func(d) = not oldGroups.any(func(id) = id == d.group_id)).concat(incomingDuties);
     let ids = events.filter(func(e) = e.club_id == club).map(func(e) = e.id);
+    competitionMatchLinks:=competitionMatchLinks.filter(func(l)=not ids.any(func(id)=id==l.event_id)).concat(incomingLinks);
+    gameResults:=gameResults.filter(func(r)=not ids.any(func(id)=r.event_id==?id)).concat(incomingResults);
+    gameSummaries:=gameSummaries.filter(func(r)=not ids.any(func(id)=r.event_id==id)).concat(incomingSummaries);
+    gamePlayerStats:=gamePlayerStats.filter(func(r)=not ids.any(func(id)=r.event_id==id)).concat(incomingStats);
+    for(op in incomingOperations.values()) {
+      let old=competitionEventOperations.find(func(o)=o.operation_id==op.operation_id);
+      if(switch(old){case(?o)o.competition_id!=op.competition_id;case null false}) return #Err("Competition operation collision");
+      let kept=switch(old){case null [];case(?o)o.event_ids.filter(func(id)=not ids.any(func(oldId)=id==oldId))};
+      competitionEventOperations:=competitionEventOperations.filter(func(o)=o.operation_id!=op.operation_id).concat([{op with event_ids=kept.concat(op.event_ids)}]);
+    };
     rsvps := rsvps.filter(func(r) = not ids.any(func(i) = i == r.event_id)).concat(snap.rsvps);
     series := series.filter(func(x) = not snap.series.any(func(y) = y.id == x.id)).concat(snap.series);
     events := events.filter(func(e) = e.club_id != club).concat(snap.events);
@@ -553,6 +576,36 @@ persistent actor class Main(governorInit : Principal) {
     let eventIds = created.map(func(event) = event.id);
     competitionEventOperations := competitionEventOperations.concat([{ operation_id; competition_id; event_ids = eventIds }]);
     #Ok(eventIds)
+  };
+
+  public shared ({caller}) func upsert_competition_match_events(input : Types.MatchEventInput) : async {#Ok:[Text];#Err:Text} {
+    let authority=competitionDomainCanister;
+    if(authority!=?caller) return #Err("Trusted competition canister only");
+    auth(input.creator);await admitAccount(input.creator);
+    if (authority != competitionDomainCanister or input.teams.size() != 2 or input.starts_at_ms >= input.ends_at_ms or input.title.size() > 256) return #Err("Invalid fixture or changed authority");
+    if(input.teams[0].team_id==input.teams[1].team_id or input.teams.any(func(t)=not valid(t.team_id) or not valid(t.club_id) or isFenced(t.club_id))) return #Err("Invalid or locked fixture teams");
+    var ids:[Text]=[];
+    for(target in input.teams.values()) {
+      let previous=competitionMatchLinks.find(func(l)=l.match_id==input.match_id and l.team_id==target.team_id);
+      let id=switch(previous){case null "evt-"#target.club_id#"-"#Nat.toText(events.size());case(?link)link.event_id};
+      let current=events.find(func(e)=e.id==id);
+      if(switch(current){case(?e)e.club_id!=target.club_id or e.team_id!=?target.team_id;case null false}) return #Err("Fixture link ownership mismatch");
+      let row:Types.Event={id;club_id=target.club_id;team_id=?target.team_id;title=input.title;description="Competition fixture";event_type="game";location=input.venue;cancelled=false;creator=input.creator;starts_at_ms=input.starts_at_ms;ends_at_ms=input.ends_at_ms;series_id=null;revision=switch(current){case null 1;case(?e)e.revision+1};deleted=false;opponent=?input.teams[if(target.team_id==input.teams[0].team_id)1 else 0].team_id;address=null;mini_league_id=null;updated_at_ms=nowMs();rsvp_audience=null;adults_only=false;restricted_to_roles=null;target_team_ids=null};
+      events:=events.filter(func(e)=e.id!=id).concat([row]);
+      competitionMatchLinks:=competitionMatchLinks.filter(func(l)=l.event_id!=id).concat([{event_id=id;competition_id=input.competition_id;match_id=input.match_id;team_id=target.team_id}]);
+      ids:=ids.concat([id]);
+    };
+    #Ok(ids)
+  };
+
+  func matchHistoryAccess(caller:Principal,event:Types.Event,managerOnly:Bool) : async {#Ok:Bool;#Err:Text} {
+    let link=switch(competitionMatchLinks.find(func(l)=l.event_id==event.id)){case null return #Ok(true);case(?l)l};
+    if(event.team_id!=?link.team_id) return #Err("History association mismatch");
+    let authority=switch(competitionDomainCanister){case null return #Err("Competition authority unavailable");case(?id)id};
+    let service:actor{read_match_score_access:shared(Text,Text,Text,Principal,Bool)->async{#Ok:Bool;#Err:Text}}=actor(authority.toText());
+    let result=try{await(with timeout=10) service.read_match_score_access(link.competition_id,link.match_id,link.team_id,caller,managerOnly)}catch(_){return #Err("Competition authority unavailable")};
+    if(competitionDomainCanister!=?authority or eventFenced(event.id) or not competitionMatchLinks.any(func(l)=l==link)) return #Err("History authority changed or locked");
+    result
   };
 
   // Association panel read (Phase 3, F5): parents for one association,
@@ -2240,6 +2293,9 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not valid(event_id) or not valid(team_id)) return #Err("Invalid game player stats");
     if (not canManageTeamBoard(caller, team_id)) return #Err("Game stats management forbidden");
+    let event=switch(events.find(func(e)=e.id==event_id and e.team_id==?team_id and not e.deleted)){case null return #Err("Game-stat team mismatch");case(?e)e};
+    switch(await matchHistoryAccess(caller,event,true)){case(#Ok(true)){};case _ return #Err("Competition manager required")};
+    if(eventFenced(event_id) or not canManageTeamBoard(caller,team_id)) return #Err("Game-stat authority changed");
     let rows : [Types.GamePlayerStat] = stats.map(func(input) : Types.GamePlayerStat {
       {
         event_id; team_id;
@@ -2262,7 +2318,7 @@ persistent actor class Main(governorInit : Principal) {
       case (#Err(e)) #Err(e);
       case (#Ok(result)) {
         let hidden = switch (result) {
-          case null competitionEventOperations.any(func(operation) = operation.event_ids.any(func(id) = id == event_id));
+          case null competitionEventOperations.any(func(operation) = operation.event_ids.any(func(id) = id == event_id)) or competitionMatchLinks.any(func(l)=l.event_id==event_id);
           case (?r) r.scores_hidden
         };
         #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id).map(func(item : Types.GamePlayerStat) : Types.GamePlayerStat {
@@ -2300,6 +2356,7 @@ persistent actor class Main(governorInit : Principal) {
         let event = switch (events.find(func(e) = e.id == id and not e.deleted)) { case null return #Err("Event not found"); case (?e) e };
         if (event.team_id != ?team_id) return #Err("Game result team mismatch");
         let authority = competitionDomainCanister;
+        switch(await matchHistoryAccess(caller,event,true)){case(#Ok(true)){};case _ return #Err("Competition manager required")};
         for (operation in competitionEventOperations.values()) {
           if (operation.event_ids.any(func(e) = e == id)) {
             let configured = switch (authority) { case null return #Err("Competition authority unavailable"); case (?a) a };
@@ -2342,6 +2399,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not (await* canViewMatch(caller, event))) return #Err("Event access forbidden");
     let authority = competitionDomainCanister;
     var hidden = false;
+    switch(await matchHistoryAccess(caller,event,false)){case(#Err(e))return #Err(e);case(#Ok(visible))hidden:=not visible};
     for (operation in competitionEventOperations.values()) {
       if (operation.event_ids.any(func(id) = id == event_id)) {
         let id = switch (authority) { case null return #Err("Competition authority unavailable"); case (?id) id };
@@ -2380,6 +2438,7 @@ persistent actor class Main(governorInit : Principal) {
       case null return #Err("Event not found"); case (?e) e
     };
     if (not manages(caller,event) or eventFenced(event_id)) return #Err("Game result management forbidden");
+    switch(await matchHistoryAccess(caller,event,true)){case(#Ok(true)){};case _ return #Err("Competition manager required")};
     // Removing a competition's mirrored History is also a result mutation.
     let authority = competitionDomainCanister;
     for (operation in competitionEventOperations.values()) {
@@ -2802,7 +2861,7 @@ persistent actor class Main(governorInit : Principal) {
     ""
   };
 
-  func playhqHttpGet(path : Text) : async* { #Ok : Text; #Err : Text } {
+  func playhqHttpGetTenant(path : Text, tenant : ?Text) : async* { #Ok : Text; #Err : Text } {
     let config = switch (playHQConfig) {
       case null { return #Err("PlayHQ not configured") };
       case (?c) { c };
@@ -2813,7 +2872,7 @@ persistent actor class Main(governorInit : Principal) {
       headers = [
         { name = "x-api-key"; value = config.api_key },
         { name = "Accept"; value = "application/json" },
-      ];
+      ].concat(switch(tenant){case null [];case(?value)[{name="x-phq-tenant";value}]});
       body = null;
       method = #get;
       transform = ?{ function = playhqTransform; context = Blob.fromArray([]) };
@@ -2834,6 +2893,43 @@ persistent actor class Main(governorInit : Principal) {
     } catch (e) {
       #Err("PlayHQ request failed: " # Error.message(e))
     }
+  };
+  func playhqHttpGet(path:Text):async*{#Ok:Text;#Err:Text}{await* playhqHttpGetTenant(path,null)};
+
+  // Production PlayHQ endpoint shapes, complete bounded pages only. This
+  // returns solely to the configured competition service, never a browser.
+  public shared ({caller}) func fetch_playhq_grade(tenant:Text,grade:Text) : async {#Ok:{games:[{game_id:Text;home_id:Text;away_id:Text;home_name:Text;away_name:Text;home_score:?Nat16;away_score:?Nat16;starts_at_ms:?Nat64;status:Text;venue:?Text}];stats:[{game_id:Text;team_id:Text;player_id:Text;player_name:Text;stats_json:Text}]};#Err:Text} {
+    let authority=competitionDomainCanister;
+    if(authority!=?caller) return #Err("Trusted competition canister only");
+    if(not valid(tenant) or not valid(grade) or Text.contains(grade,#char '/') or Text.contains(tenant,#char '/') or Text.contains(grade,#char '?')) return #Err("Invalid PlayHQ scope");
+    let body=switch(await* playhqHttpGetTenant("/grades/"#grade#"/fixture",?tenant)){case(#Err(e))return #Err(e);case(#Ok(b))b};
+    let rows=switch(PlayhqFeed.rows(body)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+    var games:[{game_id:Text;home_id:Text;away_id:Text;home_name:Text;away_name:Text;home_score:?Nat16;away_score:?Nat16;starts_at_ms:?Nat64;status:Text;venue:?Text}]=[];
+    var stats:[{game_id:Text;team_id:Text;player_id:Text;player_name:Text;stats_json:Text}]=[];
+    for(row in rows.values()) {
+      let id=PlayhqFeed.str(row,"id");
+      if(not valid(id) or Text.contains(id,#char '/') or Text.contains(id,#char '?')) return #Err("Invalid game identity");
+      let home=PlayhqFeed.field(PlayhqFeed.field(row,"teams"),"home");let away=PlayhqFeed.field(PlayhqFeed.field(row,"teams"),"away");
+      let h=PlayhqFeed.str(home,"id");let a=PlayhqFeed.str(away,"id");
+      if(not valid(h) or not valid(a) or h==a) return #Err("Invalid fixture teams");
+      let score=PlayhqFeed.field(row,"score");let status=Text.toUpper(PlayhqFeed.str(row,"status"));
+      let state=if(Text.contains(status,#text "COMPLETE") or Text.contains(status,#text "FINAL") or status=="FT")"completed"else if(Text.contains(status,#text "CANCEL") or Text.contains(status,#text "FORFEIT"))"cancelled"else "scheduled";
+      let date=PlayhqFeed.str(PlayhqFeed.field(row,"schedule"),"date");
+      let venue=PlayhqFeed.str(PlayhqFeed.field(row,"venue"),"name");
+      games:=games.concat([{game_id=id;home_id=h;away_id=a;home_name=PlayhqFeed.str(home,"name");away_name=PlayhqFeed.str(away,"name");home_score=PlayhqFeed.score(score,"home");away_score=PlayhqFeed.score(score,"away");starts_at_ms=parsePlayhqTime(if(date=="")PlayhqFeed.str(row,"startsAt")else date,"UTC");status=state;venue=if(venue=="")null else ?venue}]);
+      if(state=="completed") {
+        let raw=switch(await* playhqHttpGetTenant("/games/"#id#"/statistics",?tenant)){case(#Err(e))return #Err(e);case(#Ok(b))b};
+        let players=switch(PlayhqFeed.rows(raw)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+        for(p in players.values()) {
+          let player=PlayhqFeed.field(p,"player");let playerId=PlayhqFeed.str(player,"id");let team=PlayhqFeed.str(PlayhqFeed.field(p,"team"),"id");
+          if(not valid(playerId) or (team!=h and team!=a)) return #Err("Foreign player-stat team");
+          stats:=stats.concat([{game_id=id;team_id=team;player_id=playerId;player_name=PlayhqFeed.str(player,"name");stats_json=PlayhqFeed.numeric(PlayhqFeed.field(p,"statistics"))}]);
+          if (stats.size() > 2000) return #Err("Player-stat batch too large");
+        }
+      }
+    };
+    if(authority!=competitionDomainCanister) return #Err("Competition authority changed");
+    #Ok({games;stats})
   };
 
   // Mirrors PlayHQTeamLinkCard's Supabase `competitions` read: id/name/season

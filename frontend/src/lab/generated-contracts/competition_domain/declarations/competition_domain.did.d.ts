@@ -221,6 +221,11 @@ export interface Main {
     { 'Ok' : string } |
       { 'Err' : string }
   >,
+  'claim_playhq_player' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'competition_engagement_summary' : ActorMethod<
     [Array<string>, bigint, bigint],
     { 'Ok' : Array<CompetitionEngagementSummary> } |
@@ -514,6 +519,11 @@ export interface Main {
     { 'Ok' : Array<Season> } |
       { 'Err' : string }
   >,
+  'materialize_match_events' : ActorMethod<
+    [string],
+    { 'Ok' : Array<string> } |
+      { 'Err' : string }
+  >,
   'memory_stats' : ActorMethod<
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
@@ -606,6 +616,24 @@ export interface Main {
   'read_history_score_access' : ActorMethod<
     [string, string, bigint, Principal, boolean],
     { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'read_match_score_access' : ActorMethod<
+    [string, string, string, Principal, boolean],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'read_playhq_stats' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'claims' : Array<
+            { 'player_id' : string, 'mine' : boolean, 'tenant' : string }
+          >,
+          'stats' : Array<PlayHQStat>,
+          'matches' : Array<PlayHQMatchMeta>,
+        }
+      } |
       { 'Err' : string }
   >,
   'read_resource_club' : ActorMethod<
@@ -797,6 +825,11 @@ export interface Main {
     { 'Ok' : boolean } |
       { 'Err' : string }
   >,
+  'sync_playhq_grade' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'transfer_governorship' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -880,6 +913,28 @@ export interface MatchRead {
 export interface OfficialChat {
   'conversation_id' : string,
   'scope' : string,
+  'competition_id' : string,
+}
+export interface PlayHQMatchMeta {
+  'grade_id' : string,
+  'home_id' : string,
+  'synced_revision' : bigint,
+  'away_id' : string,
+  'game_id' : string,
+  'home_name' : string,
+  'away_name' : string,
+  'match_id' : string,
+  'tenant' : string,
+  'competition_id' : string,
+}
+export interface PlayHQStat {
+  'player_id' : string,
+  'team_id' : string,
+  'stats_json' : string,
+  'player_name' : string,
+  'game_id' : string,
+  'match_id' : string,
+  'tenant' : string,
   'competition_id' : string,
 }
 export type Result = { 'Ok' : Settings } |

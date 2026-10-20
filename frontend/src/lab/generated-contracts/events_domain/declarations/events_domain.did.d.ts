@@ -564,6 +564,37 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'fetch_playhq_grade' : ActorMethod<
+    [string, string],
+    {
+        'Ok' : {
+          'stats' : Array<
+            {
+              'player_id' : string,
+              'team_id' : string,
+              'stats_json' : string,
+              'player_name' : string,
+              'game_id' : string,
+            }
+          >,
+          'games' : Array<
+            {
+              'status' : string,
+              'venue' : [] | [string],
+              'home_id' : string,
+              'starts_at_ms' : [] | [bigint],
+              'away_id' : string,
+              'game_id' : string,
+              'home_name' : string,
+              'away_name' : string,
+              'away_score' : [] | [number],
+              'home_score' : [] | [number],
+            }
+          >,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'getApiDoc' : ActorMethod<[], string>,
   'get_active_game' : ActorMethod<
     [[] | [string]],
@@ -1584,6 +1615,11 @@ export interface Main {
     { 'Ok' : EventSeries } |
       { 'Err' : string }
   >,
+  'upsert_competition_match_events' : ActorMethod<
+    [MatchEventInput],
+    { 'Ok' : Array<string> } |
+      { 'Err' : string }
+  >,
   /**
    * / Public: aggregate record counts (shown in admin settings). Counts only —
    * / no record contents, so no PII is exposed.
@@ -1600,6 +1636,16 @@ export interface MatchCaptainAssignment {
   'ref_kind' : string,
   'event_id' : string,
   'ref_id' : string,
+}
+export interface MatchEventInput {
+  'teams' : Array<CompetitionEventTarget>,
+  'title' : string,
+  'creator' : Principal,
+  'venue' : [] | [string],
+  'starts_at_ms' : bigint,
+  'ends_at_ms' : bigint,
+  'match_id' : string,
+  'competition_id' : string,
 }
 export interface MatchGoalkeeperAssignment {
   'period' : string,

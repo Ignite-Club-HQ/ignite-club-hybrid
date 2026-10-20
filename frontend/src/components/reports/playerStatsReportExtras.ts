@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { readHistoryResult } from "@/features/competitions/history/historyRepository";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveTeam } from "@/live/features/club";
@@ -277,7 +278,7 @@ async function fetchReportExtrasSupabase(
 
   let eventsQuery = supabase
     .from("events")
-    .select("id, title, event_date, opponent, final_score_home, final_score_away")
+    .select("id, title, event_date, opponent, competition_match_id")
     .eq("team_id", teamId)
     .eq("type", "game");
 
@@ -296,10 +297,7 @@ async function fetchReportExtrasSupabase(
   if (eventIds.length === 0) return empty;
 
   const [resultsRes, captainsRes, pomRes, gkRes, statsRes] = await Promise.all([
-    supabase
-      .from("game_results")
-      .select("event_id, home_label, away_label, home_score, away_score, period_scores, player_stats")
-      .in("event_id", eventIds),
+    Promise.all(eventIds.map(id=>readHistoryResult(id))).then(rows=>({data:rows.filter(row=>row!==null)})),
     supabase.from("match_captains").select("event_id, user_id, child_id").in("event_id", eventIds),
     supabase.from("player_of_match").select("event_id, user_id, child_id").in("event_id", eventIds),
     supabase
@@ -375,7 +373,7 @@ async function fetchReportExtrasSupabase(
       if (day && !orphanByDate.has(day)) orphanByDate.set(day, r);
     });
     (events ?? []).forEach((e: any) => {
-      if (resultByEvent.has(e.id)) return;
+      if (resultByEvent.has(e.id) || e.competition_match_id) return;
       const day = e.event_date ? String(e.event_date).slice(0, 10) : null;
       const match = day ? orphanByDate.get(day) : null;
       if (match) resultByEvent.set(e.id, match);
@@ -404,8 +402,8 @@ async function fetchReportExtrasSupabase(
   const matches: ReportMatch[] = (events ?? [])
     .map((event: any) => {
       const gr = resultByEvent.get(event.id);
-      const homeScore = gr?.home_score ?? event.final_score_home ?? null;
-      const awayScore = gr?.away_score ?? event.final_score_away ?? null;
+      const homeScore = gr?.scores_hidden ? null : gr?.home_score ?? null;
+      const awayScore = gr?.scores_hidden ? null : gr?.away_score ?? null;
       const result =
         homeScore == null || awayScore == null
           ? null
@@ -414,7 +412,7 @@ async function fetchReportExtrasSupabase(
             : homeScore < awayScore
               ? "L"
               : "D";
-      const matchScorers = extractScorers(gr?.player_stats);
+      const matchScorers = gr?.scores_hidden ? [] : extractScorers(gr?.player_stats);
       // Aggregate per-player goals across all matches in the range.
       matchScorers.forEach((s) => {
         const existing = scorersByPlayer[s.id];
@@ -439,7 +437,7 @@ async function fetchReportExtrasSupabase(
         captainNames: captains.filter((c: any) => c.event_id === event.id).map(nameFor),
         pomNames: poms.filter((c: any) => c.event_id === event.id).map(nameFor),
         goalkeeperNames: gks.filter((c: any) => c.event_id === event.id).map(nameFor),
-        playerGoals: goalsByEvent.get(event.id) ?? 0,
+        playerGoals: gr?.scores_hidden ? 0 : goalsByEvent.get(event.id) ?? 0,
         scorers: matchScorers,
       } satisfies ReportMatch;
     })

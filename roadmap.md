@@ -1,6 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Current request — preserve History and PlayHQ under score privacy
+- [ ] Owner request 20 Oct 23:43 UTC: complete remaining integration in one batch, with focused dual-mode, real-canister and SQL checks; preserve all stored detail and avoid deploying unrelated scaling changes.
 - [x] Initial History preservation batch: shared dual-mode History reader, nullable display, existing ICP competition-operation trusted privacy bridge, player/MVP metadata preservation and real two-actor tests. No release/complete-coverage claim.
 - [ ] Finish match-level ICP associations/PlayHQ stats, Supabase protected calendar/report/result saves and grade aggregate reconstruction; non-destructive SQL integration/application requires managed migration workflow and validation. No live changes authorized/performed.
 - [x] Add role/visibility/data-preservation tests and run affected suites in both modes; full authenticated UI and full-suite checks remain after integration.

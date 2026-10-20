@@ -78,6 +78,30 @@ type Result =
    Err: text;
    Ok: Settings;
  };
+type PlayHQStat = 
+ record {
+   competition_id: text;
+   game_id: text;
+   match_id: text;
+   player_id: text;
+   player_name: text;
+   stats_json: text;
+   team_id: text;
+   tenant: text;
+ };
+type PlayHQMatchMeta = 
+ record {
+   away_id: text;
+   away_name: text;
+   competition_id: text;
+   game_id: text;
+   grade_id: text;
+   home_id: text;
+   home_name: text;
+   match_id: text;
+   synced_revision: nat64;
+   tenant: text;
+ };
 type OfficialChat = 
  record {
    competition_id: text;
@@ -182,6 +206,11 @@ type Main =
                                             Err: text;
                                             Ok: text;
                                           });
+   claim_playhq_player: (competition_id: text, tenant: text, player_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    competition_engagement_summary: (competition_ids: vec text, since_ms: 
     int, until_ms: int) ->
     (variant {
@@ -483,6 +512,11 @@ type Main =
        Err: text;
        Ok: vec Season;
      });
+   materialize_match_events: (match_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
    memory_stats: () ->
     (record {
        heap_bytes: nat;
@@ -576,6 +610,26 @@ type Main =
     (variant {
        Err: text;
        Ok: bool;
+     });
+   read_match_score_access: (competition_id: text, match_id: text, team_id:
+    text, requester: principal, manager_only: bool) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_playhq_stats: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          claims: vec record {
+                        mine: bool;
+                        player_id: text;
+                        tenant: text;
+                      };
+          matches: vec PlayHQMatchMeta;
+          stats: vec PlayHQStat;
+        };
      });
    read_resource_club: (kind: text, id: text) ->
     (variant {
@@ -746,6 +800,11 @@ type Main =
     (variant {
        Err: text;
        Ok: bool;
+     });
+   sync_playhq_grade: (competition_id: text, tenant: text, grade: text) ->
+    (variant {
+       Err: text;
+       Ok: nat;
      });
    transfer_governorship: (new_governor: principal) ->
     (variant {

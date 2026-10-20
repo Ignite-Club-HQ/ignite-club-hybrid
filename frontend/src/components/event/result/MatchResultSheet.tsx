@@ -11,6 +11,7 @@ import {
   Square,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { readHistoryResult, saveHistoryResult } from "@/features/competitions/history/historyRepository";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -146,14 +147,7 @@ export function MatchResultSheet({
   const { data: result, isLoading } = useQuery({
     queryKey: ["match-result", eventId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("game_results")
-        .select(
-          "id, home_score, away_score, home_label, away_label, saved_by, player_stats, period_scores, notes"
-        )
-        .eq("event_id", eventId)
-        .maybeSingle();
-      return data;
+      return readHistoryResult(eventId);
     },
     enabled: !!eventId,
   });
@@ -430,6 +424,10 @@ export function MatchResultSheet({
   // ── Save ───────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!user) return;
+    if (result?.scores_hidden) {
+      toast({title:"Competition manager required",variant:"destructive"});
+      return;
+    }
     if (effectiveHome < 0 || effectiveAway < 0) {
       toast({ title: "Invalid score", description: "Scores can't be negative.", variant: "destructive" });
       return;
@@ -486,10 +484,7 @@ export function MatchResultSheet({
         notes: notes.trim() ? notes.trim() : null,
         saved_by: user.id,
       };
-      const { error } = await supabase
-        .from("game_results")
-        .upsert(payload, { onConflict: "event_id" });
-      if (error) throw error;
+      await saveHistoryResult(payload);
 
       // Clear draft on success.
       try { localStorage.removeItem(DRAFT_KEY(eventId)); } catch {/* ignore */}

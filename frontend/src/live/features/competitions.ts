@@ -175,6 +175,22 @@ export async function listLiveCompetitionMatches(ctx: FeatureBackendContext, com
   return unwrapCandid(actor.list_matches(competitionId), "List competition matches");
 }
 
+export async function readLiveCompetitionPlayHQ(ctx:FeatureBackendContext,competitionId:string){
+ const {actor}=await connectLiveCompetitionDomain(ctx.target,ctx.identity);
+ const raw=await unwrapCandid(actor.read_playhq_stats(competitionId),"Read PlayHQ statistics");
+ return {matches:raw.matches.map(m=>({external_id:m.game_id,external_home_team_id:m.home_id,external_away_team_id:m.away_id,home_team_name:m.home_name,away_team_name:m.away_name,division_id:m.grade_id,competition_divisions:{name:m.grade_id}})),
+ stats:raw.stats.map(s=>({playhq_game_id:s.game_id,playhq_team_id:s.team_id,playhq_player_id:s.player_id,player_name:s.player_name,stats:JSON.parse(s.stats_json) as Record<string,number>,tenant:s.tenant})),
+ links:raw.claims.map(c=>({playhq_player_id:c.player_id,mine:c.mine,tenant:c.tenant}))};
+}
+export async function claimLiveCompetitionPlayHQ(ctx:FeatureBackendContext,competitionId:string,tenant:string,playerId:string){
+ const {actor}=await connectLiveCompetitionDomain(ctx.target,ctx.identity);
+ return unwrapCandid(actor.claim_playhq_player(competitionId,tenant,playerId),"Claim PlayHQ player");
+}
+export async function syncLiveCompetitionPlayHQ(ctx:FeatureBackendContext,competitionId:string,tenant:string,grade:string){
+ const {actor}=await connectLiveCompetitionDomain(ctx.target,ctx.identity);
+ return unwrapCandid(actor.sync_playhq_grade(competitionId,tenant,grade),"Sync PlayHQ grade");
+}
+
 export async function claimLiveJoinToken(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.claim_join_token(token), "Claim join token");
@@ -205,7 +221,7 @@ export async function updateLiveMatchDetails(
   input: LiveMatchDetailsInput,
 ) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  const result = await unwrapCandid(
     actor.update_match_details(
       matchId,
       input.homeTeamId,
@@ -222,6 +238,8 @@ export async function updateLiveMatchDetails(
     ),
     "Update match details",
   );
+  if(input.scheduledAtMs!=null) await unwrapCandid(actor.materialize_match_events(matchId),"Sync fixture events");
+  return result;
 }
 
 export async function assignLiveDivision(

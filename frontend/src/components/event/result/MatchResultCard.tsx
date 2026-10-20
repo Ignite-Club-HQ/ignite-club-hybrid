@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, Pencil, Plus, Target, Award, StickyNote, Square } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { readHistoryResult } from "@/features/competitions/history/historyRepository";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,8 +27,9 @@ interface MatchResultCardProps {
 
 interface SavedRow {
   id: string;
-  home_score: number;
-  away_score: number;
+  home_score: number | null;
+  away_score: number | null;
+  scores_hidden: boolean;
   home_label: string | null;
   away_label: string | null;
   player_stats: any;
@@ -46,20 +47,13 @@ export function MatchResultCard({
   const { data: result, isLoading } = useQuery({
     queryKey: ["match-result", eventId],
     queryFn: async (): Promise<SavedRow | null> => {
-      const { data } = await supabase
-        .from("game_results")
-        .select(
-          "id, home_score, away_score, home_label, away_label, player_stats, period_scores, notes"
-        )
-        .eq("event_id", eventId)
-        .maybeSingle();
-      return (data as any) ?? null;
+      return await readHistoryResult(eventId) as SavedRow | null;
     },
     enabled: !!eventId,
   });
 
   if (isLoading) return null;
-  const hasScore = !!result;
+  const hasScore = !!result && !result.scores_hidden && result.home_score !== null && result.away_score !== null;
 
   const labelHome = result?.home_label || teamName;
   const savedAway = result?.away_label;
@@ -72,23 +66,23 @@ export function MatchResultCard({
         config,
         homeLabel: labelHome,
         awayLabel: labelAway,
-        homeScore: result!.home_score ?? 0,
-        awayScore: result!.away_score ?? 0,
-        periodScores: result!.period_scores,
+        homeScore: result?.home_score ?? 0,
+        awayScore: result?.away_score ?? 0,
+        periodScores: result?.period_scores,
       })
     : null;
-  const outcome = hasScore ? outcomeFor(result!.home_score ?? 0, result!.away_score ?? 0) : null;
+  const outcome = hasScore ? outcomeFor(result?.home_score ?? 0, result?.away_score ?? 0) : null;
 
   const savedScorers = Array.isArray(result?.player_stats)
-    ? (result!.player_stats as any[])
+    ? (result?.player_stats as any[])
         .filter((p) => p && (p.goals ?? 0) > 0)
         .map((p) => ({ id: String(p.id), name: String(p.name || "Player"), goals: Number(p.goals) || 0 }))
     : [];
   const carded = Array.isArray(result?.player_stats)
-    ? (result!.player_stats as any[]).filter((p) => p && ((p.yellow ?? 0) > 0 || (p.red ?? 0) > 0))
+    ? (result?.player_stats as any[]).filter((p) => p && ((p.yellow ?? 0) > 0 || (p.red ?? 0) > 0))
     : [];
   const award = Array.isArray(result?.player_stats)
-    ? (result!.player_stats as any[]).find((p) => p?.award === "mvp")
+    ? (result?.player_stats as any[]).find((p) => p?.award === "mvp")
     : null;
 
   return (
@@ -113,7 +107,7 @@ export function MatchResultCard({
                     {outcome === "loss" && <Badge variant="destructive">Loss</Badge>}
                     {outcome === "draw" && <Badge variant="secondary">Draw</Badge>}
                   </div>
-                ) : hasDraft ? (
+                ) : result?.scores_hidden ? <p className="text-sm text-muted-foreground mt-0.5">Scores hidden</p> : hasDraft ? (
                   <p className="text-sm text-amber-600 dark:text-amber-500 mt-0.5">
                     Unsaved draft — tap Record to save it
                   </p>
@@ -122,7 +116,7 @@ export function MatchResultCard({
                 )}
               </div>
             </div>
-            {canEdit && (
+            {canEdit && !result?.scores_hidden && (
               <Button
                 size="sm"
                 variant={hasScore ? "ghost" : "default"}

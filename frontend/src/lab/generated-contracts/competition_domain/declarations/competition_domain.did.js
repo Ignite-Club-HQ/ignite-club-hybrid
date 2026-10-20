@@ -266,6 +266,28 @@ export const idlFactory = ({ IDL }) => {
     'scope' : IDL.Text,
     'competition_id' : IDL.Text,
   });
+  const PlayHQStat = IDL.Record({
+    'player_id' : IDL.Text,
+    'team_id' : IDL.Text,
+    'stats_json' : IDL.Text,
+    'player_name' : IDL.Text,
+    'game_id' : IDL.Text,
+    'match_id' : IDL.Text,
+    'tenant' : IDL.Text,
+    'competition_id' : IDL.Text,
+  });
+  const PlayHQMatchMeta = IDL.Record({
+    'grade_id' : IDL.Text,
+    'home_id' : IDL.Text,
+    'synced_revision' : IDL.Nat64,
+    'away_id' : IDL.Text,
+    'game_id' : IDL.Text,
+    'home_name' : IDL.Text,
+    'away_name' : IDL.Text,
+    'match_id' : IDL.Text,
+    'tenant' : IDL.Text,
+    'competition_id' : IDL.Text,
+  });
   const EoiTeamSuggestion = IDL.Record({
     'player_count' : IDL.Nat,
     'avg_skill' : IDL.Float64,
@@ -332,6 +354,11 @@ export const idlFactory = ({ IDL }) => {
     'claim_join_token' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
+    'claim_playhq_player' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'competition_engagement_summary' : IDL.Func(
@@ -676,6 +703,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
         [],
       ),
+    'materialize_match_events' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
     'memory_stats' : IDL.Func(
         [],
         [
@@ -785,6 +817,31 @@ export const idlFactory = ({ IDL }) => {
     'read_history_score_access' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_match_score_access' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_playhq_stats' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'claims' : IDL.Vec(
+                IDL.Record({
+                  'player_id' : IDL.Text,
+                  'mine' : IDL.Bool,
+                  'tenant' : IDL.Text,
+                })
+              ),
+              'stats' : IDL.Vec(PlayHQStat),
+              'matches' : IDL.Vec(PlayHQMatchMeta),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'read_resource_club' : IDL.Func(
@@ -971,6 +1028,11 @@ export const idlFactory = ({ IDL }) => {
     'sync_my_competition_access' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        [],
+      ),
+    'sync_playhq_grade' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'transfer_governorship' : IDL.Func(

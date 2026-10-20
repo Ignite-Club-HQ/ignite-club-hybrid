@@ -55,6 +55,9 @@ persistent actor class Main(governorInit : Principal) {
   var seasons : [Types.Season];
   var matches : [Types.Match];
   var scorePrivacySettings : [ScorePrivacy.Setting];
+  var playhqMatchMetadata : [Types.PlayHQMatchMeta];
+  var playhqStats : [Types.PlayHQStat];
+  var playhqClaims : [Types.PlayHQClaim];
   func readableMatch(game : Types.Match, manager : Bool) : Types.MatchRead {
     ScorePrivacy.mask(game, not manager and ScorePrivacy.hidden(scorePrivacySettings, game.competition_id, game.division_id))
   };
@@ -176,7 +179,7 @@ persistent actor class Main(governorInit : Principal) {
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
-    { score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
+    { playhq_metadata=?playhqMatchMetadata.filter(func(x)=inC(x.competition_id));playhq_stats=?playhqStats.filter(func(x)=inC(x.competition_id));score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
       competitions = competitions.filter(func(x) = x.club_id == c);
       roles = roles.filter(func(x) = inC(x.competition_id));
       entries = entries.filter(func(x) = inC(x.competition_id));
@@ -201,6 +204,8 @@ persistent actor class Main(governorInit : Principal) {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
     scorePrivacySettings := scorePrivacySettings.filter(func(x) = not inC(x.competition_id));
+    playhqMatchMetadata:=playhqMatchMetadata.filter(func(x)=not inC(x.competition_id));
+    playhqStats:=playhqStats.filter(func(x)=not inC(x.competition_id));
     competitions := competitions.filter(func(x) = not (x.club_id == c));
     roles := roles.filter(func(x) = not (inC(x.competition_id)));
     entries := entries.filter(func(x) = not (inC(x.competition_id)));
@@ -232,9 +237,11 @@ persistent actor class Main(governorInit : Principal) {
     let decoded : ?FenceSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
     let privacy = switch (s.score_privacy) { case (?rows) rows; case null [] };
+    let phqMeta=s.playhq_metadata??[];let phqStats=s.playhq_stats??[];
     let c = club;
     let rootC = s.competitions;
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    if(phqMeta.any(func(x)=not inC(x.competition_id) or not s.matches.any(func(m)=m.id==x.match_id and m.competition_id==x.competition_id)) or phqStats.any(func(x)=not phqMeta.any(func(m)=m.match_id==x.match_id and m.game_id==x.game_id and m.tenant==x.tenant and m.competition_id==x.competition_id))) return #Err("Foreign PlayHQ snapshot records");
     if (privacy.any(func(x) = not inC(x.competition_id))
         or s.competitions.any(func(x) = not (x.club_id == c))
         or s.roles.any(func(x) = not (inC(x.competition_id)))
@@ -258,6 +265,7 @@ persistent actor class Main(governorInit : Principal) {
     if (s.competitions.any(func(e) = competitions.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
     scorePrivacySettings := scorePrivacySettings.concat(privacy);
+    playhqMatchMetadata:=playhqMatchMetadata.concat(phqMeta);playhqStats:=playhqStats.concat(phqStats);
     competitions := competitions.concat(s.competitions);
     roles := roles.concat(s.roles);
     entries := entries.concat(s.entries);
@@ -1964,12 +1972,91 @@ persistent actor class Main(governorInit : Principal) {
     if (not competitions.any(func(c) = c.id == competition_id)) return #Err("Competition not found");
     if (canManageCompetition(requester, competition_id)) return #Ok(true);
     if (manager_only) return #Ok(false);
-    let candidates = matches.filter(func(m) = m.competition_id == competition_id and
-      (m.home_team == team_id or m.away_team == team_id) and m.scheduled_at_ms == ?starts_at_ms);
-    if (candidates.size() == 1) return #Ok(not ScorePrivacy.hidden(scorePrivacySettings, competition_id, candidates[0].division_id));
-    // Older competition-wide events do not identify a match/division. Never
-    // guess a division-show override when the association is ambiguous.
+    // Legacy competition-wide events have no verified match association.
+    // Timestamp/team coincidences must never grant a division-show override.
+    ignore team_id; ignore starts_at_ms;
     #Ok(not scorePrivacySettings.any(func(s) = s.competition_id == competition_id and s.hide_scores))
+  };
+
+  public shared ({caller}) func read_match_score_access(competition_id : Text, match_id : Text, team_id : Text, requester : Principal, manager_only : Bool) : async { #Ok : Bool; #Err : Text } {
+    let authority = eventsDomainCanister;
+    if (authority != ?caller) return #Err("Trusted events canister only");
+    auth(requester); await admitAccount(requester); await syncForCompetition(requester,competition_id);
+    if (authority != eventsDomainCanister or compFenced(competition_id)) return #Err("Competition authority changed or locked");
+    let game = switch(matches.find(func(m)=m.id==match_id and m.competition_id==competition_id)) {
+      case null return #Err("Match not found"); case (?m) m
+    };
+    if(game.home_team!=team_id and game.away_team!=team_id) return #Err("Match team mismatch");
+    if(canManageCompetition(requester,competition_id)) return #Ok(true);
+    if(manager_only) return #Ok(false);
+    #Ok(not ScorePrivacy.hidden(scorePrivacySettings,competition_id,game.division_id))
+  };
+
+  public shared ({caller}) func materialize_match_events(match_id : Text) : async { #Ok : [Text]; #Err : Text } {
+    auth(caller); await admitAccount(caller);
+    let original=switch(matches.find(func(m)=m.id==match_id)){case null return #Err("Match not found");case(?m)m};
+    await syncForCompetition(caller,original.competition_id);
+    if(matchFenced(match_id) or not canManageCompetition(caller,original.competition_id)) return #Err("Competition manager required");
+    let game=switch(matches.find(func(m)=m.id==match_id and m.revision==original.revision)){case null return #Err("Match changed");case(?m)m};
+    let starts=switch(game.scheduled_at_ms){case null return #Err("Schedule the match first");case(?s)s};
+    let teams=entries.filter(func(e)=e.competition_id==game.competition_id and (e.team_id==game.home_team or e.team_id==game.away_team)).map(func(e)={team_id=e.team_id;club_id=e.club_id});
+    if(teams.size()!=2) return #Err("Both teams must be registered");
+    let authority=switch(eventsDomainCanister){case null return #Err("Events authority unavailable");case(?id)id};
+    let service : actor { upsert_competition_match_events : shared ({match_id:Text;competition_id:Text;creator:Principal;teams:[{team_id:Text;club_id:Text}];starts_at_ms:Nat64;ends_at_ms:Nat64;title:Text;venue:?Text}) -> async {#Ok:[Text];#Err:Text} }=actor(authority.toText());
+    let result=try{await (with timeout=10) service.upsert_competition_match_events({match_id;competition_id=game.competition_id;creator=caller;teams;starts_at_ms=starts;ends_at_ms=starts+Nat64.fromNat(Nat16.toNat(game.duration_minutes??90))*60_000;title=game.home_team#" vs "#game.away_team;venue=game.venue})}catch(_){return #Err("Fixture synchronization failed; retry the same match")};
+    if(eventsDomainCanister!=?authority or matchFenced(match_id)) return #Err("Fixture authority changed or locked");
+    result
+  };
+
+  public shared ({caller}) func sync_playhq_grade(competition_id:Text,tenant:Text,grade:Text) : async {#Ok:Nat;#Err:Text} {
+    auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
+    if(compFenced(competition_id) or not canManageCompetition(caller,competition_id)) return #Err("Competition manager required");
+    let authority=switch(eventsDomainCanister){case null return #Err("Events authority unavailable");case(?id)id};
+    let service:actor{fetch_playhq_grade:shared(Text,Text)->async{#Ok:Types.PlayHQFeed;#Err:Text}}=actor(authority.toText());
+    let feed=switch(try{await(with timeout=120)service.fetch_playhq_grade(tenant,grade)}catch(_){return #Err("PlayHQ synchronization unavailable")}){case(#Err(e))return #Err(e);case(#Ok(f))f};
+    await syncForCompetition(caller,competition_id);
+    if(eventsDomainCanister!=?authority or compFenced(competition_id) or not canManageCompetition(caller,competition_id)) return #Err("Competition access changed");
+    if (feed.games.size() > 200 or feed.stats.size() > 2000) return #Err("Feed exceeds import bounds");
+    var incoming:[Types.PlayHQMatchMeta]=[];var imported:[Types.Match]=[];var statRows:[Types.PlayHQStat]=[];
+    for(g in feed.games.values()) {
+      let previous=playhqMatchMetadata.find(func(m)=m.competition_id==competition_id and m.tenant==tenant and m.game_id==g.game_id);
+      let id=switch(previous){case null "phq-"#competition_id#"-"#tenant#"-"#g.game_id;case(?m)m.match_id};
+      let old=matches.find(func(m)=m.id==id);
+      // Local edits win over refresh; never overwrite a manually changed revision.
+      let override=switch(previous,old){case(?p,?m)p.synced_revision!=m.revision;case _ false};
+      let revision : Nat64 = switch(old){case null 1;case(?m)m.revision+1};
+      let row:Types.Match=switch(old){case(?m)if(override)m else ({m with status=g.status;home_score=g.home_score??m.home_score;away_score=g.away_score??m.away_score;scheduled_at_ms=g.starts_at_ms;venue=g.venue;revision});case null ({id;competition_id;home_team=g.home_id;away_team=g.away_id;status=g.status;home_score=g.home_score??0;away_score=g.away_score??0;division_id=?grade;scheduled_at_ms=g.starts_at_ms;venue=g.venue;pitch_number=null;round_number=null;duration_minutes=null;arrival_minutes_before=null;notes=null;revision})};
+      imported:=imported.concat([row]);
+      incoming:=incoming.concat([{match_id=id;competition_id;tenant;grade_id=grade;game_id=g.game_id;home_id=g.home_id;away_id=g.away_id;home_name=g.home_name;away_name=g.away_name;synced_revision=if(override)switch(previous){case(?p)p.synced_revision;case null row.revision}else row.revision}]);
+    };
+    for(s in feed.stats.values()) {
+      let meta=switch(incoming.find(func(m)=m.game_id==s.game_id)){case null return #Err("Unassociated player statistics");case(?m)m};
+      if (s.team_id != meta.home_id and s.team_id != meta.away_id or s.stats_json.size() > 8192) return #Err("Invalid player statistics");
+      statRows:=statRows.concat([{competition_id;match_id=meta.match_id;tenant;game_id=s.game_id;team_id=s.team_id;player_id=s.player_id;player_name=s.player_name;stats_json=s.stats_json}]);
+    };
+    matches:=matches.filter(func(m)=not imported.any(func(i)=i.id==m.id)).concat(imported);
+    playhqMatchMetadata:=playhqMatchMetadata.filter(func(m)=not incoming.any(func(i)=i.match_id==m.match_id)).concat(incoming);
+    playhqStats:=playhqStats.filter(func(s)=not incoming.any(func(i)=i.match_id==s.match_id)).concat(statRows);
+    #Ok(imported.size())
+  };
+
+  public shared ({caller}) func read_playhq_stats(competition_id:Text) : async {#Ok:{matches:[Types.PlayHQMatchMeta];stats:[Types.PlayHQStat];claims:[{player_id:Text;tenant:Text;mine:Bool}]};#Err:Text} {
+    auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
+    let member=canManageCompetition(caller,competition_id) or roles.any(func(r)=r.user==caller and r.competition_id==competition_id) or (await participantVisible(caller,competition_id));
+    if(not member or compFenced(competition_id)) return #Err("Competition access denied");
+    let manager=canManageCompetition(caller,competition_id);
+    let meta=playhqMatchMetadata.filter(func(m)=m.competition_id==competition_id);
+    let safe=playhqStats.filter(func(s)=s.competition_id==competition_id and matches.any(func(m)=m.id==s.match_id and (manager or not ScorePrivacy.hidden(scorePrivacySettings,competition_id,m.division_id))));
+    #Ok({matches=meta;stats=safe;claims=playhqClaims.filter(func(c)=safe.any(func(s)=s.tenant==c.tenant and s.player_id==c.player_id)).map(func(c)={player_id=c.player_id;tenant=c.tenant;mine=c.user==caller})})
+  };
+  public shared ({caller}) func claim_playhq_player(competition_id:Text,tenant:Text,player_id:Text) : async {#Ok;#Err:Text} {
+    auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
+    if(compFenced(competition_id)) return #Err("Competition locked");
+    if(not canManageCompetition(caller,competition_id) and not (await participantVisible(caller,competition_id)) and not roles.any(func(r)=r.user==caller and r.competition_id==competition_id)) return #Err("Competition access denied");
+    if(not playhqStats.any(func(s)=s.competition_id==competition_id and s.tenant==tenant and s.player_id==player_id)) return #Err("Player not found");
+    switch(playhqClaims.find(func(c)=c.tenant==tenant and c.player_id==player_id)){case(?c)if(c.user==caller)return #Ok else return #Err("Player already claimed");case null{}};
+    if(compFenced(competition_id)) return #Err("Competition locked");
+    playhqClaims:=playhqClaims.concat([{tenant;player_id;user=caller}]);#Ok
   };
 
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {
@@ -2103,6 +2190,7 @@ persistent actor class Main(governorInit : Principal) {
       if (item.sender.equal(old)) { changed += 1; { item with sender = new } } else item
     });
     var newBulkAccessPrincipals = bulkAccessPrincipals;
+    let newPlayhqClaims=playhqClaims.map(func(c):Types.PlayHQClaim {if(c.user==old){changed+=1;{c with user=new}}else c});
     if (bulkAccessPrincipals.any(func(p) = p.equal(old))) {
       let hasNew = bulkAccessPrincipals.any(func(p) = p.equal(new));
       newBulkAccessPrincipals := bulkAccessPrincipals.filterMap(func(p) : ?Principal {
@@ -2119,6 +2207,7 @@ persistent actor class Main(governorInit : Principal) {
       eoiSubmissions := newEoiSubmissions;
       broadcasts := newBroadcasts;
       bulkAccessPrincipals := newBulkAccessPrincipals;
+      playhqClaims:=newPlayhqClaims;
     };
 
     #ok(changed)
