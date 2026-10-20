@@ -82,7 +82,9 @@ module {
     ?page
   };
   // Trusted internal modules may validate a descriptor before Region I/O.
-  public func contains(state : State, handle : Handle) : Bool { owned(state, handle) != null };
+  public func contains(state : State, handle : Handle) : Bool {
+    let ?_page = owned(state, handle) else return false; true
+  };
   public func write(state : State, handle : Handle, bytes : Blob) : Bool {
     if (bytes.size() != handle.length) return false;
     let ?page = owned(state, handle) else return false;
