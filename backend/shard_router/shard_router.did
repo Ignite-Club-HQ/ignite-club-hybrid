@@ -120,6 +120,15 @@ service : (Init) -> {
       vec record { text; nat64 },
       nat64,
     ) -> (Result_7);
+  configure_store_media_growth : (
+      text,
+      principal,
+      nat64,
+      nat64,
+      vec record { text; nat64 },
+      nat64,
+      nat64,
+    ) -> (Result_7);
   // Public: remaining cycles (shown in admin settings).
   cycles_balance : () -> (nat) query;
   get_domain_migration : (text, text) -> (Result_8) query;

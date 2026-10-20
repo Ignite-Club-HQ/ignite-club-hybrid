@@ -161,6 +161,8 @@ thread_local! {
     // Per-principal count of self-service new-club placements (abuse cap).
     static PLACERS: RefCell<StableBTreeMap<Vec<u8>, u64, Memory>> = RefCell::new(StableBTreeMap::init(memory(9)));
     static MEDIA_GROWTH: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(12)));
+    // Additive store-principal partition; never reinterpret legacy group bytes.
+    static STORE_GROWTH: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(13)));
 }
 
 fn media_growth_local() -> bool {
@@ -174,6 +176,44 @@ fn growth_budget(group: &str) -> Option<media_growth::Budget> {
 }
 fn save_growth(b: &media_growth::Budget) {
     MEDIA_GROWTH.with(|m| m.borrow_mut().insert(b.group_id.as_bytes().to_vec(), encode(b)));
+}
+fn verified_store_growth(group: &str) -> Option<media_growth::StoreBudget> {
+    let g = group_for(group)?;
+    let store = g.photo_store?;
+    if GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).any(|other| other.id != group && other.photo_store == Some(store))) {
+        return None;
+    }
+    let authority = g.domains.iter().find(|d| d.domain == "club_domain")?.canister;
+    let b: media_growth::StoreBudget = STORE_GROWTH.with(|m| m.borrow().get(&store.as_slice().to_vec()).map(|raw| decode(&raw)))?;
+    b.matches(group, &g.target_alias, authority, store).then_some(b)
+}
+fn save_store_growth(b: &media_growth::StoreBudget) {
+    STORE_GROWTH.with(|m| m.borrow_mut().insert(b.store.as_slice().to_vec(), encode(b)));
+}
+#[ic_cdk::update]
+fn configure_store_media_growth(group_id: String, store: Principal, usable: u64, fixed: u64,
+    baseline: Vec<(String, u64)>, expected_revision: u64, evidence_revision: u64) -> Outcome<()> {
+    require_governor()?; registry_writable()?;
+    if !media_growth_local() { return Err("Local media growth only".into()); }
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    let group = group_for(&group_id).ok_or("Unknown group")?;
+    if group.photo_store != Some(store) || STORE_GROWTH.with(|m| m.borrow().contains_key(&store.as_slice().to_vec())) {
+        return Err("Immutable unique store baseline required".into());
+    }
+    // A physical store cannot fund two independent group budgets.
+    if GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).any(|g| g.id != group_id && g.photo_store == Some(store))) {
+        return Err("Store belongs to another group".into());
+    }
+    let legacy = growth_budget(&group_id).ok_or("Missing exact club baseline")?;
+    let authority = group.domains.iter().find(|d| d.domain == "club_domain").ok_or("Missing authority")?.canister;
+    if legacy.authority != authority || legacy.target_alias != group.target_alias { return Err("Growth binding changed".into()); }
+    let assigned: Vec<String> = GROUP_ASSIGNMENTS.with(|m| m.borrow().iter().map(|e| decode::<GroupAssignment>(&e.value()))
+        .filter(|a| a.group_id == group_id).map(|a| a.club_id).collect());
+    if assigned.len() != legacy.commitments.len() || assigned.iter().any(|id| !legacy.commitments.contains_key(id)) {
+        return Err("Exact assigned-club baseline required".into());
+    }
+    let b = media_growth::StoreBudget::import(store, evidence_revision, &legacy, usable, fixed, baseline)?;
+    save_store_growth(&b); Ok(())
 }
 #[ic_cdk::update]
 fn configure_group_media_growth(group_id: String, usable: u64, fixed: u64, free_club: u64, baseline: Vec<(String, u64)>, expected_revision: u64) -> Outcome<()> {
@@ -197,11 +237,12 @@ fn configure_group_media_growth(group_id: String, usable: u64, fixed: u64, free_
 fn reserve_growth_for(user: Principal, group_id: &str, target_alias: &str, club: &str, bytes: u64) -> Outcome<u64> {
     registry_writable()?;
     if !media_growth_local() { return Err("Local media growth only".into()); }
-    let mut b = growth_budget(group_id).ok_or("Missing growth baseline")?;
+    let mut store = verified_store_growth(group_id).ok_or("Verified per-store growth baseline required")?;
+    let b = &mut store.budget;
     if user != b.authority || b.target_alias != target_alias || group_assignment_for(club).is_none_or(|a| a.group_id != group_id) {
         return Err("Assigned club authority required".into());
     }
-    let result = b.reserve(club, bytes)?; save_growth(&b); Ok(result)
+    let result = b.reserve(club, bytes)?; save_growth(b); save_store_growth(&store); Ok(result)
 }
 #[ic_cdk::update]
 fn reserve_group_media_growth(group_id: String, target_alias: String, club: String, bytes: u64) -> Outcome<u64> {
@@ -807,7 +848,7 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
         return Err("Existing club routes require a verified migration".into());
     }
     let rows: Vec<ShardGroup> = GROUPS.with(|items| items.borrow().iter().map(|entry| decode(&entry.value())).collect());
-    let eligible: Vec<ShardGroup> = rows.into_iter().filter(|g| !media_growth_local() || growth_budget(&g.id).is_some_and(|b| b.fits(&club_id, b.free_club))).collect();
+    let eligible: Vec<ShardGroup> = rows.into_iter().filter(|g| !media_growth_local() || verified_store_growth(&g.id).is_some_and(|s| s.budget.fits(&club_id, s.budget.free_club))).collect();
     let mut group = groups::select(&eligible, &target_alias, now).cloned().ok_or("No healthy group with capacity")?;
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
     group.assigned_clubs += 1;
@@ -815,8 +856,9 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
     // Reserve physical growth and assign in the same message. A lost reply
     // retains one immutable assignment and one monotonic commitment.
     if media_growth_local() {
-        let mut budget = growth_budget(&group.id).ok_or("Missing growth baseline")?;
-        budget.reserve(&club_id, budget.free_club)?; save_growth(&budget);
+        let mut store = verified_store_growth(&group.id).ok_or("Verified per-store growth baseline required")?;
+        store.budget.reserve(&club_id, store.budget.free_club)?;
+        save_growth(&store.budget); save_store_growth(&store);
     }
     // Both maps update in one synchronous message; no await/reentrancy window.
     GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
@@ -833,9 +875,13 @@ mod tests {
         TEST_GROWTH.with(|v| *v.borrow_mut() = true);
         let mut g = groups::tests::group("growth-g", 0);
         g.target_alias = "growth-local".into();
+        g.photo_store = Some(Principal::from_slice(&[240]));
         GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(), encode(&g)));
         let authority = g.domains[0].canister;
         save_growth(&media_growth::Budget { group_id:g.id.clone(),target_alias:g.target_alias.clone(),authority,usable:100,fixed:20,free_club:40,commitments:Default::default() });
+        assert!(assign_group_record("growth-a".into(),g.target_alias.clone(),current_revision(),1).is_err());
+        let store = g.photo_store.unwrap();
+        save_store_growth(&media_growth::StoreBudget::import(store,1,&growth_budget(&g.id).unwrap(),100,20,vec![]).unwrap());
         let a = assign_group_record("growth-a".into(),g.target_alias.clone(),current_revision(),1).unwrap();
         assert_eq!(growth_budget(&g.id).unwrap().committed(),Ok(60));
         assert_eq!(assign_group_record("growth-a".into(),g.target_alias.clone(),0,1).unwrap(),a);
@@ -843,9 +889,23 @@ mod tests {
         assert!(reserve_growth_for(authority,&g.id,"foreign","growth-a",50).is_err());
         assert!(reserve_growth_for(authority,&g.id,&g.target_alias,"unassigned",50).is_err());
         assert_eq!(reserve_growth_for(authority,&g.id,&g.target_alias,"growth-a",80),Ok(80));
-        assert!(assign_group_record("growth-b".into(),g.target_alias,current_revision(),1).is_err());
+        assert!(assign_group_record("growth-b".into(),g.target_alias.clone(),current_revision(),1).is_err());
         assert!(group_assignment_for("growth-b").is_none());
         assert_eq!(growth_budget(&g.id).unwrap().committed(),Ok(100));
+        let original = g.photo_store;
+        g.photo_store = Some(Principal::from_slice(&[241]));
+        GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(),encode(&g)));
+        assert!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80).is_err());
+        assert!(verified_store_growth(&g.id).is_none());
+        g.photo_store = original;
+        GROUPS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(),encode(&g)));
+        assert_eq!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80),Ok(80));
+        let mut duplicate = g.clone(); duplicate.id = "duplicate-store-group".into();
+        GROUPS.with(|m| m.borrow_mut().insert(duplicate.id.as_bytes().to_vec(),encode(&duplicate)));
+        assert!(verified_store_growth(&g.id).is_none());
+        assert!(reserve_growth_for(authority,&g.id,"growth-local","growth-a",80).is_err());
+        GROUPS.with(|m| m.borrow_mut().remove(&duplicate.id.as_bytes().to_vec()));
+        assert!(verified_store_growth(&g.id).is_some());
         TEST_GROWTH.with(|v| *v.borrow_mut() = false);
     }
     #[test]

@@ -192,6 +192,19 @@ export const idlFactory = ({ IDL }) => {
         [Result_7],
         [],
       ),
+    'configure_store_media_growth' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Principal,
+          IDL.Nat64,
+          IDL.Nat64,
+          IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat64)),
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
+        [Result_7],
+        [],
+      ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'get_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text],

@@ -292,6 +292,7 @@ export interface shard_routerInterface {
     commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result_3>;
     commit_migration(arg0: string, arg1: bigint): Promise<Result_2>;
     configure_group_media_growth(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint): Promise<Result_7>;
+    configure_store_media_growth(arg0: string, arg1: Principal, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint, arg6: bigint): Promise<Result_7>;
     cycles_balance(): Promise<bigint>;
     get_domain_migration(arg0: string, arg1: string): Promise<Result_8>;
     get_domain_route(arg0: string, arg1: string): Promise<Result_9>;
@@ -358,6 +359,10 @@ export class Shard_router implements shard_routerInterface {
     }
     async configure_group_media_growth(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint): Promise<Result_7> {
         const result = await this.actor.configure_group_media_growth(arg0, arg1, arg2, arg3, arg4, arg5);
+        return from_candid_Result_7_n15(result);
+    }
+    async configure_store_media_growth(arg0: string, arg1: Principal, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint, arg6: bigint): Promise<Result_7> {
+        const result = await this.actor.configure_store_media_growth(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
         return from_candid_Result_7_n15(result);
     }
     async cycles_balance(): Promise<bigint> {

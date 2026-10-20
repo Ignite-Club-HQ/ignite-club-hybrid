@@ -161,6 +161,18 @@ export interface _SERVICE {
     [string, bigint, bigint, bigint, Array<[string, bigint]>, bigint],
     Result_7
   >,
+  'configure_store_media_growth' : ActorMethod<
+    [
+      string,
+      Principal,
+      bigint,
+      bigint,
+      Array<[string, bigint]>,
+      bigint,
+      bigint,
+    ],
+    Result_7
+  >,
   /**
    * Public: remaining cycles (shown in admin settings).
    */
