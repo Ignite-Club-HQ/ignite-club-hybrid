@@ -36,14 +36,20 @@ module {
     rows.add(offset, ())
   };
   public func writeWithin(store : Store, bytes : Blob, cap : Nat) : ?Slice {
-    let length = bytes.size();
+    let ?slice = reserveWithin(store, bytes.size(), cap) else return null;
+    if (not writeReserved(store, slice, bytes)) return null;
+    ?slice
+  };
+  // A reservation owns a real extent. No ciphertext is written until finalize;
+  // concurrent admissions cannot all promise the same free buddy or tail.
+  public func reserveWithin(store : Store, length : Nat, cap : Nat) : ?Slice {
     let slot = slotFor(length);
     if (slot > 16_777_216) return null;
     let offset = switch (availableClass(store, slot)) {
       case (?size) {
         let ?offsets = store.free.get(size) else return null;
         let ?(offset, _) = offsets.entries().next() else return null;
-        if (not validSlice(store.end.toNat(), { offset; length; slot = size })) return null;
+        if (not validSlice(store.end.toNat(), { offset; length; slot = size }) or offset.toNat() + size > cap) return null;
         offsets.remove(offset);
         var split = size;
         while (split > slot) {
@@ -69,8 +75,13 @@ module {
         Nat64.fromNat(aligned)
       }
     };
-    Region.storeBlob(store.region, offset, bytes);
     ?{ offset; length; slot }
+  };
+  // Caller must own the durable reservation; this never allocates or moves it.
+  public func writeReserved(store : Store, slice : Slice, bytes : Blob) : Bool {
+    if (bytes.size() != slice.length or not validSlice(store.end.toNat(), slice) or
+      slice.offset.toNat() + slice.slot > Region.size(store.region).toNat() * 65_536) return false;
+    Region.storeBlob(store.region, slice.offset, bytes); true
   };
   public func release(store : Store, slice : Slice) {
     if (not validSlice(store.end.toNat(), slice)) return;
