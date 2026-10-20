@@ -1,0 +1,13 @@
+{
+  "plan": {
+    "paymentId": "card-smoke-001",
+    "testId": "media-smoke-004",
+    "scenario": "smoke",
+    "principal": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "targetCycles": "5000000000000",
+    "balanceBefore": "24422920000",
+    "shortfallCycles": "4975577080000"
+  },
+  "phase": "creating-order",
+  "createdAt": "2026-10-20T05:27:35.914Z"
+}
