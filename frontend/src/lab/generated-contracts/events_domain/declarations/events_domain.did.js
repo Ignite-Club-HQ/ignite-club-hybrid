@@ -459,6 +459,16 @@ export const idlFactory = ({ IDL }) => {
     'api_key' : IDL.Text,
     'updated_at_ms' : IDL.Nat64,
   });
+  const MatchEventInput = IDL.Record({
+    'teams' : IDL.Vec(CompetitionEventTarget),
+    'title' : IDL.Text,
+    'creator' : IDL.Principal,
+    'venue' : IDL.Opt(IDL.Text),
+    'starts_at_ms' : IDL.Nat64,
+    'ends_at_ms' : IDL.Nat64,
+    'match_id' : IDL.Text,
+    'competition_id' : IDL.Text,
+  });
   const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
@@ -769,6 +779,40 @@ export const idlFactory = ({ IDL }) => {
           }),
         ],
         ['query'],
+      ),
+    'fetch_playhq_grade' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'stats' : IDL.Vec(
+                IDL.Record({
+                  'player_id' : IDL.Text,
+                  'team_id' : IDL.Text,
+                  'stats_json' : IDL.Text,
+                  'player_name' : IDL.Text,
+                  'game_id' : IDL.Text,
+                })
+              ),
+              'games' : IDL.Vec(
+                IDL.Record({
+                  'status' : IDL.Text,
+                  'venue' : IDL.Opt(IDL.Text),
+                  'home_id' : IDL.Text,
+                  'starts_at_ms' : IDL.Opt(IDL.Nat64),
+                  'away_id' : IDL.Text,
+                  'game_id' : IDL.Text,
+                  'home_name' : IDL.Text,
+                  'away_name' : IDL.Text,
+                  'away_score' : IDL.Opt(IDL.Nat16),
+                  'home_score' : IDL.Opt(IDL.Nat16),
+                })
+              ),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
       ),
     'getApiDoc' : IDL.Func([], [IDL.Text], ['query']),
     'get_active_game' : IDL.Func(
@@ -1937,6 +1981,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Vec(IDL.Text)),
         ],
         [IDL.Variant({ 'Ok' : EventSeries, 'Err' : IDL.Text })],
+        [],
+      ),
+    'upsert_competition_match_events' : IDL.Func(
+        [MatchEventInput],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Text), 'Err' : IDL.Text })],
         [],
       ),
     'usage_stats' : IDL.Func(

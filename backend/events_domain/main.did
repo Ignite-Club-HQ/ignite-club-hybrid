@@ -188,6 +188,17 @@ type MatchGoalkeeperAssignment =
    ref_kind: text;
    updated_at_ms: nat64;
  };
+type MatchEventInput = 
+ record {
+   competition_id: text;
+   creator: principal;
+   ends_at_ms: nat64;
+   match_id: text;
+   starts_at_ms: nat64;
+   teams: vec CompetitionEventTarget;
+   title: text;
+   venue: opt text;
+ };
 type MatchCaptainAssignment = 
  record {
    assigned_by: principal;
@@ -427,6 +438,36 @@ type Main =
           teamTrainingPauses: vec TeamTrainingPause;
         };
      }) query;
+   fetch_playhq_grade: (tenant: text, grade: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          games:
+           vec
+            record {
+              away_id: text;
+              away_name: text;
+              away_score: opt nat16;
+              game_id: text;
+              home_id: text;
+              home_name: text;
+              home_score: opt nat16;
+              starts_at_ms: opt nat64;
+              status: text;
+              venue: opt text;
+            };
+          stats:
+           vec
+            record {
+              game_id: text;
+              player_id: text;
+              player_name: text;
+              stats_json: text;
+              team_id: text;
+            };
+        };
+     });
    getApiDoc: () -> (text) query;
    get_active_game: (team_id: opt text) ->
     (variant {
@@ -1382,6 +1423,11 @@ type Main =
                         Err: text;
                         Ok: EventSeries;
                       });
+   upsert_competition_match_events: (input: MatchEventInput) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
    /// Public: aggregate record counts (shown in admin settings). Counts only —
    /// no record contents, so no PII is exposed.
    usage_stats: () -> (record {
