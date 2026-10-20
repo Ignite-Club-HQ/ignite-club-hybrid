@@ -138,6 +138,42 @@ describe.skipIf(!enabled)('local deletion activation boundary (real club/identit
       midRemovalDrift: () => { mutateAfterRevoke = true; } };
   }
 
+  it('ordinary club removal denies both linked aliases only in that club across sync and upgrade', async () => {
+    const f = await fixture();
+    const retained = p(sequence++);
+    for (const [index, club] of f.clubs.entries()) {
+      club.actor.setPrincipal(governor);
+      ok(await club.actor.add_role_grant(retained, index ? 'new' : 'legacy', 'player', []));
+    }
+    f.id.setPrincipal(f.primary); const before = ok(await f.id.whoami());
+    f.clubs[0].actor.setPrincipal(governor);
+    ok(await f.clubs[0].actor.remove_member('legacy', f.linked));
+    const verify = async () => {
+      for (const alias of [f.primary, f.linked]) {
+        for (const club of f.clubs) {
+          club.actor.setPrincipal(alias); ok(await club.actor.sync_my_linked_account());
+        }
+        f.clubs[0].actor.setPrincipal(alias);
+        expect(ok(await f.clubs[0].actor.read_my_club_memberships_indexed([], 100)).clubs).toEqual([]);
+        expect(await f.clubs[0].actor.is_club_member(alias, 'legacy')).toBe(false);
+        f.clubs[1].actor.setPrincipal(alias);
+        expect(ok(await f.clubs[1].actor.read_my_club_memberships_indexed([], 100)).clubs).toEqual(['new']);
+        expect(await f.clubs[1].actor.is_club_member(alias, 'new')).toBe(true);
+      }
+      f.clubs[0].actor.setPrincipal(retained);
+      expect(ok(await f.clubs[0].actor.read_my_club_memberships_indexed([], 100)).clubs).toEqual(['legacy']);
+      f.id.setPrincipal(f.primary); const after = ok(await f.id.whoami());
+      expect(after.id).toBe(before.id); expect(after.version).toBe(before.version);
+      expect(after.principals.map((principal: Principal) => principal.toText())).toEqual(before.principals.map((principal: Principal) => principal.toText()));
+    };
+    await verify();
+    for (const club of f.clubs) await pic.upgradeCanister({ canisterId: club.canisterId,
+      sender: governor, wasm: process.env.CLUB_DOMAIN_WASM,
+      arg: IDL.encode([IDL.Principal], [governor]),
+      upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+    await verify();
+  }, 60000);
+
   it('self deletion revokes both linked principals in legacy and new groups before shared erasure', async () => {
     const f = await fixture(); await eraseMyIcpAccount(f.identity, f.targets[0]);
     for (const principal of [f.primary, f.linked]) {

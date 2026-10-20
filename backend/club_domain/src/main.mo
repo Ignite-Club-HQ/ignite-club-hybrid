@@ -470,12 +470,12 @@ persistent actor class Main(governorInit : Principal) = this {
   // on the next read. Candidates are always re-verified with isMember, so the
   // index can only accelerate, never grant. Rebuilt after upgrade (transient).
   transient var membershipEpoch : Nat = 0;
-  transient var memberIndexEpoch : Nat = 1;
+  transient var memberIndexEpoch : ?Nat = null;
   transient var memberIndex : MembershipIndex.Index = MembershipIndex.empty();
   transient let APP_WIDE = "\u{1F}*";
 
   func currentMemberIndex() : MembershipIndex.Index {
-    if (memberIndexEpoch == membershipEpoch) return memberIndex;
+    if (memberIndexEpoch == ?membershipEpoch) return memberIndex;
     let ix = MembershipIndex.empty();
     for (g in acl.roles.values()) {
       MembershipIndex.add(ix, g.user.toText(), switch (g.club) { case (?c) c; case null APP_WIDE });
@@ -488,7 +488,7 @@ persistent actor class Main(governorInit : Principal) = this {
         for (t in teams.values()) if (t.id == teamId and t.deleted_at_ms == null) for (u in parents.concat(guardians).values()) MembershipIndex.add(ix, u.toText(), t.club_id);
       };
     };
-    memberIndex := ix; memberIndexEpoch := membershipEpoch; ix
+    memberIndex := ix; memberIndexEpoch := ?membershipEpoch; ix
   };
 
   func isMember(caller : Principal, club : Text) : Bool {

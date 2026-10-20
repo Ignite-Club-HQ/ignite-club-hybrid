@@ -80,3 +80,4 @@
 - Bound deletion is local-only: memory-16 tickets freeze account/binding and link/unlink/status/rekey changes; router memories 10/11 pin the trusted identity authority and non-expiring locks checked by every registry mutation. Commit checks captured aliases on all clubs and rechecks local state without awaits; only confirmed erasure permits identity settlement. No governor/timeout unlock. Shared workload is identical across groups; routed services are unique. Why: preserve deletion topology without releasing global drain.
 
 - League creation reads live club roles via bounded consensus with post-reply guards; timer install captures governor atomically and compatibility init requires a controller. Why: prevent stale-role creation and setup takeover.
+- Club membership index starts with no cached epoch, and marks it current only after rebuilding. Why: a first post-upgrade sync must not make an empty index appear valid and hide surviving memberships.

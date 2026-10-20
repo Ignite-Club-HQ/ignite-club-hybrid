@@ -10,19 +10,33 @@ const primary = Principal.fromUint8Array(Uint8Array.from([2, 1]));
 const linked = Principal.fromUint8Array(Uint8Array.from([3, 1]));
 const stranger = Principal.fromUint8Array(Uint8Array.from([4, 1]));
 const ok = r => { assert.ok('Ok' in r, JSON.stringify(r, (_, v) => typeof v === 'bigint' ? String(v) : v)); return r.Ok; };
+const denied = async call => {
+  try { const result = await call(); assert.ok(result && 'Err' in result, 'Expected explicit denial'); }
+  catch (error) {
+    // Transport/test failures are not authorization evidence.
+    assert.match(String(error), /Account admission denied or unavailable|Account removal fenced|Identity authority unavailable/);
+  }
+};
 const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
   const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: process.env.IDENTITY_ACCESS_WASM,
     sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   const groups = [];
+  const service = identity.actor; service.setPrincipal(governor);
+  ok(await service.register_account());
   const productionGroup = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM,
     sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   productionGroup.actor.setPrincipal(governor);
   assert.ok('Err' in await productionGroup.actor.set_identity_access_canister(identity.canisterId), 'production authority setter stays closed');
   for (const suffix of ['a', 'b']) {
     const group = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM,
-      sender: governor, controllers: [governor], environmentVariables: [{ name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" }], arg: IDL.encode([IDL.Principal], [governor]) });
+      sender: governor, controllers: [governor], environmentVariables: [
+        { name: "IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL", value: "1" },
+        { name: "IGNITE_ACCOUNT_SERVICE_IDENTITY", value: identity.canisterId.toText() }
+      ], arg: IDL.encode([IDL.Principal], [governor]) });
+    service.setPrincipal(governor);
+    ok(await service.set_service_authorities([...groups, group].map(g => g.canisterId)));
     group.actor.setPrincipal(governor);
     ok(await group.actor.create_club(`club-${suffix}`, suffix, suffix, [], []));
     ok(await group.actor.add_role_grant(primary, `club-${suffix}`, 'player', []));
@@ -30,7 +44,7 @@ try {
     ok(await group.actor.set_identity_access_canister(identity.canisterId));
     groups.push(group);
   }
-  const service = identity.actor; service.setPrincipal(governor);
+  service.setPrincipal(governor);
   ok(await service.set_club_authorities(groups.map(g => g.canisterId)));
   assert.ok('Err' in await service.set_club_authorities([groups[0].canisterId]));
   service.setPrincipal(primary); const account = ok(await service.register_account());
@@ -39,7 +53,7 @@ try {
   assert.equal(joined.version, 1n);
   for (const group of groups) {
     group.actor.setPrincipal(linked); ok(await group.actor.sync_my_linked_account());
-    assert.equal(ok(await group.actor.whoami()).id, account.id);
+    assert.equal(ok(await group.actor.read_account_whoami()).id, account.id);
     assert.equal(ok(await group.actor.read_my_club_memberships_indexed([], 100)).clubs.length, 1);
     group.actor.setPrincipal(stranger); assert.ok('Err' in await group.actor.revoke_linked_principal(account.id, linked, 1n));
   }
@@ -54,17 +68,26 @@ try {
   // Stop the remote authority so sync cannot finish before local removal.
   // One tick alone does not establish an async pause on same-subnet actors.
   await pic.stopCanister({ canisterId: identity.canisterId, sender: governor });
-  const deferredGroup = pic.createDeferredActor(clubIdl, groups[0].canisterId);
-  deferredGroup.setPrincipal(linked);
-  const staleSync = await deferredGroup.sync_my_linked_account();
+  // Use submit/await directly: the SDK deferred actor loses rejected callbacks.
+  const submit = async (factory, canisterId, sender, method, args) => {
+    const signature = factory({ IDL })._fields.find(([name]) => name === method)?.[1];
+    assert.ok(signature, 'Method must exist in the actual contract');
+    const message = await pic.client.submitCall({ canisterId, sender, method,
+      payload: new Uint8Array(IDL.encode(signature.argTypes, args)) });
+    return async () => {
+      const response = await pic.client.awaitCall(message);
+      return IDL.decode(signature.retTypes, response.body)[0];
+    };
+  };
+  const staleSync = await submit(clubIdl, groups[0].canisterId, linked, 'sync_my_linked_account', []);
   await pic.tick(1);
   groups[0].actor.setPrincipal(identity.canisterId);
   ok(await groups[0].actor.revoke_linked_principal(account.id, linked, 1n));
   await pic.startCanister({ canisterId: identity.canisterId, sender: governor });
-  assert.ok('Err' in await staleSync(), 'suspended account sync cannot cross a receiver removal');
+  await denied(staleSync);
   groups[0].actor.setPrincipal(linked);
   assert.ok('Err' in await groups[0].actor.sync_my_linked_account(), 'old authority snapshot also fails when sync starts after the removal receipt');
-  assert.deepEqual(await groups[0].actor.my_role_grants(), []);
+  assert.deepEqual(await groups[0].actor.read_account_my_role_grants(), []);
   service.setPrincipal(primary);
   await pic.stopCanister({ canisterId: groups[1].canisterId, sender: governor });
   assert.ok('Err' in await service.revoke(linked, 1n));
@@ -78,10 +101,18 @@ try {
   await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: process.env.IDENTITY_ACCESS_WASM, sender: governor,
     arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   await pic.startCanister({ canisterId: groups[1].canisterId, sender: governor });
+  // Before retrying fan-out, the unreached group's local grants still exist.
+  // Current identity eligibility must deny the revoked alias immediately.
+  groups[1].actor.setPrincipal(linked);
+  await denied(() => groups[1].actor.read_account_my_role_grants());
+  await denied(() => groups[1].actor.read_my_club_memberships_indexed([], 100));
+  await denied(() => groups[1].actor.sync_my_linked_account());
+  groups[1].actor.setPrincipal(primary);
+  assert.deepEqual(ok(await groups[1].actor.read_my_club_memberships_indexed([], 100)).clubs, ['club-b']);
   await pic.upgradeCanister({ canisterId: groups[0].canisterId, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor,
     arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   groups[0].actor.setPrincipal(linked);
-  assert.ok('Err' in await groups[0].actor.sync_my_linked_account(), 'durable unlink receipt rejects stale identity snapshot after upgrade');
+  await denied(() => groups[0].actor.sync_my_linked_account());
   service.setPrincipal(primary); const revoked = ok(await service.revoke(linked, 1n));
   assert.equal(revoked.version, 2n); assert.deepEqual(revoked.principals.map(p => p.toText()), [primary.toText()]);
   service.setPrincipal(linked); assert.ok('Err' in await service.register_account(), 'completed denial survives deindexing');
@@ -90,9 +121,9 @@ try {
   assert.ok('Err' in await service.rekey_principal(primary, linked, false));
   for (const [index, group] of groups.entries()) {
     group.actor.setPrincipal(linked);
-    assert.ok('Err' in await group.actor.sync_my_linked_account());
-    assert.deepEqual(await group.actor.my_role_grants(), []);
-    assert.deepEqual(ok(await group.actor.read_my_club_memberships_indexed([], 100)).clubs, []);
+    await denied(() => group.actor.sync_my_linked_account());
+    await denied(() => group.actor.read_account_my_role_grants());
+    await denied(() => group.actor.read_my_club_memberships_indexed([], 100));
     group.actor.setPrincipal(primary); ok(await group.actor.sync_my_linked_account());
     assert.deepEqual(ok(await group.actor.read_my_club_memberships_indexed([], 100)).clubs, [`club-${index ? 'b' : 'a'}`]);
   }
@@ -108,18 +139,16 @@ try {
   assert.equal(relinkedEligibility.account_version[0], 3n);
   for (const group of groups) {
     group.actor.setPrincipal(linked);
-    assert.deepEqual(await group.actor.my_role_grants(), [], 'relink alone does not restore deleted domain grants');
+    assert.deepEqual(await group.actor.read_account_my_role_grants(), [], 'relink alone does not restore deleted domain grants');
     group.actor.setPrincipal(governor); ok(await group.actor.add_role_grant(linked, group === groups[0] ? 'club-a' : 'club-b', 'coach', []));
     group.actor.setPrincipal(identity.canisterId); ok(await group.actor.revoke_linked_principal(account.id, linked, 1n));
     group.actor.setPrincipal(linked); ok(await group.actor.sync_my_linked_account());
-    assert.equal((await group.actor.my_role_grants()).length, 1);
+    assert.equal((await group.actor.read_account_my_role_grants()).length, 1);
     assert.equal(ok(await group.actor.read_my_club_memberships_indexed([], 100)).clubs.length, 1);
   }
   // Two callers replaying the same operation must never increment twice.
-  const deferredIdentity = pic.createDeferredActor(identityIdl, identity.canisterId);
-  deferredIdentity.setPrincipal(primary);
-  const first = await deferredIdentity.revoke(linked, 3n);
-  const second = await deferredIdentity.revoke(linked, 3n);
+  const first = await submit(identityIdl, identity.canisterId, primary, 'revoke', [linked, 3n]);
+  const second = await submit(identityIdl, identity.canisterId, primary, 'revoke', [linked, 3n]);
   const replies = await Promise.all([first(), second()]);
   assert.ok(replies.some(r => 'Ok' in r));
   service.setPrincipal(primary);
@@ -135,8 +164,8 @@ try {
   assert.ok('Denied' in persistedEligibility.decision);
   assert.equal(persistedEligibility.denied_through_version[0], 3n);
   for (const group of groups) {
-    group.actor.setPrincipal(linked); assert.deepEqual(await group.actor.my_role_grants(), []);
-    assert.ok('Err' in await group.actor.sync_my_linked_account());
+    group.actor.setPrincipal(linked); await denied(() => group.actor.read_account_my_role_grants());
+    await denied(() => group.actor.sync_my_linked_account());
   }
-  console.log('PASS: gated two-group recovery, durable registration/rekey/unrelated-link denial, bounded authorized consensus eligibility, retained history and explicit newer survivor relink without role restoration, upgrades and concurrent removal. This does NOT prove untouched-group or other-domain revocation.');
+  console.log('PASS: two-group recovery; restarted unacknowledged club denies protected reads/sync before retry while survivor retains club access; registration/rekey/unrelated-link denial, retained history, explicit newer relink without role restoration, upgrades and concurrent removal. Local rehearsal only: other-domain/global drain, restore and live opening remain unproven.');
 } finally { await pic?.tearDown(); await server.stop(); }
