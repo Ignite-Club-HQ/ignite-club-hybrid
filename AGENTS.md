@@ -11,7 +11,7 @@
 
 - Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
 - Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
-- Read nested AGENTS.md for scoped rules; scripts/ covers media recovery and paid-replay safety.
+- Read nested AGENTS.md; scripts/ governs media recovery and paid replay.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -46,4 +46,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 
-- Router index rebuilds from stable rows; writes refresh it, picks recheck gates. scale-probe never deploys. Why: preserve admission.
+- Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
