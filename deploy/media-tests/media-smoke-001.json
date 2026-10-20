@@ -11,8 +11,11 @@
     "budgetCycles": "3000000000000",
     "capacityBytes": 5368709120
   },
-  "phase": "smoke",
-  "pending": null,
+  "phase": "upgrade-mid-upload",
+  "pending": {
+    "kind": "upgrade-mid-upload",
+    "time": "2026-10-20T05:56:03.797Z"
+  },
   "receipts": [
     {
       "phase": "create",
