@@ -45,6 +45,7 @@ let lookupResponse: { data: { id: string } | null; error: { message: string } | 
   data: null,
   error: null,
 };
+let eventResponse = { data: { competition_match_id: null as string | null }, error: null as { message: string } | null };
 let writeError: { message: string } | null = null;
 let currentUser: { id: string } | null = { id: "user-1" };
 
@@ -103,7 +104,8 @@ beforeEach(() => {
   liveMocks.backend = supabaseMode ? "supabase" : "icp";
   liveMocks.saveLiveGameResult.mockReset();
   liveMocks.getUser.mockReset().mockImplementation(async () => ({ data: { user: currentUser } }));
-  liveMocks.from.mockReset().mockImplementation(() => makeFromBuilder());
+  liveMocks.from.mockReset().mockImplementation((table: string) => table === "events" ? { select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => eventResponse) })) })) } : makeFromBuilder());
+  eventResponse = { data: { competition_match_id: null }, error: null };
   ops.length = 0;
   toastSpy.mockReset();
   lookupResponse = { data: null, error: null };
@@ -113,6 +115,20 @@ beforeEach(() => {
 
 // ---- tests -------------------------------------------------------------
 describe.runIf(supabaseMode)("useSaveGameResult — onlyIfMissing fail-closed", () => {
+  it.each(["competition", "denied", "transport"])("refuses history writes on %s and permits retry", async (kind) => {
+    eventResponse = kind === "competition"
+      ? { data: { competition_match_id: "match-1" }, error: null }
+      : { data: { competition_match_id: null }, error: { message: kind } };
+    const { result } = renderHook(() => useSaveGameResult(), { wrapper });
+    await act(async () => { expect(await result.current.save(baseInput())).toBe(false); });
+    expect(ops).toEqual([]);
+    expect(result.current.saved).toBe(false);
+    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" }));
+    eventResponse = { data: { competition_match_id: null }, error: null };
+    await act(async () => { expect(await result.current.save(baseInput())).toBe(true); });
+    expect(ops).toEqual(["upsert"]);
+  });
+
   it("performs the upsert when lookup succeeds with no existing row", async () => {
     const { result } = renderHook(() => useSaveGameResult(), { wrapper });
     await act(async () => {
