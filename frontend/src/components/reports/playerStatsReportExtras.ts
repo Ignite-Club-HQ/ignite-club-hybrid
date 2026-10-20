@@ -437,7 +437,7 @@ async function fetchReportExtrasSupabase(
         captainNames: captains.filter((c: any) => c.event_id === event.id).map(nameFor),
         pomNames: poms.filter((c: any) => c.event_id === event.id).map(nameFor),
         goalkeeperNames: gks.filter((c: any) => c.event_id === event.id).map(nameFor),
-        playerGoals: goalsByEvent.get(event.id) ?? 0,
+        playerGoals: gr?.scores_hidden ? 0 : goalsByEvent.get(event.id) ?? 0,
         scorers: matchScorers,
       } satisfies ReportMatch;
     })

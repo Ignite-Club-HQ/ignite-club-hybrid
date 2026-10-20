@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { toast } from "sonner";
+import { readCompetitionPlayHQ, claimCompetitionPlayHQ } from "@/features/competitions/playhqRepository";
 
 type StatRow = {
   playhq_game_id: string;
@@ -47,10 +48,11 @@ export default function CompetitionPlayerStatsPanel({
 }) {
   const { user } = useAuth();
   const isCricket = (sport ?? "").toLowerCase() === "cricket";
-  // Allowed Supabase exception: PlayHQ-imported competition/player-stats
-  // tables have no canister counterpart. Cleanly disable the panel's
-  // queries for Internet Identity accounts instead of surfacing an error.
   const isIcp = resolveAuthBackend() === "icp";
+  const {data:protectedData,isLoading:protectedLoading,error:protectedError,refetch:refetchProtected}=useQuery({
+    queryKey:["competition-playhq-protected",competitionId,user?.id,isIcp],
+    queryFn:()=>readCompetitionPlayHQ(competitionId),
+  });
 
   // Cricket stat key categorisation (matches common PlayHQ keys, case-insensitive substring)
   const CRICKET_CATEGORIES: Record<"batting" | "bowling" | "fielding", string[]> = {
@@ -69,9 +71,10 @@ export default function CompetitionPlayerStatsPanel({
 
   // 1. Match list for this competition (need external_ids to filter stats,
   //    and team names + external team ids to power the filters below).
-  const { data: matches = [], isLoading: matchesLoading } = useQuery({
+  const matches=protectedData?.matches??[];
+  const { isLoading: matchesLoading } = useQuery({
     queryKey: ["competition-playhq-match-ids", competitionId],
-    enabled: !isIcp,
+    enabled: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("competition_matches")
@@ -134,9 +137,10 @@ export default function CompetitionPlayerStatsPanel({
   }, [linkedTeams]);
 
   // 2. Player stats joined by game id
-  const { data: rows = [], isLoading: statsLoading } = useQuery({
+  const rows=protectedData?.stats??[];
+  const { isLoading: statsLoading } = useQuery({
     queryKey: ["competition-playhq-stats", competitionId, gameIds.length],
-    enabled: gameIds.length > 0 && !isIcp,
+    enabled: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("playhq_player_stats")
@@ -148,9 +152,10 @@ export default function CompetitionPlayerStatsPanel({
   });
 
   // 3. Existing claims
-  const { data: links = [], refetch: refetchLinks } = useQuery({
+  const links=protectedData?.links??[];
+  const { refetch: refetchLinks } = useQuery({
     queryKey: ["playhq-player-links-mine"],
-    enabled: !!user && !isIcp,
+    enabled: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("playhq_player_links")
@@ -165,7 +170,7 @@ export default function CompetitionPlayerStatsPanel({
     for (const l of links as any[]) {
       const prev = m.get(l.playhq_player_id) ?? { mine: false, claimed: false };
       m.set(l.playhq_player_id, {
-        mine: prev.mine || l.user_id === user?.id,
+        mine: prev.mine || l.mine===true,
         claimed: true,
       });
     }
@@ -291,22 +296,13 @@ export default function CompetitionPlayerStatsPanel({
       toast.error("Sign in to claim a player");
       return;
     }
-    const { error } = await supabase.from("playhq_player_links").insert({
-      tenant: "default",
-      playhq_player_id: playhqPlayerId,
-      user_id: user.id,
-      claimed_by: user.id,
-      confirmed_at: new Date().toISOString(),
-    });
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    try { await claimCompetitionPlayHQ(competitionId,playhqPlayerId,rows.find(r=>r.playhq_player_id===playhqPlayerId)?.tenant??"default"); }
+    catch(error){toast.error(error instanceof Error?error.message:String(error));return;}
     toast.success(`Claimed ${playerName}`);
-    refetchLinks();
+    refetchProtected();
   };
 
-  if (matchesLoading || statsLoading) {
+  if (protectedLoading) {
     return (
       <div className="flex items-center justify-center py-10 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading stats…
@@ -314,10 +310,10 @@ export default function CompetitionPlayerStatsPanel({
     );
   }
 
-  if (isIcp) {
+  if (protectedError) {
     return (
       <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
-        PlayHQ-sourced player stats aren't available for Internet Identity accounts yet.
+        Could not load PlayHQ statistics.
       </div>
     );
   }
