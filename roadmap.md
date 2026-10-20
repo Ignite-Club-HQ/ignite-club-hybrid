@@ -1,5 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [ ] Owner request 20 Oct 20:33 UTC: redesign the photo store for multi-Region 500 GiB addressing, preserve existing files/reservations through additive upgrades, and rerun sparse boundary plus actor/accounting regressions. No live deployment/enlargement or group changes authorized.
+
 - [x] Owner request 20 Oct 19:49 UTC: opt-in 64 GiB candidate prepared with physical runtime headroom and unchanged 80% admission/club allowances; 11 Motoko files and 30 operator-policy tests pass, candidate compiles, actual prior-32-to-64 upgrade and Pro allowance checks pass. Isolated smoke64 workflow skips fill/churn. Evidence and release sequence: docs/media-64gib-candidate-2026-10-20.md. No live operation.
 
 - [x] Owner request 20 Oct 19:43 UTC: minimum local 64 GiB assessment complete—real sparse allocator tests across 32 GiB and near 64 GiB, bounded refusal/read/delete/reuse; 10 existing Motoko files plus new boundary fixture pass; actual current-store upgrade/pending/accounting and real combined Pro allowance checks pass; media/club compile. Production remains at 32 GiB; no candidate 64 GiB version or live change. Evidence: docs/media-minimum-64gib-validation-2026-10-20.md.
