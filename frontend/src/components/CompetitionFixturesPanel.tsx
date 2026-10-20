@@ -109,7 +109,7 @@ export function buildCompetitionLadderRows(
   }
 
   for (const match of matches) {
-    if (match.status !== "completed") continue;
+    if (match.status !== "completed" || optional(match.home_score) == null || optional(match.away_score) == null) continue;
     const homeId = match.home_team ?? match.home_team_id;
     const awayId = match.away_team ?? match.away_team_id;
     const homeScore = number(match.home_score);
@@ -197,12 +197,12 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
         supabase: async () => {
           const { data, error } = await supabase
             .from("competition_matches")
-            .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name)")
+            .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name), competition_match_results(home_score, away_score)")
             .eq("competition_id", competitionId)
             .order("round_number", { ascending: true, nullsFirst: false })
             .order("scheduled_at", { ascending: true, nullsFirst: false });
           if (error) throw error;
-          return data ?? [];
+          return (data ?? []).map((row: any) => row.competition_match_results !== undefined ? { ...row, home_score: row.competition_match_results?.home_score ?? null, away_score: row.competition_match_results?.away_score ?? null } : row);
         },
         icp: async (ctx) => {
           const { listLiveCompetitionMatches } = await import("@/live/features/competitions");
@@ -227,8 +227,8 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
               away_team_id: awayTeamId,
               home: entryByTeam.get(homeTeamId) ?? { id: homeTeamId, name: homeTeamId, logo_url: null },
               away: entryByTeam.get(awayTeamId) ?? { id: awayTeamId, name: awayTeamId, logo_url: null },
-              home_score: Number(match.home_score),
-              away_score: Number(match.away_score),
+              home_score: opt(match.home_score) == null ? null : Number(opt(match.home_score)),
+              away_score: opt(match.away_score) == null ? null : Number(opt(match.away_score)),
               status: match.status,
               scheduled_at: scheduledAt == null ? null : new Date(Number(scheduledAt)).toISOString(),
               venue: opt(match.venue),
@@ -992,7 +992,7 @@ function FixturesFilterAndList({
         .select("id, name, playhq_team_id, club_id, clubs:club_id(id, name)")
         .in("playhq_team_id", externalTeamIds);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).map((row: any) => row.competition_match_results !== undefined ? { ...row, home_score: row.competition_match_results?.home_score ?? null, away_score: row.competition_match_results?.away_score ?? null } : row);
     },
   });
 
@@ -1587,7 +1587,7 @@ function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRound
 
             {/* Score / vs */}
             <div className="flex flex-col items-center justify-center px-1 shrink-0">
-              {hasScore ? (
+              {!hasScore && ["completed", "played"].includes(match.status) ? <span className="text-xs text-muted-foreground">Scores hidden</span> : hasScore ? (
                 <div className="flex items-center gap-1 text-xl font-bold tabular-nums leading-none">
                   <span className={homeWon ? "" : awayWon ? "text-muted-foreground" : ""}>{match.home_score ?? "–"}</span>
                   <span className="text-muted-foreground text-sm">-</span>
@@ -1988,59 +1988,16 @@ export function CompetitionLadderPanel({
         }, { competitionId });
       }
 
-      const [ladderRes, entriesRes] = await Promise.all([
-        supabase
-          .from("competition_ladder")
-          .select("*")
-          .eq("competition_id", competitionId)
-          .order("points", { ascending: false })
-          .order("goal_diff", { ascending: false })
-          .order("goals_for", { ascending: false }),
-        supabase
-          .from("competition_entries")
-          .select("team_id, division_id, status, teams!inner(deleted_at)")
-          .eq("competition_id", competitionId)
-          .eq("status", "accepted")
-          .is("teams.deleted_at", null),
+      const [fixtures, entries] = await Promise.all([
+        supabase.from("competition_matches").select("*, competition_match_results(home_score, away_score)").eq("competition_id", competitionId),
+        supabase.from("competition_entries").select("*").eq("competition_id", competitionId),
       ]);
-      if (ladderRes.error) throw ladderRes.error;
-      if (entriesRes.error) throw entriesRes.error;
-      const ladderData = ladderRes.data ?? [];
-      const entriesData = entriesRes.data ?? [];
-
-      // Build placeholder zero-rows for accepted entries without a ladder row yet
-      const haveKey = new Set(
-        ladderData.map((r: any) => `${r.team_id ?? ""}::${r.division_id ?? ""}`)
-      );
-      const placeholders: any[] = [];
-      for (const e of entriesData) {
-        const key = `${e.team_id ?? ""}::${e.division_id ?? ""}`;
-        if (!e.team_id || haveKey.has(key)) continue;
-        haveKey.add(key);
-        placeholders.push({
-          competition_id: competitionId,
-          team_id: e.team_id,
-          division_id: e.division_id,
-          played: 0, wins: 0, draws: 0, losses: 0,
-          goals_for: 0, goals_against: 0, goal_diff: 0, points: 0,
-        });
-      }
-      const combined = [...ladderData, ...placeholders];
-
-      const teamIds = Array.from(new Set(combined.map((r: any) => r.team_id).filter(Boolean)));
-      if (teamIds.length === 0) return combined;
-
-      const { data: teams, error: teamsError } = await supabase
-        .from("teams")
-        .select("id, name, logo_url")
-        .in("id", teamIds);
-      if (teamsError) throw teamsError;
-
-      const teamById = new Map((teams ?? []).map((team: any) => [team.id, team]));
-      return combined.map((row: any) => ({
-        ...row,
-        teams: teamById.get(row.team_id) ?? null,
-      }));
+      if (fixtures.error) throw fixtures.error;
+      if (entries.error) throw entries.error;
+      const teamIds = [...new Set((entries.data ?? []).map(e => e.team_id).filter(Boolean))];
+      const teams = await supabase.from("teams").select("id,name,logo_url").in("id", teamIds);
+      if (teams.error) throw teams.error;
+      return buildCompetitionLadderRows(entries.data ?? [], (fixtures.data ?? []).map((m: any) => ({ ...m, home_score: m.competition_match_results?.home_score ?? null, away_score: m.competition_match_results?.away_score ?? null })), new Map((teams.data ?? []).map(t => [t.id,t])), { win: pointsWin, draw: pointsDraw, loss: pointsLoss });
     },
   });
 
@@ -2074,5 +2031,5 @@ export function CompetitionLadderPanel({
     );
   }
 
-  return <LadderView rows={rows} divisions={divisions} isAdmin={isAdmin} />;
+  return <><p className="text-sm text-muted-foreground">Scores hidden where privacy settings apply; hidden results are excluded.</p><LadderView rows={rows} divisions={divisions} isAdmin={isAdmin} /></>;
 }

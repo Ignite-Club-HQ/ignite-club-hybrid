@@ -220,10 +220,33 @@ export const idlFactory = ({ IDL }) => {
     'competition_id' : IDL.Text,
     'club_id' : IDL.Text,
   });
+  const MatchRead = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'round_number' : IDL.Opt(IDL.Nat16),
+    'venue' : IDL.Opt(IDL.Text),
+    'duration_minutes' : IDL.Opt(IDL.Nat16),
+    'home_team' : IDL.Text,
+    'notes' : IDL.Opt(IDL.Text),
+    'pitch_number' : IDL.Opt(IDL.Text),
+    'scheduled_at_ms' : IDL.Opt(IDL.Nat64),
+    'away_team' : IDL.Text,
+    'away_score' : IDL.Opt(IDL.Nat16),
+    'division_id' : IDL.Opt(IDL.Text),
+    'home_score' : IDL.Opt(IDL.Nat16),
+    'revision' : IDL.Nat64,
+    'arrival_minutes_before' : IDL.Opt(IDL.Nat16),
+    'competition_id' : IDL.Text,
+  });
   const RoleLinkPreview = IDL.Record({
     'name' : IDL.Text,
     'role' : IDL.Text,
     'competition_id' : IDL.Text,
+  });
+  const Setting = IDL.Record({
+    'division' : IDL.Opt(IDL.Text),
+    'competition_id' : IDL.Text,
+    'hide_scores' : IDL.Bool,
   });
   const Broadcast = IDL.Record({
     'id' : IDL.Text,
@@ -484,7 +507,7 @@ export const idlFactory = ({ IDL }) => {
           IDL.Variant({
             'Ok' : IDL.Record({
               'hidden_divisions' : IDL.Vec(IDL.Text),
-              'matches' : IDL.Vec(Match),
+              'matches' : IDL.Vec(MatchRead),
               'competition' : Competition,
               'hide_ladder' : IDL.Bool,
             }),
@@ -503,6 +526,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : RoleLinkPreview, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_score_privacy' : IDL.Func([IDL.Text], [IDL.Vec(Setting)], ['query']),
     'get_vault_access' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [
@@ -624,7 +648,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'list_matches' : IDL.Func(
         [IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Vec(Match), 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : IDL.Vec(MatchRead), 'Err' : IDL.Text })],
         [],
       ),
     'list_my_news_competitions' : IDL.Func(
@@ -885,6 +909,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_pii_access_control_canister' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_score_privacy' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Bool)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

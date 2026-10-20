@@ -48,6 +48,7 @@ import { CompetitionFixturesPanel } from "./CompetitionFixturesPanel";
 
 function mutationQuery() {
   const query: any = {};
+  query.upsert = vi.fn(() => query);
   query.update = vi.fn(() => query);
   query.delete = vi.fn(() => query);
   query.eq = vi.fn(() => query);
@@ -175,8 +176,6 @@ describe("CompetitionFixturesPanel result management", () => {
 
     await waitFor(() => expect(mocks.from).toHaveBeenCalledWith("competition_matches"));
     expect(mocks.lastQuery.update).toHaveBeenCalledWith({
-      home_score: 3,
-      away_score: 1,
       status: "completed",
     });
     expect(mocks.lastQuery.eq).toHaveBeenCalledWith("id", "match-1");
@@ -193,8 +192,6 @@ describe("CompetitionFixturesPanel result management", () => {
     await editScores("2", "");
 
     await waitFor(() => expect(mocks.lastQuery.update).toHaveBeenCalledWith({
-      home_score: 2,
-      away_score: null,
       status: "scheduled",
     }));
   });
@@ -205,8 +202,6 @@ describe("CompetitionFixturesPanel result management", () => {
     await editScores("", "");
 
     await waitFor(() => expect(mocks.lastQuery.update).toHaveBeenCalledWith({
-      home_score: null,
-      away_score: null,
       status: "scheduled",
     }));
   });
@@ -217,8 +212,6 @@ describe("CompetitionFixturesPanel result management", () => {
     await editScores("1", "0");
 
     await waitFor(() => expect(mocks.lastQuery.update).toHaveBeenCalledWith(expect.objectContaining({
-      home_score: 1,
-      away_score: 0,
       status: "completed",
       manually_overridden_at: expect.any(String),
     })));

@@ -14,8 +14,20 @@ export function brokeredPreviewStorage() {
     ? (host.match(new RegExp('^(?:id-preview(?:-[a-z0-9]+)?|project)--(' + UUID + ')(?:-dev)?(?=\\.|$)', 'i'))?.[1]
         ?? host.match(new RegExp('^(' + UUID + ')(?=[.-])', 'i'))?.[1])
     : undefined;
-  const framed = window.parent && window.parent !== window;
-  if (!projectId || !framed) return localStorage;
+  // Browser privacy settings can block third-party localStorage; never throw.
+  const local = {
+    get: (key: string): string | null => { try { return window.localStorage.getItem(key); } catch { return null; } },
+    set: (key: string, value: string) => { try { window.localStorage.setItem(key, value); } catch { /* blocked */ } },
+    remove: (key: string) => { try { window.localStorage.removeItem(key); } catch { /* blocked */ } },
+  };
+  const plainStorage = {
+    getItem: (key: string) => local.get(key),
+    setItem: (key: string, value: string) => local.set(key, value),
+    removeItem: (key: string) => local.remove(key),
+  };
+  let framed = false;
+  try { framed = !!window.parent && window.parent !== window; } catch { framed = true; }
+  if (!projectId || !framed) return plainStorage;
 
   // Post only to the real editor ancestor, validated as a Lovable origin, so the
   // session token can never reach an untrusted embedder.
@@ -23,10 +35,13 @@ export function brokeredPreviewStorage() {
   const EDITOR = dev
     ? /^https:\/\/([a-z0-9-]+\.)*(lovable\.dev|gptengineer\.app)$|^http:\/\/localhost:3000$/
     : /^https:\/\/([a-z0-9-]+\.)*(lovable\.dev|gptengineer\.app)$/;
-  const ancestor = (location.ancestorOrigins && location.ancestorOrigins[0]) || (document.referrer ? new URL(document.referrer).origin : '');
+  let ancestor = '';
+  try {
+    ancestor = (location.ancestorOrigins && location.ancestorOrigins[0]) || (document.referrer ? new URL(document.referrer).origin : '');
+  } catch { ancestor = ''; }
   const editorOrigins = ancestor && EDITOR.test(ancestor)
     ? [ancestor]
-    : (dev ? ['https://reference.invalid', 'https://reference.invalid'] : ['https://reference.invalid']);
+    : (dev ? ['https://lovable.dev', 'http://localhost:3000'] : ['https://lovable.dev']);
   const RESULT = 'lovable-preview-auth:result';
   const TIMEOUT = 2000;
   const newId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -62,27 +77,32 @@ export function brokeredPreviewStorage() {
 
   return {
     getItem: async (key: string) => {
-      let res = await request('lovable-preview-auth:get', key);
+      // Send the local copy so the broker can seed a new tab's session.
+      const localValue = local.get(key);
+      let res = await request('lovable-preview-auth:get', key, localValue ?? undefined);
       if (!res && firstGet) {
         await new Promise((r) => setTimeout(r, RETRY_DELAY));
-        res = await request('lovable-preview-auth:get', key);
+        res = await request('lovable-preview-auth:get', key, localValue ?? undefined);
       }
       firstGet = false;
       // '' is the logout tombstone: clear the local copy too so it can't resurrect if
       // the broker later goes silent. A null reply means never-synced -> keep local.
       if (res && res.ok && typeof res.value === 'string') {
-        if (res.value === '') { localStorage.removeItem(key); return null; }
+        if (res.value === '') { local.remove(key); return null; }
+        // New preview tab: adopt the editor's brokered session locally.
+        if (res.value !== localValue) local.set(key, res.value);
         return res.value;
       }
-      return localStorage.getItem(key);
+      return local.get(key);
     },
     setItem: (key: string, value: string) => {
-      localStorage.setItem(key, value);
+      local.set(key, value);
       return request('lovable-preview-auth:set', key, value).then(() => undefined);
     },
     removeItem: (key: string) => {
-      localStorage.removeItem(key);
-      return request('lovable-preview-auth:remove', key).then(() => undefined);
+      const localValue = local.get(key);
+      local.remove(key);
+      return request('lovable-preview-auth:remove', key, localValue ?? undefined).then(() => undefined);
     },
   };
 }

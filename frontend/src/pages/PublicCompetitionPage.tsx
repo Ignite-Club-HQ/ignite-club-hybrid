@@ -1,3 +1,4 @@
+import { buildCompetitionLadderRows } from "@/components/CompetitionFixturesPanel";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, Loader2, ExternalLink } from "lucide-react";
@@ -24,8 +25,8 @@ type LiveMatch = {
   round_number?: number;
   home_team: string;
   away_team: string;
-  home_score: number;
-  away_score: number;
+  home_score: number | null;
+  away_score: number | null;
   division_id?: string;
   scheduled_at_ms?: bigint;
 };
@@ -59,7 +60,7 @@ export function computeLiveLadder(
     return row;
   };
   for (const m of matches) {
-    if (m.status !== "completed" && m.status !== "played") continue;
+    if ((m.status !== "completed" && m.status !== "played") || m.home_score == null || m.away_score == null) continue;
     const home = rowFor(m.home_team, m.division_id);
     const away = rowFor(m.away_team, m.division_id);
     home.played += 1;
@@ -148,8 +149,9 @@ function IcpPublicCompetitionPage() {
       {!hide_ladder && (
         <section className="space-y-2">
           <h2 className="text-lg font-semibold">Ladder</h2>
+          {matches.some((m: any) => ["completed", "played"].includes(m.status) && m.home_score == null) && <p className="text-sm text-muted-foreground">Scores hidden — ladder excludes hidden results.</p>}
           {ladderByDivision.size === 0 ? (
-            <p className="text-sm text-muted-foreground">No ladder to display.</p>
+            <p className="text-sm text-muted-foreground">No ladder to display. Scores hidden where privacy settings apply.</p>
           ) : (
             Array.from(ladderByDivision.entries()).map(([divId, list]) => (
               <Card key={divId}>
@@ -207,7 +209,7 @@ function IcpPublicCompetitionPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <span className="flex-1 font-medium truncate text-right">{m.home_team}</span>
                   <span className="px-2 font-bold tabular-nums">
-                    {m.status === "completed" || m.status === "played" ? `${m.home_score} : ${m.away_score}` : "– : –"}
+                    {m.status === "completed" || m.status === "played" ? m.home_score == null || m.away_score == null ? "Scores hidden" : `${m.home_score} : ${m.away_score}` : "– : –"}
                   </span>
                   <span className="flex-1 font-medium truncate">{m.away_team}</span>
                 </div>
@@ -250,7 +252,7 @@ function SupabasePublicCompetitionPage() {
         .select("*")
         .eq("competition_id", id!)
         .order("sort_order");
-      return data ?? [];
+      return (data ?? []).map((row: any) => row.competition_match_results !== undefined ? { ...row, home_score: row.competition_match_results?.home_score ?? null, away_score: row.competition_match_results?.away_score ?? null } : row);
     },
   });
 
@@ -260,38 +262,20 @@ function SupabasePublicCompetitionPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("competition_matches")
-        .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name)")
+        .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name), competition_match_results(home_score, away_score)")
         .eq("competition_id", id!)
         .order("scheduled_at", { ascending: true, nullsFirst: false });
-      return data ?? [];
+      return (data ?? []).map((row: any) => row.competition_match_results !== undefined ? { ...row, home_score: row.competition_match_results?.home_score ?? null, away_score: row.competition_match_results?.away_score ?? null } : row);
     },
   });
 
   const { data: ladder = [] } = useQuery({
-    queryKey: ["public-competition-ladder", id],
+    queryKey: ["public-competition-ladder", id, matches],
     enabled: !!competition,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("competition_ladder")
-        .select("*")
-        .eq("competition_id", id!)
-        .order("points", { ascending: false })
-        .order("goal_diff", { ascending: false });
+      const { data: entries, error } = await supabase.from("competition_entries").select("*, teams:team_id(id,name,logo_url)").eq("competition_id", id!);
       if (error) throw error;
-
-      const teamIds = Array.from(new Set((data ?? []).map((r: any) => r.team_id).filter(Boolean)));
-      if (teamIds.length === 0) return data ?? [];
-
-      const { data: teams } = await supabase
-        .from("teams")
-        .select("id, name, logo_url")
-        .in("id", teamIds);
-
-      const teamById = new Map((teams ?? []).map((team: any) => [team.id, team]));
-      return (data ?? []).map((row: any) => ({
-        ...row,
-        teams: teamById.get(row.team_id) ?? null,
-      }));
+      return buildCompetitionLadderRows(entries ?? [], matches, new Map((entries ?? []).map((e: any) => [e.team_id,e.teams])), { win: 3, draw: 1, loss: 0 });
     },
   });
 
@@ -344,8 +328,9 @@ function SupabasePublicCompetitionPage() {
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Ladder</h2>
+          {matches.some((m: any) => ["completed", "played"].includes(m.status) && m.home_score == null) && <p className="text-sm text-muted-foreground">Scores hidden — ladder excludes hidden results.</p>}
         {ladderByDivision.size === 0 ? (
-          <p className="text-sm text-muted-foreground">No ladder to display.</p>
+          <p className="text-sm text-muted-foreground">No ladder to display. Scores hidden where privacy settings apply.</p>
         ) : (
           Array.from(ladderByDivision.entries()).map(([divId, list]) => {
             const div = divisions.find((d: any) => d.id === divId);
@@ -402,7 +387,7 @@ function SupabasePublicCompetitionPage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="flex-1 font-medium truncate text-right">{m.home?.name ?? "?"}</span>
-                  <span className="px-2 font-bold tabular-nums">{m.home_score ?? "–"} : {m.away_score ?? "–"}</span>
+                  <span className="px-2 font-bold tabular-nums">{m.home_score == null && ["completed", "played"].includes(m.status) ? "Scores hidden" : `${m.home_score ?? "–"} : ${m.away_score ?? "–"}`}</span>
                   <span className="flex-1 font-medium truncate">{m.away?.name ?? "?"}</span>
                 </div>
               </CardContent>

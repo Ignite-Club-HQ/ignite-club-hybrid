@@ -1,3 +1,4 @@
+import { countCompletedMatches } from "@/lib/competitionResultsMetric";
 import { acrossLists } from "@/live/featureScopes";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -1810,7 +1811,7 @@ function CompetitionPanel({ competitions, range }: { competitions: { id: string;
                     (e: any) => e.status === "accepted" || e.status === "registered",
                   ).length,
                   totalMatches: compMatches.length,
-                  resultsEntered: compMatches.filter((m: any) => m.status === "completed").length,
+                  resultsEntered: countCompletedMatches(compMatches as any[]),
                   broadcasts: compBroadcasts.filter((b: any) => {
                     const t = Number(b.created_at_ms);
                     return t >= startMs && t <= endMs;
@@ -1829,7 +1830,7 @@ function CompetitionPanel({ competitions, range }: { competitions: { id: string;
       const [matches, broadcasts, entries] = await Promise.all([
         supabase
           .from("competition_matches")
-          .select("id, home_score, away_score", { count: "exact", head: false })
+          .select("id, status", { count: "exact", head: false })
           .in("competition_id", compIds)
           .limit(2000),
         supabase
@@ -1849,7 +1850,8 @@ function CompetitionPanel({ competitions, range }: { competitions: { id: string;
           .is("teams.deleted_at", null),
       ]);
       const totalMatches = matches.data?.length || 0;
-      const completed = (matches.data || []).filter((m: any) => m.home_score !== null && m.away_score !== null).length;
+      // Canonical: a result counts only when the match status is "completed".
+      const completed = countCompletedMatches(matches.data as any[]);
       return {
         activeTeams: entries.count || 0,
         totalMatches,

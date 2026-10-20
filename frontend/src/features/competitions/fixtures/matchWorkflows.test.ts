@@ -38,6 +38,7 @@ import {
 function mutationBuilder(table: string) {
   type BuilderMethod = (...args: unknown[]) => TestBuilder;
   type TestBuilder = PromiseLike<unknown> & {
+    upsert: BuilderMethod;
     update: BuilderMethod;
     delete: BuilderMethod;
     eq: BuilderMethod;
@@ -45,7 +46,7 @@ function mutationBuilder(table: string) {
   };
   const builder = {} as TestBuilder;
   mocks.calls.push({ method: "from", args: [table] });
-  for (const method of ["update", "delete", "eq", "gt"] as const) {
+  for (const method of ["upsert", "update", "delete", "eq", "gt"] as const) {
     builder[method] = vi.fn((...args: unknown[]) => {
       mocks.calls.push({ method, args });
       return builder;
@@ -229,8 +230,10 @@ describe("match mutation targeting", () => {
     const payload = { home_score: 3, away_score: 1, status: "completed" };
     await expect(updateCompetitionMatch("match-1", payload)).resolves.toEqual({ error: null });
     expect(mocks.calls).toEqual([
+      { method: "from", args: ["competition_match_results"] },
+      { method: "upsert", args: [{ match_id: "match-1", home_score: 3, away_score: 1 }] },
       { method: "from", args: ["competition_matches"] },
-      { method: "update", args: [payload] },
+      { method: "update", args: [{ status: "completed" }] },
       { method: "eq", args: ["id", "match-1"] },
     ]);
   });

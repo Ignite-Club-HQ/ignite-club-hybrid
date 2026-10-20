@@ -359,7 +359,7 @@ export interface Main {
     {
         'Ok' : {
           'hidden_divisions' : Array<string>,
-          'matches' : Array<Match>,
+          'matches' : Array<MatchRead>,
           'competition' : Competition,
           'hide_ladder' : boolean,
         }
@@ -376,6 +376,7 @@ export interface Main {
     { 'Ok' : RoleLinkPreview } |
       { 'Err' : string }
   >,
+  'get_score_privacy' : ActorMethod<[string], Array<Setting>>,
   'get_vault_access' : ActorMethod<
     [string, Principal],
     {
@@ -485,7 +486,7 @@ export interface Main {
   >,
   'list_matches' : ActorMethod<
     [string],
-    { 'Ok' : Array<Match> } |
+    { 'Ok' : Array<MatchRead> } |
       { 'Err' : string }
   >,
   'list_my_news_competitions' : ActorMethod<
@@ -731,6 +732,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_score_privacy' : ActorMethod<
+    [string, [] | [string], [] | [boolean]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_season_divisions' : ActorMethod<
     [string, string, Array<string>],
     { 'Ok' : Season } |
@@ -848,6 +854,24 @@ export interface Match {
   'arrival_minutes_before' : [] | [number],
   'competition_id' : string,
 }
+export interface MatchRead {
+  'id' : string,
+  'status' : string,
+  'round_number' : [] | [number],
+  'venue' : [] | [string],
+  'duration_minutes' : [] | [number],
+  'home_team' : string,
+  'notes' : [] | [string],
+  'pitch_number' : [] | [string],
+  'scheduled_at_ms' : [] | [bigint],
+  'away_team' : string,
+  'away_score' : [] | [number],
+  'division_id' : [] | [string],
+  'home_score' : [] | [number],
+  'revision' : bigint,
+  'arrival_minutes_before' : [] | [number],
+  'competition_id' : string,
+}
 export interface OfficialChat {
   'conversation_id' : string,
   'scope' : string,
@@ -880,6 +904,11 @@ export interface Season {
   'divisions' : Array<string>,
   'revision' : bigint,
   'competition_id' : string,
+}
+export interface Setting {
+  'division' : [] | [string],
+  'competition_id' : string,
+  'hide_scores' : boolean,
 }
 export interface Settings {
   'subject' : string,

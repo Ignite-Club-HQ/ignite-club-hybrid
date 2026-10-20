@@ -2722,6 +2722,7 @@ export type Database = {
       }
       competition_divisions: {
         Row: {
+          hide_scores: boolean | null
           age_group: string | null
           competition_id: string
           created_at: string
@@ -2740,6 +2741,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          hide_scores?: boolean | null
           age_group?: string | null
           competition_id: string
           created_at?: string
@@ -2758,6 +2760,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          hide_scores?: boolean | null
           age_group?: string | null
           competition_id?: string
           created_at?: string
@@ -2848,6 +2851,12 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      competition_match_results: {
+        Row: { match_id: string; home_score: number | null; away_score: number | null }
+        Insert: { match_id: string; home_score?: number | null; away_score?: number | null }
+        Update: { match_id?: string; home_score?: number | null; away_score?: number | null }
+        Relationships: [{ foreignKeyName: "competition_match_results_match_id_fkey"; columns: ["match_id"]; isOneToOne: true; referencedRelation: "competition_matches"; referencedColumns: ["id"] }]
       }
       competition_matches: {
         Row: {
@@ -3075,6 +3084,7 @@ export type Database = {
       }
       competitions: {
         Row: {
+          hide_scores: boolean
           contact_email: string | null
           created_at: string
           created_by: string
@@ -3105,6 +3115,7 @@ export type Database = {
           visibility: string
         }
         Insert: {
+          hide_scores?: boolean
           contact_email?: string | null
           created_at?: string
           created_by: string
@@ -3135,6 +3146,7 @@ export type Database = {
           visibility?: string
         }
         Update: {
+          hide_scores?: boolean
           contact_email?: string | null
           created_at?: string
           created_by?: string

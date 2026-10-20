@@ -711,6 +711,67 @@ function SupabaseCompetitionSettingsPage() {
   );
 }
 
+function ScorePrivacyControls({ competitionId, divisions }: { competitionId: string; divisions: any[] }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: settings = [] } = useQuery({
+    queryKey: ["competition-score-privacy", competitionId],
+    queryFn: async () => {
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const [competition, divisionRows] = await Promise.all([
+            supabase.from("competitions").select("hide_scores").eq("id", competitionId).single(),
+            supabase.from("competition_divisions").select("name, hide_scores").eq("competition_id", competitionId),
+          ]);
+          if (competition.error) throw competition.error;
+          if (divisionRows.error) throw divisionRows.error;
+          return [{ division: [], hide_scores: competition.data.hide_scores }, ...(divisionRows.data ?? []).filter(d => d.hide_scores != null).map(d => ({ division: [d.name], hide_scores: d.hide_scores }))];
+        },
+        icp: async ctx => {
+          const { getLiveScorePrivacy } = await import("@/live/features/competitions");
+          return getLiveScorePrivacy(ctx, competitionId);
+        },
+      }, { competitionId });
+    },
+  });
+  const change = async (division: string | null, hide: boolean | null) => {
+    try {
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const request = division == null
+            ? supabase.from("competitions").update({ hide_scores: hide ?? false }).eq("id", competitionId)
+            : supabase.from("competition_divisions").update({ hide_scores: hide }).eq("competition_id", competitionId).eq("id", divisions.find(d => d.name === division)!.id);
+          const { error } = await request;
+          if (error) throw error;
+        },
+        icp: async ctx => {
+          const { setLiveScorePrivacy } = await import("@/live/features/competitions");
+          await setLiveScorePrivacy(ctx, competitionId, division, hide);
+        },
+      }, writeOnce({ competitionId }));
+      await qc.invalidateQueries();
+    } catch (error) {
+      toast({ title: "Could not update score privacy", description: String(error), variant: "destructive" });
+    }
+  };
+  const value = (division: string | null) => {
+    const row = settings.find((x: any) => (x.division[0] ?? null) === division);
+    return row ? row.hide_scores ? "hide" : "show" : "inherit";
+  };
+  return <div className="space-y-3 rounded-md border p-3">
+    <label className="flex items-center justify-between gap-3">Hide competition scores
+      <Switch checked={value(null) === "hide"} onCheckedChange={hide => change(null, hide)} />
+    </label>
+    {divisions.map(d => <label key={d.id} className="flex items-center justify-between gap-3">{d.name} scores
+      <select aria-label={`${d.name} score privacy`} value={value(d.name)} onChange={event => change(d.name, event.target.value === "inherit" ? null : event.target.value === "hide")}>
+        <option value="inherit">Inherit</option><option value="hide">Hide</option><option value="show">Show</option>
+      </select>
+    </label>)}
+  </div>;
+}
+
 function DivisionLadderVisibility({ competitionId }: { competitionId: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -823,6 +884,7 @@ function DivisionLadderVisibility({ competitionId }: { competitionId: string }) 
         <CardDescription>Choose which divisions or grades show a ladder. Fixtures and results stay visible.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <ScorePrivacyControls competitionId={competitionId} divisions={divisions} />
         <div className="flex items-center justify-between gap-3 rounded-md border p-3">
           <div className="min-w-0">
             <div className="text-sm font-medium">Hide entire competition ladder</div>
