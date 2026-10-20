@@ -110,6 +110,8 @@ try {
   await denied(() => chat.actor.replay_scheduled_message(scheduled.id));
   assert.ok('err' in await chat.actor.rekey_principal(removed, stranger, true));
   assert.ok('err' in await chat.actor.merge_principal(stranger, removed, false));
+  await denied(() => chat.actor.read_account_recent_conversations(removed, 10));
+  await denied(() => chat.actor.read_account_unread_count_by_club(removed));
   ok(await chat.actor.set_transfer_fence('club', true));
   await denied(() => chat.actor.import_club_snapshot_page('club', snapshot));
   ok(await chat.actor.set_transfer_fence('club', false));
