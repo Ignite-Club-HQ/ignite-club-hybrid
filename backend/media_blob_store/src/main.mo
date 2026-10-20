@@ -353,7 +353,14 @@ persistent actor MediaBlobStore {
         }
       };
       switch (await (with timeout = 10) service.credit_deleted_retained_media(original.token, entry)) {
-        case (#Err(message)) #Err(message);
+        case (#Err(message)) {
+          if (message == "Expired retained token absent" and original.removed) {
+            switch (await service.acknowledge_retained_media(original.token)) {
+              case (#Ok) { switch (retained_deletions.get(path)) { case (?current) { if (current.token == original.token and current.removed) retained_deletions.remove(path) }; case null {} }; #Ok };
+              case (#Err(error)) #Err(error)
+            }
+          } else #Err(message)
+        };
         case (#Ok(op)) {
           if (op.state != #committed or authority != club_domain_canister) return #Err("Deletion receipt changed");
           switch (retained_deletions.get(path)) {
@@ -1465,14 +1472,7 @@ persistent actor MediaBlobStore {
 
   public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
     switch (removalReceiver.prepare(caller, request)) {
-        case (#Err(message)) {
-          if (message == "Expired retained token absent" and original.removed) {
-            switch (await service.acknowledge_retained_media(original.token)) {
-              case (#Ok) { switch (retained_deletions.get(path)) { case (?current) { if (current.token == original.token and current.removed) retained_deletions.remove(path) }; case null {} }; #Ok };
-              case (#Err(error)) #Err(error)
-            }
-          } else #Err(message)
-        };
+      case (#Err(message)) #Err(message);
       case (#Ok) {
         // Purely local unfinished uploads can be discarded atomically. Shared
         // quota outcomes retain their journals until cancellation/commit settles.
