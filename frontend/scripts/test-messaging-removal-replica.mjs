@@ -58,6 +58,14 @@ try {
   await pic.upgradeCanister({ canisterId: chat.canisterId, wasm: process.env.MESSAGING_DOMAIN_WASM,
     sender: governor, arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   assert.equal(ok(await chat.actor.read_account_list_messages_page(conversation.id, [], 10)).messages[0].id, original.id);
+  // Deliberate legacy refusal must occur before any persistent hold/await.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await denied(() => chat.actor.list_messages(conversation.id, []));
+  }
+  chat.actor.setPrincipal(governor);
+  ok(await chat.actor.set_transfer_fence('club', true));
+  const snapshot = ok(await chat.actor.export_club_snapshot_page('club', 0n, 10n));
+  ok(await chat.actor.set_transfer_fence('club', false));
   const request = { account_id: 'removed-account', generation: 7n, inventory_digest: new Uint8Array(32).fill(9), subjects: [removed] };
   relay.actor.setPrincipal(governor);
   const prepare = () => relay.actor.prepare(chat.canisterId, request);
@@ -102,6 +110,9 @@ try {
   await denied(() => chat.actor.replay_scheduled_message(scheduled.id));
   assert.ok('err' in await chat.actor.rekey_principal(removed, stranger, true));
   assert.ok('err' in await chat.actor.merge_principal(stranger, removed, false));
+  ok(await chat.actor.set_transfer_fence('club', true));
+  await denied(() => chat.actor.import_club_snapshot_page('club', snapshot));
+  ok(await chat.actor.set_transfer_fence('club', false));
   chat.actor.setPrincipal(survivor);
   const history = ok(await chat.actor.read_account_list_messages_page(conversation.id, [], 10));
   assert.deepEqual(history.messages.map(m => m.idempotency_key), ['before']);
@@ -113,6 +124,11 @@ try {
   chat.actor.setPrincipal(removed);
   await denied(() => chat.actor.read_account_list_messages_page(conversation.id, [], 10));
   await denied(() => chat.actor.send_message(conversation.id, 'after restart', 'restart', [], []));
+  assert.equal(ok(await drain()).outstanding, 0n);
+  const recoverySnapshot = await pic.takeCanisterSnapshot({ canisterId: chat.canisterId, sender: governor });
+  await pic.loadCanisterSnapshot({ canisterId: chat.canisterId, sender: governor, snapshotId: recoverySnapshot.id });
+  chat.actor.setPrincipal(removed);
+  await denied(() => chat.actor.read_account_list_messages_page(conversation.id, [], 10));
   assert.equal(ok(await drain()).outstanding, 0n);
   chat.actor.setPrincipal(survivor);
   assert.equal(ok(await chat.actor.read_account_list_messages_page(conversation.id, [], 10)).messages.length, 2);
