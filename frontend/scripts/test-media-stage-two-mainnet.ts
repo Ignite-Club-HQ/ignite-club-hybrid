@@ -12,7 +12,7 @@ import { loadOperatorIdentity } from '../src/live/operatorTransport';
 import { mainnetInstallCalls } from '../src/live/icpInstallCalls';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
-import { approveTest, assertResume, isUnpaidAttempt, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
+import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { DEPLOY_PRINCIPAL } from '../../scripts/media-card-funding-policy.mjs';
 
@@ -58,6 +58,11 @@ if (entries.tree.some((e: any) => e.path === file)) {
     // Earlier attempt stopped before creation (e.g. unfunded deploy account): nothing was paid, restart cleanly.
     console.log(`Earlier attempt of ${binding.runId} never created a canister (${saved.error ?? 'no error recorded'}); restarting.`);
     state.previousUnpaidAttempts = [...(saved.previousUnpaidAttempts ?? []), { error: saved.error ?? null, binding: saved.binding }];
+  } else if (isResumableInstall(saved, binding)) {
+    // Created and verified, but install stopped before code was written; the install step re-proves
+    // the exact target and only installs onto an empty module (or skips when the exact build is present).
+    state = saved; state.pending = null; state.resumedInstall = new Date().toISOString();
+    console.log(`Resuming ${binding.runId} at install on existing test store ${state.canisterId}`);
   } else {
     state = saved; assertResume(state, binding);
     if (state.phase !== 'complete') throw new Error('Interrupted test requires operator reconciliation; use a new id only after accounting for the old target');
@@ -87,14 +92,14 @@ function scan(dir: string) {
   }
 }
 scan(join(root, 'deploy/groups')); scan(join(root, 'deploy/mainnet/.icp/data/mappings'));
-for (const e of entries.tree.filter((e: any) => /^deploy\/media-tests\/[^/]+\.json$/.test(e.path))) {
+for (const e of entries.tree.filter((e: any) => e.path !== file && /^deploy\/media-tests\/[^/]+\.json$/.test(e.path))) {
   const r = readJournal(e.path); collect(JSON.parse(r.text));
 }
 const agent = await HttpAgent.create({ identity, host: binding.host, shouldFetchRootKey: false });
 const calls = await mainnetInstallCalls(binding.host, identity);
 const pid = (s: string) => Principal.fromText(s);
 const managementIdl = ({ IDL: I }: { IDL: typeof IDL }) => I.Service({
-  canister_status: I.Func([I.Record({ canister_id: I.Principal })], [I.Record({ cycles: I.Nat, canister_version: I.Nat64,
+  canister_status: I.Func([I.Record({ canister_id: I.Principal })], [I.Record({ cycles: I.Nat, version: I.Nat64,
     module_hash: I.Opt(I.Vec(I.Nat8)), settings: I.Record({ controllers: I.Vec(I.Principal), environment_variables: I.Vec(I.Record({ name: I.Text, value: I.Text })) }) })], []),
   install_code: I.Func([I.Record({ mode: I.Variant({ upgrade: I.Opt(I.Record({ skip_pre_upgrade: I.Opt(I.Bool), wasm_memory_persistence: I.Opt(I.Variant({ keep: I.Null, replace: I.Null })) })) }),
     canister_id: I.Principal, wasm_module: I.Vec(I.Nat8), arg: I.Vec(I.Nat8), sender_canister_version: I.Opt(I.Nat64) })], [], []),
@@ -113,6 +118,8 @@ async function fuel() {
   const s = await proof(); assertFuel(binding, s.cycles, BigInt(state.initialCycles)); return s;
 }
 async function phase(name: string, work: () => Promise<unknown>) {
+  const prior = state.receipts.find((r: any) => r.phase === name);
+  if (prior) { console.log(`Phase ${name} already recorded; not repeated`); return prior.result; }
   state.phase = name; state.pending = { kind: name, time: new Date().toISOString() }; await save();
   const result = await work(); state.receipts.push({ phase: name, result, time: new Date().toISOString() });
   state.pending = null; await save(); return result;
@@ -156,9 +163,13 @@ try {
   });
   m = Actor.createActor(managementIdl, { agent, canisterId: 'aaaaa-aa', effectiveCanisterId: pid(state.canisterId) });
   await phase('install', async () => {
-    assertTarget(binding, state.canisterId, await calls.status(state.canisterId), await calls.subnetOf(state.canisterId), protectedIds, null);
+    const before = await calls.status(state.canisterId);
+    assertTarget(binding, state.canisterId, before, await calls.subnetOf(state.canisterId), protectedIds, before.moduleHash === null ? null : binding.wasmSha256);
     await calls.setEnvironment(state.canisterId, environmentFor(binding));
-    await proof(null); await calls.installChunked(state.canisterId, wasm, IDL.encode([], [])); await proof();
+    const current = (await calls.status(state.canisterId)).moduleHash;
+    if (current === null) { await proof(null); await calls.installChunked(state.canisterId, wasm, IDL.encode([], [])); }
+    else if (current !== binding.wasmSha256) throw new Error('Unexpected module on test store; never reinstall');
+    await proof();
     return { wasmSha256: binding.wasmSha256, environment: environmentFor(binding) };
   });
   a = Actor.createActor(idlFactory, { agent, canisterId: state.canisterId });
@@ -226,11 +237,11 @@ try {
     if (wasm.length > 1_900_000) throw new Error('Module too large for bounded direct upgrade; chunked upgrade implementation required');
     await m.install_code({ mode: { upgrade: [{ skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] }] }, canister_id: pid(state.canisterId),
       wasm_module: wasm, arg: IDL.encode([], []), sender_canister_version: [] });
-    const after = await proof(); assert.ok(after.canister_version > before.canister_version);
+    const after = await proof(); assert.ok(after.version > before.version);
     for (let i = 1; i < 3; i++) ok(await a.put_chunk(id, i, bytes.subarray(i * CHUNK, (i + 1) * CHUNK)));
     const r = ok(await a.finalize_upload(id)); assert.equal(r.content_hash, hash(bytes)); state.objects[path] = { size: bytes.length, hash: r.content_hash };
     await verify(path); for (const sample of keepSamples) await verify(sample);
-    assert.equal((await a.get_usage()).total_bytes, BigInt(total())); return { recovered: true, previousVersion: before.canister_version, upgradedVersion: after.canister_version };
+    assert.equal((await a.get_usage()).total_bytes, BigInt(total())); return { recovered: true, previousVersion: before.version, upgradedVersion: after.version };
   });
   const percentile = (v: number[], p: number) => [...v].sort((a, b) => a - b)[Math.min(v.length - 1, Math.floor(v.length * p))] ?? null;
   state.summary = { payloadBytes: total(), objects: Object.keys(state.objects).length, physical: await a.stable_storage_status(),
