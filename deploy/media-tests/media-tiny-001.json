@@ -12,10 +12,7 @@
     "capacityBytes": 536870912
   },
   "phase": "configure-empty",
-  "pending": {
-    "kind": "configure-empty",
-    "time": "2026-10-20T09:29:12.644Z"
-  },
+  "pending": null,
   "receipts": [
     {
       "phase": "create",
@@ -41,6 +38,17 @@
         ]
       },
       "time": "2026-10-20T09:29:08.272Z"
+    },
+    {
+      "phase": "configure-empty",
+      "result": {
+        "memory": {
+          "memory_bytes": "5373952",
+          "stable_bytes": "0",
+          "heap_bytes": "5339568"
+        }
+      },
+      "time": "2026-10-20T09:29:18.241Z"
     }
   ],
   "objects": {},
