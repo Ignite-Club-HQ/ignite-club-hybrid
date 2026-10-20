@@ -897,6 +897,25 @@ persistent actor MediaBlobStore {
   public query func stable_storage_status() : async { enabled : Bool; legacy_count : Nat; indexed_count : Nat; allocated_bytes : Nat64 } {
     { enabled = stable_writes; legacy_count = blobs.size(); indexed_count = stable_blobs.size(); allocated_bytes = stable_bytes.end }
   };
+  // Exact per-store allocator observations, not an aggregate group promise.
+  // Authenticated operator/authority only, locally gated; no club paths/PII.
+  public shared ({ caller }) func read_physical_growth_capacity() : async {
+    #Ok : { revision : Nat; configured_bytes : Nat; allocated_bytes : Nat; pending_slot_bytes : Nat;
+      pending_count : Nat; legacy_pending_count : Nat; allocatable_object_slots : Nat; max_object_slot_bytes : Nat };
+    #Err : Text
+  } {
+    if (not physicalReservationRehearsal or (not isGovernor<system>(caller) and ?caller != club_domain_canister)) return #Err("Local capacity authority required");
+    if (not stable_writes or blobs.size() != 0) return #Err("Complete stable-only store required");
+    var held = 0;
+    var legacyPending = 0;
+    for (upload in pending_uploads.values()) {
+      switch (upload_slots.get(upload.id)) { case (?slice) held += slice.slot; case null legacyPending += 1 }
+    };
+    if (upload_slots.size() + legacyPending != pending_uploads.size()) return #Err("Physical reservation inventory mismatch");
+    #Ok({ revision = media_inventory_revision; configured_bytes = capacity_limit_bytes.toNat();
+      allocated_bytes = stable_bytes.end.toNat(); pending_slot_bytes = held; pending_count = pending_uploads.size();
+      legacy_pending_count = legacyPending; allocatable_object_slots = if (legacyPending > 0) 0 else StableBytes.allocatableRoots(stable_bytes, capacity_limit_bytes.toNat()); max_object_slot_bytes = 16_777_216 })
+  };
 
   func findUpload(id : Text) : ?PendingUpload {
     Array.find<PendingUpload>(pending_uploads, func(upload) { upload.id == id })
