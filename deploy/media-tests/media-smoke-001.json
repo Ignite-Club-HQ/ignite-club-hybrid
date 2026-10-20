@@ -14,5 +14,6 @@
   "phase": "approved",
   "pending": null,
   "receipts": [],
-  "objects": {}
+  "objects": {},
+  "error": "Deploy identity lacks approved funding plus ledger fee"
 }
