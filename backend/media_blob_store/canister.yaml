@@ -1,6 +1,6 @@
 # Plain persistent actor: no install argument. The governor is read from the
 # GOVERNOR_PRINCIPAL canister environment variable (fail-closed while unset).
-# IGNITE_MEDIA_LARGE_CAPACITY=1 allows the 32 GiB stable-backed mode; it only takes
+# IGNITE_MEDIA_LARGE_CAPACITY=1 allows the 64 GiB stable-backed mode; it only takes
 # effect after the store is switched over (Enlarge Group 1 photo store workflow).
 name: media_blob_store
 recipe:

@@ -1,8 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { approveTest, assertFuel, assertTarget, assertResume, environmentFor, CONFIRM, FUEL_FLOOR, CALL_RESERVE, GiB } from './media-stage-two-policy.mjs';
+import { approveTest, assertFuel, assertTarget, assertResume, environmentFor, isSmokeScenario, CONFIRM, FUEL_FLOOR, CALL_RESERVE, GiB } from './media-stage-two-policy.mjs';
 const input = { runId: 'test-001', scenario: 'mixed', budgetT: '5', confirm: CONFIRM, governor: 'governor', subnetId: 'subnet', wasmSha256: 'a'.repeat(64) };
 const binding = approveTest(input);
+test('64 GiB smoke configures exactly 64 GiB without entering paid fill or churn', () => {
+  assert.equal(approveTest({ ...input, scenario: 'smoke64' }).capacityBytes, 68_719_476_736);
+  assert.equal(isSmokeScenario('smoke64'), true);
+  assert.equal(isSmokeScenario('smoke'), true);
+  assert.equal(isSmokeScenario('mixed'), false);
+  assert.equal(isSmokeScenario('tiny'), false);
+});
 test('mixed uses exactly 5 GiB; tiny uses a separate 512 MiB scenario', () => {
   assert.equal(binding.capacityBytes, 5 * GiB);
   assert.equal(approveTest({ ...input, scenario: 'tiny' }).capacityBytes, 512 * 1024 ** 2);

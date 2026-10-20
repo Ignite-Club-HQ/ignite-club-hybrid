@@ -1,7 +1,9 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [x] Owner request 20 Oct 19:49 UTC: opt-in 64 GiB candidate prepared with physical runtime headroom and unchanged 80% admission/club allowances; 11 Motoko files and 30 operator-policy tests pass, candidate compiles, actual prior-32-to-64 upgrade and Pro allowance checks pass. Isolated smoke64 workflow skips fill/churn. Evidence and release sequence: docs/media-64gib-candidate-2026-10-20.md. No live operation.
+
 - [x] Owner request 20 Oct 19:43 UTC: minimum local 64 GiB assessment complete—real sparse allocator tests across 32 GiB and near 64 GiB, bounded refusal/read/delete/reuse; 10 existing Motoko files plus new boundary fixture pass; actual current-store upgrade/pending/accounting and real combined Pro allowance checks pass; media/club compile. Production remains at 32 GiB; no candidate 64 GiB version or live change. Evidence: docs/media-minimum-64gib-validation-2026-10-20.md.
-- [ ] Small isolated live acceptance of a future 64 GiB candidate: blocked on reviewed ceiling/overhead changes, GitHub-held deploy identity and explicit deployment/funding approval; no paid full fill required.
+- [ ] Small isolated live acceptance, deployment and explicit Group 1 enlargement to 64 GiB: waits on the owner's GitHub runs using the GitHub-held signing identity; smoke64 with unique ID/budget 3 must pass before mainnet deploy and separate enlargement. No paid full fill required.
 
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 

@@ -1,6 +1,6 @@
 // @testmode replica
 // Sparse local boundary probe of the real allocator, not a full-volume fill.
-// The production policy remains 32 GiB; cap is supplied directly to the allocator.
+// Uses the candidate's real allocation ceiling; no full-volume fill.
 import Region "mo:core/Region";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
@@ -29,7 +29,9 @@ persistent actor {
     assert Stable.read(store, reused, 0, 100) == "reused-32";
 
     // Leave 64 MiB for runtime/Region metadata: 64 GiB payload is not promised.
-    let near = cap - 67_108_864;
+    assert Stable.largeLimit == cap;
+    assert Stable.physicalLimit == cap - 67_108_864;
+    let near = Stable.physicalLimit - page;
     let high = store;
     assert Region.grow(high.region, (near / page).toNat64() - Region.size(high.region)) != 18_446_744_073_709_551_615;
     high.end := near.toNat64();
@@ -42,6 +44,8 @@ persistent actor {
     assert not Stable.canAllocateWithin(high, 1, boundedCap);
     assert Stable.reserveWithin(high, 1, boundedCap) == null;
     assert high.end == end;
+    assert not Stable.canAllocateWithin(high, 1, cap);
+    assert Stable.reserveWithin(high, 1, cap) == null;
     assert Stable.read(high, held, 0, 100) == "near-64!";
     Stable.release(high, held);
     let ?again = Stable.writeWithin(high, "reupload", boundedCap) else { assert false; loop {} };

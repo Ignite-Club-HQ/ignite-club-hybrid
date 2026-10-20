@@ -5,8 +5,8 @@ import Nat64 "mo:core/Nat64";
 module {
   public let capacityCeiling : Nat64 = 2_147_483_648;
   // Opt-in ceiling for stable-backed stores (IGNITE_MEDIA_LARGE_CAPACITY=1).
-  // Off until a mainnet load test confirms cycles/latency at this size.
-  public let largeCapacityCeiling : Nat64 = 34_359_738_368; // 32 GiB
+  // Configured maximum; 80% admission and allocator/runtime headroom still apply.
+  public let largeCapacityCeiling : Nat64 = 68_719_476_736; // 64 GiB
   // Pro media allowance: 5 GiB per club across vault, gallery and chat combined,
   // plus purchased add-on GB.
   public let proMediaBaseBytes : Nat = 5_368_709_120;

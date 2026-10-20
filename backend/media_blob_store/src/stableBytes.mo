@@ -8,7 +8,10 @@ module {
   public type Store = { region : Region.Region; var end : Nat64; free : Map.Map<Nat, Map.Map<Nat64, ()>> };
   // Keep the existing operational budget until measured capacity tests pass.
   public let limit : Nat = 2_147_483_648;
-  public let largeLimit : Nat = 34_359_738_368;
+  public let largeLimit : Nat = 68_719_476_736;
+  // Explicit Region ceiling below the configured limit; leave runtime space.
+  // This reserve is conservative policy, not a measured usable-space guarantee.
+  public let physicalLimit : Nat = 68_652_367_872; // 64 GiB minus 64 MiB
   public func limitFor(large : Bool) : Nat { if (large) largeLimit else limit };
   public let responseChunk : Nat = 1_000_000;
   public func validSlice(end : Nat, slice : Slice) : Bool {
@@ -55,11 +58,12 @@ module {
   // A reservation owns a real extent. No ciphertext is written until finalize;
   // concurrent admissions cannot all promise the same free buddy or tail.
   public func reserveWithin(store : Store, length : Nat, cap : Nat) : ?Slice {
+    let boundedCap = Nat.min(cap, physicalLimit);
     let slot = slotFor(length);
     if (slot > 16_777_216) return null;
-    switch (reserveFreeWithin(store, length, cap)) { case (?slice) return ?slice; case null {} };
+    switch (reserveFreeWithin(store, length, boundedCap)) { case (?slice) return ?slice; case null {} };
     let aligned = ((store.end.toNat() + slot - 1) / slot) * slot;
-    if (aligned + slot > cap) return null;
+    if (aligned + slot > boundedCap) return null;
     let requiredPages = (aligned + slot + 65_535) / 65_536;
     let pages = Region.size(store.region).toNat();
     if (requiredPages > pages and Region.grow(store.region, Nat64.fromNat(requiredPages - pages)) == 18_446_744_073_709_551_615) return null;
@@ -77,7 +81,7 @@ module {
   public func reserveFreeWithin(store : Store, length : Nat, cap : Nat) : ?Slice {
     let slot = slotFor(length);
     if (slot > 16_777_216) return null;
-    let offset = switch (availableClass(store, slot, cap)) {
+    let offset = switch (availableClass(store, slot, Nat.min(cap, physicalLimit))) {
       case (?(size, offset)) {
         let ?offsets = store.free.get(size) else return null;
         offsets.remove(offset);
@@ -122,14 +126,16 @@ module {
   public func canAllocate(store : Store, length : Nat) : Bool { canAllocateWithin(store, length, limit) };
   // Bounded proof of reusable *whole* maximum-size roots. Smaller holes
   // deliberately count as zero, even if their aggregate byte sum is large.
-  public func allocatableRoots(store : Store, cap : Nat) : Nat {
+  public func allocatableRoots(store : Store, configured : Nat) : Nat {
+    let cap = Nat.min(configured, physicalLimit);
     if (store.end.toNat() > cap) return 0;
     let root = 16_777_216;
     let freeRoots = switch (store.free.get(root)) { case (?rows) rows.size(); case null 0 };
     let aligned = ((store.end.toNat() + root - 1) / root) * root;
     freeRoots + (if (aligned > cap) 0 else (cap - aligned) / root)
   };
-  public func canAllocateWithin(store : Store, length : Nat, cap : Nat) : Bool {
+  public func canAllocateWithin(store : Store, length : Nat, configured : Nat) : Bool {
+    let cap = Nat.min(configured, physicalLimit);
     let slot = slotFor(length);
     if (slot > 16_777_216) return false;
     if (availableClass(store, slot, cap) != null) return true;
