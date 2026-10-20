@@ -2920,7 +2920,7 @@ persistent actor class Main(governorInit : Principal) {
           let player=PlayhqFeed.field(p,"player");let playerId=PlayhqFeed.str(player,"id");let team=PlayhqFeed.str(PlayhqFeed.field(p,"team"),"id");
           if(not valid(playerId) or (team!=h and team!=a)) return #Err("Foreign player-stat team");
           stats:=stats.concat([{game_id=id;team_id=team;player_id=playerId;player_name=PlayhqFeed.str(player,"name");stats_json=PlayhqFeed.numeric(PlayhqFeed.field(p,"statistics"))}]);
-          if(stats.size()>2000) return #Err("Player-stat batch too large");
+          if (stats.size() > 2000) return #Err("Player-stat batch too large");
         }
       }
     };

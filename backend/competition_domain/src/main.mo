@@ -2011,7 +2011,7 @@ persistent actor class Main(governorInit : Principal) {
     let feed=switch(try{await(with timeout=120)service.fetch_playhq_grade(tenant,grade)}catch(_){return #Err("PlayHQ synchronization unavailable")}){case(#Err(e))return #Err(e);case(#Ok(f))f};
     await syncForCompetition(caller,competition_id);
     if(eventsDomainCanister!=?authority or compFenced(competition_id) or not canManageCompetition(caller,competition_id)) return #Err("Competition access changed");
-    if(feed.games.size()>200 or feed.stats.size()>2000) return #Err("Feed exceeds import bounds");
+    if (feed.games.size() > 200 or feed.stats.size() > 2000) return #Err("Feed exceeds import bounds");
     var incoming:[Types.PlayHQMatchMeta]=[];var imported:[Types.Match]=[];var statRows:[Types.PlayHQStat]=[];
     for(g in feed.games.values()) {
       let previous=playhqMatchMetadata.find(func(m)=m.competition_id==competition_id and m.tenant==tenant and m.game_id==g.game_id);
@@ -2026,7 +2026,7 @@ persistent actor class Main(governorInit : Principal) {
     };
     for(s in feed.stats.values()) {
       let meta=switch(incoming.find(func(m)=m.game_id==s.game_id)){case null return #Err("Unassociated player statistics");case(?m)m};
-      if(s.team_id!=meta.home_id and s.team_id!=meta.away_id or s.stats_json.size()>8192) return #Err("Invalid player statistics");
+      if (s.team_id != meta.home_id and s.team_id != meta.away_id or s.stats_json.size() > 8192) return #Err("Invalid player statistics");
       statRows:=statRows.concat([{competition_id;match_id=meta.match_id;tenant;game_id=s.game_id;team_id=s.team_id;player_id=s.player_id;player_name=s.player_name;stats_json=s.stats_json}]);
     };
     matches:=matches.filter(func(m)=not imported.any(func(i)=i.id==m.id)).concat(imported);
