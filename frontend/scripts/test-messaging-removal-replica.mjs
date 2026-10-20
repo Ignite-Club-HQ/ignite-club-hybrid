@@ -24,6 +24,8 @@ const receiptType = IDL.Record({ request: requestType, receiver: IDL.Principal, 
 // It deliberately continues returning Eligible after fencing, so denial must
 // come from persistent receiver state, not a deleted identity or role row.
 const relayIdl = ({ IDL: I }) => I.Service({
+  hold_notifications: I.Func([], [], []), release_notifications: I.Func([], [], []),
+  notification_progress: I.Func([], [I.Nat, I.Bool], ['query']),
   hold_on: I.Func([I.Nat], [], []), release: I.Func([], [], []),
   progress: I.Func([], [I.Nat, I.Bool], ['query']), pulse: I.Func([], [], []),
   prepare: I.Func([I.Principal, requestType], [I.Variant({ Ok: I.Null, Err: I.Text })], []),
@@ -146,6 +148,31 @@ try {
   assert.equal(ok(await drain()).outstanding, 0n);
   chat.actor.setPrincipal(survivor);
   assert.equal(ok(await chat.actor.read_account_list_messages_page(conversation.id, [], 10)).messages.length, 2);
+  // Detached notifications keep an original-author hold after send returns.
+  // This observes queue work, not FCM delivery or receipt completion elsewhere.
+  const notifying = p(5);
+  chat.actor.setPrincipal(governor);
+  const notificationConversation = ok(await chat.actor.create_conversation('club', [], [governor, notifying]));
+  await relay.actor.hold_notifications();
+  chat.actor.setPrincipal(notifying);
+  ok(await chat.actor.send_message(notificationConversation.id, 'notification hold', 'notify', [], []));
+  let observedNotification = false;
+  for (let round = 0; round < 80; round++) {
+    await pic.tick(1);
+    const [count, held] = await relay.actor.notification_progress();
+    if (count > 0n && held) { observedNotification = true; break; }
+  }
+  assert.ok(observedNotification, 'Detached queue call was actually observed');
+  const notificationRequest = { ...request, account_id: 'notification-author', generation: 8n, subjects: [notifying] };
+  ok(await relay.actor.prepare(chat.canisterId, notificationRequest));
+  assert.ok(ok(await relay.actor.drain(chat.canisterId, notificationRequest)).outstanding > 0n);
+  await relay.actor.release_notifications();
+  let notificationDrained = false;
+  for (let round = 0; round < 80; round++) {
+    await pic.tick(1);
+    if (ok(await relay.actor.drain(chat.canisterId, notificationRequest)).outstanding === 0n) { notificationDrained = true; break; }
+  }
+  assert.ok(notificationDrained, 'Original-author hold releases only after queue settles');
   // Ordinary deployment: preparation is unavailable; no rehearsal release.
   await pic.updateCanisterSettings({ canisterId: chat.canisterId, sender: governor, environmentVariables: [] });
   await pic.upgradeCanister({ canisterId: chat.canisterId, wasm: process.env.MESSAGING_DOMAIN_WASM,
