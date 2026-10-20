@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createJournalApi } from '../frontend/scripts/media-stage-two-github.mjs';
 import { fundingPlan, parseBalance, assertNoOpenPayment } from './media-card-funding-policy.mjs';
+import { prepareInfrastructure } from './infrastructure-card-funding.mjs';
 
 const identity = 'ignite-card-deployer';
 function cli(args) {
@@ -12,7 +13,8 @@ function cli(args) {
   return r.stdout.trim();
 }
 function balance() { return parseBalance(cli(['cycles', 'balance', '-n', 'ic', '--identity', identity, '--json'])); }
-const plan = fundingPlan({ paymentId: process.env.PAYMENT_ID, testId: process.env.TEST_RUN_ID,
+const infrastructure = process.env.FUNDING_PURPOSE ? prepareInfrastructure({ cli, identity, balance }) : undefined;
+const plan = infrastructure?.plan ?? fundingPlan({ paymentId: process.env.PAYMENT_ID, testId: process.env.TEST_RUN_ID,
   scenario: process.env.TEST_SCENARIO, budgetT: process.env.TEST_BUDGET_T, confirm: process.env.CARD_CONFIRM,
   principal: cli(['identity', 'principal', '--identity', identity]), balance: balance() });
 if (!process.env.GITHUB_REPOSITORY || !process.env.GH_TOKEN || !process.env.FUNDING_REPORT_DIR || !process.env.GITHUB_STEP_SUMMARY) {
@@ -49,11 +51,12 @@ function save() {
 }
 function summary(text) { appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`); }
 summary(`## Card funding for ${plan.scenario}: ${plan.testId}`);
-summary(`Deploy identity: \`${plan.principal}\`. Target: ${plan.targetCycles} cycles (includes the test creation fee).`);
+summary(`Deploy identity: \`${plan.principal}\`. Target: ${plan.targetCycles} cycles (includes applicable ledger/creation fees).`);
+for (const r of plan.topups ?? []) summary(`Planned top-up: **${r.name}** (${r.id}), current ${r.cycles} cycles, deposit ${r.amount} cycles.`);
 summary(`Existing balance: ${plan.balanceBefore}; requested shortfall: ${plan.shortfallCycles} cycles.`);
-summary('This funds the approved test ceiling, not a measured test cost. Checkout quotes USD/card fees; rate changes and delivery fees can affect delivered cycles.');
+summary('Checkout quotes USD/card fees; rate changes and delivery fees can affect delivered cycles. Group funding is initial fuel, not a guaranteed installation cost. Top-ups run only for the saved target list; lost replies block repeats.');
 if (plan.shortfallCycles === '0') {
-  state.phase = 'already-funded'; save(); summary('Already funded: no payment order created. Start the test separately.');
+  state.phase = 'already-funded'; save(); summary('Already funded: no payment order created.');
 } else {
   // Commit and read back intent BEFORE making the order. Unknown replies remain locked.
   state.phase = 'creating-order'; save();
@@ -93,6 +96,10 @@ if (plan.shortfallCycles === '0') {
   }
   state.balanceAfter = balance().toString();
   state.testReady = BigInt(state.balanceAfter) >= BigInt(plan.targetCycles); save();
-  summary(state.testReady ? `Balance verified: ${state.balanceAfter} cycles. Start the ${plan.scenario} test separately with ID ${plan.testId} and the same funding ceiling.`
-    : `Balance verified: ${state.balanceAfter} cycles, still below the test target. No test started; review delivered amount before authorizing another purchase.`);
+  summary(state.testReady ? `Balance verified: ${state.balanceAfter} cycles.${infrastructure ? ' Continue with the approved funding purpose below.' : ` Start the ${plan.scenario} test separately with ID ${plan.testId} and the same funding ceiling.`}`
+    : `Balance verified: ${state.balanceAfter} cycles, still below the target. No further operation started; review delivered amount before authorizing another purchase.`);
 }
+if (infrastructure) {
+  if (balance() < BigInt(plan.targetCycles)) throw new Error('Insufficient delivered cycles; no further operation started');
+  await infrastructure.finish({ state, save, summary });
+} else if (plan.shortfallCycles === '0') summary('Start the test separately.');
