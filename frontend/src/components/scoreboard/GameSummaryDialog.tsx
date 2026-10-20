@@ -41,8 +41,9 @@ export interface GameSummaryProps {
   sport: "basketball" | "netball";
   homeLabel: string;
   awayLabel: string;
-  homeScore: number;
-  awayScore: number;
+  homeScore: number | null;
+  awayScore: number | null;
+  scoresHidden?: boolean;
   perQuarter: PerQuarterScore[];
   players: SummaryPlayerStat[];
   /** Optional MVP — player.id from `players` */
@@ -78,6 +79,7 @@ export default function GameSummaryDialog({
   readOnly = false,
   onSaveNow,
   isSaved = false,
+  scoresHidden = false,
 }: GameSummaryProps) {
   const { toast } = useToast();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -85,10 +87,11 @@ export default function GameSummaryDialog({
   const [saving, setSaving] = useState(false);
 
   const result = useMemo(() => {
+    if (scoresHidden || homeScore === null || awayScore === null) return "Scores hidden";
     if (homeScore > awayScore) return "WIN";
     if (homeScore < awayScore) return "LOSS";
     return "DRAW";
-  }, [homeScore, awayScore]);
+  }, [homeScore, awayScore, scoresHidden]);
 
   const sortedPlayers = useMemo(() => {
     return [...players].sort((a, b) => {
@@ -221,12 +224,12 @@ export default function GameSummaryDialog({
               <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground truncate">{homeLabel}</p>
-                  <p className="text-3xl font-black tabular-nums">{homeScore}</p>
+                  <p className="text-3xl font-black tabular-nums">{scoresHidden ? "—" : homeScore ?? "—"}</p>
                 </div>
                 <p className="text-xs text-muted-foreground">vs</p>
                 <div className="text-left">
                   <p className="text-xs text-muted-foreground truncate">{awayLabel}</p>
-                  <p className="text-3xl font-black tabular-nums">{awayScore}</p>
+                  <p className="text-3xl font-black tabular-nums">{scoresHidden ? "—" : awayScore ?? "—"}</p>
                 </div>
               </div>
               <p
@@ -244,7 +247,7 @@ export default function GameSummaryDialog({
             </div>
 
             {/* Per-quarter strip */}
-            {perQuarter.length > 0 && (
+            {!scoresHidden && perQuarter.length > 0 && (
               <div className="grid grid-cols-4 gap-1 text-center">
                 {perQuarter.map((q) => (
                   <div key={q.quarter} className="rounded-md bg-muted/40 py-1">
@@ -269,7 +272,7 @@ export default function GameSummaryDialog({
                   </p>
                   <p className="text-sm font-semibold truncate">
                     {mvp.name}
-                    {mvp.points != null && mvp.points > 0 && (
+                    {!scoresHidden && mvp.points != null && mvp.points > 0 && (
                       <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                         · {mvp.points} pts
                       </span>
@@ -311,7 +314,7 @@ export default function GameSummaryDialog({
                         {sport === "basketball" && (
                           <>
                             <span className="font-semibold" title="Points">
-                              {p.points ?? 0}p
+                              {scoresHidden ? "—" : `${p.points ?? 0}p`}
                             </span>
                             <span
                               className={
@@ -389,11 +392,11 @@ export default function GameSummaryDialog({
             </Button>
           )}
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={handleDownload} disabled={busy}>
+            <Button variant="outline" className="flex-1" onClick={handleDownload} disabled={busy || scoresHidden}>
               <Download className="h-4 w-4 mr-1.5" />
               Download
             </Button>
-            <Button className="flex-1" onClick={handleShare} disabled={busy}>
+            <Button className="flex-1" onClick={handleShare} disabled={busy || scoresHidden}>
               <Share2 className="h-4 w-4 mr-1.5" />
               Share
             </Button>

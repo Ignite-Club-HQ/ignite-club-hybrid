@@ -21,6 +21,7 @@ import IC "mo:ic/Types";
 import Types "types";
 import Oql "../../shared/Oql";
 import OqlEvents "oqlEvents";
+import HistoryPrivacy "historyPrivacy";
 
 persistent actor class Main(governorInit : Principal) {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -2256,10 +2257,22 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(rows)
   };
 
-  public query ({ caller }) func list_game_player_stats(event_id : Text) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
-    denyLegacyAccountQuery();
-    auth(caller);
-    #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id))
+  func protectedPlayerStats(caller : Principal, event_id : Text) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    switch (await historyResult(caller,event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(result)) {
+        let hidden = switch (result) {
+          case null competitionEventOperations.any(func(operation) = operation.event_ids.any(func(id) = id == event_id));
+          case (?r) r.scores_hidden
+        };
+        #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id).map(func(item : Types.GamePlayerStat) : Types.GamePlayerStat {
+          if (hidden) ({ item with goals_scored = 0 : Nat16 }) else item
+        }))
+      }
+    }
+  };
+  public shared ({ caller }) func list_game_player_stats(event_id : Text) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    await protectedPlayerStats(caller,event_id)
   };
 
   // ---- Workstream D: cross-sport game result (upsert by event_id) ----
@@ -2281,6 +2294,27 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not valid(team_id) or not valid(sport)) return #Err("Invalid game result");
     if (not canManageTeamBoard(caller, team_id)) return #Err("Game result management forbidden");
+    switch (event_id) {
+      case null {};
+      case (?id) {
+        let event = switch (events.find(func(e) = e.id == id and not e.deleted)) { case null return #Err("Event not found"); case (?e) e };
+        if (event.team_id != ?team_id) return #Err("Game result team mismatch");
+        let authority = competitionDomainCanister;
+        for (operation in competitionEventOperations.values()) {
+          if (operation.event_ids.any(func(e) = e == id)) {
+            let configured = switch (authority) { case null return #Err("Competition authority unavailable"); case (?a) a };
+            let competition : actor { read_history_score_access : shared (Text, Text, Nat64, Principal, Bool) -> async { #Ok : Bool; #Err : Text } } = actor (configured.toText());
+            try {
+              switch (await (with timeout = 10) competition.read_history_score_access(operation.competition_id,team_id,event.starts_at_ms,caller,true)) {
+                case (#Ok(true)) {};
+                case _ return #Err("Competition manager required")
+              }
+            } catch (_) { return #Err("Competition authorization unavailable") };
+          }
+        };
+        if (authority != competitionDomainCanister or eventFenced(id) or teamFenced(team_id)) return #Err("Game authority changed or locked");
+      }
+    };
     let existing = switch (event_id) {
       case (?id) gameResults.find(func(item) = item.event_id == ?id);
       case null null;
@@ -2298,10 +2332,71 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(value)
   };
 
-  public query ({ caller }) func get_game_result(event_id : Text) : async { #Ok : ?Types.GameResult; #Err : Text } {
-    denyLegacyAccountQuery();
+  func historyResult(caller : Principal, event_id : Text) : async { #Ok : ?HistoryPrivacy.Read; #Err : Text } {
     auth(caller);
-    #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
+    await admitAccount(caller);
+    let event = switch (events.find(func(e) = e.id == event_id and not e.deleted)) {
+      case null return #Err("Event not found"); case (?e) e
+    };
+    await syncRolesFromClubDomain(caller, event.club_id);
+    if (not (await* canViewMatch(caller, event))) return #Err("Event access forbidden");
+    let authority = competitionDomainCanister;
+    var hidden = false;
+    for (operation in competitionEventOperations.values()) {
+      if (operation.event_ids.any(func(id) = id == event_id)) {
+        let id = switch (authority) { case null return #Err("Competition authority unavailable"); case (?id) id };
+        let competition : actor {
+          read_history_score_access : shared (Text, Text, Nat64, Principal, Bool) -> async { #Ok : Bool; #Err : Text }
+        } = actor (id.toText());
+        let team = switch (event.team_id) { case null return #Err("Competition team missing"); case (?t) t };
+        try {
+          switch (await (with timeout = 10) competition.read_history_score_access(operation.competition_id, team, event.starts_at_ms, caller,false)) {
+            case (#Err(e)) return #Err(e);
+            case (#Ok(visible)) { if (not visible) hidden := true }
+          }
+        } catch (_) { return #Err("Competition score authorization unavailable") };
+      }
+    };
+    if (authority != competitionDomainCanister or eventFenced(event_id)) return #Err("Event authority changed or locked");
+    let current = switch (events.find(func(e) = e.id == event_id and not e.deleted)) {
+      case null return #Err("Event no longer available"); case (?e) e
+    };
+    if (current.revision != event.revision or not canView(caller,current)) return #Err("Event access changed");
+    #Ok(switch (gameResults.find(func(item) = item.event_id == ?event_id)) {
+      case null null; case (?row) ?HistoryPrivacy.read(row,hidden)
+    })
+  };
+  public shared ({ caller }) func get_game_result(event_id : Text) : async { #Ok : ?HistoryPrivacy.Read; #Err : Text } {
+    await historyResult(caller,event_id)
+  };
+
+  public shared ({ caller }) func delete_game_result(event_id : Text) : async { #Ok; #Err : Text } {
+    switch (await historyResult(caller,event_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(null)) return #Ok;
+      case (#Ok(?row)) { if (row.scores_hidden) return #Err("Competition manager required") }
+    };
+    let event = switch (events.find(func(e) = e.id == event_id and not e.deleted)) {
+      case null return #Err("Event not found"); case (?e) e
+    };
+    if (not manages(caller,event) or eventFenced(event_id)) return #Err("Game result management forbidden");
+    // Removing a competition's mirrored History is also a result mutation.
+    let authority = competitionDomainCanister;
+    for (operation in competitionEventOperations.values()) {
+      if (operation.event_ids.any(func(id) = id == event_id)) {
+        let configured = switch (authority) { case null return #Err("Competition authority unavailable"); case (?id) id };
+        let team = switch (event.team_id) { case null return #Err("Competition team missing"); case (?id) id };
+        let competition : actor { read_history_score_access : shared (Text,Text,Nat64,Principal,Bool) -> async { #Ok : Bool; #Err : Text } } = actor (configured.toText());
+        try {
+          switch (await (with timeout = 10) competition.read_history_score_access(operation.competition_id,team,event.starts_at_ms,caller,true)) {
+            case (#Ok(true)) {}; case _ return #Err("Competition manager required")
+          }
+        } catch (_) { return #Err("Competition authority unavailable") };
+      }
+    };
+    if (authority != competitionDomainCanister or eventFenced(event_id)) return #Err("Game authority changed or locked");
+    gameResults := gameResults.filter(func(row) = row.event_id != ?event_id);
+    #Ok
   };
 
   // ---- Match captains / goalkeepers / player stats report ----
@@ -4178,15 +4273,11 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func read_account_list_game_player_stats(event_id : Text) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
-    await admitAccount(caller);
-    auth(caller);
-    #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id))
+    await protectedPlayerStats(caller,event_id)
   };
 
-  public shared ({ caller }) func read_account_get_game_result(event_id : Text) : async { #Ok : ?Types.GameResult; #Err : Text } {
-    await admitAccount(caller);
-    auth(caller);
-    #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
+  public shared ({ caller }) func read_account_get_game_result(event_id : Text) : async { #Ok : ?HistoryPrivacy.Read; #Err : Text } {
+    await historyResult(caller,event_id)
   };
 
   public shared ({ caller }) func read_account_list_match_captains(event_id : Text) : async { #Ok : [Types.MatchCaptainAssignment]; #Err : Text } {

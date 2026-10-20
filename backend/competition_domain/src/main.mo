@@ -1952,6 +1952,26 @@ persistent actor class Main(governorInit : Principal) {
     #Ok({ competition_id; club_id = competition.club_id; team_ids = teams; recipients; can_publish = canManageCompetition(requester, competition_id) })
   };
 
+  // The infrastructure caller may not supply arbitrary public requests: only
+  // the configured events service can ask on behalf of the original human.
+  public shared ({ caller }) func read_history_score_access(competition_id : Text, team_id : Text, starts_at_ms : Nat64, requester : Principal, manager_only : Bool) : async { #Ok : Bool; #Err : Text } {
+    let authority = eventsDomainCanister;
+    if (authority != ?caller) return #Err("Trusted events canister only");
+    auth(requester);
+    await admitAccount(requester);
+    await syncForCompetition(requester, competition_id);
+    if (authority != eventsDomainCanister or compFenced(competition_id)) return #Err("Competition authority changed or locked");
+    if (not competitions.any(func(c) = c.id == competition_id)) return #Err("Competition not found");
+    if (canManageCompetition(requester, competition_id)) return #Ok(true);
+    if (manager_only) return #Ok(false);
+    let candidates = matches.filter(func(m) = m.competition_id == competition_id and
+      (m.home_team == team_id or m.away_team == team_id) and m.scheduled_at_ms == ?starts_at_ms);
+    if (candidates.size() == 1) return #Ok(not ScorePrivacy.hidden(scorePrivacySettings, competition_id, candidates[0].division_id));
+    // Older competition-wide events do not identify a match/division. Never
+    // guess a division-show override when the association is ambiguous.
+    #Ok(not scorePrivacySettings.any(func(s) = s.competition_id == competition_id and s.hide_scores))
+  };
+
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {
     await admitAccount(requester);
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");

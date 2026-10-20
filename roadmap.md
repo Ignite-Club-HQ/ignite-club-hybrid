@@ -1,5 +1,11 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+## Current request — preserve History and PlayHQ under score privacy
+- [x] Initial History preservation batch: shared dual-mode History reader, nullable display, existing ICP competition-operation trusted privacy bridge, player/MVP metadata preservation and real two-actor tests. No release/complete-coverage claim.
+- [ ] Finish match-level ICP associations/PlayHQ stats, Supabase protected calendar/report/result saves and grade aggregate reconstruction; non-destructive SQL integration/application requires managed migration workflow and validation. No live changes authorized/performed.
+- [x] Add role/visibility/data-preservation tests and run affected suites in both modes; full authenticated UI and full-suite checks remain after integration.
+- [x] Document the replacement SQL draft and remaining release prerequisites; no live database changes or deployment.
+
 - [x] Owner request 20 Oct 21:00 UTC — replacement assessment: latest released Motoko 2.0.0 and master retain the same 256 GiB shared table and lack an explicit aggregate-exhaustion check; direct source arithmetic/fingerprints and independent review agree. Evidence and exact custom-runtime requirements added to docs/media-multi-region-redesign-2026-10-20.md. No pin, capacity or live changes.
 - [ ] Same request — actual runtime replacement and aggregate 500 GiB boundary read/write/upgrade tests remain blocked: no supporting released runtime was found; a reproducible custom runtime or upstream fix with safe aggregate growth and old-metadata compatibility is required. No 500 GiB growth attempted and virtual-address tests are not physical acceptance.
 - [x] Owner request 20 Oct 20:33 UTC: additive multi-Region 500 GiB addressing redesign implemented; bank-zero bytes/old pending reservations remain untouched, extra writes local-only. 13 media tests, actual sparse 64/128/192 GiB bank/upgrade and near-500 GiB virtual-address checks, real actor rollover/flag-off read/delete, saved prior actor upgrade, Pro allowance and 17-contract drift pass. Evidence: docs/media-multi-region-redesign-2026-10-20.md. No live changes.

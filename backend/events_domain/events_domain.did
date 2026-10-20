@@ -80,6 +80,24 @@ type Recurrence =
    frequency: text;
    until_ms: nat64;
  };
+type Read = 
+ record {
+   away_label: text;
+   away_score: opt nat32;
+   event_id: opt text;
+   home_label: text;
+   home_score: opt nat32;
+   id: text;
+   mvp_player_id: opt text;
+   mvp_player_name: opt text;
+   period_scores_json: text;
+   player_stats_json: text;
+   saved_by: principal;
+   scores_hidden: bool;
+   sport: text;
+   team_id: text;
+   updated_at_ms: nat64;
+ };
 type PushReachability = 
  record {
    reachable: bool;
@@ -334,6 +352,10 @@ type Main =
                                               Err: text;
                                               Ok;
                                             });
+   delete_game_result: (event_id: text) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
    delete_saved_location: (id: text) -> (variant {
                                            Err: text;
                                            Ok;
@@ -466,11 +488,10 @@ type Main =
        Err: text;
        Ok: nat32;
      }) query;
-   get_game_result: (event_id: text) ->
-    (variant {
-       Err: text;
-       Ok: opt GameResult;
-     }) query;
+   get_game_result: (event_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: opt Read;
+                                         });
    get_game_summary: (event_id: text) ->
     (variant {
        Err: text;
@@ -630,7 +651,7 @@ type Main =
     (variant {
        Err: text;
        Ok: vec GamePlayerStat;
-     }) query;
+     });
    list_group_duties: (group_id: text) ->
     (variant {
        Err: text;
@@ -820,7 +841,7 @@ type Main =
    read_account_get_game_result: (event_id: text) ->
     (variant {
        Err: text;
-       Ok: opt GameResult;
+       Ok: opt Read;
      });
    read_account_get_game_summary: (event_id: text) ->
     (variant {

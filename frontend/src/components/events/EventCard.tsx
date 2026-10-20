@@ -175,8 +175,8 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
             const r = result.length > 0 ? (result[0] as any) : null;
             return r
               ? {
-                  home_score: Number(r.home_score),
-                  away_score: Number(r.away_score),
+                  home_score: r.home_score == null ? null : Number(r.home_score),
+                  away_score: r.away_score == null ? null : Number(r.away_score),
                   home_label: r.home_label,
                   away_label: r.away_label,
                 }

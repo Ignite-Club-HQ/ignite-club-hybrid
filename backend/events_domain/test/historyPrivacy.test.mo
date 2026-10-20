@@ -1,0 +1,23 @@
+import Privacy "../src/historyPrivacy";
+import Types "../src/types";
+import Principal "mo:core/Principal";
+let game : Types.GameResult = {
+  id="history-1"; team_id="team-1"; event_id=?"event-1"; sport="basketball";
+  home_label="Home"; away_label="Away"; home_score=23; away_score=17;
+  period_scores_json="[{\"home\":23,\"away\":17}]";
+  player_stats_json="[{\"name\":\"Player\",\"points\":23}]";
+  mvp_player_id=?"player-1"; mvp_player_name=?"MVP";
+  saved_by=Principal.fromText("aaaaa-aa"); updated_at_ms=1;
+};
+let hidden = Privacy.read(game,true);
+assert hidden.home_score == null and hidden.away_score == null;
+assert hidden.period_scores_json == "[]";
+assert hidden.player_stats_json == "[{\"name\":\"Player\"}]";
+assert hidden.mvp_player_id == game.mvp_player_id;
+assert hidden.mvp_player_name == game.mvp_player_name;
+assert hidden.id == game.id and hidden.scores_hidden;
+let manager = Privacy.read(game,false);
+assert manager.home_score == ?23 and manager.away_score == ?17;
+assert manager.period_scores_json == game.period_scores_json;
+assert manager.player_stats_json == game.player_stats_json;
+assert game.home_score == 23 and game.player_stats_json != "[]";
