@@ -9,6 +9,9 @@ use ic_stable_structures::{
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 mod groups;
+mod group_index;
+#[cfg(feature = "scale-probe")]
+mod scale_probe;
 mod discovery;
 mod media_growth;
 use discovery::GroupPlacement;
@@ -162,6 +165,7 @@ thread_local! {
     static PLACERS: RefCell<StableBTreeMap<Vec<u8>, u64, Memory>> = RefCell::new(StableBTreeMap::init(memory(9)));
     static MEDIA_GROWTH: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(12)));
     // Additive store-principal partition; never reinterpret legacy group bytes.
+    static GROUP_INDEX: RefCell<Option<group_index::GroupIndex>> = const { RefCell::new(None) };
     static STORE_GROWTH: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(13)));
 }
 
@@ -682,6 +686,26 @@ fn version() -> u64 {
 fn group_for(id: &str) -> Option<ShardGroup> {
     GROUPS.with(|items| items.borrow().get(&id.as_bytes().to_vec()).map(|bytes| decode(&bytes)))
 }
+fn save_group(group: &ShardGroup) {
+    GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(group)));
+    GROUP_INDEX.with(|index| { if let Some(index) = index.borrow_mut().as_mut() { index.upsert(group); } });
+}
+fn indexed_group(target: &str, club: &str, now: u64) -> Option<ShardGroup> {
+    GROUP_INDEX.with(|index| {
+        let mut index = index.borrow_mut();
+        if index.is_none() {
+            let mut rebuilt = group_index::GroupIndex::default();
+            GROUPS.with(|rows| { for row in rows.borrow().iter() { rebuilt.upsert(&decode::<ShardGroup>(&row.value())); } });
+            *index = Some(rebuilt);
+        }
+        index.as_ref()?.pick(target, |id| {
+            let group = group_for(id)?;
+            if !groups::has_headroom(&group, target, now) || !groups::below_rollover(&group) { return None; }
+            if media_growth_local() && !verified_store_growth(id).is_some_and(|s| s.budget.fits(club, s.budget.free_club)) { return None; }
+            Some(group)
+        })
+    })
+}
 fn group_assignment_for(id: &str) -> Option<GroupAssignment> {
     GROUP_ASSIGNMENTS.with(|items| items.borrow().get(&id.as_bytes().to_vec()).map(|bytes| decode(&bytes)))
 }
@@ -816,7 +840,7 @@ fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
     }
     groups::validate(&group)?;
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
-    GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+    save_group(&group);
     REVISION.with(|stored| stored.borrow_mut().set(revision));
     Ok(revision)
 }
@@ -830,7 +854,7 @@ fn record_group_health(group_id: String, heap_bytes: u64, cycles: u64, expected_
     // canisters. This is an operator observation, never browser authorization.
     group.heap_bytes = heap_bytes; group.cycles = cycles; group.observed_at_ns = ic_cdk::api::time();
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
-    GROUPS.with(|items| items.borrow_mut().insert(group_id.into_bytes(), encode(&group)));
+    save_group(&group);
     REVISION.with(|stored| stored.borrow_mut().set(revision));
     Ok(revision)
 }
@@ -876,9 +900,7 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
             .is_some_and(|entry| entry.key().starts_with(&domain_key(&club_id, "")))) {
         return Err("Existing club routes require a verified migration".into());
     }
-    let rows: Vec<ShardGroup> = GROUPS.with(|items| items.borrow().iter().map(|entry| decode(&entry.value())).collect());
-    let eligible: Vec<ShardGroup> = rows.into_iter().filter(|g| !media_growth_local() || verified_store_growth(&g.id).is_some_and(|s| s.budget.fits(&club_id, s.budget.free_club))).collect();
-    let mut group = groups::select(&eligible, &target_alias, now).cloned().ok_or("No healthy group with capacity")?;
+    let mut group = indexed_group(&target_alias, &club_id, now).ok_or("No healthy group with capacity")?;
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
     group.assigned_clubs += 1;
     let assignment = GroupAssignment { club_id: club_id.clone(), group_id: group.id.clone(), revision };
@@ -890,7 +912,7 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
         save_growth(&store.budget); save_store_growth(&store);
     }
     // Both maps update in one synchronous message; no await/reentrancy window.
-    GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(&group)));
+    save_group(&group);
     GROUP_ASSIGNMENTS.with(|items| items.borrow_mut().insert(club_id.into_bytes(), encode(&assignment)));
     REVISION.with(|stored| stored.borrow_mut().set(revision));
     Ok(assignment)
@@ -899,6 +921,23 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn priority_index_rebuild_rollover_health_and_immutable_retry() {
+        let mut a = groups::tests::group("index-a", 79);
+        let b = groups::tests::group("index-b", 0);
+        save_group(&a); save_group(&b);
+        let first = assign_group_record("index-club-a".into(), "mainnet".into(), current_revision(), 1).unwrap();
+        assert_eq!(first.group_id, "index-a");
+        assert_eq!(assign_group_record("index-club-b".into(), "mainnet".into(), current_revision(), 1).unwrap().group_id, "index-b");
+        assert_eq!(assign_group_record("index-club-a".into(), "mainnet".into(), 0, u64::MAX).unwrap(), first);
+        a.assigned_clubs = 10; a.observed_at_ns = 0; save_group(&a);
+        assert_eq!(indexed_group("mainnet", "new", groups::MAX_READING_AGE_NS + 1).unwrap().id, "index-b");
+        GROUP_INDEX.with(|m| *m.borrow_mut() = None);
+        assert_eq!(indexed_group("mainnet", "new", 1).unwrap().id, "index-a");
+        a.accepting = false; save_group(&a);
+        assert_eq!(indexed_group("mainnet", "new", 1).unwrap().id, "index-b");
+    }
+
     #[test]
     fn growth_is_group_bound_and_reserved_with_assignment() {
         TEST_GROWTH.with(|v| *v.borrow_mut() = true);

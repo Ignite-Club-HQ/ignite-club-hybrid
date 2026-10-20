@@ -40,8 +40,10 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
-- ICP MCP OQL: bounded read-only; allowlist fields, authorize before filtering/paging/counts; no self-calls.
+- OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
 - Cross-group accounts/admission stay local-only: no live UI/deploy flags. Identity uses durable unlink denials and consensus eligibility, never resource grants. Activation requires complete all-service fences/inventory/drain/mirror proof; follow backend/AGENTS.md for evidence. Why: eligibility and fan-out cannot prove global revocation or deny unreached groups.
 
-- Keys: SDK derivation, signed controllers, durable receipts. Engine prep/captures/rental policies stay offline. Why: fixtures never authorize release.
+- Keys: SDK derivation, signed controllers, receipts; engines stay offline. Why: fixtures never authorize release.
+
+- Router index rebuilds from stable rows; writes refresh it, picks recheck gates. scale-probe never deploys. Why: preserve admission.
