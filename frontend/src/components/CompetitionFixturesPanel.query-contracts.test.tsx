@@ -126,8 +126,8 @@ describe.runIf(supabaseMode)("Competition fixture and ladder query contracts —
     await expect(linked.queryFn()).rejects.toMatchObject({ message: "linked teams unavailable" });
   });
 
-  it("rejects a ladder-row failure", async () => {
-    seed("competition_ladder", { data: null, error: { message: "ladder unavailable" } });
+  it("rejects a protected fixture-result failure", async () => {
+    seed("competition_matches", { data: null, error: { message: "ladder unavailable" } });
     seed("competition_entries", { data: [], error: null });
     render(<CompetitionLadderPanel competitionId="competition-1" divisions={[]} />);
 
@@ -231,7 +231,8 @@ describe.runIf(!supabaseMode)("Competition fixture query contract — ICP", () =
 
     expect(mocks.listEntries).toHaveBeenCalledWith(expect.anything(), "competition-1");
     expect(mocks.listMatches).toHaveBeenCalledWith(expect.anything(), "competition-1");
-    expect(rows).toEqual([
+    expect(rows.masked).toBe(false);
+    expect(rows.rows).toEqual([
       expect.objectContaining({
         team_id: "team-home", division_id: "division-1", played: 1,
         wins: 1, draws: 0, losses: 0, goals_for: 2, goals_against: 0,

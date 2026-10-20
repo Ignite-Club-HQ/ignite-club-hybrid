@@ -711,7 +711,7 @@ function SupabaseCompetitionSettingsPage() {
   );
 }
 
-function ScorePrivacyControls({ competitionId, divisions }: { competitionId: string; divisions: any[] }) {
+export function ScorePrivacyControls({ competitionId, divisions }: { competitionId: string; divisions: any[] }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: settings = [] } = useQuery({
@@ -762,7 +762,7 @@ function ScorePrivacyControls({ competitionId, divisions }: { competitionId: str
   };
   return <div className="space-y-3 rounded-md border p-3">
     <label className="flex items-center justify-between gap-3">Hide competition scores
-      <Switch checked={value(null) === "hide"} onCheckedChange={hide => change(null, hide)} />
+      <Switch aria-label="Hide competition scores" checked={value(null) === "hide"} onCheckedChange={hide => change(null, hide)} />
     </label>
     {divisions.map(d => <label key={d.id} className="flex items-center justify-between gap-3">{d.name} scores
       <select aria-label={`${d.name} score privacy`} value={value(d.name)} onChange={event => change(d.name, event.target.value === "inherit" ? null : event.target.value === "hide")}>
