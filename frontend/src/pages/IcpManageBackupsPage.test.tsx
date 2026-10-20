@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ admin: true, list: vi.fn(), create: vi.fn(), get: vi.fn(), restore: vi.fn(), restoreMedia: vi.fn(), remove: vi.fn(), exportDomain: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("@/hooks/useIsAppAdmin", () => ({ useIsAppAdmin: () => ({ isAppAdmin: m.admin, isLoading: false }) }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { icp: (ctx: unknown) => unknown }) => h.icp({}) }));
@@ -18,6 +18,12 @@ beforeEach(() => {
   m.list.mockResolvedValue([{ id: "backup-1", backup_label: "Snapshot", created_at_ms: 1792195200000n, file_count: 3n, folder_count: 2n }]);
   m.create.mockResolvedValue(undefined); m.restore.mockResolvedValue({ restoredRows: 2 }); m.restoreMedia.mockResolvedValue({ restoredRows: 2, missingBytes: [], grantsRepaired: 1 }); m.remove.mockResolvedValue(undefined);
   m.get.mockResolvedValue({ files: [{ size: 3n }], created_by: { toText: () => "admin-principal" } }); vi.stubGlobal("confirm", vi.fn(() => true));
+});
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 describe("ICP vault metadata backup administration", () => {
   it("does not read backups for non-admins", () => {
@@ -51,13 +57,20 @@ describe("ICP vault metadata backup administration", () => {
     m.create.mockRejectedValue(new Error("Snapshot failed")); open(); await screen.findByText("Snapshot"); fireEvent.click(screen.getByRole("button", { name: "Create" })); await waitFor(() => expect(m.error).toHaveBeenCalledWith("Snapshot failed")); expect(m.success).not.toHaveBeenCalled();
   });
   it("downloads metadata preserving bigint and principal values", async () => {
-    const objectUrl = vi.fn((_blob: Blob) => "blob:backup"); vi.stubGlobal("URL", { createObjectURL: objectUrl, revokeObjectURL: vi.fn() });
+    // Keep delayed cleanup inside this test, rather than leaking into the next URL mock.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const revokeObjectURL = vi.fn();
+    const objectUrl = vi.fn((_blob: Blob) => "blob:backup"); vi.stubGlobal("URL", { createObjectURL: objectUrl, revokeObjectURL });
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {}); open(); fireEvent.click(await screen.findByRole("button", { name: "Download Snapshot" }));
     await waitFor(() => expect(objectUrl).toHaveBeenCalled()); const blob = objectUrl.mock.calls[0]?.[0]; if (!blob) throw new Error("No download");
     const content = await new Promise<string>((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.readAsText(blob); });
-    expect(JSON.parse(content)).toEqual({ files: [{ size: "3" }], created_by: "admin-principal" }); expect(click).toHaveBeenCalled(); click.mockRestore();
+    expect(JSON.parse(content)).toEqual({ files: [{ size: "3" }], created_by: "admin-principal" }); expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:backup");
   });
   it("exports an admin domain as JSON and revokes its download URL", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const createObjectURL = vi.fn(() => "blob:domain-export");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
@@ -68,8 +81,10 @@ describe("ICP vault metadata backup administration", () => {
 
     await waitFor(() => expect(m.exportDomain).toHaveBeenCalledWith({}, "club_domain"));
     expect(createObjectURL).toHaveBeenCalledOnce();
-    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledOnce(), { timeout: 6_000 });
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:domain-export");
     expect(m.success).toHaveBeenCalledWith("Export downloaded");
-    click.mockRestore();
-  }, 7_000);
+    expect(click).toHaveBeenCalledOnce();
+  });
 });
