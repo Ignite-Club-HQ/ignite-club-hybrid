@@ -12,7 +12,7 @@ import { loadOperatorIdentity } from '../src/live/operatorTransport';
 import { mainnetInstallCalls } from '../src/live/icpInstallCalls';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
-import { approveTest, assertResume, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
+import { approveTest, assertResume, isUnpaidAttempt, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
 import { createJournalApi } from './media-stage-two-github.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -51,9 +51,16 @@ let sha: string | undefined;
 let state: any = { binding, phase: 'approved', pending: null, receipts: [], objects: {} };
 if (entries.tree.some((e: any) => e.path === file)) {
   const r = readJournal(file); sha = r.sha;
-  state = JSON.parse(r.text); assertResume(state, binding);
-  if (state.phase !== 'complete') throw new Error('Interrupted test requires operator reconciliation; use a new id only after accounting for the old target');
-  console.log(`Already complete: ${state.canisterId}`); process.exit(0);
+  const saved = JSON.parse(r.text);
+  if (isUnpaidAttempt(saved)) {
+    // Earlier attempt stopped before creation (e.g. unfunded deploy account): nothing was paid, restart cleanly.
+    console.log(`Earlier attempt of ${binding.runId} never created a canister (${saved.error ?? 'no error recorded'}); restarting.`);
+    state.previousUnpaidAttempts = [...(saved.previousUnpaidAttempts ?? []), { error: saved.error ?? null, binding: saved.binding }];
+  } else {
+    state = saved; assertResume(state, binding);
+    if (state.phase !== 'complete') throw new Error('Interrupted test requires operator reconciliation; use a new id only after accounting for the old target');
+    console.log(`Already complete: ${state.canisterId}`); process.exit(0);
+  }
 }
 async function save() {
   const text = json(state) + '\n';
@@ -131,10 +138,13 @@ async function verify(path: string) {
     assert.ok(p.body.length <= CHUNK); digest.update(Buffer.from(p.body)); length += p.body.length; token = p.token[0]; }
   assert.equal(length, f.size); assert.equal(digest.digest('hex'), f.hash); reads.push(performance.now() - started);
 }
+const funding = BigInt(binding.budgetCycles) - LEDGER_FEE;
+const available = await calls.cyclesBalance();
+// Checked before any journal write so an unfunded attempt leaves no record blocking the same id.
+if (available < BigInt(binding.budgetCycles)) throw new Error(`Deploy identity holds ${available} cycles; needs ${binding.budgetCycles} (approved funding plus ledger fee). Fund it, then re-run with the same id.`);
+console.log(`Deploy identity balance ${available} cycles covers approved ${binding.budgetCycles}.`);
 try {
   await save();
-  const funding = BigInt(binding.budgetCycles) - LEDGER_FEE;
-  if (await calls.cyclesBalance() < BigInt(binding.budgetCycles)) throw new Error('Deploy identity lacks approved funding plus ledger fee');
   await phase('create', async () => {
     state.createdAtNs = (BigInt(Date.now()) * 1_000_000n).toString(); await save();
     const r = await calls.createCanister({ createdAtNs: BigInt(state.createdAtNs), amount: funding, subnetId: binding.subnetId, controllers: [binding.governor] });
