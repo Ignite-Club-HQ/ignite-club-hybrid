@@ -58,6 +58,15 @@ Stable.release(pending, first);
 let ?retry = Stable.reserveWithin(pending, 100_000, 262_144) else { assert false; loop {} };
 assert retry.offset == first.offset;
 assert Stable.read(pending, second, 0, payload.size()) == payload;
+assert Stable.allocatableRoots(pending, 262_144) == 0;
+let roots : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
+assert Stable.allocatableRoots(roots, 33_554_432) == 2;
+let ?tiny = Stable.reserveWithin(roots, 1, 33_554_432) else { assert false; loop {} };
+// Tiny occupancy fragments one entire root; spare small bytes aren't a root.
+assert Stable.allocatableRoots(roots, 33_554_432) == 1;
+Stable.release(roots, tiny);
+// End alignment conservatively strands the first root until buddy proof exists.
+assert Stable.allocatableRoots(roots, 33_554_432) == 1;
 // Reducing a cap cannot reuse a free extent beyond the new cap.
 Stable.release(pending, second);
 assert Stable.reserveWithin(pending, 100_000, 131_072) == null;
