@@ -5540,6 +5540,11 @@ persistent actor class Main(governorInit : Principal) = this {
     let club = segments[1];
     if (not profiles.any(func(p) = p.id == club) or not path.startsWith(#text("clubs/" # club # "/"))) return #Err("Unknown club path");
     let pro = clubSubscriptions.any(func(s) = s.club_id == club and (s.is_pro or s.admin_pro_override or s.is_pro_football or s.admin_pro_football_override or s.is_trial));
+    if (growthRehearsal) {
+      let usage = MediaRetainedQuota.usage(mediaRetainedState.ledger, club);
+      let commitment = mediaGrowthState.commitments.get(club) ?? 0;
+      if (not mediaGrowthState.configured or (usage.finalized + usage.pending + bytes) * 2 > commitment) return #Err("Reserved club growth exhausted")
+    };
     MediaRetainedQuota.reserve(mediaRetainedState.ledger, caller, token, club, path, bytes, pro, clubStorageGb(club).toNat())
   };
   public shared ({ caller }) func commit_retained_media(token : Text) : async MediaRetainedQuota.Result {

@@ -355,8 +355,9 @@ persistent actor MediaBlobStore {
             case null #Ok;
             case (?latest) {
               if (latest.token != original.token or not latest.removed) return #Err("Deletion receipt changed");
-              switch (await (with timeout = 10) service.acknowledge_retained_media(original.token)) { case (#Err(message)) return #Err(message); case (#Ok) {} };
-              retained_deletions.remove(path); bumpInventory(); #Ok
+              if (original.token.startsWith(#text "r1:")) { switch (await (with timeout = 10) service.acknowledge_retained_media(original.token)) { case (#Err(message)) return #Err(message); case (#Ok) {} } };
+              switch (retained_deletions.get(path)) { case (?current) { if (current.token == original.token) retained_deletions.remove(path) }; case null {} };
+              bumpInventory(); #Ok
             }
           }
         }
@@ -481,6 +482,9 @@ persistent actor MediaBlobStore {
     for (id in ids.values()) {
       switch (quota_operations.get(id)) {
         case (?op) {
+          if (retained_mode == #active and (op.status == #committed or op.status == #aborted) and id.startsWith(#text "r1:")) {
+            switch (retainedService()) { case (?retained) { ignore await retained.acknowledge_retained_media(id); attempted += 1 }; case null {} }
+          };
           if (op.status == #committing) { ignore await commitShared(id); attempted += 1 };
           if (op.status == #aborting) { ignore await abortShared(id); attempted += 1 };
           if (op.status == #reserving) {
