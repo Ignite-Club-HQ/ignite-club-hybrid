@@ -1107,7 +1107,11 @@
     "to": "dfd4ab701b82e5e69ed4a4077d737d635ce33fc64faf766fecb4f9774da4a433",
     "status": "complete"
   },
-  "pendingRecoveryAbort": null,
+  "pendingRecoveryAbort": {
+    "id": "upload-260",
+    "path": "users/network-test/media-mixed-001/256",
+    "size": "8388608"
+  },
   "recoveredAborts": [
     {
       "id": "upload-259",
