@@ -3,6 +3,8 @@ import Retained "../src/mediaRetainedQuota";
 import Monthly "../src/mediaQuota";
 import Token "../../shared/MediaJournalToken";
 import Principal "mo:core/Principal";
+import Nat "mo:core/Nat";
+import Text "mo:core/Text";
 let store = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
 let ledger = Retained.empty(); let monthly = Monthly.empty(); let state = Retirement.empty();
 assert Retained.register(ledger, store); assert Retained.seal(ledger, store);
