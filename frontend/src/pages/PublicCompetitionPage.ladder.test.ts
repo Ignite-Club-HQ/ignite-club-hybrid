@@ -23,6 +23,16 @@ describe("computeLiveLadder (ICP public competition page)", () => {
     expect(away).toMatchObject({ played: 1, losses: 1, points: 0, goalDiff: -1 });
   });
 
+  it("excludes masked scores without changing configured points for visible results", () => {
+    const rows = computeLiveLadder([
+      match({ home_score: null, away_score: null }),
+      match({ home_team: "Visible", away_team: "Opponent", home_score: 2, away_score: 1 }),
+    ], 7, 4, 2);
+    expect(rows.map(r => r.team)).not.toContain("Home");
+    expect(rows.find(r => r.team === "Visible")).toMatchObject({ played: 1, points: 7 });
+    expect(rows.find(r => r.team === "Opponent")).toMatchObject({ played: 1, points: 2 });
+  });
+
   it("splits points on a draw", () => {
     const rows = computeLiveLadder([match({ home_score: 1, away_score: 1 })], 3, 1, 0);
     expect(rows.every((r) => r.draws === 1 && r.points === 1)).toBe(true);

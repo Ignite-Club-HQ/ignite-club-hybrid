@@ -17,6 +17,7 @@ import Iter "mo:core/Iter";
 import Types "types";
 import Welcome "welcomeSettings";
 import ScorePrivacy "scorePrivacy";
+import ClubSnapshot "clubSnapshot";
 
 persistent actor class Main(governorInit : Principal) {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -171,7 +172,7 @@ persistent actor class Main(governorInit : Principal) {
   };
   func compFenced(id : Text) : Bool = transferFences.size() > 0 and competitions.any(func(x) = x.id == id and isFenced(x.club_id));
   func matchFenced(id : Text) : Bool = transferFences.size() > 0 and matches.any(func(x) = x.id == id and compFenced(x.competition_id));
-  type FenceSnapshot = { score_privacy : ?[ScorePrivacy.Setting]; competitions : [Types.Competition]; roles : [Types.RoleGrant]; entries : [Types.TeamEntry]; tokens : [Types.JoinToken]; seasons : [Types.Season]; matches : [Types.Match]; chat_settings : [Types.ChatSettings]; welcome : [Welcome.Settings]; invites : [Types.CompetitionInvite]; join_links : [Types.CompetitionJoinLink]; official_invites : [Types.CompetitionOfficialEmailInvite]; welcome_jobs : [Types.CompetitionWelcomeJob]; eoi : [Types.EoiSubmission]; divisions : [Types.DivisionSetting]; ladders : [Types.CompetitionLadderSetting]; broadcasts : [Types.Broadcast]; owners : [(Text, Principal)]; role_links : [Types.RoleLink]; official_chats : [Types.OfficialChat] };
+  type FenceSnapshot = ClubSnapshot.FenceSnapshot;
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
