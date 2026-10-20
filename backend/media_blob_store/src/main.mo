@@ -1357,7 +1357,7 @@ persistent actor MediaBlobStore {
   public shared ({ caller }) func set_capacity_limit(limit_bytes : Nat64) : async Result {
     auth(caller);
     if (not isGovernor<system>(caller)) return #Err("Governor required");
-    if (limit_bytes > UploadPolicy.ceilingFor(largeMode())) return #Err(if (largeMode()) "Store capacity cannot exceed 32 GiB" else "Heap-backed store capacity cannot exceed 2 GiB");
+    if (limit_bytes > UploadPolicy.ceilingFor(largeMode())) return #Err(if (largeMode()) "Store capacity cannot exceed 64 GiB" else "Heap-backed store capacity cannot exceed 2 GiB");
     capacity_limit_bytes := limit_bytes;
     #Ok
   };

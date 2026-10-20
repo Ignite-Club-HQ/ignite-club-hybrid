@@ -12,10 +12,11 @@ test('enlargement confirmation accepts surrounding whitespace but requires the e
   }
 });
 
-test('sizes are whole GB within the 32 GB store ceiling', () => {
+test('sizes are whole GiB within the 64 GiB configured ceiling', () => {
   assert.equal(capacityBytesFor('10'), 10_737_418_240n);
   assert.equal(capacityBytesFor('32'), 34_359_738_368n);
-  assert.throws(() => capacityBytesFor('33'));
+  assert.equal(capacityBytesFor('64'), 68_719_476_736n);
+  assert.throws(() => capacityBytesFor('65'));
   assert.throws(() => capacityBytesFor('2'));
   assert.throws(() => capacityBytesFor('5.5'));
 });

@@ -31,9 +31,15 @@ assert Policy.withinProMediaAllowance(5_368_709_119, 0, 1, 0);
 assert not Policy.withinProMediaAllowance(5_368_709_119, 1, 1, 0);
 assert Policy.withinProMediaAllowance(6_442_450_944, 0, 0, 1);
 assert not Policy.withinProMediaAllowance(6_442_450_944, 0, 1, 1);
-// Large capacity is opt-in: default ceiling unchanged, large mode 32 GiB.
+// Large capacity is opt-in: default ceiling unchanged, large mode 64 GiB.
 assert Policy.effectiveCapacityFor(42_949_672_960, false) == 2_147_483_648;
-assert Policy.effectiveCapacityFor(42_949_672_960, true) == 34_359_738_368;
+assert Policy.effectiveCapacityFor(42_949_672_960, true) == 42_949_672_960;
+assert Policy.ceilingFor(true) == 68_719_476_736;
+assert Policy.effectiveCapacityFor(68_719_476_737, true) == 68_719_476_736;
+assert Policy.thresholdFor(68_719_476_736, true) == 54_975_581_388;
+assert Policy.canAdmitFor(68_719_476_736, 54_975_581_387, 0, 1, 0, true);
+assert not Policy.canAdmitFor(68_719_476_736, 54_975_581_387, 1, 1, 0, true);
+assert not Policy.canAdmitFor(68_719_476_736, 54_975_581_388, 0, 1, 0, true);
 assert Policy.thresholdFor(34_359_738_368, true) == 27_487_790_694;
 assert Policy.canAdmitFor(34_359_738_368, 20_000_000_000, 0, 1_000, 0, true);
 assert not Policy.canAdmitFor(34_359_738_368, 20_000_000_000, 0, 1_000, 0, false);
