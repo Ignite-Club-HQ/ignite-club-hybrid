@@ -790,7 +790,7 @@ persistent actor MediaBlobStore {
   };
 
   func canReserve(size : Nat64) : Bool {
-    UploadPolicy.canAdmitFor(Nat64.fromNat(Nat.min(capacity_limit_bytes.toNat(), 68_719_476_736)), total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
+    UploadPolicy.canAdmitFor(capacity_limit_bytes, total_bytes, reservedBytes(), size, PrimMem.rts_heap_size(), largeMode()) and
     // Removing the local flag with pending extents must fail closed, not
     // silently allocate a second slice for an already reserved upload.
     (physicalReservationRehearsal or upload_slots.size() == 0) and

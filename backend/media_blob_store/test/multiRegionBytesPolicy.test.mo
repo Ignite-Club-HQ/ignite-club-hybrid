@@ -1,0 +1,14 @@
+import Multi "../src/multiRegionBytes";
+assert Multi.targetBytes == 536_870_912_000;
+assert Multi.bankBytes == 68_719_476_736;
+assert Multi.maxBanks == 8;
+assert Multi.runtimeBytes == 214_748_364_800;
+assert Multi.address(0, 65_536) == ?(0, 0);
+assert Multi.address(68_719_476_736, 65_536) == ?(1, 0);
+assert Multi.address(536_870_846_464, 65_536) == ?(7, 55_834_509_312);
+assert Multi.address(536_870_912_000, 65_536) == null;
+assert Multi.address(68_719_411_200, 131_072) == null;
+assert Multi.address(18_446_744_073_709_551_615, 65_536) == null;
+assert Multi.bankCapacity(8, 536_870_912_000) == 0;
+assert Multi.bankCapacity(7, 536_870_912_000) == 55_834_574_848;
+assert Multi.bankCapacity(0, 1_073_741_824) == 1_073_741_824;
