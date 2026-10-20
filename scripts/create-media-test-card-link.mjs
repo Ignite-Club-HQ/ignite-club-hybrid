@@ -96,8 +96,8 @@ if (plan.shortfallCycles === '0') {
   }
   state.balanceAfter = balance().toString();
   state.testReady = BigInt(state.balanceAfter) >= BigInt(plan.targetCycles); save();
-  summary(state.testReady ? `Balance verified: ${state.balanceAfter} cycles. Start the ${plan.scenario} test separately with ID ${plan.testId} and the same funding ceiling.`
-    : `Balance verified: ${state.balanceAfter} cycles, still below the test target. No test started; review delivered amount before authorizing another purchase.`);
+  summary(state.testReady ? `Balance verified: ${state.balanceAfter} cycles.${infrastructure ? ' Continue with the approved funding purpose below.' : ` Start the ${plan.scenario} test separately with ID ${plan.testId} and the same funding ceiling.`}`
+    : `Balance verified: ${state.balanceAfter} cycles, still below the target. No further operation started; review delivered amount before authorizing another purchase.`);
 }
 if (infrastructure) {
   if (balance() < BigInt(plan.targetCycles)) throw new Error('Insufficient delivered cycles; no further operation started');
