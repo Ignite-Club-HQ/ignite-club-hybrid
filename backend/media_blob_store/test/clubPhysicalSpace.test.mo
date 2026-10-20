@@ -4,6 +4,7 @@ import Stable "../src/stableBytes";
 import Region "mo:core/Region";
 import Map "mo:core/Map";
 import Blob "mo:core/Blob";
+import Text "mo:core/Text";
 persistent actor {
   let global : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
   let spaces = Space.empty();
