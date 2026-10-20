@@ -1,0 +1,18 @@
+{
+  "binding": {
+    "version": 1,
+    "runId": "media-tiny-001",
+    "scenario": "tiny",
+    "governor": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+    "wasmSha256": "dfd4ab701b82e5e69ed4a4077d737d635ce33fc64faf766fecb4f9774da4a433",
+    "network": "ic",
+    "host": "https://icp-api.io",
+    "budgetCycles": "3000000000000",
+    "capacityBytes": 536870912
+  },
+  "phase": "approved",
+  "pending": null,
+  "receipts": [],
+  "objects": {}
+}
