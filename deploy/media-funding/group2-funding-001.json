@@ -1,0 +1,17 @@
+{
+  "plan": {
+    "paymentId": "group2-funding-001",
+    "purpose": "new-group",
+    "groupId": "g2",
+    "principal": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "scenario": "new-group",
+    "testId": "g2",
+    "targetCycles": "20800000000000",
+    "balanceBefore": "2107078134272",
+    "shortfallCycles": "18692921865728",
+    "topups": [],
+    "feeCycles": "0"
+  },
+  "phase": "creating-order",
+  "createdAt": "2026-10-20T12:14:13.129Z"
+}
