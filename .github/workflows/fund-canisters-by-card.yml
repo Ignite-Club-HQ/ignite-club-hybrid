@@ -1,0 +1,82 @@
+name: Fund canisters or new group by card
+
+on:
+  workflow_dispatch:
+    inputs:
+      payment_id:
+        description: 'Unique payment ID, e.g. card-topup-001; never repeat an order'
+        required: true
+      purpose:
+        description: 'Top-ups deposit fuel after payment; new-group only funds the deploy account'
+        type: choice
+        options: [top-ups, new-group]
+        default: top-ups
+      group_id:
+        description: 'g1 for live canisters; saved group for top-ups; unused group ID for creation funding'
+        required: true
+        default: g1
+      target_t:
+        description: 'Top-ups: bring canisters under 1T toward this fuel balance (1–20T); ignored for new-group'
+        required: true
+        default: '3'
+      confirm:
+        description: 'Type CREATE CARD LINK; authorizes listed top-ups after payment, never group installation'
+        required: true
+
+permissions:
+  contents: write
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+
+jobs:
+  funding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Verify funding safeguards
+        run: node --test scripts/media-card-funding-policy.test.mjs scripts/media-card-funding-workflow.test.mjs scripts/infrastructure-card-funding-policy.test.mjs scripts/infrastructure-card-funding-workflow.test.mjs frontend/scripts/media-stage-two-github.test.mjs
+      - name: Install pinned card-capable CLI
+        run: |
+          npm install -g @icp-sdk/icp-cli@1.7.0 --no-fund --no-audit
+          icp cycles buy --help > /dev/null
+          icp canister top-up --help > /dev/null
+      - name: Create payment link, wait and apply approved top-ups (open this log)
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          ICP_HOME: ${{ runner.temp }}/infrastructure-card-identity
+          GH_TOKEN: ${{ github.token }}
+          PAYMENT_ID: ${{ inputs.payment_id }}
+          FUNDING_PURPOSE: ${{ inputs.purpose }}
+          FUNDING_GROUP_ID: ${{ inputs.group_id }}
+          TOPUP_TARGET_T: ${{ inputs.target_t }}
+          CARD_CONFIRM: ${{ inputs.confirm }}
+          FUNDING_REPORT_DIR: ${{ runner.temp }}/infrastructure-card-report
+          DO_NOT_TRACK: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$DEPLOYER_PEM"
+          mkdir -p "$ICP_HOME"
+          trap 'rm -rf "$ICP_HOME"' EXIT
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$ICP_HOME/operator.pem"
+          icp identity import --from-pem "$ICP_HOME/operator.pem" --storage plaintext ignite-card-deployer
+          unset DEPLOYER_PEM
+          cd "$RUNNER_TEMP"
+          node "$GITHUB_WORKSPACE/scripts/create-media-test-card-link.mjs"
+      - name: Remove temporary identity
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/infrastructure-card-identity"
+      - name: Save funding and top-up evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-card-${{ inputs.payment_id }}
+          path: ${{ runner.temp }}/infrastructure-card-report/
+          if-no-files-found: warn
+          retention-days: 90
