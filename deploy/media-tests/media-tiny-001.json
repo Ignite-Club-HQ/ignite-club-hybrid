@@ -17756,7 +17756,7 @@
   },
   "error": "Fuel safety floor reached (1.71T left, 0.46T frozen reserve); no automatic top-up",
   "removal": {
-    "phase": "removing",
-    "at": "2026-10-20T18:48:19.546Z"
+    "phase": "removed",
+    "at": "2026-10-20T18:48:35.886Z"
   }
 }
