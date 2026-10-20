@@ -1,0 +1,56 @@
+name: Remove paid photo-store test stores
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_ids:
+        description: 'Test ids to remove, comma separated'
+        required: true
+        default: 'media-mixed-001,media-tiny-001'
+      confirm:
+        description: 'Type DELETE TEST STORES (test stores only; leftover fuel returns to the deploy key)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: '[[ "$CONFIRM" == "DELETE TEST STORES" ]]'
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Safety checks
+        run: node --test scripts/remove-media-test-stores-policy.test.mjs
+      - name: Install pinned ICP tool
+        run: npm install -g @icp-sdk/icp-cli@1.7.0 --no-fund --no-audit
+      - name: Load deploy key
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM" || { echo '::error::DEPLOYER_PEM secret missing'; exit 1; }
+          umask 077
+          PEM_FILE="$RUNNER_TEMP/remove-operator.pem"
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$PEM_FILE"
+          icp identity import --from-pem "$PEM_FILE" --storage plaintext ignite-test-remover
+          icp identity default ignite-test-remover
+          rm -f "$PEM_FILE"
+      - name: Remove test stores
+        env:
+          REMOVE_RUN_IDS: ${{ inputs.run_ids }}
+          REMOVE_CONFIRM: ${{ inputs.confirm }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/remove-media-test-stores.mjs
