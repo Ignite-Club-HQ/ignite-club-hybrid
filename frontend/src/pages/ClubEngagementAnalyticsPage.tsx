@@ -1,3 +1,4 @@
+import { countCompletedMatches } from "@/lib/competitionResultsMetric";
 import { acrossLists } from "@/live/featureScopes";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -1810,7 +1811,7 @@ function CompetitionPanel({ competitions, range }: { competitions: { id: string;
                     (e: any) => e.status === "accepted" || e.status === "registered",
                   ).length,
                   totalMatches: compMatches.length,
-                  resultsEntered: compMatches.filter((m: any) => m.status === "completed").length,
+                  resultsEntered: countCompletedMatches(compMatches as any[]),
                   broadcasts: compBroadcasts.filter((b: any) => {
                     const t = Number(b.created_at_ms);
                     return t >= startMs && t <= endMs;
@@ -1850,7 +1851,7 @@ function CompetitionPanel({ competitions, range }: { competitions: { id: string;
       ]);
       const totalMatches = matches.data?.length || 0;
       // Canonical: a result counts only when the match status is "completed".
-      const completed = (matches.data || []).filter((m: any) => m.status === "completed").length;
+      const completed = countCompletedMatches(matches.data as any[]);
       return {
         activeTeams: entries.count || 0,
         totalMatches,
