@@ -4,10 +4,11 @@ import Nat "mo:core/Nat";
 import Nat64 "mo:core/Nat64";
 import Region "mo:core/Region";
 import Blob "mo:core/Blob";
+import Text "mo:core/Text";
 module {
   public let pageBytes : Nat = 65_536;
   public type Handle = { generation : Nat; page : Nat64; offset : Nat; length : Nat; slot : Nat };
-  public type Page = { allocation : Space.Allocation; free : Map.Map<Nat, Map.Map<Nat, ()>>; live : Map.Map<Nat, Handle> };
+  public type Page = { allocation : Space.Allocation; free : Map.Map<Nat, Map.Map<Nat, ()>>; live : Map.Map<Nat, Handle>; written : Map.Map<Nat, Nat> };
   public type State = { space : Space.State; club : Text; pages : Map.Map<Nat64, Page>; var nextGeneration : Nat };
   public func empty(space : Space.State, club : Text) : State {
     { space; club; pages = Map.empty(); var nextGeneration = 0 }
@@ -59,15 +60,16 @@ module {
       case (?row) row;
       case null {
         let ?allocation = Space.reserve(state.space, state.club, pageBytes) else return null;
-        let page : Page = { allocation; free = Map.empty(); live = Map.empty() };
+        let page : Page = { allocation; free = Map.empty(); live = Map.empty(); written = Map.empty() };
         addFree(page, pageBytes, 0);
-        let ?offset = takeFree(page, slot) else return null;
+        let ?offset = takeFree(page, slot) else { Space.release(state.space, state.club, allocation); return null };
         let id = allocation.slice.offset;
         state.pages.add(id, page);
         (id, page, offset)
       }
     };
-    state.nextGeneration += 1;
+    state.space.nextGeneration += 1;
+    state.nextGeneration := state.space.nextGeneration;
     let handle = { generation = state.nextGeneration; page = id; offset; length; slot };
     page.live.add(offset, handle); ?handle
   };
@@ -83,16 +85,19 @@ module {
     if (bytes.size() != handle.length) return false;
     let ?page = owned(state, handle) else return false;
     Region.storeBlob(state.space.store.region, page.allocation.slice.offset + handle.offset.toNat64(), bytes);
+    page.written.add(handle.offset, handle.generation);
     true
   };
   public func read(state : State, handle : Handle, offset : Nat, requested : Nat) : Blob {
     let ?page = owned(state, handle) else return "";
+    if (page.written.get(handle.offset) != ?handle.generation) return "";
     if (offset >= handle.length) return "";
     Region.loadBlob(state.space.store.region, page.allocation.slice.offset + (handle.offset + offset).toNat64(), Nat.min(requested, handle.length - offset))
   };
   public func release(state : State, handle : Handle) {
     let ?page = owned(state, handle) else return;
     page.live.remove(handle.offset);
+    page.written.remove(handle.offset);
     var size = handle.slot;
     var offset = handle.offset;
     while (size < pageBytes) {
