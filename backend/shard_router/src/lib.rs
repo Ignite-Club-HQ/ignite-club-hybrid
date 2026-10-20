@@ -729,7 +729,7 @@ fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
     if current_revision() != expected_revision { return Err("Revision conflict".into()); }
     let prior = group_for(&group.id);
     if let Some(ref old) = prior {
-        if old.target_alias != group.target_alias || old.domains != group.domains {
+        if old.target_alias != group.target_alias || old.domains != group.domains || (growth_budget(&group.id).is_some() && old.photo_store != group.photo_store) {
             return Err("Group endpoints are immutable; register a new group".into());
         }
         group.assigned_clubs = old.assigned_clubs;

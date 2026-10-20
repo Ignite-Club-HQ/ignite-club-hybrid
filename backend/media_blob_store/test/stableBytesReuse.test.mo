@@ -38,7 +38,7 @@ assert Stable.read(store, reused, 0, cap) == large;
 assert not Stable.canAllocateWithin(store, 16_777_217, 34_359_738_368);
 // Old free extents may be page-aligned but cross a buddy boundary.
 let legacy : Stable.Store = { region = Region.new(); var end = 393_216; free = Map.empty() };
-let holes = Map.empty<Nat64, ()>(); holes.add(65_536, ()); holes.add(196_608, ());
+let holes = Map.empty<Nat64, ()>(); holes.add(Nat64.fromNat(65_536), ()); holes.add(Nat64.fromNat(196_608), ());
 legacy.free.add(131_072, holes);
 // Releasing an unaligned old extent must never manufacture an overlapping
 // 256 KiB slot from those two extents.
