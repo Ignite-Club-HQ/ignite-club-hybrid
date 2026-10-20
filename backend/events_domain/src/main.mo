@@ -2380,6 +2380,21 @@ persistent actor class Main(governorInit : Principal) {
       case null return #Err("Event not found"); case (?e) e
     };
     if (not manages(caller,event) or eventFenced(event_id)) return #Err("Game result management forbidden");
+    // Removing a competition's mirrored History is also a result mutation.
+    let authority = competitionDomainCanister;
+    for (operation in competitionEventOperations.values()) {
+      if (operation.event_ids.any(func(id) = id == event_id)) {
+        let configured = switch (authority) { case null return #Err("Competition authority unavailable"); case (?id) id };
+        let team = switch (event.team_id) { case null return #Err("Competition team missing"); case (?id) id };
+        let competition : actor { read_history_score_access : shared (Text,Text,Nat64,Principal,Bool) -> async { #Ok : Bool; #Err : Text } } = actor (configured.toText());
+        try {
+          switch (await (with timeout = 10) competition.read_history_score_access(operation.competition_id,team,event.starts_at_ms,caller,true)) {
+            case (#Ok(true)) {}; case _ return #Err("Competition manager required")
+          }
+        } catch (_) { return #Err("Competition authority unavailable") };
+      }
+    };
+    if (authority != competitionDomainCanister or eventFenced(event_id)) return #Err("Game authority changed or locked");
     gameResults := gameResults.filter(func(row) = row.event_id != ?event_id);
     #Ok
   };

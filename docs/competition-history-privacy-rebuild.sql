@@ -49,6 +49,20 @@ $$;
 REVOKE ALL ON FUNCTION public.can_read_history_row(uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.can_read_history_row(uuid,uuid) TO authenticated;
 
+CREATE OR REPLACE FUNCTION public.mask_history_players(p_players jsonb)
+RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path=public AS $$
+ SELECT coalesce(jsonb_agg(safe),'[]'::jsonb) FROM (
+  SELECT coalesce(jsonb_object_agg(k,v) FILTER (WHERE k IN
+   ('id','name','secondsPlayed','finalPosition','fouls','isFouledOut','isInjured','yellow','red','award')
+   AND jsonb_typeof(v) NOT IN ('array','object')),'{}'::jsonb) AS safe
+  FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p_players)='array' THEN p_players ELSE '[]'::jsonb END)
+   WITH ORDINALITY AS player(value,position)
+  CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(player.value)='object' THEN player.value ELSE '{}'::jsonb END) AS fields(k,v)
+  GROUP BY player.position ORDER BY player.position
+ ) bounded
+$$;
+REVOKE ALL ON FUNCTION public.mask_history_players(jsonb) FROM PUBLIC;
+
 -- No hidden score copy in the broadly visible events row. The result DTO
 -- overlays authorized canonical scores for calendar/History readers instead.
 CREATE OR REPLACE FUNCTION public.read_game_history(
@@ -64,7 +78,7 @@ CREATE OR REPLACE FUNCTION public.read_game_history(
       CASE WHEN e.competition_side='away' THEN r.home_score ELSE r.away_score END,gr.away_score) END,
     'scores_hidden',NOT public.history_scores_visible(gr.event_id),
     'period_scores',CASE WHEN public.history_scores_visible(gr.event_id) THEN gr.period_scores ELSE '[]'::jsonb END,
-    'player_stats',CASE WHEN public.history_scores_visible(gr.event_id) THEN gr.player_stats ELSE '[]'::jsonb END,
+    'player_stats',CASE WHEN public.history_scores_visible(gr.event_id) THEN gr.player_stats ELSE public.mask_history_players(gr.player_stats) END,
     'notes',CASE WHEN public.history_scores_visible(gr.event_id) THEN gr.notes ELSE NULL END,
     'events',CASE WHEN e.id IS NOT NULL THEN jsonb_build_object('id',e.id,'title',e.title,'start_time',e.start_time) END,
     'teams',jsonb_build_object('id',t.id,'name',t.name)
