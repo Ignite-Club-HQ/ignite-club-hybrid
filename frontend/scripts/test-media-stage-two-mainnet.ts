@@ -2,7 +2,6 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { gunzipSync } from 'node:zlib';
 import assert from 'node:assert/strict';
@@ -14,6 +13,7 @@ import { mainnetInstallCalls } from '../src/live/icpInstallCalls';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 import { approveTest, assertResume, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
+import { createJournalApi } from './media-stage-two-github.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const identity = loadOperatorIdentity(process.env.OPERATOR_PEM_PATH ?? '');
@@ -31,13 +31,7 @@ const file = `deploy/media-tests/${binding.runId}.json`;
 const out = process.env.TEST_REPORT_DIR ?? '/tmp/media-stage-two';
 mkdirSync(out, { recursive: true });
 const json = (x: unknown) => JSON.stringify(x, (_k, v) => typeof v === 'bigint' ? v.toString() : v, 2);
-function api(path: string, method = 'GET', body?: unknown): any {
-  const args = ['api', `repos/${repo}/${path}`, '--method', method];
-  if (body) args.push('--input', '-');
-  const r = spawnSync('gh', args, { input: body ? json(body) : undefined, encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(`GitHub journal request failed (${method} ${path}); no paid replay permitted`);
-  return JSON.parse(r.stdout);
-}
+const api = createJournalApi(repo, json);
 function readJournal(path: string) {
   const entry = api(`contents/${path}?ref=${branch}`);
   // Contents responses omit inline content above 1 MiB; tiny-file evidence exceeds that.
