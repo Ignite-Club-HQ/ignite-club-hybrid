@@ -1,8 +1,9 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Current request — preserve History and PlayHQ under score privacy
-- [ ] Rebuild authorized History/calendar and PlayHQ reads in both modes without deleting history or globally disabling cache-backed screens.
-- [ ] Add role/visibility/data-preservation tests and run the affected suites in both modes.
+- [x] Initial History preservation batch: shared dual-mode History reader, nullable display, existing ICP competition-operation trusted privacy bridge, player/MVP metadata preservation and real two-actor tests. No release/complete-coverage claim.
+- [ ] Finish match-level ICP associations/PlayHQ stats, Supabase protected calendar/report/result saves and grade aggregate reconstruction; non-destructive SQL integration/application requires managed migration workflow and validation. No live changes authorized/performed.
+- [x] Add role/visibility/data-preservation tests and run affected suites in both modes; full authenticated UI and full-suite checks remain after integration.
 - [ ] Document the replacement SQL and remaining release prerequisites; no live database changes or deployment.
 
 - [x] Owner request 20 Oct 21:00 UTC — replacement assessment: latest released Motoko 2.0.0 and master retain the same 256 GiB shared table and lack an explicit aggregate-exhaustion check; direct source arithmetic/fingerprints and independent review agree. Evidence and exact custom-runtime requirements added to docs/media-multi-region-redesign-2026-10-20.md. No pin, capacity or live changes.

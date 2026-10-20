@@ -1,5 +1,30 @@
 # Competition score privacy — partial implementation
 
+## Current owner decision and rebuild status (20 October, 23:27 UTC)
+
+The owner rejected destructive History cleanup and global PlayHQ screen loss; preserve existing/future data and mask only protected scores in both modes. **Do not apply `20261103000000_competition_score_privacy.sql`: its destructive section is superseded in intent but remains in that staged file.** No migration was applied or deployed.
+
+Implemented this round:
+- Team History and Club Recent Games share a dual-mode repository and nullable results; masked scores are not presented as zero-score draws. Summary retains match/MVP information and suppresses protected scoring/export.
+- ICP events reads now refresh the original human's club access and consult the configured competition service for recorded competition-event operations. Stored GameResult schema/JSON remains unchanged; managers retain full detail, masked readers retain allowlisted player identity/time/position/discipline and MVP data, but not scores/quarter totals/scoring fields.
+- Added trusted-events-only competition score access; unauthorized service calls and mismatched result team writes fail closed. Existing unlinked/ambiguous competition-wide events do not guess division-show overrides.
+- Added protected game-player-stat reads and authorized History deletion. Calendar/report conversions preserve nullable scores rather than coercing null to zero.
+- Draft non-destructive SQL replacement is in `docs/competition-history-privacy-rebuild.sql`, outside managed migrations. It proposes restrictive History/cache policies, bounded original-human History DTOs, preserved JSON/MVP rows, and score-only fan-out. It is a design draft, not standalone executable rollout SQL and not semantically verified.
+
+Verification:
+- Affected frontend suites: Supabase 53 passed / 8 mode-specific skipped; ICP 39 passed / 22 mode-specific skipped. New repository/policy-value checks pass in both modes.
+- Motoko History masking test passes, both domain contracts compile, and 17-contract Candid drift passes.
+- Real two-production-actor PocketIC rehearsal passes manager/member/outsider reads, detailed-data retention, masked JSON/MVP, original-human service denial, visible score restoration, mismatched team refusal and unavailable-authority refusal. No full-suite rerun or authenticated production UI flow.
+
+Still open (not release-ready):
+- Integrate replacement SQL with the initial privacy migration through the managed migration workflow, removing deletion/write-rejection/global-revoke sections **before** any application; validate against actual schema/policies/triggers. Read-only live schema inspection this round confirmed connected DB still has legacy fixture scores and no result table; no writes were made.
+- Supabase calendar/result/report/save surfaces need the protected History DTO/atomic write path; the existing save hook still deliberately rejects competition History writes pending that path.
+- ICP needs a verified durable match-level association for every materialized fixture and PlayHQ import, not only existing competition-wide operation records, plus upgrade/transfer coverage. No claim of complete competition fixture History synchronization.
+- PlayHQ ICP player statistics remain an existing unsupported panel; on-chain stats import/storage/claims and frontend routing still need implementation. Supabase draft policies retain unaffected cache data and manager reads, but affected cached grade aggregates need reconstruction from authorized matches rather than withholding the whole grade.
+- Off-event/unlinked saved-game paging, role/privacy query-cache invalidation, raw pitch/summary scoring bypasses and full end-to-end checks remain part of the rebuild.
+
+No user acceptance of history deletion or globally disabled PlayHQ data is implied by prior notes below.
+
 ## Implemented
 - ICP: separate stable privacy settings, introduced by a new migration ordered after the existing chain; stored match types remain unchanged.
 - Manager-authorized setting writes using the competition settings manager check, live access refresh, and transfer fence.
