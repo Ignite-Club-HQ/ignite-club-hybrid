@@ -12,10 +12,7 @@
     "capacityBytes": 5368709120
   },
   "phase": "smoke",
-  "pending": {
-    "kind": "smoke",
-    "time": "2026-10-20T06:35:49.996Z"
-  },
+  "pending": null,
   "receipts": [
     {
       "phase": "create",
@@ -52,6 +49,15 @@
         }
       },
       "time": "2026-10-20T06:35:47.861Z"
+    },
+    {
+      "phase": "smoke",
+      "result": {
+        "hashReadback": true,
+        "unauthorizedDeleteDenied": true,
+        "abortVerified": true
+      },
+      "time": "2026-10-20T06:36:21.970Z"
     }
   ],
   "objects": {},
