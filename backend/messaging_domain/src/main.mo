@@ -1304,7 +1304,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   func fanOutWsPokeForMessage(msg : Types.Message) : async () {
-    await fanOutWsPoke(msg.conversation_id, msg.sequence);
+    if (not removalReceiver.enter(msg.sender)) return;
+    try { await fanOutWsPoke(msg.conversation_id, msg.sequence) }
+    finally { removalReceiver.leave(msg.sender) };
   };
 
   // Reactions mutate `reactions` without bumping the conversation sequence,
@@ -4963,6 +4965,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   };
   public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
-    removalReceiver.receipt(caller, request, Principal.fromActor(this), 0)
+    // Timer-originated sweeps remain conservative pending work; each outgoing
+    // reminder also has an original-subject hold through its queue reply.
+    removalReceiver.receipt(caller, request, Principal.fromActor(this), if (photoReminderSweepRunning) 1 else 0)
   };
 }

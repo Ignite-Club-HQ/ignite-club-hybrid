@@ -1,6 +1,8 @@
 // Local-only real old-module upgrade and original-human drain regression.
 // No deploy flags, production activation, external push or global completion.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
@@ -11,6 +13,9 @@ for (const key of ['IDENTITY_ACCESS_WASM', 'MESSAGING_BEFORE_WASM', 'MESSAGING_D
   assert.ok(process.env[key], `${key} required; never silently skip this proof`);
 }
 const p = n => Principal.fromUint8Array(Uint8Array.from([n, 1]));
+assert.equal(createHash('sha256').update(readFileSync(process.env.MESSAGING_BEFORE_WASM)).digest('hex'),
+  '96d673b043f531376c12a6e902b8f5b5de2aa27d551150b8cb96d262924d8a75',
+  'Upgrade proof requires the real pre-receiver module, not the updated actor twice');
 const governor = p(1), removed = p(2), survivor = p(3), stranger = p(4);
 const ok = r => { assert.ok('Ok' in r, String(r.Err)); return r.Ok; };
 const denied = async operation => {
