@@ -1,5 +1,8 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+- [x] Owner request 20 Oct 19:43 UTC: minimum local 64 GiB assessment complete—real sparse allocator tests across 32 GiB and near 64 GiB, bounded refusal/read/delete/reuse; 10 existing Motoko files plus new boundary fixture pass; actual current-store upgrade/pending/accounting and real combined Pro allowance checks pass; media/club compile. Production remains at 32 GiB; no candidate 64 GiB version or live change. Evidence: docs/media-minimum-64gib-validation-2026-10-20.md.
+- [ ] Small isolated live acceptance of a future 64 GiB candidate: blocked on reviewed ceiling/overhead changes, GitHub-held deploy identity and explicit deployment/funding approval; no paid full fill required.
+
 ## Current execution order — simplified scaling (19 October 2026, 08:50 UTC)
 
 ### Current priority — owner decision 20 October 2026, 02:14 UTC
