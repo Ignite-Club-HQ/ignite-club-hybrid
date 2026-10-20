@@ -12,7 +12,7 @@ import { loadOperatorIdentity } from '../src/live/operatorTransport';
 import { mainnetInstallCalls } from '../src/live/icpInstallCalls';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
-import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
+import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, isResumableFill, isTransientReject, assertTarget, assertFuel, environmentFor, LEDGER_FEE } from './media-stage-two-policy.mjs';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { DEPLOY_PRINCIPAL } from '../../scripts/media-card-funding-policy.mjs';
 
@@ -67,6 +67,10 @@ if (entries.tree.some((e: any) => e.path === file)) {
     // the exact target and only installs onto an empty module (or skips when the exact build is present).
     state = saved; state.pending = null; state.resumedInstall = new Date().toISOString();
     console.log(`Resuming ${binding.runId} at install on existing test store ${state.canisterId}`);
+  } else if (isResumableFill(saved, binding)) {
+    // Fill was cut off mid-way; the fill step reconciles every test path against the store before continuing.
+    state = saved; state.pending = null; state.resumedFill = [...(saved.resumedFill ?? []), { at: new Date().toISOString(), error: saved.error ?? null }];
+    delete state.error; console.log(`Resuming ${binding.runId} at fill on existing test store ${state.canisterId}`);
   } else {
     state = saved; assertResume(state, binding);
     if (state.phase !== 'complete') throw new Error('Interrupted test requires operator reconciliation; use a new id only after accounting for the old target');
@@ -133,11 +137,20 @@ const ok = (r: any) => { if (!('Ok' in r)) throw new Error(`Store refusal: ${jso
 const MiB = 1024 ** 2, CHUNK = 1_000_000;
 const uploads: number[] = [], reads: number[] = []; const refused: Record<string, number> = {};
 function total() { return Object.values(state.objects).reduce((s: number, f: any) => s + f.size, 0); }
+async function retry<T>(label: string, call: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try { return await call(); } catch (e) {
+      if (!isTransientReject(e) || attempt >= 8) throw e;
+      state.transientRejects = (state.transientRejects ?? 0) + 1;
+      console.log(`Store busy on ${label} (attempt ${attempt}); retrying`); await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
+  }
+}
 async function upload(path: string, size: number) {
   const bytes = Buffer.alloc(size, size % 251), started = performance.now();
-  const r = await a.begin_upload(path, 'application/octet-stream', BigInt(size), Math.ceil(size / CHUNK));
+  const r = await retry('begin_upload', () => a.begin_upload(path, 'application/octet-stream', BigInt(size), Math.ceil(size / CHUNK)));
   if ('Err' in r) { refused[r.Err] = (refused[r.Err] ?? 0) + 1; if (r.Err !== 'StoreFull') throw new Error(`Unexpected refusal: ${r.Err}`); return false; }
-  for (let i = 0; i < Math.ceil(size / CHUNK); i++) ok(await a.put_chunk(r.Ok, i, bytes.subarray(i * CHUNK, (i + 1) * CHUNK)));
+  for (let i = 0; i < Math.ceil(size / CHUNK); i++) ok(await retry('put_chunk', () => a.put_chunk(r.Ok, i, bytes.subarray(i * CHUNK, (i + 1) * CHUNK))));
   const final = await a.finalize_upload(r.Ok);
   if ('Err' in final) { ok(await a.abort_upload(r.Ok)); refused[final.Err] = (refused[final.Err] ?? 0) + 1; if (final.Err !== 'StoreFull') throw new Error(`Unexpected refusal: ${final.Err}`); return false; }
   assert.equal(final.Ok.content_hash, hash(bytes)); assert.equal(final.Ok.content_length, BigInt(size));
@@ -200,7 +213,24 @@ try {
     await phase('fill', async () => {
       const sizes = binding.scenario === 'tiny' ? [1024] : [MiB, 2 * MiB, 400 * 1024, 4 * MiB, 8 * MiB, 2 * MiB];
       const max = binding.scenario === 'tiny' ? 10000 : 4000; const start = performance.now(); let sawRefusal = false;
-      for (let i = 0; i < max; i += 4) {
+      let from = 0;
+      if (state.resumedFill?.length) {
+        // Rebuild the object list from the store itself: each deterministic path is present with the exact
+        // expected hash, or absent. Anything else, or a byte-total mismatch, stops for operator reconciliation.
+        const rebuilt: Record<string, any> = {}; let misses = 0;
+        for (let i = 0; i < max && misses < 16; i++) {
+          const size = sizes[i % sizes.length], h = await a.get_content_hash(prefix + i);
+          if (!h.length) { misses++; continue; }
+          const want = hash(Buffer.alloc(size, size % 251));
+          if (h[0] !== want) throw new Error(`Resume reconciliation: ${prefix + i} hash differs; operator reconciliation required`);
+          rebuilt[prefix + i] = { size, hash: want }; from = i + 1; misses = 0;
+        }
+        state.objects = rebuilt; from = Math.ceil(from / 4) * 4;
+        const stored = (await a.get_usage()).total_bytes;
+        if (stored !== BigInt(total())) throw new Error(`Resume reconciliation: store holds ${stored} bytes, paths account for ${total()}; operator reconciliation required`);
+        console.log(`Reconciled ${Object.keys(rebuilt).length} stored objects (${total()} bytes); continuing fill at ${from}`); await save();
+      }
+      for (let i = from; i < max; i += 4) {
         await fuel(); const results = await Promise.all(Array.from({ length: 4 }, (_, j) => upload(prefix + (i + j), sizes[(i + j) % sizes.length])));
         if (i % 200 === 0) { await save(); console.log(`Fill ${Object.keys(state.objects).length} objects, ${total()} bytes`); }
         if (results.every(x => !x)) { sawRefusal = true; break; }

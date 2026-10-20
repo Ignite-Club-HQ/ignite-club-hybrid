@@ -43,3 +43,19 @@ export function isResumableInstall(saved, binding) {
     && receipts.length === 1 && receipts[0].phase === 'create' && receipts[0].result?.canisterId === saved.canisterId
     && !Object.keys(saved.objects ?? {}).length;
 }
+
+// Stopped inside fill after create/install/configure/smoke were all recorded. Fill writes only
+// deterministic test paths, so a resume re-reads every path's hash from the store itself and
+// refuses to continue unless the store's own byte total matches that reconciliation exactly.
+export function isResumableFill(saved, binding) {
+  if (!saved || JSON.stringify(saved.binding) !== JSON.stringify(binding)) return false;
+  const phases = (saved.receipts ?? []).map(r => r.phase).join(',');
+  return saved.phase === 'fill' && saved.pending?.kind === 'fill' && typeof saved.canisterId === 'string'
+    && phases === 'create,install,configure-empty,smoke' && saved.receipts[0].result?.canisterId === saved.canisterId
+    && binding.scenario !== 'smoke';
+}
+// Rejections raised before the store ran the call (busy queue, failed self-call) change nothing and may be retried.
+export function isTransientReject(error) {
+  const t = String(error?.message ?? error);
+  return /IC0406|could not perform self call|IC0515|queue (is )?full|IC0207|out of cycles for/i.test(t) && !/IC0207/.test(t);
+}

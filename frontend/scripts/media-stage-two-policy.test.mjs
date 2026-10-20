@@ -50,3 +50,17 @@ test('only a created store stopped inside install may resume', async () => {
   assert.equal(isResumableInstall({ ...s, binding: { ...binding, budgetCycles: '9' } }, binding), false);
   assert.equal(isResumableInstall({ ...s, pending: { kind: 'create' }, phase: 'create', receipts: [] }, binding), false);
 });
+
+test('fill resumes only after every earlier phase is recorded on the same store', async () => {
+  const { isResumableFill, isTransientReject } = await import('./media-stage-two-policy.mjs');
+  const b = { runId: 'media-mixed-001', scenario: 'mixed' };
+  const receipts = ['create', 'install', 'configure-empty', 'smoke'].map(phase => ({ phase, result: phase === 'create' ? { canisterId: 'x-cai' } : {} }));
+  const s = { binding: b, phase: 'fill', pending: { kind: 'fill' }, canisterId: 'x-cai', receipts, objects: { a: 1 } };
+  assert.equal(isResumableFill(s, b), true);
+  assert.equal(isResumableFill({ ...s, receipts: receipts.slice(0, 3) }, b), false);
+  assert.equal(isResumableFill({ ...s, phase: 'churn', pending: { kind: 'churn' } }, b), false);
+  assert.equal(isResumableFill({ ...s, canisterId: 'y-cai' }, b), false);
+  assert.equal(isResumableFill(s, { ...b, budgetCycles: '9' }), false);
+  assert.equal(isTransientReject(new Error('Reject code: 4 could not perform self call Error code: IC0406')), true);
+  assert.equal(isTransientReject(new Error('Unexpected refusal: NotAuthorized')), false);
+});
