@@ -36,5 +36,14 @@ let ?reused = Stable.writeWithin(store, large, cap) else { assert false; loop {}
 assert reused.offset == 0 and store.end == 262_144;
 assert Stable.read(store, reused, 0, cap) == large;
 assert not Stable.canAllocateWithin(store, 16_777_217, 34_359_738_368);
+// Old free extents may be page-aligned but cross a buddy boundary.
+let legacy : Stable.Store = { region = Region.new(); var end = 393_216; free = Map.empty() };
+let holes = Map.empty<Nat64, ()>(); holes.add(65_536, ()); holes.add(196_608, ());
+legacy.free.add(131_072, holes);
+// Releasing an unaligned old extent must never manufacture an overlapping
+// 256 KiB slot from those two extents.
+Stable.release(legacy, { offset = 65_536; length = 1; slot = 131_072 });
+assert not Stable.canAllocateWithin(legacy, 200_000, 393_216);
+assert holes.size() == 2;
 };
 };

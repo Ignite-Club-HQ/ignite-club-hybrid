@@ -175,6 +175,9 @@ try {
  denied(await c.save_club_subscription({...subscription,is_pro:false,plan:'free'}));
  assert.equal(ok(await c.get_club_subscription('c'))[0].is_pro,true);
  await pic.startCanister({canisterId:router.canisterId,sender:governor});
+ ok(await c.save_club_subscription({...subscription,is_pro:false,plan:'free'}));
+ // A definite outage does not refund or duplicate commitments on retry.
+ assert.equal(ok(await c.get_club_subscription('c'))[0].is_pro,false);
  await pic.upgradeCanister({canisterId:router.canisterId,wasm:routerWasm,sender:governor});
  ok(await c.save_club_subscription(subscription));
  denied(await r.place_my_new_club('00000000-0000-4000-8000-000000000001','local'));
@@ -183,5 +186,9 @@ try {
  // Production installs cannot start retained cutover even as governor.
  const production=await pic.setupCanister({idlFactory:clubIdl,wasm:clubWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])}); production.actor.setPrincipal(governor); denied(await production.actor.start_media_retained_cutover());
  denied(await production.actor.configure_media_growth(overhead+base*4n,0n,1024n,[]));
+ denied(await production.actor.configure_media_growth_router(router.canisterId,'g','local'));
+ const productionRouter=await pic.setupCanister({idlFactory:routerIdl,wasm:routerWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor}])});
+ productionRouter.actor.setPrincipal(governor);
+ denied(await productionRouter.actor.configure_group_media_growth('g',100n,0n,1n,[],0n));
  console.log('PASS: authenticated exact two-store baseline, combined pending/retained accounting, branding, replacement, deletion preparation/outage/upgrade, commit recovery, free monthly limits, retention credits and production activation refusal.');
 } finally {await server.stop();}
