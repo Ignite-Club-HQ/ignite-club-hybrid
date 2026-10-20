@@ -208,6 +208,7 @@ try {
       await proof(candidateBinding.wasmSha256);
     } else {
       assert.equal(current, binding.wasmSha256, 'Unexpected recovery target module');
+      if (state.recoveryUpdate?.status === 'pending') throw new Error('Unresolved recovery upgrade; operator reconciliation required before retry');
       await fuel();
       state.recoveryUpdate = { from: binding.wasmSha256, to: candidateBinding.wasmSha256, status: 'pending' }; await save();
       if (wasm.length > 1_900_000) throw new Error('Recovery module exceeds bounded direct upgrade size');
