@@ -1,5 +1,20 @@
 // Local-only actor authorization and operator transfer rehearsal.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
+import { resolve, join } from 'node:path';
+// Compile the production entry point separately: importing the actor from a
+// Motoko test bypasses enhanced migration initialization and is not equivalent.
+const scratch = mkdtempSync(join(tmpdir(), 'competition-privacy-'));
+const wasm = process.env.COMPETITION_DOMAIN_WASM ?? join(scratch, 'competition.wasm');
+if (!process.env.COMPETITION_DOMAIN_WASM) {
+  const cwd = resolve(import.meta.dirname, '../../backend/competition_domain');
+  const sources = execFileSync('npx', ['-y', 'ic-mops@3.5.1', 'sources'], {cwd, encoding:'utf8'}).trim().split(/\s+/);
+  execFileSync(join(homedir(), '.cache/mops/moc/1.16.1/moc'), [...sources,
+    '--enhanced-migration', 'src/backend/migrations', '-o', wasm, 'src/main.mo'], {cwd, stdio:'inherit'});
+}
+
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
@@ -7,7 +22,7 @@ import { idlFactory } from '../src/lab/bindings/competition_domain/declarations/
 const governor = Principal.fromUint8Array(Uint8Array.from([1,1]));
 const manager = Principal.fromUint8Array(Uint8Array.from([2,1]));
 const member = Principal.fromUint8Array(Uint8Array.from([3,1]));
-const ok = r => { assert.ok('Ok' in r, JSON.stringify(r)); return r.Ok; };
+const ok = r => { assert.ok('Ok' in r, String(r.Err ?? 'Expected Ok')); return r.Ok; };
 const service = idlFactory({ IDL });
 const state = service._fields.find(([k]) => k === 'export_state')[1].retTypes[0]._fields.find(([k]) => k === 'Ok')[1];
 const field = k => state._fields.find(([n]) => n === k)[1];
@@ -19,23 +34,57 @@ const snapshot = Object.fromEntries(Object.keys(fields).map(k => [k, []]));
 snapshot.competitions = [{id:'cup',club_id:'club',name:'Cup',season:'2026',status:'open',visibility:'public',description:[],points_win:5,points_draw:2,points_loss:1,revision:1n}];
 snapshot.roles = [{user:manager,role:'competition_admin',competition_id:'cup',team_id:[]},{user:member,role:'member',competition_id:'cup',team_id:[]}];
 snapshot.matches = [{id:'match',competition_id:'cup',home_team:'h',away_team:'a',home_score:4,away_score:2,status:'completed',revision:1n,...Object.fromEntries(['division_id','scheduled_at_ms','venue','pitch_number','round_number','duration_minutes','arrival_minutes_before','notes'].map(k => [k,[]]))}];
+snapshot.matches = [[], ['inherit'], ['hide'], ['show']].map((division_id, i) => ({...snapshot.matches[0], id: `match-${i}`, division_id}));
 const privacy = [{competition_id:'cup',division:[],hide_scores:true}];
-const server = await PocketIcServer.start({binPath:'/root/.cache/mops/pocket-ic/15.0.0/pocket-ic'});
+const server = await PocketIcServer.start({binPath:join(homedir(), '.cache/mops/pocket-ic/15.0.0/pocket-ic')});
 let pic;
 try {
  pic = await PocketIc.create(server.getUrl());
- const { actor:c } = await pic.setupCanister({idlFactory,wasm:process.env.COMPETITION_DOMAIN_WASM ?? '/tmp/competition-privacy.wasm',sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])});
+ const { actor:c } = await pic.setupCanister({idlFactory,wasm:wasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])});
  c.setPrincipal(governor); ok(await c.set_transfer_fence('club',true));
  ok(await c.import_club_snapshot('club',IDL.encode([newType],[{...snapshot,score_privacy:[privacy]}])));
- const exported = ok(await c.export_club_snapshot('club'));
- assert.deepEqual(IDL.decode([IDL.Record({score_privacy:IDL.Opt(privacyType)})],exported)[0].score_privacy,[privacy]);
- ok(await c.purge_club_snapshot('club')); assert.deepEqual(await c.get_score_privacy('cup'),[]);
- ok(await c.import_club_snapshot('club',exported)); assert.deepEqual(await c.get_score_privacy('cup'),privacy);
  ok(await c.set_transfer_fence('club',false));
- c.setPrincipal(manager); assert.deepEqual(ok(await c.list_matches('cup'))[0].home_score,[4]);
- c.setPrincipal(member); assert.deepEqual(ok(await c.list_matches('cup'))[0].home_score,[]);
- c.setPrincipal(Principal.anonymous()); assert.deepEqual(ok(await c.get_public_competition_page('cup')).matches[0].home_score,[]);
+ const assertScores = (rows, expected) => {
+   assert.equal(rows.length, 4);
+   rows.forEach((row, i) => {
+     assert.deepEqual(row.home_score, expected[i] ? [] : [4], row.id);
+     assert.deepEqual(row.away_score, expected[i] ? [] : [2], row.id);
+   });
+ };
+ for (const hideDefault of [false, true]) {
+   c.setPrincipal(manager);
+   ok(await c.set_score_privacy('cup', [], [hideDefault]));
+   ok(await c.set_score_privacy('cup', ['inherit'], []));
+   ok(await c.set_score_privacy('cup', ['hide'], [true]));
+   ok(await c.set_score_privacy('cup', ['show'], [false]));
+   assertScores(ok(await c.list_matches('cup')), [false,false,false,false]);
+   c.setPrincipal(member);
+   assertScores(ok(await c.list_matches('cup')), [hideDefault,hideDefault,true,false]);
+   assert.ok('Err' in await c.set_score_privacy('cup', [], [false]));
+   c.setPrincipal(Principal.anonymous());
+   assertScores(ok(await c.get_public_competition_page('cup')).matches, [hideDefault,hideDefault,true,false]);
+ }
+ c.setPrincipal(governor); ok(await c.set_transfer_fence('club',true));
+ const exported = ok(await c.export_club_snapshot('club'));
+ const savedPrivacy = await c.get_score_privacy('cup');
+ const { actor: destination } = await pic.setupCanister({idlFactory, wasm:wasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])});
+ destination.setPrincipal(governor);
+ ok(await destination.set_transfer_fence('club',true));
+ ok(await destination.import_club_snapshot('club',exported));
+ assert.deepEqual(await destination.get_score_privacy('cup'),savedPrivacy);
+ assert.deepEqual(ok(await destination.export_club_snapshot('club')), exported);
+ ok(await destination.set_transfer_fence('club',false));
+ destination.setPrincipal(member);
+ assertScores(ok(await destination.list_matches('cup')), [true,true,true,false]);
+ destination.setPrincipal(manager);
+ assertScores(ok(await destination.list_matches('cup')), [false,false,false,false]);
+ destination.setPrincipal(Principal.anonymous());
+ assertScores(ok(await destination.get_public_competition_page('cup')).matches, [true,true,true,false]);
+ ok(await c.purge_club_snapshot('club'));
+ assert.deepEqual(await c.get_score_privacy('cup'),[]);
+ const cleared = IDL.decode([newType],ok(await c.export_club_snapshot('club')))[0];
+ for (const [key, rows] of Object.entries(cleared)) assert.deepEqual(rows, key === 'score_privacy' ? [[]] : [], key);
  c.setPrincipal(governor); ok(await c.set_transfer_fence('club',true));
  ok(await c.import_club_snapshot('club',IDL.encode([oldType],[snapshot]))); assert.deepEqual(await c.get_score_privacy('cup'),[]);
- console.log('PASS: manager/member/anonymous score privacy; export/import/purge and older snapshot compatibility');
-} finally { if(pic) await pic.tearDown(); await server.stop(); }
+ console.log('PASS: manager/member/anonymous default/inherit/hide/show; two-canister export/import/source purge and older snapshot compatibility');
+} finally { if(pic) await pic.tearDown(); await server.stop(); rmSync(scratch, {recursive:true, force:true}); }
