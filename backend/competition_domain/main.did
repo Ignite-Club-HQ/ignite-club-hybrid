@@ -37,6 +37,12 @@ type Settings =
    message: text;
    subject: text;
  };
+type Setting = 
+ record {
+   competition_id: text;
+   division: opt text;
+   hide_scores: bool;
+ };
 type Season = 
  record {
    competition_id: text;
@@ -77,6 +83,25 @@ type OfficialChat =
    competition_id: text;
    conversation_id: text;
    scope: text;
+ };
+type MatchRead = 
+ record {
+   arrival_minutes_before: opt nat16;
+   away_score: opt nat16;
+   away_team: text;
+   competition_id: text;
+   division_id: opt text;
+   duration_minutes: opt nat16;
+   home_score: opt nat16;
+   home_team: text;
+   id: text;
+   notes: opt text;
+   pitch_number: opt text;
+   revision: nat64;
+   round_number: opt nat16;
+   scheduled_at_ms: opt nat64;
+   status: text;
+   venue: opt text;
  };
 type Match = 
  record {
@@ -308,7 +333,7 @@ type Main =
           competition: Competition;
           hidden_divisions: vec text;
           hide_ladder: bool;
-          matches: vec Match;
+          matches: vec MatchRead;
         };
      }) query;
    get_role_link: (competition_id: text, role: text) ->
@@ -321,6 +346,7 @@ type Main =
        Err: text;
        Ok: RoleLinkPreview;
      }) query;
+   get_score_privacy: (competition_id: text) -> (vec Setting) query;
    get_vault_access: (competition_id: text, requester: principal) ->
     (variant {
        Err: text;
@@ -430,7 +456,7 @@ type Main =
    list_matches: (competition_id: text) ->
     (variant {
        Err: text;
-       Ok: vec Match;
+       Ok: vec MatchRead;
      });
    list_my_news_competitions: () ->
     (variant {
@@ -467,10 +493,90 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   read_account_can_invite_players_to_team: (team_id: text) -> (bool);
+   read_account_competition_engagement_summary: (competition_ids: vec text,
+    since_ms: int, until_ms: int) ->
+    (variant {
+       Err: text;
+       Ok: vec CompetitionEngagementSummary;
+     });
+   read_account_get_chat_settings: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ChatSettings;
+     });
+   read_account_get_my_pending_eois: () ->
+    (variant {
+       Err: text;
+       Ok: vec EoiSubmission;
+     });
+   read_account_is_competition_admin: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_account_is_competition_invite_manager: (team_id: text, requester:
+    principal) -> (bool);
+   read_account_list_competition_broadcasts: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Broadcast;
+     });
+   read_account_list_competitions: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_list_competitions_multi: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_list_division_settings: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec DivisionSetting;
+     });
+   read_account_list_invites_by_invitee: () ->
+    (variant {
+       Err: text;
+       Ok: vec CompetitionInvite;
+     });
+   read_account_list_my_news_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_list_my_personal_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_list_official_chats: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec OfficialChat;
+     });
+   read_account_list_public_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_read_token_club: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
    read_competition_club: (id: text) -> (variant {
                                            Err: text;
                                            Ok: opt text;
                                          });
+   read_history_score_access: (competition_id: text, team_id: text,
+    starts_at_ms: nat64, requester: principal) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
    read_resource_club: (kind: text, id: text) ->
     (variant {
        Err: text;
@@ -596,6 +702,11 @@ type Main =
        Err: text;
        Ok;
      });
+   set_score_privacy: (competition_id: text, division: opt text, hide_scores:
+    opt bool) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
    set_season_divisions: (competition_id: text, name: text, divisions:
     vec text) -> (variant {
                     Err: text;
