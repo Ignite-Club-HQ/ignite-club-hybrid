@@ -348,18 +348,43 @@ export async function fetchVaultFolderTree(
   if (options.view.type !== "club" && options.view.type !== "team" && options.view.type !== "competition") return empty();
 
   const scope = getVaultScope(options.view);
-  let query = client
-    .from("vault_folders")
-    .select("id,name,parent_id,restricted_roles");
-  if (options.view.type === "club") {
-    query = query.eq("club_id", options.view.clubId).is("team_id", null);
-  } else if (options.view.type === "team") {
-    query = query.eq("team_id", options.view.teamId);
-  } else {
-    query = query.eq("club_id", options.view.clubId).eq("competition_id", options.view.competitionId);
-  }
-  const { data } = await query;
-  return buildVaultFolderTree(data ?? [], scope.folderId, options);
+  const view = options.view;
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      let query = client
+        .from("vault_folders")
+        .select("id,name,parent_id,restricted_roles");
+      if (view.type === "club") {
+        query = query.eq("club_id", view.clubId).is("team_id", null);
+      } else if (view.type === "team") {
+        query = query.eq("team_id", view.teamId);
+      } else {
+        query = query.eq("club_id", view.clubId).eq("competition_id", view.competitionId);
+      }
+      const { data } = await query;
+      return buildVaultFolderTree(data ?? [], scope.folderId, options);
+    },
+    icp: async (ctx) => {
+      // Fail closed: club-level folder trees need a privileged or club role.
+      if (view.type === "club" && !options.isPrivilegedViewer && options.clubRoles.size === 0) {
+        return empty();
+      }
+      const folders = await listLiveVaultFolders(
+        ctx,
+        view.clubId,
+        view.type === "team" ? view.teamId : null,
+        null,
+        view.type === "competition" ? view.competitionId : null,
+      );
+      const rows = (folders as any[]).map(mapLiveVaultFolder).filter((folder) => {
+        if (folder.deleted_at) return false;
+        if (view.type === "club") return !folder.team_id;
+        if (view.type === "team") return folder.team_id === view.teamId;
+        return folder.competition_id === view.competitionId;
+      });
+      return buildVaultFolderTree(rows, scope.folderId, options);
+    },
+  }, vaultViewScope(view));
 }
 
 export async function searchVaultContents(
@@ -367,6 +392,8 @@ export async function searchVaultContents(
     view: VaultFolderView;
     searchQuery: string;
     tree: VaultFolderTree;
+    isClubAdmin?: boolean;
+    isCoachOrTeamAdmin?: boolean;
   },
   client: IgniteSupabaseClient = supabase,
 ): Promise<{ folders: VaultSearchFolder[]; files: VaultSearchFile[] }> {
@@ -376,63 +403,103 @@ export async function searchVaultContents(
   const escaped = normalized.replace(/[\\%_]/g, (character) => `\\${character}`);
   const pattern = `%${escaped}%`;
   const scope = getVaultScope(options.view);
-
-  let query = client
-    .from("vault_files")
-    .select("id,folder_id,club_id,team_id,mini_league_id,name,file_url,file_size,file_type,uploaded_by,created_at,is_external_link")
-    .is("deleted_at", null)
-    .ilike("name", pattern)
-    .limit(200);
-
-  if (options.view.type === "club") {
-    query = query
-      .eq("club_id", options.view.clubId)
-      .is("team_id", null)
-      .is("mini_league_id", null);
-  } else if (options.view.type === "team") {
-    query = query.eq("team_id", options.view.teamId);
-  } else if (options.view.type === "competition") {
-    query = query.eq("club_id", options.view.clubId).eq("competition_id", options.view.competitionId);
-  } else {
-    query = query.eq("mini_league_id", options.view.miniLeagueId);
-  }
-
-  if (scope.folderId) {
-    query = query.in("folder_id", [scope.folderId, ...options.tree.descendantIds]);
-  }
-
+  const view = options.view;
   const lowerQuery = normalized.toLowerCase();
-  const folders = options.tree.descendants
-    .filter((folder) => folder.name.toLowerCase().includes(lowerQuery))
-    .map((folder) => ({
-      ...folder,
-      folder_path: options.tree.pathById.get(folder.id) || folder.name,
-    }));
 
-  const { data } = await query.order("created_at", { ascending: false });
-  const resolvedData = await resolveCompetitionVaultFileUrls(
-    (data ?? []) as VaultFileRow[],
-    client,
-  );
-  const visibleFolderIds = new Set(options.tree.descendantIds);
-  const files = resolvedData
-    .filter(
-      (file) =>
-        !file.folder_id ||
-        visibleFolderIds.has(file.folder_id) ||
-        file.folder_id === scope.folderId,
-    )
-    .map((file) => ({
-      ...file,
-      image_url: file.file_url,
-      uploader_id: file.uploaded_by,
-      title: file.name,
-      folder_path: file.folder_id
-        ? options.tree.pathById.get(file.folder_id) || ""
-        : "",
-    }));
+  const shape = (resolvedData: VaultFileRow[]) => {
+    const folders = options.tree.descendants
+      .filter((folder) => folder.name.toLowerCase().includes(lowerQuery))
+      .map((folder) => ({
+        ...folder,
+        folder_path: options.tree.pathById.get(folder.id) || folder.name,
+      }));
+    const visibleFolderIds = new Set(options.tree.descendantIds);
+    const files = resolvedData
+      .filter((file) =>
+        scope.folderId
+          ? file.folder_id === scope.folderId || (!!file.folder_id && visibleFolderIds.has(file.folder_id))
+          : !file.folder_id || visibleFolderIds.has(file.folder_id),
+      )
+      .map((file) => ({
+        ...file,
+        image_url: file.file_url,
+        uploader_id: file.uploaded_by,
+        title: file.name,
+        folder_path: file.folder_id
+          ? options.tree.pathById.get(file.folder_id) || ""
+          : "",
+      }));
+    return { folders, files } as { folders: VaultSearchFolder[]; files: VaultSearchFile[] };
+  };
 
-  return { folders, files };
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      let query = client
+        .from("vault_files")
+        .select("id,folder_id,club_id,team_id,mini_league_id,name,file_url,file_size,file_type,uploaded_by,created_at,is_external_link")
+        .is("deleted_at", null)
+        .ilike("name", pattern)
+        .limit(200);
+
+      if (view.type === "club") {
+        query = query
+          .eq("club_id", view.clubId)
+          .is("team_id", null)
+          .is("mini_league_id", null);
+      } else if (view.type === "team") {
+        query = query.eq("team_id", view.teamId);
+      } else if (view.type === "competition") {
+        query = query.eq("club_id", view.clubId).eq("competition_id", view.competitionId);
+      } else {
+        query = query.eq("mini_league_id", view.miniLeagueId);
+      }
+
+      if (scope.folderId) {
+        query = query.in("folder_id", [scope.folderId, ...options.tree.descendantIds]);
+      }
+
+      const { data } = await query.order("created_at", { ascending: false });
+      const resolvedData = await resolveCompetitionVaultFileUrls(
+        (data ?? []) as VaultFileRow[],
+        client,
+      );
+      const visibleFolderIds = new Set(options.tree.descendantIds);
+      const filtered = resolvedData.filter(
+        (file) =>
+          !file.folder_id ||
+          visibleFolderIds.has(file.folder_id) ||
+          file.folder_id === scope.folderId,
+      );
+      return { ...shape(filtered), files: shape(filtered).files.length ? shape(filtered).files : [] };
+    },
+    icp: async (ctx) => {
+      // Fail closed: club-level files need an admin or coach role.
+      if (view.type === "club" && !options.isClubAdmin && !options.isCoachOrTeamAdmin) {
+        return { folders: [], files: [] };
+      }
+      const entries = await listLiveVaultClubFilesWithFolder(
+        ctx,
+        view.clubId,
+        view.type === "team" ? view.teamId : null,
+        view.type === "mini-league" ? view.miniLeagueId : null,
+        view.type === "competition" ? view.competitionId : null,
+      );
+      const rows = (entries as any[])
+        .map(unwrapLiveVaultFileWithFolder)
+        .map(mapLiveVaultFile)
+        .filter((file) => {
+          if (file.deleted_at) return false;
+          if (!file.name.toLowerCase().includes(lowerQuery)) return false;
+          if (view.type === "club") return !file.team_id && !file.mini_league_id;
+          if (view.type === "team") return file.team_id === view.teamId;
+          if (view.type === "competition") return file.competition_id === view.competitionId;
+          return file.mini_league_id === view.miniLeagueId;
+        })
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, 200);
+      return shape(rows);
+    },
+  }, vaultViewScope(view));
 }
 
 /**
