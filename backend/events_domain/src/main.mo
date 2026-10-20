@@ -268,15 +268,23 @@ persistent actor class Main(governorInit : Principal) {
     eventGroups := eventGroups.filter(func(g) = not gids.any(func(id) = id == g.id));
     eventGroupPlayers := eventGroupPlayers.filter(func(p) = not gids.any(func(id) = id == p.group_id));
     eventGroupDuties := eventGroupDuties.filter(func(d) = not gids.any(func(id) = id == d.group_id));
+    competitionMatchLinks:=competitionMatchLinks.filter(func(l)=not evs.any(func(e)=e.id==l.event_id));
+    gameResults:=gameResults.filter(func(r)=not evs.any(func(e)=r.event_id==?e.id));
+    gamePlayerStats:=gamePlayerStats.filter(func(r)=not evs.any(func(e)=r.event_id==e.id));
+    gameSummaries:=gameSummaries.filter(func(r)=not evs.any(func(e)=r.event_id==e.id));
+    competitionEventOperations:=competitionEventOperations.map(func(o)={o with event_ids=o.event_ids.filter(func(id)=not evs.any(func(e)=e.id==id))});
     #Ok(evs.size())
   };
-  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty] };
+  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty]; match_links : ?[Types.CompetitionEventLink]; operations : ?[Types.CompetitionEventOperation]; results : ?[Types.GameResult]; summaries : ?[Types.GameSummary]; stats : ?[Types.GamePlayerStat] };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before export");
     let evs = events.filter(func(e) = e.club_id == club);
     let snap : EventsSnapshot = { events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
-      series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)); groups = ?eventGroups.filter(func(g) = evs.any(func(e) = e.id == g.event_id)); group_players = ?eventGroupPlayers.filter(func(p) = eventGroups.any(func(g) = g.id == p.group_id and evs.any(func(e) = e.id == g.event_id))); group_duties = ?eventGroupDuties.filter(func(d) = eventGroups.any(func(g) = g.id == d.group_id and evs.any(func(e) = e.id == g.event_id))) };
+      series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)); groups = ?eventGroups.filter(func(g) = evs.any(func(e) = e.id == g.event_id)); group_players = ?eventGroupPlayers.filter(func(p) = eventGroups.any(func(g) = g.id == p.group_id and evs.any(func(e) = e.id == g.event_id))); group_duties = ?eventGroupDuties.filter(func(d) = eventGroups.any(func(g) = g.id == d.group_id and evs.any(func(e) = e.id == g.event_id)));
+      match_links=?competitionMatchLinks.filter(func(l)=evs.any(func(e)=e.id==l.event_id));
+      operations=?competitionEventOperations.filter(func(o)=o.event_ids.any(func(id)=evs.any(func(e)=e.id==id))).map(func(o)={o with event_ids=o.event_ids.filter(func(id)=evs.any(func(e)=e.id==id))});
+      results=?gameResults.filter(func(r)=evs.any(func(e)=r.event_id==?e.id));summaries=?gameSummaries.filter(func(r)=evs.any(func(e)=r.event_id==e.id));stats=?gamePlayerStats.filter(func(r)=evs.any(func(e)=r.event_id==e.id)) };
     #Ok(to_candid (snap))
   };
   public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
@@ -289,6 +297,8 @@ persistent actor class Main(governorInit : Principal) {
     let incomingGroups = snap.groups ?? [];
     let incomingPlayers = snap.group_players ?? [];
     let incomingDuties = snap.group_duties ?? [];
+    let incomingLinks=snap.match_links??[];let incomingResults=snap.results??[];let incomingSummaries=snap.summaries??[];let incomingStats=snap.stats??[];let incomingOperations=snap.operations??[];
+    if(incomingLinks.any(func(l)=not snap.events.any(func(e)=e.id==l.event_id and e.team_id==?l.team_id)) or incomingResults.any(func(r)=not snap.events.any(func(e)=r.event_id==?e.id and e.team_id==?r.team_id)) or incomingStats.any(func(r)=not snap.events.any(func(e)=r.event_id==e.id and e.team_id==?r.team_id)) or incomingSummaries.any(func(r)=not snap.events.any(func(e)=r.event_id==e.id and e.team_id==?r.team_id)) or incomingOperations.any(func(o)=o.event_ids.any(func(id)=not snap.events.any(func(e)=e.id==id)))) return #Err("Foreign History snapshot records");
     if (incomingGroups.any(func(g) = not snap.events.any(func(e) = e.id == g.event_id)) or incomingPlayers.any(func(p) = not incomingGroups.any(func(g) = g.id == p.group_id)) or incomingDuties.any(func(d) = not incomingGroups.any(func(g) = g.id == d.group_id))) return #Err("Snapshot contains foreign group records");
     if (incomingGroups.any(func(g) = eventGroups.any(func(x) = x.id == g.id and not events.any(func(e) = e.id == x.event_id and e.club_id == club)))) return #Err("Group id collides with another club");
     if (incomingDuties.any(func(d) = eventGroupDuties.any(func(x) = x.id == d.id and not events.any(func(e) = e.club_id == club and eventGroups.any(func(g) = g.id == x.group_id and g.event_id == e.id))))) return #Err("Duty id collides with another club");
@@ -297,6 +307,16 @@ persistent actor class Main(governorInit : Principal) {
     eventGroupPlayers := eventGroupPlayers.filter(func(p) = not oldGroups.any(func(id) = id == p.group_id)).concat(incomingPlayers);
     eventGroupDuties := eventGroupDuties.filter(func(d) = not oldGroups.any(func(id) = id == d.group_id)).concat(incomingDuties);
     let ids = events.filter(func(e) = e.club_id == club).map(func(e) = e.id);
+    competitionMatchLinks:=competitionMatchLinks.filter(func(l)=not ids.any(func(id)=id==l.event_id)).concat(incomingLinks);
+    gameResults:=gameResults.filter(func(r)=not ids.any(func(id)=r.event_id==?id)).concat(incomingResults);
+    gameSummaries:=gameSummaries.filter(func(r)=not ids.any(func(id)=r.event_id==id)).concat(incomingSummaries);
+    gamePlayerStats:=gamePlayerStats.filter(func(r)=not ids.any(func(id)=r.event_id==id)).concat(incomingStats);
+    for(op in incomingOperations.values()) {
+      let old=competitionEventOperations.find(func(o)=o.operation_id==op.operation_id);
+      if(switch(old){case(?o)o.competition_id!=op.competition_id;case null false}) return #Err("Competition operation collision");
+      let kept=switch(old){case null [];case(?o)o.event_ids.filter(func(id)=not ids.any(func(oldId)=id==oldId))};
+      competitionEventOperations:=competitionEventOperations.filter(func(o)=o.operation_id!=op.operation_id).concat([{op with event_ids=kept.concat(op.event_ids)}]);
+    };
     rsvps := rsvps.filter(func(r) = not ids.any(func(i) = i == r.event_id)).concat(snap.rsvps);
     series := series.filter(func(x) = not snap.series.any(func(y) = y.id == x.id)).concat(snap.series);
     events := events.filter(func(e) = e.club_id != club).concat(snap.events);
