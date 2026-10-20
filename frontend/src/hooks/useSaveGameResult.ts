@@ -107,6 +107,18 @@ export function useSaveGameResult() {
         const uid = userData.user?.id;
         if (!uid) return false;
 
+        // Competition results must use the manager-authorized result path, not
+        // broad team history storage (which cannot enforce competition privacy).
+        if (input.eventId) {
+          const { data: event, error } = await supabase.from("events")
+            .select("competition_match_id").eq("id", input.eventId).maybeSingle();
+          if (error) throw error;
+          if (!event) throw new Error("Event not found or access denied.");
+          if (event.competition_match_id) {
+            throw new Error("Save this score from the competition fixtures result editor.");
+          }
+        }
+
         // Respect manual overrides: if a row already exists for this event,
         // skip the auto-write so user-edited scores/scorers aren't clobbered.
         if (opts?.onlyIfMissing && input.eventId) {
@@ -190,6 +202,11 @@ export function useSaveGameResult() {
           });
         }
         return true;
+      } catch (error) {
+        if (!opts?.silent) {
+          toast({ title: "Could not save game", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+        }
+        return false;
       } finally {
         inFlightRef.current = false;
       }
