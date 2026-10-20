@@ -23,11 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - uses: actions/checkout@v4
       - name: Validate confirmation
         env:
           CONFIRM: ${{ inputs.confirm }}
-        run: '[[ "$CONFIRM" == "ENLARGE GROUP 1 PHOTO STORE" ]]'
-      - uses: actions/checkout@v4
+        run: node --input-type=module -e "import { assertEnlargeConfirmation } from './scripts/enlarge-photo-store-policy.mjs'; assertEnlargeConfirmation(process.env.CONFIRM);"
       - uses: actions/setup-node@v4
         with:
           node-version: '22.12.0'

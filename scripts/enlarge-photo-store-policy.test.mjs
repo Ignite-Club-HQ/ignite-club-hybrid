@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { capacityBytesFor } from './enlarge-photo-store-policy.mjs';
+import { capacityBytesFor, assertEnlargeConfirmation } from './enlarge-photo-store-policy.mjs';
+
+test('enlargement confirmation accepts surrounding whitespace but requires the exact phrase', () => {
+  assert.doesNotThrow(() => assertEnlargeConfirmation('ENLARGE GROUP 1 PHOTO STORE'));
+  assert.doesNotThrow(() => assertEnlargeConfirmation(' \tENLARGE GROUP 1 PHOTO STORE\r\n'));
+  assert.doesNotThrow(() => assertEnlargeConfirmation('\u00a0ENLARGE GROUP 1 PHOTO STORE\u00a0'));
+  for (const value of [undefined, '', 'ENLARGE GROUP 2 PHOTO STORE', 'enlarge group 1 photo store', 'ENLARGE GROUP 1 PHOTO  STORE']) {
+    assert.throws(() => assertEnlargeConfirmation(value));
+  }
+});
 
 test('sizes are whole GB within the 32 GB store ceiling', () => {
   assert.equal(capacityBytesFor('10'), 10_737_418_240n);
