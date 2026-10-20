@@ -621,7 +621,7 @@ export interface Main {
   >,
   'get_game_result' : ActorMethod<
     [string],
-    { 'Ok' : [] | [GameResult] } |
+    { 'Ok' : [] | [Read] } |
       { 'Err' : string }
   >,
   'get_game_summary' : ActorMethod<
@@ -969,7 +969,7 @@ export interface Main {
   >,
   'read_account_get_game_result' : ActorMethod<
     [string],
-    { 'Ok' : [] | [GameResult] } |
+    { 'Ok' : [] | [Read] } |
       { 'Err' : string }
   >,
   'read_account_get_game_summary' : ActorMethod<
@@ -1674,6 +1674,23 @@ export interface PushReachability {
   'user' : Principal,
   'updated_at_ms' : bigint,
   'reachable' : boolean,
+}
+export interface Read {
+  'id' : string,
+  'saved_by' : Principal,
+  'period_scores_json' : string,
+  'team_id' : string,
+  'updated_at_ms' : bigint,
+  'sport' : string,
+  'mvp_player_name' : [] | [string],
+  'away_label' : string,
+  'away_score' : [] | [number],
+  'mvp_player_id' : [] | [string],
+  'event_id' : [] | [string],
+  'home_label' : string,
+  'home_score' : [] | [number],
+  'player_stats_json' : string,
+  'scores_hidden' : boolean,
 }
 export interface Recurrence {
   'until_ms' : bigint,

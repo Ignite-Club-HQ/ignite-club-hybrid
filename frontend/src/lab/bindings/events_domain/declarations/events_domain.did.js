@@ -274,7 +274,7 @@ export const idlFactory = ({ IDL }) => {
     'is_running' : IDL.Bool,
     'half_started_at_ms' : IDL.Opt(IDL.Nat64),
   });
-  const GameResult = IDL.Record({
+  const Read = IDL.Record({
     'id' : IDL.Text,
     'saved_by' : IDL.Principal,
     'period_scores_json' : IDL.Text,
@@ -283,12 +283,13 @@ export const idlFactory = ({ IDL }) => {
     'sport' : IDL.Text,
     'mvp_player_name' : IDL.Opt(IDL.Text),
     'away_label' : IDL.Text,
-    'away_score' : IDL.Nat32,
+    'away_score' : IDL.Opt(IDL.Nat32),
     'mvp_player_id' : IDL.Opt(IDL.Text),
     'event_id' : IDL.Opt(IDL.Text),
     'home_label' : IDL.Text,
-    'home_score' : IDL.Nat32,
+    'home_score' : IDL.Opt(IDL.Nat32),
     'player_stats_json' : IDL.Text,
+    'scores_hidden' : IDL.Bool,
   });
   const GameSummary = IDL.Record({
     'team_id' : IDL.Text,
@@ -436,6 +437,22 @@ export const idlFactory = ({ IDL }) => {
     'fill_in_player_name' : IDL.Opt(IDL.Text),
     'positions_played' : IDL.Vec(IDL.Text),
     'jersey_number' : IDL.Opt(IDL.Nat16),
+  });
+  const GameResult = IDL.Record({
+    'id' : IDL.Text,
+    'saved_by' : IDL.Principal,
+    'period_scores_json' : IDL.Text,
+    'team_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'sport' : IDL.Text,
+    'mvp_player_name' : IDL.Opt(IDL.Text),
+    'away_label' : IDL.Text,
+    'away_score' : IDL.Nat32,
+    'mvp_player_id' : IDL.Opt(IDL.Text),
+    'event_id' : IDL.Opt(IDL.Text),
+    'home_label' : IDL.Text,
+    'home_score' : IDL.Nat32,
+    'player_stats_json' : IDL.Text,
   });
   const PlayHQConfig = IDL.Record({
     'base_url' : IDL.Text,
@@ -815,8 +832,8 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_game_result' : IDL.Func(
         [IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Opt(GameResult), 'Err' : IDL.Text })],
-        ['query'],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Read), 'Err' : IDL.Text })],
+        [],
       ),
     'get_game_summary' : IDL.Func(
         [IDL.Text],
@@ -1248,7 +1265,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_account_get_game_result' : IDL.Func(
         [IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Opt(GameResult), 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Read), 'Err' : IDL.Text })],
         [],
       ),
     'read_account_get_game_summary' : IDL.Func(

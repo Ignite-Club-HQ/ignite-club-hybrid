@@ -571,6 +571,12 @@ type Main =
                                            Err: text;
                                            Ok: opt text;
                                          });
+   read_history_score_access: (competition_id: text, team_id: text,
+    starts_at_ms: nat64, requester: principal) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
    read_resource_club: (kind: text, id: text) ->
     (variant {
        Err: text;

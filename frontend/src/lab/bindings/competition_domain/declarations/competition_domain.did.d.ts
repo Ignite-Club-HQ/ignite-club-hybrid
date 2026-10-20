@@ -603,6 +603,11 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_history_score_access' : ActorMethod<
+    [string, string, bigint, Principal],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
   'read_resource_club' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [string] } |
