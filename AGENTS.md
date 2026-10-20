@@ -11,7 +11,7 @@
 
 - Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
 - Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html to dist/index.html for static hosting/SPA fallback.
-- Read frontend/, backend/ and scripts/ AGENTS.md before edits.
+- Read subdirectory AGENTS.md; scripts/ governs isolated media tests, protecting live storage/receipts.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -20,7 +20,7 @@
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: apply StatusBarBackdrop after SystemBars; keep its remaining CSS inset, no forced floor. Both Codemagic workflows run scripts/configure-android-status-bar.py; preserve keyboard handling. Why: native padding already reserves space.
 - ICP images wait for restored auth, share account-scoped unlocks and retry after cooldown/foreground recovery. Why: avoid false startup failures and duplicate unlocks.
-- Documents use authorized/decrypted URLs, preserve extension/MIME and cache WebView blobs natively. Why: raw ICP URLs are ciphertext.
+- Documents use authorized/decrypted URLs, preserve extension/MIME, cache WebView blobs natively. Why: raw ICP URLs are ciphertext.
 - ICP rewards verify roles via governor-configured club_domain; catalog/settings reads refresh caller role mirrors first. Why: club creation needs no manual points-service grant.
 - ICP media uses uploader avatars; inbox previews use scope IDs; DM settings read/write ICP. Chat files encrypt/register before token creation. Why: silent no-ops lost device attachments.
 - Club setup uses active membership backend; palettes/logo count separately from entitlement; sponsor/theme saves invalidate it. Why: ICP free setup has no Supabase rows.
@@ -35,13 +35,13 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - ICP frontend deploy: start mapped canisters; never reinstall on sync failure. Pin CLI; grant via `canister settings update --add-controller --force`, failing on error. Why: preserve assets/access.
-- Local media: roots/packed segments stay fixtures; memory 13 preserves promises. Keep tokens/free-only allocation, paired retirement/revisions/aligned buddies. Capacity tests reuse actors locally, not mainnet proof. Live needs approval.
+- Local media: roots/packed segments stay fixtures; memory 13 preserves promises. Keep tokens/free-only allocation, paired retirement/revisions/aligned buddies. Local tests are not mainnet proof; live needs approval.
 - II paths enforce club scope; uploads verify membership to prevent revocation bypass.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
-- ICP MCP OQL: bounded read-only, allowlisted fields; authorize before filters/counts/paging; no self-calls.
+- ICP MCP OQL: bounded read-only; allowlist fields, authorize before filtering/paging/counts; no self-calls.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
 - Cross-group accounts/admission stay local-only: no live UI/deploy flags. Identity uses durable unlink denials and consensus eligibility, never resource grants. Activation requires complete all-service fences/inventory/drain/mirror proof; follow backend/AGENTS.md for evidence. Why: eligibility and fan-out cannot prove global revocation or deny unreached groups.
 
-- Mainnet photo-key preflight: offline SDK derivation, signed controller checks, durable pre/post-upgrade receipts; other targets fail closed (vetKD rejects ingress).
+- Mainnet key preflight: offline SDK derivation, signed controller checks, durable upgrade receipts; other targets fail closed (vetKD rejects ingress).
