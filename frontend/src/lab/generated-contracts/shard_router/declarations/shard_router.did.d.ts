@@ -90,19 +90,19 @@ export type Result = { 'Ok' : bigint } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : DeletionLock } |
   { 'Err' : string };
-export type Result_10 = { 'Ok' : [] | [Migration] } |
+export type Result_10 = { 'Ok' : [] | [GroupAssignment] } |
   { 'Err' : string };
-export type Result_11 = { 'Ok' : [] | [Route] } |
+export type Result_11 = { 'Ok' : [] | [Migration] } |
   { 'Err' : string };
-export type Result_12 = { 'Ok' : Array<ShardGroup> } |
+export type Result_12 = { 'Ok' : [] | [Route] } |
   { 'Err' : string };
-export type Result_13 = { 'Ok' : Page } |
+export type Result_13 = { 'Ok' : Array<ShardGroup> } |
   { 'Err' : string };
-export type Result_14 = { 'Ok' : GroupRegistrySnapshot } |
+export type Result_14 = { 'Ok' : Page } |
   { 'Err' : string };
-export type Result_15 = { 'Ok' : Array<GroupAssignment> } |
+export type Result_15 = { 'Ok' : GroupRegistrySnapshot } |
   { 'Err' : string };
-export type Result_16 = { 'Ok' : null } |
+export type Result_16 = { 'Ok' : Array<GroupAssignment> } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : AssignResult } |
   { 'Err' : string };
@@ -114,11 +114,11 @@ export type Result_5 = { 'Ok' : DomainMigration } |
   { 'Err' : string };
 export type Result_6 = { 'Ok' : Migration } |
   { 'Err' : string };
-export type Result_7 = { 'Ok' : [] | [DomainMigration] } |
+export type Result_7 = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_8 = { 'Ok' : [] | [DomainRoute] } |
+export type Result_8 = { 'Ok' : [] | [DomainMigration] } |
   { 'Err' : string };
-export type Result_9 = { 'Ok' : [] | [GroupAssignment] } |
+export type Result_9 = { 'Ok' : [] | [DomainRoute] } |
   { 'Err' : string };
 export interface Route {
   'shard' : Principal,
@@ -130,6 +130,10 @@ export interface ShardGroup {
   'max_clubs' : number,
   'observed_at_ns' : bigint,
   'accepting' : boolean,
+  /**
+   * The group's own photo store. Uploads for its clubs go only here, never
+   * to a shared store (whose single club authority belongs to another group).
+   */
   'photo_store' : [] | [Principal],
   'heap_budget_bytes' : bigint,
   'cycles' : bigint,
@@ -153,17 +157,21 @@ export interface _SERVICE {
   'begin_migration' : ActorMethod<[string, Principal, bigint], Result_6>,
   'commit_domain_migration' : ActorMethod<[string, string, bigint], Result_3>,
   'commit_migration' : ActorMethod<[string, bigint], Result_2>,
+  'configure_group_media_growth' : ActorMethod<
+    [string, bigint, bigint, bigint, Array<[string, bigint]>, bigint],
+    Result_7
+  >,
   /**
    * Public: remaining cycles (shown in admin settings).
    */
   'cycles_balance' : ActorMethod<[], bigint>,
-  'get_domain_migration' : ActorMethod<[string, string], Result_7>,
-  'get_domain_route' : ActorMethod<[string, string], Result_8>,
-  'get_group_assignment' : ActorMethod<[string], Result_9>,
-  'get_migration' : ActorMethod<[string], Result_10>,
-  'get_route' : ActorMethod<[string], Result_11>,
-  'list_groups' : ActorMethod<[], Result_12>,
-  'list_routes' : ActorMethod<[[] | [string], number], Result_13>,
+  'get_domain_migration' : ActorMethod<[string, string], Result_8>,
+  'get_domain_route' : ActorMethod<[string, string], Result_9>,
+  'get_group_assignment' : ActorMethod<[string], Result_10>,
+  'get_migration' : ActorMethod<[string], Result_11>,
+  'get_route' : ActorMethod<[string], Result_12>,
+  'list_groups' : ActorMethod<[], Result_13>,
+  'list_routes' : ActorMethod<[[] | [string], number], Result_14>,
   /**
    * Public: live memory reading for the admin health page.
    */
@@ -173,20 +181,24 @@ export interface _SERVICE {
    * the healthiest accepting group. Capped per principal; retries are free.
    */
   'place_my_new_club' : ActorMethod<[string, string], Result_4>,
-  'read_group_registry' : ActorMethod<[string], Result_14>,
+  'read_group_registry' : ActorMethod<[string], Result_15>,
   'read_hosted_club_assignment' : ActorMethod<
     [string, string, bigint],
     Result_4
   >,
   'read_my_group_assignments' : ActorMethod<
     [Array<string>, string, bigint],
-    Result_15
+    Result_16
   >,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,
-  'release_deletion_lock' : ActorMethod<[string, bigint], Result_16>,
-  'set_deletion_authority' : ActorMethod<[Principal], Result_16>,
+  'release_deletion_lock' : ActorMethod<[string, bigint], Result_7>,
+  'reserve_group_media_growth' : ActorMethod<
+    [string, string, string, bigint],
+    Result
+  >,
+  'set_deletion_authority' : ActorMethod<[Principal], Result_7>,
   'version' : ActorMethod<[], bigint>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

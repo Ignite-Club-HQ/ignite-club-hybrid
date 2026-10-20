@@ -54,7 +54,7 @@ try {
     if ('Err' in finalized) { ok(await a.abort_upload(result.Ok)); break; }
     expected.set(path, 400_000); count++;
   }
-  assert.ok(count > 0 && count < 100, 'must observe an actual capacity refusal');
+  assert.equal(count, 32, 'freed mixed-size slots must split/coalesce into all 32 available 512 KiB slots');
   const status = await a.stable_storage_status(); const usage = await a.get_usage();
   assert.ok(status.allocated_bytes <= 16_777_216n);
   assert.equal(usage.total_bytes, BigInt([...expected.values()].reduce((sum, size) => sum + size, 0)));

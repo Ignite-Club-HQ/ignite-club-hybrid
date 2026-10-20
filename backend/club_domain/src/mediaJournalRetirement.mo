@@ -30,7 +30,14 @@ module {
       if (id == cursor and cursor != "") continue;
       if (scanned >= 200) break;
       scanned += 1; next := id;
-      if (op.state != #reserved and state.acknowledged.get(id) == ?true and Token.expired(op.token, current)) deletes := deletes.concat([id])
+      if (op.state != #reserved and state.acknowledged.get(id) == ?true and Token.expired(op.token, current)) {
+        // Recheck paired settlement at retirement, not just acknowledgement.
+        let paired = switch (Monthly.status(monthly, op.store, op.token)) {
+          case (?row) row.status != #reserved and (row.status == #committed) == (op.state == #committed);
+          case null true
+        };
+        if (paired) deletes := deletes.concat([id])
+      }
     };
     for (id in deletes.values()) {
       retained.operations.remove(id); monthly.reservations.remove(id); state.acknowledged.remove(id)

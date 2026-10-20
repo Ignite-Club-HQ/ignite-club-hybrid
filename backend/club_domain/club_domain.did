@@ -562,6 +562,11 @@ type Main =
                                 Err: text;
                                 Ok;
                               });
+   configure_media_growth_router: (router: principal, group: text, target:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    create_child_for_parent_in_club: (club_id: text, parent: principal) ->
     (variant {
        Err: text;

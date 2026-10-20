@@ -112,7 +112,9 @@ persistent actor class Main(governorInit : Principal) = this {
   var mediaRetainedState : MediaRetainedCutover.State;
   var mediaJournalState : MediaJournalRetirement.State;
   var mediaGrowthState : MediaGrowthReservations.State;
+  var mediaGrowthRouter : ?{ router : Principal; group : Text; target : Text };
   transient let growthRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_GROWTH_LOCAL_REHEARSAL") == ?"1";
+  transient let routerGrowthRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_ROUTER_GROWTH_LOCAL_REHEARSAL") == ?"1";
   transient let retainedRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL") == ?"1";
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
@@ -4468,6 +4470,10 @@ persistent actor class Main(governorInit : Principal) = this {
     if (name == "" or name.size() > 160) return #Err("Invalid club name");
     if (profiles.any(func(p) = p.id == id)) return #Err("Club already exists");
     if (growthRehearsal and not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, id, mediaGrowthState.freeBytes)) return #Err("Verified group growth capacity required");
+    if (routerGrowthRehearsal and not (await reserveRouterGrowth(id))) return #Err("Group-wide growth reservation required");
+    // The router call can interleave creation/removal; recheck before publish.
+    auth(caller);
+    if (removalReceiver.denied(caller) or profiles.any(func(p) = p.id == id)) return #Err("Club creation changed during reservation");
     let profile : Types.ClubProfile = {
       id; name; slug; description; sport;
       created_at_ms = nowMs();
@@ -5579,6 +5585,29 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   // Local operator attestation only: exact club list, all-store baseline and
   // conservative global allocator overhead; never a production capacity flag.
+  public shared ({ caller }) func configure_media_growth_router(router : Principal, group : Text, target : Text) : async { #Ok; #Err : Text } {
+    if (not routerGrowthRehearsal or not growthRehearsal or not isGovernor(caller)) return #Err("Local growth governor required");
+    if (router.isAnonymous() or router.toText() == "aaaaa-aa" or group.size() == 0 or group.size() > 64 or target.size() == 0 or target.size() > 64) return #Err("Invalid router binding");
+    let binding = { router; group; target };
+    switch (mediaGrowthRouter) { case (?saved) { if (saved != binding) return #Err("Growth router immutable") }; case null { mediaGrowthRouter := ?binding } };
+    #Ok
+  };
+  func reserveRouterGrowth(club : Text) : async Bool {
+    if (not routerGrowthRehearsal) return true;
+    if (not growthRehearsal or not retainedRehearsal or not mediaRetainedState.active) return false;
+    let ?binding = mediaGrowthRouter else return false;
+    let ?bytes = mediaGrowthState.commitments.get(club) else return false;
+    if (bytes == 0 or bytes > 18_446_744_073_709_551_615) return false;
+    let router : actor { reserve_group_media_growth : shared (Text, Text, Text, Nat64) -> async { #Ok : Nat64; #Err : Text } } = actor(binding.router.toText());
+    // The commitment itself is the monotonic idempotency key: no cancellation
+    // or refund on lost replies, rejection, downgrade, or local publication loss.
+    try {
+      switch (await router.reserve_group_media_growth(binding.group, binding.target, club, Nat64.fromNat(bytes))) {
+        case (#Ok(held)) held.toNat() >= bytes and mediaGrowthRouter == ?binding;
+        case (#Err(_)) false
+      }
+    } catch (_) { false }
+  };
   public shared ({ caller }) func configure_media_growth(usable : Nat, unassigned : Nat, free_bytes : Nat, clubs : [Text]) : async { #Ok; #Err : Text } {
     if (not growthRehearsal or not retainedRehearsal or not isGovernor(caller) or not mediaRetainedState.active) return #Err("Local active retained governor required");
     if (mediaGrowthState.configured or usable == 0 or free_bytes == 0 or clubs.size() != profiles.size() or clubs.size() > 100_000) return #Err("Immutable complete growth baseline required");
@@ -5708,6 +5737,10 @@ persistent actor class Main(governorInit : Principal) = this {
       let allowance = if (pro) MediaRetainedQuota.baseBytes + clubStorageGb(item.club_id).toNat() * MediaRetainedQuota.gib else mediaGrowthState.freeBytes;
       if (not profiles.any(func(p) = p.id == item.club_id) or not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, item.club_id, allowance)) return #Err("Verified group growth capacity required")
     };
+    let priorSubscriptions = clubSubscriptions;
+    if (routerGrowthRehearsal and not (await reserveRouterGrowth(item.club_id))) return #Err("Group-wide growth reservation required");
+    auth(caller);
+    if (removalReceiver.denied(caller) or not (isGovernor(caller) or isAppAdmin(caller)) or clubSubscriptions != priorSubscriptions) return #Err("Subscription changed during reservation");
     clubSubscriptions := clubSubscriptions.filter(func(s) = s.club_id != item.club_id);
     clubSubscriptions := clubSubscriptions.concat([item]);
     #Ok(item)
@@ -5978,6 +6011,11 @@ persistent actor class Main(governorInit : Principal) = this {
     if (gb == 0) return #Err("This promo code does not grant storage");
     let total = clubStorageGb(club_id) + gb;
     if (growthRehearsal and not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, club_id, MediaRetainedQuota.baseBytes + total.toNat() * MediaRetainedQuota.gib)) return #Err("Verified group growth capacity required");
+    let priorAddons = clubStorageGb(club_id);
+    if (routerGrowthRehearsal and not (await reserveRouterGrowth(club_id))) return #Err("Group-wide growth reservation required");
+    auth(caller);
+    if (removalReceiver.denied(caller) or not (isAdmin(caller, club_id) or isGovernor(caller)) or clubStorageGb(club_id) != priorAddons or not promoCodes.any(func(p) = p == promo)) return #Err("Storage grant changed during reservation");
+    switch (promo.expires_at_ms) { case (?e) { if (e < nowMs()) return #Err("This promo code has expired") }; case null {} };
     clubStorageAddons := clubStorageAddons.filter(func((c, _) : (Text, Nat32)) : Bool = c != club_id).concat([(club_id, total)]);
     promoRedemptions := promoRedemptions.concat([{
       promo_id = promo.id; target_id = "club-storage:" # club_id; redeemed_by = caller; redeemed_at_ms = nowMs(); expires_at_ms = (0 : Nat64);

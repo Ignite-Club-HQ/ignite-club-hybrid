@@ -37,6 +37,21 @@ ok(Retained.settle(ledger, store, paired, true));
 assert Retirement.acknowledge(state, ledger, monthly, store, paired);
 assert Retirement.retire(state, ledger, monthly, 99, "").removed == 1;
 assert Monthly.status(monthly, store, paired) == null;
+// Mixed eligibility and acknowledgement-time/retirement-time ledger drift.
+let mixed = Retained.empty(); let mixMonthly = Monthly.empty(); let mixState = Retirement.empty();
+assert Retained.register(mixed, store); assert Retained.seal(mixed, store);
+for (t in ["r1:1:10:upload", "r1:1:11:upload", "r1:1:12:upload", "r1:98:13:upload", "legacy", "r1:bad:14:upload"].values()) {
+  ok(Retained.cancel(mixed, store, t, "c", "clubs/c/photos/" # t, 1));
+  ignore Retirement.acknowledge(mixState, mixed, mixMonthly, store, t)
+};
+let unacked = store.toText() # "\u{1f}r1:1:11:upload";
+mixState.acknowledged.remove(unacked);
+switch (Monthly.reserve(mixMonthly, store, "r1:1:12:upload", "c", "gallery_photo", 1, 1, true)) { case (#Ok(_)) {}; case _ assert false };
+assert Retirement.retire(mixState, mixed, mixMonthly, 99, "").removed == 1;
+assert mixed.operations.size() == 5;
+assert Monthly.status(mixMonthly, store, "r1:1:12:upload") != null;
+assert mixed.operations.get(unacked) != null;
+assert Retained.settle(mixed, store, "r1:1:10:upload", true) == #Err("Unknown reservation");
 // Bounded cleanup still recovers room when the authority journal is full.
 for (i in Nat.range(0, 100_000)) {
   let t = "r1:1:" # i.toText() # ":delete";
