@@ -155,8 +155,8 @@ async function verify(path: string) {
 const funding = BigInt(binding.budgetCycles) - LEDGER_FEE;
 const available = await calls.cyclesBalance();
 // Checked before any journal write so an unfunded attempt leaves no record blocking the same id.
-if (available < BigInt(binding.budgetCycles)) throw new Error(`Deploy identity holds ${available} cycles; needs ${binding.budgetCycles} (approved funding plus ledger fee). Fund it, then re-run with the same id.`);
-console.log(`Deploy identity balance ${available} cycles covers approved ${binding.budgetCycles}.`);
+if (!state.canisterId && available < BigInt(binding.budgetCycles)) throw new Error(`Deploy identity holds ${available} cycles; needs ${binding.budgetCycles} (approved funding plus ledger fee). Fund it, then re-run with the same id.`);
+console.log(state.canisterId ? `Test store ${state.canisterId} already funded at creation; deploy balance ${available} not needed.` : `Deploy identity balance ${available} cycles covers approved ${binding.budgetCycles}.`);
 try {
   await save();
   await phase('create', async () => {
