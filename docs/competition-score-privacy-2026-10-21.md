@@ -38,3 +38,7 @@
 - Result and metadata writes are separate requests, not an atomic result/status transaction; add an authorized atomic RPC if required for consistency.
 - Supabase public ladder currently uses default 3/1/0 points; preserve configured competition scoring before release.
 - No deployment, live network calls, or SQL application was performed.
+
+## Round 3 status (2026-10-21)
+- Done: Supabase atomic result save RPC `save_competition_match_result` (manager-checked, result + status in one transaction) appended to the unapplied migration; frontend now calls it. ICP result + status already save in one canister call. Supabase public ladder uses configured scoring; ladder "Scores hidden" note shows only when results are masked. Relevant tests pass in both modes.
+- Still open: dedicated role/inherit/hide/show frontend tests; snapshot round-trip Motoko test; actor-level PocketIC test (PocketIC binary not present in this workspace); migration still unapplied and unvalidated against a real database.
