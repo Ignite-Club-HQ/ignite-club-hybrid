@@ -4,9 +4,9 @@ import { loadOperatorIdentity } from '../src/live/operatorTransport';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
 import { idlFactory } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
 import { DEPLOY_PRINCIPAL } from '../../scripts/media-card-funding-policy.mjs';
-import { capacityBytesFor } from '../../scripts/enlarge-photo-store-policy.mjs';
+import { capacityBytesFor, assertEnlargeConfirmation } from '../../scripts/enlarge-photo-store-policy.mjs';
 
-if (process.env.ENLARGE_CONFIRM !== 'ENLARGE GROUP 1 PHOTO STORE') throw new Error('Confirmation missing; nothing changed');
+assertEnlargeConfirmation(process.env.ENLARGE_CONFIRM);
 const limit = capacityBytesFor(process.env.ENLARGE_GIB);
 const identity = loadOperatorIdentity(process.env.OPERATOR_PEM_PATH ?? '');
 if (identity.getPrincipal().toText() !== DEPLOY_PRINCIPAL) throw new Error('Loaded key is not the deploy identity; nothing changed');
