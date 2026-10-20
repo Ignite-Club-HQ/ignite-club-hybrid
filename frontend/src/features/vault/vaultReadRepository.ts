@@ -380,7 +380,7 @@ export async function fetchVaultFolderTree(
         if (folder.deleted_at) return false;
         if (view.type === "club") return !folder.team_id;
         if (view.type === "team") return folder.team_id === view.teamId;
-        return folder.competition_id === view.competitionId;
+        return (folder as any).competition_id === view.competitionId;
       });
       return buildVaultFolderTree(rows, scope.folderId, options);
     },
@@ -463,14 +463,7 @@ export async function searchVaultContents(
         (data ?? []) as VaultFileRow[],
         client,
       );
-      const visibleFolderIds = new Set(options.tree.descendantIds);
-      const filtered = resolvedData.filter(
-        (file) =>
-          !file.folder_id ||
-          visibleFolderIds.has(file.folder_id) ||
-          file.folder_id === scope.folderId,
-      );
-      return { ...shape(filtered), files: shape(filtered).files.length ? shape(filtered).files : [] };
+      return shape(resolvedData);
     },
     icp: async (ctx) => {
       // Fail closed: club-level files need an admin or coach role.
@@ -492,7 +485,7 @@ export async function searchVaultContents(
           if (!file.name.toLowerCase().includes(lowerQuery)) return false;
           if (view.type === "club") return !file.team_id && !file.mini_league_id;
           if (view.type === "team") return file.team_id === view.teamId;
-          if (view.type === "competition") return file.competition_id === view.competitionId;
+          if (view.type === "competition") return (file as any).competition_id === view.competitionId;
           return file.mini_league_id === view.miniLeagueId;
         })
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
