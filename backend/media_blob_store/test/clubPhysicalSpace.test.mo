@@ -5,9 +5,29 @@ import Region "mo:core/Region";
 import Map "mo:core/Map";
 import Blob "mo:core/Blob";
 import Text "mo:core/Text";
+import Nat "mo:core/Nat";
+import Array "mo:core/Array";
 persistent actor {
   let global : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
   let spaces = Space.empty(global);
+  var upgradeHeld : ?Space.Allocation = null;
+  public func prepareUpgrade() : async () {
+    assert Space.promise(spaces, "upgrade", Space.rootBytes, Space.rootBytes);
+    let ?held = Space.reserve(spaces, "upgrade", 1) else { assert false; loop {} };
+    assert Space.write(spaces, "upgrade", held, Blob.fromArray([42]));
+    upgradeHeld := ?held
+  };
+  public func verifyUpgrade() : async () {
+    let ?held = upgradeHeld else { assert false; loop {} };
+    assert Stable.read(global, held.slice, 0, 1) == Blob.fromArray([42]);
+    assert Stable.reserveWithin(global, 1, Space.rootBytes) == null;
+    Space.release(spaces, "upgrade", held);
+    let ?replacement = Space.reserve(spaces, "upgrade", 1) else { assert false; loop {} };
+    assert replacement.slice == held.slice and replacement.generation > held.generation;
+    assert not Space.write(spaces, "upgrade", held, Blob.fromArray([99]));
+    Space.release(spaces, "upgrade", held);
+    assert Space.write(spaces, "upgrade", replacement, Blob.fromArray([43]))
+  };
   public func runTests() : async () {
     let cap = Space.rootBytes * 3;
     assert Space.promise(spaces, "existing", Space.rootBytes * 2, cap);
@@ -42,5 +62,20 @@ persistent actor {
     assert newClub.roots == 1;
     // A club can still use its reserved second root after the other fills up.
     assert Space.reserve(spaces, "existing", Space.rootBytes) != null;
+    // A payload-byte promise is NOT a file-count/fragmentation guarantee.
+    // Keep this counterexample as a release blocker rather than assume it away.
+    let fragmented : Stable.Store = { region = Region.new(); var end = 0; free = Map.empty() };
+    let fragments = Space.empty(fragmented);
+    assert Space.promise(fragments, "tiny", Space.rootBytes, Space.rootBytes * 2);
+    var allocations : [Space.Allocation] = [];
+    for (_ in Nat.range(0, 256)) {
+      let ?held = Space.reserve(fragments, "tiny", 1) else { assert false; loop {} };
+      allocations := allocations.concat([held])
+    };
+    assert Space.reserve(fragments, "tiny", 1) == null;
+    assert Stable.canAllocateWithin(fragmented, 1, Space.rootBytes * 2);
+    for (i in Nat.range(1, 256)) Space.release(fragments, "tiny", allocations[i]);
+    assert Space.reserve(fragments, "tiny", Space.rootBytes) == null;
+    assert Space.reserve(fragments, "tiny", 1) != null;
   }
 }
