@@ -92,7 +92,7 @@ function scan(dir: string) {
   }
 }
 scan(join(root, 'deploy/groups')); scan(join(root, 'deploy/mainnet/.icp/data/mappings'));
-for (const e of entries.tree.filter((e: any) => /^deploy\/media-tests\/[^/]+\.json$/.test(e.path))) {
+for (const e of entries.tree.filter((e: any) => e.path !== file && /^deploy\/media-tests\/[^/]+\.json$/.test(e.path))) {
   const r = readJournal(e.path); collect(JSON.parse(r.text));
 }
 const agent = await HttpAgent.create({ identity, host: binding.host, shouldFetchRootKey: false });
@@ -163,7 +163,8 @@ try {
   });
   m = Actor.createActor(managementIdl, { agent, canisterId: 'aaaaa-aa', effectiveCanisterId: pid(state.canisterId) });
   await phase('install', async () => {
-    assertTarget(binding, state.canisterId, await calls.status(state.canisterId), await calls.subnetOf(state.canisterId), protectedIds, null);
+    const before = await calls.status(state.canisterId);
+    assertTarget(binding, state.canisterId, before, await calls.subnetOf(state.canisterId), protectedIds, before.moduleHash === null ? null : binding.wasmSha256);
     await calls.setEnvironment(state.canisterId, environmentFor(binding));
     const current = (await calls.status(state.canisterId)).moduleHash;
     if (current === null) { await proof(null); await calls.installChunked(state.canisterId, wasm, IDL.encode([], [])); }
