@@ -11,8 +11,11 @@
     "budgetCycles": "5000000000000",
     "capacityBytes": 5368709120
   },
-  "phase": "install",
-  "pending": null,
+  "phase": "configure-empty",
+  "pending": {
+    "kind": "configure-empty",
+    "time": "2026-10-20T06:35:41.687Z"
+  },
   "receipts": [
     {
       "phase": "create",
@@ -42,5 +45,6 @@
   ],
   "objects": {},
   "createdAtNs": "1792478096172000000",
-  "canisterId": "2knbe-saaaa-aaaal-qxpua-cai"
+  "canisterId": "2knbe-saaaa-aaaal-qxpua-cai",
+  "initialCycles": "4394997667949"
 }
