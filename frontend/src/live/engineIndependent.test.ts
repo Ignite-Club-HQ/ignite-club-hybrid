@@ -53,6 +53,17 @@ describe('zero-cycle engine closed installation — offline transport', () => {
     await expect(runEngineClosedInstall(m, w.start, w.t, async j => { if (j.provision.pending) throw new Error('disk unavailable'); }, () => 'op')).rejects.toThrow('disk unavailable');
     expect(w.mutations).toEqual([]);
   });
+  it.each(['install', 'configure'] as const)('retains ambiguous %s mutations without replay', async phase => {
+    const w = installer(); let calls = 0;
+    if (phase === 'install') {
+      const original = w.t.install;
+      w.t.install = async (...args) => { await original(...args); calls++; throw new Error('reply lost'); };
+    } else {
+      w.t.call = async () => { calls++; throw new Error('reply lost'); };
+    }
+    const stopped = await w.run(); expect(stopped.provision.pending?.kind).toBe(phase); expect(calls).toBe(1);
+    await expect(w.run(stopped)).rejects.toThrow(`Unresolved ${phase}`); expect(calls).toBe(1);
+  });
   it('refuses live or shared IDs returned by creation', async () => {
     const w = installer(); w.t.create = async () => ({ canisterId: m.liveCanisters[0], subnetId: m.subnetId });
     const stopped = await w.run(); expect(stopped.provision.phase).toBe('failed'); expect(stopped.provision.error).toContain('live/shared');
@@ -100,6 +111,14 @@ describe('country/group preparation preserves immutable placement', () => {
   it('keeps existing clubs on their group despite a changed or missing country link', () => {
     const p = placement(); p.countries.countryDeployments.clear();
     expect(planClubPlacement({ ...p, clubId: 'existing' })).toMatchObject({ kind: 'existing', groupId: 'a', revision: 2n });
+    p.countries.countryDeployments.set('AU', 'future-engine');
+    expect(planClubPlacement({ ...p, clubId: 'existing' })).toMatchObject({ kind: 'existing', deploymentId: 'ic', groupId: 'a' });
+  });
+  it('refuses stale existing deployment bindings without moving the club', () => {
+    const p = placement(); const d = p.table.deployments.get('ic'); if (!d) throw new Error('fixture');
+    p.table.deployments.set('ic', { ...d, revision: 2n });
+    expect(() => planClubPlacement({ ...p, clubId: 'existing' })).toThrow('mismatched');
+    expect(p.table.routing.assignments.get('existing')).toEqual({ clubId: 'existing', groupId: 'a', revision: 2n });
   });
   it('keeps fill-first at 70% and changes only new-club proposals at 80%', () => {
     const p = placement(); expect(planClubPlacement(p)).toMatchObject({ kind: 'new', groupId: 'a', authorityRequired: true });

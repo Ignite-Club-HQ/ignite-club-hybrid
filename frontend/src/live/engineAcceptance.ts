@@ -1,4 +1,4 @@
-/** Evidence collector, NOT an activation gate. Offline evidence never becomes
+/** Caller-supplied evidence collector, NOT an independent verifier or activation gate. Offline evidence never becomes
  * real-engine acceptance, and no result can register, route or open a group. */
 import { ENGINE_INSTALL_SERVICES } from './engineClosedInstall';
 import { CAPACITY_READING_MAX_AGE_MS } from './groupCapacityPolicy';
@@ -40,5 +40,6 @@ export async function collectEngineAcceptance(scope: EngineAcceptanceScope, now:
     offlinePassed: scope.mode === 'offline' && missing.length === 0,
     /** Even complete real-engine evidence requires external validation and owner release. */
     activationAuthorized: false as const,
+    independentlyVerified: false as const,
     realEngineVerificationRequired: scope.mode === 'offline' };
 }
