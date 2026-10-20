@@ -1107,11 +1107,7 @@
     "to": "dfd4ab701b82e5e69ed4a4077d737d635ce33fc64faf766fecb4f9774da4a433",
     "status": "complete"
   },
-  "pendingRecoveryAbort": {
-    "id": "upload-262",
-    "path": "users/network-test/media-mixed-001/258",
-    "size": "1048576"
-  },
+  "pendingRecoveryAbort": null,
   "recoveredAborts": [
     {
       "id": "upload-259",
@@ -1127,6 +1123,11 @@
       "id": "upload-261",
       "path": "users/network-test/media-mixed-001/257",
       "size": "2097152"
+    },
+    {
+      "id": "upload-262",
+      "path": "users/network-test/media-mixed-001/258",
+      "size": "1048576"
     }
   ]
 }
