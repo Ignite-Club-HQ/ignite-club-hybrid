@@ -1,5 +1,6 @@
 import Types "types";
 import Json "mo:json";
+import Array "mo:core/Array";
 module {
   public type Read = {
     id : Text; team_id : Text; event_id : ?Text; sport : Text;
