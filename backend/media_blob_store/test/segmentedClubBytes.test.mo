@@ -24,15 +24,15 @@ persistent actor {
     let ?file = saved else { assert false; loop {} };
     assert not Segments.complete(files, file);
     assert Segments.read(files, file, 65_535, 4) == "";
-    assert Segments.writeSegment(files, file, 1, [8, 9, 10].toBlob());
+    assert Segments.writeSegment(files, file, 1, ([8, 9, 10] : [Nat8]).toBlob());
     assert Segments.complete(files, file);
-    assert Segments.read(files, file, 65_535, 4) == [7, 8, 9, 10].toBlob();
+    assert Segments.read(files, file, 65_535, 4) == ([7, 8, 9, 10] : [Nat8]).toBlob();
     Segments.release(files, file);
     let ?next = Segments.reserve(files, 65_539) else { assert false; loop {} };
     assert next.generation > file.generation;
-    assert not Segments.writeSegment(files, file, 1, [1, 1, 1].toBlob());
+    assert not Segments.writeSegment(files, file, 1, ([1, 1, 1] : [Nat8]).toBlob());
     Segments.release(files, file);
-    assert Segments.writeSegment(files, next, 1, [2, 2, 2].toBlob())
+    assert Segments.writeSegment(files, next, 1, ([2, 2, 2] : [Nat8]).toBlob())
   };
   public func runTests() : async () {
     assert Space.promise(spaces, "club", Space.rootBytes * 3, Space.rootBytes * 3);
@@ -46,7 +46,7 @@ persistent actor {
         assert Segments.writeSegment(files, file, i, Array.repeat<Nat8>(7, size).toBlob())
       };
       assert Segments.complete(files, file);
-      assert Segments.read(files, file, length - 1, 10) == [7].toBlob();
+      assert Segments.read(files, file, length - 1, 10) == ([7] : [Nat8]).toBlob();
       assert Segments.read(files, file, length, 1) == "";
       assert not Segments.writeSegment(files, file, file.segments, "");
       assert not Segments.writeSegment(files, file, 0, "");
@@ -58,10 +58,10 @@ persistent actor {
     let ?stale = Segments.reserve(files, 1) else { assert false; loop {} };
     Segments.release(files, stale);
     let ?replacement = Segments.reserve(files, 1) else { assert false; loop {} };
-    assert not Segments.writeSegment(files, stale, 0, [9].toBlob());
+    assert not Segments.writeSegment(files, stale, 0, ([9] : [Nat8]).toBlob());
     Segments.release(files, stale);
-    assert Segments.writeSegment(files, replacement, 0, [8].toBlob());
-    assert Segments.read(files, replacement, 0, 1) == [8].toBlob();
+    assert Segments.writeSegment(files, replacement, 0, ([8] : [Nat8]).toBlob());
+    assert Segments.read(files, replacement, 0, 1) == ([8] : [Nat8]).toBlob();
     Segments.release(files, replacement);
     // Fail after acquiring a descriptor and many payload pages. Roll back
     // all physical reservations without refunding the club's promised roots.
