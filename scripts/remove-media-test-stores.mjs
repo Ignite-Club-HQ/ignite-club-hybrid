@@ -16,7 +16,8 @@ const branch = 'ignite-media-test-receipts';
 const api = createJournalApi(repo, x => JSON.stringify(x));
 
 function icp(args) {
-  const r = spawnSync('icp', [...args, '-n', 'ic'], { encoding: 'utf8' });
+  // Identity commands take no network flag; canister/cycles commands target mainnet.
+  const r = spawnSync('icp', args[0] === 'identity' ? args : [...args, '-n', 'ic'], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`icp ${args[0]} ${args[1]} failed (exit ${r.status})`);
   return r.stdout;
 }
