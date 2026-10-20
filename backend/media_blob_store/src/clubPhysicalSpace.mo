@@ -4,6 +4,7 @@ import Text "mo:core/Text";
 import Nat "mo:core/Nat";
 import Nat64 "mo:core/Nat64";
 import Blob "mo:core/Blob";
+import Array "mo:core/Array";
 module {
   public let rootBytes : Nat = 16_777_216;
   public type Arena = { store : Stable.Store; var promised : Nat; var roots : Nat; held : Map.Map<Nat64, Stable.Slice> };
