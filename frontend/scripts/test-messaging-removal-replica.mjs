@@ -7,7 +7,7 @@ import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as chatIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
 import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
 
-for (const key of ['IDENTITY_ACCESS_WASM', 'MESSAGING_BEFORE_WASM', 'MESSAGING_DOMAIN_WASM', 'DELAYED_PERMISSION_WASM', 'POCKET_IC_BIN']) {
+for (const key of ['IDENTITY_ACCESS_WASM', 'MESSAGING_BEFORE_WASM', 'MESSAGING_DOMAIN_WASM', 'MESSAGING_REMOVAL_RELAY_WASM', 'POCKET_IC_BIN']) {
   assert.ok(process.env[key], `${key} required; never silently skip this proof`);
 }
 const p = n => Principal.fromUint8Array(Uint8Array.from([n, 1]));
@@ -118,6 +118,8 @@ try {
   assert.equal(ok(await chat.actor.read_account_list_messages_page(conversation.id, [], 10)).messages.length, 2);
   // Ordinary deployment: preparation is unavailable; no rehearsal release.
   await pic.updateCanisterSettings({ canisterId: chat.canisterId, sender: governor, environmentVariables: [] });
+  await pic.upgradeCanister({ canisterId: chat.canisterId, wasm: process.env.MESSAGING_DOMAIN_WASM,
+    sender: governor, arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   await denied(prepare);
   console.log('PASS: real old-module upgrade, held author drain, exact retry/conflict, denied reads/sends/replay/rekey, survivor history and post-upgrade denial. Local messaging only; no global completion or activation.');
 } finally {
