@@ -1,0 +1,31 @@
+// Browser-independent safety policy for the dedicated, unregistered network test.
+export const GiB = 1024 ** 3;
+export const LEDGER_FEE = 100_000_000_000n;
+export const FUEL_FLOOR = 1_000_000_000_000n;
+export const CALL_RESERVE = 250_000_000_000n;
+export const CONFIRM = 'TEST ISOLATED STORE';
+export function approveTest({ runId, scenario, budgetT, confirm, governor, subnetId, wasmSha256 }) {
+  if (!/^[a-z0-9][a-z0-9-]{2,47}$/.test(runId ?? '')) throw new Error('Use a unique 3–48 character test id');
+  if (!['smoke', 'mixed', 'tiny'].includes(scenario)) throw new Error('Unknown test scenario');
+  if (confirm !== CONFIRM) throw new Error('Explicit isolated-store spending confirmation required');
+  if (!/^(?:[2-9]|1[0-9]|20)$/.test(String(budgetT))) throw new Error('Approve a whole-number funding ceiling from 2 to 20T cycles');
+  if (!governor || governor === '2vxsx-fae' || !subnetId || !/^[a-f0-9]{64}$/.test(wasmSha256)) throw new Error('Complete operator, subnet and build binding required');
+  return { version: 1, runId, scenario, governor, subnetId, wasmSha256, network: 'ic', host: 'https://icp-api.io',
+    budgetCycles: (BigInt(budgetT) * 1_000_000_000_000n).toString(), capacityBytes: scenario === 'tiny' ? 512 * 1024 ** 2 : 5 * GiB };
+}
+export function environmentFor(binding) {
+  return [{ name: 'GOVERNOR_PRINCIPAL', value: binding.governor }, { name: 'IGNITE_MEDIA_LARGE_CAPACITY', value: '1' }];
+}
+export function assertTarget(binding, id, status, subnet, protectedIds, expectedModule = binding.wasmSha256) {
+  if (!id || protectedIds.has(id)) throw new Error('Refusing an existing live/group/test canister');
+  if (subnet !== binding.subnetId || status.controllers.length !== 1 || status.controllers[0] !== binding.governor) throw new Error('Exact subnet and sole governor proof required');
+  if (status.moduleHash !== expectedModule) throw new Error('Unexpected target module; never reinstall');
+}
+export function assertFuel(binding, current, initial) {
+  if (current < FUEL_FLOOR + CALL_RESERVE) throw new Error('Fuel safety floor reached; no automatic top-up');
+  if (initial - current + CALL_RESERVE > BigInt(binding.budgetCycles) - LEDGER_FEE) throw new Error('Approved funding bound reached');
+}
+export function assertResume(saved, binding) {
+  if (JSON.stringify(saved.binding) !== JSON.stringify(binding)) throw new Error('Saved test binding differs');
+  if (saved.pending) throw new Error('Unresolved mutation: report and reconcile; never automatically repeat');
+}
