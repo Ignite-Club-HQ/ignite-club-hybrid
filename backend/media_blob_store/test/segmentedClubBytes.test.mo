@@ -37,7 +37,7 @@ persistent actor {
   };
   public func runTests() : async () {
     assert Space.promise(spaces, "club", Space.rootBytes * 3, Space.rootBytes * 3);
-    for (length in [1, 65_535, 65_536, 65_537, 25 * 1_048_576].values()) {
+    for (length in [1, 65_535, 65_536, 65_537, 25 * 1_048_576, Segments.maxSegments * 65_536].values()) {
       let ?file = Segments.reserve(files, length) else { assert false; loop {} };
       assert file.length == length;
       assert not Segments.complete(files, file);
@@ -56,6 +56,11 @@ persistent actor {
     };
     assert Segments.reserve(files, 0) == null;
     assert Segments.reserve(files, Segments.maxSegments * 65_536 + 1) == null;
+    let priorGeneration = spaces.nextGeneration;
+    spaces.nextGeneration := 18_446_744_073_709_551_614;
+    assert Segments.reserve(files, 1) == null;
+    assert pool.pages.size() == 0 and files.files.size() == 0;
+    spaces.nextGeneration := priorGeneration;
     let ?stale = Segments.reserve(files, 1) else { assert false; loop {} };
     Segments.release(files, stale);
     let ?replacement = Segments.reserve(files, 1) else { assert false; loop {} };
