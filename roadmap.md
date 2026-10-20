@@ -4,6 +4,7 @@
 
 ### Current priority — owner decision 20 October 2026, 02:14 UTC
 
+- [ ] Owner request 20 October 05:25 UTC: extend card checkout to bounded canister fuel top-ups and closed-group installation funding, reusing the deploy identity and durable no-replay receipts. No automatic installation/opening; live payment and transfer acceptance require the owner's GitHub workflow.
 - [x] Owner request 20 October 05:20 UTC: card checkout workflow for the existing deploy identity. Requests live balance shortfall to the chosen test ceiling, saves/readbacks order intent, prints exact hosted checkout link/quote, waits for delivery and verifies balance; unresolved payments block repeat purchases. No automated test/deploy or card charge. Owner must run workflow and pay; live checkout remains unverified without GitHub-held signing identity.
 - [x] Correct Stage 2 journal bootstrap repository GET: GitHub rejects the trailing-slash repository endpoint (public probe 404 versus canonical 200). Shared tested request helper preserves checkpoint writes and stops failures without retry; included in workflow safety checks. Owner must start a new corrected-branch smoke run; real-network acceptance remains pending.
 - [x] Correct screenshot-reported Stage 2 startup failure: resolve the report directory in step environment, where GitHub permits runner.temp, rather than job environment. Added context regression coverage; owner must start a new run on the corrected branch. No paid test started in the rejected run.
