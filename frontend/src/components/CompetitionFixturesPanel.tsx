@@ -1955,8 +1955,8 @@ export function CompetitionLadderPanel({
   pointsDraw?: number;
   pointsLoss?: number;
 }) {
-  const { data: rows = [], isLoading, isError } = useQuery({
-    queryKey: ["competition-ladder", competitionId],
+  const { data: ladderData, isLoading, isError } = useQuery({
+    queryKey: ["competition-ladder", competitionId, pointsWin, pointsDraw, pointsLoss],
     queryFn: async () => {
       if (resolveAuthBackend() === "icp") {
         const [{ withFeatureBackend }, competitions, { icpGetTeam }] = await Promise.all([
@@ -1965,7 +1965,7 @@ export function CompetitionLadderPanel({
           import("@/lib/icpClubTeamLookup"),
         ]);
         return withFeatureBackend("competitions", {
-          supabase: async () => [],
+          supabase: async () => ({ rows: [], masked: false }),
           icp: async (ctx) => {
             const [entries, matches] = await Promise.all([
               competitions.listLiveCompetitionEntries(ctx, competitionId),
@@ -1978,12 +1978,12 @@ export function CompetitionLadderPanel({
               const team = await icpGetTeam(teamId).catch(() => null);
               return [teamId, team ? { id: team.id, name: team.name, logo_url: null } : null] as const;
             }));
-            return buildCompetitionLadderRows(
+            return { masked: matches.some((m: any) => ["completed", "played"].includes(m.status) && (m.home_score == null || m.away_score == null)), rows: buildCompetitionLadderRows(
               entries,
               matches,
               new Map(teamRows),
               { win: pointsWin, draw: pointsDraw, loss: pointsLoss },
-            );
+            ) };
           },
         }, { competitionId });
       }
@@ -1997,10 +1997,11 @@ export function CompetitionLadderPanel({
       const teamIds = [...new Set((entries.data ?? []).map(e => e.team_id).filter(Boolean))];
       const teams = await supabase.from("teams").select("id,name,logo_url").in("id", teamIds);
       if (teams.error) throw teams.error;
-      return buildCompetitionLadderRows(entries.data ?? [], (fixtures.data ?? []).map((m: any) => ({ ...m, home_score: m.competition_match_results?.home_score ?? null, away_score: m.competition_match_results?.away_score ?? null })), new Map((teams.data ?? []).map(t => [t.id,t])), { win: pointsWin, draw: pointsDraw, loss: pointsLoss });
+      return { masked: (fixtures.data ?? []).some((m: any) => ["completed", "played"].includes(m.status) && (m.competition_match_results?.home_score == null || m.competition_match_results?.away_score == null)), rows: buildCompetitionLadderRows(entries.data ?? [], (fixtures.data ?? []).map((m: any) => ({ ...m, home_score: m.competition_match_results?.home_score ?? null, away_score: m.competition_match_results?.away_score ?? null })), new Map((teams.data ?? []).map(t => [t.id,t])), { win: pointsWin, draw: pointsDraw, loss: pointsLoss }) };
     },
   });
 
+  const rows = ladderData?.rows ?? [];
   if (isLoading) {
     return <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin" /></div>;
   }
@@ -2031,5 +2032,5 @@ export function CompetitionLadderPanel({
     );
   }
 
-  return <><p className="text-sm text-muted-foreground">Scores hidden where privacy settings apply; hidden results are excluded.</p><LadderView rows={rows} divisions={divisions} isAdmin={isAdmin} /></>;
+  return <>{ladderData?.masked && <p className="text-sm text-muted-foreground">Scores hidden — hidden results are excluded.</p>}<LadderView rows={rows} divisions={divisions} isAdmin={isAdmin} /></>;
 }

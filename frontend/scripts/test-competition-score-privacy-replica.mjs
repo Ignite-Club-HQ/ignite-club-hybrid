@@ -1,0 +1,41 @@
+// Local-only actor authorization and operator transfer rehearsal.
+import assert from 'node:assert/strict';
+import { PocketIc, PocketIcServer } from '@dfinity/pic';
+import { Principal } from '@icp-sdk/core/principal';
+import { IDL } from '@icp-sdk/core/candid';
+import { idlFactory } from '../src/lab/bindings/competition_domain/declarations/competition_domain.did.js';
+const governor = Principal.fromUint8Array(Uint8Array.from([1,1]));
+const manager = Principal.fromUint8Array(Uint8Array.from([2,1]));
+const member = Principal.fromUint8Array(Uint8Array.from([3,1]));
+const ok = r => { assert.ok('Ok' in r, JSON.stringify(r)); return r.Ok; };
+const service = idlFactory({ IDL });
+const state = service._fields.find(([k]) => k === 'export_state')[1].retTypes[0]._fields.find(([k]) => k === 'Ok')[1];
+const field = k => state._fields.find(([n]) => n === k)[1];
+const fields = { competitions: field('competitions'), roles: field('roles'), entries: field('entries'), matches: field('matches') };
+for (const k of ['tokens','seasons','chat_settings','welcome','invites','join_links','official_invites','welcome_jobs','eoi','divisions','ladders','broadcasts','owners','role_links','official_chats']) fields[k] = IDL.Vec(IDL.Empty);
+const privacyType = IDL.Vec(IDL.Record({competition_id: IDL.Text, division: IDL.Opt(IDL.Text), hide_scores: IDL.Bool}));
+const oldType = IDL.Record(fields), newType = IDL.Record({...fields, score_privacy: IDL.Opt(privacyType)});
+const snapshot = Object.fromEntries(Object.keys(fields).map(k => [k, []]));
+snapshot.competitions = [{id:'cup',club_id:'club',name:'Cup',season:'2026',status:'open',visibility:'public',description:[],points_win:5,points_draw:2,points_loss:1,revision:1n}];
+snapshot.roles = [{user:manager,role:'competition_admin',competition_id:'cup',team_id:[]},{user:member,role:'member',competition_id:'cup',team_id:[]}];
+snapshot.matches = [{id:'match',competition_id:'cup',home_team:'h',away_team:'a',home_score:4,away_score:2,status:'completed',revision:1n,...Object.fromEntries(['division_id','scheduled_at_ms','venue','pitch_number','round_number','duration_minutes','arrival_minutes_before','notes'].map(k => [k,[]]))}];
+const privacy = [{competition_id:'cup',division:[],hide_scores:true}];
+const server = await PocketIcServer.start({binPath:'/root/.cache/mops/pocket-ic/15.0.0/pocket-ic'});
+let pic;
+try {
+ pic = await PocketIc.create(server.getUrl());
+ const { actor:c } = await pic.setupCanister({idlFactory,wasm:process.env.COMPETITION_DOMAIN_WASM ?? '/tmp/competition-privacy.wasm',sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])});
+ c.setPrincipal(governor); ok(await c.set_transfer_fence('club',true));
+ ok(await c.import_club_snapshot('club',IDL.encode([newType],[{...snapshot,score_privacy:[privacy]}])));
+ const exported = ok(await c.export_club_snapshot('club'));
+ assert.deepEqual(IDL.decode([IDL.Record({score_privacy:IDL.Opt(privacyType)})],exported)[0].score_privacy,[privacy]);
+ ok(await c.purge_club_snapshot('club')); assert.deepEqual(await c.get_score_privacy('cup'),[]);
+ ok(await c.import_club_snapshot('club',exported)); assert.deepEqual(await c.get_score_privacy('cup'),privacy);
+ ok(await c.set_transfer_fence('club',false));
+ c.setPrincipal(manager); assert.deepEqual(ok(await c.list_matches('cup'))[0].home_score,[4]);
+ c.setPrincipal(member); assert.deepEqual(ok(await c.list_matches('cup'))[0].home_score,[]);
+ c.setPrincipal(Principal.anonymous()); assert.deepEqual(ok(await c.get_public_competition_page('cup')).matches[0].home_score,[]);
+ c.setPrincipal(governor); ok(await c.set_transfer_fence('club',true));
+ ok(await c.import_club_snapshot('club',IDL.encode([oldType],[snapshot]))); assert.deepEqual(await c.get_score_privacy('cup'),[]);
+ console.log('PASS: manager/member/anonymous score privacy; export/import/purge and older snapshot compatibility');
+} finally { if(pic) await pic.tearDown(); await server.stop(); }

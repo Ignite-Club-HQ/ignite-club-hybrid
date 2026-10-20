@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: mocks.from },
+  supabase: { from: mocks.from, rpc: async (...args: unknown[]) => { mocks.calls.push({ method: "rpc", args }); return mocks.response; } },
 }));
 
 vi.mock("@/live/featureRouter", () => ({
@@ -230,11 +230,7 @@ describe("match mutation targeting", () => {
     const payload = { home_score: 3, away_score: 1, status: "completed" };
     await expect(updateCompetitionMatch("match-1", payload)).resolves.toEqual({ error: null });
     expect(mocks.calls).toEqual([
-      { method: "from", args: ["competition_match_results"] },
-      { method: "upsert", args: [{ match_id: "match-1", home_score: 3, away_score: 1 }] },
-      { method: "from", args: ["competition_matches"] },
-      { method: "update", args: [{ status: "completed" }] },
-      { method: "eq", args: ["id", "match-1"] },
+      { method: "rpc", args: ["save_competition_match_result", { p_match_id: "match-1", p_home_score: 3, p_away_score: 1, p_status: "completed" }] },
     ]);
   });
 

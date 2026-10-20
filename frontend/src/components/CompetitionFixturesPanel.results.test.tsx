@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
   from: vi.fn(),
+  rpc: vi.fn(),
   toast: vi.fn(),
   invalidateQueries: vi.fn(),
   matches: [] as any[],
@@ -14,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 }));
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
-vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from, rpc: mocks.rpc } }));
 vi.mock("@/live/featureRouter", () => ({
   withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
     mocks.backend === "icp" ? providers.icp({ identity: {}, target: { alias: "test" } }) : providers.supabase(),
@@ -106,7 +107,22 @@ describe("CompetitionFixturesPanel result management", () => {
     mocks.matches = [match()];
     mocks.mutationResult.error = null;
     mocks.lastQuery = null;
+    mocks.rpc.mockImplementation(async () => mocks.mutationResult);
     mocks.from.mockImplementation(() => mutationQuery());
+  });
+
+  it.each(["competition hide", "division inherit", "division hide"])("labels masked %s results for members", () => {
+    mocks.matches = [match({ status: "completed", home_score: null, away_score: null })];
+    renderPanel({ isAdmin: false });
+    expect(screen.getByText("Scores hidden")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /enter score|edit score/i })).not.toBeInTheDocument();
+  });
+
+  it("shows manager scores and edit controls even for a hidden competition", () => {
+    mocks.matches = [match({ status: "completed", home_score: 4, away_score: 2 })];
+    renderPanel();
+    expect(screen.queryByText("Scores hidden")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /edit score/i })).toBeInTheDocument();
   });
 
   it("does not expose result controls to a non-admin", () => {
@@ -174,11 +190,9 @@ describe("CompetitionFixturesPanel result management", () => {
     renderPanel();
     await editScores("3", "1");
 
-    await waitFor(() => expect(mocks.from).toHaveBeenCalledWith("competition_matches"));
-    expect(mocks.lastQuery.update).toHaveBeenCalledWith({
-      status: "completed",
-    });
-    expect(mocks.lastQuery.eq).toHaveBeenCalledWith("id", "match-1");
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith("save_competition_match_result", {
+      p_match_id: "match-1", p_home_score: 3, p_away_score: 1, p_status: "completed",
+    }));
     await waitFor(() => expect(mocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["competition-matches", "competition-1"],
     }));
@@ -191,9 +205,7 @@ describe("CompetitionFixturesPanel result management", () => {
     renderPanel();
     await editScores("2", "");
 
-    await waitFor(() => expect(mocks.lastQuery.update).toHaveBeenCalledWith({
-      status: "scheduled",
-    }));
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith("save_competition_match_result", expect.objectContaining({ p_status: "scheduled" })));
   });
 
   it.runIf(supabaseMode)("reverts a completed match to scheduled when its scores are cleared", async () => {
@@ -201,9 +213,7 @@ describe("CompetitionFixturesPanel result management", () => {
     renderPanel();
     await editScores("", "");
 
-    await waitFor(() => expect(mocks.lastQuery.update).toHaveBeenCalledWith({
-      status: "scheduled",
-    }));
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith("save_competition_match_result", expect.objectContaining({ p_status: "scheduled" })));
   });
 
   it.runIf(supabaseMode)("marks the first local edit of an externally sourced match as overridden", async () => {
@@ -211,10 +221,7 @@ describe("CompetitionFixturesPanel result management", () => {
     renderPanel();
     await editScores("1", "0");
 
-    await waitFor(() => expect(mocks.lastQuery.update).toHaveBeenCalledWith(expect.objectContaining({
-      status: "completed",
-      manually_overridden_at: expect.any(String),
-    })));
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith("save_competition_match_result", expect.objectContaining({ p_status: "completed" })));
     expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
       title: "Match updated",
       description: expect.stringMatching(/locally overridden/i),
@@ -229,8 +236,8 @@ describe("CompetitionFixturesPanel result management", () => {
     renderPanel();
     await editScores("1", "1");
 
-    await waitFor(() => expect(mocks.lastQuery.update).toHaveBeenCalled());
-    expect(mocks.lastQuery.update.mock.calls[0][0]).not.toHaveProperty("manually_overridden_at");
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalled());
+    expect(mocks.rpc.mock.calls[0][1]).not.toHaveProperty("manually_overridden_at");
   });
 
   it.runIf(supabaseMode)("reports a rejected score update without invalidating successful caches", async () => {

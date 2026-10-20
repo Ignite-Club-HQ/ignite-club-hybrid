@@ -10756,6 +10756,11 @@ export type Database = {
       }
     }
     Functions: {
+      save_competition_match_result: {
+        Args: { p_match_id: string; p_home_score: number | null; p_away_score: number | null; p_status: string | null }
+        Returns: undefined
+      }
+
       _internal_service_role_key: { Args: never; Returns: string }
       _leaderboard_window_start: { Args: { _window: string }; Returns: string }
       _provision_invite_children_internal: {
