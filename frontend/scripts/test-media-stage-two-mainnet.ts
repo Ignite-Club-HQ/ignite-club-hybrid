@@ -16,6 +16,10 @@ import { approveTest, assertResume, isUnpaidAttempt, isResumableInstall, assertT
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { DEPLOY_PRINCIPAL } from '../../scripts/media-card-funding-policy.mjs';
 
+console.log('Media store test starting');
+process.on('exit', code => console.log(`Media store test exiting with code ${code}`));
+process.on('uncaughtException', e => { console.log(`Uncaught failure: ${e instanceof Error ? e.stack ?? e.message : String(e)}`); process.exit(1); });
+process.on('unhandledRejection', e => { console.log(`Unhandled failure: ${e instanceof Error ? e.stack ?? e.message : String(e)}`); process.exit(1); });
 const root = resolve(import.meta.dirname, '../..');
 const identity = loadOperatorIdentity(process.env.OPERATOR_PEM_PATH ?? '');
 if (identity.getPrincipal().toText() !== DEPLOY_PRINCIPAL) throw new Error(`Loaded key resolves to ${identity.getPrincipal().toText()}, not the funded deploy identity ${DEPLOY_PRINCIPAL}; nothing was spent`);
@@ -120,6 +124,7 @@ async function fuel() {
 async function phase(name: string, work: () => Promise<unknown>) {
   const prior = state.receipts.find((r: any) => r.phase === name);
   if (prior) { console.log(`Phase ${name} already recorded; not repeated`); return prior.result; }
+  console.log(`Phase ${name}: starting`);
   state.phase = name; state.pending = { kind: name, time: new Date().toISOString() }; await save();
   const result = await work(); state.receipts.push({ phase: name, result, time: new Date().toISOString() });
   state.pending = null; await save(); return result;
