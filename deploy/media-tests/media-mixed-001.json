@@ -12,7 +12,10 @@
     "capacityBytes": 5368709120
   },
   "phase": "fill",
-  "pending": null,
+  "pending": {
+    "kind": "fill",
+    "time": "2026-10-20T07:26:28.194Z"
+  },
   "receipts": [
     {
       "phase": "create",
@@ -1088,7 +1091,7 @@
   },
   "createdAtNs": "1792478096172000000",
   "canisterId": "2knbe-saaaa-aaaal-qxpua-cai",
-  "initialCycles": "4394997667949",
+  "initialCycles": "1702967589207",
   "resumedFill": [
     {
       "at": "2026-10-20T07:26:21.521Z",
