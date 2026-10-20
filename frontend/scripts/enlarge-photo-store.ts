@@ -18,6 +18,14 @@ const ok = (r: any, what: string) => { if (r && 'Err' in r) throw new Error(`${w
 let status = await store.stable_storage_status();
 console.log(`Store ${target}: larger storage ${status.enabled ? 'already on' : 'off'}, ${status.legacy_count} files to copy`);
 if (!status.enabled) {
+  // Unfinished uploads block the switch-over; the deploy identity may abort them.
+  // Aborted uploads simply fail for the uploader, who can retry afterwards.
+  const pending = ok(await store.read_pending_uploads(), 'Listing unfinished uploads failed') as { id: string; path: string }[];
+  for (const u of pending) {
+    ok(await store.abort_upload(u.id), `Aborting unfinished upload ${u.id} failed`);
+    console.log(`Aborted unfinished upload ${u.id} (${u.path})`);
+  }
+  if (pending.length > 0) console.log(`Drained ${pending.length} unfinished upload(s)`);
   let copied = 0;
   for (;;) {
     const r = ok(await store.migrate_legacy_blob(), 'Copying a file failed');

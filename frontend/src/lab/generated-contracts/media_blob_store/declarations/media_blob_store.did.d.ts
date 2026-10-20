@@ -228,6 +228,11 @@ export interface _SERVICE {
     { 'Ok' : Array<{ 'id' : string, 'path' : string, 'size' : bigint }> } |
       { 'Err' : string }
   >,
+  'read_pending_uploads' : ActorMethod<
+    [],
+    { 'Ok' : Array<{ 'id' : string, 'path' : string, 'size' : bigint }> } |
+      { 'Err' : string }
+  >,
   'read_physical_growth_capacity' : ActorMethod<
     [],
     {

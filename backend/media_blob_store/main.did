@@ -255,6 +255,15 @@ service : {
                 size: nat64;
               };
     });
+  read_pending_uploads: () ->
+   (variant {
+      Err: text;
+      Ok: vec record {
+                id: text;
+                path: text;
+                size: nat64;
+              };
+    });
   read_physical_growth_capacity: () ->
    (variant {
       Err: text;
