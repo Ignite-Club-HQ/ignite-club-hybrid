@@ -2,7 +2,7 @@
 //! No endpoint seeds state, authorizes membership, or changes release gates.
 use crate::*;
 #[derive(CandidType, Serialize)]
-struct Probe { result: Outcome<GroupAssignment>, instructions: u64 }
+pub(crate) struct Probe { result: Outcome<GroupAssignment>, instructions: u64 }
 #[ic_cdk::update]
 fn measure_scale_path(path: String, club: String, target: String, revision: u64) -> Outcome<Probe> {
     require_governor()?;
