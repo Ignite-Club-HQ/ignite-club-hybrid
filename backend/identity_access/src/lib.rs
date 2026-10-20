@@ -2524,7 +2524,9 @@ mod tests {
         assert!(validate_service_authorities(&[principal(97), principal(97)]).is_err());
         assert!(validate_service_authorities(&[Principal::anonymous()]).is_err());
         assert!(validate_service_authorities(&[Principal::management_canister()]).is_err());
-        assert!(validate_service_authorities(&(1..66).map(principal).collect::<Vec<_>>()).is_err());
+        let many = |n: u32| (0..n).map(|i| Principal::from_slice(&[1, (i >> 8) as u8, i as u8, 7])).collect::<Vec<_>>();
+        assert!(validate_service_authorities(&many(200)).is_ok());
+        assert!(validate_service_authorities(&many(4097)).is_err());
     }
     #[test]
     fn erasure_blocks_all_current_identities_and_preserves_other_accounts() {
