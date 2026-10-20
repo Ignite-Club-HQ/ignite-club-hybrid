@@ -81,6 +81,9 @@ function parseCanisterIdsText(text: string): Record<string, string> {
   }
   return out;
 }
+function patchPreparation(current: DeploymentPreparation | undefined, patch: Partial<DeploymentPreparation>): DeploymentPreparation {
+  return { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...current, ...patch };
+}
 type ClubOverrideRow = { clubId: string; backend: BackendProvider };
 
 const TARGET_KIND_LABELS: Record<BackendTargetKind, string> = {
@@ -628,7 +631,7 @@ export default function PlacementAdminSettingsPage() {
         return (before?.kind === "icp-cloud-engine" || after?.kind === "icp-cloud-engine") && before?.id !== after?.id;
       });
       if (moved.length > 0 && !window.confirm(
-        `Changing the ICP deployment for ${moved.map(countryName).join(", ")} does not move existing data. Members there will see a fresh deployment until data is migrated. Save anyway?`,
+        `Changing the ICP deployment for ${moved.map(countryName).join(", ")} does not move existing data. Existing clubs must retain their original group; engine activation is blocked pending verified new-club routing. Save preparation anyway?`,
       )) return;
       routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets, clubBackendOverrides });
     } catch (error) {
@@ -1009,15 +1012,15 @@ export default function PlacementAdminSettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label htmlFor={`deployment-id-${index}`}>Deployment ID</Label>
-                      <Input id={`deployment-id-${index}`} value={row.preparation?.deploymentId ?? ''} onChange={e => updateTargetRow(index, { preparation: { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...row.preparation, deploymentId: e.target.value } })} />
+                      <Input id={`deployment-id-${index}`} value={row.preparation?.deploymentId ?? ''} onChange={e => updateTargetRow(index, { preparation: patchPreparation(row.preparation, { deploymentId: e.target.value }) })} />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor={`deployment-subnet-${index}`}>Primary subnet ID</Label>
-                      <Input id={`deployment-subnet-${index}`} value={row.preparation?.primarySubnet ?? ''} onChange={e => updateTargetRow(index, { preparation: { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...row.preparation, primarySubnet: e.target.value } })} />
+                      <Input id={`deployment-subnet-${index}`} value={row.preparation?.primarySubnet ?? ''} onChange={e => updateTargetRow(index, { preparation: patchPreparation(row.preparation, { primarySubnet: e.target.value }) })} />
                     </div>
                     <div className="space-y-1 sm:col-span-2">
                       <Label htmlFor={`deployment-groups-${index}`}>Planned group IDs (comma separated)</Label>
-                      <Input id={`deployment-groups-${index}`} value={row.preparation?.groupIds.join(', ') ?? ''} onChange={e => updateTargetRow(index, { preparation: { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...row.preparation, groupIds: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } })} />
+                      <Input id={`deployment-groups-${index}`} value={row.preparation?.groupIds.join(', ') ?? ''} onChange={e => updateTargetRow(index, { preparation: patchPreparation(row.preparation, { groupIds: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }) })} />
                     </div>
                   </div>
                 )}
@@ -1035,7 +1038,7 @@ export default function PlacementAdminSettingsPage() {
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor={`engine-proxy-${index}`}>Console encryption proxy ID</Label>
-                      <Input id={`engine-proxy-${index}`} value={row.preparation?.proxyCanisterId ?? ''} onChange={e => updateTargetRow(index, { preparation: { deploymentId: '', primarySubnet: '', groupIds: [], proxyCanisterId: '', ...row.preparation, proxyCanisterId: e.target.value } })} />
+                      <Input id={`engine-proxy-${index}`} value={row.preparation?.proxyCanisterId ?? ''} onChange={e => updateTargetRow(index, { preparation: patchPreparation(row.preparation, { proxyCanisterId: e.target.value }) })} />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor={`target-canisters-${index}`}>Canister IDs on this engine</Label>
