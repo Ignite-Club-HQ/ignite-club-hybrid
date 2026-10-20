@@ -6,7 +6,7 @@ import Nat64 "mo:core/Nat64";
 import Blob "mo:core/Blob";
 module {
   public let rootBytes : Nat = 16_777_216;
-  public type Arena = { store : Stable.Store; var promised : Nat; var roots : Nat };
+  public type Arena = { store : Stable.Store; var promised : Nat; var roots : Nat; held : Map.Map<Nat64, Stable.Slice> };
   public type State = Map.Map<Text, Arena>;
   public func empty() : State { Map.empty() };
   // The caller must authenticate and bind this ledger to its exact store.
@@ -36,7 +36,7 @@ module {
     };
     let arena = switch (old) {
       case (?arena) arena;
-      case null { { store = { region = sharedStore.region; var end = sharedStore.end; free = Map.empty<Nat, Map.Map<Nat64, ()>>() }; var promised = 0; var roots = 0 } }
+      case null { { store = { region = sharedStore.region; var end = sharedStore.end; free = Map.empty<Nat, Map.Map<Nat64, ()>>() }; var promised = 0; var roots = 0; held = Map.empty<Nat64, Stable.Slice>() } }
     };
     // Only owned extents are free inside this arena; there is no private tail.
     arena.store.end := sharedStore.end;
@@ -49,7 +49,8 @@ module {
     let ?arena = state.get(club) else return null;
     // A private arena cannot extend into another club's root or global tail.
     if (not hasFree(arena.store, Stable.slotFor(length))) return null;
-    Stable.reserveWithin(arena.store, length, arena.store.end.toNat())
+    let ?slice = Stable.reserveWithin(arena.store, length, arena.store.end.toNat()) else return null;
+    arena.held.add(slice.offset, slice); ?slice
   };
   func hasFree(store : Stable.Store, slot : Nat) : Bool {
     var size = slot;
@@ -61,10 +62,13 @@ module {
   };
   public func release(state : State, club : Text, slice : Stable.Slice) {
     let ?arena = state.get(club) else return;
+    if (arena.held.get(slice.offset) != ?slice) return;
+    arena.held.remove(slice.offset);
     Stable.release(arena.store, slice)
   };
   public func write(state : State, club : Text, slice : Stable.Slice, bytes : Blob) : Bool {
     let ?arena = state.get(club) else return false;
+    if (arena.held.get(slice.offset) != ?slice) return false;
     Stable.writeReserved(arena.store, slice, bytes)
   };
 }
