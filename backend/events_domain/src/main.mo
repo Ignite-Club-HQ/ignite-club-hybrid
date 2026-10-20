@@ -2263,7 +2263,7 @@ persistent actor class Main(governorInit : Principal) {
       case (#Ok(result)) {
         let hidden = switch (result) { case null false; case (?r) r.scores_hidden };
         #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id).map(func(item : Types.GamePlayerStat) : Types.GamePlayerStat {
-          if (hidden) ({ item with goals_scored = 0 : Nat32 }) else item
+          if (hidden) ({ item with goals_scored = 0 : Nat16 }) else item
         }))
       }
     }

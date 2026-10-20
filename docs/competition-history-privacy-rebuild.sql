@@ -21,17 +21,7 @@ FOR SELECT TO authenticated USING (public.history_scores_visible(event_id));
 
 -- Only a competition manager can modify its mirrored results. A team role or
 -- saved_by alone is never authority to alter another competition's result.
-CREATE POLICY protected_history_writes ON public.game_results AS RESTRICTIVE
-FOR ALL TO authenticated USING (
- NOT EXISTS (SELECT 1 FROM public.events e WHERE e.id=event_id AND e.competition_match_id IS NOT NULL
-             AND NOT public.can_manage_competition_vault((SELECT competition_id FROM public.competition_matches WHERE id=e.competition_match_id)))
-) WITH CHECK (
- NOT EXISTS (SELECT 1 FROM public.events e WHERE e.id=event_id AND e.competition_match_id IS NOT NULL
-             AND NOT public.can_manage_competition_vault((SELECT competition_id FROM public.competition_matches WHERE id=e.competition_match_id)))
-);
--- The restrictive ALL policy above would also restrict SELECT to managers.
--- Use command-specific policies instead, so visible competition members retain reads.
-DROP POLICY protected_history_writes ON public.game_results;
+-- Command-specific policies keep visible competition member reads intact.
 CREATE OR REPLACE FUNCTION public.can_write_competition_history(p_event uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
  SELECT NOT EXISTS (SELECT 1 FROM public.events e JOIN public.competition_matches m ON m.id=e.competition_match_id
