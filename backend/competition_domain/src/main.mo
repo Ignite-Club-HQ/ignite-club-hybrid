@@ -55,6 +55,9 @@ persistent actor class Main(governorInit : Principal) {
   var seasons : [Types.Season];
   var matches : [Types.Match];
   var scorePrivacySettings : [ScorePrivacy.Setting];
+  var playhqMatchMetadata : [Types.PlayHQMatchMeta];
+  var playhqStats : [Types.PlayHQStat];
+  var playhqClaims : [Types.PlayHQClaim];
   func readableMatch(game : Types.Match, manager : Bool) : Types.MatchRead {
     ScorePrivacy.mask(game, not manager and ScorePrivacy.hidden(scorePrivacySettings, game.competition_id, game.division_id))
   };
@@ -1998,6 +2001,57 @@ persistent actor class Main(governorInit : Principal) {
     let result=try{await (with timeout=10) service.upsert_competition_match_events({match_id;competition_id=game.competition_id;creator=caller;teams;starts_at_ms=starts;ends_at_ms=starts+Nat64.fromNat(Nat16.toNat(game.duration_minutes??90))*60_000;title=game.home_team#" vs "#game.away_team;venue=game.venue})}catch(_){return #Err("Fixture synchronization failed; retry the same match")};
     if(eventsDomainCanister!=?authority or matchFenced(match_id)) return #Err("Fixture authority changed or locked");
     result
+  };
+
+  public shared ({caller}) func sync_playhq_grade(competition_id:Text,tenant:Text,grade:Text) : async {#Ok:Nat;#Err:Text} {
+    auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
+    if(compFenced(competition_id) or not canManageCompetition(caller,competition_id)) return #Err("Competition manager required");
+    let authority=switch(eventsDomainCanister){case null return #Err("Events authority unavailable");case(?id)id};
+    let service:actor{fetch_playhq_grade:shared(Text,Text)->async{#Ok:Types.PlayHQFeed;#Err:Text}}=actor(authority.toText());
+    let feed=switch(try{await(with timeout=120)service.fetch_playhq_grade(tenant,grade)}catch(_){return #Err("PlayHQ synchronization unavailable")}){case(#Err(e))return #Err(e);case(#Ok(f))f};
+    await syncForCompetition(caller,competition_id);
+    if(eventsDomainCanister!=?authority or compFenced(competition_id) or not canManageCompetition(caller,competition_id)) return #Err("Competition access changed");
+    if(feed.games.size()>200 or feed.stats.size()>2000) return #Err("Feed exceeds import bounds");
+    var incoming:[Types.PlayHQMatchMeta]=[];var imported:[Types.Match]=[];var statRows:[Types.PlayHQStat]=[];
+    for(g in feed.games.values()) {
+      let previous=playhqMatchMetadata.find(func(m)=m.competition_id==competition_id and m.tenant==tenant and m.game_id==g.game_id);
+      let id=switch(previous){case null "phq-"#competition_id#"-"#tenant#"-"#g.game_id;case(?m)m.match_id};
+      let old=matches.find(func(m)=m.id==id);
+      // Local edits win over refresh; never overwrite a manually changed revision.
+      let override=switch(previous,old){case(?p,?m)p.synced_revision!=m.revision;case _ false};
+      let revision=switch(old){case null 1;case(?m)m.revision+1};
+      let row:Types.Match=switch(old){case(?m)if(override)m else {m with status=g.status;home_score=g.home_score??m.home_score;away_score=g.away_score??m.away_score;scheduled_at_ms=g.starts_at_ms;venue=g.venue;revision};case null {id;competition_id;home_team=g.home_id;away_team=g.away_id;status=g.status;home_score=g.home_score??0;away_score=g.away_score??0;division_id=?grade;scheduled_at_ms=g.starts_at_ms;venue=g.venue;pitch_number=null;round_number=null;duration_minutes=null;arrival_minutes_before=null;notes=null;revision}};
+      imported:=imported.concat([row]);
+      incoming:=incoming.concat([{match_id=id;competition_id;tenant;grade_id=grade;game_id=g.game_id;home_id=g.home_id;away_id=g.away_id;home_name=g.home_name;away_name=g.away_name;synced_revision=if(override)switch(previous){case(?p)p.synced_revision;case null row.revision}else row.revision}]);
+    };
+    for(s in feed.stats.values()) {
+      let meta=switch(incoming.find(func(m)=m.game_id==s.game_id)){case null return #Err("Unassociated player statistics");case(?m)m};
+      if(s.team_id!=meta.home_id and s.team_id!=meta.away_id or s.stats_json.size()>8192) return #Err("Invalid player statistics");
+      statRows:=statRows.concat([{competition_id;match_id=meta.match_id;tenant;game_id=s.game_id;team_id=s.team_id;player_id=s.player_id;player_name=s.player_name;stats_json=s.stats_json}]);
+    };
+    matches:=matches.filter(func(m)=not imported.any(func(i)=i.id==m.id)).concat(imported);
+    playhqMatchMetadata:=playhqMatchMetadata.filter(func(m)=not incoming.any(func(i)=i.match_id==m.match_id)).concat(incoming);
+    playhqStats:=playhqStats.filter(func(s)=not incoming.any(func(i)=i.match_id==s.match_id)).concat(statRows);
+    #Ok(imported.size())
+  };
+
+  public shared ({caller}) func read_playhq_stats(competition_id:Text) : async {#Ok:{matches:[Types.PlayHQMatchMeta];stats:[Types.PlayHQStat];claims:[{player_id:Text;tenant:Text;mine:Bool}]};#Err:Text} {
+    auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
+    let member=canManageCompetition(caller,competition_id) or roles.any(func(r)=r.user==caller and r.competition_id==competition_id) or (await participantVisible(caller,competition_id));
+    if(not member or compFenced(competition_id)) return #Err("Competition access denied");
+    let manager=canManageCompetition(caller,competition_id);
+    let meta=playhqMatchMetadata.filter(func(m)=m.competition_id==competition_id);
+    let safe=playhqStats.filter(func(s)=s.competition_id==competition_id and matches.any(func(m)=m.id==s.match_id and (manager or not ScorePrivacy.hidden(scorePrivacySettings,competition_id,m.division_id))));
+    #Ok({matches=meta;stats=safe;claims=playhqClaims.filter(func(c)=safe.any(func(s)=s.tenant==c.tenant and s.player_id==c.player_id)).map(func(c)={player_id=c.player_id;tenant=c.tenant;mine=c.user==caller})})
+  };
+  public shared ({caller}) func claim_playhq_player(competition_id:Text,tenant:Text,player_id:Text) : async {#Ok;#Err:Text} {
+    auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
+    if(compFenced(competition_id)) return #Err("Competition locked");
+    if(not canManageCompetition(caller,competition_id) and not (await participantVisible(caller,competition_id)) and not roles.any(func(r)=r.user==caller and r.competition_id==competition_id)) return #Err("Competition access denied");
+    if(not playhqStats.any(func(s)=s.competition_id==competition_id and s.tenant==tenant and s.player_id==player_id)) return #Err("Player not found");
+    switch(playhqClaims.find(func(c)=c.tenant==tenant and c.player_id==player_id)){case(?c)if(c.user==caller)return #Ok else return #Err("Player already claimed");case null{}};
+    if(compFenced(competition_id)) return #Err("Competition locked");
+    playhqClaims:=playhqClaims.concat([{tenant;player_id;user=caller}]);#Ok
   };
 
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {

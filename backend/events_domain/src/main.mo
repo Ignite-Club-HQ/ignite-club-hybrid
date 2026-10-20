@@ -2857,7 +2857,7 @@ persistent actor class Main(governorInit : Principal) {
     ""
   };
 
-  func playhqHttpGet(path : Text) : async* { #Ok : Text; #Err : Text } {
+  func playhqHttpGetTenant(path : Text, tenant : ?Text) : async* { #Ok : Text; #Err : Text } {
     let config = switch (playHQConfig) {
       case null { return #Err("PlayHQ not configured") };
       case (?c) { c };
@@ -2868,7 +2868,7 @@ persistent actor class Main(governorInit : Principal) {
       headers = [
         { name = "x-api-key"; value = config.api_key },
         { name = "Accept"; value = "application/json" },
-      ];
+      ].concat(switch(tenant){case null [];case(?value)[{name="x-phq-tenant";value}]});
       body = null;
       method = #get;
       transform = ?{ function = playhqTransform; context = Blob.fromArray([]) };
@@ -2890,6 +2890,7 @@ persistent actor class Main(governorInit : Principal) {
       #Err("PlayHQ request failed: " # Error.message(e))
     }
   };
+  func playhqHttpGet(path:Text):async*{#Ok:Text;#Err:Text}{await* playhqHttpGetTenant(path,null)};
 
   // Production PlayHQ endpoint shapes, complete bounded pages only. This
   // returns solely to the configured competition service, never a browser.
@@ -2897,7 +2898,7 @@ persistent actor class Main(governorInit : Principal) {
     let authority=competitionDomainCanister;
     if(authority!=?caller) return #Err("Trusted competition canister only");
     if(not valid(tenant) or not valid(grade) or Text.contains(grade,#char '/') or Text.contains(tenant,#char '/') or Text.contains(grade,#char '?')) return #Err("Invalid PlayHQ scope");
-    let body=switch(await* playhqHttpGet("/grades/"#grade#"/fixture")){case(#Err(e))return #Err(e);case(#Ok(b))b};
+    let body=switch(await* playhqHttpGetTenant("/grades/"#grade#"/fixture",?tenant)){case(#Err(e))return #Err(e);case(#Ok(b))b};
     let rows=switch(PlayhqFeed.rows(body)){case(#Err(e))return #Err(e);case(#Ok(r))r};
     var games:[{game_id:Text;home_id:Text;away_id:Text;home_name:Text;away_name:Text;home_score:?Nat16;away_score:?Nat16;starts_at_ms:?Nat64;status:Text;venue:?Text}]=[];
     var stats:[{game_id:Text;team_id:Text;player_id:Text;player_name:Text;stats_json:Text}]=[];
@@ -2913,7 +2914,7 @@ persistent actor class Main(governorInit : Principal) {
       let venue=PlayhqFeed.str(PlayhqFeed.field(row,"venue"),"name");
       games:=games.concat([{game_id=id;home_id=h;away_id=a;home_name=PlayhqFeed.str(home,"name");away_name=PlayhqFeed.str(away,"name");home_score=PlayhqFeed.score(score,"home");away_score=PlayhqFeed.score(score,"away");starts_at_ms=parsePlayhqTime(if(date=="")PlayhqFeed.str(row,"startsAt")else date,"UTC");status=state;venue=if(venue=="")null else ?venue}]);
       if(state=="completed") {
-        let raw=switch(await* playhqHttpGet("/games/"#id#"/statistics")){case(#Err(e))return #Err(e);case(#Ok(b))b};
+        let raw=switch(await* playhqHttpGetTenant("/games/"#id#"/statistics",?tenant)){case(#Err(e))return #Err(e);case(#Ok(b))b};
         let players=switch(PlayhqFeed.rows(raw)){case(#Err(e))return #Err(e);case(#Ok(r))r};
         for(p in players.values()) {
           let player=PlayhqFeed.field(p,"player");let playerId=PlayhqFeed.str(player,"id");let team=PlayhqFeed.str(PlayhqFeed.field(p,"team"),"id");
