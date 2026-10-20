@@ -87,7 +87,7 @@ export function getQueuedRsvpsForEvent(eventId: string): QueuedRsvp[] {
 async function sendQueuedRsvp(r: QueuedRsvp): Promise<boolean> {
   try {
     if (isFeatureRoutedToIcp("events")) {
-      return withFeatureBackend("events", {
+      return await withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
           const { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveMiniLeagueRsvp } = await import("@/live/features/events");
