@@ -49,7 +49,7 @@ const mgmtIdl = ({ IDL: I }: { IDL: typeof IDL }) => I.Service({
 });
 type Mgmt = {
   canister_status(a: { canister_id: Principal }): Promise<{ status: Record<string, null>; settings: { controllers: Principal[]; environment_variables: { name: string; value: string }[] } }>;
-  update_settings(a: { canister_id: Principal; settings: { environment_variables: { name: string; value: string }[] } }): Promise<void>;
+  update_settings(a: { canister_id: Principal; settings: { environment_variables: [] | [{ name: string; value: string }[]] } }): Promise<void>;
 };
 /** The management canister must be addressed via the target's subnet:
  * pass effectiveCanisterId, else the boundary returns canister_not_found. */
@@ -63,7 +63,7 @@ const envOf = async (id: string) => (await mgmtFor(id).canister_status({ caniste
 const setEnv = async (id: string, patch: Record<string, string>) => {
   const map = new Map((await envOf(id)).map(e => [e.name, e.value]));
   for (const [k, v] of Object.entries(patch)) map.set(k, v);
-  await mgmtFor(id).update_settings({ canister_id: pid(id), settings: { environment_variables: [...map].map(([name, value]) => ({ name, value })) } });
+  await mgmtFor(id).update_settings({ canister_id: pid(id), settings: { environment_variables: [[...map].map(([name, value]) => ({ name, value }))] } });
 };
 
 const registry = await readPinnedGroupRegistry((rev, cursor, limit) => router.read_group_registry_page('mainnet', rev, cursor, limit));
