@@ -291,10 +291,31 @@ persistent actor class Main(governorInit : Principal) = this {
     season_id : ?Text,
     daily_cap : ?Nat32,
   ) : async { #Ok : Types.PointsHistoryEntry; #Err : Text } {
+    await* awardPointsAs(caller, club_id, subject, action_type, scope_id, amount, description, source_id, season_id, daily_cap)
+  };
+
+  func awardPointsAs(caller : Principal,
+    club_id : Text,
+    subject : Types.Subject,
+    action_type : Text,
+    scope_id : Text,
+    amount : Int32,
+    description : Text,
+    source_id : ?Text,
+    season_id : ?Text,
+    daily_cap : ?Nat32,
+  ) : async* { #Ok : Types.PointsHistoryEntry; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
+    let target = switch (subject) {
+      case (#Child(_)) null;
+      case (#User(uid)) { try { await async { ?Principal.fromText(uid) } } catch (_) { return #Err("Invalid account subject") } };
+    };
+    switch (target) { case (?p) { if (not removalReceiver.enter(p)) return #Err("Account subject fenced") }; case null {} };
+    try {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
+    switch (target) { case (?p) { await admitAccount(p); if (removalReceiver.denied(p)) return #Err("Account subject fenced") }; case null {} };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(action_type) or not valid(scope_id) or not validDesc(description) or amount == 0) return #Err("Invalid award");
@@ -339,6 +360,7 @@ persistent actor class Main(governorInit : Principal) = this {
     pointsHistory := pointsHistory.concat([entry]);
     #Ok(entry)
   
+    } finally { switch (target) { case (?p) removalReceiver.leave(p); case null {} } };
     } finally { removalReceiver.leave(caller) };
   };
 
@@ -374,7 +396,7 @@ persistent actor class Main(governorInit : Principal) = this {
       item.source_type == action_type and item.source_id == ?scope_id
     );
     if (already) return #Err("Already awarded");
-    do { let removalReply = await award_points(club_id, subject, action_type, scope_id, amount, description, source_id, season_id, null); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }
+    do { let removalReply = await* awardPointsAs(caller, club_id, subject, action_type, scope_id, amount, description, source_id, season_id, null); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }
   
     } finally { removalReceiver.leave(caller) };
   };
@@ -667,7 +689,14 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
+    let target = switch (subject) {
+      case (#Child(_)) null;
+      case (#User(uid)) { try { await async { ?Principal.fromText(uid) } } catch (_) { return #Err("Invalid account subject") } };
+    };
+    switch (target) { case (?p) { if (not removalReceiver.enter(p)) return #Err("Account subject fenced") }; case null {} };
+    try {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
+    switch (target) { case (?p) { await admitAccount(p); if (removalReceiver.denied(p)) return #Err("Account subject fenced") }; case null {} };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     let selfOk = switch (subject) {
@@ -718,6 +747,7 @@ persistent actor class Main(governorInit : Principal) = this {
       };
     }
   
+    } finally { switch (target) { case (?p) removalReceiver.leave(p); case null {} } };
     } finally { removalReceiver.leave(caller) };
   };
 
