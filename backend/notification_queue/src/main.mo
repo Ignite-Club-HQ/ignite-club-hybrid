@@ -1824,4 +1824,9 @@ persistent actor class Main(governorInit : Principal) = this {
     let outstanding = items.filter(func(item) = item.status == #Processing and request.subjects.any(func(p) = p.toText() == item.user or "principal:" # p.toText() == item.user)).size();
     removalReceiver.receipt(caller, request, Principal.fromActor(this), outstanding)
   };
+
+  public shared ({ caller }) func seal_account_removal(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    let outstanding = items.filter(func(item) = item.status == #Processing and request.subjects.any(func(p) = p.toText() == item.user or "principal:" # p.toText() == item.user)).size();
+    removalReceiver.seal(caller, request, Principal.fromActor(this), outstanding)
+  };
 };

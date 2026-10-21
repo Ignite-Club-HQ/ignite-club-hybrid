@@ -1327,4 +1327,8 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
     removalReceiver.receipt(caller, request, Principal.fromActor(this), 0)
   };
+
+  public shared ({ caller }) func seal_account_removal(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    removalReceiver.seal(caller, request, Principal.fromActor(this), 0)
+  };
 }
