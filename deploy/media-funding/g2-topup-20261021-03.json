@@ -1,0 +1,97 @@
+{
+  "plan": {
+    "paymentId": "g2-topup-20261021-03",
+    "purpose": "top-ups",
+    "groupId": "g2",
+    "principal": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "scenario": "top-ups",
+    "testId": "g2",
+    "targetCycles": "6599686277278",
+    "balanceBefore": "1345428557550",
+    "shortfallCycles": "5254257719728",
+    "topups": [
+      {
+        "name": "club_domain",
+        "id": "yfwyv-nyaaa-aaaal-qxpyq-cai",
+        "cycles": "982660045638",
+        "amount": "517339954362"
+      },
+      {
+        "name": "events_domain",
+        "id": "ymvtj-3qaaa-aaaal-qxpza-cai",
+        "cycles": "987197352733",
+        "amount": "512802647267"
+      },
+      {
+        "name": "messaging_domain",
+        "id": "yluv5-wiaaa-aaaal-qxpzq-cai",
+        "cycles": "982424061394",
+        "amount": "517575938606"
+      },
+      {
+        "name": "vault_domain",
+        "id": "y6teq-xaaaa-aaaal-qxp2a-cai",
+        "cycles": "995837844322",
+        "amount": "504162155678"
+      },
+      {
+        "name": "competition_domain",
+        "id": "yzsce-2yaaa-aaaal-qxp2q-cai",
+        "cycles": "992338060576",
+        "amount": "507661939424"
+      },
+      {
+        "name": "club_points_domain",
+        "id": "yqrjy-mqaaa-aaaal-qxp3a-cai",
+        "cycles": "996131236597",
+        "amount": "503868763403"
+      },
+      {
+        "name": "mini_league_domain",
+        "id": "yxqpm-biaaa-aaaal-qxp3q-cai",
+        "cycles": "994718977646",
+        "amount": "505281022354"
+      },
+      {
+        "name": "media_metadata",
+        "id": "z26lc-oaaaa-aaaal-qxp4a-cai",
+        "cycles": "996858642366",
+        "amount": "503141357634"
+      },
+      {
+        "name": "insights_domain",
+        "id": "z57nw-dyaaa-aaaal-qxp4q-cai",
+        "cycles": "995111878626",
+        "amount": "504888121374"
+      },
+      {
+        "name": "notification_queue",
+        "id": "zu4gk-vqaaa-aaaal-qxp5a-cai",
+        "cycles": "993024516174",
+        "amount": "506975483826"
+      },
+      {
+        "name": "pii_access_control",
+        "id": "zt5a6-yiaaa-aaaal-qxp5q-cai",
+        "cycles": "996077475857",
+        "amount": "503922524143"
+      },
+      {
+        "name": "timer_jobs",
+        "id": "zg2rt-zaaaa-aaaal-qxp6a-cai",
+        "cycles": "994561242614",
+        "amount": "505438757386"
+      },
+      {
+        "name": "media_blob_store",
+        "id": "ycx6b-aaaaa-aaaal-qxpya-cai",
+        "cycles": "994672388179",
+        "amount": "505327611821"
+      }
+    ],
+    "feeCycles": "100000000",
+    "targetT": "1.5"
+  },
+  "phase": "creating-order",
+  "createdAt": "2026-10-21T06:46:39.608Z"
+}
