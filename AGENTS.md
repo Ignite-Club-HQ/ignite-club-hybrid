@@ -41,7 +41,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
-- Cross-group admission/receivers stay local-only; no live flags. Eligibility never grants resources. Read backend/ and scripts/AGENTS.md: release preflight never authorizes opening; complete fences/drain/mirrors/recovery required. Why: partial seals/offline adapters cannot release Group 2.
+- General admission/receivers remain local-only; fixtures never grant release. Separate governor-signed owner-test g2 opening binds exact inventory, UUIDs and deletion/placement checks; accepting stays off and stop preserves access. Read nested rules. Why: tests must not release global lifecycle.
 
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 
