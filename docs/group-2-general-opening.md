@@ -47,6 +47,13 @@ control when current clubs should keep working.
 
 This environment has no governor key or GitHub Actions token. Implementation and
 local tests do not establish deployment or authenticated mainnet club creation.
+Focused verification: 58 identity Rust tests, 8 release/workflow/journal tests,
+30 frontend opening/session/error regressions and 17-contract drift passed.
+Real local router/identity rehearsal passed with no identity rehearsal flag:
+exact 12 readers, governor-only authorization/disable, stale-registry rejection,
+active/unknown/suspended eligibility, full-account/lifecycle/recovery refusal,
+grant and suspension preservation through upgrade. Destination services in that
+rehearsal are inventory metadata; actual signed-in club creation is unverified.
 
 The app shows a short account-connection message instead of dumping the replica
 request, headers and identifiers into the pop-up; technical details stay in logs.
