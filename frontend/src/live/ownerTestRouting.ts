@@ -4,13 +4,13 @@ import type { FeatureBackendContext } from './featureRouter';
 export type OwnerRoute = { groupId: 'g2'; acceptingNew: boolean; clubIds: string[]; evidence: string };
 let confirmed: { key: string; value: OwnerRoute | null } | null = null;
 const keyFor = (ctx: FeatureBackendContext) => JSON.stringify([ctx.identity.getPrincipal().toText(), ctx.target.alias,
-  ctx.target.host, ctx.target.networkKind, ctx.target.canisterIds.shard_router]);
+  ctx.target.host, ctx.target.networkKind, ctx.target.canisterIds?.shard_router]);
 export function hasOwnerTestRouting(ctx?: FeatureBackendContext): boolean {
   return Boolean(confirmed?.value && (!ctx || confirmed.key === keyFor(ctx)));
 }
 export function clearOwnerTestRouting() { confirmed = null; }
 export async function readOwnerTestRoute(ctx: FeatureBackendContext): Promise<OwnerRoute | null> {
-  if (!ctx.target.canisterIds.shard_router || ctx.identity.getPrincipal().toText() === '2vxsx-fae') return null;
+  if (!ctx.target.canisterIds?.shard_router || ctx.identity.getPrincipal().toText() === '2vxsx-fae') return null;
   const key = keyFor(ctx);
   const { connectLiveShardRouter } = await import('./domains');
   const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
