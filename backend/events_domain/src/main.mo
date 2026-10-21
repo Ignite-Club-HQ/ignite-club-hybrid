@@ -2930,7 +2930,7 @@ persistent actor class Main(governorInit : Principal) {
 
   func playhqPages(path:Text,tenant:Text):async*{#Ok:[Json.Json];#Err:Text}{
     var rows:[Json.Json]=[];var cursor:?Text=null;var seen:[Text]=[];var pages=0;
-    label paging loop{
+    while(pages<10){
       if (pages >= 10) return #Err("PlayHQ pagination exceeds bounded import");
       let suffix=switch(cursor){case null "";case(?c)"?cursor="#c};
       let body=switch(await* playhqHttpGetTenant(path#suffix,?tenant)){case(#Err(e))return #Err(e);case(#Ok(b))b};
@@ -2945,7 +2945,8 @@ persistent actor class Main(governorInit : Principal) {
           seen:=seen.concat([next]);cursor:=?next
         }
       }
-    }
+    };
+    #Err("PlayHQ pagination exceeds bounded import")
   };
 
   // Production PlayHQ endpoint shapes, complete bounded pages only. This
