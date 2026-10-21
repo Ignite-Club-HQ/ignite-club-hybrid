@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const workflow = readFileSync(new URL('../.github/workflows/upgrade-group2.yml', import.meta.url), 'utf8');
 const runner = readFileSync(new URL('../frontend/scripts/upgrade-group2.mjs', import.meta.url), 'utf8');
+test('isolated tool home is initialized at step scope where runner paths are available', () => {
+  const jobHeader = workflow.slice(workflow.indexOf('  upgrade:'), workflow.indexOf('    steps:'));
+  assert.doesNotMatch(jobHeader, /runner\./);
+  assert.match(workflow, /ICP_HOME=\$RUNNER_TEMP\/g2-icp-home.*\$GITHUB_ENV/);
+  assert.ok(workflow.indexOf('ICP_HOME=$RUNNER_TEMP') < workflow.indexOf('icp identity import'));
+});
 test('manual upgrade is protected and serialized with existing mainnet deployment', () => {
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /environment: group-2-owner-opening/);

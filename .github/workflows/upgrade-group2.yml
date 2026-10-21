@@ -22,9 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: group-2-owner-opening
     timeout-minutes: 120
-    env:
-      ICP_HOME: ${{ runner.temp }}/g2-icp-home
     steps:
+      - name: Set isolated tool home
+        run: echo "ICP_HOME=$RUNNER_TEMP/g2-icp-home" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
