@@ -305,6 +305,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not isFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?EventsSnapshot = from_candid (snapshot);
     let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (removalReceiver.snapshotDenied(snapshot)) return #Err("Snapshot references fenced account");
     if (snap.events.any(func(e) = e.club_id != club) or snap.rsvps.any(func(r) = not snap.events.any(func(e) = e.id == r.event_id))) return #Err("Snapshot contains foreign records");
     if (snap.events.any(func(e) = events.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     let incomingGroups = snap.groups ?? [];
