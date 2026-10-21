@@ -42,6 +42,15 @@ export const idlFactory = ({ IDL }) => {
     'receiver' : IDL.Principal,
   });
   const Result_3 = IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text });
+  const Binding = IDL.Record({
+    'registry_revision' : IDL.Nat64,
+    'host' : IDL.Text,
+    'network_kind' : IDL.Text,
+    'deployment_revision' : IDL.Nat64,
+    'target_alias' : IDL.Text,
+    'registry' : IDL.Principal,
+    'deployment_id' : IDL.Text,
+  });
   const MediaRegistry = IDL.Record({
     'stores' : IDL.Vec(IDL.Principal),
     'active' : IDL.Bool,
@@ -79,15 +88,6 @@ export const idlFactory = ({ IDL }) => {
     'groups' : IDL.Vec(Group),
     'placements' : IDL.Vec(Placement),
     'revision' : IDL.Nat64,
-  });
-  const Binding = IDL.Record({
-    'registry_revision' : IDL.Nat64,
-    'host' : IDL.Text,
-    'network_kind' : IDL.Text,
-    'deployment_revision' : IDL.Nat64,
-    'target_alias' : IDL.Text,
-    'registry' : IDL.Principal,
-    'deployment_id' : IDL.Text,
   });
   const Evidence = IDL.Record({
     'snapshot' : Snapshot,
@@ -343,6 +343,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
+    'authorize_group2_admission' : IDL.Func([Binding], [Result_2], []),
     'begin_account_removal' : IDL.Func([IDL.Text, IDL.Nat64], [Result_4], []),
     'begin_link' : IDL.Func([IDL.Principal], [Result_5], []),
     'bind_external_site' : IDL.Func(
@@ -358,6 +359,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'commit_account_deletion' : IDL.Func([IDL.Text], [Result_2], []),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
+    'disable_group2_admission' : IDL.Func([], [Result_2], []),
     'erase_account' : IDL.Func([IDL.Text], [Result_2], []),
     'export_state' : IDL.Func([], [Result_8], ['query']),
     'get_external_bindings' : IDL.Func([IDL.Text], [Result_9], ['query']),
