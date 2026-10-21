@@ -26,7 +26,7 @@ test('explicit confirmation is checked before any upgrade', () => {
 test('durable GitHub intent readback precedes the upgrade call', () => {
   assert.match(runner, /group-2-upgrade-receipts/);
   assert.ok(runner.indexOf("step.phase = 'pending'; persist();") < runner.indexOf("spawnSync('icp'"));
-  assert.match(runner, /stored = api\(`\$\{path\}\?ref=\$\{branch\}`\)/);
+  assert.match(runner, /stored = persistGroup2Journal\(api, path, branch, stored, journal, 'upgrade'\)/);
   assert.match(runner, /reconcileUpgradeStep\(step, before.moduleHash\)/);
   assert.match(runner, /journal.routerRevision !== revision/);
 });
@@ -50,4 +50,5 @@ test('PII attestation is preserved in durable progress before upgrading', () => 
   assert.match(reload, /before.settingsHash !== step.settingsHash/);
   assert.match(reload, /after.settingsHash !== step.settingsHash/);
   assert.match(reload, /verifyUpgradeStatus\(plan, after, GROUP2_GOVERNOR, plan.newHash\)/);
+  assert.match(reload, /stored = persistGroup2Journal\(api, path, branch, stored, journal, 'reload'\)/);
 });

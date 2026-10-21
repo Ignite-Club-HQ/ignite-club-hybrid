@@ -10,6 +10,7 @@ import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import { createJournalApi } from './media-stage-two-github.mjs';
+import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { validateGroup2Inventory, validateUpgradeJournal, wasmHash, verifyUpgradeStatus, upgradeArgs, reconcileUpgradeStep, GROUP2_GOVERNOR } from '../../scripts/group2-upgrade-rules.mjs';
 
 const [action, wasmDirectory, pemFile, reportDirectory] = process.argv.slice(2);
@@ -104,10 +105,7 @@ if (action === 'check') {
   const binding = { release, governor: GROUP2_GOVERNOR, provisionHash: hash(provision), inventory: plans.map(({ file, ...p }) => p) };
   if (journal) validateUpgradeJournal(journal, binding);
   const persist = () => {
-    const content = Buffer.from(JSON.stringify(journal)).toString('base64');
-    api(path, 'PUT', { branch, message: 'Group 2 upgrade checkpoint', content, ...(stored ? { sha: stored.sha } : {}) });
-    stored = api(`${path}?ref=${branch}`);
-    if (JSON.stringify(JSON.parse(Buffer.from(stored.content, 'base64').toString())) !== JSON.stringify(journal)) throw new Error('Upgrade intent readback failed');
+    stored = persistGroup2Journal(api, path, branch, stored, journal, 'upgrade');
     writeFileSync(join(reportDirectory, 'upgrade-progress.json'), JSON.stringify(journal, null, 2));
   };
   if (!journal) {
@@ -170,10 +168,7 @@ if (action === 'reload') {
   let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
   const binding = { kind: 'reload', governor: GROUP2_GOVERNOR, provisionHash: hash(provision), inventory: plans.map(({ file, ...p }) => p) };
   const persist = () => {
-    const content = Buffer.from(JSON.stringify(journal)).toString('base64');
-    api(path, 'PUT', { branch, message: 'Group 2 settings reload checkpoint', content, ...(stored ? { sha: stored.sha } : {}) });
-    stored = api(`${path}?ref=${branch}`);
-    if (JSON.stringify(JSON.parse(Buffer.from(stored.content, 'base64').toString())) !== JSON.stringify(journal)) throw new Error('Reload intent readback failed');
+    stored = persistGroup2Journal(api, path, branch, stored, journal, 'reload');
     writeFileSync(join(reportDirectory, name), JSON.stringify(journal, null, 2));
   };
   if (journal && !journal.complete && JSON.stringify(journal.binding) !== JSON.stringify(binding)) throw new Error('An unfinished reload for a different inventory exists; review it before reloading');
