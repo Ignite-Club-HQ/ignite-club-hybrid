@@ -78,6 +78,13 @@
       "beforeCycles": "994523729715",
       "phase": "verified",
       "afterCycles": "1499995211581"
+    },
+    {
+      "id": "ycx6b-aaaaa-aaaal-qxpya-cai",
+      "name": "media_blob_store",
+      "amount": "505359055555",
+      "beforeCycles": "994638202262",
+      "phase": "transferring"
     }
   ]
 }
