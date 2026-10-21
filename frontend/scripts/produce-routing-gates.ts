@@ -47,10 +47,12 @@ const mgmtIdl = ({ IDL: I }: { IDL: typeof IDL }) => I.Service({
     status: I.Variant({ running: I.Null, stopped: I.Null, stopping: I.Null }), module_hash: I.Opt(I.Vec(I.Nat8)), cycles: I.Nat,
     settings: I.Record({ controllers: I.Vec(I.Principal), environment_variables: I.Vec(I.Record({ name: I.Text, value: I.Text })) }) })], []),
 });
-const mgmt = Actor.createActor(mgmtIdl, { agent, canisterId: 'aaaaa-aa' }) as unknown as {
+type Mgmt = {
   canister_status(a: { canister_id: Principal }): Promise<{ status: Record<string, null>; module_hash: [] | [Uint8Array]; cycles: bigint;
     settings: { controllers: Principal[]; environment_variables: { name: string; value: string }[] } }>;
 };
+/** Management calls must name the target canister as effectiveCanisterId, else the boundary returns canister_not_found. */
+const mgmtFor = (id: Principal) => Actor.createActor(mgmtIdl, { agent, canisterId: 'aaaaa-aa', effectiveCanisterId: id } as Parameters<typeof Actor.createActor>[1]) as unknown as Mgmt;
 const readConfig = async (id: string, resultVariant = false) => {
   const rows = IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text));
   const factory = () => IDL.Service({ read_group_opening_configuration: IDL.Func([], [resultVariant ? IDL.Variant({ Ok: rows, Err: IDL.Text }) : rows], []) });
@@ -79,7 +81,7 @@ for (const group of registry.groups) {
   for (const s of services) {
     if (!s.subnet) { problems.push(`${group.id}/${s.name}: no subnet in placement`); continue; }
     const cid = Principal.fromText(s.id);
-    const status = await mgmt.canister_status({ canister_id: cid });
+    const status = await mgmtFor(cid).canister_status({ canister_id: cid });
     const certified = await CanisterStatus.request({ agent, canisterId: cid, paths: ['subnet'] });
     const subnet = String((certified.get('subnet') as { subnetId: Principal }).subnetId);
     const health = Actor.createActor(({ IDL: I }: { IDL: typeof IDL }) => I.Service({ memory_stats: I.Func([], [I.Record({ heap_bytes: I.Nat })], ['query']) }), { agent, canisterId: cid }) as unknown as { memory_stats(): Promise<{ heap_bytes: bigint }> };
@@ -122,7 +124,7 @@ for (const group of registry.groups) {
 const descriptors: GroupDescriptor[] = registry.groups.map(g => ({ id: g.id, targetAlias: g.target_alias,
   photoStore: g.photo_store[0]?.toText(), domains: g.domains.map(d => ({ domain: d.domain, canisterId: d.canister.toText() })) }));
 const wiring = await verifyRemovalWiring({ revision: registry.revision, groups: descriptors }, identityAccess,
-  async id => (await mgmt.canister_status({ canister_id: Principal.fromText(id) })).settings.environment_variables, Date.now());
+  async id => (await mgmtFor(Principal.fromText(id)).canister_status({ canister_id: Principal.fromText(id) })).settings.environment_variables, Date.now());
 problems.push(...wiring.problems);
 if (!wiring.evidence) throw new Error(`Removal wiring incomplete; fix these before routing:\n${problems.join('\n')}`);
 if (problems.length) throw new Error(`Routing snapshot verification failed:\n${problems.join('\n')}`);
