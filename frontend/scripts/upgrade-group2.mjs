@@ -44,7 +44,7 @@ const observe = async service => {
   const environment = s.settings.environment_variables;
   const result = { moduleHash: s.module_hash[0] ? Buffer.from(s.module_hash[0]).toString('hex') : null,
     controllers: s.settings.controllers.map(p => p.toText()), running: 'running' in s.status, cycles,
-    subnetId: subnet?.subnetId?.toText() ?? '', environment };
+    subnetId: typeof subnet?.subnetId === 'string' ? subnet.subnetId : '', environment };
   verifyUpgradeStatus(service, result, GROUP2_GOVERNOR);
   return { ...result, settingsHash: hash([...environment].sort((a,b) => a.name.localeCompare(b.name))), heapBytes: String(memory.heap_bytes), stableBytes: String(memory.stable_bytes) };
 };
