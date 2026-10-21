@@ -155,6 +155,7 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : IDL.Vec(GroupAssignment),
     'Err' : IDL.Text,
   });
+  const Result_18 = IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text });
   
   return IDL.Service({
     'abort_domain_migration' : IDL.Func(
@@ -249,6 +250,11 @@ export const idlFactory = ({ IDL }) => {
     'read_my_new_club_placement' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [Result_4],
+        [],
+      ),
+    'read_new_club_creation_authorized' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text, IDL.Text],
+        [Result_18],
         [],
       ),
     'record_group_health' : IDL.Func(

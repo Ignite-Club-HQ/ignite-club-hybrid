@@ -83,6 +83,7 @@ type Result_14 = variant { Ok : Page; Err : text };
 type Result_15 = variant { Ok : GroupRegistrySnapshot; Err : text };
 type Result_16 = variant { Ok : GroupRegistryPage; Err : text };
 type Result_17 = variant { Ok : vec GroupAssignment; Err : text };
+type Result_18 = variant { Ok : bool; Err : text };
 type Result_2 = variant { Ok : AssignResult; Err : text };
 type Result_3 = variant { Ok : AssignDomainResult; Err : text };
 type Result_4 = variant { Ok : GroupAssignment; Err : text };
@@ -154,8 +155,13 @@ service : (Init) -> {
   read_group_registry_page : (text, opt nat64, opt text, nat32) -> (Result_16);
   read_hosted_club_assignment : (text, text, nat64) -> (Result_4);
   read_my_group_assignments : (vec text, text, nat64) -> (Result_17);
+  // Consensus creator receipt only; never grants club membership or data access.
   read_my_new_club_placement : (text, text, nat64) -> (Result_4);
-  read_new_club_creation_authorized : (principal, text, text, text) -> (Result_7);
+  // Only the registered destination club authority can check a creator receipt.
+  // This does not authorize private reads or grant cross-club membership.
+  read_new_club_creation_authorized : (principal, text, text, text) -> (
+      Result_18,
+    );
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   register_group : (ShardGroup, nat64) -> (Result);
   register_group_placement : (GroupPlacement, nat64) -> (Result);
