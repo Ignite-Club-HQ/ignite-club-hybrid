@@ -191,23 +191,33 @@ export interface Receipt {
   'receiver' : Principal,
 }
 export type RemovalHistoryCursor = { 'ErasedAccounts' : [] | [string] } |
+  { 'RemovalSubjects' : [] | [string] } |
   { 'Done' : null } |
   { 'PendingIntents' : bigint } |
-  { 'PrincipalDenials' : [] | [string] };
+  { 'RemovalReceipts' : [] | [string] } |
+  { 'PrincipalDenials' : [] | [string] } |
+  { 'RemovalBarriers' : [] | [string] };
 export interface RemovalHistoryManifest {
+  'removal_receipts' : bigint,
   'erased_accounts' : bigint,
+  'removal_generation' : bigint,
+  'removal_barriers' : bigint,
   'pending_intents' : bigint,
+  'removal_subjects' : bigint,
   'principal_denials' : bigint,
   'service_readers' : Array<Principal>,
   'revision' : bigint,
   'club_authorities' : Array<Principal>,
 }
 export interface RemovalHistoryPage {
+  'barriers' : Array<[string, Intent]>,
   'pending' : Array<UnlinkIntent>,
+  'subjects' : Array<[string, string]>,
   'denials' : Array<[string, PrincipalDenial]>,
   'erased' : Array<[string, bigint]>,
   'next' : RemovalHistoryCursor,
   'revision' : bigint,
+  'receipts' : Array<[string, Receipt]>,
 }
 export interface RemovalInventory {
   'media' : Array<MediaEvidence>,
@@ -372,8 +382,8 @@ export interface _SERVICE {
   'begin_account_removal' : ActorMethod<[string, bigint], Result_4>,
   'begin_link' : ActorMethod<[Principal], Result_5>,
   'bind_external_site' : ActorMethod<[string, string, string], Result_6>,
-  'check_field_access' : ActorMethod<[string, string], Result_7>,
   'cancel_account_deletion' : ActorMethod<[string], Result_2>,
+  'check_field_access' : ActorMethod<[string, string], Result_7>,
   'commit_account_deletion' : ActorMethod<[string], Result_2>,
   /**
    * Public: remaining cycles (shown in admin settings).

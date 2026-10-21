@@ -135,8 +135,12 @@ export interface Receipt {
     receiver: Principal;
 }
 export interface RemovalHistoryManifest {
+    removal_receipts: bigint;
     erased_accounts: bigint;
+    removal_generation: bigint;
+    removal_barriers: bigint;
     pending_intents: bigint;
+    removal_subjects: bigint;
     principal_denials: bigint;
     service_readers: Array<Principal>;
     revision: bigint;
@@ -159,11 +163,14 @@ export type Result_7 = {
     Err: string;
 };
 export interface RemovalHistoryPage {
+    barriers: Array<[string, Intent]>;
     pending: Array<UnlinkIntent>;
+    subjects: Array<[string, string]>;
     denials: Array<[string, PrincipalDenial]>;
     erased: Array<[string, bigint]>;
     next: RemovalHistoryCursor;
     revision: bigint;
+    receipts: Array<[string, Receipt]>;
 }
 export interface Snapshot {
     groups: Array<Group>;
@@ -376,14 +383,23 @@ export type RemovalHistoryCursor = {
     __kind__: "ErasedAccounts";
     ErasedAccounts: string | null;
 } | {
+    __kind__: "RemovalSubjects";
+    RemovalSubjects: string | null;
+} | {
     __kind__: "Done";
     Done: null;
 } | {
     __kind__: "PendingIntents";
     PendingIntents: bigint;
 } | {
+    __kind__: "RemovalReceipts";
+    RemovalReceipts: string | null;
+} | {
     __kind__: "PrincipalDenials";
     PrincipalDenials: string | null;
+} | {
+    __kind__: "RemovalBarriers";
+    RemovalBarriers: string | null;
 };
 export type Result_19 = {
     __kind__: "Ok";
@@ -537,6 +553,7 @@ export interface identity_accessInterface {
     begin_account_removal(arg0: string, arg1: bigint): Promise<Result_4>;
     begin_link(arg0: Principal): Promise<Result_5>;
     bind_external_site(arg0: string, arg1: string, arg2: string): Promise<Result_6>;
+    cancel_account_deletion(arg0: string): Promise<Result_2>;
     check_field_access(arg0: string, arg1: string): Promise<Result_7>;
     commit_account_deletion(arg0: string): Promise<Result_2>;
     cycles_balance(): Promise<bigint>;
@@ -554,7 +571,6 @@ export interface identity_accessInterface {
     memory_stats(): Promise<MemoryStats>;
     my_roles(): Promise<Result_13>;
     my_terms_acceptance(): Promise<Result_12>;
-    cancel_account_deletion(arg0: string): Promise<Result_2>;
     prepare_account_deletion(arg0: string, arg1: bigint): Promise<Result_14>;
     read_account_removal_intent(arg0: string): Promise<Result_4>;
     read_group_inventory_evidence(arg0: bigint): Promise<Result_15>;
@@ -626,6 +642,10 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.bind_external_site(arg0, arg1, arg2);
         return from_candid_Result_6_n18(result);
     }
+    async cancel_account_deletion(arg0: string): Promise<Result_2> {
+        const result = await this.actor.cancel_account_deletion(arg0);
+        return from_candid_Result_2_n10(result);
+    }
     async check_field_access(arg0: string, arg1: string): Promise<Result_7> {
         const result = await this.actor.check_field_access(arg0, arg1);
         return from_candid_Result_7_n20(result);
@@ -693,10 +713,6 @@ export class Identity_access implements identity_accessInterface {
     async my_terms_acceptance(): Promise<Result_12> {
         const result = await this.actor.my_terms_acceptance();
         return from_candid_Result_12_n44(result);
-    }
-    async cancel_account_deletion(arg0: string): Promise<Result_2> {
-        const result = await this.actor.cancel_account_deletion(arg0);
-        return from_candid_Result_2_n3(result);
     }
     async prepare_account_deletion(arg0: string, arg1: bigint): Promise<Result_14> {
         const result = await this.actor.prepare_account_deletion(arg0, arg1);
@@ -1134,24 +1150,33 @@ function from_candid_record_n59(value: {
     };
 }
 function from_candid_record_n71(value: {
+    barriers: Array<[string, _Intent]>;
     pending: Array<_UnlinkIntent>;
+    subjects: Array<[string, string]>;
     denials: Array<[string, _PrincipalDenial]>;
     erased: Array<[string, bigint]>;
     next: _RemovalHistoryCursor;
     revision: bigint;
+    receipts: Array<[string, _Receipt]>;
 }): {
+    barriers: Array<[string, Intent]>;
     pending: Array<UnlinkIntent>;
+    subjects: Array<[string, string]>;
     denials: Array<[string, PrincipalDenial]>;
     erased: Array<[string, bigint]>;
     next: RemovalHistoryCursor;
     revision: bigint;
+    receipts: Array<[string, Receipt]>;
 } {
     return {
+        barriers: value.barriers,
         pending: value.pending,
+        subjects: value.subjects,
         denials: from_candid_vec_n72(value.denials),
         erased: value.erased,
         next: from_candid_RemovalHistoryCursor_n79(value.next),
-        revision: value.revision
+        revision: value.revision,
+        receipts: value.receipts
     };
 }
 function from_candid_record_n75(value: {
@@ -1586,14 +1611,23 @@ function from_candid_variant_n78(value: {
 function from_candid_variant_n80(value: {
     ErasedAccounts: [] | [string];
 } | {
+    RemovalSubjects: [] | [string];
+} | {
     Done: null;
 } | {
     PendingIntents: bigint;
 } | {
+    RemovalReceipts: [] | [string];
+} | {
     PrincipalDenials: [] | [string];
+} | {
+    RemovalBarriers: [] | [string];
 }): {
     __kind__: "ErasedAccounts";
     ErasedAccounts: string | null;
+} | {
+    __kind__: "RemovalSubjects";
+    RemovalSubjects: string | null;
 } | {
     __kind__: "Done";
     Done: null;
@@ -1601,21 +1635,36 @@ function from_candid_variant_n80(value: {
     __kind__: "PendingIntents";
     PendingIntents: bigint;
 } | {
+    __kind__: "RemovalReceipts";
+    RemovalReceipts: string | null;
+} | {
     __kind__: "PrincipalDenials";
     PrincipalDenials: string | null;
+} | {
+    __kind__: "RemovalBarriers";
+    RemovalBarriers: string | null;
 } {
     return "ErasedAccounts" in value ? {
         __kind__: "ErasedAccounts",
         ErasedAccounts: from_candid_opt_n30(value.ErasedAccounts)
+    } : "RemovalSubjects" in value ? {
+        __kind__: "RemovalSubjects",
+        RemovalSubjects: from_candid_opt_n30(value.RemovalSubjects)
     } : "Done" in value ? {
         __kind__: "Done",
         Done: value.Done
     } : "PendingIntents" in value ? {
         __kind__: "PendingIntents",
         PendingIntents: value.PendingIntents
+    } : "RemovalReceipts" in value ? {
+        __kind__: "RemovalReceipts",
+        RemovalReceipts: from_candid_opt_n30(value.RemovalReceipts)
     } : "PrincipalDenials" in value ? {
         __kind__: "PrincipalDenials",
         PrincipalDenials: from_candid_opt_n30(value.PrincipalDenials)
+    } : "RemovalBarriers" in value ? {
+        __kind__: "RemovalBarriers",
+        RemovalBarriers: from_candid_opt_n30(value.RemovalBarriers)
     } : value;
 }
 function from_candid_variant_n82(value: {
@@ -1785,31 +1834,52 @@ function to_candid_variant_n67(value: {
     __kind__: "ErasedAccounts";
     ErasedAccounts: string | null;
 } | {
+    __kind__: "RemovalSubjects";
+    RemovalSubjects: string | null;
+} | {
     __kind__: "Done";
     Done: null;
 } | {
     __kind__: "PendingIntents";
     PendingIntents: bigint;
 } | {
+    __kind__: "RemovalReceipts";
+    RemovalReceipts: string | null;
+} | {
     __kind__: "PrincipalDenials";
     PrincipalDenials: string | null;
+} | {
+    __kind__: "RemovalBarriers";
+    RemovalBarriers: string | null;
 }): {
     ErasedAccounts: [] | [string];
+} | {
+    RemovalSubjects: [] | [string];
 } | {
     Done: null;
 } | {
     PendingIntents: bigint;
 } | {
+    RemovalReceipts: [] | [string];
+} | {
     PrincipalDenials: [] | [string];
+} | {
+    RemovalBarriers: [] | [string];
 } {
     return value.__kind__ === "ErasedAccounts" ? {
         ErasedAccounts: value.ErasedAccounts ? candid_some(value.ErasedAccounts) : candid_none()
+    } : value.__kind__ === "RemovalSubjects" ? {
+        RemovalSubjects: value.RemovalSubjects ? candid_some(value.RemovalSubjects) : candid_none()
     } : value.__kind__ === "Done" ? {
         Done: value.Done
     } : value.__kind__ === "PendingIntents" ? {
         PendingIntents: value.PendingIntents
+    } : value.__kind__ === "RemovalReceipts" ? {
+        RemovalReceipts: value.RemovalReceipts ? candid_some(value.RemovalReceipts) : candid_none()
     } : value.__kind__ === "PrincipalDenials" ? {
         PrincipalDenials: value.PrincipalDenials ? candid_some(value.PrincipalDenials) : candid_none()
+    } : value.__kind__ === "RemovalBarriers" ? {
+        RemovalBarriers: value.RemovalBarriers ? candid_some(value.RemovalBarriers) : candid_none()
     } : value;
 }
 function to_candid_variant_n93(value: AccountStatus): {

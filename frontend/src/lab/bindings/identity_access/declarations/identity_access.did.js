@@ -242,8 +242,12 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const RemovalHistoryManifest = IDL.Record({
+    'removal_receipts' : IDL.Nat64,
     'erased_accounts' : IDL.Nat64,
+    'removal_generation' : IDL.Nat64,
+    'removal_barriers' : IDL.Nat64,
     'pending_intents' : IDL.Nat64,
+    'removal_subjects' : IDL.Nat64,
     'principal_denials' : IDL.Nat64,
     'service_readers' : IDL.Vec(IDL.Principal),
     'revision' : IDL.Nat64,
@@ -255,9 +259,12 @@ export const idlFactory = ({ IDL }) => {
   });
   const RemovalHistoryCursor = IDL.Variant({
     'ErasedAccounts' : IDL.Opt(IDL.Text),
+    'RemovalSubjects' : IDL.Opt(IDL.Text),
     'Done' : IDL.Null,
     'PendingIntents' : IDL.Nat64,
+    'RemovalReceipts' : IDL.Opt(IDL.Text),
     'PrincipalDenials' : IDL.Opt(IDL.Text),
+    'RemovalBarriers' : IDL.Opt(IDL.Text),
   });
   const UnlinkIntent = IDL.Record({
     'account_id' : IDL.Text,
@@ -279,11 +286,14 @@ export const idlFactory = ({ IDL }) => {
     'reason' : DenialReason,
   });
   const RemovalHistoryPage = IDL.Record({
+    'barriers' : IDL.Vec(IDL.Tuple(IDL.Text, Intent)),
     'pending' : IDL.Vec(UnlinkIntent),
+    'subjects' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
     'denials' : IDL.Vec(IDL.Tuple(IDL.Text, PrincipalDenial)),
     'erased' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat64)),
     'next' : RemovalHistoryCursor,
     'revision' : IDL.Nat64,
+    'receipts' : IDL.Vec(IDL.Tuple(IDL.Text, Receipt)),
   });
   const Result_19 = IDL.Variant({
     'Ok' : RemovalHistoryPage,
@@ -335,12 +345,12 @@ export const idlFactory = ({ IDL }) => {
         [Result_6],
         [],
       ),
+    'cancel_account_deletion' : IDL.Func([IDL.Text], [Result_2], []),
     'check_field_access' : IDL.Func(
         [IDL.Text, IDL.Text],
         [Result_7],
         ['query'],
       ),
-    'cancel_account_deletion' : IDL.Func([IDL.Text], [Result_2], []),
     'commit_account_deletion' : IDL.Func([IDL.Text], [Result_2], []),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'erase_account' : IDL.Func([IDL.Text], [Result_2], []),
