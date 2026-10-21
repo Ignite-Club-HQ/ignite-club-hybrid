@@ -20,3 +20,17 @@ test('abandoned orders no longer block new payments', async () => {
   assert.doesNotThrow(() => assertNoOpenPayment([{ phase: 'abandoned', plan: { purpose: 'top-ups' } }]));
   assert.throws(() => assertNoOpenPayment([{ phase: 'checkout-ready', plan: { purpose: 'top-ups' } }]));
 });
+test('closes an interrupted top-up after on-chain verification', async () => {
+  const { finishInterruptedDecision } = await import('./reconcile-card-payment.mjs');
+  const records = [{ path: 'p', data: { phase: 'transferring', plan: { paymentId: 'g2-topup-x', purpose: 'top-ups',
+    topups: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }] },
+    transfers: [{ id: 'a', name: 'A', phase: 'verified', beforeCycles: '980', amount: '520' }, { id: 'b', name: 'B', phase: 'transferring', beforeCycles: '980', amount: '520' }] } }];
+  const args = { records, paymentId: 'g2-topup-x', confirm: 'CLOSE INTERRUPTED TOPUP', principal: DEPLOY_PRINCIPAL };
+  const r = finishInterruptedDecision({ ...args, liveCycles: () => '1500' });
+  assert.equal(r.data.topupsComplete, true); assert.deepEqual(r.remaining, ['C']);
+  const { assertNoOpenPayment } = await import('./media-card-funding-policy.mjs');
+  assert.doesNotThrow(() => assertNoOpenPayment([r.data]));
+  assert.throws(() => finishInterruptedDecision({ ...args, liveCycles: () => '990' }), /never replay/);
+  assert.throws(() => finishInterruptedDecision({ ...args, confirm: 'yes', liveCycles: () => '1500' }));
+  assert.throws(() => finishInterruptedDecision({ ...args, records: [{ path: 'p', data: { ...records[0].data, phase: 'checkout-ready' } }], liveCycles: () => '1500' }));
+});
