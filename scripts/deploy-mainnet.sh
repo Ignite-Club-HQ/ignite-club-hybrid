@@ -133,13 +133,13 @@ icp canister call notification_queue set_identity_access_canister "(principal \"
 # (64 hex chars). Skip silently when the secret is not configured; the
 # icp-push-deliver workflow no-ops until both this grant and its secrets exist.
 if [ -n "${ICP_PUSH_WORKER_SEED:-}" ]; then
-  NODE_PATH_DIR="$PWD/frontend/node_modules"
+  NODE_PATH_DIR="$REPO_DIR/frontend/node_modules"
   if ! node -e "require.resolve('@icp-sdk/core/identity', { paths: ['$NODE_PATH_DIR'] })" 2>/dev/null; then
     echo "==> Installing @icp-sdk/core for push worker principal derivation"
     mkdir -p "${RUNNER_TEMP:-/tmp}/icp-push-deps" && npm install --prefix "${RUNNER_TEMP:-/tmp}/icp-push-deps" @icp-sdk/core --no-fund --no-audit >/dev/null
     NODE_PATH_DIR="${RUNNER_TEMP:-/tmp}/icp-push-deps/node_modules"
   fi
-  WORKER_PRINCIPAL="$(PUSH_WORKER_NODE_PATH="$NODE_PATH_DIR" node scripts/push-worker-principal.mjs)"
+  WORKER_PRINCIPAL="$(PUSH_WORKER_NODE_PATH="$NODE_PATH_DIR" node "$REPO_DIR/scripts/push-worker-principal.mjs")"
   echo "==> Granting push worker principal on notification_queue: $WORKER_PRINCIPAL"
   icp canister call notification_queue grant_worker "(principal \"$WORKER_PRINCIPAL\")" -e "$ICP_ENV"
 fi
