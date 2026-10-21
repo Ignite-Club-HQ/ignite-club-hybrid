@@ -2833,6 +2833,7 @@ export type Database = {
           external_id: string | null
           gender: string | null
           hide_ladder: boolean
+          hide_scores: boolean | null
           id: string
           max_entries: number | null
           name: string
@@ -2851,6 +2852,7 @@ export type Database = {
           external_id?: string | null
           gender?: string | null
           hide_ladder?: boolean
+          hide_scores?: boolean | null
           id?: string
           max_entries?: number | null
           name: string
@@ -2869,6 +2871,7 @@ export type Database = {
           external_id?: string | null
           gender?: string | null
           hide_ladder?: boolean
+          hide_scores?: boolean | null
           id?: string
           max_entries?: number | null
           name?: string
@@ -2948,6 +2951,41 @@ export type Database = {
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      competition_match_results: {
+        Row: {
+          away_score: number | null
+          created_at: string
+          entered_by: string | null
+          home_score: number | null
+          match_id: string
+          updated_at: string
+        }
+        Insert: {
+          away_score?: number | null
+          created_at?: string
+          entered_by?: string | null
+          home_score?: number | null
+          match_id: string
+          updated_at?: string
+        }
+        Update: {
+          away_score?: number | null
+          created_at?: string
+          entered_by?: string | null
+          home_score?: number | null
+          match_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competition_match_results_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: true
+            referencedRelation: "competition_matches"
             referencedColumns: ["id"]
           },
         ]
@@ -3088,6 +3126,24 @@ export type Database = {
           },
         ]
       }
+      competition_pending_scores: {
+        Row: {
+          away_score: number | null
+          home_score: number | null
+          match_id: string
+        }
+        Insert: {
+          away_score?: number | null
+          home_score?: number | null
+          match_id: string
+        }
+        Update: {
+          away_score?: number | null
+          home_score?: number | null
+          match_id?: string
+        }
+        Relationships: []
+      }
       competition_role_invites: {
         Row: {
           accepted_at: string | null
@@ -3226,6 +3282,7 @@ export type Database = {
           external_id: string | null
           external_tenant: string | null
           hide_ladder: boolean
+          hide_scores: boolean
           id: string
           invite_email_message: string | null
           join_token: string | null
@@ -3260,6 +3317,7 @@ export type Database = {
           external_id?: string | null
           external_tenant?: string | null
           hide_ladder?: boolean
+          hide_scores?: boolean
           id?: string
           invite_email_message?: string | null
           join_token?: string | null
@@ -3294,6 +3352,7 @@ export type Database = {
           external_id?: string | null
           external_tenant?: string | null
           hide_ladder?: boolean
+          hide_scores?: boolean
           id?: string
           invite_email_message?: string | null
           join_token?: string | null
@@ -4600,6 +4659,8 @@ export type Database = {
           event_date: string
           final_score_away: number | null
           final_score_home: number | null
+          history_competition_id: string | null
+          history_match_id: string | null
           id: string
           is_bye: boolean
           is_cancelled: boolean
@@ -4656,6 +4717,8 @@ export type Database = {
           event_date: string
           final_score_away?: number | null
           final_score_home?: number | null
+          history_competition_id?: string | null
+          history_match_id?: string | null
           id?: string
           is_bye?: boolean
           is_cancelled?: boolean
@@ -4712,6 +4775,8 @@ export type Database = {
           event_date?: string
           final_score_away?: number | null
           final_score_home?: number | null
+          history_competition_id?: string | null
+          history_match_id?: string | null
           id?: string
           is_bye?: boolean
           is_cancelled?: boolean
@@ -5177,6 +5242,9 @@ export type Database = {
         Row: {
           away_label: string
           away_score: number
+          competition_id: string | null
+          competition_match_id: string | null
+          competition_side: string | null
           created_at: string
           event_id: string | null
           home_label: string
@@ -5196,6 +5264,9 @@ export type Database = {
         Insert: {
           away_label: string
           away_score?: number
+          competition_id?: string | null
+          competition_match_id?: string | null
+          competition_side?: string | null
           created_at?: string
           event_id?: string | null
           home_label: string
@@ -5215,6 +5286,9 @@ export type Database = {
         Update: {
           away_label?: string
           away_score?: number
+          competition_id?: string | null
+          competition_match_id?: string | null
+          competition_side?: string | null
           created_at?: string
           event_id?: string | null
           home_label?: string
@@ -11144,6 +11218,10 @@ export type Database = {
         Args: { _competition_id: string; _user_id: string }
         Returns: boolean
       }
+      can_manage_competition_vault: {
+        Args: { _competition_id: string }
+        Returns: boolean
+      }
       can_manage_event_groups: {
         Args: { _event_id: string; _user_id: string }
         Returns: boolean
@@ -11170,6 +11248,10 @@ export type Database = {
       }
       can_publish_club_wide_photo: {
         Args: { _club_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_read_history_row: {
+        Args: { p_event: string; p_team: string }
         Returns: boolean
       }
       can_view_album: { Args: { _album_id: string }; Returns: boolean }
@@ -11450,6 +11532,10 @@ export type Database = {
           child_id: string
           guardian_id: string
         }[]
+      }
+      competition_scores_visible: {
+        Args: { match_id: string }
+        Returns: boolean
       }
       complete_stripe_webhook_event: {
         Args: { p_event_id: string }
@@ -12299,6 +12385,12 @@ export type Database = {
         Args: { _platform?: string; _user_agent?: string }
         Returns: undefined
       }
+      history_result_dto: { Args: { p_id: string }; Returns: Json }
+      history_row_scores_visible: {
+        Args: { p_comp: string; p_match: string }
+        Returns: boolean
+      }
+      history_scores_visible: { Args: { p_event: string }; Returns: boolean }
       increment_child_club_points: {
         Args: { _amount: number; _child_id: string; _club_id: string }
         Returns: number
@@ -12566,6 +12658,8 @@ export type Database = {
         Returns: undefined
       }
       mask_email: { Args: { _email: string }; Returns: string }
+      mask_history_players: { Args: { p_players: Json }; Returns: Json }
+      match_scores_hidden: { Args: { _match_id: string }; Returns: boolean }
       message_reads_compute_scope_key: {
         Args: { _row: Database["public"]["Tables"]["message_reads"]["Row"] }
         Returns: string
@@ -12751,6 +12845,22 @@ export type Database = {
           inserted_count: number
         }[]
       }
+      read_game_history: {
+        Args: { p_club_id?: string; p_limit?: number; p_team_id?: string }
+        Returns: Json
+      }
+      read_game_result: { Args: { p_event_id: string }; Returns: Json }
+      read_history_player_stats: {
+        Args: {
+          p_event_id?: string
+          p_from?: string
+          p_team_id: string
+          p_to?: string
+        }
+        Returns: Json
+      }
+      read_history_report_events: { Args: { p_team_id: string }; Returns: Json }
+      read_history_summary: { Args: { p_event_id: string }; Returns: Json }
       reconcile_chat_group_unread: {
         Args: never
         Returns: {
@@ -12858,6 +12968,19 @@ export type Database = {
           storage_path: string
           team_id: string
         }[]
+      }
+      save_competition_match_result: {
+        Args: {
+          p_away_score: number
+          p_home_score: number
+          p_match_id: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      save_game_history: {
+        Args: { p_only_if_missing?: boolean; p_result: Json }
+        Returns: undefined
       }
       search_competition_coordinator_candidates: {
         Args: { _competition_id: string; _query?: string }
