@@ -104,20 +104,21 @@ test('snapshot hashes and emits lossless Nat64 removal revisions in both output 
   const files = new Map();
   runInNewContext(emission.replaceAll('import.meta.url', 'scriptUrl'), {
     createHash, URL, scriptUrl: new URL('../frontend/scripts/produce-routing-gates.ts', import.meta.url).href,
-    registry: { revision }, host: 'https://icp-api.io',
+    registry: { revision }, host: 'https://icp-api.io', routerId: 'jcdfe-vqaaa-aaaal-qxloq-cai',
     snapshotGroups: [{ id: 'g2', domains: [], photoStore: 'store', moduleHashes: {} }],
     wiring: { evidence: { revision, groupIds: ['g2'], checkedAtMs: 1792612440000 } },
     report: 'report.json', saveJson: (path, value) => files.set(path, JSON.stringify(value)),
     saveFile: (path, value) => files.set(path, value), console: { log() {} },
   });
   const report = JSON.parse(files.get('report.json'));
+  assert.equal(report.routerCanisterId, 'jcdfe-vqaaa-aaaal-qxloq-cai');
   assert.equal(report.registryRevision, '18446744073709551615');
   assert.equal(report.removalWiring.revision, '18446744073709551615');
   assert.equal(report.removalWiring.checkedAtMs, 1792612440000);
   const generated = files.get(new URL('../frontend/src/live/generated/routingGates.ts', import.meta.url).pathname);
   const emitted = JSON.parse(generated.slice(generated.indexOf(' = ') + 3).trim().replace(/;$/, ''));
   assert.deepEqual(emitted, report);
-  const { approved, targetAlias, host, evidenceSha256, ...evidence } = emitted;
+  const { approved, targetAlias, host, routerCanisterId, evidenceSha256, ...evidence } = emitted;
   assert.equal(evidenceSha256, createHash('sha256').update(JSON.stringify(evidence)).digest('hex'));
   assert.equal(BigInt(emitted.removalWiring.revision), revision);
 });

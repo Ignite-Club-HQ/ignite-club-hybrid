@@ -2,6 +2,7 @@
  * Governor placement attestation is not independent subnet measurement.
  */
 import { readPinnedGroupRegistry } from './groupRegistryPager';
+import { generalRoutingDeploymentAlias } from './generalActivation';
 import type { FeatureBackendContext } from './featureRouter';
 import { openGroupSession, type GroupRegistry } from './groupSession';
 import { GROUP_DOMAINS, type GroupDomain } from './groupRouting';
@@ -10,10 +11,13 @@ import type { EntityKind } from './groupDispatch';
 export async function openLiveGroupReadSession(ctx: FeatureBackendContext, ownerGroupId?: 'g2') {
   const { connectLiveShardRouter, connectLiveClubDomain } = await import('./domains');
   const { actor: router } = await connectLiveShardRouter(ctx.target, ctx.identity);
+  // The router filters by its on-chain deployment name; the frontend's own
+  // target alias is a different, local name for the same deployment.
+  const routerAlias = ownerGroupId ? ctx.target.alias : (generalRoutingDeploymentAlias() ?? ctx.target.alias);
   return openGroupSession(ctx, {
     async readRegistry(): Promise<GroupRegistry> {
       const principal = ctx.identity.getPrincipal().toText();
-      const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => router.read_group_registry_page(ctx.target.alias, revision, cursor, limit), undefined,
+      const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => router.read_group_registry_page(routerAlias, revision, cursor, limit), undefined,
         () => { if (ctx.identity.getPrincipal().toText() !== principal) throw new Error('Registry identity changed'); });
       if (ownerGroupId) {
         const route = await (await import('./ownerTestRouting')).readOwnerTestRoute(ctx);
@@ -67,17 +71,17 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
       return { clubs: reply.Ok.clubs, next: reply.Ok.next[0] ?? null, aclRevision: reply.Ok.acl_revision };
     },
     async readHostedAssignment(clubId, revision) {
-      const reply = await router.read_hosted_club_assignment(clubId, ctx.target.alias, revision);
+      const reply = await router.read_hosted_club_assignment(clubId, routerAlias, revision);
       if ('Err' in reply) throw new Error(reply.Err);
       return { clubId: reply.Ok.club_id, groupId: reply.Ok.group_id, revision: reply.Ok.revision };
     },
     async readAssignments(clubs, revision) {
-      const reply = await router.read_my_group_assignments(clubs, ctx.target.alias, revision);
+      const reply = await router.read_my_group_assignments(clubs, routerAlias, revision);
       if ('Err' in reply) throw new Error(reply.Err);
       return reply.Ok.map(a => ({ clubId: a.club_id, groupId: a.group_id, revision: a.revision }));
     },
     async readNewClubPlacement(clubId, revision) {
-      const reply = await router.read_my_new_club_placement(clubId, ctx.target.alias, revision);
+      const reply = await router.read_my_new_club_placement(clubId, routerAlias, revision);
       if ('Err' in reply) throw new Error(reply.Err);
       return { clubId: reply.Ok.club_id, groupId: reply.Ok.group_id, revision: reply.Ok.revision };
     },

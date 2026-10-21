@@ -8,7 +8,7 @@ import type { FeatureArea } from './featureBackend';
 import type { FeatureBackendContext } from './featureRouter';
 import type { GroupDomain, ClubAssignment } from './groupRouting';
 import { activationStatus, SHIPPED_GATES, type ActivationGates } from './groupActivation';
-import { generalRoutingStatus } from './generalActivation';
+import { generalRoutingStatus, generalRoutingDeploymentAlias } from './generalActivation';
 import { clearOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
@@ -206,7 +206,7 @@ export const clubDispatch = createClubDispatcher({
   placeNewClub: async (ctx, clubId) => {
     const { connectLiveShardRouter } = await import('./domains');
     const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
-    const reply = await actor.place_my_new_club(clubId, ctx.target.alias);
+    const reply = await actor.place_my_new_club(clubId, generalRoutingDeploymentAlias() ?? ctx.target.alias);
     if ('Err' in reply) throw new Error(reply.Err);
     return { clubId: reply.Ok.club_id, groupId: reply.Ok.group_id, revision: reply.Ok.revision };
   },

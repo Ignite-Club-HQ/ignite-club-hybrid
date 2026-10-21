@@ -20,8 +20,12 @@ import type { RemovalWiringEvidence } from './groupRemovalWiring';
 export type RoutingGatesSnapshot = {
   approved: true;
   generatedAt: string;
+  /** On-chain deployment name the registry groups carry; router calls must use
+   * this, never the frontend's own target alias (they differ by design). */
   targetAlias: string;
   host: string;
+  /** Router canister this snapshot was verified against; absence fails closed. */
+  routerCanisterId?: string;
   /** Decimal text of the registry revision this switch was verified against. */
   registryRevision: string;
   /** Exact inventory anchor: any registry change requires a fresh snapshot. */
@@ -58,6 +62,13 @@ export async function routingActive(ctx: FeatureBackendContext): Promise<boolean
   return (await generalRoutingStatus(ctx)).active;
 }
 
+/** On-chain deployment name from the approved snapshot. Every shard_router
+ * call must send this, not the frontend's own target alias. */
+export function generalRoutingDeploymentAlias(): string | null {
+  const s = ROUTING_GATES_SNAPSHOT;
+  return s && s.approved === true ? s.targetAlias : null;
+}
+
 const inventory = (g: { domains: readonly { domain: string; canisterId: string }[]; photoStore?: string | null }): string =>
   [...g.domains.map(d => `${d.domain}=${d.canisterId}`)].sort().join(',') + '|' + (g.photoStore ?? '');
 
@@ -66,12 +77,17 @@ async function compute(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   if (safePrincipal(ctx) === '2vxsx-fae') return { active: false, missing: ['not signed in'] };
   const snapshot = ROUTING_GATES_SNAPSHOT;
   if (!snapshot || snapshot.approved !== true) return { active: false, missing: ['no operator-approved routing snapshot in this build'] };
-  if (snapshot.targetAlias !== ctx.target.alias || snapshot.host !== ctx.target.host) return { active: false, missing: ['snapshot targets another deployment'] };
+  // Bind to the verified router canister and gateway, not the frontend's own
+  // target alias: the runtime alias is a local name for the same deployment.
+  if (snapshot.host !== ctx.target.host || !snapshot.routerCanisterId ||
+      snapshot.routerCanisterId !== ctx.target.canisterIds.shard_router) {
+    return { active: false, missing: ['snapshot targets another deployment'] };
+  }
   const { connectLiveShardRouter } = await import('./domains');
   const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
   const { readPinnedGroupRegistry } = await import('./groupRegistryPager');
   // Two complete consensus reads; a registry that changes mid-read throws.
-  const registry = await readPinnedGroupRegistry((rev, cursor, limit) => actor.read_group_registry_page(ctx.target.alias, rev, cursor, limit));
+  const registry = await readPinnedGroupRegistry((rev, cursor, limit) => actor.read_group_registry_page(snapshot.targetAlias, rev, cursor, limit));
   if (registry.revision !== BigInt(snapshot.registryRevision)) throw new Error('Routing switch is bound to an older registry revision; re-run the routing-snapshot verification and ship it');
   const live = new Map(registry.groups.map(g => [g.id, { domains: g.domains.map(d => [d.domain, d.canister.toText()] as const), photoStore: g.photo_store[0]?.toText() ?? null }]));
   const approved = new Map(snapshot.groups.map(g => [g.id, { domains: g.domains.map(d => [d.domain, d.canisterId] as const), photoStore: g.photoStore }]));
