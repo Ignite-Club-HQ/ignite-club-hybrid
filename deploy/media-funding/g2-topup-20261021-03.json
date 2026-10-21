@@ -142,6 +142,13 @@
       "beforeCycles": "987185035248",
       "phase": "verified",
       "afterCycles": "1499985738515"
+    },
+    {
+      "id": "yluv5-wiaaa-aaaal-qxpzq-cai",
+      "name": "messaging_domain",
+      "amount": "517575938606",
+      "beforeCycles": "982154412582",
+      "phase": "transferring"
     }
   ]
 }
