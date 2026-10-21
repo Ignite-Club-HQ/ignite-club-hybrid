@@ -37,6 +37,9 @@ test('Motoko upgrade preserves memory and Rust upgrade omits EOP-only arguments'
   assert.equal(args[args.indexOf('--wasm-memory-persistence') + 1], 'keep');
   assert.ok(args.includes(service.canisterId));
   assert.equal(upgradeArgs({ ...service, name: 'timer_jobs' }, 'x', GROUP2_GOVERNOR).includes('--wasm-memory-persistence'), false);
+  const store = upgradeArgs({ ...service, name: 'media_blob_store' }, 'x', GROUP2_GOVERNOR);
+  assert.equal(store.includes('--args'), false);
+  assert.equal(store[store.indexOf('--wasm-memory-persistence') + 1], 'keep');
 });
 test('compressed artifacts hash the actual installed module', () => {
   const bytes = Buffer.from([0,97,115,109,1,0,0,0]); assert.equal(wasmHash(bytes), wasmHash(gzipSync(bytes)));

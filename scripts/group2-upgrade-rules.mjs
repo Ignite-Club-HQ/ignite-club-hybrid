@@ -35,7 +35,8 @@ export function verifyUpgradeStatus(service, actual, governor, expectedHash) {
 }
 export function upgradeArgs(service, path, governor) {
   return ['canister', 'install', service.canisterId, '-n', 'ic', '--mode', 'upgrade', '--wasm', path,
-    ...(service.name === 'timer_jobs' ? [] : ['--wasm-memory-persistence', 'keep', '--args', `(principal "${governor}")`]), '-y'];
+    ...(service.name === 'timer_jobs' ? [] : ['--wasm-memory-persistence', 'keep']),
+    ...(['timer_jobs', 'media_blob_store'].includes(service.name) ? [] : ['--args', `(principal "${governor}")`]), '-y'];
 }
 /** Lost replies can only settle from exact module readback; never repeat an uncertain upgrade. */
 export function reconcileUpgradeStep(step, moduleHash) {
