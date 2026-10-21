@@ -14,7 +14,7 @@ export function statusEvidence(text, id) {
   return { id, cycles: BigInt(r.cycles.replaceAll('_', '')).toString() };
 }
 export function infrastructurePlan({ paymentId, purpose, groupId, principal, confirm, balance, readings = [], targetT = '3', fee = 0n, existingGroup = false }) {
-  if (!/^[a-z0-9][a-z0-9-]{2,47}$/.test(paymentId ?? '')) throw new Error('Unique 3–48 character payment ID required');
+  if (!/^[a-z0-9][a-z0-9-]{2,47}$/.test(paymentId ?? '')) throw new Error('Unique 3–48 character payment ID required: lowercase letters, digits and hyphens only, starting with a letter or digit (e.g. g2-topup-20261021-02)');
   if (principal !== DEPLOY_PRINCIPAL || confirm !== 'CREATE CARD LINK') throw new Error('Existing deploy identity and explicit confirmation required');
   if (!/^g[0-9]{1,3}$/.test(groupId ?? '')) throw new Error('Group must look like g1 or g2');
   const current = BigInt(balance);
