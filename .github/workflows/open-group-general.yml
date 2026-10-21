@@ -71,7 +71,8 @@ jobs:
           set -euo pipefail
           git config user.name "ignite-governor-bot"
           git config user.email "noreply@igniteclubhq.app"
-          git add deploy/groups/g2/general-opening.json frontend/src/live/generated/routingGates.ts 2>/dev/null || true
+          git add deploy/groups/g2/general-opening.json
+          if [ -f frontend/src/live/generated/routingGates.ts ]; then git add frontend/src/live/generated/routingGates.ts; fi
           git diff --cached --quiet || git commit -m "chore: routing snapshot for ${GITHUB_REF_NAME} [skip ci]"
           git push
       - name: Remove signing key
