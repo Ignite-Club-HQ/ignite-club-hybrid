@@ -130,7 +130,10 @@ if (!wiring.evidence) throw new Error(`Removal wiring incomplete; fix these befo
 if (problems.length) throw new Error(`Routing snapshot verification failed:\n${problems.join('\n')}`);
 
 const generatedAt = new Date().toISOString();
-const evidence = { registryRevision: String(registry.revision), groups: snapshotGroups, removalWiring: wiring.evidence, generatedAt };
+// The wire revision is Nat64 (bigint); the shipped DTO requires lossless decimal text.
+// Normalize before hashing so the report and generated source carry identical evidence.
+const evidence = { registryRevision: String(registry.revision), groups: snapshotGroups,
+  removalWiring: { ...wiring.evidence, revision: String(wiring.evidence.revision) }, generatedAt };
 const evidenceSha256 = createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
 const snapshot = { approved: true as const, targetAlias: 'mainnet', host, ...evidence, evidenceSha256 };
 saveJson(report, snapshot);

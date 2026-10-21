@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 const frontendRequire = createRequire(new URL('../frontend/package.json', import.meta.url));
 const { transformWithEsbuild } = frontendRequire('vite');
 const workflow = readFileSync(new URL('../.github/workflows/open-group-general.yml', import.meta.url), 'utf8');
@@ -93,6 +94,32 @@ test('snapshot is governor-verified, wired to removal proof, and writes the comm
   assert.match(snapshot, /src\/live\/generated\/routingGates\.ts/);
   assert.match(snapshot, /evidenceSha256/);
   assert.match(snapshot, /registryRevision: String\(registry\.revision\)/);
+});
+
+test('snapshot hashes and emits lossless Nat64 removal revisions in both output files', async () => {
+  const { code } = await transformWithEsbuild(snapshot, 'produce-routing-gates.ts');
+  const emission = code.slice(code.indexOf('const generatedAt ='));
+  assert.ok(emission.startsWith('const generatedAt ='));
+  const revision = 18446744073709551615n;
+  const files = new Map();
+  runInNewContext(emission.replaceAll('import.meta.url', 'scriptUrl'), {
+    createHash, URL, scriptUrl: new URL('../frontend/scripts/produce-routing-gates.ts', import.meta.url).href,
+    registry: { revision }, host: 'https://icp-api.io',
+    snapshotGroups: [{ id: 'g2', domains: [], photoStore: 'store', moduleHashes: {} }],
+    wiring: { evidence: { revision, groupIds: ['g2'], checkedAtMs: 1792612440000 } },
+    report: 'report.json', saveJson: (path, value) => files.set(path, JSON.stringify(value)),
+    saveFile: (path, value) => files.set(path, value), console: { log() {} },
+  });
+  const report = JSON.parse(files.get('report.json'));
+  assert.equal(report.registryRevision, '18446744073709551615');
+  assert.equal(report.removalWiring.revision, '18446744073709551615');
+  assert.equal(report.removalWiring.checkedAtMs, 1792612440000);
+  const generated = files.get(new URL('../frontend/src/live/generated/routingGates.ts', import.meta.url).pathname);
+  const emitted = JSON.parse(generated.slice(generated.indexOf(' = ') + 3).trim().replace(/;$/, ''));
+  assert.deepEqual(emitted, report);
+  const { approved, targetAlias, host, evidenceSha256, ...evidence } = emitted;
+  assert.equal(evidenceSha256, createHash('sha256').update(JSON.stringify(evidence)).digest('hex'));
+  assert.equal(BigInt(emitted.removalWiring.revision), revision);
 });
 
 test('opening runner confirms every mutation behind its exact phrase before any register call', () => {

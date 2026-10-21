@@ -41,7 +41,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages. Policy 2026-10-19: encrypted-media clubs stay put; no re-encryption or reconciliation bypass. Place new clubs into groups. Why: photo keys belong to the creating group.
-- Admission releases only via the general switch: governor-verified snapshot (revision, inventory, fingerprints, removal wiring) must match live registry, else routing fails closed; health reports never bump registry revision. Why: drift deactivates routing, never falls back.
+- Admission uses the general switch: governor-verified snapshot (revision, inventory, hashes, removal wiring) must match live registry, else fail closed; health never bumps revision. Snapshot revisions are decimal text before hashing/emission. Why: prevent drift and Nat64 precision loss.
 
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 - G2 journal readback pins the acknowledged commit; unknown writes stop. Why: branch reads can lag.
