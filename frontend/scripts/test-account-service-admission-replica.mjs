@@ -283,7 +283,7 @@ try {
  assert.ok('Err' in await pii.prepare_account_removal({...receiverRequest,generation:8n}));
  queue.setPrincipal(governor);
  ok(await queue.enqueue('held-delivery',victim.toText(),'app','event','Held worker delivery','held-delivery-key'));
- const heldDelivery=ok(await queue.claim(99999999999999n,200)).find(n=>n.id==='held-delivery');
+ const heldDelivery=ok(await queue.claim(99999999999999n,100)).find(n=>n.id==='held-delivery');
  assert.ok(heldDelivery,'Positive worker lease must exist before fencing');
  queue.setPrincipal(victim);
  assert.ok('Err' in await queue.delete_notification('held-delivery'));
