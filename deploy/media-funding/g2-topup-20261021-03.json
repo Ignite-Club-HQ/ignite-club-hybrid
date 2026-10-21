@@ -148,7 +148,8 @@
       "name": "messaging_domain",
       "amount": "517575938606",
       "beforeCycles": "982154412582",
-      "phase": "transfer-confirmed"
+      "phase": "verified",
+      "afterCycles": "1499728407188"
     }
   ]
 }
