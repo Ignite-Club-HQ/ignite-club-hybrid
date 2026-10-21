@@ -92,6 +92,24 @@
     "feeCycles": "100000000",
     "targetT": "1.5"
   },
-  "phase": "creating-order",
-  "createdAt": "2026-10-21T06:46:39.608Z"
+  "phase": "checkout-ready",
+  "createdAt": "2026-10-21T06:46:39.608Z",
+  "order": {
+    "order_id": "co-53-a19ddede5da0cad536f480e606b77c04",
+    "checkout_url": "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-53-a19ddede5da0cad536f480e606b77c04&prefilled_amount=766",
+    "amount": {
+      "currency": "USD",
+      "value": "7.66"
+    },
+    "net": {
+      "currency": "USD",
+      "value": "7.14"
+    },
+    "fee": {
+      "currency": "USD",
+      "value": "0.52"
+    },
+    "estimated_cycles": "5255596834744",
+    "expires_at": "2026-10-22T07:46:43Z"
+  }
 }
