@@ -84,7 +84,7 @@
       "name": "media_blob_store",
       "amount": "505359055555",
       "beforeCycles": "994638202262",
-      "phase": "transferring"
+      "phase": "transfer-confirmed"
     }
   ]
 }
