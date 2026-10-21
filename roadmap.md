@@ -1,10 +1,11 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Current request — preserve History and PlayHQ under score privacy
+- [x] Owner scope restriction 21 Oct 00:21 UTC: defer unused PlayHQ sync, upstream investigation and acceptance until requested; preserve existing work. Remaining active scope is History/score privacy in both modes, focused checks and release prerequisites only—not another full feature audit.
 - [ ] Owner request 20 Oct 23:43 UTC: complete remaining integration in one batch, with focused dual-mode, real-canister and SQL checks; preserve all stored detail and avoid deploying unrelated scaling changes.
 - [x] Initial History preservation batch: shared dual-mode History reader, nullable display, existing ICP competition-operation trusted privacy bridge, player/MVP metadata preservation and real two-actor tests. No release/complete-coverage claim.
 - [x] Implement exact ICP match associations, canonical History score reads/writes, preserved snapshots, tenant-scoped PlayHQ stats/claims and bounded feed pagination; wire protected dual-mode calendar/result/report/History readers and save paths. Saved non-destructive Supabase replacement includes ladder reconstruction and archived History retention.
-- [ ] Release prerequisites: full actual-schema/policy/trigger replacement validation and managed Supabase migration application; configured PlayHQ upstream acceptance; GitHub-held canister upgrades and signed-in UI acceptance. Local stand-ins are not a production baseline, and protected RPCs are not deployed live.
+- [ ] Active release prerequisites: actual-schema/policy/trigger validation for History/score privacy and managed Supabase migration application; GitHub-held canister upgrades and signed-in History/score-privacy acceptance. Local stand-ins are not a production baseline, and protected RPCs are not deployed live. PlayHQ sync acceptance is deferred and not a blocker for this scope.
 - [x] Add role/visibility/data-preservation tests and run both full suites: Supabase 6,035 and ICP 5,633 passed, zero failures; final targeted report tests and production actor privacy/PlayHQ/canonical score/snapshot checks pass. Public preview has zero page errors; authenticated UI remains unavailable for external unmanaged Supabase.
 - [x] Document the replacement SQL draft and remaining release prerequisites; no live database changes or deployment.
 
