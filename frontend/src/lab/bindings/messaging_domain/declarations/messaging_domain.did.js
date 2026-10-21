@@ -1121,6 +1121,11 @@ export const idlFactory = ({ IDL }) => {
         [ChatPhotoReminderResult],
         [],
       ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
     'search_messages' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Vec(Message), 'Err' : IDL.Text })],

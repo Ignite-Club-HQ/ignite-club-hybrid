@@ -779,6 +779,11 @@ export interface Main {
     [bigint, number, number, number],
     ChatPhotoReminderResult
   >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'search_messages' : ActorMethod<
     [string, string, number],
     { 'Ok' : Array<Message> } |

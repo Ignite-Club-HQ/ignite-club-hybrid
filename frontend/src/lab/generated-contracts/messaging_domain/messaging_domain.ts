@@ -1047,6 +1047,13 @@ export interface MainInterface {
         Err: string;
     }>;
     run_chat_photo_gallery_reminders(now_ms: bigint, window_start_hours: number, window_end_hours: number, cooldown_days: number): Promise<ChatPhotoReminderResult>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     search_messages(conversation_id: string, needle: string, limit: number): Promise<{
         __kind__: "Ok";
         Ok: Array<Message>;
@@ -2788,6 +2795,16 @@ export class Messaging_domain implements messaging_domainInterface {
     async run_chat_photo_gallery_reminders(arg0: bigint, arg1: number, arg2: number, arg3: number): Promise<ChatPhotoReminderResult> {
         const result = await this.actor.run_chat_photo_gallery_reminders(arg0, arg1, arg2, arg3);
         return from_candid_ChatPhotoReminderResult_n116(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n101(result);
     }
     async search_messages(arg0: string, arg1: string, arg2: number): Promise<{
         __kind__: "Ok";

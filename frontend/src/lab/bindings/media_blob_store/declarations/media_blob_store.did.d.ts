@@ -228,6 +228,11 @@ export interface _SERVICE {
     { 'Ok' : Array<{ 'id' : string, 'path' : string, 'size' : bigint }> } |
       { 'Err' : string }
   >,
+  'read_pending_uploads' : ActorMethod<
+    [],
+    { 'Ok' : Array<{ 'id' : string, 'path' : string, 'size' : bigint }> } |
+      { 'Err' : string }
+  >,
   'read_physical_growth_capacity' : ActorMethod<
     [],
     {
@@ -263,6 +268,11 @@ export interface _SERVICE {
   'retire_upload_outcomes' : ActorMethod<
     [string],
     { 'Ok' : { 'cursor' : string, 'removed' : bigint } } |
+      { 'Err' : string }
+  >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   'set_capacity_limit' : ActorMethod<[bigint], Result>,

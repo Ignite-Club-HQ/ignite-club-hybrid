@@ -339,6 +339,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),
     'set_club_domain_canister' : IDL.Func([IDL.Principal], [Result], []),
     'set_club_media_transfer_fence' : IDL.Func(

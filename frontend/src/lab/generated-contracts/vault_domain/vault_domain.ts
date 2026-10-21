@@ -425,6 +425,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_club_domain_canister(canister: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1040,6 +1047,16 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.restore_file(arg0);
         return from_candid_variant_n34(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n36(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";

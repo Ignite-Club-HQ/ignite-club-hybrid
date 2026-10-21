@@ -175,6 +175,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'set_club_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |

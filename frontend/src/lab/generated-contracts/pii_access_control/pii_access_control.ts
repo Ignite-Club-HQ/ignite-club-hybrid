@@ -253,6 +253,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_club_domain_canister(canister: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -613,6 +620,16 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.revoke_pii_read_competition(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n13(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";

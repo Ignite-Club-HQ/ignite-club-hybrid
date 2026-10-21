@@ -855,6 +855,11 @@ type Main =
    run_chat_photo_gallery_reminders: (now_ms: nat64, window_start_hours:
     nat32, window_end_hours: nat32, cooldown_days: nat32) ->
     (ChatPhotoReminderResult);
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    search_messages: (conversation_id: text, needle: text, limit: nat16) ->
     (variant {
        Err: text;

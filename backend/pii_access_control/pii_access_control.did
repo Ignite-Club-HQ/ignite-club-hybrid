@@ -152,6 +152,11 @@ type Main =
                                 Err: text;
                                 Ok;
                               });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    set_club_domain_canister: (canister: principal) ->
     (variant {
        Err: text;
