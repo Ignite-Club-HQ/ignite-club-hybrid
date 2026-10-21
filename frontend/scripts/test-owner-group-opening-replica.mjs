@@ -29,9 +29,8 @@ try {
   revision = ok(await router.actor.record_group_health('g2', 100n, 2_000_000_000_000n, revision));
   ok(await router.actor.set_deletion_authority(identity.canisterId));
   identity.actor.setPrincipal(governor);
-  const manifest = ok(await identity.actor.read_removal_history_manifest());
-  ok(await identity.actor.set_group_inventory_binding({ registry: router.canisterId, registry_revision: revision, target_alias: 'ic', deployment_id: 'mainnet', deployment_revision: 1n,
-    host: 'https://icp-api.io', network_kind: 'public_mainnet' }, manifest.revision));
+  ok(await identity.actor.pin_owner_test_deletion_registry({ registry: router.canisterId, registry_revision: revision, target_alias: 'ic', deployment_id: 'mainnet', deployment_revision: 1n,
+    host: 'https://icp-api.io', network_kind: 'public_mainnet' }));
   identity.actor.setPrincipal(owner); const ownerAccount = ok(await identity.actor.register_account());
   club.actor.setPrincipal(governor); ok(await club.actor.set_owner_test_deletion_identity(identity.canisterId));
   const actual = ok(await router.actor.read_group_registry('ic')).groups[0];

@@ -850,6 +850,14 @@ fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
         ("deployment_id".into(), binding.deployment_id), ("host".into(), binding.host),
         ("network_kind".into(), binding.network_kind), ("bound_deletion_released".into(), bound_deletion_released().to_string())])
 }
+/// Separate governor-only trust pin for the already-released deletion timing
+/// protocol. Existing history/lifecycle gates remain unchanged.
+#[ic_cdk::update]
+fn pin_owner_test_deletion_registry(binding: group_inventory::Binding) -> Outcome<()> {
+    require_governor(&state(), ic_cdk::api::msg_caller())?;
+    if !bound_deletion_released() || binding.network_kind != "public_mainnet" { return Err("Bound deletion mainnet release required".into()); }
+    store_group_inventory_binding(binding, removal_history_revision())
+}
 /// Only the pinned router may check a human before owner-test creation. This
 /// narrow predicate neither registers a reader nor releases global admission.
 #[ic_cdk::update]
