@@ -71,7 +71,8 @@ if (action === 'register-closed') {
     if (!subnet || typeof subnet !== 'object' || !('subnetId' in subnet)) throw new Error(`Certified subnet unavailable: ${s.name}`);
     const health = Actor.createActor(({ IDL: I }: { IDL: typeof IDL }) => I.Service({ memory_stats: I.Func([], [I.Record({ heap_bytes: I.Nat })], ['query']) }), { agent, canisterId: id }) as unknown as { memory_stats(): Promise<{ heap_bytes: bigint }> };
     observations.push({ ...s, subnetId: String(subnet.subnetId), moduleHash: Buffer.from(actual.module_hash[0] ?? []).toString('hex'),
-      controllers: actual.settings.controllers.map(p => p.toText()), environment: actual.settings.environment_variables, running: 'running' in actual.status,
+      controllers: actual.settings.controllers.map(p => p.toText()), environment: actual.settings.environment_variables.filter(e =>
+        e.name.endsWith('LOCAL_REHEARSAL') || e.name.startsWith('IGNITE_NEW_CLUB_PLACEMENT_')), running: 'running' in actual.status,
       cycles: actual.cycles, heapBytes: (await health.memory_stats()).heap_bytes,
       configuration: await readConfig(s.canisterId, s.name === 'timer_jobs') });
   }
@@ -88,7 +89,9 @@ if (action === 'register-closed') {
   if (action === 'open') {
     if (process.env.CONFIRMATION?.trim() !== 'OPEN GROUP 2 OWNER TEST') throw new Error('Exact owner opening confirmation required');
     // Signed explicit approval is separate from the read-only check.
-    const lowestCycles = observations.reduce((n, s) => s.cycles < n ? s.cycles : n, observations[0].cycles);
+    const firstObservation = observations[0];
+    if (!firstObservation) throw new Error('Complete service observations required');
+    const lowestCycles = observations.reduce((n, s) => s.cycles < n ? s.cycles : n, firstObservation.cycles);
     const largestHeap = observations.reduce((n, s) => s.heapBytes > n ? s.heapBytes : n, 0n);
     save({ ...evidence, evidence_sha256, pending: 'record-owner-group-health' });
     const healthRevision = ok(await router.record_group_health('g2', largestHeap, lowestCycles, registry.revision));
