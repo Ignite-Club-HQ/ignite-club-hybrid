@@ -1,0 +1,85 @@
+name: Open Group 2 to everyone
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Configure settings, record hashes, verify, register closed, open to everyone, or close
+        required: true
+        type: choice
+        default: check
+        options: [settings, prepare-hashes, snapshot, register-closed, check, open, close]
+      approval_file:
+        description: Committed Group 2 general-opening approval JSON
+        required: false
+        default: deploy/groups/g2/general-opening.json
+      group_ids:
+        description: Group ids to configure service settings for (settings action only)
+        required: false
+        default: g2
+      confirmation:
+        description: SET SERVICE SETTINGS / REGISTER GROUP 2 CLOSED / OPEN GROUP 2 TO EVERYONE / CLOSE GROUP 2 TO NEW CLUBS (empty for check, prepare-hashes, snapshot)
+        required: false
+        default: ''
+permissions:
+  contents: write
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+jobs:
+  general-opening:
+    runs-on: ubuntu-latest
+    environment: group-2-admin-controls
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Install project dependencies
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Test opening safeguards
+        run: node --test scripts/group-general-opening-workflow.test.mjs scripts/group2-upgrade-rules.test.mjs
+      - name: Write existing governor key
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM" || { echo "::error::Existing DEPLOYER_PEM required"; exit 1; }
+          umask 077
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/operator.pem"
+      - name: Run the selected action
+        working-directory: frontend
+        env:
+          ACTION: ${{ inputs.action }}
+          APPROVAL_FILE: ${{ inputs.approval_file }}
+          GROUP_IDS: ${{ inputs.group_ids }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          case "$ACTION" in
+            settings)
+              npx --yes tsx@4 scripts/set-group-service-settings.ts "$GROUP_IDS" "$RUNNER_TEMP/operator.pem" "$RUNNER_TEMP/settings-report.json";;
+            snapshot)
+              npx --yes tsx@4 scripts/produce-routing-gates.ts "$RUNNER_TEMP/operator.pem" "$RUNNER_TEMP/routing-gates-report.json";;
+            *)
+              case "$APPROVAL_FILE" in deploy/groups/g2/*.json) ;; *) echo "::error::Approval must be committed under deploy/groups/g2"; exit 1;; esac
+              npx --yes tsx@4 scripts/open-group-general.ts "$ACTION" "../$APPROVAL_FILE" "$RUNNER_TEMP/operator.pem" "$RUNNER_TEMP/general-opening-report.json";;
+          esac
+      - name: Commit generated approval and snapshot
+        if: inputs.action == 'prepare-hashes' || inputs.action == 'snapshot'
+        run: |
+          set -euo pipefail
+          git config user.name "ignite-governor-bot"
+          git config user.email "noreply@igniteclubhq.app"
+          git add deploy/groups/g2/general-opening.json frontend/src/live/generated/routingGates.ts 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "chore: routing snapshot for ${GITHUB_REF_NAME} [skip ci]"
+          git push
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/operator.pem"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: group-general-opening-report
+          path: ${{ runner.temp }}/*-report.json
+          if-no-files-found: ignore
