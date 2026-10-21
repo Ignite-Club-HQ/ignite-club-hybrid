@@ -2,7 +2,8 @@
 
 ## Active scope — minimum Group 2 test opening (21 October 2026, 03:07 UTC)
 This supersedes the broad 1–5 implementation backlog below for current work. Existing safeguards remain; this is not deployment or opening approval.
-- [ ] Resolve the concrete production authority/placement dependency without mainnet rehearsal flags or bypassing existing gates; distinguish necessary changes from missing acceptance evidence.
+- [x] Bounded source review identified two concrete blockers: provisioning enableGroup explicitly refuses nonlocal activation; dispatcher SHIPPED_GATES is globally OFF with no isolated owner-test/new-g2-club activation path. Neither can be resolved by simply setting accepting=true. No gates changed.
+- [ ] Implement and prove a production-safe, explicitly bounded new-test-club admission/dispatch path with revision-bound authority/removal checks; keep existing clubs on their current services. This—not unrelated global recovery—is the next implementation dependency.
 - [ ] Verify new test-club creation in g2 and the same account's access to its clubs in both groups; existing clubs remain in place.
 - [ ] Verify club-scoped permissions/removal for private photos, uploads and chat, including delayed/delegated actions; preserve other-club/member/DM access.
 - [ ] Verify g2 sign-in, business reads, notification scope and both-group worker configuration using the existing focused tests; real browser/Android/push acceptance follows approved release.
