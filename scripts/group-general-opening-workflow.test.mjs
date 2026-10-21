@@ -116,3 +116,15 @@ test('open requires removal wiring for every registered group before flipping ad
   assert.match(opening, /verifyOwnerOpeningChecks\(spec, observed, group, placement\)/);
   assert.match(opening, /record_group_health\('g2', largestHeap, lowestCycles/);
 });
+
+test('committed g2 approval budgets fit the router limits (heap 1..3 GiB, cycles > 0, clubs 1..100000)', () => {
+  const approval = JSON.parse(readFileSync(new URL('../deploy/groups/g2/general-opening.json', import.meta.url), 'utf8'));
+  const router = readFileSync(new URL('../backend/shard_router/src/groups.rs', import.meta.url), 'utf8');
+  assert.match(router, /heap_budget_bytes > 3 \* 1024 \* 1024 \* 1024/);
+  assert.match(router, /MAX_CLUBS: u32 = 100_000/);
+  const heap = BigInt(approval.heapBudgetBytes);
+  assert.ok(heap > 0n && heap <= 3n * 1024n ** 3n, `heapBudgetBytes ${heap}`);
+  assert.ok(BigInt(approval.minCycles) > 0n);
+  assert.ok(approval.maxClubs > 0 && approval.maxClubs <= 100_000);
+  assert.ok(opening.indexOf('Approval budgets outside router limits') < opening.indexOf('router.register_group('));
+});
