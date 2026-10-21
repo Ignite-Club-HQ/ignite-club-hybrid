@@ -49,6 +49,7 @@ type GroupPlacement = record {
   primary_subnet : principal;
 };
 type GroupRegistryPage = record {
+  configuration_revision : opt nat64;
   groups : vec ShardGroup;
   placements : vec GroupPlacement;
   next_cursor : opt text;

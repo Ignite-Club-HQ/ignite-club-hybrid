@@ -12,6 +12,19 @@ GOVERNOR = "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae"
 
 
 class DeploySafetyTests(unittest.TestCase):
+    def test_router_scope_only_upgrades_existing_router_without_creating_or_rewiring(self):
+        result, calls = self.run_deploy(True, deployed=True, scope="router")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c for c in calls if c.startswith("deploy")], ["deploy shard_router -e ic -y --mode upgrade --no-create"])
+        self.assertFalse(any(c.startswith("canister call") for c in calls))
+        self.assertFalse(any("key-preflight" in c or "reinstall" in c for c in calls))
+
+    def test_router_upgrade_failure_never_retries_or_creates(self):
+        result, calls = self.run_deploy(True, scope="router")
+        self.assertEqual(result.returncode, 42)
+        self.assertEqual([c for c in calls if c.startswith("deploy")], ["deploy shard_router -e ic -y --mode upgrade --no-create"])
+        self.assertFalse(any(c.startswith("canister call") for c in calls))
+
     def run_deploy(self, modern, deployed=False, key_safe=True, scope="all", push_worker=False):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)

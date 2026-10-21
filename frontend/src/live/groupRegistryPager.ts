@@ -2,12 +2,14 @@
  * a revision conflict into a different inventory. Recheck identity per await. */
 export async function readPinnedGroupRegistry<G extends { id: string }, P extends { group_id: string }>(
   read: (revision: [] | [bigint], cursor: [] | [string], limit: number) => Promise<
-    { Ok: { revision: bigint; groups: G[]; placements: P[]; next_cursor: [] | [string] } } | { Err: string }>,
+    { Ok: { revision: bigint; configuration_revision?: [] | [bigint]; groups: G[]; placements: P[]; next_cursor: [] | [string] } } | { Err: string }>,
   expected?: bigint, recheck: () => void = () => {},
 ) {
   let pinned = expected;
   const once = async () => {
     const groups: G[] = [], placements: P[] = [];
+    let configurationRevision: bigint | undefined;
+    let firstPage = true;
     let cursor: [] | [string] = [];
     const ids = new Set<string>();
     for (let pages = 0; pages < 4096; pages++) {
@@ -17,6 +19,9 @@ export async function readPinnedGroupRegistry<G extends { id: string }, P extend
       if ('Err' in reply) throw new Error(reply.Err);
       const page = reply.Ok;
       pinned ??= page.revision;
+      const config = page.configuration_revision?.[0];
+      if (firstPage) { configurationRevision = config; firstPage = false; }
+      else if (config !== configurationRevision) throw new Error("Configuration revision changed between pages");
       if (page.revision !== pinned || page.groups.length > 64 || page.groups.length !== page.placements.length ||
           page.next_cursor.length && cursor.length && page.next_cursor[0] <= cursor[0]) throw new Error('Registry revision or cursor changed');
       for (const g of page.groups) {
@@ -25,7 +30,7 @@ export async function readPinnedGroupRegistry<G extends { id: string }, P extend
       }
       groups.push(...page.groups); placements.push(...page.placements);
       if (groups.length > 4096) throw new Error('Registry safety bound exceeded');
-      if (!page.next_cursor.length) return { revision: pinned, groups, placements };
+      if (!page.next_cursor.length) return { revision: pinned, configurationRevision, groups, placements };
       cursor = page.next_cursor;
     }
     throw new Error('Registry cursor safety bound exceeded');

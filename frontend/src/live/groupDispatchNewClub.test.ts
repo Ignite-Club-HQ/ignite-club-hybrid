@@ -16,6 +16,15 @@ function world(placed: string | Error, gates = ON) {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('new club placement', () => {
+  it('does not replay or fall back when creation fails after a placement was reserved', async () => {
+    const { d, s } = world('g2');
+    const create = vi.fn(async () => { throw new Error('Unknown create outcome'); });
+    await expect(createClubDispatcher(d as never).forNewClub('membership', 'c1', create)).rejects.toThrow('Unknown create outcome');
+    expect(d.placeNewClub).toHaveBeenCalledTimes(1);
+    expect(s.createInGroup).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   it('switched off: clubs are created on the shared canisters, no placement asked', async () => {
     const { d } = world('g1', OFF);
     expect(await createClubDispatcher(d as never).forNewClub('membership', 'c1', async (c: any) => c.group)).toBe('shared');

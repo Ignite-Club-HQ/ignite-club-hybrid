@@ -14,6 +14,12 @@ const transport = (change?: number) => {
   };
 };
 describe('revision pinned registry paging', () => {
+  it('rejects configuration drift even when the assignment revision stays pinned', async () => {
+    let calls = 0;
+    const read = async () => ({ Ok: { revision: 1n, configuration_revision: [++calls === 1 ? 4n : 5n] as [bigint],
+      groups: [{ id: 'g2' }], placements: [{ group_id: 'g2' }], next_cursor: [] as [] } });
+    await expect(readPinnedGroupRegistry(read)).rejects.toThrow('changed between consensus reads');
+  });
   it('collects 200 groups through both consensus reads', async () => {
     const result = await readPinnedGroupRegistry(transport());
     expect(result.groups).toHaveLength(200); expect(result.placements).toHaveLength(200); expect(result.revision).toBe(1n);
