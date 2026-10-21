@@ -49,3 +49,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
 - History uses nullable DTOs/exact links and verified humans; PlayHQ keys are tenant-scoped, claims grant no ownership. Deploy history scope upgrades only competition/events, never creates or rewires others. Why: preserve data and isolate releases.
+- Group Infrastructure page (/admin/group-infrastructure) is the single canonical live-utilization view (memory, fuel, club counts, photo stores). Never re-add fuel/memory/photo-store cards to Placement Settings or Canister Health — link to the panel instead. Why: the same readings in two places drift apart and confuse operators.

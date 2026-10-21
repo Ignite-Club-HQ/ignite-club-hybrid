@@ -326,9 +326,9 @@ function SupabaseAdminPage() {
             />
             <AdminMenuItem
               icon={Globe2}
-              label="Canister Health"
-              description="Live cycle balances, burn rate and days remaining for every canister"
-              onClick={() => navigate("/admin/icp-health")}
+              label="Group Infrastructure"
+              description="Live memory, fuel and club counts per group and per canister"
+              onClick={() => navigate("/admin/group-infrastructure")}
             />
           </CardContent>
         </Card>

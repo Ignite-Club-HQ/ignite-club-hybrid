@@ -32,7 +32,7 @@ async function probeCanisters(): Promise<CanisterProbe[]> {
   const agent = await HttpAgent.create({ host: target.host, identity: new AnonymousIdentity() });
   // `cycles_balance` is a cheap, no-argument query implemented by every
   // domain canister — used purely here as a reachability/latency probe, not
-  // to read the actual balance (see CanisterBalancesCard for that).
+  // to read the actual balance (see the Group Infrastructure page for that).
   const idl = () => IDL.Service({ cycles_balance: IDL.Func([], [IDL.Nat], ["query"]) });
 
   return Promise.all(
