@@ -1,3 +1,8 @@
+# Group 2 account-access repair
+- [ ] Add isolated production eligibility release and governor-authorized Group 2 service readers; preserve removal and lifecycle gates.
+- [ ] Add protected identity-only release and snapshot refresh using existing deployment tools; run focused regressions.
+- [ ] Deploy, authorize and verify signed-in club creation on mainnet (requires existing governor deployment access).
+
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Active scope — minimum Group 2 test opening (21 October 2026, 03:07 UTC)
