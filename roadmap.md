@@ -1,5 +1,10 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+## Current request — complete all Group 2 checks (21 October 2026, 02:18 UTC)
+- [ ] Complete consolidated local opening, provisioning, interruption and recovery checks; record current evidence and gaps without repeating unrelated feature audits.
+- [ ] Independently verify live g2 inventory, health and publicly verifiable controller/module evidence; distinguish certified metadata from private configuration and signed-in acceptance.
+- [ ] Resolve the opening decision against every production gate. Keep g2 closed if unfinished removal/drain/history recovery or external release/device prerequisites remain; no rehearsal flags, spending or live mutations.
+
 ## Current request — test Group 2 opening (21 October 2026, 02:14 UTC)
 - [x] Focused opening/routing/account-authority tests: 51 pass in ICP mode and 51 in Supabase mode. Real two-group five-service photo/upload/chat/removal/notification/upgrade rehearsal passes; FCM sends stubbed. Fresh live reads: all 13 g2 canisters respond, ~0.98–1.00T each, below the existing 1T warning threshold. Evidence: docs/group-2-opening-check-2026-10-21.md. No live changes.
 - [ ] Open g2 only after all existing activation gates pass. Blockers: production authority wiring and activation intentionally refuse; complete all-service drain/history recovery remain unfinished engineering. GitHub-held deploy identity, exact live attestation and signed-in/device acceptance are external prerequisites. Do not use rehearsal flags on mainnet.
