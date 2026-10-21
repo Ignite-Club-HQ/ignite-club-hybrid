@@ -20,6 +20,8 @@ try {
   const clubs = [];
   for (const groupId of ['g1', 'g2']) {
     const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM,
+      environmentVariables: [{ name: 'IGNITE_NEW_CLUB_PLACEMENT_ROUTER', value: router.canisterId.toText() },
+        { name: 'IGNITE_NEW_CLUB_PLACEMENT_GROUP', value: groupId }, { name: 'IGNITE_NEW_CLUB_PLACEMENT_TARGET', value: 'test' }],
       sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
     clubs.push(club);
     const subnet = await pic.getCanisterSubnetId(club.canisterId); assert.ok(subnet);
@@ -43,6 +45,10 @@ try {
     assert.ok('Err' in await router.actor.read_my_new_club_placement(placement.club_id, 'test', revision));
     router.actor.setPrincipal(creator);
     assert.ok('Err' in await router.actor.read_my_new_club_placement(placement.club_id, 'test', revision - 1n));
+    club.actor.setPrincipal(creator);
+    assert.ok('Err' in await club.actor.create_club(uuid(99), 'Unplaced', 'unplaced', [], []));
+    club.actor.setPrincipal(outsider);
+    assert.deepEqual(await club.actor.create_club(placement.club_id, 'Stolen', 'stolen', [], []), { Err: 'Original creator placement required' });
     club.actor.setPrincipal(creator);
     ok(await club.actor.create_club(placement.club_id, `Test ${groupId}`, `test-${groupId}`, [], []));
     assert.deepEqual(ok(await club.actor.read_my_club_memberships_indexed([], 100)).clubs, [placement.club_id]);
@@ -70,5 +76,6 @@ try {
   router.actor.setPrincipal(governor); ok(await router.actor.set_deletion_authority(governor));
   ok(await router.actor.acquire_deletion_lock('locked-account', revision));
   router.actor.setPrincipal(creator); assert.ok('Err' in await router.actor.read_my_new_club_placement(uuid(2), 'test', revision));
+  assert.ok('Err' in await router.actor.read_new_club_creation_authorized(creator, uuid(2), 'test', 'g2'));
   console.log('PASS: real creator-bound new-club placement in two authorities, readback, foreign/stale denial, stop-new-placement with retained access, upgrade ownership, club-only removal and deletion lock; other domain IDs are metadata fixtures, not full live opening evidence.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
