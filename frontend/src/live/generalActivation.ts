@@ -16,6 +16,7 @@ import type { FeatureBackendContext } from './featureRouter';
 import { GROUP_DOMAINS } from './groupRouting';
 import { ROUTING_GATES_SNAPSHOT } from './generated/routingGates';
 import type { RemovalWiringEvidence } from './groupRemovalWiring';
+import { groupApprovalConfiguration } from './groupApproval';
 
 export type RoutingGatesSnapshot = {
   approved: true;
@@ -28,6 +29,9 @@ export type RoutingGatesSnapshot = {
   routerCanisterId?: string;
   /** Decimal text of the registry revision this switch was verified against. */
   registryRevision: string;
+  /** Separate approval epoch; legacy snapshots need governor regeneration. */
+  configurationRevision?: string;
+  approvedConfiguration?: string;
   /** Exact inventory anchor: any registry change requires a fresh snapshot. */
   groups: { id: string; domains: { domain: string; canisterId: string }[]; photoStore: string | null;
     moduleHashes: Record<string, string> }[];
@@ -88,17 +92,23 @@ async function compute(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   const { readPinnedGroupRegistry } = await import('./groupRegistryPager');
   // Two complete consensus reads; a registry that changes mid-read throws.
   const registry = await readPinnedGroupRegistry((rev, cursor, limit) => actor.read_group_registry_page(snapshot.targetAlias, rev, cursor, limit));
-  if (registry.revision !== BigInt(snapshot.registryRevision)) throw new Error('Routing switch is bound to an older registry revision; re-run the routing-snapshot verification and ship it');
-  const live = new Map(registry.groups.map(g => [g.id, { domains: g.domains.map(d => [d.domain, d.canister.toText()] as const), photoStore: g.photo_store[0]?.toText() ?? null }]));
-  const approved = new Map(snapshot.groups.map(g => [g.id, { domains: g.domains.map(d => [d.domain, d.canisterId] as const), photoStore: g.photoStore }]));
+  if (registry.configurationRevision === undefined || snapshot.configurationRevision === undefined || !snapshot.approvedConfiguration) {
+    throw new Error('Group routing needs the updated router and a fresh approved snapshot before creating clubs');
+  }
+  if (registry.configurationRevision !== BigInt(snapshot.configurationRevision)) throw new Error('Group configuration changed since approval; run snapshot and publish before creating clubs');
+  const live = new Map(registry.groups.map(g => [g.id, { domains: g.domains.map(d => ({ domain: d.domain, canisterId: d.canister.toText() })), photoStore: g.photo_store[0]?.toText() ?? null }]));
+  const approved = new Map(snapshot.groups.map(g => [g.id, { domains: g.domains, photoStore: g.photoStore }]));
   for (const [id, want] of approved) {
     const got = live.get(id);
     if (!got || inventory(want) !== inventory(got)) throw new Error(`Group ${id} changed since the routing snapshot; re-verify before routing`);
   }
   if (live.size !== approved.size) throw new Error('Registry group set changed since the routing snapshot; re-verify before routing');
+  if (groupApprovalConfiguration(registry.groups, registry.placements) !== snapshot.approvedConfiguration) {
+    throw new Error('Group placement or policy changed since approval; run snapshot and publish before creating clubs');
+  }
   const removalWiring: RemovalWiringEvidence = { revision: BigInt(snapshot.removalWiring.revision),
     groupIds: snapshot.removalWiring.groupIds, checkedAtMs: snapshot.removalWiring.checkedAtMs };
   const gates: ActivationGates = { operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true,
-    routedDomains: [...GROUP_DOMAINS], registryRevision: registry.revision, approvedRevision: BigInt(snapshot.registryRevision), removalWiring };
+    routedDomains: [...GROUP_DOMAINS], registryRevision: registry.configurationRevision, approvedRevision: BigInt(snapshot.configurationRevision), removalWiring };
   return activationStatus(gates);
 }

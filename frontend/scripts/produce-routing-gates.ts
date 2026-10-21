@@ -18,6 +18,7 @@ import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
 import { verifyRemovalWiring, ADMISSION_DOMAINS, type GroupDescriptor } from '../src/live/groupRemovalWiring';
 import { verifyOwnerReciprocalConfiguration, type OwnerCheckSpec, type ObservedService } from '../src/live/ownerOpeningChecks';
 import { resolveOpeningWorker } from './opening-worker.mjs';
+import { groupApprovalConfiguration } from '../src/live/groupApproval';
 
 const GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 const host = process.env.ICP_HOST || 'https://icp-api.io';
@@ -66,6 +67,7 @@ const readConfig = async (id: string, resultVariant = false) => {
 
 const registry = await readPinnedGroupRegistry((rev, cursor, limit) => router.read_group_registry_page('mainnet', rev, cursor, limit));
 if (registry.groups.length === 0) throw new Error('No registered groups; register a group before producing a routing snapshot');
+if (registry.configurationRevision === undefined) throw new Error('Upgrade the router before producing a configuration-bound snapshot');
 
 const problems: string[] = [];
 const snapshotGroups: RoutingSnapshotGroup[] = [];
@@ -128,12 +130,21 @@ const wiring = await verifyRemovalWiring({ revision: registry.revision, groups: 
 problems.push(...wiring.problems);
 if (!wiring.evidence) throw new Error(`Removal wiring incomplete; fix these before routing:\n${problems.join('\n')}`);
 if (problems.length) throw new Error(`Routing snapshot verification failed:\n${problems.join('\n')}`);
+// Verification spans many awaits. Refuse intervening assignment/configuration
+// changes rather than authorizing a different registry than the one verified.
+const finalRegistry = await readPinnedGroupRegistry((rev, cursor, limit) => router.read_group_registry_page('mainnet', rev, cursor, limit), registry.revision);
+if (finalRegistry.configurationRevision !== registry.configurationRevision ||
+    groupApprovalConfiguration(finalRegistry.groups, finalRegistry.placements) !== groupApprovalConfiguration(registry.groups, registry.placements)) {
+  throw new Error('Configuration changed during snapshot verification');
+}
 
 const generatedAt = new Date().toISOString();
 // The wire revision is Nat64 (bigint); the shipped DTO requires lossless decimal text.
 // Normalize before hashing so the report and generated source carry identical evidence.
 const evidence = { registryRevision: String(registry.revision), groups: snapshotGroups,
-  removalWiring: { ...wiring.evidence, revision: String(wiring.evidence.revision) }, generatedAt };
+  configurationRevision: String(registry.configurationRevision),
+  approvedConfiguration: groupApprovalConfiguration(registry.groups, registry.placements),
+  removalWiring: { ...wiring.evidence, revision: String(registry.configurationRevision) }, generatedAt };
 const evidenceSha256 = createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
 const snapshot = { approved: true as const, targetAlias: 'mainnet', host, routerCanisterId: routerId, ...evidence, evidenceSha256 };
 saveJson(report, snapshot);
