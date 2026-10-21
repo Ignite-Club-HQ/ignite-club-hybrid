@@ -1142,6 +1142,32 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
 mod tests {
     use super::*;
     #[test]
+    fn consecutive_creator_reservations_preserve_configuration_and_upgrade() {
+        let operator = Principal::from_slice(&[230, 1]);
+        init(Init { governor: operator });
+        let mut g = groups::tests::group("config-test", 0);
+        g.target_alias = "configuration-test".into();
+        save_group(&g);
+        let approved = configuration_revision();
+        let creator = Principal::from_slice(&[231, 1]);
+        let id = "00000000-0000-4000-8000-000000000081".to_string();
+        let first = place_new_club_for(creator, id.clone(), g.target_alias.clone(), 1).unwrap();
+        let second = place_new_club_for(creator, "00000000-0000-4000-8000-000000000082".into(), g.target_alias.clone(), 1).unwrap();
+        assert_eq!(first.revision, 1);
+        assert_eq!(second.revision, 2);
+        assert_eq!(configuration_revision(), approved);
+        assert_eq!(place_new_club_for(creator, id.clone(), g.target_alias.clone(), 1).unwrap(), first);
+        assert!(place_new_club_for(operator, id, g.target_alias.clone(), 1).is_err());
+        assert_eq!(current_revision(), 2);
+        let stopped = stop_group_placements_for(operator, g.id.clone(), g.target_alias.clone(), 2).unwrap();
+        assert_eq!(configuration_revision(), approved + 1);
+        assert_eq!(stop_group_placements_for(operator, g.id, g.target_alias, stopped).unwrap(), stopped);
+        assert_eq!(configuration_revision(), approved + 1);
+        post_upgrade();
+        assert_eq!(current_revision(), stopped);
+        assert_eq!(configuration_revision(), approved + 1);
+    }
+    #[test]
     fn priority_index_rebuild_rollover_health_and_immutable_retry() {
         let mut a = groups::tests::group("index-a", 79);
         let b = groups::tests::group("index-b", 0);
