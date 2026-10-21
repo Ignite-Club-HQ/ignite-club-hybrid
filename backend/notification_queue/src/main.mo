@@ -141,7 +141,7 @@ persistent actor class Main(governorInit : Principal) = this {
       scheduled = scheduled.filter(func(x) = x.club_id == ?c) }
   };
   func fenceDrop(c : Text) {
-
+    if (items.any(func(x) = x.club == c and x.status == #Processing)) Runtime.trap("Unsettled delivery must be retained");
     items := items.filter(func(x) = not (x.club == c));
     scheduled := scheduled.filter(func(x) = not (x.club_id == ?c));
   };
@@ -160,6 +160,8 @@ persistent actor class Main(governorInit : Principal) = this {
 
     if (s.items.any(func(x) = not (x.club == c))
         or s.scheduled.any(func(x) = not (x.club_id == ?c))) return #Err("Snapshot contains foreign records");
+    if (s.items.any(func(x) = recipientFenced(x.user) or x.status == #Processing)
+        or s.scheduled.any(func(x) = recipientFenced(x.author))) return #Err("Snapshot restores fenced or unsettled delivery");
     if (false) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
     items := items.concat(s.items);
@@ -631,6 +633,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not (do { let removalReply = await ownsInbox(caller, captured.user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Not your notification");
     let index = switch (findIndex(id)) { case null return #Err("Unknown notification"); case (?i) i };
     if (items[index] != captured) return #Err("Notification changed");
+    if (captured.status == #Processing) return #Err("Notification delivery must settle before deletion");
     let updated : Types.Notification = { items[index] with read = true };
     replace(index, updated); #Ok(updated)
   
@@ -681,6 +684,7 @@ persistent actor class Main(governorInit : Principal) = this {
     authenticated(caller);
     var kept : [Types.Notification] = [];
     var removed : Nat16 = 0;
+    if (items.any(func(item) = item.user == user and item.status == #Processing and (switch (club) { case (?c) item.club == c; case null true }))) return #Err("Notification delivery must settle before clearing");
     for (item in items.values()) {
       let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
       if (item.user == user and clubOk) {
@@ -1133,6 +1137,11 @@ persistent actor class Main(governorInit : Principal) = this {
       deliver_scheduled_message : shared (Principal, Text, Text, Text, ?{ kind : Text; ref_id : Text; url : ?Text }, ?Text) -> async { #Ok : { id : Text }; #Err : Text };
     } = actor (Principal.toText(messaging));
     for (item in due.values()) {
+      if (not looksLikePrincipal(item.author)) continue;
+      let subject = try { await async { ?Principal.fromText(item.author) } } catch (_) { null };
+      let ?author = subject else continue;
+      if (not removalReceiver.enter(author)) continue;
+      try {
       if (accountAdmissionEnabled) {
         let allowed = await eligibleUsers([item.author]);
         if (allowed.size() == 0 or getScheduled(item.id) != ?item or scheduledFenced(item.id) or messagingDomainCanister != ?messaging) continue;
@@ -1151,8 +1160,8 @@ persistent actor class Main(governorInit : Principal) = this {
             let body = if (item.body == "" and attachment != null) { " " } else { item.body };
             try {
               switch (await chat.deliver_scheduled_message(Principal.fromText(item.author), conversation, body, "sched:" # item.id # ":" # Nat64.toText(slot), attachment, item.reply_to_id)) {
-                case (#Ok(msg)) { settleScheduled(item.id, slot, #Sent(msg.id)) };
-                case (#Err(e)) { settleScheduled(item.id, slot, #Failed(e)) };
+                case (#Ok(msg)) { if (not removalReceiver.denied(author) and messagingDomainCanister == ?messaging) settleScheduled(item.id, slot, #Sent(msg.id)) };
+                case (#Err(e)) { if (not removalReceiver.denied(author) and messagingDomainCanister == ?messaging) settleScheduled(item.id, slot, #Failed(e)) };
               };
             } catch (_) {
               // Transient call failure: stay Pending, retried next tick.
@@ -1160,6 +1169,7 @@ persistent actor class Main(governorInit : Principal) = this {
           };
         };
       };
+      } finally { removalReceiver.leave(author) };
     };
     deliveringScheduled := false;
   };
