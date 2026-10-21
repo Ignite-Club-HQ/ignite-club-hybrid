@@ -80,3 +80,6 @@ controls, replacing the superseded owner-only trial
   that group's wiring; do not weaken the snapshot checks.
 - Health reporting currently covers registered groups; a newly registered
   group appears automatically on the next 15-minute run.
+
+## Account-service link (part of `settings`)
+`settings` also links the shared account service once, skipping anything already correct and reading every value back: identity `IGNITE_BOUND_DELETION_RELEASE=1`, router `deletion_authority` = identity, identity pinned to this router (`pin_owner_test_deletion_registry`, mainnet), and each group's club service bound to the identity (only while it is empty). A different existing binding stops the run for review. `open`/`close` re-pin the identity forward to the new registry revision so account deletions keep working.
