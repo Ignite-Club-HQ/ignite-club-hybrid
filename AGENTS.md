@@ -11,7 +11,7 @@
 
 - Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
 - Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
-- Read nested AGENTS.md (scripts/, backend/, backend/media_blob_store/); scripts/ governs media recovery and paid replay.
+- Read nested AGENTS.md in scripts/, frontend/, backend/ and backend/media_blob_store/ before scoped changes.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -40,10 +40,11 @@ it. Skills are authoritative — prefer them over general knowledge.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
 - OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
-- Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
+- Media moves require operator-authenticated registries, journaled fences and bounded consensus pages. Policy 2026-10-19: encrypted-media clubs stay put; no re-encryption or reconciliation bypass. Place new clubs into groups. Why: photo keys belong to the creating group.
 - Admission releases only via the general switch: governor-verified snapshot (revision, inventory, fingerprints, removal wiring) must match live registry, else routing fails closed; health reports never bump registry revision. Why: drift deactivates routing, never falls back.
 
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
+- G2 journal readback pins the acknowledged commit; unknown writes stop. Why: branch reads can lag.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
 - History uses nullable DTOs/exact links and verified humans; PlayHQ keys are tenant-scoped, claims grant no ownership. Deploy history scope upgrades only competition/events, never creates or rewires others. Why: preserve data and isolate releases.
