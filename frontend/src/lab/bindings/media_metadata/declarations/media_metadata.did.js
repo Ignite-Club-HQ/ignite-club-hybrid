@@ -246,6 +246,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
         [],
       ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
     'register_asset' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text })],

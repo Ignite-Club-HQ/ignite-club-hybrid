@@ -203,6 +203,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     register_asset(club_id: string, kind: string, mime: string, checksum: string, storage_path: string, visibility: string, expires_at_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: Asset;
@@ -604,6 +605,10 @@ export class Media_metadata implements media_metadataInterface {
     }> {
         const result = await this.actor.read_club_media_references(arg0, arg1, to_candid_opt_n28(arg2));
         return from_candid_variant_n29(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async register_asset(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: bigint): Promise<{
         __kind__: "Ok";

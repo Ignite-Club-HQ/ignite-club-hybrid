@@ -1373,6 +1373,10 @@ export interface Main {
     [string, Principal],
     { 'can_manage' : boolean, 'is_member' : boolean, 'club_id' : [] | [string] }
   >,
+  /**
+   * / Bounded consensus configuration evidence; never changes or grants access.
+   */
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'read_has_child_guardian' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_membership' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_staff_role' : ActorMethod<[Principal, string], boolean>,

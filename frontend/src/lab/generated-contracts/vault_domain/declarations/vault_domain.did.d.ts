@@ -250,6 +250,7 @@ export interface Main {
     { 'Ok' : Page } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'read_resource_club' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [string] } |

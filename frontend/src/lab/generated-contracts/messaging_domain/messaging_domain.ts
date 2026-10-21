@@ -965,6 +965,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     recapTransform(arg0: {
         context: Uint8Array;
         response: HttpRequestResult;
@@ -2674,6 +2675,10 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.read_conversation_club(arg0);
         return from_candid_variant_n96(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async recapTransform(arg0: {
         context: Uint8Array;

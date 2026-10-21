@@ -1577,6 +1577,11 @@ type Main =
        club_id: opt text;
        is_member: bool;
      }) query;
+   /// Bounded consensus configuration evidence; never changes or grants access.
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    read_has_child_guardian: (user: principal, child_id: text) -> (bool);
    read_has_club_membership: (user: principal, club_id: text) -> (bool);
    read_has_club_staff_role: (user: principal, club_id: text) -> (bool);

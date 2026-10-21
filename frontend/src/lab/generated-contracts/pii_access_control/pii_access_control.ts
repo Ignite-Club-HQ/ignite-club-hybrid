@@ -200,6 +200,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     read_private_media_authority(club: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -546,6 +547,10 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.read_club_media_authority(arg0);
         return from_candid_variant_n14(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async read_private_media_authority(arg0: string): Promise<{
         __kind__: "Ok";

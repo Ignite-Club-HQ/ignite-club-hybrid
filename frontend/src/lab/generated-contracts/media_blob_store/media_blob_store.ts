@@ -300,6 +300,7 @@ export interface media_blob_storeInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     read_pending_test_uploads(prefix: string): Promise<{
         __kind__: "Ok";
         Ok: Array<{
@@ -561,6 +562,10 @@ export class Media_blob_store implements media_blob_storeInterface {
     }> {
         const result = await this.actor.read_account_removal_drain(arg0);
         return from_candid_variant_n42(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async read_pending_test_uploads(arg0: string): Promise<{
         __kind__: "Ok";

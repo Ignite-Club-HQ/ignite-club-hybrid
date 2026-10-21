@@ -223,6 +223,7 @@ export interface _SERVICE {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'read_pending_test_uploads' : ActorMethod<
     [string],
     { 'Ok' : Array<{ 'id' : string, 'path' : string, 'size' : bigint }> } |

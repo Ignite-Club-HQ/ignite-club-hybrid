@@ -503,6 +503,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     record_active_user(club_id: string, account_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1537,6 +1538,10 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.read_account_removal_drain(arg0);
         return from_candid_variant_n65(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async record_active_user(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";

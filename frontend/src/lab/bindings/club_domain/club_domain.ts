@@ -1780,6 +1780,10 @@ export interface MainInterface {
         is_member: boolean;
         club_id?: string;
     }>;
+    /**
+     * / Bounded consensus configuration evidence; never changes or grants access.
+     */
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     read_has_child_guardian(user: Principal, child_id: string): Promise<boolean>;
     read_has_club_membership(user: Principal, club_id: string): Promise<boolean>;
     read_has_club_staff_role(user: Principal, club_id: string): Promise<boolean>;
@@ -5303,6 +5307,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.read_competition_team_access(arg0, arg1);
         return from_candid_record_n254(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async read_has_child_guardian(arg0: Principal, arg1: string): Promise<boolean> {
         const result = await this.actor.read_has_child_guardian(arg0, arg1);

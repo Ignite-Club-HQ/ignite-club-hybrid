@@ -383,6 +383,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     read_resource_club(kind: string, id: string): Promise<{
         __kind__: "Ok";
         Ok: string | null;
@@ -987,6 +988,10 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.read_club_media_references(arg0, arg1, to_candid_opt_n37(arg2));
         return from_candid_variant_n38(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async read_resource_club(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";

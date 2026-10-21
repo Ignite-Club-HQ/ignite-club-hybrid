@@ -459,6 +459,7 @@ export interface Main {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'record_active_user' : ActorMethod<
     [string, string],
     { 'Ok' : null } |

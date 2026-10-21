@@ -814,6 +814,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     read_history_match_result(match_id: string, team_id: string, requester: Principal): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -2238,6 +2239,10 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.read_competition_club(arg0);
         return from_candid_variant_n84(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async read_history_match_result(arg0: string, arg1: string, arg2: Principal): Promise<{
         __kind__: "Ok";

@@ -1994,6 +1994,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
     'read_has_child_guardian' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
