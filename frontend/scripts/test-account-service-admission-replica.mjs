@@ -320,6 +320,7 @@ try {
   assert.deepEqual(Uint8Array.from(retained.body),photoCipher,'Public endpoint remains ciphertext, never plaintext');
  }
  console.log('PASS: real two-store ciphertext upload/read/decrypt, erase during post-derivation membership callback, fresh club-photo key denial, denied upload/chunk/finalize with no publication, and real vault-to-club original-human denial. Cached keys/previous downloads are not revoked.');
+ for (const actor of [club,events,competition,league,points,media,insights,blob,queue,chat]) actor.setPrincipal(victim);
  for (const call of domainCalls) await denied(call);
  await denied(()=>chat.read_account_list_messages_page(conversation.id,[],10));
  await denied(()=>chat.send_message(conversation.id,'must fail','m2',[],[]));
