@@ -59,8 +59,12 @@ const groups: Array<Record<string, unknown>> = [];
 const problems: string[] = [];
 for (const group of registry.groups) {
   const services: Array<{ name: string; canister: string; heapBytes: bigint; cycles: bigint }> = [];
+  // Shared infrastructure (the workload identity singleton) is registered as a group
+  // domain but is not the group's own capacity: skip it so its balance/heap never
+  // distorts placement health or trips the legacy-canister refusal.
+  const dedicated = group.domains.filter(d => d.domain !== 'secret_workload_identity');
   const photoStore = group.photo_store[0]; // opt principal decodes as [] | [Principal]
-  const canisters: string[] = [...group.domains.map(d => d.canister.toText()), photoStore?.toText()]
+  const canisters: string[] = [...dedicated.map(d => d.canister.toText()), photoStore?.toText()]
     .filter((x): x is string => typeof x === 'string');
   for (const canister of canisters) {
     try {
