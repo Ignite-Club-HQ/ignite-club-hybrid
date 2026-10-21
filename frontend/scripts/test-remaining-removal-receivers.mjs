@@ -17,7 +17,7 @@ const relayIdl=({IDL:I})=>I.Service({
 const ok=r=>{assert.ok('Ok' in r,String(r.Err));return r.Ok};
 const probes={
   events_domain:['read_account_list_my_viewed_event_ids',[[]]],
-  competition_domain:['read_account_list_competitions',[]],
+  competition_domain:['read_account_list_competitions',['club']],
   mini_league_domain:['read_account_get_mini_leagues',[[]]],
   club_points_domain:['read_account_get_user_points',['club',removed.toText()]],
   media_metadata:['read_account_get_asset',['unknown']],
