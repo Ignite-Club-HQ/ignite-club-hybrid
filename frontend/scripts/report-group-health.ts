@@ -6,16 +6,18 @@
  * Usage: tsx scripts/report-group-health.ts <operator.pem> <report.json>
  * Env: ICP_HOST (default https://icp-api.io). */
 import { writeFileSync, mkdirSync, openSync, writeSync, fsyncSync, closeSync, renameSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import { HttpAgent, Actor, AnonymousIdentity } from '@icp-sdk/core/agent';
-import { Principal } from '@icp-sdk/core/principal';
+import { Actor, HttpAgent, AnonymousIdentity } from '@icp-sdk/core/agent';
 import { IDL } from '@icp-sdk/core/candid';
+import { Principal } from '@icp-sdk/core/principal';
 import { loadOperatorIdentity } from '../src/live/operatorTransport';
-import { GOVERNOR } from './group-live-constants';
 import { idlFactory, type _SERVICE } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
 import { GROUP_DOMAINS } from '../src/live/groupRouting';
 import { DEPLOYED_MAINNET_CANISTER_IDS as LIVE } from '../src/live/generated/deployedCanisterIds';
+
+const GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 
 const [pem, report] = process.argv.slice(2);
 if (!pem || !report) throw new Error('Usage: report-group-health <operator.pem> <report.json>');
