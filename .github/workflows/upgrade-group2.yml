@@ -3,13 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Check fuel and upgrade readiness, or upgrade all thirteen existing Group 2 services
+        description: Check readiness, upgrade all thirteen Group 2 services, or reload them with identical code so saved settings take effect
         required: true
         type: choice
         default: check
-        options: [check, upgrade]
+        options: [check, upgrade, reload]
       confirmation:
-        description: Type UPGRADE GROUP 2 for upgrade (leave empty for check)
+        description: Type UPGRADE GROUP 2 for upgrade, RELOAD GROUP 2 SETTINGS for reload (leave empty for check)
         required: false
         default: ''
 permissions:
@@ -38,7 +38,7 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          node -e 'if (!["check","upgrade"].includes(process.env.ACTION) || (process.env.ACTION === "upgrade" && process.env.CONFIRMATION.trim() !== "UPGRADE GROUP 2")) throw Error("Type UPGRADE GROUP 2 for upgrade")'
+          node -e 'const a = process.env.ACTION, c = process.env.CONFIRMATION.trim(); if (!["check","upgrade","reload"].includes(a) || (a === "upgrade" && c !== "UPGRADE GROUP 2") || (a === "reload" && c !== "RELOAD GROUP 2 SETTINGS")) throw Error("Type UPGRADE GROUP 2 for upgrade or RELOAD GROUP 2 SETTINGS for reload")'
       - name: Install pinned tools and project dependencies
         run: |
           set -euo pipefail

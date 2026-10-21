@@ -13,8 +13,9 @@ import { createJournalApi } from './media-stage-two-github.mjs';
 import { validateGroup2Inventory, validateUpgradeJournal, wasmHash, verifyUpgradeStatus, upgradeArgs, reconcileUpgradeStep, GROUP2_GOVERNOR } from '../../scripts/group2-upgrade-rules.mjs';
 
 const [action, wasmDirectory, pemFile, reportDirectory] = process.argv.slice(2);
-if (!['check', 'upgrade'].includes(action) || !wasmDirectory || !pemFile || !reportDirectory) throw new Error('Usage: upgrade-group2 <check|upgrade> <wasm-directory> <existing-key-file> <report-directory>');
+if (!['check', 'upgrade', 'reload'].includes(action) || !wasmDirectory || !pemFile || !reportDirectory) throw new Error('Usage: upgrade-group2 <check|upgrade|reload> <wasm-directory> <existing-key-file> <report-directory>');
 if (action === 'upgrade' && process.env.CONFIRMATION?.trim() !== 'UPGRADE GROUP 2') throw new Error('Type UPGRADE GROUP 2 to confirm');
+if (action === 'reload' && process.env.CONFIRMATION?.trim() !== 'RELOAD GROUP 2 SETTINGS') throw new Error('Type RELOAD GROUP 2 SETTINGS to confirm');
 const root = resolve(import.meta.dirname, '../..');
 const provision = JSON.parse(readFileSync(join(root, 'deploy/groups/g2/provision.json')));
 const shared = JSON.parse(readFileSync(join(root, 'deploy/mainnet/.icp/data/mappings/ic.ids.json')));
@@ -85,7 +86,7 @@ writeFileSync(join(reportDirectory, 'upgrade-report.json'), JSON.stringify(repor
 if (action === 'check') {
   keyGate('before');
   console.log('All thirteen g2 services checked; no upgrades or opening performed.');
-} else {
+} else if (action === 'upgrade') {
   const repo = process.env.GITHUB_REPOSITORY, release = process.env.GITHUB_SHA;
   if (!repo || !release || !/^[a-f0-9]{40}$/.test(release)) throw new Error('GitHub release binding required');
   const api = createJournalApi(repo, JSON.stringify);
@@ -141,4 +142,69 @@ if (action === 'check') {
   if (await closed() !== revision) throw new Error('Router changed during final verification');
   journal.complete = true; persist();
   console.log('Thirteen Group 2 modules verified; settings and photo key preserved. Group 2 remains closed.');
+}
+if (action === 'reload') {
+  // Same-module reload: Motoko services read their service settings into
+  // transient values only at install/upgrade, so settings written after the
+  // last upgrade stay invisible until the identical module is reinstalled in
+  // upgrade mode. Refuses unless every staged artifact equals the live module,
+  // so no code, fingerprint, memory or setting changes. Replaying a pending
+  // step is safe because reinstalling the identical module is idempotent.
+  for (const p of plans) {
+    const live = publicObservations.find(o => o.name === p.name)?.oldHash;
+    if (live !== p.newHash) throw new Error(`Reload refused: the staged ${p.name} build differs from the live module (live ${live}, staged ${p.newHash}); reload never changes code`);
+  }
+  const repo = process.env.GITHUB_REPOSITORY, release = process.env.GITHUB_SHA;
+  if (!repo || !release || !/^[a-f0-9]{40}$/.test(release)) throw new Error('GitHub release binding required');
+  const api = createJournalApi(repo, JSON.stringify);
+  const branch = 'group-2-upgrade-receipts';
+  const refs = api(`git/matching-refs/heads/${branch}`);
+  if (!refs.some(r => r.ref === `refs/heads/${branch}`)) {
+    const metadata = api(''); const base = api(`git/ref/heads/${metadata.default_branch}`);
+    api('git/refs', 'POST', { ref: `refs/heads/${branch}`, sha: base.object.sha });
+  }
+  const name = 'reload-progress.json';
+  const path = `contents/deploy/groups/g2/${name}`;
+  const directory = api(`contents/deploy/groups/g2?ref=${branch}`);
+  let stored = directory.some(e => e.name === name) ? api(`${path}?ref=${branch}`) : null;
+  let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
+  const binding = { kind: 'reload', governor: GROUP2_GOVERNOR, provisionHash: hash(provision), inventory: plans.map(({ file, ...p }) => p) };
+  const persist = () => {
+    const content = Buffer.from(JSON.stringify(journal)).toString('base64');
+    api(path, 'PUT', { branch, message: 'Group 2 settings reload checkpoint', content, ...(stored ? { sha: stored.sha } : {}) });
+    stored = api(`${path}?ref=${branch}`);
+    if (JSON.stringify(JSON.parse(Buffer.from(stored.content, 'base64').toString())) !== JSON.stringify(journal)) throw new Error('Reload intent readback failed');
+    writeFileSync(join(reportDirectory, name), JSON.stringify(journal, null, 2));
+  };
+  if (journal && !journal.complete && JSON.stringify(journal.binding) !== JSON.stringify(binding)) throw new Error('An unfinished reload for a different inventory exists; review it before reloading');
+  if (!journal || journal.complete) {
+    keyGate('before');
+    journal = { binding, release, routerRevision: revision, keyReceipt: JSON.parse(readFileSync(keyFile)),
+      steps: publicObservations.map(s => ({ name: s.name, canisterId: s.canisterId, moduleHash: s.oldHash, settingsHash: s.settingsHash, phase: 'ready' })), complete: false };
+    persist();
+  } else writeFileSync(keyFile, JSON.stringify(journal.keyReceipt));
+  if (journal.routerRevision !== revision) throw new Error('Router changed since reload intent');
+  keyGate('after');
+  for (const plan of plans) {
+    if (await closed() !== revision) throw new Error('Registry changed; stop reload');
+    const step = journal.steps.find(s => s.name === plan.name);
+    if (!step) throw new Error('Missing reload journal service');
+    if (step.phase === 'complete') continue;
+    const before = await observe(plan);
+    if (before.moduleHash !== plan.newHash) throw new Error(`Live module changed: ${plan.name}`);
+    if (before.settingsHash !== step.settingsHash) throw new Error(`Settings changed since reload intent: ${plan.name}`);
+    step.phase = 'pending'; persist();
+    console.log(`Reloading g2 ${plan.name} (same module)`);
+    const result = spawnSync('icp', upgradeArgs(plan, plan.file, GROUP2_GOVERNOR), { cwd: reportDirectory, stdio: 'inherit' });
+    if (result.status !== 0) throw new Error(`Reload failed or response unknown: ${plan.name}; rerun reload (same module, safe to repeat)`);
+    const after = await observe(plan);
+    verifyUpgradeStatus(plan, after, GROUP2_GOVERNOR, plan.newHash);
+    if (after.settingsHash !== step.settingsHash) throw new Error('Environment settings changed during reload');
+    if (plan.name === 'pii_access_control') keyGate('after');
+    step.phase = 'complete'; persist();
+  }
+  keyGate('after');
+  if (await closed() !== revision) throw new Error('Router changed during final verification');
+  journal.complete = true; persist();
+  console.log('Thirteen Group 2 services reloaded with identical modules; settings now active, fingerprints unchanged. Group 2 remains closed.');
 }

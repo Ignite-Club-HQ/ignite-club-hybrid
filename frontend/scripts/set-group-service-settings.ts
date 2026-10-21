@@ -156,7 +156,11 @@ if (val(await readConfig(identityAccess), 'registry') !== routerId) {
 for (const group of groups) {
   const club = group.domains.find(d => d.domain === 'club_domain')!.canister.toText();
   const bound = val(await readRows(club), 'identity_access');
-  if (!bound) { ok(await linker(club).set_owner_test_deletion_identity(pid(identityAccess))); link[`${group.id}ClubIdentity`] = 'set'; }
+  if (!bound) {
+    const r = await linker(club).set_owner_test_deletion_identity(pid(identityAccess));
+    if ('Err' in r && r.Err === 'Complete Group 2 placement binding required') throw new Error(`${group.id} club service has the placement settings saved but has not loaded them yet. Run "Upgrade Group 2 (closed)" with action reload and confirmation RELOAD GROUP 2 SETTINGS, then rerun settings.`);
+    ok(r); link[`${group.id}ClubIdentity`] = 'set';
+  }
   else if (bound !== identityAccess) throw new Error(`${group.id} club service is bound to another account service (${bound}); stop and review`);
   else link[`${group.id}ClubIdentity`] = 'already set';
   if (val(await readRows(club), 'identity_access') !== identityAccess) throw new Error(`${group.id}: club identity readback failed`);
