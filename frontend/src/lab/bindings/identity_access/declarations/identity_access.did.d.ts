@@ -443,6 +443,11 @@ export interface _SERVICE {
    * users).
    */
   'my_terms_acceptance' : ActorMethod<[], Result_12>,
+  /**
+   * Separate governor-only trust pin for the already-released deletion timing
+   * protocol. Existing history/lifecycle gates remain unchanged.
+   */
+  'pin_owner_test_deletion_registry' : ActorMethod<[Binding], Result_2>,
   'prepare_account_deletion' : ActorMethod<[string, bigint], Result_14>,
   'read_account_removal_intent' : ActorMethod<[string], Result_4>,
   'read_group_inventory_evidence' : ActorMethod<[bigint], Result_15>,

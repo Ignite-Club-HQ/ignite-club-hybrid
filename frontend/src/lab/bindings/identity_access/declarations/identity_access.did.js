@@ -394,6 +394,7 @@ export const idlFactory = ({ IDL }) => {
     'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
     'my_roles' : IDL.Func([], [Result_13], ['query']),
     'my_terms_acceptance' : IDL.Func([], [Result_12], ['query']),
+    'pin_owner_test_deletion_registry' : IDL.Func([Binding], [Result_2], []),
     'prepare_account_deletion' : IDL.Func(
         [IDL.Text, IDL.Nat64],
         [Result_14],
