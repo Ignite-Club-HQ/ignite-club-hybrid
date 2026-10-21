@@ -87,6 +87,19 @@ export interface Migration {
   'club_id' : string,
   'migration_revision' : bigint,
 }
+export interface OwnerOpening {
+  'accepting_new' : boolean,
+  'approval' : OwnerOpeningApproval,
+  'opened_revision' : bigint,
+}
+export interface OwnerOpeningApproval {
+  'club_ids' : Array<string>,
+  'placement' : GroupPlacement,
+  'owner' : Principal,
+  'group' : ShardGroup,
+  'expected_revision' : bigint,
+  'evidence_sha256' : string,
+}
 export interface Page {
   'next' : [] | [string],
   'routes' : Array<Route>,
@@ -106,15 +119,19 @@ export type Result_13 = { 'Ok' : Array<ShardGroup> } |
   { 'Err' : string };
 export type Result_14 = { 'Ok' : Page } |
   { 'Err' : string };
-export type Result_15 = { 'Ok' : GroupRegistrySnapshot } |
+export type Result_15 = { 'Ok' : OwnerOpening } |
   { 'Err' : string };
-export type Result_16 = { 'Ok' : GroupRegistryPage } |
+export type Result_16 = { 'Ok' : GroupRegistrySnapshot } |
   { 'Err' : string };
-export type Result_17 = { 'Ok' : Array<GroupAssignment> } |
+export type Result_17 = { 'Ok' : GroupRegistryPage } |
   { 'Err' : string };
-export type Result_18 = { 'Ok' : boolean } |
+export type Result_18 = { 'Ok' : Array<GroupAssignment> } |
+  { 'Err' : string };
+export type Result_19 = { 'Ok' : [] | [OwnerOpening] } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : AssignResult } |
+  { 'Err' : string };
+export type Result_20 = { 'Ok' : boolean } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
@@ -199,14 +216,19 @@ export interface _SERVICE {
    */
   'memory_stats' : ActorMethod<[], MemoryStats>,
   /**
+   * Explicit governor signature grants only bounded owner test placement, not
+   * global admission, membership, recovery release or general accepting status.
+   */
+  'open_owner_test_group' : ActorMethod<[OwnerOpeningApproval], Result_15>,
+  /**
    * Any signed-in user creating a club asks for its group here; the router picks
    * the healthiest accepting group. Capped per principal; retries are free.
    */
   'place_my_new_club' : ActorMethod<[string, string], Result_4>,
-  'read_group_registry' : ActorMethod<[string], Result_15>,
+  'read_group_registry' : ActorMethod<[string], Result_16>,
   'read_group_registry_page' : ActorMethod<
     [string, [] | [bigint], [] | [string], number],
-    Result_16
+    Result_17
   >,
   'read_hosted_club_assignment' : ActorMethod<
     [string, string, bigint],
@@ -214,7 +236,7 @@ export interface _SERVICE {
   >,
   'read_my_group_assignments' : ActorMethod<
     [Array<string>, string, bigint],
-    Result_17
+    Result_18
   >,
   /**
    * Consensus creator receipt only; never grants club membership or data access.
@@ -224,12 +246,16 @@ export interface _SERVICE {
     Result_4
   >,
   /**
+   * Caller-scoped consensus discovery, including after stopping new placements.
+   */
+  'read_my_owner_test_opening' : ActorMethod<[string], Result_19>,
+  /**
    * Only the registered destination club authority can check a creator receipt.
    * This does not authorize private reads or grant cross-club membership.
    */
   'read_new_club_creation_authorized' : ActorMethod<
     [Principal, string, string, string],
-    Result_18
+    Result_20
   >,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
@@ -240,6 +266,7 @@ export interface _SERVICE {
     Result
   >,
   'set_deletion_authority' : ActorMethod<[Principal], Result_7>,
+  'stop_owner_test_group' : ActorMethod<[string, bigint], Result_15>,
   'version' : ActorMethod<[], bigint>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

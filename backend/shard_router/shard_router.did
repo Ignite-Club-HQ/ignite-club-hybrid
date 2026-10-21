@@ -72,6 +72,19 @@ type Migration = record {
   club_id : text;
   migration_revision : nat64;
 };
+type OwnerOpening = record {
+  accepting_new : bool;
+  approval : OwnerOpeningApproval;
+  opened_revision : nat64;
+};
+type OwnerOpeningApproval = record {
+  club_ids : vec text;
+  placement : GroupPlacement;
+  owner : principal;
+  group : ShardGroup;
+  expected_revision : nat64;
+  evidence_sha256 : text;
+};
 type Page = record { next : opt text; routes : vec Route; revision : nat64 };
 type Result = variant { Ok : nat64; Err : text };
 type Result_1 = variant { Ok : DeletionLock; Err : text };
@@ -80,11 +93,13 @@ type Result_11 = variant { Ok : opt Migration; Err : text };
 type Result_12 = variant { Ok : opt Route; Err : text };
 type Result_13 = variant { Ok : vec ShardGroup; Err : text };
 type Result_14 = variant { Ok : Page; Err : text };
-type Result_15 = variant { Ok : GroupRegistrySnapshot; Err : text };
-type Result_16 = variant { Ok : GroupRegistryPage; Err : text };
-type Result_17 = variant { Ok : vec GroupAssignment; Err : text };
-type Result_18 = variant { Ok : bool; Err : text };
+type Result_15 = variant { Ok : OwnerOpening; Err : text };
+type Result_16 = variant { Ok : GroupRegistrySnapshot; Err : text };
+type Result_17 = variant { Ok : GroupRegistryPage; Err : text };
+type Result_18 = variant { Ok : vec GroupAssignment; Err : text };
+type Result_19 = variant { Ok : opt OwnerOpening; Err : text };
 type Result_2 = variant { Ok : AssignResult; Err : text };
+type Result_20 = variant { Ok : bool; Err : text };
 type Result_3 = variant { Ok : AssignDomainResult; Err : text };
 type Result_4 = variant { Ok : GroupAssignment; Err : text };
 type Result_5 = variant { Ok : DomainMigration; Err : text };
@@ -148,19 +163,24 @@ service : (Init) -> {
   list_routes : (opt text, nat16) -> (Result_14) query;
   // Public: live memory reading for the admin health page.
   memory_stats : () -> (MemoryStats) query;
+  // Explicit governor signature grants only bounded owner test placement, not
+  // global admission, membership, recovery release or general accepting status.
+  open_owner_test_group : (OwnerOpeningApproval) -> (Result_15);
   // Any signed-in user creating a club asks for its group here; the router picks
   // the healthiest accepting group. Capped per principal; retries are free.
   place_my_new_club : (text, text) -> (Result_4);
-  read_group_registry : (text) -> (Result_15);
-  read_group_registry_page : (text, opt nat64, opt text, nat32) -> (Result_16);
+  read_group_registry : (text) -> (Result_16);
+  read_group_registry_page : (text, opt nat64, opt text, nat32) -> (Result_17);
   read_hosted_club_assignment : (text, text, nat64) -> (Result_4);
-  read_my_group_assignments : (vec text, text, nat64) -> (Result_17);
+  read_my_group_assignments : (vec text, text, nat64) -> (Result_18);
   // Consensus creator receipt only; never grants club membership or data access.
   read_my_new_club_placement : (text, text, nat64) -> (Result_4);
+  // Caller-scoped consensus discovery, including after stopping new placements.
+  read_my_owner_test_opening : (text) -> (Result_19);
   // Only the registered destination club authority can check a creator receipt.
   // This does not authorize private reads or grant cross-club membership.
   read_new_club_creation_authorized : (principal, text, text, text) -> (
-      Result_18,
+      Result_20,
     );
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   register_group : (ShardGroup, nat64) -> (Result);
@@ -168,5 +188,6 @@ service : (Init) -> {
   release_deletion_lock : (text, nat64) -> (Result_7);
   reserve_group_media_growth : (text, text, text, nat64) -> (Result);
   set_deletion_authority : (principal) -> (Result_7);
+  stop_owner_test_group : (text, nat64) -> (Result_15);
   version : () -> (nat64) query;
 }
