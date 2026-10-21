@@ -9,6 +9,7 @@
 import { readFileSync, mkdirSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { Actor, HttpAgent } from '@icp-sdk/core/agent';
+import { IDL } from '@icp-sdk/core/candid';
 import { Principal } from '@icp-sdk/core/principal';
 import { loadOperatorIdentity } from '../src/live/operatorTransport';
 import { idlFactory } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
@@ -110,4 +111,61 @@ for (const group of groups) {
   save({ ...report, groups: [...(report.groups as unknown[]), entry], pending: undefined });
   console.log(`Group ${group.id}: identity binding, admission release and creator binding set and verified.`);
 }
-console.log('All requested groups configured. Run the routing snapshot next.');
+// Shared account-service link required by the opening check: the router names
+// identity_access as its deletion authority, identity_access releases the bound
+// deletion protocol and pins this exact router deployment, and each group's
+// club authority names the shared identity. Every write is skipped when the
+// value is already correct and verified by consensus readback afterwards.
+const readConfig = async (id: string): Promise<[string, string][] | string> => {
+  const rows = IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text));
+  const a = Actor.createActor(() => IDL.Service({ read_group_opening_configuration: IDL.Func([], [IDL.Variant({ Ok: rows, Err: IDL.Text })], []) }),
+    { agent, canisterId: pid(id) }) as unknown as { read_group_opening_configuration(): Promise<{ Ok: [string, string][] } | { Err: string }> };
+  const r = await a.read_group_opening_configuration();
+  return 'Ok' in r ? r.Ok : r.Err;
+};
+const readRows = async (id: string): Promise<[string, string][]> => {
+  const rows = IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text));
+  const a = Actor.createActor(() => IDL.Service({ read_group_opening_configuration: IDL.Func([], [rows], []) }),
+    { agent, canisterId: pid(id) }) as unknown as { read_group_opening_configuration(): Promise<[string, string][]> };
+  return a.read_group_opening_configuration();
+};
+const val = (rows: [string, string][] | string, k: string) => typeof rows === 'string' ? undefined : rows.find(r => r[0] === k)?.[1];
+const unit = IDL.Variant({ Ok: IDL.Null, Err: IDL.Text });
+const linker = (id: string) => Actor.createActor(() => IDL.Service({
+  set_deletion_authority: IDL.Func([IDL.Principal], [unit], []),
+  pin_owner_test_deletion_registry: IDL.Func([IDL.Record({ registry: IDL.Principal, registry_revision: IDL.Nat64, target_alias: IDL.Text,
+    deployment_id: IDL.Text, deployment_revision: IDL.Nat64, host: IDL.Text, network_kind: IDL.Text })], [unit], []),
+  set_owner_test_deletion_identity: IDL.Func([IDL.Principal], [unit], []),
+}), { agent, canisterId: pid(id) }) as unknown as Record<string, (...a: unknown[]) => Promise<{ Ok: null } | { Err: string }>>;
+
+save({ ...report, pending: { phase: 'account-service-link' } });
+const link: Record<string, string> = {};
+if ((await envOf(identityAccess)).find(e => e.name === 'IGNITE_BOUND_DELETION_RELEASE')?.value !== '1') {
+  await setEnv(identityAccess, { IGNITE_BOUND_DELETION_RELEASE: '1' }); link.deletionRelease = 'set';
+} else link.deletionRelease = 'already set';
+if ((await envOf(identityAccess)).find(e => e.name === 'IGNITE_BOUND_DELETION_RELEASE')?.value !== '1') throw new Error('Account service deletion release readback failed');
+const routerAuthority = val(await readConfig(routerId), 'deletion_authority');
+if (!routerAuthority) { ok(await linker(routerId).set_deletion_authority(pid(identityAccess))); link.routerAuthority = 'set'; }
+else if (routerAuthority !== identityAccess) throw new Error(`Router deletion authority is bound to ${routerAuthority}, not the account service; stop and review`);
+else link.routerAuthority = 'already set';
+if (val(await readConfig(identityAccess), 'registry') !== routerId) {
+  ok(await linker(identityAccess).pin_owner_test_deletion_registry({ registry: pid(routerId), registry_revision: registry.revision, target_alias: 'mainnet',
+    deployment_id: 'mainnet', deployment_revision: 1n, host: 'https://icp-api.io', network_kind: 'public_mainnet' }));
+  link.registryPin = `pinned at revision ${registry.revision}`;
+} else link.registryPin = 'already pinned';
+for (const group of groups) {
+  const club = group.domains.find(d => d.domain === 'club_domain')!.canister.toText();
+  const bound = val(await readRows(club), 'identity_access');
+  if (!bound) { ok(await linker(club).set_owner_test_deletion_identity(pid(identityAccess))); link[`${group.id}ClubIdentity`] = 'set'; }
+  else if (bound !== identityAccess) throw new Error(`${group.id} club service is bound to another account service (${bound}); stop and review`);
+  else link[`${group.id}ClubIdentity`] = 'already set';
+  if (val(await readRows(club), 'identity_access') !== identityAccess) throw new Error(`${group.id}: club identity readback failed`);
+}
+const idCfg = await readConfig(identityAccess);
+if (val(await readConfig(routerId), 'deletion_authority') !== identityAccess || val(idCfg, 'registry') !== routerId ||
+    val(idCfg, 'network_kind') !== 'public_mainnet' || val(idCfg, 'bound_deletion_released') !== 'true') {
+  throw new Error(`Account service link readback failed: ${typeof idCfg === 'string' ? idCfg : JSON.stringify(idCfg)}`);
+}
+save({ ...report, link, pending: undefined });
+console.log(`Account service linked: ${JSON.stringify(link)}`);
+console.log('All requested groups configured. Run check next.');
