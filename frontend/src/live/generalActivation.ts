@@ -70,8 +70,8 @@ async function compute(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   // Two complete consensus reads; a registry that changes mid-read throws.
   const registry = await readPinnedGroupRegistry((rev, cursor, limit) => actor.read_group_registry_page(ctx.target.alias, rev, cursor, limit));
   if (registry.revision !== BigInt(snapshot.registryRevision)) throw new Error('Routing switch is bound to an older registry revision; re-run the routing-snapshot verification and ship it');
-  const live = new Map(registry.groups.map(g => [g.id, { domains: g.domains.map(d => [d.domain, d.canister.toText()] as const), photo: g.photo_store[0]?.toText() ?? null }]));
-  const approved = new Map(snapshot.groups.map(g => [g.id, { domains: g.domains.map(d => [d.domain, d.canisterId] as const), photo: g.photoStore }]));
+  const live = new Map(registry.groups.map(g => [g.id, { domains: g.domains.map(d => [d.domain, d.canister.toText()] as const), photoStore: g.photo_store[0]?.toText() ?? null }]));
+  const approved = new Map(snapshot.groups.map(g => [g.id, { domains: g.domains.map(d => [d.domain, d.canisterId] as const), photoStore: g.photoStore }]));
   for (const [id, want] of approved) {
     const got = live.get(id);
     if (!got || inventory(want) !== inventory(got)) throw new Error(`Group ${id} changed since the routing snapshot; re-verify before routing`);
