@@ -28,6 +28,11 @@ test('the reporter is anonymous-read only and refuses partial or live-shared rea
   assert.match(runner, /lists a live legacy canister/);
 });
 
+test('shared infrastructure is registered but never counted as group capacity', () => {
+  assert.match(runner, /filter\(d => d\.domain !== 'secret_workload_identity'\)/);
+  assert.match(runner, /not the group's own capacity/);
+});
+
 test('the report is a durable receipt whose revision binding can be audited', () => {
   assert.match(runner, /evidenceSha256|evidence = createHash\('sha256'\)/);
   assert.match(runner, /No group health reported/);
