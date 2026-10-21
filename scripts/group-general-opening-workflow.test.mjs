@@ -143,3 +143,10 @@ test('the commit step saves the approval even before the snapshot file exists', 
   assert.match(yml, /if \[ -f frontend\/src\/live\/generated\/routingGates\.ts \]; then git add/);
   assert.doesNotMatch(yml, /git add deploy\/groups\/g2\/general-opening\.json frontend/);
 });
+
+test('checks and snapshots resolve the existing delivery identity rather than accepting the first grant', () => {
+  assert.match(workflow, /secrets\.ICP_PUSH_WORKER_SEED/);
+  assert.match(workflow, /run: bash scripts\/resolve-group-push-worker\.sh/);
+  for (const source of [opening, snapshot]) assert.match(source, /resolveOpeningWorker\(.+process\.env\.PUSH_WORKER_PRINCIPAL/);
+  assert.doesNotMatch(snapshot, /pushWorker: worker|queue\.filter/);
+});

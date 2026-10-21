@@ -22,4 +22,29 @@ describe('owner-only Group 2 opening checks', () => {
   it('requires creator binding and forbids mainnet rehearsal flags; account admission release switch allowed', () => { const f = fixture(); f.observed[0].environment.pop(); expect(f.check).toThrow('creator-placement'); const g = fixture(); g.observed[1].environment.push({ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }); expect(g.check).not.toThrow(); const h = fixture(); h.observed[1].environment.push({ name: 'IGNITE_MEDIA_LOCAL_REHEARSAL', value: '1' }); expect(h.check).toThrow('Rehearsal'); });
   it('requires capacity and 1-10 explicit distinct club IDs', () => { const f = fixture(); f.observed[0].cycles = 9n; expect(f.check).toThrow('health'); const g = fixture(); g.spec.clubIds = []; expect(g.check).toThrow('1-10'); });
   it('does not accept a configuration receipt instead of actual reciprocal reads', () => { const f = fixture(); expect(() => verifyOwnerReciprocalConfiguration({ ...f.spec, identityAccess: 'identity', pushWorker: 'worker' }, f.observed, [], [])).toThrow('Consensus configuration unavailable'); });
+  it('requires the expected worker on both queue and timer, not another granted worker', () => {
+    const f = fixture();
+    // All peers are the fixture service IDs; extra rows cannot substitute another authority.
+    for (const service of f.observed) service.configuration = f.spec.services.map(s => [s.name, s.canisterId]);
+    const queue = f.observed.find(s => s.name === 'notification_queue');
+    const timer = f.observed.find(s => s.name === 'timer_jobs');
+    const club = f.observed.find(s => s.name === 'club_domain');
+    const competition = f.observed.find(s => s.name === 'competition_domain');
+    if (!queue || !timer || !club || !competition) throw new Error('Incomplete test fixture');
+    queue.configuration?.push(['identity_access', 'identity'], ['worker', 'other'], ['worker', 'worker']);
+    timer.configuration?.push(['worker:*', 'worker']);
+    club.configuration?.push(['identity_access', 'identity'], ['media_store', 'media_blob_store'], ['competition_authority', 'competition_domain']);
+    competition.configuration?.push(['participant_club_authority', 'club_domain']);
+    const router: [string, string][] = [['deletion_authority', 'identity']];
+    const identity: [string, string][] = [['registry', 'router'], ['target_alias', 'ic'], ['deployment_id', 'mainnet'],
+      ['host', f.spec.host], ['network_kind', 'public_mainnet'], ['bound_deletion_released', 'true']];
+    const check = (worker = 'worker') => verifyOwnerReciprocalConfiguration({ ...f.spec, identityAccess: 'identity', pushWorker: worker }, f.observed, router, identity);
+    expect(() => check()).not.toThrow();
+    expect(() => check('')).toThrow('approval notification worker missing');
+    queue.configuration = queue.configuration?.filter(r => r[1] !== 'worker');
+    expect(() => check()).toThrow('has not granted the expected delivery worker');
+    queue.configuration?.push(['worker', 'worker']);
+    timer.configuration = timer.configuration?.filter(r => r[0] !== 'worker:*');
+    expect(() => check()).toThrow('Timer worker missing');
+  });
 });
