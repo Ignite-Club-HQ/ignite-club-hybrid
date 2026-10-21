@@ -60,7 +60,7 @@
       "name": "notification_queue",
       "amount": "507396265473",
       "beforeCycles": "992601533866",
-      "phase": "transferring"
+      "phase": "transfer-confirmed"
     }
   ]
 }
