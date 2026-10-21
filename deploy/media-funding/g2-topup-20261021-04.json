@@ -68,7 +68,7 @@
       "name": "pii_access_control",
       "amount": "503953562988",
       "beforeCycles": "996043972742",
-      "phase": "transferring"
+      "phase": "transfer-confirmed"
     }
   ]
 }
