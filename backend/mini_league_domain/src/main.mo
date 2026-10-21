@@ -190,16 +190,21 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   // Creation must use current club authority, not a manually populated mirror.
   func currentClubAdmin(caller : Principal, club : Text) : async* Bool {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     if (isGovernor(caller)) return true;
     let id = switch (clubDomainCanister) { case null return false; case (?id) id };
     let domain : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor(id.toText());
-    let fresh = try { await (with timeout = 10) domain.read_account_list_user_club_roles(caller, club) } catch (_) { return false };
-    await admitAccount(caller);
+    let fresh = try { { let removalReply = await (with timeout = 10) domain.read_account_list_user_club_roles(caller, club); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply } } catch (_) { return false };
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (clubDomainCanister != ?id or isFenced(club)) return false;
     roles := roles.filter(func(r) = not (r.user.equal(caller) and r.club_id == club)).concat(
       fresh.map(func((role, team)) : Types.RoleGrant = { user = caller; role; club_id = club; team_id = team })
     );
     fresh.any(func((role, _)) = role == "club_admin")
+  
+    } finally { removalReceiver.leave(caller) };
   };
   // League-admin = club admin OR the league creator OR explicitly granted via
   // mini_league_admins — mirrors can_view_mini_league / the admin-management
@@ -356,37 +361,50 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func read_can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
-    await admitAccount(viewer);
+    if (not removalReceiver.enter(viewer)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(viewer); if (removalReceiver.denied(viewer)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (eventsDomainCanister != ?caller or Principal.isAnonymous(viewer)) return false;
     let league = switch (findLeague(league_id)) { case null return false; case (?l) l };
     if (league.club_id != club_id or league.status != "active") return false;
     if (isLeagueAdmin(viewer, league) or isClubMember(viewer, club_id)) return true;
     for (p in players.values()) {
-      if (p.mini_league_id == league_id and (await* playerAccessWrite(viewer, p))) {
+      if (p.mini_league_id == league_id and ({ let removalReply = await* playerAccessWrite(viewer, p); if (removalReceiver.denied(viewer)) throw Error.reject("Account removal fenced after callback"); removalReply })) {
         return eventsDomainCanister == ?caller and findLeague(league_id) == ?league and findPlayer(p.id) == ?p and not leagueFenced(league_id);
       };
     };
     false
+  
+    } finally { removalReceiver.leave(viewer) };
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");
     if (not roles.any(func(item) = item.user.equal(principal) and item.role == role and item.club_id == club_id and item.team_id == team_id)) {
       roles := roles.concat([{ user = principal; role; club_id; team_id }]);
     };
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ---------------- Mini-leagues ----------------
 
   public shared ({ caller }) func create_mini_league(club_id : Text, name : Text, description : ?Text, logo_url : ?Text, team_size : Nat16, min_players_per_side : Nat16, minutes_per_half : Nat16, bib_colors : [Text], show_matches_to_members : Bool) : async { #Ok : Types.MiniLeague; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(name) or not validOpt(description, 2000) or not validOpt(logo_url, 512)) return #Err("Invalid mini-league");
-    if (not (await* currentClubAdmin(caller, club_id))) return #Err("Club admin required");
+    if (not ({ let removalReply = await* currentClubAdmin(caller, club_id); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Club admin required");
     let now = nowMs();
     let created : Types.MiniLeague = {
       id = nextId("mlg-" # club_id, leagues.size()); club_id; name; description; logo_url;
@@ -395,10 +413,15 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     leagues := leagues.concat([created]);
     #Ok(created)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func update_mini_league(id : Text, name : Text, description : ?Text, logo_url : ?Text, team_size : Nat16, min_players_per_side : Nat16, minutes_per_half : Nat16, bib_colors : [Text], show_matches_to_members : Bool) : async { #Ok : Types.MiniLeague; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, id)) {
@@ -410,10 +433,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func set_mini_league_status(id : Text, status : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validLeagueStatus(status)) return #Err("Invalid status");
@@ -425,6 +453,8 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public composite query ({ caller }) func get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
@@ -568,7 +598,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Sessions ----------------
 
   public shared ({ caller }) func create_session(mini_league_id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -585,10 +618,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(created)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func update_session(id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, id)) {
@@ -600,12 +638,17 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Cancellation kept separate from update_session, mirroring
   // set_event_cancelled, so cancelling cannot clobber other fields.
   public shared ({ caller }) func cancel_session(id : Text) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, id)) {
@@ -616,10 +659,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func set_session_status(id : Text, status : Text) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (sessionFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validSessionStatus(status)) return #Err("Invalid status");
@@ -631,6 +679,8 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public composite query ({ caller }) func list_sessions(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueSession]; #Err : Text } {
@@ -647,7 +697,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Players ----------------
 
   public shared ({ caller }) func add_player(mini_league_id : Text, name : Text, child_id : ?Text, parent_user_id : ?Text, ability_rating : ?Nat16, notes : ?Text) : async { #Ok : Types.MiniLeaguePlayer; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -673,10 +726,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(created)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func update_player(id : Text, name : Text, ability_rating : ?Nat16, notes : ?Text) : async { #Ok : Types.MiniLeaguePlayer; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (playerFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (findPlayer(id)) {
@@ -693,10 +751,15 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func remove_player(id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (playerFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (findPlayer(id)) {
@@ -727,6 +790,8 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public composite query ({ caller }) func list_players(mini_league_id : Text) : async { #Ok : [Types.MiniLeaguePlayer]; #Err : Text } {
@@ -757,12 +822,15 @@ persistent actor class Main(governorInit : Principal) = this {
   // Mirrors the `child_guardians` insert AddSecondParentDialog performs on
   // the Supabase branch; idempotent on (child_id, guardian_user_id).
   public shared ({ caller }) func link_mini_league_guardian(child_id : Text, guardian_user_id : Principal) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(child_id)) return #Err("Invalid child");
     if (guardian_user_id.equal(Principal.anonymous())) return #Err("Invalid guardian principal");
     if (not isChildLeagueAdmin(caller, child_id)) return #Err("Mini-league admin required");
-    if (not (await* currentGuardianWrite(guardian_user_id, child_id))) return #Err("Verified child guardian required");
+    if (not ({ let removalReply = await* currentGuardianWrite(guardian_user_id, child_id); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Verified child guardian required");
     if (not isChildLeagueAdmin(caller, child_id) or players.any(func(p) = p.child_id == ?child_id and leagueFenced(p.mini_league_id))) return #Err("Child authority changed");
     if (findChild(child_id) == null) {
       children := children.concat([{ id = child_id; parent_user_id = null; claimed_by = null; created_at_ms = nowMs(); updated_at_ms = nowMs() }]);
@@ -771,6 +839,8 @@ persistent actor class Main(governorInit : Principal) = this {
       guardians := guardians.concat([{ child_id; guardian_user_id; created_at_ms = nowMs() }]);
     };
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Matches exactly what ManagePlayersDialog computes client-side from
@@ -812,7 +882,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // player row (second-parent invites); otherwise a new player is created on
   // claim (primary parent join-link flow).
   public shared ({ caller }) func create_invite(mini_league_id : Text, player_id : ?Text, label_text : ?Text) : async { #Ok : Types.MiniLeagueInvite; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -824,7 +897,7 @@ persistent actor class Main(governorInit : Principal) = this {
         };
         if (not validOpt(label_text, 256)) return #Err("Invalid invite");
         let created : Types.MiniLeagueInvite = {
-          token = await randomToken("mli"); mini_league_id; player_id; label_text;
+          token = { let removalReply = await randomToken("mli"); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }; mini_league_id; player_id; label_text;
           status = "pending"; claimed_by = null; created_by = caller; created_at_ms = nowMs(); claimed_at_ms = null;
         };
         if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
@@ -834,6 +907,8 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(created)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Mirrors claim_mini_league_invite(_token): binds the caller as the
@@ -841,7 +916,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // player_name when the invite has no pre-bound player), and returns the
   // (mini_league_id, club_id, player_id) triple like the Postgres function.
   public shared ({ caller }) func claim_invite(token : Text, player_name : Text) : async { #Ok : Types.ClaimedInvite; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     switch (invites.find(func(item) = item.token == token)) {
       case null #Err("Invite not found");
@@ -884,6 +962,8 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Bearer preview contains no parent/email/child identifier. Claim binds caller atomically.
@@ -905,7 +985,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Groups ----------------
 
   public shared ({ caller }) func create_group(session_id : Text, name : Text, ability_band : ?Text, display_order : Nat16, target_size : Nat16, pitch_name : ?Text) : async { #Ok : Types.MiniLeagueGroup; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (sessionFenced(session_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireSessionAdmin(caller, session_id)) {
@@ -921,10 +1004,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(created)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func update_group(id : Text, name : Text, ability_band : ?Text, display_order : Nat16, target_size : Nat16, pitch_name : ?Text) : async { #Ok : Types.MiniLeagueGroup; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (groupFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, id)) {
@@ -936,10 +1024,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func assign_player_to_group(group_id : Text, player_id : Text, jersey_number : ?Nat16) : async { #Ok : Types.MiniLeagueGroupPlayer; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
@@ -952,10 +1045,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(value)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func unassign_player_from_group(group_id : Text, player_id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
@@ -965,6 +1063,8 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public composite query ({ caller }) func list_group_players(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupPlayer]; #Err : Text } {
@@ -1007,7 +1107,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Group duties ----------------
 
   public shared ({ caller }) func create_duty(group_id : Text, name : Text, points : ?Nat16) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (groupFenced(group_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireGroupAdmin(caller, group_id)) {
@@ -1023,13 +1126,18 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(created)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Any player-linked caller (the claimed parent) or a league admin can
   // claim an open duty for a player — mirrors the member-facing duty claim
   // flow in EventDutiesSection/MatchDutiesDialog.
   public shared ({ caller }) func claim_duty(id : Text, player_id : Text) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (dutyFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (duties.find(func(item) = item.id == id)) {
@@ -1045,7 +1153,7 @@ persistent actor class Main(governorInit : Principal) = this {
                   case null #Err("Mini-league not found");
                   case (?league) {
                     let player = findPlayer(player_id);
-                    let isPlayerClaimant = switch (player) { case (?p) p.mini_league_id == league.id and (await* playerAccessWrite(caller, p)); case null false };
+                    let isPlayerClaimant = switch (player) { case (?p) p.mini_league_id == league.id and ({ let removalReply = await* playerAccessWrite(caller, p); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }); case null false };
                     if (not (isLeagueAdmin(caller, league) or isPlayerClaimant)) return #Err("Forbidden");
                     if (player == null or player != findPlayer(player_id) or (switch (player) { case (?p) p.mini_league_id != league.id; case null true })) return #Err("Player authority changed");
                     if (leagueFenced(league.id)) return #Err("Club is temporarily locked for a transfer");
@@ -1061,10 +1169,15 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func complete_duty(id : Text, points_awarded : Bool) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (dutyFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (duties.find(func(item) = item.id == id)) {
@@ -1080,6 +1193,8 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public composite query ({ caller }) func list_duties(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupDuty]; #Err : Text } {
@@ -1109,7 +1224,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // a player) or the claimed parent of that player, mirroring the
   // events_domain set_rsvp guard shape.
   public shared ({ caller }) func set_availability(session_id : Text, player_id : Text, status : Text) : async { #Ok : Types.MiniLeagueSessionAvailability; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (sessionFenced(session_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validAvailabilityStatus(status)) return #Err("Invalid availability status");
@@ -1120,7 +1238,7 @@ persistent actor class Main(governorInit : Principal) = this {
           case null #Err("Mini-league not found");
           case (?league) {
             let player = findPlayer(player_id);
-            let isPlayerClaimant = switch (player) { case (?p) p.mini_league_id == league.id and (await* playerAccessWrite(caller, p)); case null false };
+            let isPlayerClaimant = switch (player) { case (?p) p.mini_league_id == league.id and ({ let removalReply = await* playerAccessWrite(caller, p); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }); case null false };
             if (not (isLeagueAdmin(caller, league) or isPlayerClaimant)) return #Err("Forbidden");
             if (player == null or player != findPlayer(player_id) or (switch (player) { case (?p) p.mini_league_id != league.id; case null true })) return #Err("Player authority changed");
                     if (leagueFenced(league.id)) return #Err("Club is temporarily locked for a transfer");
@@ -1140,6 +1258,8 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public composite query ({ caller }) func get_availability(session_id : Text, player_id : Text) : async { #Ok : ?Types.MiniLeagueSessionAvailability; #Err : Text } {
@@ -1185,7 +1305,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Admins ----------------
 
   public shared ({ caller }) func add_admin(mini_league_id : Text, user_id : Principal) : async { #Ok : Types.MiniLeagueAdmin; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1198,10 +1321,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(created)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func remove_admin(mini_league_id : Text, user_id : Principal) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1211,6 +1339,8 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func list_admins(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueAdmin]; #Err : Text } {
@@ -1228,7 +1358,10 @@ persistent actor class Main(governorInit : Principal) = this {
   func validJoinLinkRole(value : Text) : Bool { value == "player" or value == "admin" };
 
   public shared ({ caller }) func create_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1238,7 +1371,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (joinLinks.any(func(item) = item.mini_league_id == mini_league_id and item.role == role and not item.revoked)) return #Err("Active join link already exists");
         let link : Types.MiniLeagueJoinLink = {
           mini_league_id;
-          token = await randomToken("mljl");
+          token = { let removalReply = await randomToken("mljl"); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
           role;
           revoked = false;
           created_by = caller;
@@ -1249,10 +1382,15 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(link)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func rotate_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1262,17 +1400,22 @@ persistent actor class Main(governorInit : Principal) = this {
         switch (joinLinks.find(func(item) = item.mini_league_id == mini_league_id and item.role == role and not item.revoked)) {
           case null #Err("No active join link");
           case (?current) {
-            let rotated : Types.MiniLeagueJoinLink = { current with token = await randomToken("mljl"); revision = current.revision + 1 };
+            let rotated : Types.MiniLeagueJoinLink = { current with token = { let removalReply = await randomToken("mljl"); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }; revision = current.revision + 1 };
             joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and item.role == role and not item.revoked) rotated else item);
             #Ok(rotated)
           };
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func revoke_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1283,6 +1426,8 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Token lookup for the claim page: the token itself is the capability, so
@@ -1297,7 +1442,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // Claims an admin join link: grants the caller league-admin rights instead
   // of minting a roster player.
   public shared ({ caller }) func claim_admin_join_link(token : Text) : async { #Ok : { mini_league_id : Text; club_id : Text }; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     switch (joinLinks.find(func(item) = item.token == token)) {
       case null #Err("Join link not found");
@@ -1315,12 +1463,17 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Mirrors join_competition_by_token but mints a fresh player record,
   // since mini-league join links are not pre-bound to an existing player.
   public shared ({ caller }) func join_mini_league_by_token(token : Text, player_name : Text) : async { #Ok : Types.ClaimedInvite; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     switch (joinLinks.find(func(item) = item.token == token)) {
       case null #Err("Join link not found");
@@ -1350,6 +1503,8 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func list_mini_league_join_links(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueJoinLink]; #Err : Text } {
@@ -1366,7 +1521,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // and their players/duties, availability, invites, admins, join links).
   // Mirrors the Supabase mini_leagues delete, which cascades via FK.
   public shared ({ caller }) func delete_mini_league(mini_league_id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1393,6 +1551,8 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Clones a league with its roster (players keep name/rating/notes and any
@@ -1400,7 +1560,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // id. Sessions, groups, duties and availability are not copied — they are
   // per-session state, same as the Supabase duplicateLeagueMutation.
   public shared ({ caller }) func duplicate_mini_league(mini_league_id : Text, new_name : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
@@ -1443,11 +1606,14 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok(created)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Account removal fenced");
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
     if (old.equal(new)) return #err("old and new must differ");
@@ -1560,50 +1726,78 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller = origin }) func read_account_verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
+    if (not removalReceiver.enter(viewer)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     if (origin != Principal.fromActor(this)) return false;
-    await admitAccount(viewer);
+    { let removalReply = await admitAccount(viewer); if (removalReceiver.denied(viewer)) throw Error.reject("Account removal fenced after callback"); removalReply };
     let caller = viewer;
     if (Principal.isAnonymous(caller)) return false;
     if (isLeagueAdmin(caller, league) or isClubMember(caller, league.club_id)) return true;
     for (p in players.values()) {
-      if (p.mini_league_id == league.id and (await this.read_account_verify_player_access(caller, p))) return true;
+      if (p.mini_league_id == league.id and ({ let removalReply = await this.read_account_verify_player_access(caller, p); if (removalReceiver.denied(viewer)) throw Error.reject("Account removal fenced after callback"); removalReply })) return true;
     };
     false
+  
+    } finally { removalReceiver.leave(viewer) };
   };
 
   public shared ({ caller = origin }) func read_account_filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
+    if (not removalReceiver.enter(viewer)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     if (origin != Principal.fromActor(this)) return [];
-    await admitAccount(viewer);
+    { let removalReply = await admitAccount(viewer); if (removalReceiver.denied(viewer)) throw Error.reject("Account removal fenced after callback"); removalReply };
     let caller = viewer;
     var out : [Types.MiniLeague] = [];
-    for (league in candidates.values()) if (await this.read_account_verify_league_access(caller, league)) out := out.concat([league]);
+    for (league in candidates.values()) if ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(viewer)) throw Error.reject("Account removal fenced after callback"); removalReply }) out := out.concat([league]);
     out
+  
+    } finally { removalReceiver.leave(viewer) };
   };
 
   public shared ({ caller }) func read_account_can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
-    await admitAccount(viewer);
+    if (not removalReceiver.enter(viewer)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(viewer); if (removalReceiver.denied(viewer)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (eventsDomainCanister != ?caller or Principal.isAnonymous(viewer)) return false;
     switch (findLeague(league_id)) {
       case null false;
-      case (?league) league.club_id == club_id and league.status == "active" and (await this.read_account_verify_league_access(viewer, league));
+      case (?league) league.club_id == club_id and league.status == "active" and ({ let removalReply = await this.read_account_verify_league_access(viewer, league); if (removalReceiver.denied(viewer)) throw Error.reject("Account removal fenced after callback"); removalReply });
     }
+  
+    } finally { removalReceiver.leave(viewer) };
   };
 
   public shared ({ caller }) func read_account_get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findLeague(id)) {
       case null #Err("Mini-league not found");
-      case (?league) { if (not (await this.read_account_verify_league_access(caller, league))) #Err("Forbidden") else #Ok(league) };
+      case (?league) { if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) #Err("Forbidden") else #Ok(league) };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_mini_leagues_by_club(club_id : Text) : async [Types.MiniLeague] {
-    await admitAccount(caller);
-    await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = item.club_id == club_id))
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
+    { let removalReply = await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = item.club_id == club_id)); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_news_audience(mini_league_id : Text, requester : Principal) : async { #Ok : Types.MiniLeagueNewsAudience; #Err : Text } {
-    await admitAccount(requester);
+    if (not removalReceiver.enter(requester)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(requester); if (removalReceiver.denied(requester)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (clubDomainCanister) {
       case null { return #Err("club_domain canister not configured") };
       case (?clubDomain) { if (not caller.equal(clubDomain)) return #Err("club_domain only") };
@@ -1624,18 +1818,18 @@ persistent actor class Main(governorInit : Principal) = this {
         };
         for (player in players.values()) {
           if (player.mini_league_id == mini_league_id) {
-            switch (player.claimed_by) { case (?u) { if (await this.read_account_verify_player_access(u, player)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+            switch (player.claimed_by) { case (?u) { if ({ let removalReply = await this.read_account_verify_player_access(u, player); if (removalReceiver.denied(requester)) throw Error.reject("Account removal fenced after callback"); removalReply }) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
             switch (player.child_id) {
               case (?childId) {
                 switch (findChild(childId)) {
                   case (?child) {
-                    switch (child.parent_user_id) { case (?u) { if (await this.read_account_verify_child_guardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
-                    switch (child.claimed_by) { case (?u) { if (await this.read_account_verify_child_guardian(u, childId)) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+                    switch (child.parent_user_id) { case (?u) { if ({ let removalReply = await this.read_account_verify_child_guardian(u, childId); if (removalReceiver.denied(requester)) throw Error.reject("Account removal fenced after callback"); removalReply }) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
+                    switch (child.claimed_by) { case (?u) { if ({ let removalReply = await this.read_account_verify_child_guardian(u, childId); if (removalReceiver.denied(requester)) throw Error.reject("Account removal fenced after callback"); removalReply }) recipients := addNewsRecipient(recipients, ?u) }; case null {} };
                   };
                   case null {};
                 };
                 for (guardian in guardians.values()) {
-                  if (guardian.child_id == childId and (await this.read_account_verify_child_guardian(guardian.guardian_user_id, childId))) recipients := addNewsRecipient(recipients, ?guardian.guardian_user_id);
+                  if (guardian.child_id == childId and ({ let removalReply = await this.read_account_verify_child_guardian(guardian.guardian_user_id, childId); if (removalReceiver.denied(requester)) throw Error.reject("Account removal fenced after callback"); removalReply })) recipients := addNewsRecipient(recipients, ?guardian.guardian_user_id);
                 };
               };
               case null {};
@@ -1646,37 +1840,62 @@ persistent actor class Main(governorInit : Principal) = this {
         #Ok({ club_id = league.club_id; recipients })
       };
     }
+  
+    } finally { removalReceiver.leave(requester) };
   };
 
   public shared ({ caller }) func read_account_get_mini_leagues(ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (ids.size() > 300) return #Err("Too many ids");
-    #Ok(await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = ids.any(func(i) = i == item.id))))
+    #Ok({ let removalReply = await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = ids.any(func(i) = i == item.id))); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_mini_leagues_by_clubs(club_ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (club_ids.size() > 200) return #Err("Too many ids");
-    #Ok(await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id))))
+    #Ok({ let removalReply = await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id))); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_my_leagues() : async [Types.MiniLeague] {
-    await admitAccount(caller);
-    await this.read_account_filter_visible_leagues(caller, leagues)
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
+    { let removalReply = await this.read_account_filter_visible_leagues(caller, leagues); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_my_league_access(ids : [Text]) : async { #Ok : [{ id : Text; can_manage : Bool; can_delete : Bool; is_club_admin : Bool }]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (ids.size() > 200) return #Err("Too many ids");
-    #Ok((await this.read_account_filter_visible_leagues(caller, leagues.filter(func(l) = ids.any(func(id) = id == l.id)))).map(func(l) = {
+    #Ok(({ let removalReply = await this.read_account_filter_visible_leagues(caller, leagues.filter(func(l) = ids.any(func(id) = id == l.id))); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }).map(func(l) = {
       id = l.id; can_manage = isLeagueAdmin(caller, l); can_delete = isLeagueAdmin(caller, l); is_club_admin = isClubAdmin(caller, l.club_id)
     }))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_league_members(id : Text) : async { #Ok : [{ user_id : Text; is_staff : Bool; is_parent : Bool }]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     let league = switch (findLeague(id)) { case null return #Err("Mini-league not found"); case (?l) l };
-    if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+    if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
     var parentIds : [Text] = [];
     var staffIds : [Text] = [league.created_by.toText()];
     let add = func(ids : [Text], id : Text) : [Text] {
@@ -1684,11 +1903,11 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     for (p in players.values()) {
       if (p.mini_league_id == id) {
-        switch (p.parent_user_id) { case (?u) { let user = Principal.fromText(u); if (await this.read_account_verify_player_access(user, p)) parentIds := add(parentIds, u) }; case null {} };
-        switch (p.claimed_by) { case (?u) { if (await this.read_account_verify_player_access(u, p)) parentIds := add(parentIds, u.toText()) }; case null {} };
+        switch (p.parent_user_id) { case (?u) { let user = Principal.fromText(u); if ({ let removalReply = await this.read_account_verify_player_access(user, p); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) parentIds := add(parentIds, u) }; case null {} };
+        switch (p.claimed_by) { case (?u) { if ({ let removalReply = await this.read_account_verify_player_access(u, p); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) parentIds := add(parentIds, u.toText()) }; case null {} };
         switch (p.child_id) {
           case (?child) {
-            for (g in guardians.values()) { if (g.child_id == child and (await this.read_account_verify_child_guardian(g.guardian_user_id, child))) parentIds := add(parentIds, g.guardian_user_id.toText()) };
+            for (g in guardians.values()) { if (g.child_id == child and ({ let removalReply = await this.read_account_verify_child_guardian(g.guardian_user_id, child); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) parentIds := add(parentIds, g.guardian_user_id.toText()) };
           };
           case null {};
         };
@@ -1701,39 +1920,54 @@ persistent actor class Main(governorInit : Principal) = this {
     for (u in staffIds.values()) { all := add(all, u) };
     if (all.size() > 500) return #Err("League member list exceeds 500");
     #Ok(all.map(func(u) = { user_id = u; is_staff = staffIds.any(func(x) = x == u); is_parent = parentIds.any(func(x) = x == u) }))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_sessions(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueSession]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findLeague(mini_league_id)) {
       case null #Err("Mini-league not found");
       case (?league) {
-        if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+        if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
         #Ok(sessions.filter(func(item) = item.mini_league_id == mini_league_id))
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_players(mini_league_id : Text) : async { #Ok : [Types.MiniLeaguePlayer]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findLeague(mini_league_id)) {
       case null #Err("Mini-league not found");
       case (?league) {
-        if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+        if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
         #Ok(players.filter(func(item) = item.mini_league_id == mini_league_id))
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_player_guardian_status(player_id : Text) : async { #Ok : Types.PlayerGuardianStatus; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findPlayer(player_id)) {
       case null #Err("Player not found");
       case (?player) {
         switch (findLeague(player.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not isLeagueAdmin(caller, league) and not (await this.read_account_verify_player_access(caller, player))) return #Err("Forbidden");
+            if (not isLeagueAdmin(caller, league) and not ({ let removalReply = await this.read_account_verify_player_access(caller, player); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
             var guardianCount : Nat = 0;
             var parentLinked = false;
             switch (player.child_id) {
@@ -1743,7 +1977,7 @@ persistent actor class Main(governorInit : Principal) = this {
                 switch (player.claimed_by) { case (?u) candidates := candidates.concat([u]); case null {} };
                 switch (player.parent_user_id) { case (?u) candidates := candidates.concat([Principal.fromText(u)]); case null {} };
                 for (g in guardians.values()) if (g.child_id == cid and not candidates.any(func(u) = u == g.guardian_user_id)) candidates := candidates.concat([g.guardian_user_id]);
-                for (u in candidates.values()) if (await this.read_account_verify_child_guardian(u, cid)) { guardianCount += 1; parentLinked := true };
+                for (u in candidates.values()) if ({ let removalReply = await this.read_account_verify_child_guardian(u, cid); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) { guardianCount += 1; parentLinked := true };
               };
             };
             let pending = not parentLinked and guardianCount == 0;
@@ -1752,18 +1986,28 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_invites(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueInvite]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(invites.filter(func(item) = item.mini_league_id == mini_league_id));
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_group_players(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupPlayer]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findGroup(group_id)) {
       case null #Err("Group not found");
       case (?group) {
@@ -1773,7 +2017,7 @@ persistent actor class Main(governorInit : Principal) = this {
             switch (findLeague(leagueId)) {
               case null #Err("Mini-league not found");
               case (?league) {
-                if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+                if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
                 #Ok(groupPlayers.filter(func(item) = item.group_id == group_id))
               };
             }
@@ -1781,26 +2025,36 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_groups(session_id : Text) : async { #Ok : [Types.MiniLeagueGroup]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findSession(session_id)) {
       case null #Err("Session not found");
       case (?session) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+            if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
             #Ok(groups.filter(func(item) = item.session_id == session_id))
           };
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_duties(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupDuty]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findGroup(group_id)) {
       case null #Err("Group not found");
       case (?group) {
@@ -1810,7 +2064,7 @@ persistent actor class Main(governorInit : Principal) = this {
             switch (findLeague(leagueId)) {
               case null #Err("Mini-league not found");
               case (?league) {
-                if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+                if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
                 #Ok(duties.filter(func(item) = item.group_id == group_id))
               };
             }
@@ -1818,60 +2072,87 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_availability(session_id : Text, player_id : Text) : async { #Ok : ?Types.MiniLeagueSessionAvailability; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findSession(session_id)) {
       case null #Err("Session not found");
       case (?session) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+            if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
             #Ok(availability.find(func(item) = item.session_id == session_id and item.player_id == player_id))
           };
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_session_availability(session_id : Text) : async { #Ok : [Types.MiniLeagueSessionAvailability]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (findSession(session_id)) {
       case null #Err("Session not found");
       case (?session) {
         switch (findLeague(session.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
-            if (not (await this.read_account_verify_league_access(caller, league))) return #Err("Forbidden");
+            if (not ({ let removalReply = await this.read_account_verify_league_access(caller, league); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Forbidden");
             #Ok(availability.filter(func(item) = item.session_id == session_id))
           };
         }
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_my_availability() : async [Types.MiniLeagueSessionAvailability] {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     var myPlayerIds : [Text] = [];
-    for (p in players.values()) if (await this.read_account_verify_player_access(caller, p)) myPlayerIds := myPlayerIds.concat([p.id]);
+    for (p in players.values()) if ({ let removalReply = await this.read_account_verify_player_access(caller, p); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) myPlayerIds := myPlayerIds.concat([p.id]);
     availability.filter(func(item) = myPlayerIds.any(func(pid) = pid == item.player_id))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_admins(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueAdmin]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(admins.filter(func(item) = item.mini_league_id == mini_league_id));
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_mini_league_join_links(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueJoinLink]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(joinLinks.filter(func(item) = item.mini_league_id == mini_league_id));
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 };
