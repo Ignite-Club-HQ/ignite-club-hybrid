@@ -12,7 +12,7 @@ GOVERNOR = "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae"
 
 
 class DeploySafetyTests(unittest.TestCase):
-    def run_deploy(self, modern, deployed=False, key_safe=True, scope="all"):
+    def run_deploy(self, modern, deployed=False, key_safe=True, scope="all", push_worker=False):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             log = temp / "calls"
@@ -32,6 +32,17 @@ esac
             executable.chmod(0o755)
             preflight = temp / "node"
             preflight.write_text('''#!/usr/bin/env bash
+if [[ "$1" == *push-worker-principal.mjs ]]; then
+  test "$1" = "$TEST_REPO/scripts/push-worker-principal.mjs" && test -f "$1" || exit 44
+  test "$PUSH_WORKER_NODE_PATH" = "$TEST_REPO/frontend/node_modules" || exit 45
+  printf 'worker-helper resolved\n' >> "$CALL_LOG"
+  printf '%s\n' "$TEST_GOVERNOR"
+  exit 0
+fi
+if [[ "$1" == -e && "$2" == *require.resolve* ]]; then
+  [[ "$2" == *"$TEST_REPO/frontend/node_modules"* ]] || exit 46
+  exit 0
+fi
 if [[ "$1" != *media-key-deploy-preflight.mjs ]]; then exec "$REAL_NODE" "$@"; fi
 printf 'key-preflight %s\n' "$2" >> "$CALL_LOG"
 if [ "$KEY_SAFE" != 1 ]; then exit 43; fi
@@ -40,13 +51,23 @@ exit 0
 ''')
             preflight.chmod(0o755)
             environment = dict(os.environ, PATH=f"{temp}:{os.environ['PATH']}", REAL_NODE=shutil.which("node"),
-                               CALL_LOG=str(log), MODERN=str(int(modern)), DEPLOYED=str(int(deployed)), ICP_PUSH_WORKER_SEED="",
+                               CALL_LOG=str(log), MODERN=str(int(modern)), DEPLOYED=str(int(deployed)),
+                               ICP_PUSH_WORKER_SEED=("00" * 32 if push_worker else ""), TEST_REPO=str(ROOT),
                                TEST_GOVERNOR=GOVERNOR, GOVERNOR=GOVERNOR,
                                KEY_SAFE=str(int(key_safe)),
                                DEPLOY_TARGET="mainnet", ICP_ENV="ic", DEPLOY_SCOPE=scope)
             result = subprocess.run(["bash", str(ROOT / "scripts/deploy-mainnet.sh")],
                                     env=environment, capture_output=True, text=True)
             return result, log.read_text().splitlines()
+
+    def test_push_worker_helper_resolves_from_repo_after_entering_deploy_directory(self):
+        result, calls = self.run_deploy(True, deployed=True, push_worker=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("worker-helper resolved", calls)
+        grant = f'canister call notification_queue grant_worker (principal "{GOVERNOR}") -e ic'
+        self.assertIn(grant, calls)
+        self.assertLess(calls.index("worker-helper resolved"), calls.index(grant))
+        self.assertTrue(any(c.startswith("canister call media_blob_store set_club_domain_canister") for c in calls))
 
     def test_league_parent_authorities_are_wired_reciprocally(self):
         result, calls = self.run_deploy(True, deployed=True)
