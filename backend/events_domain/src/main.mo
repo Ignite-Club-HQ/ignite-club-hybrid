@@ -3616,10 +3616,12 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   func importPlayhqTeam(club_id : Text, team_id : Text, competition_id : Text, playhq_team_id : Text, actor_ : Principal) : async* { #Ok : Types.PlayHQImportResult; #Err : Text } {
+    if (removalReceiver.denied(actor_)) return #Err("Account removal fenced");
     let body = switch (await* playhqHttpGet("/v1/competitions/" # competition_id # "/fixture")) {
       case (#Err(e)) return #Err(e);
       case (#Ok(b)) b;
     };
+    if (removalReceiver.denied(actor_) or isFenced(club_id)) return #Err("Account or club fenced after callback");
     let games = parsePlayhqGames(body, playhq_team_id);
     if (games.size() == 0) return #Err("No fixtures found for this team in PlayHQ yet");
     let now = nowMs();
@@ -3751,10 +3753,15 @@ persistent actor class Main(governorInit : Principal) = this {
     var i = 0;
     while (i < batch and i < autos.size()) {
       let s = autos[(playhqSweepCursor + i) % autos.size()];
+      if (not removalReceiver.enter(s.updated_by)) { i += 1; continue };
+      try {
+      await admitAccount(s.updated_by);
       let r = await* importPlayhqTeam(s.club_id, s.team_id, s.competition_id, s.playhq_team_id, s.updated_by);
+      if (removalReceiver.denied(s.updated_by)) { i += 1; continue };
       let (ok, err) = switch (r) { case (#Ok(_)) (true, null); case (#Err(e)) (false, ?e) };
       playhqTeamSyncs := playhqTeamSyncs.map<Types.PlayHQTeamSync, Types.PlayHQTeamSync>(func(x) = if (x.team_id == s.team_id) { { x with last_synced_at_ms = if ok ?nowMs() else x.last_synced_at_ms; last_error = err } } else x);
       i += 1;
+      } finally { removalReceiver.leave(s.updated_by) };
     };
     playhqSweepCursor := (playhqSweepCursor + batch) % autos.size();
   };
@@ -3955,6 +3962,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   func fanOutReminder(event : Types.Event) : async { #Ok : Nat16; #Err : Text } {
+    if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
+    try {
+    await admitAccount(event.creator);
     let event_id = event.id;
     do {
       do {
@@ -3983,6 +3993,7 @@ persistent actor class Main(governorInit : Principal) = this {
         };
       };
     };
+    } finally { removalReceiver.leave(event.creator) };
   };
 
   // ---- Scheduled (auto) RSVP reminders ----
@@ -4137,6 +4148,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   func fanOutScheduledNotice(event : Types.Event, recipients : [Text], body : Text, keyPrefix : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
+    try {
+    await admitAccount(event.creator);
     if (recipients.size() == 0) return #Ok(0);
     switch (notificationQueueCanister) {
       case null { #Err("Notification queue not configured") };
@@ -4149,9 +4163,13 @@ persistent actor class Main(governorInit : Principal) = this {
         } catch (_) { #Err("Scheduled reminder queue call failed") }
       };
     }
+    } finally { removalReceiver.leave(event.creator) };
   };
 
   func fanOutDutyTeamReminder(event : Types.Event, team_id : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
+    try {
+    await admitAccount(event.creator);
     switch (notificationQueueCanister) {
       case null { #Err("Notification queue not configured") };
       case (?queueCanister) {
@@ -4180,6 +4198,7 @@ persistent actor class Main(governorInit : Principal) = this {
         } catch (_) { #Err("Duty reminder queue call failed") }
       };
     }
+    } finally { removalReceiver.leave(event.creator) };
   };
 
   func markReminderSent(event_id : Text) {
@@ -4198,6 +4217,9 @@ persistent actor class Main(governorInit : Principal) = this {
     var sentThisRun = 0;
     for (event in events.values()) {
       if (sentThisRun < 20 and event.event_type == "game" and not event.deleted and not event.cancelled and event.team_id != null and event.ends_at_ms + minAge <= now and event.ends_at_ms + maxAge > now and photoPromptsSent.find(func(id) = id == event.id) == null) {
+        if (not removalReceiver.enter(event.creator)) continue;
+        try {
+        await admitAccount(event.creator);
         photoPromptsSent := photoPromptsSent.concat([event.id]);
         sentThisRun += 1;
         var recipients : [Text] = [];
@@ -4220,6 +4242,7 @@ persistent actor class Main(governorInit : Principal) = this {
             ignore await queue.fan_out(recipients, event.club_id, "photo_prompt_reminder", "Got photos from \"" # event.title # "\"? Add them to the team gallery.", "photo-prompt-" # event.id, ?event.id);
           } catch (_) {};
         };
+        } finally { removalReceiver.leave(event.creator) };
       };
     };
     if (photoPromptsSent.size() > 5000) photoPromptsSent := photoPromptsSent.sliceToArray(photoPromptsSent.size() - 5000, photoPromptsSent.size());

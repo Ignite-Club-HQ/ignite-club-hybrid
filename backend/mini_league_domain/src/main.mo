@@ -826,11 +826,15 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
 
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
+    if (not removalReceiver.enter(guardian_user_id)) return #Err("Guardian fenced");
+    try {
+    await admitAccount(guardian_user_id);
     auth(caller);
     if (not valid(child_id)) return #Err("Invalid child");
     if (guardian_user_id.equal(Principal.anonymous())) return #Err("Invalid guardian principal");
     if (not isChildLeagueAdmin(caller, child_id)) return #Err("Mini-league admin required");
     if (not (do { let removalReply = await* currentGuardianWrite(guardian_user_id, child_id); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Verified child guardian required");
+    if (removalReceiver.denied(guardian_user_id)) return #Err("Guardian fenced after callback");
     if (not isChildLeagueAdmin(caller, child_id) or players.any(func(p) = p.child_id == ?child_id and leagueFenced(p.mini_league_id))) return #Err("Child authority changed");
     if (findChild(child_id) == null) {
       children := children.concat([{ id = child_id; parent_user_id = null; claimed_by = null; created_at_ms = nowMs(); updated_at_ms = nowMs() }]);
@@ -840,6 +844,7 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     #Ok
   
+    } finally { removalReceiver.leave(guardian_user_id) };
     } finally { removalReceiver.leave(caller) };
   };
 
@@ -1712,17 +1717,26 @@ persistent actor class Main(governorInit : Principal) = this {
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_verify_child_guardian(user : Principal, child : Text) : async Bool {
     if (caller != Principal.fromActor(this)) return false;
-    if (not (await accountAdmission.eligible(user))) return false;
-    await* currentGuardianWrite(user, child)
+    if (not removalReceiver.enter(user)) return false;
+    try {
+    let eligible = await accountAdmission.eligible(user);
+    if (removalReceiver.denied(user) or not eligible) return false;
+    let allowed = await* currentGuardianWrite(user, child);
+    allowed and not removalReceiver.denied(user)
+    } finally { removalReceiver.leave(user) };
   };
 
   public shared ({ caller }) func read_account_verify_player_access(user : Principal, player : Types.MiniLeaguePlayer) : async Bool {
     if (caller != Principal.fromActor(this)) return false;
-    if (not (await accountAdmission.eligible(user))) return false;
+    if (not removalReceiver.enter(user)) return false;
+    try {
+    let eligible = await accountAdmission.eligible(user);
+    if (removalReceiver.denied(user) or not eligible) return false;
     let current = switch (findPlayer(player.id)) { case null return false; case (?p) p };
     if (current != player) return false;
     let allowed = await* playerAccessWrite(user, current);
-    allowed and findPlayer(player.id) == ?current and not playerFenced(player.id)
+    allowed and not removalReceiver.denied(user) and findPlayer(player.id) == ?current and not playerFenced(player.id)
+    } finally { removalReceiver.leave(user) };
   };
 
   public shared ({ caller = origin }) func read_account_verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
