@@ -188,7 +188,7 @@
       "name": "media_metadata",
       "amount": "503141357634",
       "beforeCycles": "996846238576",
-      "phase": "transferring"
+      "phase": "transfer-confirmed"
     }
   ]
 }
