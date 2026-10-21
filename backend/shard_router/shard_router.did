@@ -155,6 +155,7 @@ service : (Init) -> {
   read_hosted_club_assignment : (text, text, nat64) -> (Result_4);
   read_my_group_assignments : (vec text, text, nat64) -> (Result_17);
   read_my_new_club_placement : (text, text, nat64) -> (Result_4);
+  read_new_club_creation_authorized : (principal, text, text, text) -> (Result_7);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   register_group : (ShardGroup, nat64) -> (Result);
   register_group_placement : (GroupPlacement, nat64) -> (Result);

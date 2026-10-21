@@ -299,6 +299,20 @@ fn read_my_new_club_placement(club_id: String, target_alias: String, expected_re
     creator_placement(caller(), &club_id, &target_alias, expected_revision)
 }
 
+/// Only the registered destination club authority can check a creator receipt.
+/// This does not authorize private reads or grant cross-club membership.
+#[ic_cdk::update]
+fn read_new_club_creation_authorized(user: Principal, club_id: String, target_alias: String, group_id: String) -> Outcome<bool> {
+    registry_writable()?;
+    let group = group_for(&group_id).ok_or("Unknown group")?;
+    if group.target_alias != target_alias || !group.domains.iter().any(|d| d.domain == "club_domain" && d.canister == caller()) {
+        return Err("Registered destination club authority required".into());
+    }
+    if !GROUP_PLACEMENTS.with(|m| m.borrow().contains_key(&group_id.as_bytes().to_vec())) { return Err("Complete group placement required".into()); }
+    Ok(user != Principal::anonymous() && placement_owner(&club_id) == Some(user) &&
+        group_assignment_for(&club_id).is_some_and(|a| a.group_id == group_id))
+}
+
 fn memory(id: u8) -> Memory {
     MANAGER.with(|manager| manager.borrow().get(MemoryId::new(id)))
 }
