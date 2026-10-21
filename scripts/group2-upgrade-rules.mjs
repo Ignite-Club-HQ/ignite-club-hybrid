@@ -5,7 +5,8 @@ import { GROUP_BUILD_SERVICES } from './stage-group-wasm.mjs';
 export const GROUP2_GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 export const GROUP2_FUEL_FLOOR = 1_000_000_000_000n;
 /** Historical name, production meaning: this env releases cross-group account
- * admission/removal checks, so it alone may stay set through upgrades. */
+ * admission/removal checks on every group service, so it alone may stay set
+ * through upgrades. Any other LOCAL_REHEARSAL flag remains forbidden. */
 export const ADMISSION_RELEASE_FLAG = 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL';
 export function validateGroup2Inventory(provision, shared) {
   if (provision.groupId !== 'g2' || provision.deploymentId !== 'mainnet' || provision.phase !== 'checked' || provision.pending ||

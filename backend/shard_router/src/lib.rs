@@ -1029,11 +1029,12 @@ fn record_group_health(group_id: String, heap_bytes: u64, cycles: u64, expected_
     let mut group = group_for(&group_id).ok_or("Unknown group")?;
     // Report the largest heap and smallest cycle balance across ALL group
     // canisters. This is an operator observation, never browser authorization.
+    // Health is an observation, not inventory: it must not bump the registry
+    // revision, or scheduled reporting would invalidate revision-bound
+    // approvals such as the routing snapshot.
     group.heap_bytes = heap_bytes; group.cycles = cycles; group.observed_at_ns = ic_cdk::api::time();
-    let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
     save_group(&group);
-    REVISION.with(|stored| stored.borrow_mut().set(revision));
-    Ok(revision)
+    Ok(current_revision())
 }
 
 #[ic_cdk::query]
