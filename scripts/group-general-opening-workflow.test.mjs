@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { runInNewContext } from 'node:vm';
 const frontendRequire = createRequire(new URL('../frontend/package.json', import.meta.url));
 const { transformWithEsbuild } = frontendRequire('vite');
 const workflow = readFileSync(new URL('../.github/workflows/open-group-general.yml', import.meta.url), 'utf8');
@@ -17,6 +18,26 @@ test('opening scripts transform cleanly (catches duplicate declarations before G
     const result = await transformWithEsbuild(source, name).catch(e => { throw new Error(`${name}: ${e.message}`); });
     assert.ok(result?.code.length > 0, name);
   }
+});
+
+test('settings startup accepts the workflow arguments without accessing the later report object', async () => {
+  const { code } = await transformWithEsbuild(settings, 'set-group-service-settings.ts');
+  const startup = code.slice(code.indexOf('const [groupIdsArg'), code.indexOf('const ids ='));
+  assert.ok(startup.length > 0);
+  runInNewContext(`${startup}\nconst report = {};`, {
+    process: { argv: ['node', 'settings', 'g2', '/tmp/operator.pem', '/tmp/settings-report.json'],
+      env: { CONFIRMATION: 'SET SERVICE SETTINGS' } },
+  });
+});
+
+test('settings startup rejects a missing report path before any identity or network access', async () => {
+  const { code } = await transformWithEsbuild(settings, 'set-group-service-settings.ts');
+  const startup = code.slice(code.indexOf('const [groupIdsArg'), code.indexOf('const ids ='));
+  assert.ok(startup.length > 0);
+  assert.throws(() => runInNewContext(`${startup}\nconst report = {};`, {
+    process: { argv: ['node', 'settings', 'g2', '/tmp/operator.pem'],
+      env: { CONFIRMATION: 'SET SERVICE SETTINGS' } },
+  }), /Usage: set-group-service-settings/);
 });
 
 test('manual opening workflow is protected and serialized with existing mainnet deployment', () => {

@@ -19,7 +19,7 @@ import { ADMISSION_DOMAINS, ADMISSION_FLAG, ADMISSION_AUTHORITY } from '../src/l
 const GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 
 const [groupIdsArg, pem, reportPath] = process.argv.slice(2);
-if (!groupIdsArg || !pem || !report) throw new Error('Usage: set-group-service-settings <group_ids> <operator.pem> <report.json>');
+if (!groupIdsArg || !pem || !reportPath) throw new Error('Usage: set-group-service-settings <group_ids> <operator.pem> <report.json>');
 if (process.env.CONFIRMATION?.trim() !== 'SET SERVICE SETTINGS') throw new Error('Exact confirmation SET SERVICE SETTINGS required');
 const wanted = groupIdsArg.split(',').map(s => s.trim()).filter(Boolean);
 if (!wanted.length || wanted.some(id => !/^[a-z0-9-]{1,32}$/.test(id))) throw new Error('Invalid group id list');
