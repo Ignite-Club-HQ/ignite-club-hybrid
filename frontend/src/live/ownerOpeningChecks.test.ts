@@ -40,6 +40,17 @@ describe('owner-only Group 2 opening checks', () => {
       ['host', f.spec.host], ['network_kind', 'public_mainnet'], ['bound_deletion_released', 'true']];
     const check = (worker = 'worker') => verifyOwnerReciprocalConfiguration({ ...f.spec, identityAccess: 'identity', pushWorker: worker }, f.observed, router, identity);
     expect(() => check()).not.toThrow();
+    // Reproduce the production mismatch: a destination enables admission,
+    // while the shared identity has released deletion only, not eligibility.
+    club.environment.push({ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' },
+      { name: 'IGNITE_ACCOUNT_SERVICE_IDENTITY', value: 'identity' });
+    expect(() => check()).toThrow('account_admission_released');
+    identity.push(['account_admission_released', 'false']);
+    expect(() => check()).toThrow('not released');
+    identity[identity.length - 1][1] = 'true';
+    expect(() => check()).toThrow('reader is not authorized: club_domain');
+    identity.push(['eligibility_authority', 'club_domain']);
+    expect(() => check()).not.toThrow();
     expect(() => check('')).toThrow('approval notification worker missing');
     queue.configuration = queue.configuration?.filter(r => r[1] !== 'worker');
     expect(() => check()).toThrow('has not granted the expected delivery worker');

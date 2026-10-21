@@ -31,6 +31,7 @@ import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { slugifyClubName } from "@/lib/eoiUtils";
 import { ISO_COUNTRY_CODES, countryName } from "@/lib/countries";
 import { getCurrentCountry } from "@/live/userCountry";
+import { clubCreationErrorMessage } from "@/lib/clubCreationError";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 
@@ -339,8 +340,8 @@ export default function CreateClubPage() {
       // leaves club-creation failures undiagnosable.
       console.error("[CreateClub] failed", error);
       toast({
-        title: "Error",
-        description: error?.message || "Failed to create club. Please try again.",
+        title: "We couldn't create your club",
+        description: clubCreationErrorMessage(error),
         variant: "destructive",
       });
     }

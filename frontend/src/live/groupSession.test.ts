@@ -123,6 +123,14 @@ describe('integrated deployment-bound group read session', () => {
     const g = fixture(); g.transport.readMemberships = async () => { throw new Error('Group unavailable'); };
     await expect(openGroupSession(g.ctx, g.transport)).rejects.toThrow('unavailable');
   });
+  it('indexed account admission rejection never falls back to the scan pager or creates a session', async () => {
+    const f = fixture();
+    f.transport.readMembershipsIndexed = vi.fn(async () => { throw new Error('Account admission denied or unavailable'); });
+    await expect(openGroupSession(f.ctx, f.transport)).rejects.toThrow('Account admission denied or unavailable');
+    expect(f.transport.readMembershipsIndexed).toHaveBeenCalledTimes(1);
+    expect(f.transport.readMemberships).not.toHaveBeenCalled();
+    expect(f.transport.readAssignments).not.toHaveBeenCalled();
+  });
   it('revoked membership, stale registry and unknown clubs block before feature reads', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport); const read = vi.fn(async () => ['ok']);
     await expect(s.readClubs(['foreign'], 'events_domain', read)).rejects.toThrow('outside');

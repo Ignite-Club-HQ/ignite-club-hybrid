@@ -846,9 +846,16 @@ fn bound_deletion_released() -> bool {
 fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
     require_governor(&state(), ic_cdk::api::msg_caller())?;
     let binding = group_inventory_binding().ok_or("Deletion registry not pinned")?;
-    Ok(vec![("registry".into(), binding.registry.to_text()), ("target_alias".into(), binding.target_alias),
+    let mut rows = vec![("registry".into(), binding.registry.to_text()), ("target_alias".into(), binding.target_alias),
         ("deployment_id".into(), binding.deployment_id), ("host".into(), binding.host),
-        ("network_kind".into(), binding.network_kind), ("bound_deletion_released".into(), bound_deletion_released().to_string())])
+        ("network_kind".into(), binding.network_kind), ("bound_deletion_released".into(), bound_deletion_released().to_string()),
+        ("account_admission_released".into(), account_group_rehearsal_enabled().to_string())];
+    // Read-only evidence; neither registers readers nor releases the lifecycle.
+    let mut authorities = link_lifecycle().authorities;
+    authorities.extend(service_authorities());
+    authorities.sort(); authorities.dedup();
+    rows.extend(authorities.into_iter().map(|p| ("eligibility_authority".into(), p.to_text())));
+    Ok(rows)
 }
 /// Separate governor-only trust pin for the already-released deletion timing
 /// protocol. Existing history/lifecycle gates remain unchanged.
