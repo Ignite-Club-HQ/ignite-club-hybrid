@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 const workflow = readFileSync(new URL('../.github/workflows/upgrade-group2.yml', import.meta.url), 'utf8');
 const runner = readFileSync(new URL('../frontend/scripts/upgrade-group2.mjs', import.meta.url), 'utf8');
 test('isolated tool home is initialized at step scope where runner paths are available', () => {
@@ -51,4 +52,25 @@ test('PII attestation is preserved in durable progress before upgrading', () => 
   assert.match(reload, /after.settingsHash !== step.settingsHash/);
   assert.match(reload, /verifyUpgradeStatus\(plan, after, GROUP2_GOVERNOR, plan.newHash\)/);
   assert.match(reload, /stored = persistGroup2Journal\(api, path, branch, stored, journal, 'reload'\)/);
+});
+test('resume after the eleventh saved completion reloads only timers and photo store', async () => {
+  const names = ['club_domain', 'events_domain', 'messaging_domain', 'vault_domain', 'competition_domain',
+    'club_points_domain', 'mini_league_domain', 'media_metadata', 'insights_domain', 'notification_queue',
+    'pii_access_control', 'timer_jobs', 'media_blob_store'];
+  const journal = { steps: names.map((name, i) => ({ name, phase: i < 11 ? 'complete' : 'ready', settingsHash: 'settings' })) };
+  const reload = runner.slice(runner.indexOf("if (action === 'reload') {\n"));
+  const loop = reload.slice(reload.indexOf('  for (const plan of plans) {'), reload.indexOf("\n  keyGate('after');\n  if (await closed()"));
+  const installed = [];
+  let savedPhase;
+  await vm.runInNewContext(`(async () => { ${loop} })()`, {
+    plans: names.map(name => ({ name, newHash: 'module', file: name })), journal, revision: '1',
+    closed: async () => '1', observe: async () => ({ moduleHash: 'module', settingsHash: 'settings' }),
+    persist: () => { savedPhase = journal.steps.find(s => s.phase === 'pending')?.name; },
+    upgradeArgs: plan => [plan.name], GROUP2_GOVERNOR: 'governor', reportDirectory: '/tmp',
+    spawnSync: (_command, args) => {
+      assert.equal(savedPhase, args[0]); installed.push(args[0]); return { status: 0 };
+    }, verifyUpgradeStatus: () => {}, keyGate: () => {}, console: { log: () => {} },
+  });
+  assert.deepEqual(installed, ['timer_jobs', 'media_blob_store']);
+  assert.equal(journal.steps.filter(s => s.phase === 'complete').length, 13);
 });
