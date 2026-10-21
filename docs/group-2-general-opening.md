@@ -21,7 +21,11 @@ controls, replacing the superseded owner-only trial
    workflow is scheduled every 15 minutes; confirm one green run. It reports
    every registered group anonymously (public `cycles_balance` / `memory_stats`)
    and refuses partial or shared-canister readings.
-3. **Service settings** — `Open Group 2 to everyone` → action `settings`
+3. **register-closed** — `Open Group 2 to everyone` → action `register-closed`,
+   confirmation `REGISTER GROUP 2 CLOSED`. Registers the installed group and
+   placement records **closed**. Settings and fingerprint collection require
+   this registry entry; do not run them before registration.
+4. **Service settings** — `Open Group 2 to everyone` → action `settings`
    (confirmation `SET SERVICE SETTINGS`):
    - binds all g2 services and the photo store to `identity_access`
      (`IGNITE_ACCOUNT_IDENTITY_ACCESS`),
@@ -29,14 +33,11 @@ controls, replacing the superseded owner-only trial
    - then sets the creator placement binding
      (`IGNITE_ACCOUNT_CLUB_PLACEMENT_ROUTER=jcdfe-vqaaa-aaaal-qxloq-cai`),
    - verifies each write by read-back. Group 1 stays untouched.
-4. **prepare-hashes** — records the live module fingerprints of the thirteen
+5. **prepare-hashes** — records the live module fingerprints of the thirteen
    services plus the photo store into `deploy/groups/g2/general-opening.json`
    (committed automatically). Refuses to proceed without them.
-5. **register-closed** — confirmation `REGISTER GROUP 2 CLOSED`. Registers the
-   group (100-club cap, 1T fuel floor, 4 GiB heap budget) and the placement
-   records with revision CAS, **closed**. Safe to re-run; refuses if a group id
-   is already open.
-6. **check** — verifies the full opening case without mutating: exact
+6. **Report group health**, then **check** — refresh the newly registered
+   group's health and verify the full opening case without mutating: exact
    inventory/fingerprints, closed registration state, live health (fresh
    readings from step 2), every registered group's reciprocal configuration,
    identity wiring and removal wiring. Any mismatch fails the run.

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
+import { resolve } from 'node:path';
 const frontendRequire = createRequire(new URL('../frontend/package.json', import.meta.url));
 const { transformWithEsbuild } = frontendRequire('vite');
 const workflow = readFileSync(new URL('../.github/workflows/open-group-general.yml', import.meta.url), 'utf8');
@@ -38,6 +39,23 @@ test('settings startup rejects a missing report path before any identity or netw
     process: { argv: ['node', 'settings', 'g2', '/tmp/operator.pem'],
       env: { CONFIRMATION: 'SET SERVICE SETTINGS' } },
   }), /Usage: set-group-service-settings/);
+});
+
+test('settings, snapshot and stop read the real root mappings regardless of workflow working folder', () => {
+  const expected = JSON.parse(readFileSync(new URL('../deploy/mainnet/.icp/data/mappings/ic.ids.json', import.meta.url), 'utf8'));
+  for (const name of ['set-group-service-settings.ts', 'produce-routing-gates.ts', 'stop-group-placements.ts']) {
+    const scriptUrl = new URL(`../frontend/scripts/${name}`, import.meta.url);
+    const source = readFileSync(scriptUrl, 'utf8');
+    const declaration = source.match(/^const ids = .+;$/m)?.[0];
+    assert.ok(declaration, name);
+    for (const cwd of [new URL('../', import.meta.url).pathname, new URL('../frontend/', import.meta.url).pathname]) {
+      const actual = runInNewContext(`${declaration.replaceAll('import.meta.url', 'scriptUrl')}\nids`, {
+        URL, scriptUrl: scriptUrl.href, readFileSync, resolve: (...parts) => resolve(cwd, ...parts),
+      });
+      assert.equal(actual.shard_router, expected.shard_router, `${name}: ${cwd}`);
+      assert.equal(actual.identity_access, expected.identity_access, `${name}: ${cwd}`);
+    }
+  }
 });
 
 test('manual opening workflow is protected and serialized with existing mainnet deployment', () => {
