@@ -252,6 +252,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
     'read_pending_test_uploads' : IDL.Func(
         [IDL.Text],
         [

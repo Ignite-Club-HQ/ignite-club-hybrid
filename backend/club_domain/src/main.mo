@@ -1,4 +1,5 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import Error "mo:core/Error";
 import MediaEvidence "../../shared/MediaEvidence";
@@ -78,6 +79,22 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  /// Bounded consensus configuration evidence; never changes or grants access.
+  public shared ({ caller }) func read_group_opening_configuration() : async [(Text, Text)] {
+    if (not isGovernor(caller)) Runtime.trap("Governor required");
+    if (competitionAuthorities.size() > 64 or mediaQuotaStores.size() > 64) Runtime.trap("Opening authority set exceeds bounded owner scope");
+    [
+      ("club_domain", Principal.fromActor(this).toText()),
+      ("identity_access", OpeningConfiguration.optional(identityAccessCanister)),
+      ("notification_queue", OpeningConfiguration.optional(notificationQueueCanister)),
+      ("mini_league_domain", OpeningConfiguration.optional(miniLeagueDomainCanister)),
+      ("competition_domain", OpeningConfiguration.optional(competitionDomainCanister)),
+      ("events_domain", OpeningConfiguration.optional(eventsDomainCanister)),
+      ("messaging_domain", OpeningConfiguration.optional(messagingDomainCanister)),
+      ("pii_access_control", OpeningConfiguration.optional(piiCanister))
+    ].concat(competitionAuthorities.map(func p = ("competition_authority", p.toText())))
+      .concat(mediaQuotaStores.map(func p = ("media_store", p.toText())))
+  };
   // Live memory reading for the admin health page (public, like cycles_balance).
   public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
     {
@@ -585,6 +602,16 @@ persistent actor class Main(governorInit : Principal) = this {
     if (Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") != ?"1") return #Err("Cross-group account lifecycle not released");
     if (identityUnlinkReceipts.size() > 0 and identityAccessCanister != ?id) return #Err("Cannot replace identity authority after unlink");
     identityAccessCanister := ?id; membershipEpoch += 1; #Ok
+  };
+  /// Independent deletion-only configuration for an empty owner-test group.
+  /// Does not release linked-account sync or register lifecycle receivers.
+  public shared ({ caller }) func set_owner_test_deletion_identity(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid identity required");
+    if (newClubGroup != ?"g2" or newClubRouter == null or newClubTarget == null) return #Err("Complete Group 2 placement binding required");
+    if (profiles.size() != 0 or identityUnlinkReceipts.size() != 0) return #Err("Empty owner-test group required");
+    if (identityAccessCanister != null and identityAccessCanister != ?id) return #Err("Deletion identity already bound");
+    identityAccessCanister := ?id;
+    #Ok
   };
   type LinkedAccount = { id : Text; principals : [Principal]; version : Nat64; status : { #Active; #Suspended } };
   public shared ({ caller }) func sync_my_linked_account() : async { #Ok; #Err : Text } {

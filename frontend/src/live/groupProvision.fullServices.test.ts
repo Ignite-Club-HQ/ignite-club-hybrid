@@ -65,6 +65,18 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     await configureProvisionGroup(saved, async p => { saved = structuredClone(p); }, transport, governor.toText(), globals);
     expect(calls).toBe(firstCalls); // Real acknowledged calls are not repeated.
     const actor = (name: string, user = governor) => { const a = services.get(name).actor; a.setPrincipal(user); return a; };
+    // Actual consensus configuration reads—not the saved setup checklist.
+    for (const [name] of services) {
+      const reply = await actor(name).read_group_opening_configuration();
+      const rows = name === 'timer_jobs' ? ok(reply) : reply;
+      expect(Array.isArray(rows), name).toBe(true);
+      if (name === 'timer_jobs') expect(await actor(name, outsider).read_group_opening_configuration()).toHaveProperty('Err');
+      else await expect(actor(name, outsider).read_group_opening_configuration()).rejects.toThrow();
+    }
+    const clubConfig = await actor('club_domain').read_group_opening_configuration();
+    expect(clubConfig).toContainEqual(['notification_queue', services.get('notification_queue').canisterId.toText()]);
+    const blobConfig = await actor('media_blob_store').read_group_opening_configuration();
+    expect(blobConfig).toEqual([['club_domain', services.get('club_domain').canisterId.toText()]]);
     const club = actor('club_domain');
     ok(await club.create_club('new-club', 'New club', 'new-club', [], []));
     ok(await club.add_role_grant(member, 'new-club', 'club_admin', []));

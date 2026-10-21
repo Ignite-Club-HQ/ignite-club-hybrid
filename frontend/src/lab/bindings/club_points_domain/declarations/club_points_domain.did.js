@@ -398,6 +398,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
     'redeem_reward' : IDL.Func(
         [IDL.Text, Subject, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],

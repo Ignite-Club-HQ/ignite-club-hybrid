@@ -16,6 +16,10 @@ mod scale_probe;
 use scale_probe::Probe;
 mod discovery;
 mod media_growth;
+mod owner_opening;
+#[cfg(test)]
+mod owner_opening_tests;
+use owner_opening::{OwnerOpening, OwnerOpeningApproval};
 use discovery::GroupPlacement;
 use groups::{GroupAssignment, ShardGroup};
 
@@ -171,6 +175,75 @@ thread_local! {
     static STORE_GROWTH: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(13)));
     // Additive creator binding; old assignments never imply creator ownership.
     static PLACEMENT_OWNERS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(14)));
+    // Permanent additive partition. Stop preserves the owner's route discovery.
+    static OWNER_OPENINGS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(15)));
+}
+
+fn owner_opening(target: &str) -> Option<OwnerOpening> {
+    OWNER_OPENINGS.with(|m| m.borrow().get(&target.to_string()).map(|b| decode(&b)))
+}
+fn open_owner_group_for(operator: Principal, approval: OwnerOpeningApproval, now: u64) -> Outcome<OwnerOpening> {
+    if governor() != Some(operator) || operator == Principal::anonymous() { return Err("Governor required".into()); }
+    registry_writable()?;
+    let target = approval.group.target_alias.clone();
+    if let Some(old) = owner_opening(&target) {
+        // A lost opening response may be read back without another mutation.
+        if old.approval == approval && old.accepting_new { return Ok(old); }
+        return Err("Owner opening already bound; stop does not reset or reassign it".into());
+    }
+    if current_revision() != approval.expected_revision { return Err("Revision conflict".into()); }
+    let group = group_for(&approval.group.id).ok_or("Unknown group")?;
+    let placement: GroupPlacement = GROUP_PLACEMENTS.with(|m| m.borrow().get(&group.id.as_bytes().to_vec()).map(|b| decode(&b))).ok_or("Complete placement required")?;
+    owner_opening::validate(&approval, &group, &placement, now)?;
+    for club in &approval.club_ids {
+        if group_assignment_for(club).is_some() || route_for(club).is_some() || migration_for(club).is_some() ||
+            DOMAIN_ROUTES.with(|m| m.borrow().range(domain_key(club, "")..).next().is_some_and(|e| e.key().starts_with(&domain_key(club, "")))) {
+            return Err("Owner test approval must contain only fresh clubs".into());
+        }
+    }
+    let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
+    let receipt = OwnerOpening { approval, accepting_new: true, opened_revision: revision };
+    OWNER_OPENINGS.with(|m| m.borrow_mut().insert(target, encode(&receipt)));
+    REVISION.with(|m| m.borrow_mut().set(revision));
+    Ok(receipt)
+}
+/// Explicit governor signature grants only bounded owner test placement, not
+/// global admission, membership, recovery release or general accepting status.
+#[ic_cdk::update]
+fn open_owner_test_group(approval: OwnerOpeningApproval) -> Outcome<OwnerOpening> {
+    open_owner_group_for(caller(), approval, ic_cdk::api::time())
+}
+fn stop_owner_group_for(operator: Principal, target: String, expected_revision: u64) -> Outcome<OwnerOpening> {
+    if governor() != Some(operator) || operator == Principal::anonymous() { return Err("Governor required".into()); }
+    registry_writable()?;
+    let mut receipt = owner_opening(&target).ok_or("No owner opening")?;
+    if !receipt.accepting_new { return Ok(receipt); }
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
+    receipt.accepting_new = false;
+    OWNER_OPENINGS.with(|m| m.borrow_mut().insert(target, encode(&receipt)));
+    REVISION.with(|m| m.borrow_mut().set(revision));
+    Ok(receipt)
+}
+#[ic_cdk::update]
+fn stop_owner_test_group(target_alias: String, expected_revision: u64) -> Outcome<OwnerOpening> {
+    stop_owner_group_for(caller(), target_alias, expected_revision)
+}
+/// Caller-scoped consensus discovery, including after stopping new placements.
+#[ic_cdk::update]
+fn read_my_owner_test_opening(target_alias: String) -> Outcome<Option<OwnerOpening>> {
+    let user = caller();
+    if user == Principal::anonymous() { return Err("Authentication required".into()); }
+    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
+    Ok(owner_opening(&target_alias).filter(|r| r.approval.owner == user || governor() == Some(user)))
+}
+/// No private approval data: admins deleting a different account still need
+/// the complete group inventory, even when they have no test-club membership.
+#[ic_cdk::update]
+fn read_owner_test_deletion_required(target_alias: String) -> Outcome<bool> {
+    if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
+    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
+    Ok(owner_opening(&target_alias).is_some())
 }
 
 fn media_growth_local() -> bool {
@@ -266,6 +339,7 @@ fn is_uuid(id: &str) -> bool {
 
 fn place_new_club_for(user: Principal, club_id: String, target_alias: String, now: u64) -> Outcome<GroupAssignment> {
     if user == Principal::anonymous() { return Err("Authentication required".into()); }
+    registry_writable()?;
     if !is_uuid(&club_id) { return Err("Club id must be a fresh UUID".into()); }
     // Idempotent retry requires the original authenticated creator. Location
     // metadata or an old governor assignment cannot authorize club creation.
@@ -276,7 +350,27 @@ fn place_new_club_for(user: Principal, club_id: String, target_alias: String, no
     let key = user.as_slice().to_vec();
     let used = PLACERS.with(|m| m.borrow().get(&key).unwrap_or(0));
     if used >= MAX_SELF_PLACEMENTS { return Err("New club placement limit reached".into()); }
-    let assignment = assign_group_record(club_id, target_alias, current_revision(), now)?;
+    let assignment = if let Some(receipt) = owner_opening(&target_alias).filter(|r| r.approval.owner == user) {
+        if media_growth_local() { return Err("Owner opening cannot bypass rehearsal growth accounting".into()); }
+        if !receipt.accepting_new || !receipt.approval.club_ids.contains(&club_id) { return Err("Owner test placement stopped or UUID not approved".into()); }
+        let mut group = group_for(&receipt.approval.group.id).ok_or("Missing owner group")?;
+        if !owner_opening::same_inventory(&group, &receipt.approval.group) { return Err("Owner opening inventory changed".into()); }
+        group.accepting = true;
+        if !groups::has_headroom(&group, &target_alias, now) || !groups::below_rollover(&group) { return Err("Owner group lacks fresh healthy capacity".into()); }
+        // The owner path is separate from the general fill-first selector.
+        // Preserve every existing migration and deletion guard.
+        if route_for(&club_id).is_some() || migration_for(&club_id).is_some() ||
+            DOMAIN_ROUTES.with(|m| m.borrow().range(domain_key(&club_id, "")..).next().is_some_and(|e| e.key().starts_with(&domain_key(&club_id, "")))) {
+            return Err("Existing club routes require a verified migration".into());
+        }
+        let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
+        group.accepting = false; group.assigned_clubs += 1;
+        let assignment = GroupAssignment { club_id: club_id.clone(), group_id: group.id.clone(), revision };
+        save_group(&group);
+        GROUP_ASSIGNMENTS.with(|m| m.borrow_mut().insert(club_id.as_bytes().to_vec(), encode(&assignment)));
+        REVISION.with(|m| m.borrow_mut().set(revision));
+        assignment
+    } else { assign_group_record(club_id, target_alias, current_revision(), now)? };
     PLACEMENT_OWNERS.with(|m| m.borrow_mut().insert(assignment.club_id.as_bytes().to_vec(), user.as_slice().to_vec()));
     PLACERS.with(|m| m.borrow_mut().insert(key, used + 1));
     Ok(assignment)
@@ -302,10 +396,23 @@ fn read_my_new_club_placement(club_id: String, target_alias: String, expected_re
 /// Only the registered destination club authority can check a creator receipt.
 /// This does not authorize private reads or grant cross-club membership.
 #[ic_cdk::update]
-fn read_new_club_creation_authorized(user: Principal, club_id: String, target_alias: String, group_id: String) -> Outcome<bool> {
+async fn read_new_club_creation_authorized(user: Principal, club_id: String, target_alias: String, group_id: String) -> Outcome<bool> {
     registry_writable()?;
+    let revision = current_revision();
+    let requestor = caller();
+    let initial = group_for(&group_id).ok_or("Unknown group")?;
+    if initial.target_alias != target_alias || !initial.domains.iter().any(|d| d.domain == "club_domain" && d.canister == requestor) {
+        return Err("Registered destination club authority required".into());
+    }
+    if owner_opening(&target_alias).is_some_and(|r| r.approval.group.id == group_id) {
+        let receipt = owner_opening(&target_alias).ok_or("Owner opening missing")?;
+        if receipt.approval.owner != user || !receipt.approval.club_ids.contains(&club_id) { return Ok(false); }
+        if !owner_creation_eligible(user).await? { return Ok(false); }
+        registry_writable()?;
+        if current_revision() != revision || owner_opening(&target_alias).as_ref() != Some(&receipt) { return Err("Owner opening changed during eligibility check".into()); }
+    }
     let group = group_for(&group_id).ok_or("Unknown group")?;
-    if group.target_alias != target_alias || !group.domains.iter().any(|d| d.domain == "club_domain" && d.canister == caller()) {
+    if group.target_alias != target_alias || !group.domains.iter().any(|d| d.domain == "club_domain" && d.canister == requestor) {
         return Err("Registered destination club authority required".into());
     }
     if !GROUP_PLACEMENTS.with(|m| m.borrow().contains_key(&group_id.as_bytes().to_vec())) { return Err("Complete group placement required".into()); }
@@ -348,6 +455,11 @@ fn require_governor() -> Outcome<()> {
     } else {
         Err("Forbidden".into())
     }
+}
+#[ic_cdk::update]
+fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
+    require_governor()?;
+    Ok(vec![("deletion_authority".into(), deletion_authority().map(|p| p.to_text()).unwrap_or_default())])
 }
 
 fn validate_club_id(club_id: &str) -> Outcome<()> {
@@ -861,6 +973,9 @@ fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
     if current_revision() != expected_revision { return Err("Revision conflict".into()); }
     let prior = group_for(&group.id);
     if let Some(ref old) = prior {
+        if let Some(opening) = owner_opening(&old.target_alias).filter(|r| r.approval.group.id == old.id) {
+            if !owner_opening::same_inventory(&group, &opening.approval.group) { return Err("Owner test group inventory and general closed state are immutable".into()); }
+        }
         if old.target_alias != group.target_alias || old.domains != group.domains || (growth_budget(&group.id).is_some() && old.photo_store != group.photo_store) {
             return Err("Group endpoints are immutable; register a new group".into());
         }
@@ -919,8 +1034,23 @@ fn assign_new_club_group(club_id: String, target_alias: String, expected_revisio
 /// Any signed-in user creating a club asks for its group here; the router picks
 /// the healthiest accepting group. Capped per principal; retries are free.
 #[ic_cdk::update]
-fn place_my_new_club(club_id: String, target_alias: String) -> Outcome<GroupAssignment> {
-    place_new_club_for(caller(), club_id, target_alias, ic_cdk::api::time())
+async fn place_my_new_club(club_id: String, target_alias: String) -> Outcome<GroupAssignment> {
+    let user = caller();
+    if let Some(receipt) = owner_opening(&target_alias).filter(|r| r.approval.owner == user) {
+        registry_writable()?;
+        let revision = current_revision();
+        if !owner_creation_eligible(user).await? { return Err("Owner account cannot create a test club".into()); }
+        registry_writable()?;
+        if current_revision() != revision || owner_opening(&target_alias).as_ref() != Some(&receipt) { return Err("Owner opening changed during eligibility check".into()); }
+    }
+    place_new_club_for(user, club_id, target_alias, ic_cdk::api::time())
+}
+async fn owner_creation_eligible(user: Principal) -> Outcome<bool> {
+    let identity = deletion_authority().ok_or("Owner opening requires bound deletion authority")?;
+    let reply = ic_cdk::call::Call::bounded_wait(identity, "read_owner_test_creation_eligible").with_arg(&user)
+        .await.map_err(|_| "Owner identity verification unavailable")?;
+    let result: Outcome<bool> = reply.candid().map_err(|_| "Invalid owner identity reply")?;
+    result
 }
 
 fn assign_group_record(club_id: String, target_alias: String, expected_revision: u64, now: u64) -> Outcome<GroupAssignment> {

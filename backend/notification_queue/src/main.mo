@@ -1,4 +1,5 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import Map "mo:core/Map";
 import Error "mo:core/Error";
@@ -43,6 +44,14 @@ persistent actor class Main(governorInit : Principal) = this {
 
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  public shared ({ caller }) func read_group_opening_configuration() : async [(Text, Text)] {
+    governorOnly(caller);
+    if (workers.size() > 64) Runtime.trap("Opening worker set exceeds bounded owner scope");
+    [("club_domain", OpeningConfiguration.optional(clubDomainCanister)),
+     ("messaging_domain", OpeningConfiguration.optional(messagingDomainCanister)),
+     ("identity_access", OpeningConfiguration.optional(identityAccessCanister))]
+      .concat(workers.map(func p = ("worker", p.toText())))
+  };
   // Live memory reading for the admin health page (public, like cycles_balance).
   public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
     {

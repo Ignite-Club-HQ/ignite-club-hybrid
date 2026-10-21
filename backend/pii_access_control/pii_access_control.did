@@ -113,6 +113,10 @@ type Main =
        Err: text;
        Ok: ClubMediaAuthority;
      });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    read_private_media_authority: (club: text) ->
     (variant {
        Err: text;

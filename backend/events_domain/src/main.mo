@@ -1,4 +1,5 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import RemovalEndpoints "../../shared/RemovalEndpoints";
 import Map "mo:core/Map";
@@ -51,6 +52,13 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  public shared ({ caller }) func read_group_opening_configuration() : async [(Text, Text)] {
+    if (not isGovernor(caller)) Runtime.trap("Governor required");
+    [("club_domain", OpeningConfiguration.optional(clubDomainCanister)),
+     ("notification_queue", OpeningConfiguration.optional(notificationQueueCanister)),
+     ("mini_league_domain", OpeningConfiguration.optional(miniLeagueDomainCanister)),
+     ("competition_domain", OpeningConfiguration.optional(competitionDomainCanister))]
+  };
 
   // ICP MCP Layer 3: behavioral guide for AI agents (see
   // docs.internetcomputer.org/guides/frontends/service-discoverability).

@@ -268,6 +268,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     record_chat_notify_batch(message_id: string, conversation_id: string, sender: string, preview: string, recipients: Array<string>, mute_list: Array<string>): Promise<ChatNotifyBatchResult>;
     record_digest_item(id: string, message_id: string, message_type: DigestSource, chat_scope_id: string, message_created_at_ms: bigint, classification: DigestClassification, summary: string, topic: string | null, mentions: Array<string>, provider: string | null): Promise<DigestResult>;
     recover(): Promise<ResultNat16>;
@@ -754,6 +755,10 @@ export class Notification_queue implements notification_queueInterface {
     }> {
         const result = await this.actor.read_account_removal_drain(arg0);
         return from_candid_variant_n63(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async record_chat_notify_batch(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>): Promise<ChatNotifyBatchResult> {
         const result = await this.actor.record_chat_notify_batch(arg0, arg1, arg2, arg3, arg4, arg5);

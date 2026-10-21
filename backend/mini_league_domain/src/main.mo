@@ -1,4 +1,5 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import RemovalEndpoints "../../shared/RemovalEndpoints";
 import Map "mo:core/Map";
@@ -40,6 +41,11 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  public shared ({ caller }) func read_group_opening_configuration() : async [(Text, Text)] {
+    if (not isGovernor(caller)) Runtime.trap("Governor required");
+    [("club_domain", OpeningConfiguration.optional(clubDomainCanister)),
+     ("events_domain", OpeningConfiguration.optional(eventsDomainCanister))]
+  };
   // Live memory reading for the admin health page (public, like cycles_balance).
   public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
     {

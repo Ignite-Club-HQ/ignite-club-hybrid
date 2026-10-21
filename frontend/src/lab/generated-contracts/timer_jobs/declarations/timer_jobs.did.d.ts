@@ -87,6 +87,11 @@ export interface _SERVICE {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<
+    [],
+    { 'Ok' : Array<[string, string]> } |
+      { 'Err' : string }
+  >,
   'reconcile' : ActorMethod<[snapshot], result_reconciliation>,
   'recover_expired' : ActorMethod<[bigint], result_nat16>,
   'recover_interrupted' : ActorMethod<[], result_nat16>,

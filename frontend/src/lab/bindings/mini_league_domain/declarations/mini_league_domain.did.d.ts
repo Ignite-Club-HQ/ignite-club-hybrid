@@ -429,6 +429,7 @@ export interface Main {
     [Principal, string, string],
     boolean
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |

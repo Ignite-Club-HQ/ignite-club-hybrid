@@ -178,6 +178,7 @@ export interface Main {
     { 'Ok' : Page } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'register_asset' : ActorMethod<
     [string, string, string, string, string, string, bigint],
     { 'Ok' : Asset } |

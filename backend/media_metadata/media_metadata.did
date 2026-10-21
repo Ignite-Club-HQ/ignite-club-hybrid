@@ -155,6 +155,10 @@ type Main =
                    Err: text;
                    Ok: Page;
                  });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    register_asset: (club_id: text, kind: text, mime: text, checksum: 
     text, storage_path: text, visibility: text, expires_at_ms: nat64) ->
     (variant {

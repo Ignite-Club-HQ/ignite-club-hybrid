@@ -1,4 +1,5 @@
 import { activationStatus, SHIPPED_GATES } from "./groupActivation";
+import { hasOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
 import { getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
@@ -42,7 +43,7 @@ function storedSessionPrincipal(): string | null {
 export function parseIcpBlobUrl(
   url: string,
   target: IcpTargetConfig | null,
-  requireConfigured = !activationStatus(SHIPPED_GATES).active,
+  requireConfigured = !activationStatus(SHIPPED_GATES).active && !hasOwnerTestRouting(),
 ): { path: string; canisterId: string } | null {
   if (!target) return null;
   // Any configured photo store (sharding) — unknown canisters are rejected.
@@ -95,7 +96,9 @@ export async function readCachedIcpBlobObjectUrl(url: string): Promise<string | 
  */
 export async function resolveIcpBlobObjectUrl(url: string): Promise<string | null> {
   let target = getActiveIcpTarget();
-  if (activationStatus(SHIPPED_GATES).active && parseIcpBlobUrl(url, target)) {
+  const routeIdentity = await getCurrentInternetIdentityConfirmed();
+  const owner = routeIdentity ? await readOwnerTestRoute({ target, identity: routeIdentity }) : null;
+  if ((activationStatus(SHIPPED_GATES).active || owner) && parseIcpBlobUrl(url, target, false)) {
     const { clubDispatch } = await import("./groupDispatch");
     const targets = await clubDispatch.readAcross("media", "media_metadata", async ctx => parseIcpBlobUrl(url, ctx.target, true) ? [ctx.target] : [], parts => parts.flat());
     const unique = [...new Map(targets.map(t => [JSON.stringify(t.canisterIds), t])).values()];

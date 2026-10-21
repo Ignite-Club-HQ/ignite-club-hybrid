@@ -720,6 +720,7 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'recapTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult

@@ -283,6 +283,7 @@ export interface Main {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'redeem_reward' : ActorMethod<
     [string, Subject, string, [] | [string]],
     { 'Ok' : RewardRedemption } |

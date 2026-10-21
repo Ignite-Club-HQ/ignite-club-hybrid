@@ -416,6 +416,10 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    record_active_user: (club_id: text, account_id: text) ->
     (variant {
        Err: text;

@@ -623,6 +623,7 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'read_history_match_result' : ActorMethod<
     [string, string, Principal],
     {

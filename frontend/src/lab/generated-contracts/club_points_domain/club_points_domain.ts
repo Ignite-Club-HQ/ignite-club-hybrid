@@ -347,6 +347,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     redeem_reward(club_id: string, subject: Subject, reward_id: string, idempotency_key: string | null): Promise<{
         __kind__: "Ok";
         Ok: RewardRedemption;
@@ -925,6 +926,10 @@ export class Club_points_domain implements club_points_domainInterface {
     }> {
         const result = await this.actor.read_account_removal_drain(arg0);
         return from_candid_variant_n44(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async redeem_reward(arg0: string, arg1: Subject, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";

@@ -519,6 +519,10 @@ type Main =
     MiniLeaguePlayer) -> (bool);
    read_can_read_league_matches: (viewer: principal, league_id: text,
     club_id: text) -> (bool);
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;

@@ -114,6 +114,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         [],
       ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'reconcile' : IDL.Func([snapshot], [result_reconciliation], ['query']),
     'recover_expired' : IDL.Func([IDL.Nat64], [result_nat16], []),
     'recover_interrupted' : IDL.Func([], [result_nat16], []),

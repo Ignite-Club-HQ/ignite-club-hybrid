@@ -7,7 +7,18 @@ type DeletionDomain = 'club_domain' | 'vault_domain' | 'events_domain' | 'messag
 export async function openAccountDeletionInventory(target: IcpTargetConfig, identity: Identity,
   required: readonly DeletionDomain[]) {
   const { activationStatus, SHIPPED_GATES } = await import('./groupActivation');
-  const grouped = activationStatus(SHIPPED_GATES).active;
+  const owner = activationStatus(SHIPPED_GATES).active ? null : await (await import('./ownerTestRouting')).readOwnerTestRoute({ target, identity });
+  let grouped = activationStatus(SHIPPED_GATES).active || Boolean(owner);
+  if (!grouped && target.canisterIds?.shard_router) {
+    const { actor } = await (await import('./domains')).connectLiveShardRouter(target, identity);
+    try {
+      const reply = await actor.read_owner_test_deletion_required(target.alias);
+      if ('Err' in reply) throw new Error(reply.Err);
+      grouped = reply.Ok;
+    } catch (error) {
+      if (!/has no (query |update )?method|method.*(not found|does not exist)/i.test(String(error))) throw error;
+    }
+  }
   const session = grouped
     ? await (await import('./groupSessionLive')).openLiveGroupReadSession({ target, identity })
     : undefined;

@@ -1780,6 +1780,10 @@ export interface MainInterface {
         is_member: boolean;
         club_id?: string;
     }>;
+    /**
+     * / Bounded consensus configuration evidence; never changes or grants access.
+     */
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     read_has_child_guardian(user: Principal, child_id: string): Promise<boolean>;
     read_has_club_membership(user: Principal, club_id: string): Promise<boolean>;
     read_has_club_staff_role(user: Principal, club_id: string): Promise<boolean>;
@@ -2350,6 +2354,17 @@ export interface MainInterface {
     set_own_child_team(child_id: string, team_id: string, assigned: boolean): Promise<{
         __kind__: "Ok";
         Ok: Child;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    /**
+     * / Independent deletion-only configuration for an empty owner-test group.
+     * / Does not release linked-account sync or register lifecycle receivers.
+     */
+    set_owner_test_deletion_identity(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -5304,6 +5319,10 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.read_competition_team_access(arg0, arg1);
         return from_candid_record_n254(result);
     }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
+    }
     async read_has_child_guardian(arg0: Principal, arg1: string): Promise<boolean> {
         const result = await this.actor.read_has_child_guardian(arg0, arg1);
         return result;
@@ -6115,6 +6134,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.set_own_child_team(arg0, arg1, arg2);
         return from_candid_variant_n20(result);
+    }
+    async set_owner_test_deletion_identity(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_owner_test_deletion_identity(arg0);
+        return from_candid_variant_n17(result);
     }
     async set_pending_invite_email_hash(arg0: string, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";

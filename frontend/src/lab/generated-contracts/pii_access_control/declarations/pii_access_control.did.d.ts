@@ -134,6 +134,7 @@ export interface Main {
     { 'Ok' : ClubMediaAuthority } |
       { 'Err' : string }
   >,
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'read_private_media_authority' : ActorMethod<
     [string],
     {

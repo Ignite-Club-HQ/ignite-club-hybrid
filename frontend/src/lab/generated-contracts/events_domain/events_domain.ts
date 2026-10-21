@@ -1309,6 +1309,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     record_event_view(event_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -3869,6 +3870,10 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.read_event_group_club(arg0);
         return from_candid_variant_n139(result);
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
+        return result;
     }
     async record_event_view(arg0: string): Promise<{
         __kind__: "Ok";

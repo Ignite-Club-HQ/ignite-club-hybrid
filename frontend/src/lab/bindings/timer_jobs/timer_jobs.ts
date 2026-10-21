@@ -183,6 +183,13 @@ export interface timer_jobsInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_group_opening_configuration(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, string]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     reconcile(arg0: snapshot): Promise<result_reconciliation>;
     recover_expired(arg0: bigint): Promise<result_nat16>;
     recover_interrupted(): Promise<result_nat16>;
@@ -291,24 +298,34 @@ export class Timer_jobs implements timer_jobsInterface {
         const result = await this.actor.purge_club_snapshot(arg0);
         return from_candid_variant_n26(result);
     }
+    async read_group_opening_configuration(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, string]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_group_opening_configuration();
+        return from_candid_variant_n41(result);
+    }
     async reconcile(arg0: snapshot): Promise<result_reconciliation> {
         const result = await this.actor.reconcile(to_candid_snapshot_n27(arg0));
-        return from_candid_result_reconciliation_n41(result);
+        return from_candid_result_reconciliation_n42(result);
     }
     async recover_expired(arg0: bigint): Promise<result_nat16> {
         const result = await this.actor.recover_expired(arg0);
-        return from_candid_result_nat16_n43(result);
+        return from_candid_result_nat16_n44(result);
     }
     async recover_interrupted(): Promise<result_nat16> {
         const result = await this.actor.recover_interrupted();
-        return from_candid_result_nat16_n43(result);
+        return from_candid_result_nat16_n44(result);
     }
     async schedule(arg0: string, arg1: string, arg2: bigint, arg3: string): Promise<result_job> {
         const result = await this.actor.schedule(arg0, arg1, arg2, arg3);
         return from_candid_result_job_n15(result);
     }
     async schedule_with_callback(arg0: string, arg1: string, arg2: Principal | null, arg3: bigint, arg4: string): Promise<result_job> {
-        const result = await this.actor.schedule_with_callback(arg0, arg1, to_candid_opt_n45(arg2), arg3, arg4);
+        const result = await this.actor.schedule_with_callback(arg0, arg1, to_candid_opt_n46(arg2), arg3, arg4);
         return from_candid_result_job_n15(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<result_unit> {
@@ -412,14 +429,14 @@ function from_candid_result_job_n15(value: _result_job): result_job {
 function from_candid_result_jobs_n6(value: _result_jobs): result_jobs {
     return from_candid_variant_n7(value);
 }
-function from_candid_result_nat16_n43(value: _result_nat16): result_nat16 {
-    return from_candid_variant_n44(value);
+function from_candid_result_nat16_n44(value: _result_nat16): result_nat16 {
+    return from_candid_variant_n45(value);
 }
 function from_candid_result_page_n37(value: _result_page): result_page {
     return from_candid_variant_n38(value);
 }
-function from_candid_result_reconciliation_n41(value: _result_reconciliation): result_reconciliation {
-    return from_candid_variant_n42(value);
+function from_candid_result_reconciliation_n42(value: _result_reconciliation): result_reconciliation {
+    return from_candid_variant_n43(value);
 }
 function from_candid_result_snapshot_n18(value: _result_snapshot): result_snapshot {
     return from_candid_variant_n19(value);
@@ -580,7 +597,26 @@ function from_candid_variant_n38(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n42(value: {
+function from_candid_variant_n41(value: {
+    Ok: Array<[string, string]>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<[string, string]>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n43(value: {
     Ok: _reconciliation;
 } | {
     Err: string;
@@ -599,7 +635,7 @@ function from_candid_variant_n42(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n44(value: {
+function from_candid_variant_n45(value: {
     Ok: number;
 } | {
     Err: string;
@@ -649,7 +685,7 @@ function to_candid_opt_n22(value: bigint | null): [] | [bigint] {
 function to_candid_opt_n36(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n45(value: Principal | null): [] | [Principal] {
+function to_candid_opt_n46(value: Principal | null): [] | [Principal] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_queue_state_n34(value: queue_state): _queue_state {

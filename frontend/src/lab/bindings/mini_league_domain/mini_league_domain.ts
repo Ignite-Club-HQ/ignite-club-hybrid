@@ -530,6 +530,7 @@ export interface MainInterface {
     read_account_verify_league_access(viewer: Principal, league: MiniLeague): Promise<boolean>;
     read_account_verify_player_access(user: Principal, player: MiniLeaguePlayer): Promise<boolean>;
     read_can_read_league_matches(viewer: Principal, league_id: string, club_id: string): Promise<boolean>;
+    read_group_opening_configuration(): Promise<Array<[string, string]>>;
     rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -1497,6 +1498,10 @@ export class Mini_league_domain implements mini_league_domainInterface {
     }
     async read_can_read_league_matches(arg0: Principal, arg1: string, arg2: string): Promise<boolean> {
         const result = await this.actor.read_can_read_league_matches(arg0, arg1, arg2);
+        return result;
+    }
+    async read_group_opening_configuration(): Promise<Array<[string, string]>> {
+        const result = await this.actor.read_group_opening_configuration();
         return result;
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{

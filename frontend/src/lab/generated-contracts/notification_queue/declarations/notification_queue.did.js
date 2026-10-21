@@ -415,6 +415,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
     'record_chat_notify_batch' : IDL.Func(
         [
           IDL.Text,

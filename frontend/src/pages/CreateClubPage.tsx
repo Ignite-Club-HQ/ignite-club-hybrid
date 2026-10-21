@@ -193,11 +193,12 @@ export default function CreateClubPage() {
 
     try {
       const newClubId = crypto.randomUUID();
+      const creationScope = { newClubId };
       const clubId = await withFeatureBackend("membership", {
         icp: async (ctx) => {
           const profile = await createLiveClub(
             ctx,
-            newClubId,
+            creationScope.newClubId,
             name.trim(),
             slugifyClubName(name.trim()) || `club-${Date.now()}`,
             description.trim() || "",
@@ -322,7 +323,7 @@ export default function CreateClubPage() {
 
           return club.id as string;
         },
-      }, { newClubId });
+      }, creationScope);
 
       setSaving(false);
       void queryClient.invalidateQueries();

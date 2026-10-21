@@ -310,6 +310,10 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    redeem_reward: (club_id: text, subject: Subject, reward_id: text,
     idempotency_key: opt text) -> (variant {
                                      Err: text;

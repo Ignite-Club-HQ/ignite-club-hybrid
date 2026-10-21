@@ -1994,6 +1994,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
     'read_has_child_guardian' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
@@ -2476,6 +2481,11 @@ export const idlFactory = ({ IDL }) => {
     'set_own_child_team' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_owner_test_deletion_identity' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_pending_invite_email_hash' : IDL.Func(

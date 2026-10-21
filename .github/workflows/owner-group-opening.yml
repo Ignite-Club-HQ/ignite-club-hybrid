@@ -1,0 +1,61 @@
+name: Group 2 owner opening
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Check, explicitly open owner-only placement, or stop new placements
+        required: true
+        type: choice
+        default: check
+        options: [register-closed, check, open, stop]
+      approval_file:
+        description: Committed exact Group 2 opening approval JSON
+        required: true
+      confirmation:
+        description: REGISTER GROUP 2 CLOSED, OPEN GROUP 2 OWNER TEST, or STOP GROUP 2 TEST PLACEMENTS (empty for check)
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+jobs:
+  owner-opening:
+    runs-on: ubuntu-latest
+    environment: group-2-owner-opening
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Install project dependencies
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Write existing governor key
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM" || { echo "::error::Existing DEPLOYER_PEM required"; exit 1; }
+          umask 077
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/operator.pem"
+      - name: Check or explicitly change owner-only placement
+        working-directory: frontend
+        env:
+          ACTION: ${{ inputs.action }}
+          APPROVAL_FILE: ${{ inputs.approval_file }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          case "$APPROVAL_FILE" in deploy/groups/g2/*.json) ;; *) echo "::error::Approval must be committed under deploy/groups/g2"; exit 1;; esac
+          npx --yes tsx@4 scripts/owner-group-opening.ts "$ACTION" "../$APPROVAL_FILE" "$RUNNER_TEMP/operator.pem" "$RUNNER_TEMP/owner-opening-report.json"
+      - name: Remove key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/operator.pem"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: group-2-owner-opening-report
+          path: ${{ runner.temp }}/owner-opening-report.json
+          if-no-files-found: ignore

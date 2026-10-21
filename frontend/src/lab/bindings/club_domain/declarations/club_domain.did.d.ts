@@ -1373,6 +1373,10 @@ export interface Main {
     [string, Principal],
     { 'can_manage' : boolean, 'is_member' : boolean, 'club_id' : [] | [string] }
   >,
+  /**
+   * / Bounded consensus configuration evidence; never changes or grants access.
+   */
+  'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'read_has_child_guardian' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_membership' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
@@ -1807,6 +1811,15 @@ export interface Main {
   'set_own_child_team' : ActorMethod<
     [string, string, boolean],
     { 'Ok' : Child } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Independent deletion-only configuration for an empty owner-test group.
+   * / Does not release linked-account sync or register lifecycle receivers.
+   */
+  'set_owner_test_deletion_identity' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_pending_invite_email_hash' : ActorMethod<
