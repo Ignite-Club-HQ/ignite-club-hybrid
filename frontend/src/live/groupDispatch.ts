@@ -8,6 +8,7 @@ import type { FeatureArea } from './featureBackend';
 import type { FeatureBackendContext } from './featureRouter';
 import type { GroupDomain, ClubAssignment } from './groupRouting';
 import { activationStatus, chooseRoute, SHIPPED_GATES, type ActivationGates } from './groupActivation';
+import { clearOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
@@ -35,6 +36,8 @@ export type DispatchDeps = {
   store?: OwnerStore;
   /** Ask the global directory for an original-creator-bound placement. */
   placeNewClub?: (ctx: FeatureBackendContext, clubId: string) => Promise<ClubAssignment>;
+  /** Independent consensus owner-test policy; never synthesizes global gates. */
+  ownerActive?: () => Promise<boolean>;
 };
 export const MAX_DEVICE_OWNERS = 2000;
 const owners = new Map<string, string | null>(); // kind:id -> club (null = shared canisters)
@@ -91,11 +94,12 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
 }
 
 export function createClubDispatcher(deps: DispatchDeps) {
+  const active = async () => activationStatus(deps.gates()).active || Boolean(await deps.ownerActive?.());
   return {
     /** List reads already know each item's club: record it so opening the item
      * later (e.g. from a notification) needs no group probe. Free when off. */
     remember: async (kind: 'event' | 'conversation' | 'team' | 'miniLeague', pairs: ReadonlyArray<readonly [string, string]>): Promise<void> => {
-      if (!activationStatus(deps.gates()).active || pairs.length === 0) return;
+      if (pairs.length === 0 || !await active()) return;
       const { principal } = await sessionFor(deps);
       for (const [id, club] of pairs) owners.set(`${kind}:${id}`, club);
       persist(deps, principal);
@@ -103,23 +107,23 @@ export function createClubDispatcher(deps: DispatchDeps) {
     /** Data spanning the caller's clubs: shared canisters + every group, asked
      * at the same time (load time = slowest group, not the sum). */
     readAcross: async <T, R>(feature: FeatureArea, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>, merge: (parts: T[]) => R): Promise<R> => {
-      if (!activationStatus(deps.gates()).active) return merge([await deps.legacy(feature, '', fn)]);
+      if (!await active()) return merge([await deps.legacy(feature, '', fn)]);
       const { s } = await sessionFor(deps);
       const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn), s.readEveryGroup(domain, async ctx => [await fn(ctx)], Number.MAX_SAFE_INTEGER)]);
       return merge([shared, ...groups]);
     },
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
-      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
+      if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
       const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
       if (club && !s.isAssigned(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
         return s.readHosted(club, domain, fn);
       }
-      return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.readClub(club, domain, fn) : deps.legacy(feature, club ?? '', fn);
+      return club && s.isAssigned(club) ? s.readClub(club, domain, fn) : deps.legacy(feature, club ?? '', fn);
     },
     writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
-      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
+      if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
       const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
       if (club && !s.isAssigned(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
@@ -127,14 +131,14 @@ export function createClubDispatcher(deps: DispatchDeps) {
         // participant/claimant permission. Never manufacture club membership.
         return s.readHosted(club, domain, ctx => fn(ctx, key));
       }
-      return club && chooseRoute(deps.gates(), s.isAssigned(club)) === 'group' ? s.writeClub(club, domain, key, fn, attempts) : deps.legacy(feature, club ?? '', ctx => fn(ctx, key));
+      return club && s.isAssigned(club) ? s.writeClub(club, domain, key, fn, attempts) : deps.legacy(feature, club ?? '', ctx => fn(ctx, key));
     },
     /** Invite links/codes: the invitee isn't a member yet, so ask every group
      * which one holds the token and run the call there only. None = shared
      * canisters (club not moved). Two claims = refuse. Never retried; the
      * session is reopened afterwards so the newly joined club is routable. */
     forInvite: async <T>(feature: FeatureArea, token: string, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
-      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, '', fn);
+      if (!await active()) return deps.legacy(feature, '', fn);
       if (!deps.holdsInvite) throw new Error('Invite lookup unavailable');
       const holds = deps.holdsInvite;
       const { s } = await sessionFor(deps);
@@ -147,7 +151,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
      * (healthiest with room), then the club is created there, once. If no
      * group is placed the call fails rather than silently using shared. */
     forNewClub: async <T>(feature: FeatureArea, clubId: string, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
-      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
+      if (!await active()) return deps.legacy(feature, clubId, fn);
       if (!deps.placeNewClub) throw new Error('Club placement unavailable');
       const ctx = await deps.context();
       const placement = await deps.placeNewClub(ctx, clubId);
@@ -161,14 +165,14 @@ export function createClubDispatcher(deps: DispatchDeps) {
       finally { cached?.session.then(x => x.dispose(), () => {}); cached = null; }
     },
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
-      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
+      if (!await active()) return deps.legacy(feature, clubId, fn);
       const { s } = await sessionFor(deps);
-      return chooseRoute(deps.gates(), s.isAssigned(clubId)) === 'group' ? s.readClub(clubId, domain, fn) : deps.legacy(feature, clubId, fn);
+      return s.isAssigned(clubId) ? s.readClub(clubId, domain, fn) : deps.legacy(feature, clubId, fn);
     },
     write: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
-      if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, ctx => fn(ctx, key));
+      if (!await active()) return deps.legacy(feature, clubId, ctx => fn(ctx, key));
       const { s } = await sessionFor(deps);
-      return chooseRoute(deps.gates(), s.isAssigned(clubId)) === 'group' ? s.writeClub(clubId, domain, key, fn, attempts) : deps.legacy(feature, clubId, ctx => fn(ctx, key));
+      return s.isAssigned(clubId) ? s.writeClub(clubId, domain, key, fn, attempts) : deps.legacy(feature, clubId, ctx => fn(ctx, key));
     },
   };
 }
@@ -184,7 +188,14 @@ export const clubDispatch = createClubDispatcher({
     if (!identity) throw new Error('Sign in again to continue.');
     return { identity, target: getActiveIcpTarget() };
   },
-  open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx),
+  ownerActive: async () => {
+    const [{ getCurrentInternetIdentityConfirmed }, { getActiveIcpTarget }] = await Promise.all([import('./internetIdentityAuth'), import('./targetRegistry')]);
+    const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
+    if (!identity) throw new Error('Sign in again to continue.');
+    return Boolean(await readOwnerTestRoute({ identity, target: getActiveIcpTarget() }));
+  },
+  open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx,
+    activationStatus(SHIPPED_GATES).active ? undefined : (await readOwnerTestRoute(ctx))?.groupId),
   lookup: async (ctx, kind, id) => (await import('./groupSessionLive')).lookupEntityClub(ctx, kind, id),
   holdsInvite: async (ctx, token) => (await import('./groupSessionLive')).groupHoldsInvite(ctx, token),
   placeNewClub: async (ctx, clubId) => {
@@ -202,6 +213,7 @@ export const clubDispatch = createClubDispatcher({
 
 /** Sign-out: forget every entity→club answer kept on this device. */
 export function wipeGroupOwnerCache() {
+  clearOwnerTestRouting();
   clearGroupDispatchCache();
   try { for (const k of Object.keys(localStorage)) if (k.startsWith('ignite.groupOwners.')) localStorage.removeItem(k); } catch { /* no storage */ }
 }

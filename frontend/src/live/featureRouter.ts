@@ -6,6 +6,7 @@ import { activationStatus, SHIPPED_GATES } from "./groupActivation";
 import { clubDispatch } from "./groupDispatch";
 import type { GroupDomain } from "./groupRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
+import { readOwnerTestRoute, nextOwnerTestClubId } from './ownerTestRouting';
 
 /**
  * Runtime dispatcher that connects feature repositories to the hybrid
@@ -100,7 +101,7 @@ async function dispatchIcp<T>(feature: FeatureArea, providers: FeatureBackendPro
   // Group routing switch-on lock: shipped off, so every club uses the shared
   // canisters. If ever switched on without the club-scoped dispatcher, fail
   // closed instead of silently sending a moved club to the old group.
-  if (activationStatus(SHIPPED_GATES).active && !scope?.legacy) {
+  if (!scope?.legacy && (activationStatus(SHIPPED_GATES).active || Boolean(await readOwnerTestRoute(context)))) {
     const domain = FEATURE_GROUP_DOMAIN[feature];
     if (scope && 'shared' in scope) return providers.icp(context);
     if (scope && 'newClubId' in scope) return clubDispatch.forNewClub(feature, scope.newClubId, async ctx => providers.icp(ctx));
@@ -131,3 +132,7 @@ function hasSupabaseSession(): boolean {
 }
 
 export { writeOnce } from "./clubScope";
+/** Use after backend selection: Supabase UUID creation remains unchanged. */
+export async function newClubIdForContext(context: FeatureBackendContext, requested: string) {
+  return nextOwnerTestClubId(context, requested);
+}

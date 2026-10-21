@@ -7,7 +7,7 @@ import { openGroupSession, type GroupRegistry } from './groupSession';
 import { GROUP_DOMAINS, type GroupDomain } from './groupRouting';
 import type { EntityKind } from './groupDispatch';
 
-export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
+export async function openLiveGroupReadSession(ctx: FeatureBackendContext, ownerGroupId?: 'g2') {
   const { connectLiveShardRouter, connectLiveClubDomain } = await import('./domains');
   const { actor: router } = await connectLiveShardRouter(ctx.target, ctx.identity);
   return openGroupSession(ctx, {
@@ -15,6 +15,12 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
       const principal = ctx.identity.getPrincipal().toText();
       const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => router.read_group_registry_page(ctx.target.alias, revision, cursor, limit), undefined,
         () => { if (ctx.identity.getPrincipal().toText() !== principal) throw new Error('Registry identity changed'); });
+      if (ownerGroupId) {
+        const route = await (await import('./ownerTestRouting')).readOwnerTestRoute(ctx);
+        if (!route || route.groupId !== ownerGroupId) throw new Error('Owner routing approval required');
+        snapshot.groups = snapshot.groups.filter(g => g.id === ownerGroupId);
+        snapshot.placements = snapshot.placements.filter(p => p.group_id === ownerGroupId);
+      }
       const first = snapshot.placements[0];
       if (!first) throw new Error('No complete group placement');
       for (const p of snapshot.placements) {
