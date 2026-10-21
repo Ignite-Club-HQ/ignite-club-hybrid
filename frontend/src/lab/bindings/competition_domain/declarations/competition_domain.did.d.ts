@@ -732,6 +732,11 @@ export interface Main {
     { 'Ok' : CompetitionJoinLink } |
       { 'Err' : string }
   >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'send_competition_broadcast' : ActorMethod<
     [string, string, string],
     { 'Ok' : Broadcast } |

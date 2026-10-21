@@ -1474,6 +1474,13 @@ export interface MainInterface {
         Err: string;
     }>;
     schema(): Promise<string>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     send_event_reminders(event_id: string): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -4096,6 +4103,16 @@ export class Events_domain implements events_domainInterface {
     async schema(): Promise<string> {
         const result = await this.actor.schema();
         return result;
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n178(result);
     }
     async send_event_reminders(arg0: string): Promise<{
         __kind__: "Ok";

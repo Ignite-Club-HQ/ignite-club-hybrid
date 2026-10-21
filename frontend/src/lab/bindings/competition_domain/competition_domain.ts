@@ -959,6 +959,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     send_competition_broadcast(competition_id: string, title: string, body: string): Promise<{
         __kind__: "Ok";
         Ok: Broadcast;
@@ -2433,6 +2440,16 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.rotate_competition_join_link(arg0);
         return from_candid_variant_n26(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n85(result);
     }
     async send_competition_broadcast(arg0: string, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";

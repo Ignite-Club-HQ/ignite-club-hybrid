@@ -543,6 +543,11 @@ type Main =
        Err: text;
        Ok: MiniLeagueJoinLink;
      });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    set_availability: (session_id: text, player_id: text, status: text) ->
     (variant {
        Err: text;

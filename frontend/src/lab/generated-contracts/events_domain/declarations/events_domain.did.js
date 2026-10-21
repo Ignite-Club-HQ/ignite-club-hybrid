@@ -1774,6 +1774,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'schema' : IDL.Func([], [IDL.Text], ['query']),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
     'send_event_reminders' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],

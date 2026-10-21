@@ -326,6 +326,11 @@ type Main =
     opt text, body: text, image_url: opt text, reply_to_id: opt text,
     scheduled_for_ms: nat64, recurrence: Recurrence, recurrence_until_ms:
     opt nat64) -> (ScheduledResult);
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    set_club_domain_canister: (id: principal) -> (variant {
                                                    Err: text;
                                                    Ok;

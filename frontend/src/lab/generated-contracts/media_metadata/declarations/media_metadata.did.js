@@ -283,6 +283,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : GalleryChatCard, 'Err' : IDL.Text })],
         [],
       ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_asset_scope' : IDL.Func(
         [
           IDL.Text,

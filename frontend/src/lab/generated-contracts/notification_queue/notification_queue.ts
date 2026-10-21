@@ -294,6 +294,13 @@ export interface MainInterface {
     }>;
     remove_device_tokens(user: string, tokens: Array<string>): Promise<DeviceTokenCountResult>;
     schedule_message(id: string, author: string, chat_type: ChatType, team_id: string | null, club_id: string | null, group_id: string | null, conversation_id: string | null, body: string, image_url: string | null, reply_to_id: string | null, scheduled_for_ms: bigint, recurrence: Recurrence, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_club_domain_canister(id: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -797,6 +804,16 @@ export class Notification_queue implements notification_queueInterface {
     async schedule_message(arg0: string, arg1: string, arg2: ChatType, arg3: string | null, arg4: string | null, arg5: string | null, arg6: string | null, arg7: string, arg8: string | null, arg9: string | null, arg10: bigint, arg11: Recurrence, arg12: bigint | null): Promise<ScheduledResult> {
         const result = await this.actor.schedule_message(arg0, arg1, to_candid_ChatType_n69(arg2), to_candid_opt_n25(arg3), to_candid_opt_n25(arg4), to_candid_opt_n25(arg5), to_candid_opt_n25(arg6), arg7, to_candid_opt_n25(arg8), to_candid_opt_n25(arg9), arg10, to_candid_Recurrence_n71(arg11), to_candid_opt_n32(arg12));
         return from_candid_ScheduledResult_n9(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n63(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";

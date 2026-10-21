@@ -549,6 +549,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'set_ad_active' : ActorMethod<
     [string, boolean],
     { 'Ok' : null } |

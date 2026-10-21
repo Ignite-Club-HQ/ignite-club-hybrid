@@ -565,6 +565,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_availability(session_id: string, player_id: string, status: string): Promise<{
         __kind__: "Ok";
         Ok: MiniLeagueSessionAvailability;
@@ -1541,6 +1548,16 @@ export class Mini_league_domain implements mini_league_domainInterface {
     }> {
         const result = await this.actor.rotate_mini_league_join_link(arg0, arg1);
         return from_candid_variant_n33(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n70(result);
     }
     async set_availability(arg0: string, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";

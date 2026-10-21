@@ -1398,6 +1398,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'schema' : ActorMethod<[], string>,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'send_event_reminders' : ActorMethod<
     [string],
     { 'Ok' : number } |

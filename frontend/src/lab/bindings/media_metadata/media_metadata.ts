@@ -238,6 +238,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_asset_scope(asset_id: string, team_id: string | null, mini_league_id: string | null, competition_id: string | null, event_id: string | null, caption: string | null, album_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: Asset;
@@ -647,6 +654,16 @@ export class Media_metadata implements media_metadataInterface {
     }> {
         const result = await this.actor.save_gallery_chat_card(to_candid_opt_n22(arg0), arg1, arg2, to_candid_opt_n22(arg3), arg4, to_candid_opt_n22(arg5), to_candid_opt_n22(arg6), arg7, arg8, arg9, arg10);
         return from_candid_variant_n36(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n27(result);
     }
     async set_asset_scope(arg0: string, arg1: string | null, arg2: string | null, arg3: string | null, arg4: string | null, arg5: string | null, arg6: string | null): Promise<{
         __kind__: "Ok";

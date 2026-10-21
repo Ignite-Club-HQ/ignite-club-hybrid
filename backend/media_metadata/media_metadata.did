@@ -183,6 +183,11 @@ type Main =
        Err: text;
        Ok: GalleryChatCard;
      });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    set_asset_scope: (asset_id: text, team_id: opt text, mini_league_id:
     opt text, competition_id: opt text, event_id: opt text, caption:
     opt text, album_id: opt text) -> (variant {

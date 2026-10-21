@@ -450,6 +450,11 @@ export interface Main {
     { 'Ok' : MiniLeagueJoinLink } |
       { 'Err' : string }
   >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'set_availability' : ActorMethod<
     [string, string, string],
     { 'Ok' : MiniLeagueSessionAvailability } |

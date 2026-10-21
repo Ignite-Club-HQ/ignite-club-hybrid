@@ -629,6 +629,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_ad_active(id: string, is_active: boolean): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1710,6 +1717,16 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.revoke_app_admin(arg0);
         return from_candid_variant_n2(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n65(result);
     }
     async set_ad_active(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";

@@ -695,6 +695,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MiniLeagueJoinLink, 'Err' : IDL.Text })],
         [],
       ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_availability' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [

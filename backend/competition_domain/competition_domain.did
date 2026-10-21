@@ -737,6 +737,11 @@ type Main =
        Err: text;
        Ok: CompetitionJoinLink;
      });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    send_competition_broadcast: (competition_id: text, title: text, body:
     text) -> (variant {
                 Err: text;

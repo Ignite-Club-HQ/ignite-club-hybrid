@@ -335,6 +335,11 @@ type Main =
                 Err: text;
                 Ok: ClubPointsSettings;
               });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    set_club_domain_canister: (id: principal) -> (variant {
                                                    Err: text;
                                                    Ok;

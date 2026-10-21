@@ -954,6 +954,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
         [],
       ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
     'send_competition_broadcast' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Broadcast, 'Err' : IDL.Text })],

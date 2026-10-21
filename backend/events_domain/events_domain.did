@@ -1248,6 +1248,11 @@ type Main =
        Ok: PitchBoardSettings;
      });
    schema: () -> (text) query;
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    send_event_reminders: (event_id: text) -> (variant {
                                                 Err: text;
                                                 Ok: nat16;
