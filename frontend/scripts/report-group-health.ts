@@ -83,6 +83,11 @@ for (const group of registry.groups) {
   groups.push({ id: group.id, revision, largestHeap: String(largestHeap), lowestCycles: String(lowestCycles), services: services.length, evidence });
 }
 
+if (registry.groups.length === 0) {
+  save({ reportedAt: new Date().toISOString(), host, routerId, revision: String(registry.revision), groups: [], problems: [], note: 'no registered groups yet' });
+  console.log(`No registered groups at revision ${registry.revision}; nothing to report yet.`);
+  process.exit(0);
+}
 if (groups.length === 0) throw new Error(`No group health reported:\n${problems.join('\n')}`);
 save({ reportedAt: new Date().toISOString(), host, routerId, revision: String(registry.revision), groups, problems });
 console.log(`Reported health for ${groups.length} group(s) at revision ${registry.revision}.`);
