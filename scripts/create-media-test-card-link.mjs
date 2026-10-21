@@ -11,7 +11,7 @@ for (const k of ['PAYMENT_ID', 'CARD_CONFIRM', 'FUNDING_GROUP_ID', 'TOPUP_TARGET
 const identity = 'ignite-card-deployer';
 function cli(args) {
   const r = spawnSync('icp', args, { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(`ICP ${args.slice(0, 2).join(' ')} failed; no automatic retry`);
+  if (r.status !== 0) throw new Error(`ICP ${args.slice(0, 2).join(' ')} failed; no automatic retry: ${(r.stderr || '').trim().slice(-400)}`);
   return r.stdout.trim();
 }
 function balance() { return parseBalance(cli(['cycles', 'balance', '-n', 'ic', '--identity', identity, '--json'])); }

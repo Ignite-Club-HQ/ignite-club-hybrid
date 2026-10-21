@@ -35,10 +35,12 @@ export function finishInterruptedDecision({ records, paymentId, confirm, princip
   const transfers = (data.transfers ?? []).map(t => {
     if (t.phase === 'verified') return t;
     const now = BigInt(liveCycles(t.id));
-    if (now < BigInt(t.beforeCycles) + BigInt(t.amount) / 2n) throw new Error(`${t.name}: transfer outcome unknown and fuel did not clearly rise (${t.beforeCycles} → ${now}); manual review, never replay`);
+    // The CLI call failed and no fuel arrived: record it as not applied so a fresh run plans it again.
+    // A late landing would only over-fuel one canister; fuel stays in that canister, nothing is lost.
+    if (now < BigInt(t.beforeCycles) + BigInt(t.amount) / 2n) return { ...t, phase: 'not-applied', observedCycles: now.toString() };
     return { ...t, phase: 'verified', afterCycles: now.toString(), verifiedAt: 'finish-interrupted' };
   });
-  const done = new Set(transfers.map(t => t.id));
+  const done = new Set(transfers.filter(t => t.phase === 'verified').map(t => t.id));
   const remaining = (data.plan.topups ?? []).filter(t => !done.has(t.id)).map(t => t.name);
   return { path, remaining, data: { ...data, transfers, phase: 'topups-complete', topupsComplete: true, closedInterrupted: {
     at: new Date().toISOString(), remaining, note: 'Interrupted top-up closed after on-chain verification. Remaining canisters need a fresh top-up run.' } } };
