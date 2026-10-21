@@ -150,6 +150,13 @@
       "beforeCycles": "982154412582",
       "phase": "verified",
       "afterCycles": "1499728407188"
+    },
+    {
+      "id": "y6teq-xaaaa-aaaal-qxp2a-cai",
+      "name": "vault_domain",
+      "amount": "504162155678",
+      "beforeCycles": "995826159132",
+      "phase": "transferring"
     }
   ]
 }
