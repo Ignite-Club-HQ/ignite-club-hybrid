@@ -123,8 +123,27 @@ Partial completion; **not release-ready**.
 - Separately replayed the eight production score migrations listed above, then ours, against explicitly simplified prerequisite tables and role helpers in disposable `round6_policy`; all applied cleanly. Assertions verified manager reads and atomic writes, member/anonymous hidden-score denial, member result/RPC write denial, division show/hide override, legacy redirection, event score scrubbing, history write rejection, and empty pending handoff table (`/tmp/r6-policy.log`, `/tmp/r6-check.log`). This does NOT establish full production-schema compatibility.
 - Repeated with explicit cache-table stand-ins in `round6_cache`: anon/authenticated lack SELECT on all three caches, service_role retains writes; cache insert and PlayHQ-shaped result upsert succeeded. These validate privilege statements, not real cache schema dependencies.
 
-### Owner must accept / decide
+### Retired approach — do not apply
 - Competition-linked event final scores are permanently null; existing competition `game_results` history rows are deleted (including attached quarter/player/MVP details), and new history writes are rejected. This applies even to visible competitions and managers: use competition fixtures/results, not team History, for scores. Showing scores again does not reconstruct deleted history.
 - All browser access to the three raw PlayHQ caches is revoked globally, including visible/unmatched competitions and managers; service sync can continue writing. Cache-backed ladders/player-stat screens need redesign if the owner requires continued access. Previously downloaded/offline data cannot be recalled.
 - Legacy division false becomes inherit (preserving the previous competition-hide-wins behavior); new explicit show overrides competition hide. Owner must approve these semantics.
-- Obtain the missing original baseline/schema and rerun the complete chain with real policies/triggers and representative data before release; approve destructive history cleanup and global cache loss, or request a manager-authorized history/cache redesign instead. The limited rehearsal is not permission to apply in production.
+- The owner rejected this destructive approach and chose preservation. The old SQL and initial rebuild SQL are now explicitly retired outside the managed migrations directory.
+
+## Preservation implementation — 21 October completion pass
+
+- Calendar, result editing, History and player reports now use protected dual-mode readers. Stored period/player/MVP data is retained; masked score totals are nullable, not false draws/zero-goal totals.
+- ICP exact event/match/team links survive rescheduling and snapshots. Original-human manager checks protect saves; canonical match writes/reads keep linked History and ladders consistent. PlayHQ imported metadata/statistics survive snapshots, obey division/default privacy, and use tenant-scoped player/game keys. Non-exclusive self-identification grants no ownership and only the caller's links are returned.
+- Supabase replacement is saved in four **drafts**, assembled in this order: `competition-history-preservation-foundation.sql`, `competition-history-preservation-layer.sql`, `competition-history-report-layer.sql`, `competition-history-preservation-tail.sql`. The former destructive migration was not applied and has been removed from automatic migration discovery.
+- The replacement preserves History associations across fixture deletion, authorizes restricted-event reads, retains manager access, protects raw score-bearing cache/board JSON, and reconstructs the canonical ladder from visible results. PlayHQ-shaped upserts bind score handoff to the existing external fixture ID.
+
+### Verified evidence
+- Full frontend suites before the final canonical-score additions: **Supabase 6,035 passed / 358 skipped; ICP 5,633 passed / 760 skipped; no failures**. Subsequent targeted History/report tests passed in both modes.
+- Production actor PocketIC checks: manager/member/anonymous privacy overrides, exact-link idempotent rescheduling, detailed History/MVP masking, trusted-caller and forged-team denial, snapshot export/import/purge, older snapshot compatibility, PlayHQ member/manager statistics, nonexclusive caller-only claims, canonical score writes and hidden/forged reads all pass.
+- Touched canisters compile; all **17** Candid contracts match. Feed parser and History mask Motoko tests pass.
+- Disposable PostgreSQL rehearsal applies the full replacement against explicit simplified prerequisite tables, and passes manager scores, hidden member DTOs, raw-table denial, player/MVP preservation and fixture-deletion/archive retention. This is **not** a full production-baseline replay.
+- Public preview opens `/auth` with zero browser page errors; signed-in end-to-end checks are unavailable for external unmanaged Supabase. No live database application, deployment, fuel spending, scaling activation or photo-store changes occurred.
+
+### Still not release-complete
+- The four Supabase drafts need full live-schema/policy/trigger compatibility verification and managed migration application. Until then, new protected RPCs do not exist live and affected Supabase screens can report read errors; never restore raw-data fallback.
+- ICP grade/stat feeds now follow bounded cursor pages (10 pages, 200 fixtures, 2,000 stats), refusing missing/repeated/unsafe cursors and oversized partial imports. Parser tests and production compile pass; actual configured upstream acceptance remains unverified, including whether real cursors use the accepted unreserved URL alphabet.
+- Signed-in History/calendar/result/report/PlayHQ acceptance and mainnet canister upgrades remain release prerequisites. Do not claim the complete owner request or production rollout is finished from local tests.

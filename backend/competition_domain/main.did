@@ -605,6 +605,16 @@ type Main =
                                            Err: text;
                                            Ok: opt text;
                                          });
+   read_history_match_result: (match_id: text, team_id: text, requester:
+    principal) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             away: opt nat16;
+             hidden: bool;
+             home: opt nat16;
+           };
+     });
    read_history_score_access: (competition_id: text, team_id: text,
     starts_at_ms: nat64, requester: principal, manager_only: bool) ->
     (variant {
@@ -842,6 +852,11 @@ type Main =
                                     Err: text;
                                     Ok: Match;
                                   });
+   write_history_match_result: (match_id: text, team_id: text, requester:
+    principal, own: nat32, opponent: nat32) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
  };
 type JoinToken = 
  record {

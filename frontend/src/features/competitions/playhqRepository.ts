@@ -1,7 +1,7 @@
 import { withFeatureBackend } from "@/live/featureRouter";
 import { supabase } from "@/integrations/supabase/client";
 import { historyRpc } from "./history/historyRepository";
-export type PlayHQMatch = {external_id:string;external_home_team_id:string|null;external_away_team_id:string|null;home_team_name:string|null;away_team_name:string|null;division_id:string|null;competition_divisions:{name:string|null}|null};
+export type PlayHQMatch = {tenant?:string;external_id:string;external_home_team_id:string|null;external_away_team_id:string|null;home_team_name:string|null;away_team_name:string|null;division_id:string|null;competition_divisions:{name:string|null}|null};
 export type PlayHQStat = {playhq_game_id:string;playhq_team_id:string|null;playhq_player_id:string;player_name:string|null;stats:Record<string,number>|null;tenant?:string};
 export type PlayHQData = {matches:PlayHQMatch[];stats:PlayHQStat[];links:{playhq_player_id:string;mine:boolean;tenant?:string}[]};
 export async function readCompetitionPlayHQ(competitionId:string):Promise<PlayHQData>{

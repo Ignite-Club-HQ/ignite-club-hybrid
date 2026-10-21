@@ -46,4 +46,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
-- History uses authorized nullable DTOs, retaining stored details; trusted events reads verify the original human. Why: team roles/UI masking cannot protect copied competition scores.
+- History retains details behind nullable DTOs and exact match links; reads verify humans, PlayHQ keys include tenant, claims grant no ownership. Why: masks, rescheduling and external IDs cannot authorize scores.

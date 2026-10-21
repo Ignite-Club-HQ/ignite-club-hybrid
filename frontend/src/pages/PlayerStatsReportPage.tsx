@@ -1,3 +1,4 @@
+import { readReportEvents } from "@/features/competitions/history/reportRepository";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -198,42 +199,8 @@ function SupabasePlayerStatsReportPage() {
   });
 
   async function fetchSupabaseGameEvents(): Promise<GameEvent[]> {
-    // Events that have any saved stats for this team. Historically only
-    // `game_summaries.team_id` was consulted, so games whose summary was
-    // saved without a team id (or that only produced player-stat rows)
-    // vanished from the report. Union every signal instead.
-    const [summariesRes, statsRes, teamEventsRes] = await Promise.all([
-      supabase.from("game_summaries").select("event_id").eq("team_id", selectedTeamId),
-      supabase.from("game_player_stats").select("event_id").eq("team_id", selectedTeamId),
-      supabase.from("events").select("id").eq("team_id", selectedTeamId).eq("type", "game"),
-    ]);
-
-    const eventIdSet = new Set<string>();
-    for (const row of summariesRes.data || []) if (row.event_id) eventIdSet.add(row.event_id);
-    for (const row of statsRes.data || []) if (row.event_id) eventIdSet.add(row.event_id);
-
-    // Recover rows saved without a team id by checking this team's own events.
-    const teamEventIds = (teamEventsRes.data || []).map((e: any) => e.id).filter(Boolean);
-    if (teamEventIds.length > 0) {
-      const [orphanStats, orphanSummaries] = await Promise.all([
-        supabase.from("game_player_stats").select("event_id").in("event_id", teamEventIds),
-        supabase.from("game_summaries").select("event_id").in("event_id", teamEventIds),
-      ]);
-      for (const row of orphanStats.data || []) if (row.event_id) eventIdSet.add(row.event_id);
-      for (const row of orphanSummaries.data || []) if (row.event_id) eventIdSet.add(row.event_id);
-    }
-
-    const eventIds = Array.from(eventIdSet);
-    if (eventIds.length === 0) return [];
-
-    const { data: events } = await supabase
-      .from("events")
-      .select("id, title, event_date, opponent")
-      .in("id", eventIds)
-      .eq("type", "game")
-      .order("event_date", { ascending: false });
-
-    return (events as GameEvent[]) || [];
+    if (!selectedTeamId) return [];
+    return readReportEvents(selectedTeamId);
   }
 
   // Check if user has Pro Football access via team or club subscription

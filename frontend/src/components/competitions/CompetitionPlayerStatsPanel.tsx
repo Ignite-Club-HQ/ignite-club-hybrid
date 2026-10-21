@@ -32,6 +32,7 @@ type StatRow = {
 };
 
 type Aggregate = {
+  tenant: string;
   playhq_player_id: string;
   player_name: string;
   games: number;
@@ -108,13 +109,13 @@ export default function CompetitionPlayerStatsPanel({
   const teamNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const row of matches) {
-      if (row.external_home_team_id) m.set(row.external_home_team_id, row.home_team_name ?? row.external_home_team_id);
-      if (row.external_away_team_id) m.set(row.external_away_team_id, row.away_team_name ?? row.external_away_team_id);
+      if (row.external_home_team_id) m.set(JSON.stringify([row.tenant??"default",row.external_home_team_id]), row.home_team_name ?? row.external_home_team_id);
+      if (row.external_away_team_id) m.set(JSON.stringify([row.tenant??"default",row.external_away_team_id]), row.away_team_name ?? row.external_away_team_id);
     }
     return m;
   }, [matches]);
 
-  const externalTeamIds = useMemo(() => Array.from(teamNameById.keys()), [teamNameById]);
+  const externalTeamIds = useMemo(() => Array.from(new Set(matches.flatMap(m=>[m.external_home_team_id,m.external_away_team_id]).filter((id):id is string=>!!id))), [matches]);
 
   // Resolve PlayHQ team id → owning Ignite club (when a team has been linked).
   const { data: linkedTeams = [] } = useQuery({
@@ -172,8 +173,9 @@ export default function CompetitionPlayerStatsPanel({
   const claimsByPlayer = useMemo(() => {
     const m = new Map<string, { mine: boolean; claimed: boolean }>();
     for (const l of links as any[]) {
-      const prev = m.get(l.playhq_player_id) ?? { mine: false, claimed: false };
-      m.set(l.playhq_player_id, {
+      const key=JSON.stringify([l.tenant??"default",l.playhq_player_id]);
+      const prev = m.get(key) ?? { mine: false, claimed: false };
+      m.set(key, {
         mine: prev.mine || l.mine===true,
         claimed: true,
       });
@@ -203,7 +205,7 @@ export default function CompetitionPlayerStatsPanel({
     const m = new Map<string, { divisionId: string; name: string }>();
     for (const row of matches) {
       if (row.external_id && row.division_id) {
-        m.set(row.external_id, {
+        m.set(JSON.stringify([row.tenant??"default",row.external_id]), {
           divisionId: row.division_id,
           name: row.competition_divisions?.name ?? "Unknown grade",
         });
@@ -235,13 +237,13 @@ export default function CompetitionPlayerStatsPanel({
   // Apply filters to stat rows before aggregation
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
-      if (filterTeamId !== "_all" && r.playhq_team_id !== filterTeamId) return false;
+      if (filterTeamId !== "_all" && JSON.stringify([r.tenant??"default",r.playhq_team_id]) !== filterTeamId) return false;
       if (filterClubId !== "_all") {
         const club = r.playhq_team_id ? clubByExternalTeam.get(r.playhq_team_id) : null;
         if (club?.clubId !== filterClubId) return false;
       }
       if (filterGradeId !== "_all") {
-        const grade = r.playhq_game_id ? gradeByGameId.get(r.playhq_game_id) : null;
+        const grade = r.playhq_game_id ? gradeByGameId.get(JSON.stringify([r.tenant??"default",r.playhq_game_id])) : null;
         if (grade?.divisionId !== filterGradeId) return false;
       }
       return true;
@@ -252,12 +254,13 @@ export default function CompetitionPlayerStatsPanel({
   const aggregates: Aggregate[] = useMemo(() => {
     const map = new Map<string, Aggregate>();
     for (const r of filteredRows) {
-      const key = r.playhq_player_id;
-      if (!key) continue;
+      if (!r.playhq_player_id) continue;
+      const key = JSON.stringify([r.tenant??"default",r.playhq_player_id]);
       let agg = map.get(key);
       if (!agg) {
         agg = {
-          playhq_player_id: key,
+          tenant:r.tenant??"default",
+          playhq_player_id: r.playhq_player_id,
           player_name: r.player_name ?? "Unknown",
           games: 0,
           totals: {},
@@ -295,12 +298,12 @@ export default function CompetitionPlayerStatsPanel({
     return list;
   }, [aggregates, sortKey]);
 
-  const claim = async (playhqPlayerId: string, playerName: string) => {
+  const claim = async (playhqPlayerId: string, playerName: string, playerTenant: string) => {
     if (!user) {
       toast.error("Sign in to claim a player");
       return;
     }
-    try { await claimCompetitionPlayHQ(competitionId,playhqPlayerId,rows.find(r=>r.playhq_player_id===playhqPlayerId)?.tenant??"default"); }
+    try { await claimCompetitionPlayHQ(competitionId,playhqPlayerId,playerTenant); }
     catch(error){toast.error(error instanceof Error?error.message:String(error));return;}
     toast.success(`Claimed ${playerName}`);
     refetchProtected();
@@ -548,9 +551,10 @@ export default function CompetitionPlayerStatsPanel({
           </thead>
           <tbody>
             {sorted.map((a) => {
-              const claim_ = claimsByPlayer.get(a.playhq_player_id);
+              const identityKey=JSON.stringify([a.tenant,a.playhq_player_id]);
+              const claim_ = claimsByPlayer.get(identityKey);
               return (
-                <tr key={a.playhq_player_id} className="border-t">
+                <tr key={identityKey} className="border-t">
                   <td className="p-2 font-medium">
                     <div className="flex items-center gap-2">
                       <span>{a.player_name}</span>
@@ -573,7 +577,7 @@ export default function CompetitionPlayerStatsPanel({
                     </td>
                   ))}
                   <td className="p-2 text-right">
-                    {claim_?.claimed ? (
+                    {claim_?.mine ? (
                       <Badge variant="outline" className="text-[10px] gap-1">
                         <UserCheck className="h-3 w-3" /> Claimed
                       </Badge>
@@ -582,7 +586,7 @@ export default function CompetitionPlayerStatsPanel({
                         size="sm"
                         variant="ghost"
                         className="h-7 text-xs"
-                        onClick={() => claim(a.playhq_player_id, a.player_name)}
+                        onClick={() => claim(a.playhq_player_id, a.player_name,a.tenant)}
                       >
                         Claim
                       </Button>

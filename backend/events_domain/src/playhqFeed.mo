@@ -20,4 +20,19 @@ module {
   public func numeric(raw:Json.Json):Text {
     switch(raw){case(#object_(fields))Json.stringify(#object_(fields.filter(func(pair)=switch(pair.1){case(#number(_))true;case _ false})),null);case _ "{}"}
   };
+  public func page(raw:Text):{#Ok:{rows:[Json.Json];cursor:?Text};#Err:Text}{
+    switch(Json.parse(raw)){
+      case(#err(_))#Err("Invalid PlayHQ JSON");
+      case(#ok(doc)){
+        let values=switch(field(doc,"data")){case(#array(v))v;case _ return #Err("Malformed PlayHQ data")};
+        if (values.size() > 200) return #Err("Feed exceeds 200 records");
+        let meta=field(doc,"metadata");
+        if(field(meta,"hasMore")==#bool(true)){
+          let cursor=str(meta,"nextCursor");
+          if(cursor=="")return #Err("Missing pagination cursor");
+          #Ok({rows=values;cursor=?cursor})
+        }else #Ok({rows=values;cursor=null})
+      }
+    }
+  };
 }

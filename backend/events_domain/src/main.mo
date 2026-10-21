@@ -4,6 +4,8 @@ import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
+import Option "mo:core/Option";
+import Json "mo:json";
 import Nat32 "mo:core/Nat32";
 import Nat16 "mo:core/Nat16";
 import Nat64 "mo:core/Nat64";
@@ -584,9 +586,16 @@ persistent actor class Main(governorInit : Principal) {
     auth(input.creator);await admitAccount(input.creator);
     if (authority != competitionDomainCanister or input.teams.size() != 2 or input.starts_at_ms >= input.ends_at_ms or input.title.size() > 256) return #Err("Invalid fixture or changed authority");
     if(input.teams[0].team_id==input.teams[1].team_id or input.teams.any(func(t)=not valid(t.team_id) or not valid(t.club_id) or isFenced(t.club_id))) return #Err("Invalid or locked fixture teams");
+    // Validate every existing link before touching either event.
+    for(target in input.teams.values()){
+      switch(competitionMatchLinks.find(func(l)=l.match_id==input.match_id and l.team_id==target.team_id)){
+        case null {};
+        case(?link){if(link.competition_id!=input.competition_id or events.any(func(e)=e.id==link.event_id and (e.club_id!=target.club_id or e.team_id!=?target.team_id)))return #Err("Fixture link ownership mismatch")}
+      }
+    };
     var ids:[Text]=[];
     for(target in input.teams.values()) {
-      let previous=competitionMatchLinks.find(func(l)=l.match_id==input.match_id and l.team_id==target.team_id);
+      let previous=competitionMatchLinks.find(func(l)=l.match_id==input.match_id and l.competition_id==input.competition_id and l.team_id==target.team_id);
       let id=switch(previous){case null "evt-"#target.club_id#"-"#Nat.toText(events.size());case(?link)link.event_id};
       let current=events.find(func(e)=e.id==id);
       if(switch(current){case(?e)e.club_id!=target.club_id or e.team_id!=?target.team_id;case null false}) return #Err("Fixture link ownership mismatch");
@@ -2280,6 +2289,8 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func get_game_summary(event_id : Text) : async { #Ok : ?Types.GameSummary; #Err : Text } {
     denyLegacyAccountQuery();
     auth(caller);
+    let event=switch(events.find(func(e)=e.id==event_id and not e.deleted)){case null return #Err("Event not found");case(?e)e};
+    if(not canView(caller,event)) return #Err("Event access forbidden");
     #Ok(gameSummaries.find(func(item) = item.event_id == event_id))
   };
 
@@ -2369,6 +2380,14 @@ persistent actor class Main(governorInit : Principal) {
             } catch (_) { return #Err("Competition authorization unavailable") };
           }
         };
+        switch(competitionMatchLinks.find(func(l)=l.event_id==id)){
+          case null {};
+          case(?link){
+            let configured=switch(authority){case null return #Err("Competition authority unavailable");case(?a)a};
+            let service:actor{write_history_match_result:shared(Text,Text,Principal,Nat32,Nat32)->async{#Ok;#Err:Text}}=actor(configured.toText());
+            switch(try{await(with timeout=10)service.write_history_match_result(link.match_id,team_id,caller,home_score,away_score)}catch(_){return #Err("Competition result synchronization failed")}){case(#Err(e))return #Err(e);case(#Ok){}};
+          }
+        };
         if (authority != competitionDomainCanister or eventFenced(id) or teamFenced(team_id)) return #Err("Game authority changed or locked");
       }
     };
@@ -2420,8 +2439,21 @@ persistent actor class Main(governorInit : Principal) {
       case null return #Err("Event no longer available"); case (?e) e
     };
     if (current.revision != event.revision or not canView(caller,current)) return #Err("Event access changed");
+    var canonical: ?{home:?Nat16;away:?Nat16;hidden:Bool}=null;
+    switch(competitionMatchLinks.find(func(l)=l.event_id==event_id)){
+      case null {};
+      case(?link){
+        let configured=switch(authority){case null return #Err("Competition authority unavailable");case(?a)a};
+        let service:actor{read_history_match_result:shared(Text,Text,Principal)->async{#Ok:{home:?Nat16;away:?Nat16;hidden:Bool};#Err:Text}}=actor(configured.toText());
+        switch(try{await(with timeout=10)service.read_history_match_result(link.match_id,link.team_id,caller)}catch(_){return #Err("Competition result unavailable")}){case(#Err(e))return #Err(e);case(#Ok(r))canonical:=?r};
+      }
+    };
+    if(authority!=competitionDomainCanister or eventFenced(event_id))return #Err("History authority changed");
     #Ok(switch (gameResults.find(func(item) = item.event_id == ?event_id)) {
-      case null null; case (?row) ?HistoryPrivacy.read(row,hidden)
+      case null null; case (?row) {
+        let read=HistoryPrivacy.read(row,hidden or (switch(canonical){case null false;case(?r)r.hidden}));
+        ?(switch(canonical){case null read;case(?r)({read with home_score=r.home.map(func(n)=Nat32.fromNat(Nat16.toNat(n)));away_score=r.away.map(func(n)=Nat32.fromNat(Nat16.toNat(n)))})})
+      }
     })
   };
   public shared ({ caller }) func get_game_result(event_id : Text) : async { #Ok : ?HistoryPrivacy.Read; #Err : Text } {
@@ -2896,14 +2928,35 @@ persistent actor class Main(governorInit : Principal) {
   };
   func playhqHttpGet(path:Text):async*{#Ok:Text;#Err:Text}{await* playhqHttpGetTenant(path,null)};
 
+  func playhqPages(path:Text,tenant:Text):async*{#Ok:[Json.Json];#Err:Text}{
+    var rows:[Json.Json]=[];var cursor:?Text=null;var seen:[Text]=[];var pages=0;
+    while (pages < 10) {
+      if (pages >= 10) return #Err("PlayHQ pagination exceeds bounded import");
+      let suffix=switch(cursor){case null "";case(?c)"?cursor="#c};
+      let body=switch(await* playhqHttpGetTenant(path#suffix,?tenant)){case(#Err(e))return #Err(e);case(#Ok(b))b};
+      let page=switch(PlayhqFeed.page(body)){case(#Err(e))return #Err(e);case(#Ok(p))p};
+      rows:=rows.concat(page.rows);pages+=1;
+      if (rows.size() > 2000) return #Err("PlayHQ batch exceeds bounds");
+      switch(page.cursor){
+        case null return #Ok(rows);
+        case(?next){
+          // Restrict cursor to unreserved URL characters; never inject a path/query.
+          if (next.size() > 512 or seen.any(func(c)=c==next) or Text.toArray(next).any(func(c)=not ((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c=='-' or c=='_' or c=='.' or c=='~')))return #Err("Invalid pagination cursor");
+          seen:=seen.concat([next]);cursor:=?next
+        }
+      }
+    };
+    #Err("PlayHQ pagination exceeds bounded import")
+  };
+
   // Production PlayHQ endpoint shapes, complete bounded pages only. This
   // returns solely to the configured competition service, never a browser.
   public shared ({caller}) func fetch_playhq_grade(tenant:Text,grade:Text) : async {#Ok:{games:[{game_id:Text;home_id:Text;away_id:Text;home_name:Text;away_name:Text;home_score:?Nat16;away_score:?Nat16;starts_at_ms:?Nat64;status:Text;venue:?Text}];stats:[{game_id:Text;team_id:Text;player_id:Text;player_name:Text;stats_json:Text}]};#Err:Text} {
     let authority=competitionDomainCanister;
     if(authority!=?caller) return #Err("Trusted competition canister only");
     if(not valid(tenant) or not valid(grade) or Text.contains(grade,#char '/') or Text.contains(tenant,#char '/') or Text.contains(grade,#char '?')) return #Err("Invalid PlayHQ scope");
-    let body=switch(await* playhqHttpGetTenant("/grades/"#grade#"/fixture",?tenant)){case(#Err(e))return #Err(e);case(#Ok(b))b};
-    let rows=switch(PlayhqFeed.rows(body)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+    let rows=switch(await* playhqPages("/grades/"#grade#"/fixture",tenant)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+    if (rows.size() > 200) return #Err("Grade exceeds bounded import");
     var games:[{game_id:Text;home_id:Text;away_id:Text;home_name:Text;away_name:Text;home_score:?Nat16;away_score:?Nat16;starts_at_ms:?Nat64;status:Text;venue:?Text}]=[];
     var stats:[{game_id:Text;team_id:Text;player_id:Text;player_name:Text;stats_json:Text}]=[];
     for(row in rows.values()) {
@@ -2918,12 +2971,12 @@ persistent actor class Main(governorInit : Principal) {
       let venue=PlayhqFeed.str(PlayhqFeed.field(row,"venue"),"name");
       games:=games.concat([{game_id=id;home_id=h;away_id=a;home_name=PlayhqFeed.str(home,"name");away_name=PlayhqFeed.str(away,"name");home_score=PlayhqFeed.score(score,"home");away_score=PlayhqFeed.score(score,"away");starts_at_ms=parsePlayhqTime(if(date=="")PlayhqFeed.str(row,"startsAt")else date,"UTC");status=state;venue=if(venue=="")null else ?venue}]);
       if(state=="completed") {
-        let raw=switch(await* playhqHttpGetTenant("/games/"#id#"/statistics",?tenant)){case(#Err(e))return #Err(e);case(#Ok(b))b};
-        let players=switch(PlayhqFeed.rows(raw)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+        let players=switch(await* playhqPages("/games/"#id#"/statistics",tenant)){case(#Err(e))return #Err(e);case(#Ok(r))r};
         for(p in players.values()) {
           let player=PlayhqFeed.field(p,"player");let playerId=PlayhqFeed.str(player,"id");let team=PlayhqFeed.str(PlayhqFeed.field(p,"team"),"id");
           if(not valid(playerId) or (team!=h and team!=a)) return #Err("Foreign player-stat team");
-          stats:=stats.concat([{game_id=id;team_id=team;player_id=playerId;player_name=PlayhqFeed.str(player,"name");stats_json=PlayhqFeed.numeric(PlayhqFeed.field(p,"statistics"))}]);
+          let values=switch(PlayhqFeed.field(p,"statistics")){case(#null_)PlayhqFeed.field(p,"stats");case(v)v};
+          stats:=stats.concat([{game_id=id;team_id=team;player_id=playerId;player_name=PlayhqFeed.str(player,"name");stats_json=PlayhqFeed.numeric(values)}]);
           if (stats.size() > 2000) return #Err("Player-stat batch too large");
         }
       }
@@ -4365,6 +4418,9 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func read_account_get_game_summary(event_id : Text) : async { #Ok : ?Types.GameSummary; #Err : Text } {
     await admitAccount(caller);
     auth(caller);
+    let event=switch(events.find(func(e)=e.id==event_id and not e.deleted)){case null return #Err("Event not found");case(?e)e};
+    await syncRolesFromClubDomain(caller,event.club_id);
+    if(not (await* canViewMatch(caller,event)) or eventFenced(event_id)) return #Err("Event access forbidden");
     #Ok(gameSummaries.find(func(item) = item.event_id == event_id))
   };
 
