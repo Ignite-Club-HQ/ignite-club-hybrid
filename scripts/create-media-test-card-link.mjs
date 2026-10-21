@@ -15,6 +15,11 @@ function cli(args) {
   return r.stdout.trim();
 }
 function balance() { return parseBalance(cli(['cycles', 'balance', '-n', 'ic', '--identity', identity, '--json'])); }
+if (process.env.FUNDING_PURPOSE === 'reconcile-paid') {
+  const { reconcilePaidOrder } = await import('./reconcile-card-payment.mjs');
+  await reconcilePaidOrder({ cli, identity, balance });
+  process.exit(0);
+}
 const infrastructure = process.env.FUNDING_PURPOSE ? prepareInfrastructure({ cli, identity, balance }) : undefined;
 const plan = infrastructure?.plan ?? fundingPlan({ paymentId: process.env.PAYMENT_ID, testId: process.env.TEST_RUN_ID,
   scenario: process.env.TEST_SCENARIO, budgetT: process.env.TEST_BUDGET_T, confirm: process.env.CARD_CONFIRM,
