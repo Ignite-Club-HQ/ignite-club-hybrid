@@ -136,3 +136,10 @@ test('register-closed resumes a half-registered group by adding only the placeme
   assert.ok(resume > 0 && resume < opening.indexOf('router.register_group(group'));
   assert.match(opening, /Incomplete group placement registry/);
 });
+
+test('the commit step saves the approval even before the snapshot file exists', () => {
+  const yml = readFileSync(new URL('../.github/workflows/open-group-general.yml', import.meta.url), 'utf8');
+  assert.match(yml, /git add deploy\/groups\/g2\/general-opening\.json\n/);
+  assert.match(yml, /if \[ -f frontend\/src\/live\/generated\/routingGates\.ts \]; then git add/);
+  assert.doesNotMatch(yml, /git add deploy\/groups\/g2\/general-opening\.json frontend/);
+});
