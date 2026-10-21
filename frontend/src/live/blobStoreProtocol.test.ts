@@ -100,6 +100,7 @@ describe("media_blob_store contract", () => {
       "rekey_principal",
       "retained_snapshot_page",
       "retire_upload_outcomes",
+      "seal_account_removal",
       "set_capacity_limit",
       "set_club_domain_canister",
       "set_club_media_transfer_fence",
