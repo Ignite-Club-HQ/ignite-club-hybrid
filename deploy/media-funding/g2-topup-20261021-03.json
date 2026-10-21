@@ -92,7 +92,7 @@
     "feeCycles": "100000000",
     "targetT": "1.5"
   },
-  "phase": "delivered",
+  "phase": "transferring",
   "createdAt": "2026-10-21T06:46:39.608Z",
   "order": {
     "order_id": "co-53-a19ddede5da0cad536f480e606b77c04",
@@ -125,5 +125,14 @@
     "balance": "6601025386230"
   },
   "balanceAfter": "6601025386230",
-  "testReady": true
+  "testReady": true,
+  "transfers": [
+    {
+      "id": "yfwyv-nyaaa-aaaal-qxpyq-cai",
+      "name": "club_domain",
+      "amount": "517339954362",
+      "beforeCycles": "982647527548",
+      "phase": "transferring"
+    }
+  ]
 }
