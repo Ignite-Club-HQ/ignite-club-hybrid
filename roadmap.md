@@ -1,6 +1,10 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Active scope — minimum Group 2 test opening (21 October 2026, 03:07 UTC)
+- [x] 20:06 UTC owner report: **Open Group 2 to everyone succeeded** — Group 2 is registered, verified, snapshotted and open (accepting=true). Remaining follow-ups below.
+- [ ] Sync the GitHub snapshot commit so this checkout's `frontend/src/live/generated/routingGates.ts` stops being `null` — until the snapshot ships in a frontend build, `generalActivation` keeps ICP routing inactive while the router may already place new clubs into Group 2, so any test club would resolve to the legacy shared canisters. Sync first, then verify a signed-in test club resolves and works against Group 2 (sign-in, club creation, photos, messaging, notifications).
+- [ ] Rerun `Report group health to the router` after opening so the now-accepting group has fresh health readings.
+
 - [x] Fix screenshot-reported snapshot/open blocker: normalize removal-wiring Nat64 revision to lossless decimal text before hashing and emitting the report/generated snapshot. Actual emission/hash/readback with maximum Nat64 plus opening regressions: 32 Node and 6 activation tests pass. No live mutations; rerun snapshot on the synced branch, then open only after green.
 - [x] Fix successful-settings/failing-check notification-worker comparison: check/hash/snapshot resolve the existing CI delivery identity, reject conflicting approvals and retain exact queue/timer grants. 43 focused safeguards pass; preview build OK. No live changes; owner must rerun check after sync (empty confirmation); live grants remain unverified here.
 - [x] Fix reported reload checkpoint readback failure after eleven successful services: upgrade/reload persist against acknowledged immutable GitHub commit and exact blob, not lagging branch head. 39 safeguards pass, including actual reload-loop resume skipping eleven completed services and finishing timers/photo store; mismatched/unknown journal writes stop without replay. Live GitHub rerun remains owner-run; no live mutations here.
