@@ -753,9 +753,6 @@ persistent actor class Main(governorInit : Principal) = this {
   // Fresh private-delivery permission, separate from claim and shared devices.
   // False is a definitive denial; Err is unavailable/changed evidence (retry).
   public shared ({ caller }) func authorize_delivery(id : Text, key : Text) : async { #Ok : Bool; #Err : Text } {
-    if (not removalReceiver.enter(user)) throw Error.reject("Account removal fenced or operation capacity reached");
-    try {
-
     worker(caller);
     let captured = switch (get(id)) { case null return #Err("Unknown notification"); case (?n) n };
     if (captured.status != #Processing or captured.idempotency_key != key or not ownsLease(id, caller)) return #Err("Notification lease required");
@@ -789,8 +786,6 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     if (removalReceiver.denied(user)) return #Ok(false);
     #Ok(allowed and recipientAllowed(captured.user, captured.kind))
-    } finally { removalReceiver.leave(user) };
-  
     } finally { removalReceiver.leave(user) };
   };
 
@@ -1798,7 +1793,10 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
   func recipientFenced(user : Text) : Bool {
-    removal_subjects.entries().any(func(entry) = entry.0.toText() == user or "principal:" # entry.0.toText() == user)
+    for ((subject, _) in removal_subjects.entries()) {
+      if (subject.toText() == user or "principal:" # subject.toText() == user) return true;
+    };
+    false
   };
   public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
     switch (removalReceiver.prepare(caller, request)) {
