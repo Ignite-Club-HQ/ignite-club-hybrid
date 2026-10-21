@@ -38,7 +38,13 @@ jobs:
       - name: Install project dependencies
         run: node scripts/ensure-frontend-deps.mjs
       - name: Test opening safeguards
-        run: node --test scripts/group-general-opening-workflow.test.mjs scripts/group2-upgrade-rules.test.mjs
+        run: node --test scripts/group-general-opening-workflow.test.mjs scripts/group2-upgrade-rules.test.mjs scripts/opening-worker.test.mjs
+      - name: Resolve existing notification worker
+        if: inputs.action != 'settings' && inputs.action != 'register-closed'
+        env:
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
+        run: bash scripts/resolve-group-push-worker.sh
       - name: Write existing governor key
         env:
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}

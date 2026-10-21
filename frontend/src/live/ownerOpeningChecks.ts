@@ -61,7 +61,9 @@ export function verifyOwnerReciprocalConfiguration(spec: OwnerCheckSpec & { iden
     for (const peer of peers) if (value(rows, peer) !== id(peer)) throw new Error(`Wrong reciprocal authority: ${name}.${peer}`);
   }
   const queue = observed.find(s => s.name === 'notification_queue')?.configuration ?? [];
-  if (value(queue, 'identity_access') !== spec.identityAccess || !queue.some(r => r[0] === 'worker' && r[1] === spec.pushWorker)) throw new Error('Shared identity or notification worker missing');
+  if (!spec.pushWorker) throw new Error('Opening approval notification worker missing');
+  if (value(queue, 'identity_access') !== spec.identityAccess) throw new Error('Notification queue shared identity binding mismatch');
+  if (!queue.some(r => r[0] === 'worker' && r[1] === spec.pushWorker)) throw new Error('Notification queue has not granted the expected delivery worker');
   const timer = observed.find(s => s.name === 'timer_jobs')?.configuration ?? [];
   if (!timer.some(r => r[0] === 'worker:*' && r[1] === spec.pushWorker)) throw new Error('Timer worker missing');
   const club = observed.find(s => s.name === 'club_domain')?.configuration ?? [];
