@@ -130,3 +130,9 @@ test('committed g2 approval budgets fit the router limits (heap 1..3 GiB, cycles
   assert.match(readFileSync(new URL('../backend/shard_router/src/discovery.rs', import.meta.url), 'utf8'), /p\.deployment_revision == 0/);
   assert.ok(opening.indexOf('Approval budgets outside router limits') < opening.indexOf('router.register_group('));
 });
+
+test('register-closed resumes a half-registered group by adding only the placement', () => {
+  const resume = opening.indexOf("'placement-resume'");
+  assert.ok(resume > 0 && resume < opening.indexOf('router.register_group(group'));
+  assert.match(opening, /Incomplete group placement registry/);
+});
