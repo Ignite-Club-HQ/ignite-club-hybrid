@@ -149,12 +149,16 @@ export const idlFactory = ({ IDL }) => {
     'opened_revision' : IDL.Nat64,
   });
   const Result_15 = IDL.Variant({ 'Ok' : OwnerOpening, 'Err' : IDL.Text });
+  const Result_16 = IDL.Variant({
+    'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+    'Err' : IDL.Text,
+  });
   const GroupRegistrySnapshot = IDL.Record({
     'groups' : IDL.Vec(ShardGroup),
     'placements' : IDL.Vec(GroupPlacement),
     'revision' : IDL.Nat64,
   });
-  const Result_16 = IDL.Variant({
+  const Result_17 = IDL.Variant({
     'Ok' : GroupRegistrySnapshot,
     'Err' : IDL.Text,
   });
@@ -164,16 +168,16 @@ export const idlFactory = ({ IDL }) => {
     'next_cursor' : IDL.Opt(IDL.Text),
     'revision' : IDL.Nat64,
   });
-  const Result_17 = IDL.Variant({ 'Ok' : GroupRegistryPage, 'Err' : IDL.Text });
-  const Result_18 = IDL.Variant({
+  const Result_18 = IDL.Variant({ 'Ok' : GroupRegistryPage, 'Err' : IDL.Text });
+  const Result_19 = IDL.Variant({
     'Ok' : IDL.Vec(GroupAssignment),
     'Err' : IDL.Text,
   });
-  const Result_19 = IDL.Variant({
+  const Result_20 = IDL.Variant({
     'Ok' : IDL.Opt(OwnerOpening),
     'Err' : IDL.Text,
   });
-  const Result_20 = IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text });
+  const Result_21 = IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text });
   
   return IDL.Service({
     'abort_domain_migration' : IDL.Func(
@@ -250,10 +254,11 @@ export const idlFactory = ({ IDL }) => {
     'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
     'open_owner_test_group' : IDL.Func([OwnerOpeningApproval], [Result_15], []),
     'place_my_new_club' : IDL.Func([IDL.Text, IDL.Text], [Result_4], []),
-    'read_group_registry' : IDL.Func([IDL.Text], [Result_16], []),
+    'read_group_opening_configuration' : IDL.Func([], [Result_16], []),
+    'read_group_registry' : IDL.Func([IDL.Text], [Result_17], []),
     'read_group_registry_page' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Opt(IDL.Text), IDL.Nat32],
-        [Result_17],
+        [Result_18],
         [],
       ),
     'read_hosted_club_assignment' : IDL.Func(
@@ -263,7 +268,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_my_group_assignments' : IDL.Func(
         [IDL.Vec(IDL.Text), IDL.Text, IDL.Nat64],
-        [Result_18],
+        [Result_19],
         [],
       ),
     'read_my_new_club_placement' : IDL.Func(
@@ -271,10 +276,10 @@ export const idlFactory = ({ IDL }) => {
         [Result_4],
         [],
       ),
-    'read_my_owner_test_opening' : IDL.Func([IDL.Text], [Result_19], []),
+    'read_my_owner_test_opening' : IDL.Func([IDL.Text], [Result_20], []),
     'read_new_club_creation_authorized' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Text],
-        [Result_20],
+        [Result_21],
         [],
       ),
     'record_group_health' : IDL.Func(

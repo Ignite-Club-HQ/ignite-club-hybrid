@@ -121,17 +121,19 @@ export type Result_14 = { 'Ok' : Page } |
   { 'Err' : string };
 export type Result_15 = { 'Ok' : OwnerOpening } |
   { 'Err' : string };
-export type Result_16 = { 'Ok' : GroupRegistrySnapshot } |
+export type Result_16 = { 'Ok' : Array<[string, string]> } |
   { 'Err' : string };
-export type Result_17 = { 'Ok' : GroupRegistryPage } |
+export type Result_17 = { 'Ok' : GroupRegistrySnapshot } |
   { 'Err' : string };
-export type Result_18 = { 'Ok' : Array<GroupAssignment> } |
+export type Result_18 = { 'Ok' : GroupRegistryPage } |
   { 'Err' : string };
-export type Result_19 = { 'Ok' : [] | [OwnerOpening] } |
+export type Result_19 = { 'Ok' : Array<GroupAssignment> } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : AssignResult } |
   { 'Err' : string };
-export type Result_20 = { 'Ok' : boolean } |
+export type Result_20 = { 'Ok' : [] | [OwnerOpening] } |
+  { 'Err' : string };
+export type Result_21 = { 'Ok' : boolean } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
@@ -225,10 +227,11 @@ export interface _SERVICE {
    * the healthiest accepting group. Capped per principal; retries are free.
    */
   'place_my_new_club' : ActorMethod<[string, string], Result_4>,
-  'read_group_registry' : ActorMethod<[string], Result_16>,
+  'read_group_opening_configuration' : ActorMethod<[], Result_16>,
+  'read_group_registry' : ActorMethod<[string], Result_17>,
   'read_group_registry_page' : ActorMethod<
     [string, [] | [bigint], [] | [string], number],
-    Result_17
+    Result_18
   >,
   'read_hosted_club_assignment' : ActorMethod<
     [string, string, bigint],
@@ -236,7 +239,7 @@ export interface _SERVICE {
   >,
   'read_my_group_assignments' : ActorMethod<
     [Array<string>, string, bigint],
-    Result_18
+    Result_19
   >,
   /**
    * Consensus creator receipt only; never grants club membership or data access.
@@ -248,14 +251,14 @@ export interface _SERVICE {
   /**
    * Caller-scoped consensus discovery, including after stopping new placements.
    */
-  'read_my_owner_test_opening' : ActorMethod<[string], Result_19>,
+  'read_my_owner_test_opening' : ActorMethod<[string], Result_20>,
   /**
    * Only the registered destination club authority can check a creator receipt.
    * This does not authorize private reads or grant cross-club membership.
    */
   'read_new_club_creation_authorized' : ActorMethod<
     [Principal, string, string, string],
-    Result_20
+    Result_21
   >,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
