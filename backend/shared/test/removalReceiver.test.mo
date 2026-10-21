@@ -16,6 +16,9 @@ assert gate.prepare(outsider, request) == #Err("Configured rehearsal identity re
 assert not gate.denied(subject);
 assert gate.prepare(identity, request) == #Ok;
 assert gate.denied(subject);
+assert gate.snapshotDenied(to_candid ({ nested = ?subject }));
+assert gate.snapshotDenied(to_candid ({ legacy = subject.toText() }));
+assert not gate.snapshotDenied(to_candid ({ nested = outsider }));
 assert not gate.enter(subject);
 assert gate.prepare(identity, request) == #Ok;
 assert gate.prepare(identity, { request with generation = 2 }) == #Err("Immutable removal fence conflict");
