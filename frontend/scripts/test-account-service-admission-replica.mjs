@@ -281,11 +281,28 @@ try {
  assert.ok(heldDrain.outstanding>0n,'Held key request must prevent a drained receipt');
  ok(await pii.prepare_account_removal(receiverRequest));
  assert.ok('Err' in await pii.prepare_account_removal({...receiverRequest,generation:8n}));
+ queue.setPrincipal(governor);
+ ok(await queue.enqueue('held-delivery',victim.toText(),'app','event','Held worker delivery','held-delivery-key'));
+ const heldDelivery=ok(await queue.claim(99999999999999n,200)).find(n=>n.id==='held-delivery');
+ assert.ok(heldDelivery,'Positive worker lease must exist before fencing');
+ queue.setPrincipal(victim);
+ assert.ok('Err' in await queue.delete_notification('held-delivery'));
+ assert.ok('Err' in await queue.clear_inbox(victim.toText(),[]));
  for (const receiver of [club,vault,events,competition,league,points,media,insights,queue,chat]) {
   receiver.setPrincipal(identity.canisterId);
   ok(await receiver.prepare_account_removal(receiverRequest));
-  assert.equal(ok(await receiver.read_account_removal_drain(receiverRequest)).outstanding,0n);
+  assert.equal(ok(await receiver.read_account_removal_drain(receiverRequest)).outstanding,receiver===queue?1n:0n);
  }
+ queue.setPrincipal(governor);
+ assert.equal(ok(await queue.recover()),0,'Recovery must not reset an issued external capability');
+ assert.ok('Err' in await queue.authorize_delivery('held-delivery','held-delivery-key'));
+ await pic.upgradeCanister({canisterId:services[3].canisterId,wasm:process.env.NOTIFICATION_QUEUE_WASM,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
+ queue.setPrincipal(identity.canisterId);
+ assert.equal(ok(await queue.read_account_removal_drain(receiverRequest)).outstanding,1n,'Unsettled external delivery must survive upgrade');
+ queue.setPrincipal(stranger); await denied(()=>queue.acknowledge('held-delivery','held-delivery-key'));
+ queue.setPrincipal(governor); ok(await queue.acknowledge('held-delivery','held-delivery-key'));
+ queue.setPrincipal(identity.canisterId);
+ assert.equal(ok(await queue.read_account_removal_drain(receiverRequest)).outstanding,0n,'Only authenticated lease settlement releases delivery drain');
  // Existing local roles remain: denial must come from the durable human fence.
  vault.setPrincipal(victim); await denied(()=>vault.read_account_list_club_files('club',[],[]));
  club.setPrincipal(extra[0].canisterId); await denied(()=>club.read_has_club_staff_role(victim,'club'));
