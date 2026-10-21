@@ -12,7 +12,7 @@ GOVERNOR = "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae"
 
 
 class DeploySafetyTests(unittest.TestCase):
-    def run_deploy(self, modern, deployed=False, key_safe=True):
+    def run_deploy(self, modern, deployed=False, key_safe=True, scope="all"):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             log = temp / "calls"
@@ -35,6 +35,7 @@ esac
 if [[ "$1" != *media-key-deploy-preflight.mjs ]]; then exec "$REAL_NODE" "$@"; fi
 printf 'key-preflight %s\n' "$2" >> "$CALL_LOG"
 if [ "$KEY_SAFE" != 1 ]; then exit 43; fi
+if [ "$2" = before ]; then mkdir -p "$(dirname "$4")"; printf '{}' > "$4"; fi
 exit 0
 ''')
             preflight.chmod(0o755)
@@ -42,7 +43,7 @@ exit 0
                                CALL_LOG=str(log), MODERN=str(int(modern)), DEPLOYED=str(int(deployed)), ICP_PUSH_WORKER_SEED="",
                                TEST_GOVERNOR=GOVERNOR, GOVERNOR=GOVERNOR,
                                KEY_SAFE=str(int(key_safe)),
-                               DEPLOY_TARGET="mainnet", ICP_ENV="ic")
+                               DEPLOY_TARGET="mainnet", ICP_ENV="ic", DEPLOY_SCOPE=scope)
             result = subprocess.run(["bash", str(ROOT / "scripts/deploy-mainnet.sh")],
                                     env=environment, capture_output=True, text=True)
             return result, log.read_text().splitlines()
@@ -83,6 +84,20 @@ exit 0
         self.assertEqual(sum(call.startswith("deploy") for call in calls), 1)
         self.assertFalse(any("reinstall" in call or "replace" in call for call in calls))
         self.assertFalse(any(call.startswith("canister call") for call in calls))
+
+    def test_history_scope_only_upgrades_two_existing_canisters(self):
+        result, calls = self.run_deploy(True, deployed=True, scope="history")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c for c in calls if c.startswith("deploy")], ["deploy competition_domain events_domain -e ic -y --mode upgrade --no-create"])
+        mutations = [c for c in calls if c.startswith("canister call")]
+        self.assertEqual(len(mutations), 4)
+        self.assertTrue(all(c.startswith(("canister call events_domain ", "canister call competition_domain ")) for c in mutations))
+
+    def test_history_failure_never_falls_back_to_install(self):
+        result, calls = self.run_deploy(True, scope="history")
+        self.assertEqual(result.returncode, 42)
+        self.assertEqual(sum(c.startswith("deploy") for c in calls), 1)
+        self.assertFalse(any(c.startswith("canister call") for c in calls))
 
 
 if __name__ == "__main__":
