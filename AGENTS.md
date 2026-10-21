@@ -41,7 +41,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages; reconciliation cannot enable encrypted moves. Policy 2026-10-19: never move clubs holding encrypted media or build re-encryption; keep the fail-closed gate. Existing clubs stay put; place new clubs into groups. Why: photo keys belong to the creating group.
-- Cross-group accounts/admission and messaging receivers stay local-only; no live flags. Identity denials/eligibility never grant resources. Activation needs all-service fences/inventory/drain/mirrors and history recovery; read backend/AGENTS.md. Why: messaging tests cannot authorize Group 2.
+- Cross-group admission/receivers stay local-only; no live flags. Eligibility never grants resources. Read backend/ and scripts/AGENTS.md: release preflight never authorizes opening; complete fences/drain/mirrors/recovery required. Why: partial seals/offline adapters cannot release Group 2.
 
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 
