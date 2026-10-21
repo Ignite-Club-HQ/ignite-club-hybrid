@@ -1,6 +1,7 @@
 /** Manual governor check/open/stop. No deploy, creation, funding, moves or
  * rehearsal configuration. All mutable actions require exact revision CAS. */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, openSync, fsyncSync, closeSync, renameSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { Actor, HttpAgent, CanisterStatus } from '@icp-sdk/core/agent';
 import { IDL } from '@icp-sdk/core/candid';
@@ -23,7 +24,14 @@ Principal.fromText(spec.owner);
 const agent = await HttpAgent.create({ host: spec.host, identity });
 const router = Actor.createActor<_SERVICE>(idlFactory, { agent, canisterId: spec.routerId });
 const ok = <T>(r: { Ok: T } | { Err: string }): T => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
-const save = (v: unknown) => writeFileSync(out, JSON.stringify(v, (_, x) => typeof x === 'bigint' ? String(x) : x, 2));
+const save = (v: unknown) => {
+  const temp = `${out}.tmp`;
+  const fd = openSync(temp, 'w', 0o600);
+  try { writeFileSync(fd, JSON.stringify(v, (_, x) => typeof x === 'bigint' ? String(x) : x, 2)); fsyncSync(fd); } finally { closeSync(fd); }
+  renameSync(temp, out);
+  const directory = openSync(dirname(out), 'r');
+  try { fsyncSync(directory); } finally { closeSync(directory); }
+};
 const readConfig = async (id: string, resultVariant = false) => {
   const rows = IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text));
   const factory = () => IDL.Service({ read_group_opening_configuration: IDL.Func([], [resultVariant ? IDL.Variant({ Ok: rows, Err: IDL.Text }) : rows], []) });

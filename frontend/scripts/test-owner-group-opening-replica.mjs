@@ -44,9 +44,17 @@ try {
   router.actor.setPrincipal(owner); const assigned = ok(await router.actor.place_my_new_club(ids[0], 'ic')); assert.equal(assigned.group_id, 'g2');
   club.actor.setPrincipal(owner); ok(await club.actor.create_club(ids[0], 'Owner test', 'owner-test', [], []));
   assert.deepEqual(ok(await club.actor.read_my_club_memberships_indexed([], 100)).clubs, [ids[0]]);
+  // An assigned UUID is a positive control for the suspension rule: without
+  // the identity check this exact create would succeed.
+  const pending = ok(await router.actor.place_my_new_club(ids[1], 'ic'));
+  identity.actor.setPrincipal(governor); ok(await identity.actor.set_account_status(ownerAccount.id, { Suspended: null }));
+  club.actor.setPrincipal(owner); assert.ok('Err' in await club.actor.create_club(ids[1], 'Suspended pending', 'suspended-pending', [], []));
+  router.actor.setPrincipal(owner); assert.ok('Err' in await router.actor.place_my_new_club(ids[1], 'ic'));
+  identity.actor.setPrincipal(governor); ok(await identity.actor.set_account_status(ownerAccount.id, { Active: null }));
+  club.actor.setPrincipal(owner); ok(await club.actor.create_club(ids[1], 'Resumed pending', 'resumed-pending', [], []));
   router.actor.setPrincipal(governor); ok(await router.actor.stop_owner_test_group('ic', await router.actor.version()));
   assert.equal(ok(await router.actor.list_groups())[0].accepting, false);
-  router.actor.setPrincipal(owner); assert.ok('Err' in await router.actor.place_my_new_club(ids[1], 'ic')); assert.deepEqual(ok(await router.actor.place_my_new_club(ids[0], 'ic')), assigned);
+  router.actor.setPrincipal(owner); assert.ok('Err' in await router.actor.place_my_new_club('00000000-0000-4000-8000-000000000099', 'ic')); assert.deepEqual(ok(await router.actor.place_my_new_club(ids[1], 'ic')), pending); assert.deepEqual(ok(await router.actor.place_my_new_club(ids[0], 'ic')), assigned);
   assert.equal(ok(await router.actor.read_my_group_assignments([ids[0]], 'ic', await router.actor.version())).length, 1);
   identity.actor.setPrincipal(governor);
   // Eligibility uses current human account status; suspended owners cannot

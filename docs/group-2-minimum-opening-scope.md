@@ -24,7 +24,15 @@ The next implementation is the bounded production admission/dispatch path plus i
 - Real two-authority rehearsal passed: creates/readback in both groups, direct unplaced/stolen creation denial, stale/foreign receipt denial, stop further placements with retained club access, upgrade-preserved creator ownership, club-scoped removal and deletion locks. Other domain endpoints in this test are metadata fixtures.
 - Existing real two-group five-service private-photo decrypt/upload/chat/notification regression passed separately, with provider sends stubbed. Router Rust: 34 tests. Six focused frontend suites: 70 tests in ICP and 70 in Supabase. Candid drift: 17 contracts. No live writes, flags or deployments.
 
-**Still necessary:** an owner-restricted production admission policy and its integration with app routing and approved opening attestation, then signed-in acceptance. Neither existing opening refusal was removed; g2 remains closed. The current batch does not claim that a limited live opening path is finished.
+**Superseded by the owner-only opening batch below.** General activation and its refusal remain unchanged; the independent bounded path does not release them.
+
+## Owner-only opening batch: 21 October 2026, 03:23 UTC
+
+Built a separate manual protected-environment workflow for closed registration, exact live placement checks, explicit governor-signed owner opening and stop. Router memory 15 restricts admission to g2, the app owner and explicit test UUIDs while general accepting stays false. Actual consensus configuration readers check reciprocal authorities/worker grants; destination creation and placement check current shared identity eligibility, with post-await revision/receipt rechecks. Owner app routing includes only g2 plus existing shared clubs; Supabase/general gates remain unchanged. Unknown outcomes retain reservations; stop/upgrade preserve existing assignments and membership-controlled access.
+
+Verification: 118 focused tests per backend mode, 39 router + 55 identity + 4 timer Rust tests, real owner opening/creation/readback/stop/upgrade rehearsal, real thirteen-service closed configuration/read-denial/business/upgrade test, two-group encrypted media/chat/removal/notification regression and 17-contract drift passed. Provider sends are stubbed; real sign-in/Android/push acceptance remains unverified. Public preview opens without page errors; preview builds report OK.
+
+See `docs/group-2-owner-opening.md` for exact workflow prerequisites. Nothing deployed/opened. The owner must configure the GitHub reviewer restriction, separately release the reviewed modules/configuration, supply the exact live approval and run checks before opening. Local artifacts are not mainnet release fingerprints.
 
 ## Deferred unless a demonstrated opening dependency requires them
 

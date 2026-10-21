@@ -7,7 +7,7 @@
 import type { FeatureArea } from './featureBackend';
 import type { FeatureBackendContext } from './featureRouter';
 import type { GroupDomain, ClubAssignment } from './groupRouting';
-import { activationStatus, chooseRoute, SHIPPED_GATES, type ActivationGates } from './groupActivation';
+import { activationStatus, SHIPPED_GATES, type ActivationGates } from './groupActivation';
 import { clearOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
