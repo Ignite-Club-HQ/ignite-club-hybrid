@@ -16,6 +16,16 @@ Owner scope clarification: 21 October 2026, 03:07 UTC. This replaces the expande
 
 The next implementation is the bounded production admission/dispatch path plus its authority/club-access checks, not completing every item from the broader 1–5 backlog. Determining the exact checks requires tracing that path; source refusals must not simply be removed. No current readiness or mainnet verification is claimed.
 
+## Limited implementation batch: 21 October 2026
+
+- Router memory 14 persistently binds every new self-placement to its original principal. A different caller or a legacy/governor-created assignment cannot claim a retry. Consensus creator receipts are registry-revision checked and refuse while deletion locks exist; receipts never grant club membership.
+- Destination verification is an update callable only by the registered club authority, with complete group placement and original creator/group checks. Newly provisioned club authorities may enable mandatory creation binding with all three placement-router/group/target settings; no settings preserves existing creation behavior, partial settings refuse, unavailable/denying router refuses. This is not an activation flag and no deployed settings were changed.
+- Dispatcher now reserves placement before opening its fresh session, then verifies the exact creator receipt before a single creation attempt. It no longer uses a pre-placement registry snapshot. Principal/host/network/target IDs isolate cached sessions.
+- Real two-authority rehearsal passed: creates/readback in both groups, direct unplaced/stolen creation denial, stale/foreign receipt denial, stop further placements with retained club access, upgrade-preserved creator ownership, club-scoped removal and deletion locks. Other domain endpoints in this test are metadata fixtures.
+- Existing real two-group five-service private-photo decrypt/upload/chat/notification regression passed separately, with provider sends stubbed. Router Rust: 34 tests. Six focused frontend suites: 70 tests in ICP and 70 in Supabase. Candid drift: 17 contracts. No live writes, flags or deployments.
+
+**Still necessary:** an owner-restricted production admission policy and its integration with app routing and approved opening attestation, then signed-in acceptance. Neither existing opening refusal was removed; g2 remains closed. The current batch does not claim that a limited live opening path is finished.
+
 ## Deferred unless a demonstrated opening dependency requires them
 
 - Expanded account-wide erasure completion and global drain coordination.
