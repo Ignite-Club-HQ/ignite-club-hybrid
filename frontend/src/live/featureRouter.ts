@@ -97,7 +97,9 @@ export async function withFeatureBackend<T>(
 
 /** Both ICP sign-in paths obey the same scope/activation boundary. */
 async function dispatchIcp<T>(feature: FeatureArea, providers: FeatureBackendProviders<T>, context: FeatureBackendContext, scope?: ClubScope): Promise<T> {
-  const { identity } = context;
+  if (scope && 'newClubId' in scope && !scope.legacy) {
+    scope.newClubId = await nextOwnerTestClubId(context, scope.newClubId);
+  }
   // Group routing switch-on lock: shipped off, so every club uses the shared
   // canisters. If ever switched on without the club-scoped dispatcher, fail
   // closed instead of silently sending a moved club to the old group.
@@ -133,6 +135,3 @@ function hasSupabaseSession(): boolean {
 
 export { writeOnce } from "./clubScope";
 /** Use after backend selection: Supabase UUID creation remains unchanged. */
-export async function newClubIdForContext(context: FeatureBackendContext, requested: string) {
-  return nextOwnerTestClubId(context, requested);
-}

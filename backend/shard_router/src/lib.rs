@@ -17,6 +17,8 @@ use scale_probe::Probe;
 mod discovery;
 mod media_growth;
 mod owner_opening;
+#[cfg(test)]
+mod owner_opening_tests;
 use owner_opening::{OwnerOpening, OwnerOpeningApproval};
 use discovery::GroupPlacement;
 use groups::{GroupAssignment, ShardGroup};
@@ -329,6 +331,7 @@ fn is_uuid(id: &str) -> bool {
 
 fn place_new_club_for(user: Principal, club_id: String, target_alias: String, now: u64) -> Outcome<GroupAssignment> {
     if user == Principal::anonymous() { return Err("Authentication required".into()); }
+    registry_writable()?;
     if !is_uuid(&club_id) { return Err("Club id must be a fresh UUID".into()); }
     // Idempotent retry requires the original authenticated creator. Location
     // metadata or an old governor assignment cannot authorize club creation.
@@ -340,6 +343,7 @@ fn place_new_club_for(user: Principal, club_id: String, target_alias: String, no
     let used = PLACERS.with(|m| m.borrow().get(&key).unwrap_or(0));
     if used >= MAX_SELF_PLACEMENTS { return Err("New club placement limit reached".into()); }
     let assignment = if let Some(receipt) = owner_opening(&target_alias).filter(|r| r.approval.owner == user) {
+        if media_growth_local() { return Err("Owner opening cannot bypass rehearsal growth accounting".into()); }
         if !receipt.accepting_new || !receipt.approval.club_ids.contains(&club_id) { return Err("Owner test placement stopped or UUID not approved".into()); }
         let mut group = group_for(&receipt.approval.group.id).ok_or("Missing owner group")?;
         if !owner_opening::same_inventory(&group, &receipt.approval.group) { return Err("Owner opening inventory changed".into()); }

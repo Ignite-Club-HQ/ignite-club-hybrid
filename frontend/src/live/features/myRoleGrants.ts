@@ -1,6 +1,7 @@
 import { connectLiveClubDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { activationStatus, SHIPPED_GATES } from "../groupActivation";
+import { readOwnerTestRoute } from '../ownerTestRouting';
 
 type Grant = Awaited<ReturnType<Awaited<ReturnType<typeof connectLiveClubDomain>>["actor"]["my_role_grants"]>>[number];
 
@@ -27,7 +28,7 @@ export function mergeRoleGrants(parts: Grant[][]): Grant[] {
  * at once and merge. Routing off (shipped): one shared call, as before.
  */
 export async function fetchMyRoleGrantsEverywhere(ctx: FeatureBackendContext): Promise<Grant[]> {
-  if (!activationStatus(SHIPPED_GATES).active) return rawGrants(ctx);
+  if (!activationStatus(SHIPPED_GATES).active && !await readOwnerTestRoute(ctx)) return rawGrants(ctx);
   const { clubDispatch } = await import("../groupDispatch");
   return clubDispatch.readAcross("membership", "club_domain", rawGrants, mergeRoleGrants);
 }

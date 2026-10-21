@@ -1,6 +1,7 @@
 import type { ClubScope, FeatureBackendContext } from './featureRouter';
 import type { FeatureArea } from './featureBackend';
 import { activationStatus, SHIPPED_GATES } from './groupActivation';
+import { hasOwnerTestRouting } from './ownerTestRouting';
 
 /** Composite feeds route each nested resource separately, never their whole context. */
 type Dispatcher = typeof import('./featureRouter')['withFeatureBackend'];
@@ -11,4 +12,4 @@ export function createContentReader(active: () => boolean, load: () => Promise<D
     return dispatch(feature, { supabase: () => { throw new Error('ICP content read cannot fall back'); }, icp: read }, scope);
   };
 }
-export const readContentInScope = createContentReader(() => activationStatus(SHIPPED_GATES).active, async () => (await import('./featureRouter')).withFeatureBackend);
+export const readContentInScope = createContentReader(() => activationStatus(SHIPPED_GATES).active || hasOwnerTestRouting(), async () => (await import('./featureRouter')).withFeatureBackend);

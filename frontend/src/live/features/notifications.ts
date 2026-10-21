@@ -141,7 +141,7 @@ export async function clearLiveInbox(
 
 async function mutateOwnedInbox(userId: string, clubId: string | null, action: 'read' | 'delete'): Promise<boolean> {
   const { activationStatus, SHIPPED_GATES } = await import('../groupActivation');
-  if (!activationStatus(SHIPPED_GATES).active) return false;
+  if (!activationStatus(SHIPPED_GATES).active && !(await import('../ownerTestRouting')).hasOwnerTestRouting()) return false;
   const { withFeatureBackend } = await import('../featureRouter');
   const { acrossLists } = await import('../featureScopes');
   const { writeOnce } = await import('../clubScope');

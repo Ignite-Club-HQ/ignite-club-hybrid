@@ -7,9 +7,10 @@ type DeletionDomain = 'club_domain' | 'vault_domain' | 'events_domain' | 'messag
 export async function openAccountDeletionInventory(target: IcpTargetConfig, identity: Identity,
   required: readonly DeletionDomain[]) {
   const { activationStatus, SHIPPED_GATES } = await import('./groupActivation');
-  const grouped = activationStatus(SHIPPED_GATES).active;
+  const owner = activationStatus(SHIPPED_GATES).active ? null : await (await import('./ownerTestRouting')).readOwnerTestRoute({ target, identity });
+  const grouped = activationStatus(SHIPPED_GATES).active || Boolean(owner);
   const session = grouped
-    ? await (await import('./groupSessionLive')).openLiveGroupReadSession({ target, identity })
+    ? await (await import('./groupSessionLive')).openLiveGroupReadSession({ target, identity }, owner?.groupId)
     : undefined;
   try {
     const targets = session
