@@ -3,6 +3,9 @@
 ## Current request — Group 2 installation failures
 - [x] Correct compiled-file discovery using final CLI artifacts; nine focused checks pass.
 - [x] Reuse the existing notification-worker seed in closed install/configure workflows; eight focused checks and both workflow configurations pass. Live installation requires the owner's fresh GitHub run and existing worker secret or explicit principal variable.
+- [x] Owner ran Install new group (closed) 21 Oct: g2 installed, configured (33 reciprocal settings incl. dedicated blob store `ycx6b-…` and notification worker grant), phase `checked`, stays CLOSED/unregistered. Independently verified live: all 13 canisters answer cycles/memory queries, ~1T cycles each (normal post-install level; scheduled fuel tops up).
+- [ ] Owner next: run Deploy ICP canisters (mainnet) once so Group 1's notification_queue gets the same push-worker principal derived from the new ICP_PUSH_WORKER_SEED (grant step in scripts/deploy-mainnet.sh line ~135).
+- [ ] g2 stays closed: opening for real clubs remains gated on the approved activation gates (operator approval, verified recovery, full rehearsal, mainnet verification, removal wiring at the approved registry revision) plus the unfinished receiver/drain engineering (see simplified-scaling section).
 
 ## Current request — preserve History and PlayHQ under score privacy
 - [x] Owner approval 21 Oct 00:23 UTC: applied focused Supabase History/score-privacy migration and ACL hardening after live-column/FK rehearsal. Live verification: 69 fixtures, 10 protected results, 66 History rows, zero raw fixture/event scores. Targeted report tests pass both modes; history-only upgrade workflow prepared.
