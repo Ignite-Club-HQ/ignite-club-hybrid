@@ -33,10 +33,19 @@ jobs:
       ICP_HOME: ${{ github.workspace }}/.icp-home
     steps:
       - name: Confirm
+        env:
+          RAW_CONFIRM: ${{ inputs.confirm }}
+          RAW_GROUP_ID: ${{ inputs.group_id }}
         run: |
-          test "${{ inputs.confirm }}" = "INSTALL CLOSED GROUP" || { echo "::error::Type INSTALL CLOSED GROUP to confirm"; exit 1; }
-          echo "${{ inputs.group_id }}" | grep -Eq '^g[0-9]{1,3}$' || { echo "::error::group id must look like g2"; exit 1; }
-          test "${{ inputs.group_id }}" != "g1" || { echo "::error::g1 is the live group"; exit 1; }
+          set -euo pipefail
+          # Trim only surrounding whitespace (mobile keyboards add a trailing space); the phrase itself stays exact.
+          trim() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"; printf '%s' "$v"; }
+          confirm="$(trim "$RAW_CONFIRM")"
+          group_id="$(trim "$RAW_GROUP_ID")"
+          test "$confirm" = "INSTALL CLOSED GROUP" || { echo "::error::Type INSTALL CLOSED GROUP to confirm"; exit 1; }
+          echo "$group_id" | grep -Eq '^g[0-9]{1,3}$' || { echo "::error::group id must look like g2"; exit 1; }
+          test "$group_id" != "g1" || { echo "::error::g1 is the live group"; exit 1; }
+          printf 'GROUP_ID=%s\n' "$group_id" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -78,10 +87,10 @@ jobs:
           REQUEST_ID: ${{ inputs.request_id }}
           APPROVED_BY: ${{ github.actor }}
           WASM_DIR: ${{ runner.temp }}/wasm
-        run: npx --yes tsx@4 scripts/install-group-closed.ts "${{ inputs.group_id }}" "$RUNNER_TEMP/operator.pem"
+        run: npx --yes tsx@4 scripts/install-group-closed.ts "$GROUP_ID" "$RUNNER_TEMP/operator.pem"
       - name: Save progress
         if: always()
         run: |
           rm -f "$RUNNER_TEMP/operator.pem"
           git config user.name "ignite-operator"; git config user.email "operator@users.noreply.github.com"
-          git add "deploy/groups/${{ inputs.group_id }}" && git commit -m "Closed group ${{ inputs.group_id }} install progress" && git push || true
+          test -n "${GROUP_ID:-}" || exit 0; git add "deploy/groups/$GROUP_ID" && git commit -m "Closed group $GROUP_ID install progress" && git push || true
