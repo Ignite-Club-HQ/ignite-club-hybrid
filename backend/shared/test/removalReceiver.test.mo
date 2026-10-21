@@ -28,7 +28,11 @@ switch (gate.receipt(identity, request, identity, 2)) { case (#Ok(r)) assert r.o
 let restored = Receiver.Gate(true, ?identity, intents, subjects, active);
 assert not restored.enter(subject);
 switch (restored.receipt(identity, request, identity, 0)) { case (#Ok(r)) assert r.outstanding == 1; case _ assert false };
+assert restored.seal(identity, request, identity, 0) == #Err("Removal work remains outstanding");
 restored.leave(subject);
+switch (restored.seal(identity, request, identity, 0)) { case (#Ok(r)) assert r.outstanding == 0; case _ assert false };
+assert restored.seal(identity, request, identity, 1) == #Err("Removal work remains outstanding");
+assert restored.seal(outsider, request, identity, 0) == #Err("Configured rehearsal identity required");
 switch (restored.receipt(identity, request, identity, 0)) { case (#Ok(r)) assert r.outstanding == 0; case _ assert false };
 assert restored.enter(outsider);
 assert Receiver.Gate(false, ?identity, intents, subjects, active).prepare(identity, request) == #Err("Configured rehearsal identity required");

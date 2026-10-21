@@ -75,6 +75,14 @@ module {
         outstanding += switch (active.get(subject)) { case null 0; case (?n) n }
       };
       #Ok({ request; receiver; outstanding })
+    };
+    // A sealed receipt cannot be obtained from a cached observation or a
+    // timeout. Immutable fences reject new holds; outstanding work must settle.
+    public func seal(caller : Principal, request : Request, receiver : Principal, pending : Nat) : { #Ok : Receipt; #Err : Text } {
+      switch (receipt(caller, request, receiver, pending)) {
+        case (#Err(e)) #Err(e);
+        case (#Ok(r)) { if (r.outstanding != 0) #Err("Removal work remains outstanding") else #Ok(r) };
+      }
     }
   }
 }
