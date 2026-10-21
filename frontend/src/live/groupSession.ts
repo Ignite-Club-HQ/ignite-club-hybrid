@@ -17,6 +17,10 @@ export type GroupSessionTransport = {
   readMembershipsIndexed?(ctx: FeatureBackendContext, after: string | null, limit: number): Promise<{ clubs: string[]; next: string | null; aclRevision: bigint }>;
   /** Group of a club the caller may not belong to (e.g. a competition host). Returns location only; destinations keep their own access rules. */
   readHostedAssignment?(clubId: string, revision: bigint): Promise<ClubAssignment>;
+  /** On-chain deployment name the registry groups carry, when it differs from
+   * the frontend's own target alias (a local name for the same deployment).
+   * Read after readRegistry(); the session binds routing to this name. */
+  deploymentAlias?(): string | undefined;
 };
 /** A group's clubs use only that group's photo store: shared stores answer to
  * another group's club service and would refuse (or misjudge) its clubs. */
@@ -38,8 +42,9 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const registryFingerprint = (value: GroupRegistry) => JSON.stringify(value, (_key, v) => typeof v === 'bigint' ? v.toString() : v);
   const initialRegistry = registryFingerprint(registry);
   sameIdentity();
+  const expectedAlias = transport.deploymentAlias?.() ?? context.target.alias;
   if (registry.revision < 1n || registry.groups.length < 1 || registry.groups.length > 4096 ||
-      registry.deployment.alias !== context.target.alias || registry.deployment.networkKind !== context.target.networkKind ||
+      registry.deployment.alias !== expectedAlias || registry.deployment.networkKind !== context.target.networkKind ||
       new URL(registry.deployment.host).origin !== new URL(context.target.host).origin ||
       registry.bindings.length !== registry.groups.length || new Set(registry.groups.map(g => g.id)).size !== registry.groups.length ||
       new Set(registry.bindings.map(b => b.groupId)).size !== registry.bindings.length) throw new Error('Invalid authoritative group registry');
