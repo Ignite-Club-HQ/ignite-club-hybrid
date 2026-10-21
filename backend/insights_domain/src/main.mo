@@ -1,4 +1,8 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import RemovalReceiver "../../shared/RemovalReceiver";
+import RemovalEndpoints "../../shared/RemovalEndpoints";
+import Map "mo:core/Map";
+import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -14,15 +18,22 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
   transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
   transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
     case (?id) ?Principal.fromText(id); case null null
   };
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
+  var removal_subjects : Map.Map<Principal, Text>;
+  var removal_active : Map.Map<Principal, Nat>;
+  transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
+  include RemovalEndpoints(removalReceiver, Principal.fromActor(this), func _ = 0);
   func admitAccount(subject : Principal) : async () {
-    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
+    let eligible = await accountAdmission.eligible(subject);
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
@@ -176,7 +187,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");
@@ -184,6 +198,8 @@ persistent actor class Main(governorInit : Principal) {
       roles := roles.concat([{ user = principal; role; club_id; team_id }]);
     };
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // App-wide app_admin grants (club/team scoped grants use grant_role above,
@@ -212,7 +228,10 @@ persistent actor class Main(governorInit : Principal) {
   // existing app admin may promote another principal (not governor-only —
   // Internet Identity app admins have no Supabase-style single owner).
   public shared ({ caller }) func grant_app_admin(principal : Principal) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");
@@ -220,6 +239,8 @@ persistent actor class Main(governorInit : Principal) {
       roles := roles.concat([{ user = principal; role = "app_admin"; club_id = APP_ADMIN_CLUB_SENTINEL; team_id = null }]);
     };
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Mirrors ManageUsersPage's "Remove Admin" action. App-admin gated, but
@@ -228,40 +249,58 @@ persistent actor class Main(governorInit : Principal) {
   // via isGovernor — removing a role grant from them would be a no-op that
   // misleads the admin UI into thinking they lost access).
   public shared ({ caller }) func revoke_app_admin(principal : Principal) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (principal.equal(caller)) return #Err("Cannot revoke your own app admin access");
     if (isGovernor(principal)) return #Err("Cannot revoke the governor's app admin access");
     roles := roles.filter(func(item) = not (item.user.equal(principal) and item.role == "app_admin"));
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ================= Perf / analytics ingest =================
 
   public shared ({ caller }) func record_web_vital(metric_name : Text, metric_value : Float, rating : Text, page_path : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(metric_name) or not valid(page_path)) return #Err("Invalid web vital");
     webVitals := webVitals.concat([{ id = freshId("wv"); user = caller; metric_name; metric_value; rating; page_path; created_at_ms = nowMs() }]);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public type PerfSampleInput = { surface : Text; source : Text; duration_ms : Nat32; cache_hit : Bool; platform : Text };
 
   public shared ({ caller }) func record_perf_sample(surface : Text, source : Text, duration_ms : Nat32, cache_hit : Bool, platform : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(surface) or not valid(source)) return #Err("Invalid perf sample");
     perfSamples := perfSamples.concat([{ surface; user = caller; source; duration_ms; cache_hit; platform; created_at_ms = nowMs() }]);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Bounded batch variant so a single client flush (e.g. beforeunload) can
   // ship several buffered samples in one call instead of one round trip
   // each; caps at MAX_BATCH to bound message size like create_series' 366 cap.
   public shared ({ caller }) func record_perf_samples_batch(samples : [PerfSampleInput]) : async { #Ok : Nat32; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (samples.size() == 0) return #Err("Empty batch");
     if (samples.size() > MAX_BATCH) return #Err("Batch too large");
@@ -270,6 +309,8 @@ persistent actor class Main(governorInit : Principal) {
     let rows = samples.map(func(item : PerfSampleInput) : Types.PerfSample = { surface = item.surface; user = caller; source = item.source; duration_ms = item.duration_ms; cache_hit = item.cache_hit; platform = item.platform; created_at_ms = now });
     perfSamples := perfSamples.concat(rows);
     #Ok(Nat.toNat32(rows.size()))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   func percentile(sorted : [Nat32], p : Float) : Nat32 {
@@ -322,47 +363,72 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func record_message_sent(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     let day = dayKey(nowMs());
     bumpCounter(club_id, day, #Message, null);
     bumpCounter(club_id, day, #ActiveUser, ?account_id);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func record_rsvp_completed(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     let day = dayKey(nowMs());
     bumpCounter(club_id, day, #Rsvp, null);
     bumpCounter(club_id, day, #ActiveUser, ?account_id);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func record_active_user(club_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id) or not valid(account_id)) return #Err("Invalid input");
     bumpCounter(club_id, dayKey(nowMs()), #ActiveUser, ?account_id);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func record_sponsor_impression(club_id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     bumpCounter(club_id, dayKey(nowMs()), #SponsorImpression, null);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func record_sponsor_click(club_id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller); if (not valid(club_id)) return #Err("Invalid club");
     bumpCounter(club_id, dayKey(nowMs()), #SponsorClick, null);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   func kindEq(a : Types.EngagementEventKind, b : Types.EngagementEventKind) : Bool { a == b };
@@ -445,12 +511,17 @@ persistent actor class Main(governorInit : Principal) {
   // ================= Admin alerts =================
 
   public shared ({ caller }) func create_admin_alert(alert_type : Text, details : Text) : async { #Ok : Types.AdminAlert; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(alert_type)) return #Err("Invalid alert");
     let value : Types.AdminAlert = { id = freshId("alert"); alert_type; details; status = #Open; created_at_ms = nowMs(); resolved_at_ms = null; resolved_by = null };
     adminAlerts := adminAlerts.concat([value]);
     #Ok(value)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func list_admin_alerts(status : ?Types.AlertStatus) : async { #Ok : [Types.AdminAlert]; #Err : Text } {
@@ -460,7 +531,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func resolve_admin_alert(id : Text) : async { #Ok : Types.AdminAlert; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     switch (adminAlerts.find(func(item) = item.id == id)) {
       case null { #Err("Alert not found") };
@@ -470,16 +544,23 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ================= Audit logs =================
 
   public shared ({ caller }) func append_audit_log(action_type : Text, table_name : Text, target_user_id : ?Text, target_user_name : ?Text, details : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(action_type)) return #Err("Invalid audit log");
     auditLogs := auditLogs.concat([{ id = freshId("audit"); action_type; actor_id = caller; target_user_id; target_user_name; details; table_name; created_at_ms = nowMs() }]);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Paginated, optionally filtered by actor and/or action_type/table_name.
@@ -500,13 +581,18 @@ persistent actor class Main(governorInit : Principal) {
   // ================= Feedback =================
 
   public shared ({ caller }) func submit_feedback(kind : Text, title : ?Text, message : Text, page_url : ?Text) : async { #Ok : Types.Feedback; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(kind) or message == "" or message.size() > 4000) return #Err("Invalid feedback");
     let now = nowMs();
     let value : Types.Feedback = { id = freshId("fb"); user = caller; kind; title; message; page_url; status = #Open; admin_notes = null; created_at_ms = now; updated_at_ms = now };
     feedback := feedback.concat([value]);
     #Ok(value)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func my_feedback() : async [Types.Feedback] {
@@ -526,7 +612,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func update_feedback_status(id : Text, status : Types.FeedbackStatus, admin_notes : ?Text) : async { #Ok : Types.Feedback; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     switch (feedback.find(func(item) = item.id == id)) {
       case null { #Err("Feedback not found") };
@@ -536,15 +625,22 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Mirrors ManageFeedbackPage's delete action (Supabase `feedback.delete`).
   public shared ({ caller }) func delete_feedback(id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not feedback.any(func(item) = item.id == id)) return #Err("Feedback not found");
     feedback := feedback.filter(func(item) = item.id != id);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ================= Client perf log =================
@@ -558,7 +654,10 @@ persistent actor class Main(governorInit : Principal) {
   // stronger per-entry attestation.
 
   public shared ({ caller }) func record_client_perf(entries : [Types.ClientPerfEntry]) : async { #Ok : Nat32; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (entries.size() == 0) return #Err("Empty batch");
     if (entries.size() > MAX_BATCH) return #Err("Batch too large");
@@ -566,6 +665,8 @@ persistent actor class Main(governorInit : Principal) {
     let rows = entries.map(func(item : Types.ClientPerfEntry) : Types.ClientPerfSample = { path = item.path; metric = item.metric; value_ms = item.value_ms; at_ms = item.at_ms; user = item.principal });
     clientPerfSamples := clientPerfSamples.concat(rows);
     #Ok(Nat.toNat32(rows.size()))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Avg/p50/p95 value_ms for a page path (optionally filtered by metric)
@@ -610,7 +711,10 @@ persistent actor class Main(governorInit : Principal) {
     posters : ?Nat32,
     read_rate : ?Float,
   ) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(metric_key) or not valid(period)) return #Err("Invalid benchmark");
     let updated : Types.Benchmark = { metric_key; period; value; updated_at_ms = nowMs(); total_members; dau; wau; mau; posters; read_rate };
@@ -619,6 +723,8 @@ persistent actor class Main(governorInit : Principal) {
       case null { benchmarks := benchmarks.concat([updated]) };
     };
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func get_benchmarks(metric_keys : [Text]) : async { #Ok : [Types.Benchmark]; #Err : Text } {
@@ -639,7 +745,10 @@ persistent actor class Main(governorInit : Principal) {
   // instead of accumulating into the plain float counter, so repeat
   // impressions from the same account count once toward unique_reach.
   public shared ({ caller }) func record_sponsor_metric(sponsor_id : Text, metric : Text, delta : Float, account_id : ?Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(sponsor_id) or not valid(metric)) return #Err("Invalid sponsor metric");
     let period = dayKey(nowMs());
@@ -669,6 +778,8 @@ persistent actor class Main(governorInit : Principal) {
       case null { sponsorMetrics := sponsorMetrics.concat([{ sponsor_id; metric; period; value = delta }]) };
     };
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Club-owned sponsor counter (preferred). Same metric semantics as
@@ -676,7 +787,10 @@ persistent actor class Main(governorInit : Principal) {
   // move with the club. Legacy sponsor-only rows for this sponsor are
   // folded into this club on first use (a sponsor belongs to one club).
   public shared ({ caller }) func record_club_sponsor_metric(club_id : Text, sponsor_id : Text, metric : Text, delta : Float, account_id : ?Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(club_id) or not valid(sponsor_id) or not valid(metric)) return #Err("Invalid sponsor metric");
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
@@ -690,6 +804,8 @@ persistent actor class Main(governorInit : Principal) {
     };
     addClubMetric(club_id, sponsor_id, metric, period, delta);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   func addClubMetric(club_id : Text, sponsor_id : Text, metric : Text, period : Text, delta : Float) {
@@ -725,11 +841,16 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-only: fold legacy sponsor-only rows into a club before a move,
   // so a sponsor that has not been shown since the upgrade still moves.
   public shared ({ caller }) func claim_legacy_sponsor_metrics(club_id : Text, sponsor_ids : [Text]) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not fenceGov(caller)) return #Err("Governor required");
     if (sponsor_ids.size() > 500) return #Err("Too many sponsors");
     for (s in sponsor_ids.values()) claimLegacySponsor(club_id, s);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func get_sponsor_performance(sponsor_id : Text, period : Text) : async { #Ok : Types.SponsorPerformance; #Err : Text } {
@@ -776,13 +897,18 @@ persistent actor class Main(governorInit : Principal) {
   var memoryReports : [{ at : Int; source : Text; readings_json : Text; analysis_json : Text; author : Principal }];
 
   public shared ({ caller }) func add_memory_report(source : Text, readings_json : Text, analysis_json : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admins only");
     if (readings_json.size() > 20_000 or analysis_json.size() > 20_000) return #Err("Report too large");
     let entry = { at = Time.now(); source; readings_json; analysis_json; author = caller };
     let all = memoryReports.concat([entry]);
     memoryReports := if (all.size() > 200) all.sliceToArray(all.size() - 200, all.size()) else all;
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func list_memory_reports(limit : Nat) : async [{ at : Int; source : Text; readings_json : Text; analysis_json : Text }] {
@@ -811,7 +937,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func upsert_ad_setting(location : Text, is_enabled : Bool, override_sponsors : Bool, show_only_when_no_sponsors : Bool) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(location)) return #Err("Invalid location");
     let now = nowMs();
@@ -821,6 +950,8 @@ persistent actor class Main(governorInit : Principal) {
       adSettings := adSettings.concat([{ location; is_enabled; override_sponsors; show_only_when_no_sponsors; updated_at_ms = now }]);
     };
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public query ({ caller }) func list_ads() : async { #Ok : [Types.AppAd]; #Err : Text } {
@@ -830,7 +961,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_ad(input : Types.AppAdInput) : async { #Ok : Types.AppAd; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(input.name)) return #Err("Invalid ad name");
     if (input.ad_type != "image" and input.ad_type != "logo_text") return #Err("Invalid ad type");
@@ -845,10 +979,15 @@ persistent actor class Main(governorInit : Principal) {
     };
     ads := ads.concat([ad]);
     #Ok(ad)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func update_ad(id : Text, input : Types.AppAdInput) : async { #Ok : Types.AppAd; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(input.name)) return #Err("Invalid ad name");
     if (input.ad_type != "image" and input.ad_type != "logo_text") return #Err("Invalid ad type");
@@ -866,35 +1005,52 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func set_ad_active(id : Text, is_active : Bool) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not ads.any(func(a) = a.id == id)) return #Err("Ad not found");
     ads := ads.map(func(a) = if (a.id == id) ({ a with is_active; updated_at_ms = nowMs() }) else a);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func delete_ad(id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not ads.any(func(a) = a.id == id)) return #Err("Ad not found");
     ads := ads.filter(func(a) = a.id != id);
     adEvents := adEvents.filter(func(e) = e.ad_id != id);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // View/click ingest for the ad carousel (app_ad_analytics). Any signed-in
   // member may record; the dedupe/debounce policy stays client-side.
   public shared ({ caller }) func record_ad_event(ad_id : Text, event_type : Text, context : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(ad_id) or not valid(context)) return #Err("Invalid ad event");
     if (event_type != "view" and event_type != "click") return #Err("Invalid event type");
     if (not ads.any(func(a) = a.id == ad_id)) return #Err("Ad not found");
     adEvents := adEvents.concat([{ id = freshId("ade"); ad_id; event_type; context; user = caller; created_at_ms = nowMs() }]);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // All location settings, for the admin ads settings tab.
@@ -931,20 +1087,30 @@ persistent actor class Main(governorInit : Principal) {
   // view/reaction/comment totals without this canister holding any media.
 
   public shared ({ caller }) func record_photo_upload(club_id : Text, photo_id : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not valid(club_id) or not valid(photo_id)) return #Err("Invalid photo upload");
     photoUploads := photoUploads.concat([{ photo_id; club_id; uploaded_at_ms = nowMs() }]);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func record_photo_engagement(photo_id : Text, kind : Types.PhotoEngagementKind) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(photo_id)) return #Err("Invalid photo engagement");
     photoEngagementEvents := photoEngagementEvents.concat([{ photo_id; kind; created_at_ms = nowMs() }]);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Count of photos uploaded to a club within [since_ms, until_ms).
@@ -986,11 +1152,16 @@ persistent actor class Main(governorInit : Principal) {
     session_id : Text,
     duration_seconds : Nat32,
   ) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (not valid(user_id) or not valid(page_path) or not valid(page_label) or not valid(session_id)) return #Err("Invalid activity entry");
     userActivity := userActivity.concat([{ user_id; club_id; page_path; page_label; session_id; started_at_ms = nowMs(); duration_seconds }]);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Admin-gated page-view drill-down over [since_ms, until_ms), optionally
@@ -1011,6 +1182,7 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Account removal fenced");
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
     if (old.equal(new)) return #err("Old and new principal must differ");
@@ -1119,7 +1291,10 @@ persistent actor class Main(governorInit : Principal) {
 
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_list_app_admins() : async { #Ok : [Principal]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let admins = roles.filter(func(item) = item.role == "app_admin");
     var out : [Principal] = [];
@@ -1127,10 +1302,15 @@ persistent actor class Main(governorInit : Principal) {
       if (not out.any(func(p) = p.equal(item.user))) { out := out.concat([item.user]) };
     };
     #Ok(out)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_perf_aggregate(surface : Text, source : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.PerfAggregate; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let matches = perfSamples.filter(func(item) =
       item.surface == surface and (source == null or source == ?item.source) and item.created_at_ms >= since_ms and item.created_at_ms < until_ms
@@ -1146,59 +1326,104 @@ persistent actor class Main(governorInit : Principal) {
       p50_ms = percentile(sorted, 0.5);
       p95_ms = percentile(sorted, 0.95);
     })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_club_engagement_totals(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.EngagementTotals; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(totalsFor(club_id, since_ms, until_ms))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_club_engagement_benchmarks(club_id : Text, since_ms : Nat64, until_ms : Nat64, prev_since_ms : Nat64, prev_until_ms : Nat64) : async { #Ok : Types.EngagementBenchmarks; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok({ club_id; current = totalsFor(club_id, since_ms, until_ms); previous = totalsFor(club_id, prev_since_ms, prev_until_ms) })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_club_engagement_message_volume(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(seriesFor(club_id, #Message, since_ms, until_ms))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_club_engagement_rsvp_completion_series(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(seriesFor(club_id, #Rsvp, since_ms, until_ms))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_club_engagement_active_users(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.EngagementDayPoint]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     let inRange = engagementCounters.filter(func(item) = item.club_id == club_id and kindEq(item.kind, #ActiveUser) and item.day >= dayKey(since_ms) and item.day <= dayKey(until_ms));
     #Ok(inRange.map(func(item) = { day = item.day; value = Nat.toNat32(item.activeUsers.size()) }).sort(func(a, b) = if (a.day == b.day) #equal else if (a.day < b.day) #less else #greater))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_club_engagement_sponsor_performance(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : { impressions : [Types.EngagementDayPoint]; clicks : [Types.EngagementDayPoint] }; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok({ impressions = seriesFor(club_id, #SponsorImpression, since_ms, until_ms); clicks = seriesFor(club_id, #SponsorClick, since_ms, until_ms) })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_club_engagement_total_unique_reach(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Nat32; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(totalsFor(club_id, since_ms, until_ms).active_users)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_admin_alerts(status : ?Types.AlertStatus) : async { #Ok : [Types.AdminAlert]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     #Ok(adminAlerts.filter(func(item) = status == null or status == ?item.status))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_audit_logs(actor_filter : ?Principal, action_type : ?Text, table_name : ?Text, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.AuditLog]; total : Nat32 }; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let boundedLimit = Nat32.min(limit, 200);
     let matches = auditLogs.filter(func(item) =
@@ -1209,26 +1434,41 @@ persistent actor class Main(governorInit : Principal) {
     let start = Nat.min(Nat32.toNat(offset), matches.size());
     let end = Nat.min(start + Nat32.toNat(boundedLimit), matches.size());
     #Ok({ items = matches.sliceToArray(start, end); total = Nat.toNat32(matches.size()) })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_my_feedback() : async [Types.Feedback] {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     feedback.filter(func(item) = item.user.equal(caller))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_feedback(status : ?Types.FeedbackStatus, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.Feedback]; total : Nat32 }; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let boundedLimit = Nat32.min(limit, 200);
     let matches = feedback.filter(func(item) = status == null or status == ?item.status);
     let start = Nat.min(Nat32.toNat(offset), matches.size());
     let end = Nat.min(start + Nat32.toNat(boundedLimit), matches.size());
     #Ok({ items = matches.sliceToArray(start, end); total = Nat.toNat32(matches.size()) })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_client_perf_aggregate(path : Text, metric : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.ClientPerfAggregate; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let matches = clientPerfSamples.filter(func(item) =
       item.path == path and (metric == null or metric == ?item.metric) and item.at_ms >= since_ms and item.at_ms < until_ms
@@ -1244,17 +1484,27 @@ persistent actor class Main(governorInit : Principal) {
       p50_ms = percentile(sorted, 0.5);
       p95_ms = percentile(sorted, 0.95);
     })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_benchmarks(metric_keys : [Text]) : async { #Ok : [Types.Benchmark]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (metric_keys.size() == 0) return #Ok(benchmarks);
     #Ok(benchmarks.filter(func(item) = metric_keys.any(func(k) = k == item.metric_key)))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_sponsor_performance(sponsor_id : Text, period : Text) : async { #Ok : Types.SponsorPerformance; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let legacy = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period).map(func(item) = { metric = item.metric; value = item.value });
     let owned = clubSponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period);
@@ -1267,10 +1517,15 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok({ sponsor_id; period; metrics })
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_sponsor_benchmarks(sponsor_ids : [Text], since_period : Text, until_period : Text) : async { #Ok : [Types.SponsorBenchmarkRow]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     if (sponsor_ids.size() == 0 or sponsor_ids.size() > 100) return #Err("Invalid sponsor list");
     #Ok(sponsor_ids.map(func(sponsor_id : Text) : Types.SponsorBenchmarkRow {
@@ -1286,6 +1541,8 @@ persistent actor class Main(governorInit : Principal) {
       let ctr = if (impressions == 0) 0.0 else Int.toFloat(Nat32.toNat(clicks)) / Int.toFloat(Nat32.toNat(impressions));
       { sponsor_id; impressions; clicks; unique_reach; ctr }
     }))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_memory_reports(limit : Nat) : async [{ at : Int; source : Text; readings_json : Text; analysis_json : Text }] {
@@ -1297,24 +1554,42 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func read_account_is_app_admin() : async Bool {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     isAppAdmin(caller)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_ads() : async { #Ok : [Types.AppAd]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     #Ok(ads.sort(func(a, b) = Nat32.compare(a.display_order, b.display_order)))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_ad_settings() : async { #Ok : [Types.AppAdSetting]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     #Ok(adSettings.sort(func(a, b) = Text.compare(a.location, b.location)))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_ad_event_summary(since_ms : Nat64) : async { #Ok : [Types.AdEventSummary]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let inRange = adEvents.filter(func(e) = e.created_at_ms >= since_ms);
     var result : [Types.AdEventSummary] = [];
@@ -1332,16 +1607,26 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok(result)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_count_photos(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Nat; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(photoUploads.filter(func(item) = item.club_id == club_id and item.uploaded_at_ms >= since_ms and item.uploaded_at_ms < until_ms).size())
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_photo_engagement_totals(photo_ids : [Text]) : async { #Ok : [Types.PhotoEngagementTotal]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     if (photo_ids.size() == 0) return #Ok([]);
     if (photo_ids.size() > 300) return #Err("Too many photo ids");
@@ -1354,10 +1639,15 @@ persistent actor class Main(governorInit : Principal) {
         comments = matches.filter(func(item) = item.kind == #Comment).size();
       }
     }))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_list_user_activity(club_id : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.UserActivityEntry]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not isAppAdmin(caller) and (switch (club_id) { case (?c) not isClubAdmin(caller, c); case null true })) return #Err("Admin required");
     let matches = userActivity.filter(func(item) =
       (club_id == null or club_id == item.club_id) and item.started_at_ms >= since_ms and item.started_at_ms < until_ms
@@ -1365,5 +1655,7 @@ persistent actor class Main(governorInit : Principal) {
     let sorted = matches.sort(func(a, b) = Nat64.compare(b.started_at_ms, a.started_at_ms));
     let end = Nat.min(MAX_ACTIVITY_LIST, sorted.size());
     #Ok(sorted.sliceToArray(0, end))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 };

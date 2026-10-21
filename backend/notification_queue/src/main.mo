@@ -1,4 +1,7 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import RemovalReceiver "../../shared/RemovalReceiver";
+import Map "mo:core/Map";
+import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -18,15 +21,21 @@ import ScheduleCalendar "scheduleCalendar";
 import SchedulePatch "schedulePatch";
 import UpdateReminderAccess "updateReminderAccess";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
   transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
   transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
     case (?id) ?Principal.fromText(id); case null null
   };
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
+  var removal_subjects : Map.Map<Principal, Text>;
+  var removal_active : Map.Map<Principal, Nat>;
+  transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
   func admitAccount(subject : Principal) : async () {
-    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
+    let eligible = await accountAdmission.eligible(subject);
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
@@ -132,7 +141,7 @@ persistent actor class Main(governorInit : Principal) {
       scheduled = scheduled.filter(func(x) = x.club_id == ?c) }
   };
   func fenceDrop(c : Text) {
-
+    if (items.any(func(x) = x.club == c and x.status == #Processing)) Runtime.trap("Unsettled delivery must be retained");
     items := items.filter(func(x) = not (x.club == c));
     scheduled := scheduled.filter(func(x) = not (x.club_id == ?c));
   };
@@ -151,6 +160,8 @@ persistent actor class Main(governorInit : Principal) {
 
     if (s.items.any(func(x) = not (x.club == c))
         or s.scheduled.any(func(x) = not (x.club_id == ?c))) return #Err("Snapshot contains foreign records");
+    if (s.items.any(func(x) = recipientFenced(x.user) or x.status == #Processing)
+        or s.scheduled.any(func(x) = recipientFenced(x.author))) return #Err("Snapshot restores fenced or unsettled delivery");
     if (false) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
     items := items.concat(s.items);
@@ -173,7 +184,13 @@ persistent actor class Main(governorInit : Principal) {
       let subject = try { await async { ?Principal.fromText(user) } } catch (_) { null };
       switch (subject) {
         case null {};
-        case (?principal) { if (await accountAdmission.eligible(principal)) allowed := allowed.concat([user]) }
+        case (?principal) {
+          if (not removalReceiver.enter(principal)) continue;
+          try {
+            let eligible = await accountAdmission.eligible(principal);
+            if (eligible and not removalReceiver.denied(principal)) allowed := allowed.concat([user]);
+          } finally { removalReceiver.leave(principal) };
+        }
       };
     };
     allowed
@@ -189,11 +206,16 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
   func ownsInbox(caller : Principal, user : Text) : async Bool {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     // Current ICP rows use principal text; historical account-id rows require
     // authoritative subject-bound resolution. No browser account assertion.
-    await admitAccount(caller);
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (user == caller.toText()) return true;
-    switch (await callerAccountId(caller)) { case (?id) id == user; case null false }
+    switch (do { let removalReply = await callerAccountId(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) { case (?id) id == user; case null false }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Governor or club_domain app_admin grant. Fail-closed while
@@ -417,20 +439,23 @@ persistent actor class Main(governorInit : Principal) {
     body : Text,
     key : Text,
   ) : async Types.Result {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
-    if (not trustedService) await admitAccount(caller);
+    if (not trustedService) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
     if (not valid(id) or not valid(user) or not valid(club) or not valid(kind) or not valid(key)) {
       return #Err("Invalid notification fields");
     };
     if (UpdateReminderAccess.protectedKind(kind)) {
-      switch (await authorizeUpdateReminder(caller, [user], club)) {
+      switch (do { let removalReply = await authorizeUpdateReminder(caller, [user], club); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) {
         case (#Err(e)) { return #Err(e) };
         case (#Ok) {};
       };
     };
-    if (not trustedService) await admitAccount(caller);
+    if (not trustedService) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Notification scope changed");
     switch (get(id)) {
       case (?existing) {
@@ -456,6 +481,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(notification)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Browser fan-out: one update call enqueues the same notification for many
@@ -471,8 +498,11 @@ persistent actor class Main(governorInit : Principal) {
   // preference row are fail-open (treated as allowed), matching the safe
   // defaults returned by get_preferences.
   public shared ({ caller }) func fan_out(inputUsers : [Text], club : Text, kind : Text, body : Text, key_prefix : Text, related_id : ?Text) : async Types.ResultNat16 {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
-    if (not trustedService) await admitAccount(caller);
+    if (not trustedService) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
     if (inputUsers.size() == 0 or inputUsers.size() > 500) { return #Err("Invalid recipient count") };
@@ -488,7 +518,7 @@ persistent actor class Main(governorInit : Principal) {
       if (not users.any(func(u) = u == user)) users := users.concat([user]);
     };
     if (UpdateReminderAccess.protectedKind(kind)) {
-      switch (await authorizeUpdateReminder(caller, users, club)) {
+      switch (do { let removalReply = await authorizeUpdateReminder(caller, users, club); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) {
         case (#Err(e)) { return #Err(e) };
         case (#Ok) {};
       };
@@ -504,9 +534,9 @@ persistent actor class Main(governorInit : Principal) {
         is_app_admin : shared query (Principal) -> async Bool;
       };
       let permitted = try {
-        let roles = await clubs.list_user_club_roles(caller, club);
+        let roles = do { let removalReply = await clubs.list_user_club_roles(caller, club); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
         if (ScheduleAccess.canBroadcast(roles, related_id)) { true }
-        else { await clubs.is_app_admin(caller) }
+        else { do { let removalReply = await clubs.is_app_admin(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply } }
       } catch (_) { false };
       if (not permitted) { return #Err("Schedule manager required") };
       // Validate the full batch before writing any notification. Never trust
@@ -514,14 +544,14 @@ persistent actor class Main(governorInit : Principal) {
       for (user in users.values()) {
         let principal = Principal.fromText(user);
         if (Principal.isAnonymous(principal)) { return #Err("Invalid recipient") };
-        let roles = try { await clubs.list_user_club_roles(principal, club) }
+        let roles = try { do { let removalReply = await clubs.list_user_club_roles(principal, club); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply } }
           catch (_) { return #Err("Could not verify schedule recipient") };
         if (not ScheduleAccess.recipient(roles, related_id)) {
           return #Err("Recipient is not in the schedule scope")
         };
       };
     };
-    if (not trustedService) await admitAccount(caller);
+    if (not trustedService) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Notification scope changed");
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
     var created : Nat16 = 0;
@@ -548,6 +578,8 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok(created)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ---- Browser inbox surface ----
@@ -573,10 +605,13 @@ persistent actor class Main(governorInit : Principal) {
   // ownership check awaits an inter-canister lookup.
 
   public shared ({ caller }) func list_inbox(user : Text, club : ?Text, limit : Nat16) : async Types.Results {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
     if (limit == 0 or limit > 500) { return #Err("Invalid page size") };
-    if (not (await ownsInbox(caller, user))) return #Err("Not your inbox or account unavailable");
+    if (not (do { let removalReply = await ownsInbox(caller, user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Not your inbox or account unavailable");
     var res : [Types.Notification] = [];
     for (item in items.values()) {
       let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
@@ -585,22 +620,33 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok(res)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func mark_read(id : Text) : async Types.Result {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     authenticated(caller);
     let captured = switch (get(id)) { case null return #Err("Unknown notification"); case (?n) n };
-    if (not (await ownsInbox(caller, captured.user))) return #Err("Not your notification");
+    if (not (do { let removalReply = await ownsInbox(caller, captured.user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Not your notification");
     let index = switch (findIndex(id)) { case null return #Err("Unknown notification"); case (?i) i };
     if (items[index] != captured) return #Err("Notification changed");
+    if (captured.status == #Processing) return #Err("Notification delivery must settle before deletion");
     let updated : Types.Notification = { items[index] with read = true };
     replace(index, updated); #Ok(updated)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func mark_all_read(user : Text, club : ?Text) : async Types.ResultNat16 {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
-    if (not (await ownsInbox(caller, user))) return #Err("Not your inbox or account unavailable");
+    if (not (do { let removalReply = await ownsInbox(caller, user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Not your inbox or account unavailable");
     var marked : Nat16 = 0;
     var index = 0;
     for (item in items.values()) {
@@ -612,22 +658,33 @@ persistent actor class Main(governorInit : Principal) {
       index += 1;
     };
     #Ok(marked)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func delete_notification(id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     authenticated(caller);
     let captured = switch (get(id)) { case null return #Err("Unknown notification"); case (?n) n };
-    if (not (await ownsInbox(caller, captured.user))) return #Err("Not your notification");
+    if (not (do { let removalReply = await ownsInbox(caller, captured.user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Not your notification");
     let index = switch (findIndex(id)) { case null return #Err("Unknown notification"); case (?i) i };
     if (items[index] != captured) return #Err("Notification changed");
     items := items.filter(func(item) = item.id != id); clearLease(id); #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func clear_inbox(user : Text, club : ?Text) : async Types.ResultNat16 {
-    if (not (await ownsInbox(caller, user))) return #Err("Not your inbox");
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    if (not (do { let removalReply = await ownsInbox(caller, user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Not your inbox");
     authenticated(caller);
     var kept : [Types.Notification] = [];
     var removed : Nat16 = 0;
+    if (items.any(func(item) = item.user == user and item.status == #Processing and (switch (club) { case (?c) item.club == c; case null true }))) return #Err("Notification delivery must settle before clearing");
     for (item in items.values()) {
       let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
       if (item.user == user and clubOk) {
@@ -640,6 +697,8 @@ persistent actor class Main(governorInit : Principal) {
     };
     items := kept;
     #Ok(removed)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func claim(now_ms : Nat64, limit : Nat16) : async Types.Results {
@@ -667,7 +726,7 @@ persistent actor class Main(governorInit : Principal) {
         case null {};
         case (?index) {
           let item = items[index];
-          if (item == candidate and item.status == #Pending and not isFenced(item.club) and allowed.any(func(u) = u == item.user)) {
+          if (item == candidate and item.status == #Pending and not isFenced(item.club) and allowed.any(func(u) = u == item.user) and not recipientFenced(item.user)) {
             let processing : Types.Notification = { item with status = #Processing; attempts = item.attempts + 1 };
             replace(index, processing); setLease(item.id, caller); claimed := claimed.concat([processing]);
           }
@@ -705,19 +764,22 @@ persistent actor class Main(governorInit : Principal) {
     let subject = try { await async { ?Principal.fromText(captured.user) } } catch (_) { null };
     let ?user = subject else return #Err("Recipient identity unresolved");
     if (Principal.isAnonymous(user)) return #Ok(false);
+    if (not removalReceiver.enter(user)) return #Ok(false);
+    try {
+    do { let removalReply = await admitAccount(user); if (removalReceiver.denied(user)) throw Error.reject("Account removal fenced after callback"); removalReply };
     let cd = clubDomainCanister;
     let md = messagingDomainCanister;
     let allowed = try {
       if (captured.kind == "message_chat") {
         let ?authority = md else return #Err("Messaging authority unavailable");
         let messaging : actor { read_account_can_read_digest : shared (Principal, Text) -> async Bool } = actor(authority.toText());
-        await (with timeout = 10) messaging.read_account_can_read_digest(user, captured.club)
+        do { let removalReply = await (with timeout = 10) messaging.read_account_can_read_digest(user, captured.club); if (removalReceiver.denied(user)) throw Error.reject("Account removal fenced after callback"); removalReply }
       } else if (captured.club == "" or captured.club == "global" or captured.club == "app" or captured.kind == "club_invite" or captured.kind == "team_invite" or captured.kind == "membership_removed" or captured.kind == "role_removed") {
         true // App/personal and access-change notices do not grant club access.
       } else {
         let ?authority = cd else return #Err("Club authority unavailable");
         let clubs : actor { read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(authority.toText());
-        await (with timeout = 10) clubs.read_has_club_membership(user, captured.club)
+        do { let removalReply = await (with timeout = 10) clubs.read_has_club_membership(user, captured.club); if (removalReceiver.denied(user)) throw Error.reject("Account removal fenced after callback"); removalReply }
       }
     } catch (_) { return #Err("Delivery authority unavailable") };
     worker(caller);
@@ -726,7 +788,9 @@ persistent actor class Main(governorInit : Principal) {
       case (?fresh) { if (fresh != captured or not ownsLease(id, caller)) return #Err("Notification changed") };
       case null return #Err("Notification removed")
     };
+    if (removalReceiver.denied(user)) return #Ok(false);
     #Ok(allowed and recipientAllowed(captured.user, captured.kind))
+    } finally { removalReceiver.leave(user) };
   };
 
   public shared ({ caller }) func fail(id : Text, error : Text, retry_at_ms : ?Nat64) : async Types.Result {
@@ -751,10 +815,15 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func get_notification(id : Text) : async ?Types.Notification {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     if (Principal.isAnonymous(caller)) return null;
     let captured = switch (get(id)) { case null return null; case (?n) n };
-    if (not (await ownsInbox(caller, captured.user))) return null;
+    if (not (do { let removalReply = await ownsInbox(caller, captured.user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return null;
     switch (get(id)) { case (?fresh) { if (fresh == captured) ?fresh else null }; case null null }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func recover() : async Types.ResultNat16 {
@@ -762,7 +831,7 @@ persistent actor class Main(governorInit : Principal) {
     var recovered : Nat16 = 0;
     var index = 0;
     for (item in items.values()) {
-      if (item.status == #Processing) {
+      if (item.status == #Processing and not accountAdmissionEnabled) {
         replace(index, { item with status = #Pending });
         clearLease(item.id);
         recovered += 1;
@@ -834,7 +903,10 @@ persistent actor class Main(governorInit : Principal) {
     recurrence : Types.Recurrence,
     recurrence_until_ms : ?Nat64,
   ) : async Types.ScheduledResult {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
     if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     if (not valid(id) or not valid(author) or (not valid(body) and image_url == null)) {
@@ -863,6 +935,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(message)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Caller-scoped per target: returns the author's scheduled messages,
@@ -892,7 +966,10 @@ persistent actor class Main(governorInit : Principal) {
     recurrence : ?Types.Recurrence,
     recurrence_until_ms : ?Nat64,
   ) : async Types.ScheduledResult {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
     if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     switch (findScheduledIndex(id)) {
@@ -920,10 +997,15 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func cancel_scheduled(id : Text, author : Text) : async Types.ScheduledResult {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
     if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     switch (findScheduledIndex(id)) {
@@ -937,6 +1019,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Worker/governor guarded: the timer job marks a scheduled message sent
@@ -1053,6 +1137,11 @@ persistent actor class Main(governorInit : Principal) {
       deliver_scheduled_message : shared (Principal, Text, Text, Text, ?{ kind : Text; ref_id : Text; url : ?Text }, ?Text) -> async { #Ok : { id : Text }; #Err : Text };
     } = actor (Principal.toText(messaging));
     for (item in due.values()) {
+      if (not looksLikePrincipal(item.author)) continue;
+      let subject = try { await async { ?Principal.fromText(item.author) } } catch (_) { null };
+      let ?author = subject else continue;
+      if (not removalReceiver.enter(author)) continue;
+      try {
       if (accountAdmissionEnabled) {
         let allowed = await eligibleUsers([item.author]);
         if (allowed.size() == 0 or getScheduled(item.id) != ?item or scheduledFenced(item.id) or messagingDomainCanister != ?messaging) continue;
@@ -1071,8 +1160,8 @@ persistent actor class Main(governorInit : Principal) {
             let body = if (item.body == "" and attachment != null) { " " } else { item.body };
             try {
               switch (await chat.deliver_scheduled_message(Principal.fromText(item.author), conversation, body, "sched:" # item.id # ":" # Nat64.toText(slot), attachment, item.reply_to_id)) {
-                case (#Ok(msg)) { settleScheduled(item.id, slot, #Sent(msg.id)) };
-                case (#Err(e)) { settleScheduled(item.id, slot, #Failed(e)) };
+                case (#Ok(msg)) { if (not removalReceiver.denied(author) and messagingDomainCanister == ?messaging) settleScheduled(item.id, slot, #Sent(msg.id)) };
+                case (#Err(e)) { if (not removalReceiver.denied(author) and messagingDomainCanister == ?messaging) settleScheduled(item.id, slot, #Failed(e)) };
               };
             } catch (_) {
               // Transient call failure: stay Pending, retried next tick.
@@ -1080,6 +1169,7 @@ persistent actor class Main(governorInit : Principal) {
           };
         };
       };
+      } finally { removalReceiver.leave(author) };
     };
     deliveringScheduled := false;
   };
@@ -1162,7 +1252,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func upsert_preferences(user : Text, input : Types.PreferencesInput) : async Types.PreferencesResult {
-    if (not (await ownsInbox(caller, user))) return #Err("Not your preferences");
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    if (not (do { let removalReply = await ownsInbox(caller, user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Not your preferences");
     authenticated(caller);
     if (not valid(user)) { return #Err("Invalid user") };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
@@ -1186,6 +1279,8 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(created)
       };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ======================================================================
@@ -1219,7 +1314,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func upsert_push_alert_settings(input : Types.PushAlertSettingsInput) : async Types.PushAlertSettings {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     governorOnly(caller);
     let updated : Types.PushAlertSettings = {
       input with
@@ -1228,6 +1326,8 @@ persistent actor class Main(governorInit : Principal) {
     };
     push_settings := ?updated;
     updated
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ======================================================================
@@ -1253,6 +1353,9 @@ persistent actor class Main(governorInit : Principal) {
     recipients : [Text],
     mute_list : [Text],
   ) : async Types.ChatNotifyBatchResult {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
     authenticated(caller);
     if (not valid(message_id) or not valid(conversation_id) or not valid(sender)) {
       return #Err("Invalid chat notify fields");
@@ -1269,12 +1372,12 @@ persistent actor class Main(governorInit : Principal) {
     if (not fromMessagingDomain and Principal.toText(caller) != sender) {
       return #Err("Sender must match caller");
     };
-    if (not fromMessagingDomain) await admitAccount(caller);
+    if (not fromMessagingDomain) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     let effective_mute_list = if (fromMessagingDomain) { mute_list } else { [] };
     if (chatMessageProcessed(message_id)) { return #Ok(0) };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
     if (accountAdmissionEnabled and recipients.size() > 200) return #Err("Recipient admission batch exceeds 200");
-    let allowedRecipients = await eligibleUsers(recipients);
+    let allowedRecipients = do { let removalReply = await eligibleUsers(recipients); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (chatMessageProcessed(message_id)) return #Ok(0);
     var created : Nat16 = 0;
     for (recipient in recipients.values()) {
@@ -1306,6 +1409,8 @@ persistent actor class Main(governorInit : Principal) {
     };
     chat_notified_messages := chat_notified_messages.concat([message_id]);
     #Ok(created)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // ======================================================================
@@ -1336,7 +1441,10 @@ persistent actor class Main(governorInit : Principal) {
   // ======================================================================
 
   public shared ({ caller }) func register_device_token(platform : Text, token : Text, p256dh : ?Text, auth : ?Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
     if (not valid(platform) or not valid(token)) { return #Err("Invalid device token fields") };
     let user = Principal.toText(caller);
@@ -1348,6 +1456,8 @@ persistent actor class Main(governorInit : Principal) {
     });
     if (not replaced) { device_tokens := device_tokens.concat([entry]) };
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func unregister_device_token(token : Text) : async Types.DeviceTokenCountResult {
@@ -1361,7 +1471,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func register_device_version(platform : Text, app_version : ?Text, build_number : ?Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
     if (platform != "ios" and platform != "android" and platform != "web") return #Err("Invalid platform");
     for (value in [app_version, build_number].values()) {
@@ -1372,16 +1485,23 @@ persistent actor class Main(governorInit : Principal) {
     deviceVersions := deviceVersions.filter(func(v) = v.user != user or v.platform != platform);
     deviceVersions := deviceVersions.concat([{ user; platform; app_version; build_number }]);
     #Ok
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Version metadata is device-reported, not attestation. Never return push tokens.
   public shared ({ caller }) func get_update_reminder_audience(users : [Text], club : Text) : async { #Ok : [{ user : Text; platform : Text; app_version : ?Text; build_number : ?Text }]; #Err : Text } {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     if (users.size() > 500) return #Err("Too many recipients");
-    switch (await authorizeUpdateReminder(caller, users, club)) { case (#Err(e)) { return #Err(e) }; case (#Ok) {} };
+    switch (do { let removalReply = await authorizeUpdateReminder(caller, users, club); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) { case (#Err(e)) { return #Err(e) }; case (#Ok) {} };
     #Ok(deviceVersions.filter(func(v) = users.any(func(u) = u == v.user) and
       device_tokens.any(func(t) = t.user == v.user and t.platform == v.platform)))
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func list_device_tokens(users : [Text]) : async Types.DeviceTokensResult {
@@ -1408,8 +1528,11 @@ persistent actor class Main(governorInit : Principal) {
   // App-admin gated (governor or club_domain app_admin). Backs
   // PushAnalyticsPage's health dashboard and "Cleanup Stale" button.
   public shared ({ caller }) func get_push_delivery_health(now_ms : Nat64) : async Types.PushDeliveryHealthResult {
-    await admitAccount(caller);
-    switch (await appAdminOnly(caller)) {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
+    switch (do { let removalReply = await appAdminOnly(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) {
       case (#Err(e)) { return #Err(e) };
       case (#Ok) {};
     };
@@ -1441,14 +1564,19 @@ persistent actor class Main(governorInit : Principal) {
       failed_24h = failed;
       device_token_count = Nat.toNat32(device_tokens.size());
     });
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Removes device tokens untouched for more than `max_age_ms` (stale/dead
   // registrations — same intent as the Supabase cleanup-push-subscriptions
   // edge function). Returns the number removed.
   public shared ({ caller }) func cleanup_stale_device_tokens(now_ms : Nat64, max_age_ms : Nat64) : async Types.DeviceTokenCountResult {
-    await admitAccount(caller);
-    switch (await appAdminOnly(caller)) {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
+    switch (do { let removalReply = await appAdminOnly(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }) {
       case (#Err(e)) { return #Err(e) };
       case (#Ok) {};
     };
@@ -1456,6 +1584,8 @@ persistent actor class Main(governorInit : Principal) {
     let before = device_tokens.size();
     device_tokens := device_tokens.filter(func(t : Types.DeviceToken) : Bool { t.updated_at_ms >= cutoff });
     #Ok(Nat.toNat16(before - device_tokens.size()));
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
@@ -1470,6 +1600,7 @@ persistent actor class Main(governorInit : Principal) {
   // Lease.owner (always a worker principal), messagingDomainCanister
   // (canister wiring), chat_notified_messages (message ids, not identities).
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Account removal fenced");
     rekeyImpl(caller, old, new, dry_run, false)
   };
 
@@ -1480,6 +1611,8 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Account removal fenced");
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Account removal fenced");
     authenticated(caller);
     let isGov = switch (governor) { case (?g) { g.equal(caller) }; case null { false } };
     if (not isGov) return #err("Forbidden");
@@ -1597,7 +1730,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func read_account_list_scheduled(author : Text, target : ?Text) : async Types.ScheduledResults {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
     if (not ScheduleAccess.owns(caller, author)) { return #Err("Author mismatch") };
     if (not valid(author)) { return #Err("Invalid author") };
@@ -1610,15 +1746,20 @@ persistent actor class Main(governorInit : Principal) {
       if (item.author == author and targetOk) { res := res.concat([item]) };
     };
     #Ok(res)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_digest(source : Types.DigestSource, chat_scope_id : Text, since_ms : Nat64, limit : Nat16) : async Types.DigestResults {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     let configured = messagingDomainCanister;
     let messaging = switch (configured) { case null return #Err("Chat authority unavailable"); case (?id) id };
     let domain : actor { read_account_can_read_digest : shared (Principal, Text) -> async Bool } = actor(messaging.toText());
-    let allowed = try { await domain.read_account_can_read_digest(caller, chat_scope_id) } catch (_) { false };
-    await admitAccount(caller);
+    let allowed = try { do { let removalReply = await domain.read_account_can_read_digest(caller, chat_scope_id); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply } } catch (_) { false };
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (not allowed or configured != messagingDomainCanister) return #Err("Chat scope access forbidden");
     authenticated(caller);
     if (not valid(chat_scope_id)) { return #Err("Invalid chat scope") };
@@ -1630,23 +1771,57 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
     #Ok(res)
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_preferences(user : Text) : async Types.Preferences {
-    if (not (await ownsInbox(caller, user))) Runtime.trap("Not your preferences");
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    if (not (do { let removalReply = await ownsInbox(caller, user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) Runtime.trap("Not your preferences");
     authenticated(caller);
     switch (findPreference(user)) {
       case (?prefs) { prefs };
       case null { defaultPreferences(user) };
     }
+  
+    } finally { removalReceiver.leave(caller) };
   };
 
   public shared ({ caller }) func read_account_get_push_alert_settings() : async Types.PushAlertSettings {
-    await admitAccount(caller);
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     authenticated(caller);
     switch (push_settings) {
       case (?settings) { settings };
       case null { defaultPushAlertSettings() };
     }
+  
+    } finally { removalReceiver.leave(caller) };
+  };
+  func recipientFenced(user : Text) : Bool {
+    for ((subject, _) in removal_subjects.entries()) {
+      if (subject.toText() == user or "principal:" # subject.toText() == user) return true;
+    };
+    false
+  };
+  public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
+    switch (removalReceiver.prepare(caller, request)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok) {
+        // Processing rows and worker leases remain durable drain obligations.
+        // Cancelling an unclaimed notification is not evidence an external send ended.
+        items := items.map(func(item) = if (recipientFenced(item.user) and item.status == #Pending) ({ item with status = #Failed }) else item);
+        scheduled := scheduled.map(func(item) = if (recipientFenced(item.author) and item.status == #Pending) ({ item with status = #Cancelled }) else item);
+        #Ok
+      }
+    }
+  };
+  public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    let outstanding = items.filter(func(item) = item.status == #Processing and request.subjects.any(func(p) = p.toText() == item.user or "principal:" # p.toText() == item.user)).size();
+    removalReceiver.receipt(caller, request, Principal.fromActor(this), outstanding)
   };
 };
