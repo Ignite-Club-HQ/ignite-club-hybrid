@@ -435,6 +435,11 @@ fn require_governor() -> Outcome<()> {
         Err("Forbidden".into())
     }
 }
+#[ic_cdk::update]
+fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
+    require_governor()?;
+    Ok(vec![("deletion_authority".into(), deletion_authority().map(|p| p.to_text()).unwrap_or_default())])
+}
 
 fn validate_club_id(club_id: &str) -> Outcome<()> {
     if club_id.trim().is_empty() || club_id.len() > MAX_CLUB_ID_BYTES || club_id.contains(':') {

@@ -563,6 +563,13 @@ fn save_root() {
 fn metadata() -> Metadata {
     METADATA.with(|metadata| metadata.borrow().clone())
 }
+#[ic_cdk::update]
+fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
+    require_governor()?;
+    let m = metadata();
+    if m.workers.len() > 64 { return Err("Opening worker set exceeds bounded owner scope".into()); }
+    Ok(m.workers.iter().map(|w| (format!("worker:{}", w.scope), w.worker.to_text())).collect())
+}
 
 fn save_metadata(value: Metadata) {
     METADATA.with(|metadata| *metadata.borrow_mut() = value);

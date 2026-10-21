@@ -1,4 +1,5 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import Error "mo:core/Error";
 import MediaEvidence "../../shared/MediaEvidence";
@@ -78,6 +79,21 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
+  /// Bounded consensus configuration evidence; never changes or grants access.
+  public shared ({ caller }) func read_group_opening_configuration() : async [(Text, Text)] {
+    if (not isGovernor(caller)) Runtime.trap("Governor required");
+    [
+      ("club_domain", Principal.fromActor(this).toText()),
+      ("identity_access", OpeningConfiguration.optional(identityAccessCanister)),
+      ("notification_queue", OpeningConfiguration.optional(notificationQueueCanister)),
+      ("mini_league_domain", OpeningConfiguration.optional(miniLeagueDomainCanister)),
+      ("competition_domain", OpeningConfiguration.optional(competitionDomainCanister)),
+      ("events_domain", OpeningConfiguration.optional(eventsDomainCanister)),
+      ("messaging_domain", OpeningConfiguration.optional(messagingDomainCanister)),
+      ("pii_access_control", OpeningConfiguration.optional(piiCanister))
+    ].concat(competitionAuthorities.map(func p = ("competition_authority", p.toText())))
+      .concat(mediaQuotaStores.map(func p = ("media_store", p.toText())))
+  };
   // Live memory reading for the admin health page (public, like cycles_balance).
   public query func memory_stats() : async { heap_bytes : Nat; memory_bytes : Nat; stable_bytes : Nat } {
     {
