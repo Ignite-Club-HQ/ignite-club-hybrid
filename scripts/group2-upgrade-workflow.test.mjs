@@ -40,4 +40,14 @@ test('PII attestation is preserved in durable progress before upgrading', () => 
   assert.match(runner, /keyReceipt: JSON.parse\(readFileSync\(keyFile\)\)/);
   assert.match(runner, /else writeFileSync\(keyFile, JSON.stringify\(journal.keyReceipt\)\)/);
   assert.ok(runner.indexOf("keyGate('after');") < runner.indexOf("spawnSync('icp'"));
+});test('reload only reinstalls identical modules, behind its own confirmation and durable intent', () => {
+  assert.match(workflow, /options: \[check, upgrade, reload\]/);
+  assert.match(workflow, /RELOAD GROUP 2 SETTINGS/);
+  assert.match(runner, /CONFIRMATION\?\.trim\(\) !== 'RELOAD GROUP 2 SETTINGS'/);
+  const reload = runner.slice(runner.indexOf("if (action === 'reload') {\n"));
+  assert.ok(reload.indexOf('Reload refused: the staged') < reload.indexOf("spawnSync('icp'"));
+  assert.ok(reload.indexOf("step.phase = 'pending'; persist();") < reload.indexOf("spawnSync('icp'"));
+  assert.match(reload, /before.settingsHash !== step.settingsHash/);
+  assert.match(reload, /after.settingsHash !== step.settingsHash/);
+  assert.match(reload, /verifyUpgradeStatus\(plan, after, GROUP2_GOVERNOR, plan.newHash\)/);
 });
