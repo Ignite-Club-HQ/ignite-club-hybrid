@@ -7,12 +7,12 @@ on:
         required: true
         type: choice
         default: check
-        options: [check, open, stop]
+        options: [register-closed, check, open, stop]
       approval_file:
         description: Committed exact Group 2 opening approval JSON
         required: true
       confirmation:
-        description: OPEN GROUP 2 OWNER TEST or STOP GROUP 2 TEST PLACEMENTS (empty for check)
+        description: REGISTER GROUP 2 CLOSED, OPEN GROUP 2 OWNER TEST, or STOP GROUP 2 TEST PLACEMENTS (empty for check)
         required: false
         default: ''
 permissions:

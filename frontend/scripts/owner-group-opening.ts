@@ -10,9 +10,11 @@ import { verifyOwnerOpeningChecks, verifyOwnerReciprocalConfiguration, type Owne
 import { idlFactory } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/shard_router.did';
 import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
+import { routerGroupRecord } from '../src/live/groupProvisionRouter';
+import type { Provision } from '../src/live/groupProvisioner';
 
 const [action, file, pem, out] = process.argv.slice(2);
-if (!['check', 'open', 'stop'].includes(action) || !file || !pem || !out) throw new Error('Usage: owner-group-opening <check|open|stop> <approval.json> <operator.pem> <report.json>');
+if (!['register-closed', 'check', 'open', 'stop'].includes(action) || !file || !pem || !out) throw new Error('Usage: owner-group-opening <register-closed|check|open|stop> <approval.json> <operator.pem> <report.json>');
 const spec: OwnerCheckSpec & { identityAccess: string; pushWorker: string } = JSON.parse(readFileSync(file, 'utf8'));
 if (!/^https:\/\/icp-api\.io$/.test(spec.host)) throw new Error('Owner opening supports the pinned public-mainnet gateway only');
 const identity = loadOperatorIdentity(pem);
@@ -29,7 +31,23 @@ const readConfig = async (id: string, resultVariant = false) => {
   const reply = await actor.read_group_opening_configuration();
   return Array.isArray(reply) ? reply : ok(reply as { Ok: [string, string][] } | { Err: string });
 };
-if (action === 'stop') {
+if (action === 'register-closed') {
+  if (process.env.CONFIRMATION?.trim() !== 'REGISTER GROUP 2 CLOSED') throw new Error('Exact closed registration confirmation required');
+  const full = spec as typeof spec & { provisionFile: string; workloadIdentity: string; deploymentRevision: string; primarySubnet: string; maxClubs: number };
+  if (!/^\.\.\/deploy\/groups\/g2\/provision\.json$/.test(full.provisionFile)) throw new Error('Exact committed g2 provision file required');
+  const provision = JSON.parse(readFileSync(full.provisionFile, 'utf8'), (_, x) => x?.$bigint ? BigInt(x.$bigint) : x) as Provision;
+  if (provision.groupId !== 'g2' || provision.phase !== 'checked' || provision.pending) throw new Error('Complete checked closed g2 provision required');
+  const { group, placement } = routerGroupRecord(provision, { secret_workload_identity: full.workloadIdentity }, { targetAlias: spec.targetAlias, deploymentId: spec.deploymentId,
+    deploymentRevision: BigInt(full.deploymentRevision), host: spec.host, networkKind: 'public_mainnet', primarySubnet: full.primarySubnet,
+    approvedSubnets: [full.primarySubnet], additionalSubnetsEnabled: false }, { maxClubs: full.maxClubs, heapBudgetBytes: BigInt(spec.heapBudgetBytes), minCycles: BigInt(spec.minCycles) }, false);
+  if (await router.version() !== BigInt(spec.revision)) throw new Error('Registry revision changed before closed registration');
+  save({ action, pending: 'register', group, placement, revision: spec.revision });
+  const closed = ok(await router.register_group(group, BigInt(spec.revision)));
+  save({ action, closedRevision: closed, pending: 'placement', group, placement });
+  const revision = ok(await router.register_group_placement(placement, closed));
+  save({ action, closedRevision: closed, placementRevision: revision, group, placement });
+  console.log(`Group 2 registered CLOSED at revision ${revision}; no owner opening or general accepting enabled.`);
+} else if (action === 'stop') {
   if (process.env.CONFIRMATION?.trim() !== 'STOP GROUP 2 TEST PLACEMENTS') throw new Error('Exact stop confirmation required');
   const receipt = ok(await router.stop_owner_test_group(spec.targetAlias, BigInt(spec.revision)));
   save({ action, receipt });
@@ -70,7 +88,11 @@ if (action === 'stop') {
   if (action === 'open') {
     if (process.env.CONFIRMATION?.trim() !== 'OPEN GROUP 2 OWNER TEST') throw new Error('Exact owner opening confirmation required');
     // Signed explicit approval is separate from the read-only check.
-    const approval = { owner: Principal.fromText(spec.owner), group, placement, club_ids: spec.clubIds, expected_revision: registry.revision, evidence_sha256 };
+    const lowestCycles = observations.reduce((n, s) => s.cycles < n ? s.cycles : n, observations[0].cycles);
+    const largestHeap = observations.reduce((n, s) => s.heapBytes > n ? s.heapBytes : n, 0n);
+    save({ ...evidence, evidence_sha256, pending: 'record-owner-group-health' });
+    const healthRevision = ok(await router.record_group_health('g2', largestHeap, lowestCycles, registry.revision));
+    const approval = { owner: Principal.fromText(spec.owner), group, placement, club_ids: spec.clubIds, expected_revision: healthRevision, evidence_sha256 };
     const intent = { ...evidence, evidence_sha256, pending: approval };
     save(intent);
     const receipt = ok(await router.open_owner_test_group(approval));

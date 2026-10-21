@@ -18,6 +18,15 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
       if (ownerGroupId) {
         const route = await (await import('./ownerTestRouting')).readOwnerTestRoute(ctx);
         if (!route || route.groupId !== ownerGroupId) throw new Error('Owner routing approval required');
+        const receiptReply = await router.read_my_owner_test_opening(ctx.target.alias);
+        if ('Err' in receiptReply) throw new Error(receiptReply.Err);
+        const approval = receiptReply.Ok[0]?.approval;
+        const actual = snapshot.groups.find(g => g.id === ownerGroupId), placed = snapshot.placements.find(p => p.group_id === ownerGroupId);
+        const fingerprint = (v: unknown) => JSON.stringify(v, (_, x) => typeof x === 'bigint' ? String(x) : x);
+        if (!approval || !actual || !placed || fingerprint(placed) !== fingerprint(approval.placement) ||
+            fingerprint(actual.domains) !== fingerprint(approval.group.domains) || fingerprint(actual.photo_store) !== fingerprint(approval.group.photo_store) || actual.accepting) {
+          throw new Error('Owner opening inventory no longer matches the exact approved placement');
+        }
         snapshot.groups = snapshot.groups.filter(g => g.id === ownerGroupId);
         snapshot.placements = snapshot.placements.filter(p => p.group_id === ownerGroupId);
       }
