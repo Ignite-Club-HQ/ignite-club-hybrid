@@ -3,7 +3,7 @@ import { hasOwnerTestRouting } from './ownerTestRouting';
 import { withFeatureBackend, type ClubScope, type FeatureBackendContext } from './featureRouter';
 
 /** Nested reads must not reuse the first club's canisters for another club. */
-export function readMiniLeagueInScope<T>(
+export async function readMiniLeagueInScope<T>(
   context: FeatureBackendContext,
   scope: ClubScope,
   read: (context: FeatureBackendContext) => Promise<T>,

@@ -3,7 +3,7 @@ import { hasOwnerTestRouting } from './ownerTestRouting';
 import { withFeatureBackend, type FeatureBackendContext } from './featureRouter';
 
 /** Caller-wide reward helpers must resolve each club independently. */
-export function readPointsInClub<T>(
+export async function readPointsInClub<T>(
   context: FeatureBackendContext,
   clubId: string,
   read: (context: FeatureBackendContext) => Promise<T>,
