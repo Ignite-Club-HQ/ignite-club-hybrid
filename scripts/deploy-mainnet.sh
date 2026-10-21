@@ -21,6 +21,8 @@ GOVERNOR="${GOVERNOR:-gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giw
 export GOVERNOR
 DEPLOY_TARGET="${DEPLOY_TARGET:-mainnet}"
 ICP_ENV="${ICP_ENV:-ic}"
+DEPLOY_SCOPE="${DEPLOY_SCOPE:-all}"
+case "$DEPLOY_SCOPE" in all|history) ;; *) echo "ERROR: unsupported deployment scope"; exit 1;; esac
 PROJECT_DIR="$(cd "$(dirname "$0")/../deploy/$DEPLOY_TARGET" && pwd)"
 IDS_JSON="$PROJECT_DIR/.icp/data/mappings/$ICP_ENV.ids.json"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -58,6 +60,23 @@ fi
 if [ -f "$IDS_JSON" ] && node -e "const m=require('$IDS_JSON');process.exit(m.pii_access_control ? 0 : 1)"; then
   echo "==> Attesting original encrypted-photo key before any upgrade"
   node "$REPO_DIR/frontend/scripts/media-key-deploy-preflight.mjs" before "$IDS_JSON" "$KEY_RECEIPT" "$DEPLOY_TARGET" "$ICP_ENV"
+fi
+if [ "$DEPLOY_SCOPE" = history ]; then
+  [ "$DEPLOY_TARGET" = mainnet ] && [ "$ICP_ENV" = ic ] || { echo "ERROR: History upgrade requires mapped mainnet"; exit 1; }
+  [ -f "$KEY_RECEIPT" ] || { echo "ERROR: original key attestation required before upgrade"; exit 1; }
+  node -e "const m=require('$IDS_JSON');for(const k of ['events_domain','competition_domain','club_domain'])if(typeof m[k]!=='string')process.exit(1)"
+  echo "==> Upgrading only competition_domain and events_domain; no creation, media or scaling changes"
+  icp deploy competition_domain events_domain -e "$ICP_ENV" -y --mode upgrade --no-create
+  node "$REPO_DIR/frontend/scripts/media-key-deploy-preflight.mjs" after "$IDS_JSON" "$KEY_RECEIPT" "$DEPLOY_TARGET" "$ICP_ENV"
+  HISTORY_EVENTS="$(node -e "console.log(require('$IDS_JSON').events_domain)")"
+  HISTORY_COMPETITION="$(node -e "console.log(require('$IDS_JSON').competition_domain)")"
+  HISTORY_CLUB="$(node -e "console.log(require('$IDS_JSON').club_domain)")"
+  icp canister call competition_domain set_events_domain_canister "(principal \"$HISTORY_EVENTS\")" -e "$ICP_ENV"
+  icp canister call events_domain set_competition_domain_canister "(principal \"$HISTORY_COMPETITION\")" -e "$ICP_ENV"
+  icp canister call competition_domain set_club_domain_canister "(principal \"$HISTORY_CLUB\")" -e "$ICP_ENV"
+  icp canister call events_domain set_club_domain_canister "(principal \"$HISTORY_CLUB\")" -e "$ICP_ENV"
+  echo "==> History-only upgrade complete"
+  exit 0
 fi
 echo "==> Deploying all 18 canisters to $DEPLOY_TARGET (this funds them from your cycles balance)"
 # 1T cycles per canister (18T total) fits a ~8 ICP budget with headroom; top up later as needed.

@@ -18,7 +18,16 @@
 name: Deploy ICP canisters (mainnet)
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Upgrade scope (History only leaves media and scaling untouched)"
+        type: choice
+        required: true
+        default: history
+        options:
+          - history
+          - all
 
 permissions:
   # write: the run commits the canister ID mapping back so reruns reuse
@@ -35,6 +44,7 @@ jobs:
     timeout-minutes: 120
     env:
       ICP_HOME: ${{ github.workspace }}/.icp-home
+      DEPLOY_SCOPE: ${{ inputs.scope || 'all' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -98,6 +108,10 @@ jobs:
             echo "==> This MUST match the principal whose account address you funded."
             echo "key_source=secret" >> "$GITHUB_ENV"
           else
+            if [ "$DEPLOY_SCOPE" = history ]; then
+              echo "::error::History upgrades require the existing DEPLOYER_PEM; refusing to create a replacement identity."
+              exit 1
+            fi
             icp identity new ignite-governor --storage plaintext \
               --output-seed "$ICP_HOME/identity/keys/ignite-governor.seed.txt"
             icp identity default ignite-governor
@@ -117,6 +131,7 @@ jobs:
           icp cycles balance -n ic || true
 
       - name: Convert available ICP to cycles
+        if: inputs.scope != 'history'
         run: |
           set -euo pipefail
           # Outside the checkout — see "Show funding address and balances" above.
@@ -150,6 +165,7 @@ jobs:
             | xargs -r sed -i "s|$SENTINEL|$GOVERNOR|g"
 
       - name: Verify cycles are ready for deploy
+        if: inputs.scope != 'history'
         run: |
           set -uo pipefail
           # Outside the checkout — see "Show funding address and balances" above.
@@ -192,7 +208,7 @@ jobs:
           echo "==> funds, top up this identity's address and run the workflow again —"
           echo "==> already-created canisters are kept, nothing is lost."
 
-      - name: Deploy + wire all 18 canisters
+      - name: Deploy selected canisters
         env:
           ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
           DEPLOYER_PEM_FILE: ${{ github.workspace }}/.icp-home/identity/keys/ignite-governor.pem
