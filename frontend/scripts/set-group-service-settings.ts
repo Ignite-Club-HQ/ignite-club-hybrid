@@ -14,11 +14,11 @@ import { loadOperatorIdentity } from '../src/live/operatorTransport';
 import { idlFactory } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/shard_router.did';
 import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
-import { ADMISSION_FLAG, ADMISSION_AUTHORITY } from '../src/live/groupRemovalWiring';
+import { ADMISSION_DOMAINS, ADMISSION_FLAG, ADMISSION_AUTHORITY } from '../src/live/groupRemovalWiring';
 
 const GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 
-const [groupIdsArg, pem, report] = process.argv.slice(2);
+const [groupIdsArg, pem, reportPath] = process.argv.slice(2);
 if (!groupIdsArg || !pem || !report) throw new Error('Usage: set-group-service-settings <group_ids> <operator.pem> <report.json>');
 if (process.env.CONFIRMATION?.trim() !== 'SET SERVICE SETTINGS') throw new Error('Exact confirmation SET SERVICE SETTINGS required');
 const wanted = groupIdsArg.split(',').map(s => s.trim()).filter(Boolean);
@@ -34,11 +34,11 @@ const router = Actor.createActor<_SERVICE>(idlFactory, { agent, canisterId: Prin
 const ok = <T>(reply: { Ok: T } | { Err: string }): T => { if ('Err' in reply) throw new Error(reply.Err); return reply.Ok; };
 
 const save = (data: unknown) => {
-  mkdirSync(dirname(report), { recursive: true });
-  const temp = `${report}.tmp`, fd = openSync(temp, 'w', 0o600);
+  mkdirSync(dirname(reportPath), { recursive: true });
+  const temp = `${reportPath}.tmp`, fd = openSync(temp, 'w', 0o600);
   try { writeFileSync(fd, JSON.stringify(data, (_, v) => typeof v === 'bigint' ? String(v) : v, 2)); fsyncSync(fd); } finally { closeSync(fd); }
-  renameSync(temp, report);
-  const dir = openSync(dirname(report), 'r'); try { fsyncSync(dir); } finally { closeSync(dir); }
+  renameSync(temp, reportPath);
+  const dir = openSync(dirname(reportPath), 'r'); try { fsyncSync(dir); } finally { closeSync(dir); }
 };
 
 const mgmtIdl = ({ IDL: I }: { IDL: typeof IDL }) => I.Service({

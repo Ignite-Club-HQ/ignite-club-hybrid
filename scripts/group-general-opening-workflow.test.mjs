@@ -1,10 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+const frontendRequire = createRequire(new URL('../frontend/package.json', import.meta.url));
+const { transformWithEsbuild } = frontendRequire('vite');
 const workflow = readFileSync(new URL('../.github/workflows/open-group-general.yml', import.meta.url), 'utf8');
 const settings = readFileSync(new URL('../frontend/scripts/set-group-service-settings.ts', import.meta.url), 'utf8');
 const snapshot = readFileSync(new URL('../frontend/scripts/produce-routing-gates.ts', import.meta.url), 'utf8');
 const opening = readFileSync(new URL('../frontend/scripts/open-group-general.ts', import.meta.url), 'utf8');
+
+test('opening scripts transform cleanly (catches duplicate declarations before GitHub)', async () => {
+  for (const [name, source] of [['set-group-service-settings.ts', settings], ['produce-routing-gates.ts', snapshot],
+    ['open-group-general.ts', opening],
+    ['report-group-health.ts', readFileSync(new URL('../frontend/scripts/report-group-health.ts', import.meta.url), 'utf8')],
+    ['stop-group-placements.ts', readFileSync(new URL('../frontend/scripts/stop-group-placements.ts', import.meta.url), 'utf8')]]) {
+    const result = await transformWithEsbuild(source, name).catch(e => { throw new Error(`${name}: ${e.message}`); });
+    assert.ok(result?.code.length > 0, name);
+  }
+});
 
 test('manual opening workflow is protected and serialized with existing mainnet deployment', () => {
   assert.match(workflow, /workflow_dispatch:/);
