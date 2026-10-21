@@ -31,6 +31,8 @@ export function verifyOwnerOpeningChecks(spec: OwnerCheckSpec, observed: Observe
         actual.cycles < BigInt(spec.minCycles) || actual.heapBytes >= BigInt(spec.heapBudgetBytes)) throw new Error(`Unverified module/controller/subnet/health: ${item.name}`);
     // The account admission release switch (historical LOCAL_REHEARSAL name)
     // is the production cross-group lifecycle gate; any other flag stays forbidden.
+    // The account admission release switch (historical LOCAL_REHEARSAL name)
+    // is the production cross-group lifecycle gate; any other flag stays forbidden.
     if (actual.environment.some(e => e.name.endsWith('LOCAL_REHEARSAL') && e.value === '1' && e.name !== ADMISSION_FLAG)) throw new Error(`Rehearsal flag forbidden: ${item.name}`);
     if (item.name === 'club_domain') {
       const env = (key: string) => { const hits = actual.environment.filter(e => e.name === key); return hits.length === 1 ? hits[0].value : undefined; };
