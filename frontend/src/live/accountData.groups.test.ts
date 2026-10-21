@@ -4,6 +4,7 @@ import type { IcpTargetConfig } from './targetRegistry';
 const state = vi.hoisted(() => ({ active: true, registry: vi.fn(), dispose: vi.fn(), erase: vi.fn(),
   revoke: vi.fn(), purge: vi.fn(), validate: vi.fn(), order: [] as string[], targets: [] as unknown[] }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: state.active }) }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => state.active, generalRoutingStatus: async () => ({ active: state.active, missing: [] }), cachedGeneralRoutingActive: () => state.active, clearGeneralRoutingCache: () => {} }));
 vi.mock('./groupSessionLive', () => ({ openLiveGroupReadSession: async () => {
   const targets = await state.registry();
   return { dispose: state.dispose, readEveryGroup: async () => targets, assertRegistryUnchanged: state.validate };

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureBackendContext } from './featureRouter';
 const state = vi.hoisted(() => ({ active: true, dispatch: vi.fn() }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: state.active }) }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => state.active, generalRoutingStatus: async () => ({ active: state.active, missing: [] }), cachedGeneralRoutingActive: () => state.active, clearGeneralRoutingCache: () => {} }));
 vi.mock('./featureRouter', () => ({ withFeatureBackend: state.dispatch }));
 import { readPointsInClub } from './pointsRouting';
 const shared = { target: { alias: 'shared' } } as unknown as FeatureBackendContext;

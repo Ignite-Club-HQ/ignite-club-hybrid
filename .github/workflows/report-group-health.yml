@@ -1,0 +1,43 @@
+name: Report group health to the router
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '*/15 * * * *'
+permissions:
+  contents: write
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+jobs:
+  report-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Install project dependencies
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Write existing governor key
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM" || { echo "::error::Existing DEPLOYER_PEM required"; exit 1; }
+          umask 077
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/operator.pem"
+      - name: Report every registered group's health
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npx --yes tsx@4 scripts/report-group-health.ts "$RUNNER_TEMP/operator.pem" "$RUNNER_TEMP/group-health-report.json"
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/operator.pem"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: group-health-report
+          path: ${{ runner.temp }}/group-health-report.json
+          if-no-files-found: ignore

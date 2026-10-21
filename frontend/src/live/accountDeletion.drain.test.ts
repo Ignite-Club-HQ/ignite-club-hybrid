@@ -17,6 +17,7 @@ import { idlFactory as mediaIdl } from '../lab/bindings/media_blob_store/declara
 
 const seam = vi.hoisted(() => ({ connect: undefined as any, identity: undefined as any }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: false }) }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => false, generalRoutingStatus: async () => ({ active: false, missing: [] }), cachedGeneralRoutingActive: () => false, clearGeneralRoutingCache: () => {} }));
 vi.mock('./identityAccess', () => ({
   connectLiveIdentityAccessClientWithIdentity: (...args: any[]) => seam.identity(...args),
 }));

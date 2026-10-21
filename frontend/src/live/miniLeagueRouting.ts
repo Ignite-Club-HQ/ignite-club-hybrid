@@ -1,14 +1,14 @@
-import { activationStatus, SHIPPED_GATES } from './groupActivation';
+import { routingActive } from './generalActivation';
 import { hasOwnerTestRouting } from './ownerTestRouting';
 import { withFeatureBackend, type ClubScope, type FeatureBackendContext } from './featureRouter';
 
 /** Nested reads must not reuse the first club's canisters for another club. */
-export function readMiniLeagueInScope<T>(
+export async function readMiniLeagueInScope<T>(
   context: FeatureBackendContext,
   scope: ClubScope,
   read: (context: FeatureBackendContext) => Promise<T>,
 ): Promise<T> {
-  if (!activationStatus(SHIPPED_GATES).active && !hasOwnerTestRouting(context)) return read(context);
+  if (!await routingActive(context) && !hasOwnerTestRouting(context)) return read(context);
   return withFeatureBackend('mini_leagues', {
     supabase: () => { throw new Error('Internet Identity connection required'); },
     icp: read,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ active: false, dispatch: vi.fn() }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: state.active }) }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => state.active, generalRoutingStatus: async () => ({ active: state.active, missing: [] }), cachedGeneralRoutingActive: () => state.active, clearGeneralRoutingCache: () => {} }));
 vi.mock('./featureRouter', () => ({ withFeatureBackend: state.dispatch }));
 import { readMembershipInScope } from './membershipRouting';
 

@@ -28,8 +28,9 @@ test('sole original deploy identity is required', () => {
   assert.throws(() => verifyUpgradeStatus(service, { ...status(), controllers: [GROUP2_GOVERNOR, 'other'] }, GROUP2_GOVERNOR), /controller/);
   assert.throws(() => verifyUpgradeStatus(service, status(), 'other'), /controller/);
 });
-test('local rehearsal flags cannot pass production preflight', () => {
-  assert.throws(() => verifyUpgradeStatus(service, { ...status(), environment: [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }] }, GROUP2_GOVERNOR), /Rehearsal/);
+test('local rehearsal flags cannot pass production preflight; the account admission release switch is allowed', () => {
+  verifyUpgradeStatus(service, { ...status(), environment: [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }] }, GROUP2_GOVERNOR);
+  assert.throws(() => verifyUpgradeStatus(service, { ...status(), environment: [{ name: 'IGNITE_MEDIA_LOCAL_REHEARSAL', value: '1' }] }, GROUP2_GOVERNOR), /Rehearsal/);
 });
 test('Motoko upgrade preserves memory and Rust upgrade omits EOP-only arguments', () => {
   const args = upgradeArgs(service, '/tmp/club.wasm', GROUP2_GOVERNOR);

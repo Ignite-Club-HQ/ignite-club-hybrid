@@ -8,6 +8,7 @@ import type { FeatureArea } from './featureBackend';
 import type { FeatureBackendContext } from './featureRouter';
 import type { GroupDomain, ClubAssignment } from './groupRouting';
 import { activationStatus, SHIPPED_GATES, type ActivationGates } from './groupActivation';
+import { generalRoutingStatus } from './generalActivation';
 import { clearOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
@@ -38,6 +39,8 @@ export type DispatchDeps = {
   placeNewClub?: (ctx: FeatureBackendContext, clubId: string) => Promise<ClubAssignment>;
   /** Independent consensus owner-test policy; never synthesizes global gates. */
   ownerActive?: () => Promise<boolean>;
+  /** Live general-routing switch; production injects generalRoutingStatus. */
+  generalActive?: (ctx: FeatureBackendContext) => Promise<boolean>;
 };
 export const MAX_DEVICE_OWNERS = 2000;
 const owners = new Map<string, string | null>(); // kind:id -> club (null = shared canisters)
@@ -94,7 +97,8 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
 }
 
 export function createClubDispatcher(deps: DispatchDeps) {
-  const active = async () => activationStatus(deps.gates()).active || Boolean(await deps.ownerActive?.());
+  const active = async () => activationStatus(deps.gates()).active || Boolean(await deps.ownerActive?.()) ||
+    Boolean(deps.generalActive && await deps.generalActive(await deps.context()));
   return {
     /** List reads already know each item's club: record it so opening the item
      * later (e.g. from a notification) needs no group probe. Free when off. */
@@ -180,6 +184,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
 /** Production dispatcher. Shipped gates are off, so this always takes the legacy path. */
 export const clubDispatch = createClubDispatcher({
   gates: () => SHIPPED_GATES,
+  generalActive: ctx => generalRoutingStatus(ctx).then(s => s.active),
   legacy: async (feature, clubId, icp) => (await import('./featureRouter')).withFeatureBackend(feature, {
     supabase: () => { throw new Error('Club-scoped dispatch is ICP-only'); }, icp }, { clubId, legacy: true }),
   context: async () => {
@@ -195,7 +200,7 @@ export const clubDispatch = createClubDispatcher({
     return Boolean(await readOwnerTestRoute({ identity, target: getActiveIcpTarget() }));
   },
   open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx,
-    activationStatus(SHIPPED_GATES).active ? undefined : (await readOwnerTestRoute(ctx))?.groupId),
+    (await generalRoutingStatus(ctx)).active ? undefined : (await readOwnerTestRoute(ctx))?.groupId),
   lookup: async (ctx, kind, id) => (await import('./groupSessionLive')).lookupEntityClub(ctx, kind, id),
   holdsInvite: async (ctx, token) => (await import('./groupSessionLive')).groupHoldsInvite(ctx, token),
   placeNewClub: async (ctx, clubId) => {

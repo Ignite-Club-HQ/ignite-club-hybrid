@@ -140,8 +140,11 @@ export async function clearLiveInbox(
 }
 
 async function mutateOwnedInbox(userId: string, clubId: string | null, action: 'read' | 'delete'): Promise<boolean> {
-  const { activationStatus, SHIPPED_GATES } = await import('../groupActivation');
-  if (!activationStatus(SHIPPED_GATES).active && !(await import('../ownerTestRouting')).hasOwnerTestRouting()) return false;
+  const [{ routingActive }, { getCurrentInternetIdentityConfirmed }, { getActiveIcpTarget }] =
+    await Promise.all([import('../generalActivation'), import('../internetIdentityAuth'), import('../targetRegistry')]);
+  const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
+  const general = identity ? await routingActive({ identity, target: getActiveIcpTarget() }) : false;
+  if (!general && !(await import('../ownerTestRouting')).hasOwnerTestRouting()) return false;
   const { withFeatureBackend } = await import('../featureRouter');
   const { acrossLists } = await import('../featureScopes');
   const { writeOnce } = await import('../clubScope');

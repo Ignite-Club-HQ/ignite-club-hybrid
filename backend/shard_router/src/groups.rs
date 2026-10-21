@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 // per validated group, 4096 rows reserve <32 MiB plus B-tree overhead.
 pub const MAX_GROUPS: usize = 4096;
 pub const MAX_CLUBS: u32 = 100_000;
-pub const MAX_READING_AGE_NS: u64 = 15 * 60 * 1_000_000_000;
+// Health readings stay valid for two hours: scheduled reporting runs well
+// inside this window even when GitHub Actions cron runs late.
+pub const MAX_READING_AGE_NS: u64 = 2 * 60 * 60 * 1_000_000_000;
 pub const PREPARE_PERCENT: u128 = 70;
 pub const ROLLOVER_PERCENT: u128 = 80;
 pub const DOMAINS: [&str; 13] = [

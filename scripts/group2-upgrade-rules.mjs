@@ -4,6 +4,10 @@ import { GROUP_BUILD_SERVICES } from './stage-group-wasm.mjs';
 
 export const GROUP2_GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 export const GROUP2_FUEL_FLOOR = 1_000_000_000_000n;
+/** Historical name, production meaning: this env releases cross-group account
+ * admission/removal checks on every group service, so it alone may stay set
+ * through upgrades. Any other LOCAL_REHEARSAL flag remains forbidden. */
+export const ADMISSION_RELEASE_FLAG = 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL';
 export function validateGroup2Inventory(provision, shared) {
   if (provision.groupId !== 'g2' || provision.deploymentId !== 'mainnet' || provision.phase !== 'checked' || provision.pending ||
       !provision.dedicatedBlobStore?.installed || provision.dedicatedBlobStore.subnetId !== provision.subnetId ||
@@ -35,7 +39,7 @@ export function verifyUpgradeStatus(service, actual, governor, expectedHash) {
   if (actual.cycles < GROUP2_FUEL_FLOOR)
     fail(`fuel under the 1T floor: ${(Number(actual.cycles) / 1e12).toFixed(3)}T — run the g2 card top-up, then retry`);
   if (expectedHash && actual.moduleHash !== expectedHash) fail('module hash differs from the staged artifact');
-  if (actual.environment.some(e => e.name.endsWith('LOCAL_REHEARSAL') && e.value !== '' && e.value !== '0'))
+  if (actual.environment.some(e => e.name.endsWith('LOCAL_REHEARSAL') && e.name !== ADMISSION_RELEASE_FLAG && e.value !== '' && e.value !== '0'))
     throw new Error(`Rehearsal settings forbidden: ${service.name}`);
 }
 export function upgradeArgs(service, path, governor) {
