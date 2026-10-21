@@ -321,3 +321,8 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Read-only live dashboard at /admin/group-infrastructure: per-group and per-canister memory vs tested limits, fuel, club counts, photo-store fullness; 30s live refresh; group inventory from the governor-verified routing snapshot + shared deployment IDs. Add/remove/open/stop stay in GitHub workflows (deploy key never in the app).
 - [x] Deprecated duplicates: Canister Health page now redirects to the panel (memory history/trend/forecast moved with it); Placement Settings lost its Photo Stores and Canister Balances cards and links to the panel instead.
 - [ ] Owner verification: publish, open Admin → Group Infrastructure, confirm both groups report live.
+
+## Active scope — Group Infrastructure admin panel (22 October 2026)
+- [x] Read-only live dashboard at /admin/group-infrastructure: per-group and per-canister memory vs tested limits, fuel, club counts, photo-store fullness; 30s live refresh; group inventory from the governor-verified routing snapshot + shared deployment IDs. Add/remove/open/stop stay in GitHub workflows (deploy key never in the app).
+- [x] Deprecated duplicates: Canister Health page now redirects to the panel (memory history/trend/forecast moved with it); Placement Settings lost its Photo Stores and Canister Balances cards and links to the panel instead.
+- [ ] Owner verification: publish, open Admin → Group Infrastructure, confirm both groups report live.
