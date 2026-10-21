@@ -11,6 +11,7 @@ import { idlFactory as routerIdl } from '../lab/bindings/shard_router/declaratio
 import { createIdentityAccessClient } from '../lab/identityAccessClient';
 const seam=vi.hoisted(() => ({ connect: undefined as any, identity: undefined as any, session: undefined as any }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: true }) }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => true, generalRoutingStatus: async () => ({ active: true, missing: [] }), cachedGeneralRoutingActive: () => true, clearGeneralRoutingCache: () => {} }));
 vi.mock('./identityAccess', () => ({ connectLiveIdentityAccessClientWithIdentity: (...a: any[]) => seam.identity(...a) }));
 vi.mock('./domains', () => ({ connectLiveClubDomain: (...a: any[]) => seam.connect(...a) }));
 vi.mock('./groupSessionLive', () => ({ openLiveGroupReadSession: (...a: any[]) => seam.session(...a) }));

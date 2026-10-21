@@ -1,6 +1,7 @@
 import { it, expect, vi } from 'vitest';
 const m = vi.hoisted(() => ({ scopes: [] as unknown[], mark: vi.fn(), remove: vi.fn() }));
 vi.mock('../groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: true }) }));
+vi.mock('../generalActivation', () => ({ routingActive: async () => true, generalRoutingStatus: async () => ({ active: true, missing: [] }), cachedGeneralRoutingActive: () => true, clearGeneralRoutingCache: () => {} }));
 vi.mock('../domains', () => ({ connectLiveNotificationQueue: async () => ({ actor: {
   list_inbox: async () => ({ Ok: [{ id: 'n1', read: false }, { id: 'n2', read: true }] }),
   mark_read: m.mark, delete_notification: m.remove,

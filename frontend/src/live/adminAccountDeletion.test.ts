@@ -5,6 +5,7 @@ import { eraseIcpAccountAsAdmin } from "./adminAccountDeletion";
 const m = vi.hoisted(() => ({ revoke: vi.fn(), erase: vi.fn(), dispose: vi.fn(), active: false,
   prepare: vi.fn(), commit: vi.fn(), settle: vi.fn(), validate: vi.fn(), sessionDispose: vi.fn(), targets: [] as IcpTargetConfig[] }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: m.active }) }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => m.active, generalRoutingStatus: async () => ({ active: m.active, missing: [] }), cachedGeneralRoutingActive: () => m.active, clearGeneralRoutingCache: () => {} }));
 vi.mock('./groupSessionLive', () => ({ openLiveGroupReadSession: async () => ({
   deletionRegistryRevision: 4n, readEveryGroup: async () => m.targets, assertRegistryUnchanged: m.validate, dispose: m.sessionDispose,
 }) }));

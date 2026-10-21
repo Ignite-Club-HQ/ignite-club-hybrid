@@ -29,6 +29,7 @@ vi.mock("./groupActivation", () => ({
   activationStatus: () => ({ active: mocks.groupActive, missing: [] }),
   SHIPPED_GATES: {},
 }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => mocks.groupActive, generalRoutingStatus: async () => ({ active: mocks.groupActive, missing: [] }), cachedGeneralRoutingActive: () => mocks.groupActive, clearGeneralRoutingCache: () => {} }));
 vi.mock("./groupDispatch", () => ({
   clubDispatch: {
     forNewClub: vi.fn(),

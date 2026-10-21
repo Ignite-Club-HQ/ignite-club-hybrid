@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   readAcross: vi.fn(), decrypt: vi.fn(),
 }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: state.active }) }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => state.active, generalRoutingStatus: async () => ({ active: state.active, missing: [] }), cachedGeneralRoutingActive: () => state.active, clearGeneralRoutingCache: () => {} }));
 vi.mock('./targetRegistry', () => ({ getActiveIcpTarget: () => state.shared }));
 vi.mock('./internetIdentityAuth', () => ({ getCurrentInternetIdentityConfirmed: async () => ({ getPrincipal: () => ({ toText: () => 'parent-a' }) }) }));
 vi.mock('./groupDispatch', () => ({ clubDispatch: { readAcross: state.readAcross } }));

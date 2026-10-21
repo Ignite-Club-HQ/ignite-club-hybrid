@@ -12,6 +12,7 @@ import { idlFactory as identityIdl } from '../lab/bindings/identity_access/decla
 const seam = vi.hoisted(() => ({ connect: undefined as any, identity: undefined as any,
   session: undefined as any, purges: [] as string[] }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: true }) }));
+vi.mock('./generalActivation', () => ({ routingActive: async () => true, generalRoutingStatus: async () => ({ active: true, missing: [] }), cachedGeneralRoutingActive: () => true, clearGeneralRoutingCache: () => {} }));
 vi.mock('./identityAccess', () => ({ isLiveIdentityAccessConfigured: () => true,
   connectLiveIdentityAccessClientWithIdentity: (...args: any[]) => seam.identity(...args) }));
 vi.mock('./groupSessionLive', () => ({ openLiveGroupReadSession: (...args: any[]) => seam.session(...args) }));
