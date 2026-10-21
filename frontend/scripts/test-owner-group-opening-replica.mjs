@@ -6,6 +6,7 @@ import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
+import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
 const p = n => Principal.fromUint8Array(new Uint8Array([n, 1]));
 const governor = p(1), owner = p(2), other = p(3), ok = r => { assert.ok('Ok' in r, r.Err); return r.Ok; };
 const ids = [1, 2].map(n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`);
@@ -14,6 +15,8 @@ const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
   const router = await pic.setupCanister({ idlFactory: routerIdl, wasm: process.env.SHARD_ROUTER_WASM, sender: governor, controllers: [governor], arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
+  const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: process.env.IDENTITY_ACCESS_WASM, sender: governor, controllers: [governor],
+    environmentVariables: [{ name: 'IGNITE_BOUND_DELETION_RELEASE', value: '1' }], arg: IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]) });
   const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM, sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]),
     environmentVariables: [{ name: 'IGNITE_NEW_CLUB_PLACEMENT_ROUTER', value: router.canisterId.toText() }, { name: 'IGNITE_NEW_CLUB_PLACEMENT_GROUP', value: 'g2' }, { name: 'IGNITE_NEW_CLUB_PLACEMENT_TARGET', value: 'ic' }] });
   const subnet = await pic.getCanisterSubnetId(club.canisterId); assert.ok(subnet);
@@ -24,6 +27,13 @@ try {
   const placement = { group_id: 'g2', deployment_id: 'mainnet', deployment_revision: 1n, host: 'https://icp-api.io', network_kind: 'public_mainnet', primary_subnet: subnet, approved_subnets: [subnet], additional_subnets_enabled: false, domains: group.domains.map(d => ({ ...d, subnet })) };
   revision = ok(await router.actor.register_group_placement(placement, revision));
   revision = ok(await router.actor.record_group_health('g2', 100n, 2_000_000_000_000n, revision));
+  ok(await router.actor.set_deletion_authority(identity.canisterId));
+  identity.actor.setPrincipal(governor);
+  const manifest = ok(await identity.actor.read_removal_history_manifest());
+  ok(await identity.actor.set_group_inventory_binding({ registry: router.canisterId, registry_revision: revision, target_alias: 'ic', deployment_id: 'mainnet', deployment_revision: 1n,
+    host: 'https://icp-api.io', network_kind: 'public_mainnet' }, manifest.revision));
+  identity.actor.setPrincipal(owner); ok(await identity.actor.register_account());
+  club.actor.setPrincipal(governor); ok(await club.actor.set_owner_test_deletion_identity(identity.canisterId));
   const actual = ok(await router.actor.read_group_registry('ic')).groups[0];
   const approval = { owner, group: actual, placement, club_ids: ids, expected_revision: revision, evidence_sha256: 'ab'.repeat(32) };
   router.actor.setPrincipal(owner); assert.ok('Err' in await router.actor.open_owner_test_group(approval));
@@ -39,6 +49,12 @@ try {
   assert.equal(ok(await router.actor.list_groups())[0].accepting, false);
   router.actor.setPrincipal(owner); assert.ok('Err' in await router.actor.place_my_new_club(ids[1], 'ic')); assert.deepEqual(ok(await router.actor.place_my_new_club(ids[0], 'ic')), assigned);
   assert.equal(ok(await router.actor.read_my_group_assignments([ids[0]], 'ic', await router.actor.version())).length, 1);
+  identity.actor.setPrincipal(governor); const account = await identity.actor.get_account_by_principal(owner);
+  // Eligibility uses current human account status; suspended owners cannot
+  // turn a saved creator receipt into a fresh create or placement.
+  const ownerAccount = ok(account); assert.ok(ownerAccount[0]);
+  ok(await identity.actor.set_account_status(ownerAccount[0].id, { Suspended: null }));
+  club.actor.setPrincipal(owner); assert.ok('Err' in await club.actor.create_club(ids[1], 'Denied suspended', 'suspended', [], []));
   await pic.upgradeCanister({ canisterId: router.canisterId, wasm: process.env.SHARD_ROUTER_WASM, sender: governor });
   assert.equal(ok(await router.actor.read_my_owner_test_opening('ic'))[0].accepting_new, false);
   assert.equal(ok(await router.actor.read_my_group_assignments([ids[0]], 'ic', await router.actor.version())).length, 1);

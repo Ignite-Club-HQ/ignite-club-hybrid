@@ -603,6 +603,16 @@ persistent actor class Main(governorInit : Principal) = this {
     if (identityUnlinkReceipts.size() > 0 and identityAccessCanister != ?id) return #Err("Cannot replace identity authority after unlink");
     identityAccessCanister := ?id; membershipEpoch += 1; #Ok
   };
+  /// Independent deletion-only configuration for an empty owner-test group.
+  /// Does not release linked-account sync or register lifecycle receivers.
+  public shared ({ caller }) func set_owner_test_deletion_identity(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid identity required");
+    if (newClubGroup != ?"g2" or newClubRouter == null or newClubTarget == null) return #Err("Complete Group 2 placement binding required");
+    if (profiles.size() != 0 or identityUnlinkReceipts.size() != 0) return #Err("Empty owner-test group required");
+    if (identityAccessCanister != null and identityAccessCanister != ?id) return #Err("Deletion identity already bound");
+    identityAccessCanister := ?id;
+    #Ok
+  };
   type LinkedAccount = { id : Text; principals : [Principal]; version : Nat64; status : { #Active; #Suspended } };
   public shared ({ caller }) func sync_my_linked_account() : async { #Ok; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");

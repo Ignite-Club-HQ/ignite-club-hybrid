@@ -2,6 +2,7 @@
  * Stopping new placements retains discovery for already-created test clubs. */
 import type { FeatureBackendContext } from './featureRouter';
 export type OwnerRoute = { groupId: 'g2'; acceptingNew: boolean; clubIds: string[]; evidence: string };
+export function validateOwnerReceipt(receipt: Awaited<ReturnType<Awaited<ReturnType<typeof import('./domains')['connectLiveShardRouter']>>['actor']['read_my_owner_test_opening']>> extends { Ok: infer T } ? T : never) { return receipt; }
 let confirmed: { key: string; value: OwnerRoute | null } | null = null;
 const keyFor = (ctx: FeatureBackendContext) => JSON.stringify([ctx.identity.getPrincipal().toText(), ctx.target.alias,
   ctx.target.host, ctx.target.networkKind, ctx.target.canisterIds?.shard_router]);
