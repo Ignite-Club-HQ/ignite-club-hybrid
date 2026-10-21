@@ -676,15 +676,22 @@ struct RemovalHistoryManifest {
     pending_intents: u64,
     club_authorities: Vec<Principal>,
     service_readers: Vec<Principal>,
+    removal_generation: u64,
+    removal_barriers: u64,
+    removal_subjects: u64,
+    removal_receipts: u64,
 }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-enum RemovalHistoryCursor { PrincipalDenials(Option<String>), ErasedAccounts(Option<String>), PendingIntents(u64), Done }
+enum RemovalHistoryCursor { PrincipalDenials(Option<String>), ErasedAccounts(Option<String>), PendingIntents(u64), RemovalBarriers(Option<String>), RemovalSubjects(Option<String>), RemovalReceipts(Option<String>), Done }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 struct RemovalHistoryPage {
     revision: u64,
     denials: Vec<(String, PrincipalDenial)>,
     erased: Vec<(String, u64)>,
     pending: Vec<UnlinkIntent>,
+    barriers: Vec<(String, removal_barrier::Intent)>,
+    subjects: Vec<(String, String)>,
+    receipts: Vec<(String, removal_barrier::Receipt)>,
     next: RemovalHistoryCursor,
 }
 fn history_access(enabled: bool, governor: Principal, caller: Principal) -> Outcome<()> {
@@ -701,6 +708,10 @@ fn history_manifest() -> RemovalHistoryManifest {
         pending_intents: lifecycle.pending.len() as u64,
         club_authorities: lifecycle.authorities,
         service_readers: service_authorities(),
+        removal_generation: REMOVAL_GENERATION.with(|m| *m.borrow().get()),
+        removal_barriers: REMOVAL_INTENTS.with(|m| m.borrow().len()),
+        removal_subjects: REMOVAL_SUBJECTS.with(|m| m.borrow().len()),
+        removal_receipts: REMOVAL_RECEIPTS.with(|m| m.borrow().len()),
     }
 }
 /// Local-only consensus recovery evidence. Reader lists/club receipts are NOT
@@ -713,7 +724,7 @@ fn read_removal_history_manifest() -> Outcome<RemovalHistoryManifest> {
 fn history_page(revision: u64, cursor: RemovalHistoryCursor, limit: u16) -> Outcome<RemovalHistoryPage> {
     if limit == 0 || limit > 200 { return Err("Invalid history page size".into()); }
     if revision != removal_history_revision() { return Err("Removal history changed; restart export".into()); }
-    let mut page = RemovalHistoryPage { revision, denials: vec![], erased: vec![], pending: vec![], next: RemovalHistoryCursor::Done };
+    let mut page = RemovalHistoryPage { revision, denials: vec![], erased: vec![], pending: vec![], barriers: vec![], subjects: vec![], receipts: vec![], next: RemovalHistoryCursor::Done };
     let bound = limit as usize;
     match cursor {
         RemovalHistoryCursor::PrincipalDenials(after) => {
@@ -745,6 +756,34 @@ fn history_page(revision: u64, cursor: RemovalHistoryCursor, limit: u16) -> Outc
             if offset > lifecycle.pending.len() as u64 { return Err("Invalid pending intent cursor".into()); }
             page.pending = lifecycle.pending.into_iter().skip(offset as usize).take(bound).collect();
             if page.pending.len() == bound { page.next = RemovalHistoryCursor::PendingIntents(offset + page.pending.len() as u64); }
+            else { page.next = RemovalHistoryCursor::RemovalBarriers(None); }
+        }
+        RemovalHistoryCursor::RemovalBarriers(after) => {
+            if after.as_ref().is_some_and(|s| s.len() > 256) { return Err("Invalid history key cursor".into()); }
+            page.barriers = REMOVAL_INTENTS.with(|m| {
+                use std::ops::Bound::{Excluded, Unbounded};
+                m.borrow().range((after.map(Excluded).unwrap_or(Unbounded), Unbounded)).take(bound)
+                    .map(|e| (e.key().clone(), decode(&e.value()))).collect()
+            });
+            page.next = if page.barriers.len() == bound { RemovalHistoryCursor::RemovalBarriers(page.barriers.last().map(|e| e.0.clone())) } else { RemovalHistoryCursor::RemovalSubjects(None) };
+        }
+        RemovalHistoryCursor::RemovalSubjects(after) => {
+            if after.as_ref().is_some_and(|s| s.len() > 256) { return Err("Invalid history key cursor".into()); }
+            page.subjects = REMOVAL_SUBJECTS.with(|m| {
+                use std::ops::Bound::{Excluded, Unbounded};
+                m.borrow().range((after.map(Excluded).unwrap_or(Unbounded), Unbounded)).take(bound)
+                    .map(|e| (e.key().clone(), e.value())).collect()
+            });
+            page.next = if page.subjects.len() == bound { RemovalHistoryCursor::RemovalSubjects(page.subjects.last().map(|e| e.0.clone())) } else { RemovalHistoryCursor::RemovalReceipts(None) };
+        }
+        RemovalHistoryCursor::RemovalReceipts(after) => {
+            if after.as_ref().is_some_and(|s| s.len() > 256) { return Err("Invalid history key cursor".into()); }
+            page.receipts = REMOVAL_RECEIPTS.with(|m| {
+                use std::ops::Bound::{Excluded, Unbounded};
+                m.borrow().range((after.map(Excluded).unwrap_or(Unbounded), Unbounded)).take(bound)
+                    .map(|e| (e.key().clone(), decode(&e.value()))).collect()
+            });
+            if page.receipts.len() == bound { page.next = RemovalHistoryCursor::RemovalReceipts(page.receipts.last().map(|e| e.0.clone())); }
         }
         RemovalHistoryCursor::Done => {}
     }
