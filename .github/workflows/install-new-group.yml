@@ -1,6 +1,6 @@
 # Create, install and configure a NEW club group on mainnet, kept CLOSED.
 # Signs with DEPLOYER_PEM. Spends cycles from the deploy identity (about
-# 1.6T per service, 12 services). Never registers or opens the group, never
+# 1.6T per service, 13 services). Never registers or opens the group, never
 # touches existing canisters' code. Re-run to resume after any interruption.
 name: Install new group (closed)
 
@@ -46,20 +46,15 @@ jobs:
           targets: wasm32-unknown-unknown
       - name: Install build tools (pinned)
         run: npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
+      - name: Verify build artifact staging
+        run: node --test scripts/stage-group-wasm.test.mjs
       - name: Build group services
         working-directory: deploy/mainnet
         run: |
           set -euo pipefail
           icp build club_domain events_domain messaging_domain vault_domain competition_domain club_points_domain \
             mini_league_domain media_metadata insights_domain notification_queue pii_access_control timer_jobs media_blob_store
-          mkdir -p "$RUNNER_TEMP/wasm"
-          for d in club_domain events_domain messaging_domain vault_domain competition_domain club_points_domain \
-                   mini_league_domain media_metadata insights_domain notification_queue pii_access_control timer_jobs media_blob_store; do
-            f="$(find .icp/cache -type f \( -name '*.wasm' -o -name '*.wasm.gz' \) -path "*${d}*" | sort | tail -1)"
-            test -n "$f" || { echo "::error::No build output for $d"; exit 1; }
-            case "$f" in *.gz) cp "$f" "$RUNNER_TEMP/wasm/$d.wasm.gz";; *) cp "$f" "$RUNNER_TEMP/wasm/$d.wasm";; esac
-            echo "$d <- $f"
-          done
+          node ../../scripts/stage-group-wasm.mjs . "$RUNNER_TEMP/wasm"
       - name: Install frontend dependencies
         run: node scripts/ensure-frontend-deps.mjs
       - name: Write operator key
