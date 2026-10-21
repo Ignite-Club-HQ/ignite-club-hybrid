@@ -1,5 +1,15 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+## Active scope — minimum Group 2 test opening (21 October 2026, 03:07 UTC)
+This supersedes the broad 1–5 implementation backlog below for current work. Existing safeguards remain; this is not deployment or opening approval.
+- [x] Bounded source review identified two concrete blockers: provisioning enableGroup explicitly refuses nonlocal activation; dispatcher SHIPPED_GATES is globally OFF with no isolated owner-test/new-g2-club activation path. Neither can be resolved by simply setting accepting=true. No gates changed.
+- [ ] Implement and prove a production-safe, explicitly bounded new-test-club admission/dispatch path with revision-bound authority/removal checks; keep existing clubs on their current services. This—not unrelated global recovery—is the next implementation dependency.
+- [ ] Verify new test-club creation in g2 and the same account's access to its clubs in both groups; existing clubs remain in place.
+- [ ] Verify club-scoped permissions/removal for private photos, uploads and chat, including delayed/delegated actions; preserve other-club/member/DM access.
+- [ ] Verify g2 sign-in, business reads, notification scope and both-group worker configuration using the existing focused tests; real browser/Android/push acceptance follows approved release.
+- [ ] Define exact approved opening configuration and stop-new-placement behavior without breaking existing clubs; register g2 only after required checks and separate approval.
+- Deferred unless a concrete opening dependency is demonstrated: expanded whole-account completion/global drain, provider-outcome reconciliation, whole-system snapshot recovery, exhaustive unrelated infrastructure audits and one global disaster-recovery test. Do not remove their existing safeguards or claim them complete.
+
 ## Current request — build Group 2 safeguards 1–5 (21 October 2026, 02:29 UTC)
 - [x] Added seven migration-backed human-domain receivers, persistent entry/callback holds, timer creator holds, guardian/user-target checks, snapshot/rekey refusal, private original-caller points implementation and notification issued-lease preservation. Ordinary club removal remains club-scoped. Details: docs/group-removal-build-2026-10-21.md.
 - [x] Added zero-work sealing to all twelve human-data receivers, identity fresh full-target seal verification, complete barrier/subject/receipt history pagination, offline exact-inventory recovery/journal/anchor core and read-only non-authorizing release preflight.
