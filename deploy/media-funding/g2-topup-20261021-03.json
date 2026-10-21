@@ -172,7 +172,8 @@
       "name": "club_points_domain",
       "amount": "503868763403",
       "beforeCycles": "996119057371",
-      "phase": "transfer-confirmed"
+      "phase": "verified",
+      "afterCycles": "1499985876774"
     }
   ]
 }
