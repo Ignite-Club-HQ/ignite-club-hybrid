@@ -1,5 +1,12 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+## Current request — build Group 2 safeguards 1–5 (21 October 2026, 02:29 UTC)
+- [ ] Integrate persistent removal receivers across remaining services, including scheduled/delegated operations and notification delivery; preserve ordinary club-scoped removal and other-club access.
+- [ ] Implement exact-inventory all-target drain/completion and settlement without fabricated acknowledgements or unsafe retry/reset.
+- [ ] Implement history-preserving coordinated recovery with anti-rollback validation and authority-first resume.
+- [ ] Implement production-safe release/opening verification without rehearsal flags or bypassing existing approval/revision gates; do not deploy or open g2.
+- [ ] Build missing local artifacts and run consolidated real all-service interruption/upgrade/recovery acceptance plus focused regressions; document exact results and remaining live prerequisites.
+
 ## Current request — complete all Group 2 checks (21 October 2026, 02:18 UTC)
 - [x] Complete all executable consolidated checks: 65 frontend tests per mode (130 executions), 70 Node safeguards, 8 deploy safeguards, 17-contract drift and six workflow YAML validations pass. Actual two-group five-service integration and three-fixture management snapshot receipts pass. Evidence/limitations: docs/group-2-opening-check-2026-10-21.md.
 - [x] Independently verify live g2: 13/13 health readings and certified module/controller sets; sole expected controller, 13 unique nonoverlapping group IDs, 0.9829–0.9971T each (LOW FUEL). Detailed certified metadata: docs/group-2-live-verification-2026-10-21.md. Anonymous router reads forbid verifying accepting state/private settings; no release-artifact hash equivalence is claimed.
