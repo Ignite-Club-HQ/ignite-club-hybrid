@@ -126,5 +126,7 @@ test('committed g2 approval budgets fit the router limits (heap 1..3 GiB, cycles
   assert.ok(heap > 0n && heap <= 3n * 1024n ** 3n, `heapBudgetBytes ${heap}`);
   assert.ok(BigInt(approval.minCycles) > 0n);
   assert.ok(approval.maxClubs > 0 && approval.maxClubs <= 100_000);
+  assert.ok(BigInt(approval.deploymentRevision) >= 1n, 'router rejects placement revision 0');
+  assert.match(readFileSync(new URL('../backend/shard_router/src/discovery.rs', import.meta.url), 'utf8'), /p\.deployment_revision == 0/);
   assert.ok(opening.indexOf('Approval budgets outside router limits') < opening.indexOf('router.register_group('));
 });
