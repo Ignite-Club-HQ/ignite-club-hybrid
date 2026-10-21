@@ -1,0 +1,49 @@
+{
+  "plan": {
+    "paymentId": "g2-topup-20261021-04",
+    "purpose": "top-ups",
+    "groupId": "g2",
+    "principal": "vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae",
+    "scenario": "top-ups",
+    "testId": "g2",
+    "targetCycles": "2527604071804",
+    "balanceBefore": "2528391607502",
+    "shortfallCycles": "0",
+    "topups": [
+      {
+        "name": "insights_domain",
+        "id": "z57nw-dyaaa-aaaal-qxp4q-cai",
+        "cycles": "995078542835",
+        "amount": "504921457165"
+      },
+      {
+        "name": "notification_queue",
+        "id": "zu4gk-vqaaa-aaaal-qxp5a-cai",
+        "cycles": "992603734527",
+        "amount": "507396265473"
+      },
+      {
+        "name": "pii_access_control",
+        "id": "zt5a6-yiaaa-aaaal-qxp5q-cai",
+        "cycles": "996046437012",
+        "amount": "503953562988"
+      },
+      {
+        "name": "timer_jobs",
+        "id": "zg2rt-zaaaa-aaaal-qxp6a-cai",
+        "cycles": "994526269377",
+        "amount": "505473730623"
+      },
+      {
+        "name": "media_blob_store",
+        "id": "ycx6b-aaaaa-aaaal-qxpya-cai",
+        "cycles": "994640944445",
+        "amount": "505359055555"
+      }
+    ],
+    "feeCycles": "100000000",
+    "targetT": "1.5"
+  },
+  "phase": "already-funded",
+  "createdAt": "2026-10-21T07:25:04.492Z"
+}
