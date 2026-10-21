@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const workflow = readFileSync(new URL('../.github/workflows/upgrade-group2.yml', import.meta.url), 'utf8');
+const runner = readFileSync(new URL('../frontend/scripts/upgrade-group2.mjs', import.meta.url), 'utf8');
+test('manual upgrade is protected and serialized with existing mainnet deployment', () => {
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /environment: group-2-owner-opening/);
+  assert.match(workflow, /group: ignite-mainnet-governor-deployment/);
+  assert.match(workflow, /cancel-in-progress: false/);
+  assert.match(workflow, /secrets\.DEPLOYER_PEM/);
+  assert.match(workflow, /icp-cli@1\.7\.0/);
+  assert.doesNotMatch(workflow, /identity new|cycles mint|icp deploy|install-group-closed/);
+});
+test('explicit confirmation is checked before any upgrade', () => {
+  assert.ok(runner.indexOf("CONFIRMATION?.trim() !== 'UPGRADE GROUP 2'") < runner.indexOf("spawnSync('icp'"));
+  assert.match(runner, /validateGroup2Inventory\(provision, shared\)/);
+  assert.match(runner, /read_owner_test_deletion_required/);
+});
+test('durable GitHub intent readback precedes the upgrade call', () => {
+  assert.match(runner, /group-2-upgrade-receipts/);
+  assert.ok(runner.indexOf("step.phase = 'pending'; persist();") < runner.indexOf("spawnSync('icp'"));
+  assert.match(runner, /stored = api\(`\$\{path\}\?ref=\$\{branch\}`\)/);
+  assert.match(runner, /reconcileUpgradeStep\(step, before.moduleHash\)/);
+  assert.match(runner, /journal.routerRevision !== revision/);
+});
+test('upgrades cannot change settings or open the group and always remove signing keys', () => {
+  assert.match(runner, /after.settingsHash !== step.settingsHash/);
+  assert.doesNotMatch(runner, /open_owner_test_group\(|update_settings\(|register_group\(|enable_stable_media_storage\(/);
+  assert.match(workflow, /if: always\(\)/);
+  assert.match(workflow, /rm -f "\$RUNNER_TEMP\/g2-operator.pem"/);
+});
+test('PII attestation is preserved in durable progress before upgrading', () => {
+  assert.match(runner, /keyReceipt: JSON.parse\(readFileSync\(keyFile\)\)/);
+  assert.match(runner, /else writeFileSync\(keyFile, JSON.stringify\(journal.keyReceipt\)\)/);
+  assert.ok(runner.indexOf("keyGate('after');") < runner.indexOf("spawnSync('icp'"));
+});

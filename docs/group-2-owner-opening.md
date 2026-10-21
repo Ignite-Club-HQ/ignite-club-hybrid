@@ -23,7 +23,22 @@ Nothing was deployed or opened by this implementation. The workflow intentionall
 4. Commit an opening approval under `deploy/groups/g2/` with the fields below. Use your app Internet Identity principal as `owner`, not the deploy principal. Use module SHA-256 values from the reviewed **icp recipe build/deployed comparison**, never local smoke artifacts. No placeholder approval is supplied: it would pretend live verification has happened.
 5. Register CLOSED if necessary. Update the committed revision after registration. Run `check`; then separately run `open` with `OPEN GROUP 2 OWNER TEST`. Use `stop` with the current approved revision and `STOP GROUP 2 TEST PLACEMENTS` when finished. A revision conflict requires rereading and reviewing, not removing the CAS check.
 
-### Approval fields
+### Running the Group 2 upgrade
+
+After top-ups and the separately approved shared-router/identity upgrade, use Actions → **Upgrade Group 2 (closed)** on the approved release branch:
+
+| Field | First run | Upgrade run |
+| --- | --- | --- |
+| `action` | `check` | `upgrade` |
+| `confirmation` | Leave empty | `UPGRADE GROUP 2` |
+
+Both runs require the existing `DEPLOYER_PEM` secret and the protected **group-2-owner-opening** environment. Run both from the same reviewed release. The check verifies all thirteen existing g2 services, sole governor control, certified subnet, running state, at least **1T cycles each**, and the original production photo key; it performs no upgrades or admission changes. The upgrade uses CLI **1.7.0** recipe artifacts, upgrade-only installation by explicit g2 canister IDs, and preserved Motoko memory. It never creates/reinstalls a canister, mints/deposits fuel, modifies service settings, rewires Group 1, or opens g2.
+
+Progress and original public photo-key attestation are saved and read back on the **group-2-upgrade-receipts** branch before each upgrade. The **group-2-upgrade-report** artifact contains public module hashes, inventory and fuel evidence—not the signing key or environment values. If interrupted, rerun the same release only after reviewing the saved progress: a pending upgrade settles only if the exact intended module is already installed; an old/unknown module outcome stops for manual reconciliation rather than repeating the call. Changing release/inventory or router revision also stops. Do not delete progress to bypass a refusal.
+
+Once the upgrade succeeds, complete step 3's owner-placement/deletion settings separately, use the verified **newHash** values in your opening approval, and run **Group 2 owner opening**: `register-closed` → `check` → `open` (registration only if not already registered). The compatible app release and actual signed-in acceptance remain separate prerequisites. The upgrade workflow does not automatically run configuration or opening.
+
+### Opening approval fields
 
 `governor`, `owner`, `routerId`, `identityAccess`, `pushWorker`, `targetAlias`, `deploymentId`, `host` (pinned `https://icp-api.io`), `revision` (decimal text), `clubIds` (1–10 fresh UUIDs), `minCycles`, `heapBudgetBytes`, and `services` (exact twelve per-group domains plus `media_blob_store`, each with `name`, `canisterId`, `subnetId`, `moduleHash`). Budgets must match the closed router group and reviewed test capacity, not inferred ICP headline limits.
 
