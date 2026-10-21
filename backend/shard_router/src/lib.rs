@@ -237,6 +237,14 @@ fn read_my_owner_test_opening(target_alias: String) -> Outcome<Option<OwnerOpeni
     if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
     Ok(owner_opening(&target_alias).filter(|r| r.approval.owner == user || governor() == Some(user)))
 }
+/// No private approval data: admins deleting a different account still need
+/// the complete group inventory, even when they have no test-club membership.
+#[ic_cdk::update]
+fn read_owner_test_deletion_required(target_alias: String) -> Outcome<bool> {
+    if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
+    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
+    Ok(owner_opening(&target_alias).is_some())
+}
 
 fn media_growth_local() -> bool {
     #[cfg(test)] { TEST_GROWTH.with(|v| *v.borrow()) }
@@ -392,6 +400,10 @@ async fn read_new_club_creation_authorized(user: Principal, club_id: String, tar
     registry_writable()?;
     let revision = current_revision();
     let requestor = caller();
+    let initial = group_for(&group_id).ok_or("Unknown group")?;
+    if initial.target_alias != target_alias || !initial.domains.iter().any(|d| d.domain == "club_domain" && d.canister == requestor) {
+        return Err("Registered destination club authority required".into());
+    }
     if owner_opening(&target_alias).is_some_and(|r| r.approval.group.id == group_id) {
         let receipt = owner_opening(&target_alias).ok_or("Owner opening missing")?;
         if receipt.approval.owner != user || !receipt.approval.club_ids.contains(&club_id) { return Ok(false); }

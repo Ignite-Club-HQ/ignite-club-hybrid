@@ -2,7 +2,6 @@
  * Stopping new placements retains discovery for already-created test clubs. */
 import type { FeatureBackendContext } from './featureRouter';
 export type OwnerRoute = { groupId: 'g2'; acceptingNew: boolean; clubIds: string[]; evidence: string };
-export function validateOwnerReceipt(receipt: Awaited<ReturnType<Awaited<ReturnType<typeof import('./domains')['connectLiveShardRouter']>>['actor']['read_my_owner_test_opening']>> extends { Ok: infer T } ? T : never) { return receipt; }
 let confirmed: { key: string; value: OwnerRoute | null } | null = null;
 const keyFor = (ctx: FeatureBackendContext) => JSON.stringify([ctx.identity.getPrincipal().toText(), ctx.target.alias,
   ctx.target.host, ctx.target.networkKind, ctx.target.canisterIds?.shard_router]);
@@ -34,6 +33,7 @@ export async function readOwnerTestRoute(ctx: FeatureBackendContext): Promise<Ow
   if (key !== keyFor(ctx) || a.owner.toText() !== ctx.identity.getPrincipal().toText() || a.group.id !== 'g2' ||
       a.group.target_alias !== ctx.target.alias || a.group.accepting || a.placement.network_kind !== ctx.target.networkKind ||
       new URL(a.placement.host).origin !== new URL(ctx.target.host).origin || a.club_ids.length < 1 || a.club_ids.length > 10 ||
+      new Set(a.club_ids).size !== a.club_ids.length || a.club_ids.some(id => !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)) ||
       !/^[a-f0-9]{64}$/i.test(a.evidence_sha256)) throw new Error('Owner opening does not match this identity and deployment');
   const value: OwnerRoute = { groupId: 'g2', acceptingNew: receipt.accepting_new, clubIds: a.club_ids, evidence: a.evidence_sha256 };
   confirmed = { key, value }; return value;

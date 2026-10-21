@@ -32,7 +32,7 @@ try {
   const manifest = ok(await identity.actor.read_removal_history_manifest());
   ok(await identity.actor.set_group_inventory_binding({ registry: router.canisterId, registry_revision: revision, target_alias: 'ic', deployment_id: 'mainnet', deployment_revision: 1n,
     host: 'https://icp-api.io', network_kind: 'public_mainnet' }, manifest.revision));
-  identity.actor.setPrincipal(owner); ok(await identity.actor.register_account());
+  identity.actor.setPrincipal(owner); const ownerAccount = ok(await identity.actor.register_account());
   club.actor.setPrincipal(governor); ok(await club.actor.set_owner_test_deletion_identity(identity.canisterId));
   const actual = ok(await router.actor.read_group_registry('ic')).groups[0];
   const approval = { owner, group: actual, placement, club_ids: ids, expected_revision: revision, evidence_sha256: 'ab'.repeat(32) };
@@ -49,11 +49,10 @@ try {
   assert.equal(ok(await router.actor.list_groups())[0].accepting, false);
   router.actor.setPrincipal(owner); assert.ok('Err' in await router.actor.place_my_new_club(ids[1], 'ic')); assert.deepEqual(ok(await router.actor.place_my_new_club(ids[0], 'ic')), assigned);
   assert.equal(ok(await router.actor.read_my_group_assignments([ids[0]], 'ic', await router.actor.version())).length, 1);
-  identity.actor.setPrincipal(governor); const account = await identity.actor.get_account_by_principal(owner);
+  identity.actor.setPrincipal(governor);
   // Eligibility uses current human account status; suspended owners cannot
   // turn a saved creator receipt into a fresh create or placement.
-  const ownerAccount = ok(account); assert.ok(ownerAccount[0]);
-  ok(await identity.actor.set_account_status(ownerAccount[0].id, { Suspended: null }));
+  ok(await identity.actor.set_account_status(ownerAccount.id, { Suspended: null }));
   club.actor.setPrincipal(owner); assert.ok('Err' in await club.actor.create_club(ids[1], 'Denied suspended', 'suspended', [], []));
   await pic.upgradeCanister({ canisterId: router.canisterId, wasm: process.env.SHARD_ROUTER_WASM, sender: governor });
   assert.equal(ok(await router.actor.read_my_owner_test_opening('ic'))[0].accepting_new, false);
