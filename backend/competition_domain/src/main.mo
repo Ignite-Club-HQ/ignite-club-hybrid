@@ -253,6 +253,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not isFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?FenceSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (removalReceiver.snapshotDenied(snapshot)) return #Err("Snapshot references fenced account");
     let privacy = switch (s.score_privacy) { case (?rows) rows; case null [] };
     let phqMeta=s.playhq_metadata??[];let phqStats=s.playhq_stats??[];
     let c = club;

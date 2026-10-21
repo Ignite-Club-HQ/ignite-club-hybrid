@@ -125,6 +125,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not isFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?PointsSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (removalReceiver.snapshotDenied(snapshot)) return #Err("Snapshot references fenced account");
     if (s.roles.any(func(x) = x.club_id != club) or s.history.any(func(x) = x.club_id != club) or s.users.any(func(x) = x.club_id != club)
         or s.children.any(func(x) = x.club_id != club) or s.rewards.any(func(x) = x.club_id != club) or s.redemptions.any(func(x) = x.club_id != club)
         or s.cooldowns.any(func(x) = x.club_id != club) or s.settings.any(func(x) = x.club_id != club)) return #Err("Snapshot contains foreign records");

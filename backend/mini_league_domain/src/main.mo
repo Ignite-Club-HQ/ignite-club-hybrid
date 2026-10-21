@@ -150,6 +150,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not isFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?LeagueSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (removalReceiver.snapshotDenied(snapshot)) return #Err("Snapshot references fenced account");
     let inL = func(id : Text) : Bool = s.leagues.any(func(l) = l.id == id);
     let inS = func(id : Text) : Bool = s.sessions.any(func(x) = x.id == id);
     let inG = func(id : Text) : Bool = s.groups.any(func(x) = x.id == id);
