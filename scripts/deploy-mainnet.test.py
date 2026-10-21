@@ -35,6 +35,7 @@ esac
 if [[ "$1" != *media-key-deploy-preflight.mjs ]]; then exec "$REAL_NODE" "$@"; fi
 printf 'key-preflight %s\n' "$2" >> "$CALL_LOG"
 if [ "$KEY_SAFE" != 1 ]; then exit 43; fi
+if [ "$2" = before ]; then mkdir -p "$(dirname "$4")"; printf '{}' > "$4"; fi
 exit 0
 ''')
             preflight.chmod(0o755)
