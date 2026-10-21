@@ -2,7 +2,7 @@ import type { Identity } from "@icp-sdk/core/agent";
 import { isFeatureCanisterConfigured, type FeatureArea } from "./featureBackend";
 import { getCurrentInternetIdentity, getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getEffectiveBackendForFeature, isSignedInWithEmail, tryGetActiveIcpTarget } from "./loadBackendRouting";
-import { activationStatus, SHIPPED_GATES } from "./groupActivation";
+import { routingActive } from "./generalActivation";
 import { clubDispatch } from "./groupDispatch";
 import type { GroupDomain } from "./groupRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
@@ -103,7 +103,7 @@ async function dispatchIcp<T>(feature: FeatureArea, providers: FeatureBackendPro
   // Group routing switch-on lock: shipped off, so every club uses the shared
   // canisters. If ever switched on without the club-scoped dispatcher, fail
   // closed instead of silently sending a moved club to the old group.
-  if (!scope?.legacy && (activationStatus(SHIPPED_GATES).active || Boolean(await readOwnerTestRoute(context)))) {
+  if (!scope?.legacy && (await routingActive(context) || Boolean(await readOwnerTestRoute(context)))) {
     const domain = FEATURE_GROUP_DOMAIN[feature];
     if (scope && 'shared' in scope) return providers.icp(context);
     if (scope && 'newClubId' in scope) return clubDispatch.forNewClub(feature, scope.newClubId, async ctx => providers.icp(ctx));

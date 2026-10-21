@@ -1,4 +1,4 @@
-import { activationStatus, SHIPPED_GATES } from './groupActivation';
+import { routingActive } from './generalActivation';
 import { hasOwnerTestRouting } from './ownerTestRouting';
 import { withFeatureBackend, type FeatureBackendContext, type ClubScope } from './featureRouter';
 
@@ -9,7 +9,7 @@ export function readMembershipInScope<T>(
   scope: ClubScope,
   read: (context: FeatureBackendContext) => Promise<T>,
 ): Promise<T> {
-  if (!activationStatus(SHIPPED_GATES).active && !hasOwnerTestRouting(context)) return read(context);
+  if (!await routingActive(context) && !hasOwnerTestRouting(context)) return read(context);
   return withFeatureBackend('membership', {
     supabase: () => { throw new Error('Internet Identity connection required'); },
     icp: read,

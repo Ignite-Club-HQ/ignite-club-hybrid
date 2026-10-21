@@ -6,9 +6,10 @@ type DeletionDomain = 'club_domain' | 'vault_domain' | 'events_domain' | 'messag
 /** Keep discovery alive through deletion: membership loss must not drop an authority on retry. */
 export async function openAccountDeletionInventory(target: IcpTargetConfig, identity: Identity,
   required: readonly DeletionDomain[]) {
-  const { activationStatus, SHIPPED_GATES } = await import('./groupActivation');
-  const owner = activationStatus(SHIPPED_GATES).active ? null : await (await import('./ownerTestRouting')).readOwnerTestRoute({ target, identity });
-  let grouped = activationStatus(SHIPPED_GATES).active || Boolean(owner);
+  const { routingActive } = await import('./generalActivation');
+  const general = await routingActive({ target, identity });
+  const owner = general ? null : await (await import('./ownerTestRouting')).readOwnerTestRoute({ target, identity });
+  let grouped = general || Boolean(owner);
   if (!grouped && target.canisterIds?.shard_router) {
     const { actor } = await (await import('./domains')).connectLiveShardRouter(target, identity);
     try {
