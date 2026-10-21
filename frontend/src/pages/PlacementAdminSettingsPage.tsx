@@ -45,9 +45,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoading } from "@/components/ui/page-loading";
-import { PhotoStoresCard } from "@/components/admin/PhotoStoresCard";
 import { FreePlanLimitsCard } from "@/components/admin/FreePlanLimitsCard";
-import { CanisterBalancesCard } from "@/components/admin/CanisterBalancesCard";
 import { CanisterUsageCard } from "@/components/admin/CanisterUsageCard";
 import { SpeedComparisonCard } from "@/components/admin/SpeedComparisonCard";
 import { ClubProOverridesCard } from "@/components/admin/ClubProOverridesCard";
@@ -881,8 +879,19 @@ export default function PlacementAdminSettingsPage() {
         </Card>
 
         <FreePlanLimitsCard />
-        <PhotoStoresCard />
-        <CanisterBalancesCard />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Live utilization</CardTitle>
+            <CardDescription>
+              Photo-store fullness, canister fuel and memory now live in one place: Group Infrastructure.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => navigate("/admin/group-infrastructure")}>
+              Open Group Infrastructure
+            </Button>
+          </CardContent>
+        </Card>
         <CanisterUsageCard />
         <SpeedComparisonCard />
         <ClubProOverridesCard />
