@@ -3257,9 +3257,6 @@ persistent actor class Main(governorInit : Principal) = this {
   // Splits a JSON array body (as returned by extractJsonArray) into the raw
   // text of each top-level `{...}` object, ignoring nested braces.
   func splitJsonObjects(arrText : Text) : [Text] {
-    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
-    try {
-
     let parts = Text.toArray(arrText);
     let size = parts.size();
     var objects : [Text] = [];
