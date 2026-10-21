@@ -64,11 +64,14 @@ const mgmtIdl = ({ IDL: I }: { IDL: typeof IDL }) => I.Service({
     status: I.Variant({ running: I.Null, stopped: I.Null, stopping: I.Null }), module_hash: I.Opt(I.Vec(I.Nat8)), cycles: I.Nat,
     settings: I.Record({ controllers: I.Vec(I.Principal), environment_variables: I.Vec(I.Record({ name: I.Text, value: I.Text })) }) })], []),
 });
-const mgmt = Actor.createActor(mgmtIdl, { agent, canisterId: 'aaaaa-aa' }) as unknown as {
+type Mgmt = {
   canister_status(a: { canister_id: Principal }): Promise<{ status: Record<string, null>; module_hash: [] | [Uint8Array]; cycles: bigint;
     settings: { controllers: Principal[]; environment_variables: { name: string; value: string }[] } }>;
 };
-const envOf = async (id: string) => (await mgmt.canister_status({ canister_id: Principal.fromText(id) })).settings.environment_variables;
+/** Management calls must name the target canister as effectiveCanisterId, else the boundary returns canister_not_found. */
+const mgmtFor = (id: string | Principal) => Actor.createActor(mgmtIdl, { agent, canisterId: 'aaaaa-aa',
+  effectiveCanisterId: typeof id === 'string' ? Principal.fromText(id) : id } as Parameters<typeof Actor.createActor>[1]) as unknown as Mgmt;
+const envOf = async (id: string) => (await mgmtFor(id).canister_status({ canister_id: Principal.fromText(id) })).settings.environment_variables;
 
 async function observeServices(group: { domains: { domain: string; canister: { toText(): string } }[]; photo_store: [] | [{ toText(): string }] },
   placement: { domains: { domain: string; subnet: { toText(): string } }[] }) {
@@ -81,7 +84,7 @@ async function observeServices(group: { domains: { domain: string; canister: { t
   let lowestCycles: bigint | null = null, largestHeap = 0n;
   for (const s of services) {
     const cid = Principal.fromText(s.id);
-    const status = await mgmt.canister_status({ canister_id: cid });
+    const status = await mgmtFor(cid).canister_status({ canister_id: cid });
     const certified = await CanisterStatus.request({ agent, canisterId: cid, paths: ['subnet'] });
     const subnet = String((certified.get('subnet') as { subnetId: Principal }).subnetId);
     const health = Actor.createActor(({ IDL: I }: { IDL: typeof IDL }) => I.Service({ memory_stats: I.Func([], [I.Record({ heap_bytes: I.Nat })], ['query']) }), { agent, canisterId: cid }) as unknown as { memory_stats(): Promise<{ heap_bytes: bigint }> };
