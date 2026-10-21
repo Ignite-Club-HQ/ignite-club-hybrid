@@ -1,6 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Active scope — minimum Group 2 test opening (21 October 2026, 03:07 UTC)
+- [ ] Fix screenshot-reported creation approval drift: separate configuration approval from assignment revisions without weakening inventory, placement, creator or deletion checks; verify consecutive creation and mutation rejection. Live authenticated revision/reservation readback and owner-run router upgrade/snapshot remain required.
 - [x] 20:06 UTC owner report: **Open Group 2 to everyone succeeded** — Group 2 is registered, verified, snapshotted and open (accepting=true). Remaining follow-ups below.
 - [x] Sync the GitHub snapshot commit so this checkout's `frontend/src/live/generated/routingGates.ts` stops being `null` — until the snapshot ships in a frontend build, `generalActivation` keeps ICP routing inactive while the router may already place new clubs into Group 2, so any test club would resolve to the legacy shared canisters. Sync first, then verify a signed-in test club resolves and works against Group 2 (sign-in, club creation, photos, messaging, notifications).
 - [x] Rerun `Report group health to the router` after opening so the now-accepting group has fresh health readings.
