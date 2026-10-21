@@ -17,6 +17,7 @@ import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/sha
 import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
 import { verifyRemovalWiring, ADMISSION_DOMAINS, type GroupDescriptor } from '../src/live/groupRemovalWiring';
 import { verifyOwnerReciprocalConfiguration, type OwnerCheckSpec, type ObservedService } from '../src/live/ownerOpeningChecks';
+import { resolveOpeningWorker } from './opening-worker.mjs';
 
 const GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 const host = process.env.ICP_HOST || 'https://icp-api.io';
@@ -27,6 +28,8 @@ if (!pem || !report) throw new Error('Usage: produce-routing-gates <operator.pem
 const ids = JSON.parse(readFileSync(new URL('../../deploy/mainnet/.icp/data/mappings/ic.ids.json', import.meta.url), 'utf8'));
 const routerId = ids.shard_router as string, identityAccess = ids.identity_access as string;
 if (!routerId || !identityAccess) throw new Error('Shared router/identity mappings missing');
+const approval = JSON.parse(readFileSync(new URL('../../deploy/groups/g2/general-opening.json', import.meta.url), 'utf8'));
+const pushWorker = resolveOpeningWorker(approval.pushWorker, process.env.PUSH_WORKER_PRINCIPAL);
 const identity = loadOperatorIdentity(pem);
 if (identity.getPrincipal().toText() !== GOVERNOR) throw new Error('Existing deployment administrator required');
 const agent = await HttpAgent.create({ host, identity });
@@ -108,12 +111,9 @@ for (const group of registry.groups) {
   }
   snapshotGroups.push({ id: group.id, domains: group.domains.map(d => ({ domain: d.domain, canisterId: d.canister.toText() })),
     photoStore: store, moduleHashes });
-  // Reciprocal configuration per group, with the group's own worker principal.
-  const queue = observed.find(s => s.name === 'notification_queue')?.configuration ?? [];
-  const worker = queue.filter(r => r[0] === 'worker')[0]?.[1];
-  if (!worker) { problems.push(`${group.id}: notification worker missing`); continue; }
+  // Verify the actual delivery identity, not an arbitrary first queue grant.
   const spec: OwnerCheckSpec & { identityAccess: string; pushWorker: string } = {
-    governor: GOVERNOR, routerId, identityAccess, pushWorker: worker, targetAlias: group.target_alias,
+    governor: GOVERNOR, routerId, identityAccess, pushWorker, targetAlias: group.target_alias,
     deploymentId: placement.deployment_id, host: placement.host, revision: String(registry.revision),
     services: observed.map(s => ({ name: s.name, canisterId: s.canisterId, subnetId: s.subnetId, moduleHash: s.moduleHash })),
     minCycles: String(group.min_cycles), heapBudgetBytes: String(group.heap_budget_bytes) };

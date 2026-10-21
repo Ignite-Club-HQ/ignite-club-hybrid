@@ -19,6 +19,7 @@ import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/sha
 import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
 import { routerGroupRecord } from '../src/live/groupProvisionRouter';
 import type { Provision } from '../src/live/groupProvisioner';
+import { resolveOpeningWorker } from './opening-worker.mjs';
 
 const GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 const CONFIRMATIONS: Record<string, string> = {
@@ -36,6 +37,7 @@ if (action in CONFIRMATIONS && process.env.CONFIRMATION?.trim() !== CONFIRMATION
 }
 const spec: OwnerCheckSpec & { identityAccess: string; pushWorker: string; provisionFile?: string; workloadIdentity?: string;
   deploymentRevision?: string; primarySubnet?: string; maxClubs?: number } = JSON.parse(readFileSync(file, 'utf8'));
+if (action !== 'register-closed') spec.pushWorker = resolveOpeningWorker(spec.pushWorker, process.env.PUSH_WORKER_PRINCIPAL);
 if (spec.host !== 'https://icp-api.io') throw new Error('General opening supports the pinned public-mainnet gateway only');
 if (spec.targetAlias !== 'mainnet' || spec.deploymentId !== 'mainnet') throw new Error('Exact mainnet deployment required');
 const identity = loadOperatorIdentity(pem);
