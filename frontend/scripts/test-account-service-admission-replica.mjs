@@ -295,7 +295,7 @@ try {
  }
  queue.setPrincipal(governor);
  assert.equal(ok(await queue.recover()),0,'Recovery must not reset an issued external capability');
- assert.ok('Err' in await queue.authorize_delivery('held-delivery','held-delivery-key'));
+ assert.deepEqual(await queue.authorize_delivery('held-delivery','held-delivery-key'),{Ok:false});
  await pic.upgradeCanister({canisterId:services[3].canisterId,wasm:process.env.NOTIFICATION_QUEUE_WASM,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
  queue.setPrincipal(identity.canisterId);
  assert.equal(ok(await queue.read_account_removal_drain(receiverRequest)).outstanding,1n,'Unsettled external delivery must survive upgrade');
