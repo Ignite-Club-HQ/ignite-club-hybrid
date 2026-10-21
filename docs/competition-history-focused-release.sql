@@ -92,6 +92,7 @@ DECLARE
   v_location text; v_location_name text; v_home_event uuid; v_away_event uuid;
   v_placeholder boolean; v_home_name text; v_away_name text;
 BEGIN
+  IF pg_trigger_depth()>1 THEN RETURN NEW;END IF;
   IF TG_OP = 'DELETE' THEN
     UPDATE public.events SET is_cancelled=true WHERE competition_match_id=OLD.id;
     RETURN OLD;
@@ -218,12 +219,16 @@ BEGIN
     NEW.away_event_id := v_away_event;
   END IF;
 
+  IF TG_OP='INSERT' THEN
+    UPDATE public.competition_matches SET home_event_id=NEW.home_event_id,away_event_id=NEW.away_event_id WHERE id=NEW.id;
+  END IF;
   RETURN NEW;
 END;
 $$;
 
 
-CREATE TRIGGER trg_sync_competition_match_events_iu BEFORE INSERT OR UPDATE ON public.competition_matches FOR EACH ROW EXECUTE FUNCTION public.sync_competition_match_events();
+CREATE TRIGGER trg_sync_competition_match_events_iu BEFORE UPDATE ON public.competition_matches FOR EACH ROW EXECUTE FUNCTION public.sync_competition_match_events();
+CREATE TRIGGER history_sync_competition_match_insert AFTER INSERT ON public.competition_matches FOR EACH ROW EXECUTE FUNCTION public.sync_competition_match_events();
 CREATE TRIGGER trg_sync_competition_match_events_d BEFORE DELETE ON public.competition_matches FOR EACH ROW EXECUTE FUNCTION public.sync_competition_match_events();
 
 -- Production dropped legacy columns; restore null-only compatibility slots.
