@@ -13,7 +13,7 @@ if (!['check', 'stop'].includes(action) || !pem || !report) throw new Error('Exp
 if (action === 'stop' && (!/^\d+$/.test(revisionText) || process.env.CONFIRMATION?.trim() !== 'STOP GROUP 2 NEW CLUBS')) {
   throw new Error('Stop requires the checked revision and STOP GROUP 2 NEW CLUBS');
 }
-const ids = JSON.parse(readFileSync(resolve('deploy/mainnet/.icp/data/mappings/ic.ids.json'), 'utf8'));
+const ids = JSON.parse(readFileSync(new URL('../../deploy/mainnet/.icp/data/mappings/ic.ids.json', import.meta.url), 'utf8'));
 const routerId = Principal.fromText(ids.shard_router).toText();
 const identity = loadOperatorIdentity(pem);
 if (identity.getPrincipal().toText() !== 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae') throw new Error('Existing deployment administrator required');

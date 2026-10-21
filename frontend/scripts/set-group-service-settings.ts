@@ -24,7 +24,7 @@ if (process.env.CONFIRMATION?.trim() !== 'SET SERVICE SETTINGS') throw new Error
 const wanted = groupIdsArg.split(',').map(s => s.trim()).filter(Boolean);
 if (!wanted.length || wanted.some(id => !/^[a-z0-9-]{1,32}$/.test(id))) throw new Error('Invalid group id list');
 
-const ids = JSON.parse(readFileSync(resolve('deploy/mainnet/.icp/data/mappings/ic.ids.json'), 'utf8'));
+const ids = JSON.parse(readFileSync(new URL('../../deploy/mainnet/.icp/data/mappings/ic.ids.json', import.meta.url), 'utf8'));
 const routerId = ids.shard_router as string, identityAccess = ids.identity_access as string;
 if (!routerId || !identityAccess) throw new Error('Shared router/identity mappings missing');
 const identity = loadOperatorIdentity(pem);
