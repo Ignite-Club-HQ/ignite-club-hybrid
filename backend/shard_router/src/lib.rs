@@ -169,6 +169,8 @@ thread_local! {
     // Additive store-principal partition; never reinterpret legacy group bytes.
     static GROUP_INDEX: RefCell<Option<group_index::GroupIndex>> = const { RefCell::new(None) };
     static STORE_GROWTH: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(13)));
+    // Additive creator binding; old assignments never imply creator ownership.
+    static PLACEMENT_OWNERS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(14)));
 }
 
 fn media_growth_local() -> bool {
@@ -265,16 +267,50 @@ fn is_uuid(id: &str) -> bool {
 fn place_new_club_for(user: Principal, club_id: String, target_alias: String, now: u64) -> Outcome<GroupAssignment> {
     if user == Principal::anonymous() { return Err("Authentication required".into()); }
     if !is_uuid(&club_id) { return Err("Club id must be a fresh UUID".into()); }
-    // Idempotent retry: an existing assignment never counts against the cap.
+    // Idempotent retry requires the original authenticated creator. Location
+    // metadata or an old governor assignment cannot authorize club creation.
     if group_assignment_for(&club_id).is_some() {
+        if placement_owner(&club_id) != Some(user) { return Err("New club placement belongs to another creator or predates creator binding".into()); }
         return assign_group_record(club_id, target_alias, current_revision(), now);
     }
     let key = user.as_slice().to_vec();
     let used = PLACERS.with(|m| m.borrow().get(&key).unwrap_or(0));
     if used >= MAX_SELF_PLACEMENTS { return Err("New club placement limit reached".into()); }
     let assignment = assign_group_record(club_id, target_alias, current_revision(), now)?;
+    PLACEMENT_OWNERS.with(|m| m.borrow_mut().insert(assignment.club_id.as_bytes().to_vec(), user.as_slice().to_vec()));
     PLACERS.with(|m| m.borrow_mut().insert(key, used + 1));
     Ok(assignment)
+}
+
+fn placement_owner(club_id: &str) -> Option<Principal> {
+    PLACEMENT_OWNERS.with(|m| m.borrow().get(&club_id.as_bytes().to_vec()).map(|bytes| Principal::from_slice(&bytes)))
+}
+
+fn creator_placement(user: Principal, club_id: &str, target_alias: &str, expected_revision: u64) -> Outcome<GroupAssignment> {
+    if user == Principal::anonymous() { return Err("Authentication required".into()); }
+    registry_writable()?;
+    if placement_owner(club_id) != Some(user) { return Err("Original club creator required".into()); }
+    hosted_assignment(club_id, target_alias, expected_revision, current_revision())
+}
+
+/// Consensus creator receipt only; never grants club membership or data access.
+#[ic_cdk::update]
+fn read_my_new_club_placement(club_id: String, target_alias: String, expected_revision: u64) -> Outcome<GroupAssignment> {
+    creator_placement(caller(), &club_id, &target_alias, expected_revision)
+}
+
+/// Only the registered destination club authority can check a creator receipt.
+/// This does not authorize private reads or grant cross-club membership.
+#[ic_cdk::update]
+fn read_new_club_creation_authorized(user: Principal, club_id: String, target_alias: String, group_id: String) -> Outcome<bool> {
+    registry_writable()?;
+    let group = group_for(&group_id).ok_or("Unknown group")?;
+    if group.target_alias != target_alias || !group.domains.iter().any(|d| d.domain == "club_domain" && d.canister == caller()) {
+        return Err("Registered destination club authority required".into());
+    }
+    if !GROUP_PLACEMENTS.with(|m| m.borrow().contains_key(&group_id.as_bytes().to_vec())) { return Err("Complete group placement required".into()); }
+    Ok(user != Principal::anonymous() && placement_owner(&club_id) == Some(user) &&
+        group_assignment_for(&club_id).is_some_and(|a| a.group_id == group_id))
 }
 
 fn memory(id: u8) -> Memory {
@@ -1041,6 +1077,11 @@ mod tests {
         assert!(place_new_club_for(Principal::anonymous(), id(0), "selftest".into(), 1).is_err());
         assert!(place_new_club_for(user, "not-a-uuid".into(), "selftest".into(), 1).is_err());
         let first = place_new_club_for(user, id(1), "selftest".into(), 1).unwrap();
+        assert_eq!(creator_placement(user, &id(1), "selftest", current_revision()), Ok(first.clone()));
+        assert!(place_new_club_for(Principal::from_slice(&[8; 29]), id(1), "selftest".into(), 1).is_err());
+        assert!(creator_placement(Principal::anonymous(), &id(1), "selftest", current_revision()).is_err());
+        assert!(creator_placement(user, &id(1), "foreign", current_revision()).is_err());
+        assert!(creator_placement(user, &id(1), "selftest", current_revision() - 1).is_err());
         assert_eq!(place_new_club_for(user, id(1), "selftest".into(), 1).unwrap(), first);
         for n in 2..=MAX_SELF_PLACEMENTS { place_new_club_for(user, id(n), "selftest".into(), 1).unwrap(); }
         assert!(place_new_club_for(user, id(99), "selftest".into(), 1).is_err());

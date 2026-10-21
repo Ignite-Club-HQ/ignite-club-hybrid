@@ -55,6 +55,27 @@ persistent actor class Main(governorInit : Principal) = this {
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
   };
+  // Only configure on newly provisioned group authorities. Existing shared
+  // clubs keep their creation path; partial configuration refuses all creates.
+  transient let newClubRouter = Runtime.envVar<system>("IGNITE_NEW_CLUB_PLACEMENT_ROUTER");
+  transient let newClubGroup = Runtime.envVar<system>("IGNITE_NEW_CLUB_PLACEMENT_GROUP");
+  transient let newClubTarget = Runtime.envVar<system>("IGNITE_NEW_CLUB_PLACEMENT_TARGET");
+  func creatorPlacementAllowed(subject : Principal, clubId : Text) : async Bool {
+    switch (newClubRouter, newClubGroup, newClubTarget) {
+      case (null, null, null) true;
+      case (?routerId, ?groupId, ?targetAlias) {
+        let router : actor {
+          read_new_club_creation_authorized : shared (Principal, Text, Text, Text) -> async { #Ok : Bool; #Err : Text }
+        } = actor(routerId);
+        try {
+          switch (await (with timeout = 30) router.read_new_club_creation_authorized(subject, clubId, targetAlias, groupId)) {
+            case (#Ok(allowed)) allowed; case (#Err(_)) false
+          }
+        } catch (_) { false }
+      };
+      case _ false
+    }
+  };
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
   // Live memory reading for the admin health page (public, like cycles_balance).
@@ -4469,6 +4490,9 @@ persistent actor class Main(governorInit : Principal) = this {
     if (id == "" or id.size() > 128) return #Err("Invalid club id");
     if (name == "" or name.size() > 160) return #Err("Invalid club name");
     if (profiles.any(func(p) = p.id == id)) return #Err("Club already exists");
+    if (not (await creatorPlacementAllowed(caller, id))) return #Err("Original creator placement required");
+    auth(caller);
+    if (removalReceiver.denied(caller) or profiles.any(func(p) = p.id == id)) return #Err("Club creation changed during placement check");
     if (growthRehearsal and not MediaGrowthReservations.reserve(mediaGrowthState, mediaRetainedState.ledger, id, mediaGrowthState.freeBytes)) return #Err("Verified group growth capacity required");
     if (routerGrowthRehearsal and not (await reserveRouterGrowth(id))) return #Err("Group-wide growth reservation required");
     // The router call can interleave creation/removal; recheck before publish.

@@ -4,13 +4,13 @@ import { OFF } from './groupActivation';
 import { GROUP_DOMAINS } from './groupRouting';
 
 const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n, removalWiring: { revision: 1n, groupIds: ["a"], checkedAtMs: 0 } };
-const ctx = { identity: { getPrincipal: () => ({ toText: () => 'p1' }) } };
+const ctx = { identity: { getPrincipal: () => ({ toText: () => 'p1' }) }, target: { alias: 'mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: {} } };
 function world(placed: string | Error, gates = ON) {
   const s = { readClub: vi.fn(), writeClub: vi.fn(), isAssigned: () => false, dispose: vi.fn(), readEveryGroup: vi.fn(),
-    createInGroup: vi.fn(async (g: string, _d: string, w: (c: any) => any) => w({ group: g })) };
+    createInGroup: vi.fn(async (p: {groupId: string}, _d: string, w: (c: any) => any) => w({ group: p.groupId })) };
   const d = { gates: () => gates, legacy: vi.fn(async (_f: string, _c: string, fn: (c: any) => any) => fn({ group: 'shared' })),
     context: async () => ctx, open: vi.fn(async () => s),
-    placeNewClub: vi.fn(async () => { if (placed instanceof Error) throw placed; return placed; }) };
+    placeNewClub: vi.fn(async (_ctx, clubId: string) => { if (placed instanceof Error) throw placed; return { clubId, groupId: placed, revision: 2n }; }) };
   return { d, s };
 }
 beforeEach(() => clearGroupDispatchCache());
@@ -26,6 +26,8 @@ describe('new club placement', () => {
     expect(await createClubDispatcher(d as never).forNewClub('membership', 'c1', async (c: any) => c.group)).toBe('g2');
     expect(d.placeNewClub).toHaveBeenCalledWith(ctx, 'c1');
     expect(s.createInGroup).toHaveBeenCalledTimes(1);
+    expect(s.createInGroup.mock.calls[0][0]).toEqual({ clubId: 'c1', groupId: 'g2', revision: 2n });
+    expect(d.placeNewClub.mock.invocationCallOrder[0]).toBeLessThan(d.open.mock.invocationCallOrder[0]);
     expect(s.dispose).toHaveBeenCalled();
   });
   it('placement refused (no room / limit): creation fails, never silently shared', async () => {

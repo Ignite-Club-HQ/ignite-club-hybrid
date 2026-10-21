@@ -6,14 +6,14 @@
  * canisters (not yet moved). Never falls back from a group to the old canisters. */
 import type { FeatureArea } from './featureBackend';
 import type { FeatureBackendContext } from './featureRouter';
-import type { GroupDomain } from './groupRouting';
+import type { GroupDomain, ClubAssignment } from './groupRouting';
 import { activationStatus, chooseRoute, SHIPPED_GATES, type ActivationGates } from './groupActivation';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
   isAssigned(c: string): boolean; dispose(): void;
   readHosted?<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
-  createInGroup?<T>(g: string, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
+  createInGroup?<T>(placement: ClubAssignment, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   readEveryGroup<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]> };
 /** What a call is about. Non-club scopes are resolved to their owning club. */
 export type EntityScope = { clubId: string } | { photoId: string } | { galleryCardId: string } | { newsId: string } | { competitionId: string } | { competitionMatchId: string } | { eoiId: string } | { seasonId: string } | { vaultFileId: string } | { vaultFolderId: string } | { notificationId: string } | { scheduledMessageId: string } | { eventGroupId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string };
@@ -33,14 +33,14 @@ export type DispatchDeps = {
   /** Does this group hold the invite token? (invitees aren't members yet) */
   holdsInvite?: (ctx: FeatureBackendContext, token: string) => Promise<boolean>;
   store?: OwnerStore;
-  /** Ask the global directory to place a new club; returns its group id. */
-  placeNewClub?: (ctx: FeatureBackendContext, clubId: string) => Promise<string>;
+  /** Ask the global directory for an original-creator-bound placement. */
+  placeNewClub?: (ctx: FeatureBackendContext, clubId: string) => Promise<ClubAssignment>;
 };
 export const MAX_DEVICE_OWNERS = 2000;
 const owners = new Map<string, string | null>(); // kind:id -> club (null = shared canisters)
 const inflight = new Map<string, Promise<string | null>>();
 let loadedFor: string | null = null;
-let cached: { principal: string; session: Promise<Session> } | null = null;
+let cached: { principal: string; targetKey: string; session: Promise<Session> } | null = null;
 export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; }
 
 function hydrate(deps: DispatchDeps, principal: string) {
@@ -55,7 +55,9 @@ function persist(deps: DispatchDeps, principal: string) {
 
 async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendContext; s: Session; principal: string }> {
   const ctx = await deps.context(); const principal = ctx.identity.getPrincipal().toText();
-  if (!cached || cached.principal !== principal) { clearGroupDispatchCache(); cached = { principal, session: deps.open(ctx) }; }
+  const targetKey = JSON.stringify([ctx.target.alias, ctx.target.host, ctx.target.networkKind,
+    Object.entries(ctx.target.canisterIds ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
+  if (!cached || cached.principal !== principal || cached.targetKey !== targetKey) { clearGroupDispatchCache(); cached = { principal, targetKey, session: deps.open(ctx) }; }
   hydrate(deps, principal);
   try { return { ctx, s: await cached.session, principal }; } catch (e) { cached = null; throw e; }
 }
@@ -147,10 +149,15 @@ export function createClubDispatcher(deps: DispatchDeps) {
     forNewClub: async <T>(feature: FeatureArea, clubId: string, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!activationStatus(deps.gates()).active) return deps.legacy(feature, clubId, fn);
       if (!deps.placeNewClub) throw new Error('Club placement unavailable');
-      const { ctx, s } = await sessionFor(deps);
+      const ctx = await deps.context();
+      const placement = await deps.placeNewClub(ctx, clubId);
+      if (placement.clubId !== clubId) throw new Error('Foreign club placement');
+      // Placement changes the registry revision. Do not create from the session
+      // captured before that mutation; reopen against its acknowledged receipt.
+      clearGroupDispatchCache();
+      const { s } = await sessionFor(deps);
       if (!s.createInGroup) throw new Error('Club placement unavailable');
-      const groupId = await deps.placeNewClub(ctx, clubId);
-      try { return await s.createInGroup(groupId, 'club_domain', fn); }
+      try { return await s.createInGroup(placement, 'club_domain', fn); }
       finally { cached?.session.then(x => x.dispose(), () => {}); cached = null; }
     },
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
@@ -185,7 +192,7 @@ export const clubDispatch = createClubDispatcher({
     const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
     const reply = await actor.place_my_new_club(clubId, ctx.target.alias);
     if ('Err' in reply) throw new Error(reply.Err);
-    return reply.Ok.group_id;
+    return { clubId: reply.Ok.club_id, groupId: reply.Ok.group_id, revision: reply.Ok.revision };
   },
   store: {
     load: p => JSON.parse(localStorage.getItem(`ignite.groupOwners.${p}`) ?? '{}'),

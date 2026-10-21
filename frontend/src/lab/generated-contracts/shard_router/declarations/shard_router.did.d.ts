@@ -112,6 +112,8 @@ export type Result_16 = { 'Ok' : GroupRegistryPage } |
   { 'Err' : string };
 export type Result_17 = { 'Ok' : Array<GroupAssignment> } |
   { 'Err' : string };
+export type Result_18 = { 'Ok' : boolean } |
+  { 'Err' : string };
 export type Result_2 = { 'Ok' : AssignResult } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : AssignDomainResult } |
@@ -213,6 +215,21 @@ export interface _SERVICE {
   'read_my_group_assignments' : ActorMethod<
     [Array<string>, string, bigint],
     Result_17
+  >,
+  /**
+   * Consensus creator receipt only; never grants club membership or data access.
+   */
+  'read_my_new_club_placement' : ActorMethod<
+    [string, string, bigint],
+    Result_4
+  >,
+  /**
+   * Only the registered destination club authority can check a creator receipt.
+   * This does not authorize private reads or grant cross-club membership.
+   */
+  'read_new_club_creation_authorized' : ActorMethod<
+    [Principal, string, string, string],
+    Result_18
   >,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,

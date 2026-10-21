@@ -21,6 +21,33 @@ function fixture() {
   return { ctx, registry, assignments, transport };
 }
 describe('integrated deployment-bound group read session', () => {
+  it('creates once only after an exact original-creator placement read at the current revision', async () => {
+    const f = fixture(); const placement = { clubId: 'new-test-club', groupId: 'b', revision: 2n };
+    f.transport.readNewClubPlacement = vi.fn(async () => placement);
+    const s = await openGroupSession(f.ctx, f.transport); const create = vi.fn(async ctx => ctx.target.canisterIds.club_domain);
+    expect(await s.createInGroup(placement, 'club_domain', create)).toBe('b-0-cai');
+    expect(f.transport.readNewClubPlacement).toHaveBeenCalledWith('new-test-club', 2n);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+  it('stale, foreign or missing creator proof cannot run a create', async () => {
+    for (const kind of ['missing', 'foreign', 'stale', 'registry']) {
+      const f = fixture(); const placement = { clubId: 'new-test-club', groupId: 'b', revision: 2n };
+      if (kind !== 'missing') f.transport.readNewClubPlacement = async () => {
+        if (kind === 'registry') f.registry.revision++;
+        return { ...placement, groupId: kind === 'foreign' ? 'a' : 'b', revision: kind === 'stale' ? 1n : 2n };
+      };
+      const s = await openGroupSession(f.ctx, f.transport); const create = vi.fn();
+      await expect(s.createInGroup(placement, 'club_domain', create)).rejects.toThrow();
+      expect(create).not.toHaveBeenCalled();
+    }
+  });
+  it('a lost creation reply is not automatically retried', async () => {
+    const f = fixture(); const placement = { clubId: 'new-test-club', groupId: 'b', revision: 2n };
+    f.transport.readNewClubPlacement = async () => placement;
+    const s = await openGroupSession(f.ctx, f.transport); const create = vi.fn(async () => { throw new Error('reply lost'); });
+    await expect(s.createInGroup(placement, 'club_domain', create)).rejects.toThrow('reply lost');
+    expect(create).toHaveBeenCalledTimes(1);
+  });
   it('rejects same-revision authority substitution during deletion inventory validation', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
     f.registry.groups[1].domains[0].canisterId = 'replacement-cai';

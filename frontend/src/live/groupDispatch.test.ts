@@ -7,7 +7,9 @@ const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPa
 function deps(gates = OFF, principal = 'p1') {
   const session = { readClub: vi.fn(async () => 'group'), writeClub: vi.fn(async () => 'group'), isAssigned: (c: string) => c === 'moved', dispose: vi.fn() };
   const d = { gates: () => gates, legacy: vi.fn(async () => 'legacy') as never,
-    context: async () => ({ identity: { getPrincipal: () => ({ toText: () => principal }) } }) as never, open: vi.fn(async () => session) };
+    context: async () => ({ identity: { getPrincipal: () => ({ toText: () => principal }) }, target: {
+      alias: 'mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: {},
+    } }) as never, open: vi.fn(async () => session) };
   return { d, session };
 }
 beforeEach(() => clearGroupDispatchCache());
@@ -70,6 +72,13 @@ describe('club-scoped dispatcher', () => {
   it('a different signed-in person gets a fresh session', async () => {
     const a = deps(ON, 'p1'); await createClubDispatcher(a.d).read('events', 'moved', 'events_domain', async () => 1);
     const b = deps(ON, 'p2'); await createClubDispatcher(b.d).read('events', 'moved', 'events_domain', async () => 1);
+    expect(a.session.dispose).toHaveBeenCalled(); expect(b.d.open).toHaveBeenCalledTimes(1);
+  });
+  it('the same person switching deployment endpoints cannot reuse a group session', async () => {
+    const a = deps(ON); await createClubDispatcher(a.d).read('events', 'moved', 'events_domain', async () => 1);
+    const b = deps(ON); const original = b.d.context;
+    b.d.context = async () => ({ ...await original(), target: { alias: 'other', host: 'https://other.invalid', networkKind: 'cloud_engine', canisterIds: {} } }) as never;
+    await createClubDispatcher(b.d).read('events', 'moved', 'events_domain', async () => 1);
     expect(a.session.dispose).toHaveBeenCalled(); expect(b.d.open).toHaveBeenCalledTimes(1);
   });
   it('the shipped dispatcher is switched off', async () => {

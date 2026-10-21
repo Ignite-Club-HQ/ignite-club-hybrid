@@ -9,7 +9,8 @@ function world(groups: Record<string, string[]>, gates = ON) {
   const s = { readClub: vi.fn(), writeClub: vi.fn(), isAssigned: () => false, dispose: vi.fn(),
     readEveryGroup: vi.fn(async (_d: string, r: (c: any) => Promise<any[]>) => (await Promise.all(ctxs.map(r))).flat()) };
   const d = { gates: () => gates, legacy: vi.fn(async (_f: string, _c: string, fn: (c: any) => any) => fn({ group: 'shared' })),
-    context: async () => ctxs[0] ?? { identity: { getPrincipal: () => ({ toText: () => 'p1' }) } }, open: vi.fn(async () => s),
+    context: async () => ({ ...(ctxs[0] ?? { identity: { getPrincipal: () => ({ toText: () => 'p1' }) } }),
+      target: { alias: 'mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: {} } }), open: vi.fn(async () => s),
     holdsInvite: async (c: any, t: string) => groups[c.group].includes(t) };
   return { d, s };
 }
