@@ -6,6 +6,8 @@ import { createJournalApi } from '../frontend/scripts/media-stage-two-github.mjs
 import { fundingPlan, parseBalance, assertNoOpenPayment } from './media-card-funding-policy.mjs';
 import { prepareInfrastructure } from './infrastructure-card-funding.mjs';
 
+// Mobile keyboards add surrounding spaces; trim only those, the exact value is still validated.
+for (const k of ['PAYMENT_ID', 'CARD_CONFIRM', 'FUNDING_GROUP_ID', 'TOPUP_TARGET_T']) if (process.env[k] !== undefined) process.env[k] = process.env[k].trim();
 const identity = 'ignite-card-deployer';
 function cli(args) {
   const r = spawnSync('icp', args, { encoding: 'utf8' });
