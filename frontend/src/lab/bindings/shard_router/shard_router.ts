@@ -300,6 +300,7 @@ export interface DeletionLock {
 export interface GroupRegistryPage {
     groups: Array<ShardGroup>;
     placements: Array<GroupPlacement>;
+    configuration_revision?: bigint;
     next_cursor?: string;
     revision: bigint;
 }
@@ -490,7 +491,7 @@ export class Shard_router implements shard_routerInterface {
     }
     async read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_19> {
         const result = await this.actor.read_my_group_assignments(arg0, arg1, arg2);
-        return from_candid_Result_19_n65(result);
+        return from_candid_Result_19_n66(result);
     }
     async read_my_new_club_placement(arg0: string, arg1: string, arg2: bigint): Promise<Result_4> {
         const result = await this.actor.read_my_new_club_placement(arg0, arg1, arg2);
@@ -498,15 +499,15 @@ export class Shard_router implements shard_routerInterface {
     }
     async read_my_owner_test_opening(arg0: string): Promise<Result_20> {
         const result = await this.actor.read_my_owner_test_opening(arg0);
-        return from_candid_Result_20_n67(result);
+        return from_candid_Result_20_n68(result);
     }
     async read_new_club_creation_authorized(arg0: Principal, arg1: string, arg2: string, arg3: string): Promise<Result_21> {
         const result = await this.actor.read_new_club_creation_authorized(arg0, arg1, arg2, arg3);
-        return from_candid_Result_21_n70(result);
+        return from_candid_Result_21_n71(result);
     }
     async read_owner_test_deletion_required(arg0: string): Promise<Result_21> {
         const result = await this.actor.read_owner_test_deletion_required(arg0);
-        return from_candid_Result_21_n70(result);
+        return from_candid_Result_21_n71(result);
     }
     async record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result> {
         const result = await this.actor.record_group_health(arg0, arg1, arg2, arg3);
@@ -587,17 +588,17 @@ function from_candid_Result_17_n56(value: _Result_17): Result_17 {
 function from_candid_Result_18_n61(value: _Result_18): Result_18 {
     return from_candid_variant_n62(value);
 }
-function from_candid_Result_19_n65(value: _Result_19): Result_19 {
-    return from_candid_variant_n66(value);
+function from_candid_Result_19_n66(value: _Result_19): Result_19 {
+    return from_candid_variant_n67(value);
 }
 function from_candid_Result_1_n3(value: _Result_1): Result_1 {
     return from_candid_variant_n4(value);
 }
-function from_candid_Result_20_n67(value: _Result_20): Result_20 {
-    return from_candid_variant_n68(value);
+function from_candid_Result_20_n68(value: _Result_20): Result_20 {
+    return from_candid_variant_n69(value);
 }
-function from_candid_Result_21_n70(value: _Result_21): Result_21 {
-    return from_candid_variant_n71(value);
+function from_candid_Result_21_n71(value: _Result_21): Result_21 {
+    return from_candid_variant_n72(value);
 }
 function from_candid_Result_2_n5(value: _Result_2): Result_2 {
     return from_candid_variant_n6(value);
@@ -650,7 +651,10 @@ function from_candid_opt_n37(value: [] | [Principal]): Principal | null {
 function from_candid_opt_n43(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n69(value: [] | [_OwnerOpening]): OwnerOpening | null {
+function from_candid_opt_n65(value: [] | [bigint]): bigint | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n70(value: [] | [_OwnerOpening]): OwnerOpening | null {
     return value.length === 0 ? null : from_candid_OwnerOpening_n50(value[0]);
 }
 function from_candid_record_n36(value: {
@@ -767,17 +771,20 @@ function from_candid_record_n59(value: {
 function from_candid_record_n64(value: {
     groups: Array<_ShardGroup>;
     placements: Array<_GroupPlacement>;
+    configuration_revision: [] | [bigint];
     next_cursor: [] | [string];
     revision: bigint;
 }): {
     groups: Array<ShardGroup>;
     placements: Array<GroupPlacement>;
+    configuration_revision?: bigint;
     next_cursor?: string;
     revision: bigint;
 } {
     return {
         groups: from_candid_vec_n34(value.groups),
         placements: value.placements,
+        configuration_revision: record_opt_to_undefined(from_candid_opt_n65(value.configuration_revision)),
         next_cursor: record_opt_to_undefined(from_candid_opt_n43(value.next_cursor)),
         revision: value.revision
     };
@@ -1124,7 +1131,7 @@ function from_candid_variant_n62(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n66(value: {
+function from_candid_variant_n67(value: {
     Ok: Array<_GroupAssignment>;
 } | {
     Err: string;
@@ -1143,7 +1150,7 @@ function from_candid_variant_n66(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n68(value: {
+function from_candid_variant_n69(value: {
     Ok: [] | [_OwnerOpening];
 } | {
     Err: string;
@@ -1156,13 +1163,13 @@ function from_candid_variant_n68(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n69(value.Ok)
+        Ok: from_candid_opt_n70(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n71(value: {
+function from_candid_variant_n72(value: {
     Ok: boolean;
 } | {
     Err: string;

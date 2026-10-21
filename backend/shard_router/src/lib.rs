@@ -40,7 +40,9 @@ fn deletion_authority() -> Option<Principal> {
 fn set_deletion_authority(authority: Principal) -> Outcome<()> {
     require_governor()?; registry_writable()?; validate_shard(authority)?;
     if deletion_authority().is_some_and(|p| p != authority) { return Err("Deletion authority immutable".into()); }
-    DELETION_AUTHORITY.with(|m| m.borrow_mut().set(authority.as_slice().to_vec())); Ok(())
+    if deletion_authority() == Some(authority) { return Ok(()); }
+    DELETION_AUTHORITY.with(|m| m.borrow_mut().set(authority.as_slice().to_vec()));
+    bump_configuration_revision(); Ok(())
 }
 #[ic_cdk::update]
 fn acquire_deletion_lock(account_id: String, expected_revision: u64) -> Outcome<DeletionLock> {
@@ -176,6 +178,8 @@ thread_local! {
     // Additive creator binding; old assignments never imply creator ownership.
     static PLACEMENT_OWNERS: RefCell<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(14)));
     // Permanent additive partition. Stop preserves the owner's route discovery.
+    // Configuration approval is independent of assignment/deletion fencing (memory 2).
+    static CONFIG_REVISION: RefCell<StableCell<u64, Memory>> = RefCell::new(StableCell::init(memory(16), 0));
     static OWNER_OPENINGS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(15)));
 }
 
@@ -205,6 +209,7 @@ fn open_owner_group_for(operator: Principal, approval: OwnerOpeningApproval, now
     let receipt = OwnerOpening { approval, accepting_new: true, opened_revision: revision };
     OWNER_OPENINGS.with(|m| m.borrow_mut().insert(target, encode(&receipt)));
     REVISION.with(|m| m.borrow_mut().set(revision));
+    bump_configuration_revision();
     Ok(receipt)
 }
 /// Explicit governor signature grants only bounded owner test placement, not
@@ -223,6 +228,7 @@ fn stop_owner_group_for(operator: Principal, target: String, expected_revision: 
     receipt.accepting_new = false;
     OWNER_OPENINGS.with(|m| m.borrow_mut().insert(target, encode(&receipt)));
     REVISION.with(|m| m.borrow_mut().set(revision));
+    bump_configuration_revision();
     Ok(receipt)
 }
 #[ic_cdk::update]
@@ -245,6 +251,7 @@ fn stop_group_placements_for(operator: Principal, group_id: String, target_alias
         OWNER_OPENINGS.with(|m| m.borrow_mut().insert(target_alias, encode(receipt)));
     }
     REVISION.with(|m| m.borrow_mut().set(revision));
+    bump_configuration_revision();
     Ok(revision)
 }
 /// Governor-only stop for general and trial admission. Never removes assignments
@@ -318,7 +325,7 @@ fn configure_store_media_growth(group_id: String, store: Principal, usable: u64,
         return Err("Exact assigned-club baseline required".into());
     }
     let b = media_growth::StoreBudget::import(store, evidence_revision, &legacy, usable, fixed, baseline)?;
-    save_store_growth(&b); Ok(())
+    save_store_growth(&b); bump_configuration_revision(); Ok(())
 }
 #[ic_cdk::update]
 fn configure_group_media_growth(group_id: String, usable: u64, fixed: u64, free_club: u64, baseline: Vec<(String, u64)>, expected_revision: u64) -> Outcome<()> {
@@ -337,7 +344,7 @@ fn configure_group_media_growth(group_id: String, usable: u64, fixed: u64, free_
         if b.commitments.contains_key(&club) || !assigned.iter().any(|a| a.club_id == club) { return Err("Baseline club mismatch".into()); }
         b.reserve(&club, bytes)?;
     }
-    save_growth(&b); Ok(())
+    save_growth(&b); bump_configuration_revision(); Ok(())
 }
 fn reserve_growth_for(user: Principal, group_id: &str, target_alias: &str, club: &str, bytes: u64) -> Outcome<u64> {
     registry_writable()?;
@@ -532,6 +539,14 @@ fn domain_migration_for(club_id: &str, domain: &str) -> Option<DomainMigration> 
     DOMAIN_MIGRATIONS.with(|migrations| migrations.borrow().get(&key).map(|bytes| decode(&bytes)))
 }
 
+fn configuration_revision() -> u64 {
+    CONFIG_REVISION.with(|r| *r.borrow().get())
+}
+fn bump_configuration_revision() {
+    let next = configuration_revision().checked_add(1).expect("Configuration revision exhausted");
+    CONFIG_REVISION.with(|r| r.borrow_mut().set(next));
+}
+
 fn current_revision() -> u64 {
     REVISION.with(|revision| *revision.borrow().get())
 }
@@ -541,6 +556,7 @@ fn init(init: Init) {
     assert!(init.governor != Principal::anonymous(), "invalid governor");
     GOVERNOR.with(|cell| cell.borrow_mut().set(init.governor.as_slice().to_vec()));
     REVISION.with(|revision| revision.borrow_mut().set(0));
+    CONFIG_REVISION.with(|revision| revision.borrow_mut().set(0));
 }
 
 #[ic_cdk::post_upgrade]
@@ -618,6 +634,7 @@ fn assign(request: AssignRequest) -> Outcome<AssignResult> {
             .insert(request.club_id.into_bytes(), encode(&route))
     });
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
+    bump_configuration_revision();
     let _ = previous;
     Ok(AssignResult {
         route,
@@ -661,6 +678,7 @@ fn begin_migration(
             .insert(club_id.into_bytes(), encode(&migration))
     });
     REVISION.with(|stored| stored.borrow_mut().set(migration_revision));
+    bump_configuration_revision();
     Ok(migration)
 }
 
@@ -687,6 +705,7 @@ fn commit_migration(club_id: String, expected_migration_revision: u64) -> Outcom
     });
     MIGRATIONS.with(|stored| stored.borrow_mut().remove(&club_id.as_bytes().to_vec()));
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
+    bump_configuration_revision();
     Ok(AssignResult {
         route,
         revision: next_revision,
@@ -706,6 +725,7 @@ fn abort_migration(club_id: String, expected_migration_revision: u64) -> Outcome
         .checked_add(1)
         .ok_or("Revision exhausted")?;
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
+    bump_configuration_revision();
     Ok(next_revision)
 }
 
@@ -742,6 +762,7 @@ fn assign_domain(request: AssignDomainRequest) -> Outcome<AssignDomainResult> {
     let key = domain_key(&request.club_id, &request.domain);
     DOMAIN_ROUTES.with(|routes| routes.borrow_mut().insert(key, encode(&route)));
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
+    bump_configuration_revision();
     Ok(AssignDomainResult {
         route,
         revision: next_revision,
@@ -784,6 +805,7 @@ fn begin_domain_migration(
     let key = domain_key(&club_id, &domain);
     DOMAIN_MIGRATIONS.with(|stored| stored.borrow_mut().insert(key, encode(&migration)));
     REVISION.with(|stored| stored.borrow_mut().set(migration_revision));
+    bump_configuration_revision();
     Ok(migration)
 }
 
@@ -814,6 +836,7 @@ fn commit_domain_migration(
     DOMAIN_ROUTES.with(|routes| routes.borrow_mut().insert(key.clone(), encode(&route)));
     DOMAIN_MIGRATIONS.with(|stored| stored.borrow_mut().remove(&key));
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
+    bump_configuration_revision();
     Ok(AssignDomainResult {
         route,
         revision: next_revision,
@@ -840,6 +863,7 @@ fn abort_domain_migration(
         .checked_add(1)
         .ok_or("Revision exhausted")?;
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
+    bump_configuration_revision();
     Ok(next_revision)
 }
 
@@ -902,6 +926,7 @@ fn register_group_placement(placement: GroupPlacement, expected_revision: u64) -
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
     GROUP_PLACEMENTS.with(|m| m.borrow_mut().insert(key, encode(&placement)));
     REVISION.with(|m| m.borrow_mut().set(revision));
+    bump_configuration_revision();
     Ok(revision)
 }
 
@@ -918,6 +943,7 @@ fn read_group_registry(target_alias: String) -> Outcome<GroupRegistrySnapshot> {
 pub struct GroupRegistryPage {
     pub revision: u64, pub groups: Vec<ShardGroup>, pub placements: Vec<GroupPlacement>,
     pub next_cursor: Option<String>,
+    pub configuration_revision: Option<u64>,
 }
 
 // Cursor advances over at most 64 stable keys, including foreign targets: no
@@ -942,7 +968,7 @@ fn read_group_registry_page(target_alias: String, expected_revision: Option<u64>
     } else { None };
     let groups: Vec<ShardGroup> = rows.into_iter().take(limit as usize).map(|(_,v)| decode::<ShardGroup>(&v)).filter(|g| g.target_alias == target_alias).collect();
     let placements = groups.iter().map(|g| GROUP_PLACEMENTS.with(|m| m.borrow().get(&g.id.as_bytes().to_vec()).map(|b| decode(&b))).ok_or_else(|| "Incomplete group placement registry".to_string())).collect::<Outcome<Vec<_>>>()?;
-    Ok(GroupRegistryPage { revision, groups, placements, next_cursor })
+    Ok(GroupRegistryPage { revision, groups, placements, next_cursor, configuration_revision: Some(configuration_revision()) })
 }
 
 #[ic_cdk::update]
@@ -1019,6 +1045,7 @@ fn register_group(group: ShardGroup, expected_revision: u64) -> Outcome<u64> {
     let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
     save_group(&group);
     REVISION.with(|stored| stored.borrow_mut().set(revision));
+    bump_configuration_revision();
     Ok(revision)
 }
 

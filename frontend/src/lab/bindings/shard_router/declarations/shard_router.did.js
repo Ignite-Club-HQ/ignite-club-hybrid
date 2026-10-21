@@ -165,6 +165,7 @@ export const idlFactory = ({ IDL }) => {
   const GroupRegistryPage = IDL.Record({
     'groups' : IDL.Vec(ShardGroup),
     'placements' : IDL.Vec(GroupPlacement),
+    'configuration_revision' : IDL.Opt(IDL.Nat64),
     'next_cursor' : IDL.Opt(IDL.Text),
     'revision' : IDL.Nat64,
   });

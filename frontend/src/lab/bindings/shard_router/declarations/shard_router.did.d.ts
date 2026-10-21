@@ -66,6 +66,7 @@ export interface GroupPlacement {
 export interface GroupRegistryPage {
   'groups' : Array<ShardGroup>,
   'placements' : Array<GroupPlacement>,
+  'configuration_revision' : [] | [bigint],
   'next_cursor' : [] | [string],
   'revision' : bigint,
 }
