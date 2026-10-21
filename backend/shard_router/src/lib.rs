@@ -229,6 +229,30 @@ fn stop_owner_group_for(operator: Principal, target: String, expected_revision: 
 fn stop_owner_test_group(target_alias: String, expected_revision: u64) -> Outcome<OwnerOpening> {
     stop_owner_group_for(caller(), target_alias, expected_revision)
 }
+fn stop_group_placements_for(operator: Principal, group_id: String, target_alias: String, expected_revision: u64) -> Outcome<u64> {
+    if operator == Principal::anonymous() || governor() != Some(operator) { return Err("Governor required".into()); }
+    registry_writable()?;
+    if current_revision() != expected_revision { return Err("Revision conflict".into()); }
+    let mut group = group_for(&group_id).ok_or("Unknown group")?;
+    if group.target_alias != target_alias { return Err("Group belongs to another deployment".into()); }
+    let mut opening = owner_opening(&target_alias).filter(|r| r.approval.group.id == group_id);
+    if !group.accepting && !opening.as_ref().is_some_and(|r| r.accepting_new) { return Ok(current_revision()); }
+    let revision = current_revision().checked_add(1).ok_or("Revision exhausted")?;
+    group.accepting = false;
+    save_group(&group);
+    if let Some(ref mut receipt) = opening {
+        receipt.accepting_new = false;
+        OWNER_OPENINGS.with(|m| m.borrow_mut().insert(target_alias, encode(receipt)));
+    }
+    REVISION.with(|m| m.borrow_mut().set(revision));
+    Ok(revision)
+}
+/// Governor-only stop for general and trial admission. Never removes assignments
+/// or changes membership, service endpoints, media, or opening authorization.
+#[ic_cdk::update]
+fn stop_group_new_placements(group_id: String, target_alias: String, expected_revision: u64) -> Outcome<u64> {
+    stop_group_placements_for(caller(), group_id, target_alias, expected_revision)
+}
 /// Caller-scoped consensus discovery, including after stopping new placements.
 #[ic_cdk::update]
 fn read_my_owner_test_opening(target_alias: String) -> Outcome<Option<OwnerOpening>> {

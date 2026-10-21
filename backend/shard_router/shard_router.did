@@ -194,5 +194,6 @@ service : (Init) -> {
   reserve_group_media_growth : (text, text, text, nat64) -> (Result);
   set_deletion_authority : (principal) -> (Result_7);
   stop_owner_test_group : (text, nat64) -> (Result_15);
+  stop_group_new_placements : (text, text, nat64) -> (Result);
   version : () -> (nat64) query;
 }

@@ -301,6 +301,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_deletion_authority' : IDL.Func([IDL.Principal], [Result_7], []),
+    'stop_group_new_placements' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat64],
+        [Result],
+        [],
+      ),
     'stop_owner_test_group' : IDL.Func([IDL.Text, IDL.Nat64], [Result_15], []),
     'version' : IDL.Func([], [IDL.Nat64], ['query']),
   });

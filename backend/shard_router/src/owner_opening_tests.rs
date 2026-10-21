@@ -1,4 +1,41 @@
 use super::*;
+#[test] fn general_stop_requires_governor_and_exact_deployment_revision() {
+    let (gov, owner, a) = setup();
+    let mut group = a.group; group.accepting = true; save_group(&group);
+    let rev = current_revision();
+    for user in [owner, Principal::anonymous()] {
+        assert!(stop_group_placements_for(user, "g2".into(), "mainnet".into(), rev).is_err());
+    }
+    assert!(stop_group_placements_for(gov, "g2".into(), "other".into(), rev).is_err());
+    assert!(stop_group_placements_for(gov, "g2".into(), "mainnet".into(), rev + 1).is_err());
+    assert!(group_for("g2").unwrap().accepting);
+    assert_eq!(current_revision(), rev);
+}
+#[test] fn general_stop_preserves_existing_assignments_and_other_groups() {
+    let (gov, _, a) = setup(); let mut group = a.group; group.accepting = true; save_group(&group);
+    let id = a.club_ids[0].clone();
+    let placed = assign_group_record(id.clone(), "mainnet".into(), current_revision(), 1).unwrap();
+    let mut sibling = group.clone(); sibling.id = "g1".into(); save_group(&sibling);
+    let before = group_for("g2").unwrap();
+    let rev = stop_group_placements_for(gov, "g2".into(), "mainnet".into(), current_revision()).unwrap();
+    let mut expected = before; expected.accepting = false;
+    assert_eq!(group_for("g2").unwrap(), expected);
+    assert!(group_for("g1").unwrap().accepting);
+    assert_eq!(assign_group_record(id, "mainnet".into(), rev, 1).unwrap(), placed);
+    assert_eq!(stop_group_placements_for(gov, "g2".into(), "mainnet".into(), rev).unwrap(), rev);
+    let mut sibling = group_for("g1").unwrap(); sibling.accepting = false; save_group(&sibling);
+    assert!(assign_group_record(a.club_ids[1].clone(), "mainnet".into(), rev, 1).is_err());
+}
+#[test] fn general_stop_also_stops_trial_and_respects_deletion_locks() {
+    let (gov, owner, a) = setup(); open_owner_group_for(gov, a.clone(), 1).unwrap();
+    DELETION_LOCKS.with(|m| m.borrow_mut().insert("locked".into(), encode(&DeletionLock { account_id: "locked".into(), revision: current_revision() })));
+    assert!(stop_group_placements_for(gov, "g2".into(), "mainnet".into(), current_revision()).is_err());
+    assert!(owner_opening("mainnet").unwrap().accepting_new);
+    DELETION_LOCKS.with(|m| m.borrow_mut().remove(&"locked".into()));
+    stop_group_placements_for(gov, "g2".into(), "mainnet".into(), current_revision()).unwrap();
+    assert!(!owner_opening("mainnet").unwrap().accepting_new);
+    assert!(place_new_club_for(owner, a.club_ids[0].clone(), "mainnet".into(), 1).is_err());
+}
 fn setup() -> (Principal, Principal, OwnerOpeningApproval) {
     let gov = Principal::from_slice(&[200, 1]); let owner = Principal::from_slice(&[201, 1]);
     GOVERNOR.with(|m| m.borrow_mut().set(gov.as_slice().to_vec()));

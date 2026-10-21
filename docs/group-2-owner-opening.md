@@ -1,5 +1,11 @@
 # Group 2 owner-only opening
 
+**Superseded trial preference (21 October 2026):** owner-only creation restrictions
+are no longer requested. Use `docs/group-2-stop-controls.md` for the independent
+administrator stop control. This document describes only the older bounded trial;
+its open action must not be used as a general Group 2 opening path. General opening
+and compatible app routing remain separate work.
+
 ## What is implemented
 
 The manual **Group 2 owner opening** GitHub workflow has four actions:

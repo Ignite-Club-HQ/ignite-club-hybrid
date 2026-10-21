@@ -274,6 +274,7 @@ export interface _SERVICE {
     Result
   >,
   'set_deletion_authority' : ActorMethod<[Principal], Result_7>,
+  'stop_group_new_placements' : ActorMethod<[string, string, bigint], Result>,
   'stop_owner_test_group' : ActorMethod<[string, bigint], Result_15>,
   'version' : ActorMethod<[], bigint>,
 }
