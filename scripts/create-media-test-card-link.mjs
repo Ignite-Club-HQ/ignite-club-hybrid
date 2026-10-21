@@ -15,9 +15,9 @@ function cli(args) {
   return r.stdout.trim();
 }
 function balance() { return parseBalance(cli(['cycles', 'balance', '-n', 'ic', '--identity', identity, '--json'])); }
-if (process.env.FUNDING_PURPOSE === 'reconcile-paid') {
+if (['reconcile-paid', 'abandon-order'].includes(process.env.FUNDING_PURPOSE)) {
   const { reconcilePaidOrder } = await import('./reconcile-card-payment.mjs');
-  await reconcilePaidOrder({ cli, identity, balance });
+  await reconcilePaidOrder({ cli, identity, balance, abandon: process.env.FUNDING_PURPOSE === 'abandon-order' });
   process.exit(0);
 }
 const infrastructure = process.env.FUNDING_PURPOSE ? prepareInfrastructure({ cli, identity, balance }) : undefined;

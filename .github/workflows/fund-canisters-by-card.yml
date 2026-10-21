@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       payment_id:
-        description: 'Unique payment ID (reconcile-paid: the Order co-... shown in the stuck run log)'
+        description: 'Unique payment ID (reconcile-paid/abandon-order: the Order co-... from the stuck run log)'
         required: true
       purpose:
         description: 'Top-ups deposit fuel after payment; new-group only funds the deploy account'
         type: choice
-        options: [top-ups, new-group, reconcile-paid]
+        options: [top-ups, new-group, reconcile-paid, abandon-order]
         default: top-ups
       group_id:
         description: 'g1 for live canisters; saved group for top-ups; unused group ID for creation funding'
@@ -20,7 +20,7 @@ on:
         required: true
         default: '3'
       confirm:
-        description: 'Type CREATE CARD LINK (reconcile-paid: I PAID THIS ORDER); never group installation'
+        description: 'Type CREATE CARD LINK (reconcile-paid: I PAID THIS ORDER; abandon-order: ABANDON THIS ORDER); never group installation'
         required: true
 
 permissions:
