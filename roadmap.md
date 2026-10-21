@@ -1,9 +1,11 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Current request — complete all Group 2 checks (21 October 2026, 02:18 UTC)
-- [ ] Complete consolidated local opening, provisioning, interruption and recovery checks; record current evidence and gaps without repeating unrelated feature audits.
-- [ ] Independently verify live g2 inventory, health and publicly verifiable controller/module evidence; distinguish certified metadata from private configuration and signed-in acceptance.
-- [ ] Resolve the opening decision against every production gate. Keep g2 closed if unfinished removal/drain/history recovery or external release/device prerequisites remain; no rehearsal flags, spending or live mutations.
+- [x] Complete all executable consolidated checks: 65 frontend tests per mode (130 executions), 70 Node safeguards, 8 deploy safeguards, 17-contract drift and six workflow YAML validations pass. Actual two-group five-service integration and three-fixture management snapshot receipts pass. Evidence/limitations: docs/group-2-opening-check-2026-10-21.md.
+- [x] Independently verify live g2: 13/13 health readings and certified module/controller sets; sole expected controller, 13 unique nonoverlapping group IDs, 0.9829–0.9971T each (LOW FUEL). Detailed certified metadata: docs/group-2-live-verification-2026-10-21.md. Anonymous router reads forbid verifying accepting state/private settings; no release-artifact hash equivalence is claimed.
+- [x] Opening decision: do not open g2. Production opening/wiring still explicitly refuse; removal attestation requires local-only flags. No flags, canisters, permissions, registry or routing changed, and no spending occurred.
+- [ ] Remaining local replica checks: full-service, account timing/boundary, removal-history and real provisioning recovery need missing compiled identity/router/timer artifacts; no backend build was run. Full receiver/drain/claimed-delivery/quota settlement/completion/history recovery remains unfinished engineering, not a credential-only blocker.
+- [ ] Remaining live acceptance: approved production-safe exact-inventory upgrades/configuration and registry revision require GitHub-held signing identity; worker grants/queue list and signed-in two-group browser/Android/FCM flows remain unverified. Closed unregistered g2 is not covered by the registered-group fuel collector; top-ups also require owner ceiling/balance/approval.
 
 ## Current request — test Group 2 opening (21 October 2026, 02:14 UTC)
 - [x] Focused opening/routing/account-authority tests: 51 pass in ICP mode and 51 in Supabase mode. Real two-group five-service photo/upload/chat/removal/notification/upgrade rehearsal passes; FCM sends stubbed. Fresh live reads: all 13 g2 canisters respond, ~0.98–1.00T each, below the existing 1T warning threshold. Evidence: docs/group-2-opening-check-2026-10-21.md. No live changes.
@@ -12,7 +14,7 @@
 ## Current request — Group 2 installation failures
 - [x] Correct compiled-file discovery using final CLI artifacts; nine focused checks pass.
 - [x] Reuse the existing notification-worker seed in closed install/configure workflows; eight focused checks and both workflow configurations pass. Live installation requires the owner's fresh GitHub run and existing worker secret or explicit principal variable.
-- [x] Owner ran Install new group (closed) 21 Oct: g2 installed, configured (33 reciprocal settings incl. dedicated blob store `ycx6b-…` and notification worker grant), phase `checked`, stays CLOSED/unregistered. Independently verified live: all 13 canisters answer cycles/memory queries, ~1T cycles each (normal post-install level; scheduled fuel tops up).
+- [x] Owner ran Install new group (closed) 21 Oct: g2 installed, configured (33 reciprocal settings incl. dedicated blob store `ycx6b-…` and notification worker grant), phase `checked`, stays CLOSED/unregistered. Independently verified live: all 13 canisters answer cycles/memory queries, ~1T cycles each. Correction: scheduled fuel collects registered groups only, so unregistered g2 is not yet included; deposits also depend on configured budget and existing balance.
 - [ ] Owner next: run Deploy ICP canisters (mainnet) once so Group 1's notification_queue gets the same push-worker principal derived from the new ICP_PUSH_WORKER_SEED (grant step in scripts/deploy-mainnet.sh line ~135).
 - [ ] g2 stays closed: opening for real clubs remains gated on the approved activation gates (operator approval, verified recovery, full rehearsal, mainnet verification, removal wiring at the approved registry revision) plus the unfinished receiver/drain engineering (see simplified-scaling section).
 
