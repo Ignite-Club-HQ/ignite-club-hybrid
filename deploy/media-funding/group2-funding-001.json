@@ -12,7 +12,7 @@
     "topups": [],
     "feeCycles": "0"
   },
-  "phase": "checkout-ready",
+  "phase": "abandoned",
   "createdAt": "2026-10-20T12:14:13.129Z",
   "order": {
     "order_id": "co-46-77c6c3b1d2718e3625f3ef8b62bd5c5e",
@@ -31,5 +31,10 @@
     },
     "estimated_cycles": "18694140178111",
     "expires_at": "2026-10-21T13:14:21Z"
+  },
+  "abandoned": {
+    "at": "2026-10-21T06:44:26.990Z",
+    "balanceAtClose": "1345428557550",
+    "note": "Operator closed this unpaid/undelivered order. Any late delivery stays in the deploy account; no top-ups were applied."
   }
 }
