@@ -76,7 +76,7 @@
       "name": "timer_jobs",
       "amount": "505473730623",
       "beforeCycles": "994523729715",
-      "phase": "transferring"
+      "phase": "transfer-confirmed"
     }
   ]
 }
