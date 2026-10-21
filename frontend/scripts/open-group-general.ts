@@ -73,6 +73,18 @@ const mgmtFor = (id: string | Principal) => Actor.createActor(mgmtIdl, { agent, 
   effectiveCanisterId: typeof id === 'string' ? Principal.fromText(id) : id } as Parameters<typeof Actor.createActor>[1]) as unknown as Mgmt;
 const envOf = async (id: string) => (await mgmtFor(id).canister_status({ canister_id: Principal.fromText(id) })).settings.environment_variables;
 
+/** Account deletions pin the exact router revision; re-pin forward after open/close bumps it. */
+const repinDeletionRegistry = async (revision: bigint) => {
+  const unit = IDL.Variant({ Ok: IDL.Null, Err: IDL.Text });
+  const a = Actor.createActor(() => IDL.Service({ pin_owner_test_deletion_registry: IDL.Func([IDL.Record({ registry: IDL.Principal, registry_revision: IDL.Nat64,
+    target_alias: IDL.Text, deployment_id: IDL.Text, deployment_revision: IDL.Nat64, host: IDL.Text, network_kind: IDL.Text })], [unit], []) }),
+    { agent, canisterId: Principal.fromText(spec.identityAccess) }) as unknown as { pin_owner_test_deletion_registry(b: unknown): Promise<{ Ok: null } | { Err: string }> };
+  try {
+    const r = await a.pin_owner_test_deletion_registry({ registry: Principal.fromText(spec.routerId), registry_revision: revision, target_alias: spec.targetAlias,
+      deployment_id: spec.deploymentId, deployment_revision: BigInt(spec.deploymentRevision ?? '1'), host: spec.host, network_kind: 'public_mainnet' });
+    console.log('Err' in r ? `Account deletion re-pin refused (${r.Err}); rerun settings later.` : `Account deletion pinned at revision ${revision}.`);
+  } catch (e) { console.log(`Account deletion re-pin failed (${e instanceof Error ? e.message : e}); rerun settings later.`); }
+};
 async function observeServices(group: { domains: { domain: string; canister: { toText(): string } }[]; photo_store: [] | [{ toText(): string }] },
   placement: { domains: { domain: string; subnet: { toText(): string } }[] }) {
   const services = group.domains.filter(d => d.domain !== 'secret_workload_identity')
@@ -189,6 +201,7 @@ if (action === 'register-closed') {
     const after = await readRegistry();
     const reopened = after.groups.find(g => g.id === 'g2');
     if (!reopened || !reopened.accepting) throw new Error('Open readback failed; reconcile manually, do not replay the call');
+    await repinDeletionRegistry(after.revision);
     save({ action, openedRevision: String(newRevision), accepting: true, wiring });
     console.log(`Group 2 is OPEN to new clubs at revision ${after.revision}. Existing clubs keep their access.`);
   } else {
@@ -199,6 +212,7 @@ if (action === 'register-closed') {
     const after = await readRegistry();
     const closed = after.groups.find(g => g.id === 'g2');
     if (!closed || closed.accepting) throw new Error('Close readback failed; reconcile manually, do not replay the call');
+    await repinDeletionRegistry(after.revision);
     save({ action, closedRevision: String(newRevision), accepting: false });
     console.log('Group 2 is closed to new clubs. Existing clubs keep their assignment and access.');
   }
