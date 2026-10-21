@@ -240,6 +240,13 @@ export interface MediaEvidence {
     club_authority: Principal;
     registry: MediaRegistry;
 }
+export type Result_26 = {
+    __kind__: "Ok";
+    Ok: Array<Receipt>;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export type Result_12 = {
     __kind__: "Ok";
     Ok: TermsAcceptance | null;
@@ -605,9 +612,10 @@ export interface identity_accessInterface {
     set_terms_acceptance(arg0: number): Promise<Result_25>;
     set_theme_preference(arg0: string | null): Promise<Result_11>;
     settle_account_deletion(arg0: string): Promise<Result_2>;
+    verify_account_removal_seals(arg0: string): Promise<Result_26>;
     whoami(): Promise<Result>;
 }
-import type { Access as _Access, Account as _Account, AccountStatus as _AccountStatus, Binding as _Binding, DenialReason as _DenialReason, EligibilityDecision as _EligibilityDecision, Entitlement as _Entitlement, Evidence as _Evidence, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, Intent as _Intent, LinkChallenge as _LinkChallenge, PrincipalDenial as _PrincipalDenial, PrincipalEligibility as _PrincipalEligibility, PrivacyConsent as _PrivacyConsent, Profile as _Profile, ProfileSearchResult as _ProfileSearchResult, Receipt as _Receipt, RemovalHistoryCursor as _RemovalHistoryCursor, RemovalHistoryManifest as _RemovalHistoryManifest, RemovalHistoryPage as _RemovalHistoryPage, RemovalInventory as _RemovalInventory, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_17 as _Result_17, Result_18 as _Result_18, Result_19 as _Result_19, Result_2 as _Result_2, Result_20 as _Result_20, Result_21 as _Result_21, Result_22 as _Result_22, Result_23 as _Result_23, Result_24 as _Result_24, Result_25 as _Result_25, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance, Ticket as _Ticket, UnlinkIntent as _UnlinkIntent } from "./declarations/identity_access.did";
+import type { Access as _Access, Account as _Account, AccountStatus as _AccountStatus, Binding as _Binding, DenialReason as _DenialReason, EligibilityDecision as _EligibilityDecision, Entitlement as _Entitlement, Evidence as _Evidence, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, Intent as _Intent, LinkChallenge as _LinkChallenge, PrincipalDenial as _PrincipalDenial, PrincipalEligibility as _PrincipalEligibility, PrivacyConsent as _PrivacyConsent, Profile as _Profile, ProfileSearchResult as _ProfileSearchResult, Receipt as _Receipt, RemovalHistoryCursor as _RemovalHistoryCursor, RemovalHistoryManifest as _RemovalHistoryManifest, RemovalHistoryPage as _RemovalHistoryPage, RemovalInventory as _RemovalInventory, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_17 as _Result_17, Result_18 as _Result_18, Result_19 as _Result_19, Result_2 as _Result_2, Result_20 as _Result_20, Result_21 as _Result_21, Result_22 as _Result_22, Result_23 as _Result_23, Result_24 as _Result_24, Result_25 as _Result_25, Result_26 as _Result_26, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance, Ticket as _Ticket, UnlinkIntent as _UnlinkIntent } from "./declarations/identity_access.did";
 export class Identity_access implements identity_accessInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async accept_link(arg0: bigint): Promise<Result> {
@@ -850,6 +858,10 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.settle_account_deletion(arg0);
         return from_candid_Result_2_n10(result);
     }
+    async verify_account_removal_seals(arg0: string): Promise<Result_26> {
+        const result = await this.actor.verify_account_removal_seals(arg0);
+        return from_candid_Result_26_n98(result);
+    }
     async whoami(): Promise<Result> {
         const result = await this.actor.whoami();
         return from_candid_Result_n1(result);
@@ -938,6 +950,9 @@ function from_candid_Result_24_n94(value: _Result_24): Result_24 {
 }
 function from_candid_Result_25_n96(value: _Result_25): Result_25 {
     return from_candid_variant_n97(value);
+}
+function from_candid_Result_26_n98(value: _Result_26): Result_26 {
+    return from_candid_variant_n99(value);
 }
 function from_candid_Result_2_n10(value: _Result_2): Result_2 {
     return from_candid_variant_n11(value);
@@ -1788,6 +1803,25 @@ function from_candid_variant_n97(value: {
 }): {
     __kind__: "Ok";
     Ok: TermsAcceptance;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n99(value: {
+    Ok: Array<_Receipt>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<Receipt>;
 } | {
     __kind__: "Err";
     Err: string;

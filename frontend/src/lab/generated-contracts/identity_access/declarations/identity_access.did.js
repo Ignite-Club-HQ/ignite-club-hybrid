@@ -314,6 +314,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result_24 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
   const Result_25 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
+  const Result_26 = IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text });
   
   return IDL.Service({
     'accept_link' : IDL.Func([IDL.Nat64], [Result], []),
@@ -485,6 +486,7 @@ export const idlFactory = ({ IDL }) => {
     'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_25], []),
     'set_theme_preference' : IDL.Func([IDL.Opt(IDL.Text)], [Result_11], []),
     'settle_account_deletion' : IDL.Func([IDL.Text], [Result_2], []),
+    'verify_account_removal_seals' : IDL.Func([IDL.Text], [Result_26], []),
     'whoami' : IDL.Func([], [Result], ['query']),
   });
 };

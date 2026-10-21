@@ -216,6 +216,7 @@ type Result_22 = variant { Ok : nat64; Err : text };
 type Result_23 = variant { Ok : vec ProfileSearchResult; Err : text };
 type Result_24 = variant { Ok : PrivacyConsent; Err : text };
 type Result_25 = variant { Ok : TermsAcceptance; Err : text };
+type Result_26 = variant { Ok : vec Receipt; Err : text };
 type Result_3 = variant { Ok : Receipt; Err : text };
 type Result_4 = variant { Ok : Intent; Err : text };
 type Result_5 = variant { Ok : LinkChallenge; Err : text };
@@ -426,5 +427,8 @@ service : (Init) -> {
   // never called `set_profile`.
   set_theme_preference : (opt text) -> (Result_11);
   settle_account_deletion : (text) -> (Result_2);
+  // Fresh, authenticated full-inventory seal verification. This does not erase
+  // data, release registry locks, restore histories or activate a group.
+  verify_account_removal_seals : (text) -> (Result_26);
   whoami : () -> (Result) query;
 }

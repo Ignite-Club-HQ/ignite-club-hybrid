@@ -268,6 +268,8 @@ export type Result_24 = { 'Ok' : PrivacyConsent } |
   { 'Err' : string };
 export type Result_25 = { 'Ok' : TermsAcceptance } |
   { 'Err' : string };
+export type Result_26 = { 'Ok' : Array<Receipt> } |
+  { 'Err' : string };
 export type Result_3 = { 'Ok' : Receipt } |
   { 'Err' : string };
 export type Result_4 = { 'Ok' : Intent } |
@@ -585,6 +587,11 @@ export interface _SERVICE {
    */
   'set_theme_preference' : ActorMethod<[[] | [string]], Result_11>,
   'settle_account_deletion' : ActorMethod<[string], Result_2>,
+  /**
+   * Fresh, authenticated full-inventory seal verification. This does not erase
+   * data, release registry locks, restore histories or activate a group.
+   */
+  'verify_account_removal_seals' : ActorMethod<[string], Result_26>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
