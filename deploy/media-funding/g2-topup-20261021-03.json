@@ -166,6 +166,13 @@
       "beforeCycles": "992325697007",
       "phase": "verified",
       "afterCycles": "1499985692431"
+    },
+    {
+      "id": "yqrjy-mqaaa-aaaal-qxp3a-cai",
+      "name": "club_points_domain",
+      "amount": "503868763403",
+      "beforeCycles": "996119057371",
+      "phase": "transferring"
     }
   ]
 }
