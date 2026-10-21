@@ -50,6 +50,10 @@ try {
     club.actor.setPrincipal(outsider);
     assert.deepEqual(await club.actor.create_club(placement.club_id, 'Stolen', 'stolen', [], []), { Err: 'Original creator placement required' });
     club.actor.setPrincipal(creator);
+    // Before creation an unavailable router cannot silently admit the caller.
+    await pic.stopCanister({ canisterId: router.canisterId, sender: governor });
+    assert.deepEqual(await club.actor.create_club(placement.club_id, 'Unavailable', 'unavailable', [], []), { Err: 'Original creator placement required' });
+    await pic.startCanister({ canisterId: router.canisterId, sender: governor });
     ok(await club.actor.create_club(placement.club_id, `Test ${groupId}`, `test-${groupId}`, [], []));
     assert.deepEqual(ok(await club.actor.read_my_club_memberships_indexed([], 100)).clubs, [placement.club_id]);
     // Closing to placements must not remove assignment or member access.
@@ -68,6 +72,12 @@ try {
   assert.deepEqual(ok(await router.actor.read_my_new_club_placement(uuid(2), 'test', revision)), prior);
   router.actor.setPrincipal(outsider); assert.ok('Err' in await router.actor.read_my_new_club_placement(uuid(2), 'test', revision));
   assert.ok('Err' in await router.actor.read_my_group_assignments([uuid(1), uuid(2)], 'test', revision));
+  assert.ok('Err' in await router.actor.read_new_club_creation_authorized(creator, uuid(2), 'test', 'g2'));
+  const partial = await pic.setupCanister({ idlFactory: clubIdl, wasm: process.env.CLUB_DOMAIN_WASM,
+    sender: governor, controllers: [governor], environmentVariables: [{ name: 'IGNITE_NEW_CLUB_PLACEMENT_GROUP', value: 'g2' }],
+    arg: IDL.encode([IDL.Principal], [governor]) });
+  partial.actor.setPrincipal(creator);
+  assert.deepEqual(await partial.actor.create_club(uuid(99), 'Partial', 'partial', [], []), { Err: 'Original creator placement required' });
   clubs[1].actor.setPrincipal(governor); ok(await clubs[1].actor.remove_member(uuid(2), creator));
   router.actor.setPrincipal(creator);
   assert.equal(ok(await router.actor.read_my_group_assignments([uuid(1)], 'test', revision)).length, 1);
