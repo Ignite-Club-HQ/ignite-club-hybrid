@@ -181,8 +181,9 @@ export default function CreateClubPage() {
     }
     if (!sport) {
       toast({
-        title: "Please select a sport",
-        description: "Sport is required so we can tailor your club setup.",
+        title: "Almost there — pick a sport",
+        description:
+          "Choose your club's sport below so we can set up the right teams and events for you.",
         variant: "destructive",
       });
       setMoreOpen(true);
