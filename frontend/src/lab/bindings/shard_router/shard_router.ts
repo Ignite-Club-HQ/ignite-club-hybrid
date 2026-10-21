@@ -320,6 +320,7 @@ export interface shard_routerInterface {
     read_group_registry_page(arg0: string, arg1: bigint | null, arg2: string | null, arg3: number): Promise<Result_16>;
     read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_4>;
     read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_17>;
+    read_my_new_club_placement(arg0: string, arg1: string, arg2: bigint): Promise<Result_4>;
     record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result>;
     register_group(arg0: ShardGroup, arg1: bigint): Promise<Result>;
     register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result>;
@@ -434,6 +435,10 @@ export class Shard_router implements shard_routerInterface {
     async read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_17> {
         const result = await this.actor.read_my_group_assignments(arg0, arg1, arg2);
         return from_candid_Result_17_n53(result);
+    }
+    async read_my_new_club_placement(arg0: string, arg1: string, arg2: bigint): Promise<Result_4> {
+        const result = await this.actor.read_my_new_club_placement(arg0, arg1, arg2);
+        return from_candid_Result_4_n9(result);
     }
     async record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result> {
         const result = await this.actor.record_group_health(arg0, arg1, arg2, arg3);

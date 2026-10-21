@@ -246,6 +246,11 @@ export const idlFactory = ({ IDL }) => {
         [Result_17],
         [],
       ),
+    'read_my_new_club_placement' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat64],
+        [Result_4],
+        [],
+      ),
     'record_group_health' : IDL.Func(
         [IDL.Text, IDL.Nat64, IDL.Nat64, IDL.Nat64],
         [Result],

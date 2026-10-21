@@ -214,6 +214,10 @@ export interface _SERVICE {
     [Array<string>, string, bigint],
     Result_17
   >,
+  'read_my_new_club_placement' : ActorMethod<
+    [string, string, bigint],
+    Result_4
+  >,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,
