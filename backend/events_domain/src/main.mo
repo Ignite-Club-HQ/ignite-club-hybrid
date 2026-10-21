@@ -5,6 +5,7 @@ import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Option "mo:core/Option";
+import Json "mo:json";
 import Nat32 "mo:core/Nat32";
 import Nat16 "mo:core/Nat16";
 import Nat64 "mo:core/Nat64";
@@ -2940,7 +2941,7 @@ persistent actor class Main(governorInit : Principal) {
         case null return #Ok(rows);
         case(?next){
           // Restrict cursor to unreserved URL characters; never inject a path/query.
-          if(next.size()>512 or seen.any(func(c)=c==next) or Text.toArray(next).any(func(c)=not ((c>='a' and c<='z') or (c>='A' and c<='Z') or (c>='0' and c<='9') or c=='-' or c=='_' or c=='.' or c=='~')))return #Err("Invalid pagination cursor");
+          if (next.size() > 512 or seen.any(func(c)=c==next) or Text.toArray(next).any(func(c)=not ((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c=='-' or c=='_' or c=='.' or c=='~')))return #Err("Invalid pagination cursor");
           seen:=seen.concat([next]);cursor:=?next
         }
       }
