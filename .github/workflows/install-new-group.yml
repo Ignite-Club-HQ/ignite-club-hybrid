@@ -57,6 +57,13 @@ jobs:
           node ../../scripts/stage-group-wasm.mjs . "$RUNNER_TEMP/wasm"
       - name: Install frontend dependencies
         run: node scripts/ensure-frontend-deps.mjs
+      - name: Resolve existing notification worker
+        env:
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
+        run: |
+          node --test scripts/resolve-group-push-worker.test.mjs
+          bash scripts/resolve-group-push-worker.sh
       - name: Write operator key
         env:
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
@@ -68,7 +75,6 @@ jobs:
       - name: Install group (closed)
         working-directory: frontend
         env:
-          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
           REQUEST_ID: ${{ inputs.request_id }}
           APPROVED_BY: ${{ github.actor }}
           WASM_DIR: ${{ runner.temp }}/wasm

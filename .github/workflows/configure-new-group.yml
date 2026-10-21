@@ -28,6 +28,13 @@ jobs:
           node-version: "22.12.0"
       - name: Install frontend dependencies
         run: node scripts/ensure-frontend-deps.mjs
+      - name: Resolve existing notification worker
+        env:
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
+        run: |
+          node --test scripts/resolve-group-push-worker.test.mjs
+          bash scripts/resolve-group-push-worker.sh
       - name: Write operator key
         env:
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
@@ -38,8 +45,6 @@ jobs:
           printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/operator.pem"
       - name: Configure group (closed)
         working-directory: frontend
-        env:
-          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
         run: npx --yes tsx@4 scripts/configure-group-closed.ts "../${{ inputs.provision_file }}" "$RUNNER_TEMP/operator.pem"
       - name: Commit configuration progress
         if: always()

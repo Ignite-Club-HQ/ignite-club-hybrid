@@ -1,5 +1,9 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+## Current request — Group 2 installation failures
+- [x] Correct compiled-file discovery using final CLI artifacts; nine focused checks pass.
+- [ ] Reuse the existing notification-worker seed in closed install/configure workflows and verify missing/invalid settings fail before spending.
+
 ## Current request — preserve History and PlayHQ under score privacy
 - [x] Owner approval 21 Oct 00:23 UTC: applied focused Supabase History/score-privacy migration and ACL hardening after live-column/FK rehearsal. Live verification: 69 fixtures, 10 protected results, 66 History rows, zero raw fixture/event scores. Targeted report tests pass both modes; history-only upgrade workflow prepared.
 - [x] Owner scope restriction 21 Oct 00:21 UTC: defer unused PlayHQ sync, upstream investigation and acceptance until requested; preserve existing work. Remaining active scope is History/score privacy in both modes, focused checks and release prerequisites only—not another full feature audit.
