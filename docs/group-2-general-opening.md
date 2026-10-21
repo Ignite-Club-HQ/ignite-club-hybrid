@@ -24,8 +24,36 @@ The corrected check requires governor-read identity evidence
 destination. Missing evidence blocks check/snapshot/open. This change does not
 release admission, register readers, alter deployed settings, or fix live
 creation by itself. Do not set rehearsal flags, disable admission, or fall back
-to shared canisters. A separately verified production-safe admission connection
-is still needed; publishing alone cannot repair the live authorization.
+to shared canisters. Publishing alone cannot repair the live authorization.
+
+The dedicated **Repair Group 2 account access** workflow now provides the narrow
+repair. Choose action **repair**, confirmation **REPAIR GROUP 2 ACCOUNT ACCESS**.
+It builds/upgrades only the pinned existing shared identity canister, authorizes
+the exact eleven Group 2 admission domains plus its dedicated photo store from
+two consensus router inventory reads, verifies the grant, then regenerates and
+commits the routing snapshot. It preserves existing accounts, settings, Group 1
+services, club/media assignments and placement accepting state. It never sets
+the identity rehearsal flag or enables account-link/removal recovery features.
+The workflow uses the existing DEPLOYER_PEM in the protected group-2-admin-controls
+environment and the shared deployment concurrency lock. An immutable-commit
+journal retains unknown upgrade outcomes and refuses automatic upgrade replay.
+Once green, publish the updated app and create/read back a fresh Group 2 club.
+If snapshot generation fails after authorization, rerun the existing snapshot
+action after resolving its reported mismatch; do not repeat opening.
+Action **disable**, confirmation **DISABLE GROUP 2 ACCOUNT ACCESS**, revokes the
+narrow eligibility grant (not the placement accepting switch). It blocks Group 2
+account-protected operations; ordinary stop-new-placement remains the preferred
+control when current clubs should keep working.
+
+This environment has no governor key or GitHub Actions token. Implementation and
+local tests do not establish deployment or authenticated mainnet club creation.
+Focused verification: 58 identity Rust tests, 8 release/workflow/journal tests,
+30 frontend opening/session/error regressions and 17-contract drift passed.
+Real local router/identity rehearsal passed with no identity rehearsal flag:
+exact 12 readers, governor-only authorization/disable, stale-registry rejection,
+active/unknown/suspended eligibility, full-account/lifecycle/recovery refusal,
+grant and suspension preservation through upgrade. Destination services in that
+rehearsal are inventory metadata; actual signed-in club creation is unverified.
 
 The app shows a short account-connection message instead of dumping the replica
 request, headers and identifiers into the pop-up; technical details stay in logs.

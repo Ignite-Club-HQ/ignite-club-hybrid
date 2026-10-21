@@ -383,6 +383,7 @@ export interface _SERVICE {
     [string, Principal],
     Result_3
   >,
+  'authorize_group2_admission' : ActorMethod<[Binding], Result_2>,
   'begin_account_removal' : ActorMethod<[string, bigint], Result_4>,
   'begin_link' : ActorMethod<[Principal], Result_5>,
   'bind_external_site' : ActorMethod<[string, string, string], Result_6>,
@@ -393,6 +394,7 @@ export interface _SERVICE {
    * Public: remaining cycles (shown in admin settings).
    */
   'cycles_balance' : ActorMethod<[], bigint>,
+  'disable_group2_admission' : ActorMethod<[], Result_2>,
   'erase_account' : ActorMethod<[string], Result_2>,
   'export_state' : ActorMethod<[], Result_8>,
   'get_external_bindings' : ActorMethod<[string], Result_9>,

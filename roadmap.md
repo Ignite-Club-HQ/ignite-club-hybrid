@@ -1,8 +1,14 @@
+# Group 2 account-access repair
+- [x] Add isolated stable production eligibility release and governor-authorized exact Group 2 service readers derived from two pinned consensus registry reads; preserve removal and lifecycle gates.
+- [x] Add protected identity-only release and automatic verified snapshot refresh using existing immutable-commit journal tools. Passed 58 identity tests, 8 release/journal/workflow tests, 30 frontend regressions, 17-contract drift and a real local router/identity authorization/suspension/upgrade/disable rehearsal.
+- [ ] Deploy, authorize and refresh mainnet snapshot: existing DEPLOYER_PEM and GitHub Actions token are absent here; owner must run Repair Group 2 account access → repair → REPAIR GROUP 2 ACCOUNT ACCESS. No live writes performed.
+- [ ] Publish refreshed snapshot and verify signed-in fresh club creation/readback: requires completed release and owner's Internet Identity session; local destination IDs are metadata, not live creation evidence.
+
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Active scope — minimum Group 2 test opening (21 October 2026, 03:07 UTC)
 - [x] Diagnose screenshot-reported indexed membership admission denial: destination admission flags were checked but shared identity eligibility release/authorized readers were not. Added read-only identity evidence, fail-closed opening/snapshot checks, short club-creation error and regression tests; no lifecycle release or live changes.
-- [ ] Resolve live Group 2 admission and verify actual club creation/readback: shared identity eligibility is still rehearsal-gated with separate reader authorization. Needs a verified production-safe connection, not enabling rehearsal flags or turning off destination protection; authenticated mainnet acceptance also requires the owner's II session/deploy identity.
+- [ ] Resolve live Group 2 admission and verify actual club creation/readback: isolated eligibility-only repair and protected identity-only upgrade/snapshot workflow implemented and locally tested (see top section); live release still requires the GitHub-held governor identity and signed-in acceptance. No rehearsal flags or destination protection bypass.
 - [x] Repair screenshot-reported approval drift: stable configuration revision separate from assignment/deletion/session CAS, complete canonical group/placement/policy checks, legacy-snapshot refusal and pinned consensus readback. Consecutive creator reservations, immutable retries, failed-create nonreplay and configuration drift regressions pass locally. Added existing-router-only upgrade scope; no live mutations.
 - [ ] Release and authenticated acceptance of approval repair: owner must sync, run Deploy ICP canisters (mainnet) scope router, run snapshot with empty confirmation, sync/publish, then create/read back two fresh clubs. Blocked by owner-held deploy identity and Internet Identity session; live revision/placement and actual Wasm upgrade preservation are not verified here.
 - [x] 20:06 UTC owner report: **Open Group 2 to everyone succeeded** — Group 2 is registered, verified, snapshotted and open (accepting=true). Remaining follow-ups below.

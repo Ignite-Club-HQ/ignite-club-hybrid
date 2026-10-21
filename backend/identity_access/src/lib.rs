@@ -12,6 +12,7 @@ use std::cell::RefCell;
 mod group_inventory;
 mod removal_barrier;
 mod deletion_timing;
+mod admission;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -53,6 +54,7 @@ const MEM_REMOVAL_INTENTS: u8 = 13;
 const MEM_REMOVAL_SUBJECTS: u8 = 14;
 const MEM_REMOVAL_RECEIPTS: u8 = 15;
 const MEM_DELETION_TICKETS: u8 = 16;
+const MEM_GROUP2_ADMISSION: u8 = 17;
 // Stable B-tree rows grow independently of heap snapshots. Reserve a conservative
 // 8 KiB per account (including eight denial rows) within 32 GiB stable memory.
 const MAX_ACCOUNTS: usize = (32u64 * 1024 * 1024 * 1024 / 8192) as usize;
@@ -351,7 +353,7 @@ struct PrincipalEligibility {
     denied_through_version: Option<u64>,
 }
 fn principal_eligibility(subject: Principal) -> PrincipalEligibility {
-    let account = account_for_write(subject).ok();
+    let account = account_for_write(subject).ok().filter(|a| !DELETION_TICKETS.with(|m| m.borrow().contains_key(&a.id)));
     PrincipalEligibility {
         subject,
         decision: if account.is_some() { EligibilityDecision::Eligible } else { EligibilityDecision::Denied },
@@ -360,8 +362,10 @@ fn principal_eligibility(subject: Principal) -> PrincipalEligibility {
     }
 }
 fn authority_eligibilities(caller: Principal, subjects: Vec<Principal>) -> Outcome<Vec<PrincipalEligibility>> {
-    if !account_group_rehearsal_enabled() { return Err("Cross-group eligibility not released".into()); }
-    if !link_lifecycle().authorities.contains(&caller) && !service_authorities().contains(&caller) { return Err("Configured authority required".into()); }
+    let production = group2_admission();
+    if !account_group_rehearsal_enabled() && !production.enabled { return Err("Cross-group eligibility not released".into()); }
+    let legacy = account_group_rehearsal_enabled() && (link_lifecycle().authorities.contains(&caller) || service_authorities().contains(&caller));
+    if !legacy && !(production.enabled && production.readers.contains(&caller)) { return Err("Configured authority required".into()); }
     if subjects.is_empty() || subjects.len() > 200 { return Err("Eligibility batch must contain 1 to 200 subjects".into()); }
     let mut distinct = subjects.clone(); distinct.sort(); distinct.dedup();
     if distinct.len() != subjects.len() { return Err("Duplicate eligibility subject".into()); }
@@ -470,6 +474,7 @@ thread_local! {
     static REMOVAL_SUBJECTS: RefCell<StableBTreeMap<String, String, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_SUBJECTS)));
     static DELETION_TICKETS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(MEM_DELETION_TICKETS)));
+    static GROUP2_ADMISSION: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(MEM_GROUP2_ADMISSION), Vec::new()));
     static REMOVAL_RECEIPTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_RECEIPTS)));
 }
@@ -564,6 +569,71 @@ async fn verify_account_removal_seals(account_id: String) -> Outcome<Vec<removal
 }
 fn group_inventory_binding() -> Option<group_inventory::Binding> {
     GROUP_INVENTORY_BINDING.with(|m| if m.borrow().get().is_empty() { None } else { Some(decode(m.borrow().get())) })
+}
+fn group2_admission() -> admission::Config {
+    GROUP2_ADMISSION.with(|m| if m.borrow().get().is_empty() { admission::Config::default() } else { decode(m.borrow().get()) })
+}
+fn admission_configuration_clear() -> Outcome<()> {
+    if removal_pending() || DELETION_TICKETS.with(|m| !m.borrow().is_empty()) || !link_lifecycle().pending.is_empty() {
+        return Err("Account removal or unlink pending".into());
+    }
+    Ok(())
+}
+/// Governor-only production repair. Derive readers from the pinned router,
+/// never from a browser-supplied principal list. No lifecycle gate is released.
+#[ic_cdk::update]
+async fn authorize_group2_admission(binding: group_inventory::Binding) -> Outcome<()> {
+    require_governor(&state(), ic_cdk::api::msg_caller())?;
+    admission_configuration_clear()?;
+    let pinned = group_inventory_binding().ok_or("Deletion registry not pinned")?;
+    let mut expected = pinned.clone(); expected.registry_revision = binding.registry_revision;
+    if expected != binding || binding.registry_revision < pinned.registry_revision || !bound_deletion_released() {
+        return Err("Pinned mainnet account connection required".into());
+    }
+    let history = removal_history_revision();
+    let prior = group2_admission();
+    let prior_bytes = encode(&prior);
+    let recheck = || -> Outcome<()> {
+        admission_configuration_clear()?;
+        if group_inventory_binding().as_ref() != Some(&pinned) || removal_history_revision() != history || encode(&group2_admission()) != prior_bytes {
+            return Err("Account configuration changed during authorization".into());
+        }
+        Ok(())
+    };
+    let mut observed = None;
+    for _ in 0..2 {
+        let mut groups = Vec::new(); let mut placements = Vec::new(); let mut cursor: Option<String> = None;
+        loop {
+            recheck()?;
+            let reply = ic_cdk::call::Call::bounded_wait(binding.registry, "read_group_registry_page")
+                .with_args(&(&binding.target_alias, Some(binding.registry_revision), &cursor, 64u32))
+                .await.map_err(|_| "Admission registry unavailable".to_string())?;
+            recheck()?;
+            let page: Outcome<admission::Page> = reply.candid().map_err(|_| "Invalid admission registry reply".to_string())?;
+            let page = page?;
+            if page.revision != binding.registry_revision || page.groups.len() > 64 || page.groups.len() != page.placements.len() ||
+                page.next_cursor.as_ref().is_some_and(|n| cursor.as_ref().is_some_and(|c| n <= c)) { return Err("Admission registry drift".into()); }
+            groups.extend(page.groups); placements.extend(page.placements);
+            if groups.len() > 4096 { return Err("Admission inventory bound exceeded".into()); }
+            match page.next_cursor { None => break, Some(next) => cursor=Some(next) }
+        }
+        if observed.as_ref().is_some_and(|p| p != &(groups.clone(),placements.clone())) { return Err("Admission inventory changed".into()); }
+        observed=Some((groups,placements));
+    }
+    let (groups,placements)=observed.ok_or("Admission inventory missing")?;
+    let readers=admission::readers(&groups,&placements,&binding)?;
+    if prior.readers.iter().any(|p| !readers.contains(p)) { return Err("Cannot replace an existing admission reader".into()); }
+    recheck()?;
+    GROUP2_ADMISSION.with(|m| m.borrow_mut().set(encode(&admission::Config { enabled:true,readers })));
+    bump_removal_history();
+    Ok(())
+}
+#[ic_cdk::update]
+fn disable_group2_admission() -> Outcome<()> {
+    require_governor(&state(), ic_cdk::api::msg_caller())?;
+    let mut config=group2_admission(); config.enabled=false;
+    GROUP2_ADMISSION.with(|m|m.borrow_mut().set(encode(&config)));
+    bump_removal_history(); Ok(())
 }
 fn store_group_inventory_binding(binding: group_inventory::Binding, expected_history_revision: u64) -> Outcome<()> {
     if removal_pending() { return Err("Removal barrier pending".into()); }
@@ -849,10 +919,11 @@ fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
     let mut rows = vec![("registry".into(), binding.registry.to_text()), ("target_alias".into(), binding.target_alias),
         ("deployment_id".into(), binding.deployment_id), ("host".into(), binding.host),
         ("network_kind".into(), binding.network_kind), ("bound_deletion_released".into(), bound_deletion_released().to_string()),
-        ("account_admission_released".into(), account_group_rehearsal_enabled().to_string())];
+        ("account_admission_released".into(), (account_group_rehearsal_enabled() || group2_admission().enabled).to_string())];
     // Read-only evidence; neither registers readers nor releases the lifecycle.
-    let mut authorities = link_lifecycle().authorities;
-    authorities.extend(service_authorities());
+    let mut authorities = if account_group_rehearsal_enabled() { let mut a=link_lifecycle().authorities; a.extend(service_authorities()); a } else { vec![] };
+    let production=group2_admission();
+    if production.enabled { authorities.extend(production.readers); }
     authorities.sort(); authorities.dedup();
     rows.extend(authorities.into_iter().map(|p| ("eligibility_authority".into(), p.to_text())));
     Ok(rows)
@@ -2629,6 +2700,40 @@ mod tests {
     #[test]
     fn eligibility_transport_remains_unreleased() {
         assert_eq!(authority_eligibilities(principal(98), vec![principal(99)]), Err("Cross-group eligibility not released".into()));
+    }
+    #[test]
+    fn production_admission_releases_only_exact_readers_not_lifecycle() {
+        let reader=principal(98); let user=principal(99);
+        let account=Account { id:"production-reader".into(),principals:vec![user],version:1,status:AccountStatus::Active };
+        put_account(&account); index_principal(user,&account.id);
+        GROUP2_ADMISSION.with(|m|m.borrow_mut().set(encode(&admission::Config {enabled:true,readers:vec![reader]})));
+        assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Eligible);
+        assert_eq!(authority_eligibilities(user,vec![user]),Err("Configured authority required".into()));
+        assert!(authority_eligibilities(reader,vec![]).is_err());
+        assert!(authority_eligibilities(reader,vec![user,user]).is_err());
+        assert!(authority_eligibilities(reader,(0..201u32).map(|i|Principal::self_authenticating(i.to_be_bytes())).collect()).is_err());
+        assert!(!account_group_rehearsal_enabled());
+        assert_eq!(service_account(reader,user),Err("Service admission not released".into()));
+        assert_eq!(set_club_authorities(vec![reader]),Err("Cross-group account lifecycle not released".into()));
+        let restored:admission::Config=decode(&encode(&group2_admission()));
+        assert!(restored.enabled); assert_eq!(restored.readers,vec![reader]);
+    }
+    #[test]
+    fn production_admission_keeps_suspension_erasure_and_deletion_denied() {
+        let reader=principal(96);let user=principal(95);
+        GROUP2_ADMISSION.with(|m|m.borrow_mut().set(encode(&admission::Config {enabled:true,readers:vec![reader]})));
+        let mut account=Account {id:"production-denial".into(),principals:vec![user],version:2,status:AccountStatus::Active};
+        put_account(&account);index_principal(user,&account.id);
+        assert_eq!(authority_eligibilities(reader,vec![principal(94)]).unwrap()[0].decision,EligibilityDecision::Denied);
+        account.status=AccountStatus::Suspended;put_account(&account);
+        assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Denied);
+        account.status=AccountStatus::Active;put_account(&account);
+        DELETION_TICKETS.with(|m|m.borrow_mut().insert(account.id.clone(),vec![0]));
+        assert!(admission_configuration_clear().is_err());
+        assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Denied);
+        DELETION_TICKETS.with(|m|m.borrow_mut().remove(&account.id));
+        erase_account_core(&mut empty_core_state(principal(93)),&account).unwrap();
+        assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Denied);
     }
     #[test]
     fn service_readers_remain_separate_and_unreleased() {
