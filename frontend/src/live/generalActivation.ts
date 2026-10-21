@@ -40,8 +40,11 @@ export function clearGeneralRoutingCache() { cache = null; }
  * stale simply means not-yet-active; the async check always decides writes. */
 export function cachedGeneralRoutingActive(): boolean { return cache?.value.active ?? false; }
 
-const keyFor = (ctx: FeatureBackendContext) => JSON.stringify([ctx.identity.getPrincipal().toText(), ctx.target.alias,
-  ctx.target.host, ctx.target.networkKind, ctx.target.canisterIds?.shard_router ?? null]);
+const keyFor = (ctx: FeatureBackendContext) => JSON.stringify([safePrincipal(ctx), ctx?.target?.alias ?? null,
+  ctx?.target?.host ?? null, ctx?.target?.networkKind ?? null, ctx?.target?.canisterIds?.shard_router ?? null]);
+const safePrincipal = (ctx?: FeatureBackendContext) => {
+  try { return ctx?.identity?.getPrincipal?.().toText?.() ?? null; } catch { return null; }
+};
 
 export async function generalRoutingStatus(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   const key = keyFor(ctx);
@@ -59,8 +62,8 @@ const inventory = (g: { domains: readonly { domain: string; canisterId: string }
   [...g.domains.map(d => `${d.domain}=${d.canisterId}`)].sort().join(',') + '|' + (g.photoStore ?? '');
 
 async function compute(ctx: FeatureBackendContext): Promise<RoutingStatus> {
-  if (!ctx.target.canisterIds?.shard_router) return { active: false, missing: ['no group router on this deployment'] };
-  if (ctx.identity.getPrincipal().toText() === '2vxsx-fae') return { active: false, missing: ['not signed in'] };
+  if (!ctx?.target?.canisterIds?.shard_router || !safePrincipal(ctx)) return { active: false, missing: ['no group router on this deployment'] };
+  if (safePrincipal(ctx) === '2vxsx-fae') return { active: false, missing: ['not signed in'] };
   const snapshot = ROUTING_GATES_SNAPSHOT;
   if (!snapshot || snapshot.approved !== true) return { active: false, missing: ['no operator-approved routing snapshot in this build'] };
   if (snapshot.targetAlias !== ctx.target.alias || snapshot.host !== ctx.target.host) return { active: false, missing: ['snapshot targets another deployment'] };
