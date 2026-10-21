@@ -33,10 +33,19 @@ jobs:
       ICP_HOME: ${{ github.workspace }}/.icp-home
     steps:
       - name: Confirm
+        env:
+          RAW_CONFIRM: ${{ inputs.confirm }}
+          RAW_GROUP_ID: ${{ inputs.group_id }}
         run: |
-          test "${{ inputs.confirm }}" = "INSTALL CLOSED GROUP" || { echo "::error::Type INSTALL CLOSED GROUP to confirm"; exit 1; }
-          echo "${{ inputs.group_id }}" | grep -Eq '^g[0-9]{1,3}$' || { echo "::error::group id must look like g2"; exit 1; }
-          test "${{ inputs.group_id }}" != "g1" || { echo "::error::g1 is the live group"; exit 1; }
+          set -euo pipefail
+          # Trim only surrounding whitespace (mobile keyboards add a trailing space); the phrase itself stays exact.
+          trim() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"; printf '%s' "$v"; }
+          confirm="$(trim "$RAW_CONFIRM")"
+          group_id="$(trim "$RAW_GROUP_ID")"
+          test "$confirm" = "INSTALL CLOSED GROUP" || { echo "::error::Type INSTALL CLOSED GROUP to confirm"; exit 1; }
+          echo "$group_id" | grep -Eq '^g[0-9]{1,3}$' || { echo "::error::group id must look like g2"; exit 1; }
+          test "$group_id" != "g1" || { echo "::error::g1 is the live group"; exit 1; }
+          printf 'GROUP_ID=%s\n' "$group_id" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
