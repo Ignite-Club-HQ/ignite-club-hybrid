@@ -23,8 +23,6 @@ Nothing was deployed or opened by this implementation. The workflow intentionall
 4. Commit an opening approval under `deploy/groups/g2/` with the fields below. Use your app Internet Identity principal as `owner`, not the deploy principal. Use module SHA-256 values from the reviewed **icp recipe build/deployed comparison**, never local smoke artifacts. No placeholder approval is supplied: it would pretend live verification has happened.
 5. Register CLOSED if necessary. Update the committed revision after registration. Run `check`; then separately run `open` with `OPEN GROUP 2 OWNER TEST`. Use `stop` with the current approved revision and `STOP GROUP 2 TEST PLACEMENTS` when finished. A revision conflict requires rereading and reviewing, not removing the CAS check.
 
-### Approval fields
-
 ### Running the Group 2 upgrade
 
 After top-ups and the separately approved shared-router/identity upgrade, use Actions → **Upgrade Group 2 (closed)** on the approved release branch:

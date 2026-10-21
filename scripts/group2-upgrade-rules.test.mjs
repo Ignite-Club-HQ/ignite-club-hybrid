@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { validateGroup2Inventory, wasmHash, verifyUpgradeStatus, upgradeArgs, reconcileUpgradeStep, GROUP2_GOVERNOR } from './group2-upgrade-rules.mjs';
+import { validateGroup2Inventory, validateUpgradeJournal, wasmHash, verifyUpgradeStatus, upgradeArgs, reconcileUpgradeStep, GROUP2_GOVERNOR } from './group2-upgrade-rules.mjs';
 const provision = JSON.parse(readFileSync(new URL('../deploy/groups/g2/provision.json', import.meta.url)));
 const inventory = () => validateGroup2Inventory(structuredClone(provision), {});
 test('upgrade inventory contains exactly thirteen existing g2 services', () => {
@@ -50,4 +50,15 @@ test('unknown callback cannot replay an upgrade with the old module', () => {
 test('completed or ready steps refuse changed module readback', () => {
   assert.throws(() => reconcileUpgradeStep({ phase: 'complete', newHash: 'b' }, 'c'), /changed/);
   assert.throws(() => reconcileUpgradeStep({ phase: 'ready', oldHash: 'a' }, 'b'), /changed/);
+});
+test('resume requires exactly thirteen valid steps and the original bound photo key', () => {
+  const binding = { governor: GROUP2_GOVERNOR, inventory: inventory().map(s => ({ ...s, newHash: 'b'.repeat(64) })) };
+  const journal = { binding, routerRevision: '0', complete: false, steps: binding.inventory.map(s => ({ ...s, oldHash: 'a'.repeat(64), settingsHash: 'c'.repeat(64), phase: 'ready' })),
+    keyReceipt: { governor: GROUP2_GOVERNOR, deploymentId: 'mainnet', environment: 'ic', host: 'https://icp-api.io', keyName: 'key_1',
+      canisterId: provision.canisters.pii_access_control, publicKeyHex: 'd'.repeat(192), moduleHash: 'a'.repeat(64) } };
+  validateUpgradeJournal(journal, binding);
+  const invalid = structuredClone(journal); invalid.steps[0].phase = 'retry';
+  assert.throws(() => validateUpgradeJournal(invalid, binding), /step/);
+  invalid.steps = journal.steps.slice(1); assert.throws(() => validateUpgradeJournal(invalid, binding), /journal/);
+  invalid.steps = journal.steps; invalid.keyReceipt.canisterId = 'other'; assert.throws(() => validateUpgradeJournal(invalid, binding), /photo-key/);
 });

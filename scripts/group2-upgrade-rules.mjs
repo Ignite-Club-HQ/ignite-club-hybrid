@@ -7,7 +7,7 @@ export const GROUP2_FUEL_FLOOR = 1_000_000_000_000n;
 export function validateGroup2Inventory(provision, shared) {
   if (provision.groupId !== 'g2' || provision.deploymentId !== 'mainnet' || provision.phase !== 'checked' || provision.pending ||
       !provision.dedicatedBlobStore?.installed || provision.dedicatedBlobStore.subnetId !== provision.subnetId ||
-      provision.configuration?.completed?.length < 1) throw new Error('Complete checked g2 provision required');
+      !provision.configuration?.completed?.length) throw new Error('Complete checked g2 provision required');
   const domains = GROUP_BUILD_SERVICES.filter(n => n !== 'media_blob_store');
   if (Object.keys(provision.canisters).length !== 12 || provision.installedDomains.length !== 12 ||
       domains.some(n => !provision.installedDomains.includes(n))) throw new Error('Exact twelve installed domains required');
@@ -39,6 +39,7 @@ export function upgradeArgs(service, path, governor) {
 }
 /** Lost replies can only settle from exact module readback; never repeat an uncertain upgrade. */
 export function reconcileUpgradeStep(step, moduleHash) {
+  if (!['ready', 'pending', 'complete'].includes(step.phase)) throw new Error('Invalid upgrade phase');
   if (step.phase === 'pending') {
     if (moduleHash !== step.newHash) throw new Error('Unknown upgrade outcome: reconcile manually; no automatic replay');
     return { ...step, phase: 'complete' };
@@ -46,4 +47,21 @@ export function reconcileUpgradeStep(step, moduleHash) {
   if (step.phase === 'complete' && moduleHash !== step.newHash) throw new Error('Completed module changed');
   if (step.phase === 'ready' && moduleHash !== step.oldHash) throw new Error('Original module changed');
   return step;
+}
+export function validateUpgradeJournal(journal, binding) {
+  if (!journal || JSON.stringify(journal.binding) !== JSON.stringify(binding) || !/^\d+$/.test(journal.routerRevision) ||
+      !Array.isArray(journal.steps) || journal.steps.length !== 13 || new Set(journal.steps.map(s => s.name)).size !== 13 ||
+      typeof journal.complete !== 'boolean') throw new Error('Invalid or foreign upgrade journal');
+  for (const planned of binding.inventory) {
+    const step = journal.steps.find(s => s.name === planned.name);
+    if (!step || step.canisterId !== planned.canisterId || step.subnetId !== planned.subnetId || step.newHash !== planned.newHash ||
+        !/^[a-f0-9]{64}$/.test(step.oldHash ?? '') || !/^[a-f0-9]{64}$/.test(step.settingsHash ?? '') ||
+        !['ready', 'pending', 'complete'].includes(step.phase)) throw new Error('Invalid upgrade journal step');
+  }
+  const receipt = journal.keyReceipt;
+  if (!receipt || receipt.governor !== binding.governor || receipt.deploymentId !== 'mainnet' || receipt.environment !== 'ic' ||
+      receipt.host !== 'https://icp-api.io' || receipt.keyName !== 'key_1' ||
+      receipt.canisterId !== binding.inventory.find(s => s.name === 'pii_access_control')?.canisterId ||
+      !/^[a-f0-9]{192}$/.test(receipt.publicKeyHex ?? '') || !/^[a-f0-9]{64}$/.test(receipt.moduleHash ?? ''))
+    throw new Error('Invalid original photo-key receipt');
 }

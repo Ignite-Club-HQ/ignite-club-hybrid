@@ -10,7 +10,7 @@ import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import { createJournalApi } from './media-stage-two-github.mjs';
-import { validateGroup2Inventory, wasmHash, verifyUpgradeStatus, upgradeArgs, reconcileUpgradeStep, GROUP2_GOVERNOR } from '../../scripts/group2-upgrade-rules.mjs';
+import { validateGroup2Inventory, validateUpgradeJournal, wasmHash, verifyUpgradeStatus, upgradeArgs, reconcileUpgradeStep, GROUP2_GOVERNOR } from '../../scripts/group2-upgrade-rules.mjs';
 
 const [action, wasmDirectory, pemFile, reportDirectory] = process.argv.slice(2);
 if (!['check', 'upgrade'].includes(action) || !wasmDirectory || !pemFile || !reportDirectory) throw new Error('Usage: upgrade-group2 <check|upgrade> <wasm-directory> <existing-key-file> <report-directory>');
@@ -101,7 +101,7 @@ if (action === 'check') {
   let stored = exists ? api(`${path}?ref=${branch}`) : null;
   let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
   const binding = { release, governor: GROUP2_GOVERNOR, provisionHash: hash(provision), inventory: plans.map(({ file, ...p }) => p) };
-  if (journal && JSON.stringify(journal.binding) !== JSON.stringify(binding)) throw new Error('Upgrade journal belongs to another release/inventory; reconcile before changing it');
+  if (journal) validateUpgradeJournal(journal, binding);
   const persist = () => {
     const content = Buffer.from(JSON.stringify(journal)).toString('base64');
     api(path, 'PUT', { branch, message: 'Group 2 upgrade checkpoint', content, ...(stored ? { sha: stored.sha } : {}) });
