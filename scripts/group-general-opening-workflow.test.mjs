@@ -40,7 +40,7 @@ test('snapshot is governor-verified, wired to removal proof, and writes the comm
   assert.match(snapshot, /verifyOwnerReciprocalConfiguration/);
   assert.match(snapshot, /src\/live\/generated\/routingGates\.ts/);
   assert.match(snapshot, /evidenceSha256/);
-  assert.match(snapshot, /older registry revision/);
+  assert.match(snapshot, /registryRevision: String\(registry\.revision\)/);
 });
 
 test('opening runner confirms every mutation behind its exact phrase before any register call', () => {
