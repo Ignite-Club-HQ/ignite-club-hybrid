@@ -158,6 +158,13 @@
       "beforeCycles": "995826159132",
       "phase": "verified",
       "afterCycles": "1499986104260"
+    },
+    {
+      "id": "yzsce-2yaaa-aaaal-qxp2q-cai",
+      "name": "competition_domain",
+      "amount": "507661939424",
+      "beforeCycles": "992325697007",
+      "phase": "transferring"
     }
   ]
 }
