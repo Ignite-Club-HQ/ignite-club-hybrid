@@ -21,11 +21,12 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "Upgrade scope (History only leaves media and scaling untouched)"
+        description: "Upgrade scope (router only fixes group approvals; history only leaves media/scaling untouched)"
         type: choice
         required: true
         default: history
         options:
+          - router
           - history
           - all
 
@@ -108,8 +109,8 @@ jobs:
             echo "==> This MUST match the principal whose account address you funded."
             echo "key_source=secret" >> "$GITHUB_ENV"
           else
-            if [ "$DEPLOY_SCOPE" = history ]; then
-              echo "::error::History upgrades require the existing DEPLOYER_PEM; refusing to create a replacement identity."
+            if [ "$DEPLOY_SCOPE" != all ]; then
+              echo "::error::Scoped upgrades require the existing DEPLOYER_PEM; refusing to create a replacement identity."
               exit 1
             fi
             icp identity new ignite-governor --storage plaintext \
@@ -131,7 +132,7 @@ jobs:
           icp cycles balance -n ic || true
 
       - name: Convert available ICP to cycles
-        if: inputs.scope != 'history'
+        if: inputs.scope == 'all'
         run: |
           set -euo pipefail
           # Outside the checkout — see "Show funding address and balances" above.
@@ -165,7 +166,7 @@ jobs:
             | xargs -r sed -i "s|$SENTINEL|$GOVERNOR|g"
 
       - name: Verify cycles are ready for deploy
-        if: inputs.scope != 'history'
+        if: inputs.scope == 'all'
         run: |
           set -uo pipefail
           # Outside the checkout — see "Show funding address and balances" above.

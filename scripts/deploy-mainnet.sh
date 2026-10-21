@@ -22,7 +22,7 @@ export GOVERNOR
 DEPLOY_TARGET="${DEPLOY_TARGET:-mainnet}"
 ICP_ENV="${ICP_ENV:-ic}"
 DEPLOY_SCOPE="${DEPLOY_SCOPE:-all}"
-case "$DEPLOY_SCOPE" in all|history) ;; *) echo "ERROR: unsupported deployment scope"; exit 1;; esac
+case "$DEPLOY_SCOPE" in all|history|router) ;; *) echo "ERROR: unsupported deployment scope"; exit 1;; esac
 PROJECT_DIR="$(cd "$(dirname "$0")/../deploy/$DEPLOY_TARGET" && pwd)"
 IDS_JSON="$PROJECT_DIR/.icp/data/mappings/$ICP_ENV.ids.json"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -55,6 +55,15 @@ if [ "$CURRENT" != "$GOVERNOR" ]; then
   echo "       timer_jobs.initialize() and the wiring calls must come from the governor."
   echo "       Switch to the governor identity (icp identity default <name>) and re-run."
   exit 1
+fi
+
+if [ "$DEPLOY_SCOPE" = router ]; then
+  [ "$DEPLOY_TARGET" = mainnet ] && [ "$ICP_ENV" = ic ] || { echo "ERROR: Router upgrade requires mapped mainnet"; exit 1; }
+  node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('$IDS_JSON','utf8'));if(m.shard_router!=='jcdfe-vqaaa-aaaal-qxloq-cai')process.exit(1)"
+  echo "==> Upgrading only the existing shared router; no creation or service rewiring"
+  icp deploy shard_router -e "$ICP_ENV" -y --mode upgrade --no-create
+  echo "==> Router-only upgrade complete; run snapshot, sync and publish before creating clubs"
+  exit 0
 fi
 
 if [ -f "$IDS_JSON" ] && node -e "const m=require('$IDS_JSON');process.exit(m.pii_access_control ? 0 : 1)"; then

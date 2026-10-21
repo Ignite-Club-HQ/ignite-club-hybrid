@@ -9,6 +9,35 @@ controls, replacing the superseded owner-only trial
 
 ## Order of operations (each step is its own GitHub run)
 
+### Repair for the club-creation approval error (22 October 2026)
+
+Ordinary club reservations previously advanced the same revision used by the
+frontend approval. A fresh snapshot alone was therefore only a temporary fix.
+The router now stores a separate stable configuration revision, while keeping
+the original assignment/deletion/session revision and all creator checks.
+
+For an already-open Group 2:
+1. Sync these changes to GitHub.
+2. Run **Deploy ICP canisters (mainnet)** with scope **router**. It upgrades
+   only the pinned existing router; it never creates canisters or rewires
+   club/media services. Do not choose `all` for this repair.
+3. Run **Open Group 2 to everyone** with action **snapshot**, confirmation empty.
+   Do not repeat `open` for a group that is already accepting.
+4. Sync the generated snapshot to Lovable and publish.
+5. Create two fresh test clubs and confirm their membership/details read back.
+   Report their names if either fails; this repair does not move existing clubs.
+
+Health and ordinary placements do not change configuration approval. Group
+registration, admission changes, placement bindings and authorization/capacity
+baseline changes invalidate it. Complete consensus reads remain assignment-
+revision-pinned and reject concurrent drift; service/placement/policy inventory
+must still match the approved canonical projection exactly. Old snapshots and
+old router responses fail closed until upgraded and regenerated.
+
+Local verification is not authenticated mainnet creation or an actual Wasm
+upgrade rehearsal. The owner-run upgrade, snapshot and two-club check are still
+required before claiming this repair is live.
+
 1. **Deploy the shared router upgrade first** — run
    `Deploy ICP canisters (mainnet)` with scope `all`. This is required because:
    - placement needs health readings fresher than 15 minutes and the new
