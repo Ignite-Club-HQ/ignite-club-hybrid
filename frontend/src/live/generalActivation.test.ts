@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({
   revision: 7n,
   groups: [] as unknown[],
 }));
-vi.mock('./generated/routingGates', () => ({ ROUTING_GATES_SNAPSHOT: state.snapshot }));
+vi.mock('./generated/routingGates', () => ({ get ROUTING_GATES_SNAPSHOT() { return state.snapshot; } }));
 vi.mock('./domains', () => ({
   connectLiveShardRouter: async () => ({
     actor: {
