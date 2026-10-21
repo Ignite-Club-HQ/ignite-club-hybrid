@@ -366,6 +366,7 @@ export interface shard_routerInterface {
     read_my_new_club_placement(arg0: string, arg1: string, arg2: bigint): Promise<Result_4>;
     read_my_owner_test_opening(arg0: string): Promise<Result_20>;
     read_new_club_creation_authorized(arg0: Principal, arg1: string, arg2: string, arg3: string): Promise<Result_21>;
+    read_owner_test_deletion_required(arg0: string): Promise<Result_21>;
     record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result>;
     register_group(arg0: ShardGroup, arg1: bigint): Promise<Result>;
     register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result>;
@@ -500,6 +501,10 @@ export class Shard_router implements shard_routerInterface {
     }
     async read_new_club_creation_authorized(arg0: Principal, arg1: string, arg2: string, arg3: string): Promise<Result_21> {
         const result = await this.actor.read_new_club_creation_authorized(arg0, arg1, arg2, arg3);
+        return from_candid_Result_21_n70(result);
+    }
+    async read_owner_test_deletion_required(arg0: string): Promise<Result_21> {
+        const result = await this.actor.read_owner_test_deletion_required(arg0);
         return from_candid_Result_21_n70(result);
     }
     async record_group_health(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint): Promise<Result> {

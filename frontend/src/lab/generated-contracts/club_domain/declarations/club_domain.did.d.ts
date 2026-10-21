@@ -1813,6 +1813,15 @@ export interface Main {
     { 'Ok' : Child } |
       { 'Err' : string }
   >,
+  /**
+   * / Independent deletion-only configuration for an empty owner-test group.
+   * / Does not release linked-account sync or register lifecycle receivers.
+   */
+  'set_owner_test_deletion_identity' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_pending_invite_email_hash' : ActorMethod<
     [string, string, string],
     { 'Ok' : null } |

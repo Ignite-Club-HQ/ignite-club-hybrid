@@ -2358,6 +2358,17 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Independent deletion-only configuration for an empty owner-test group.
+     * / Does not release linked-account sync or register lifecycle receivers.
+     */
+    set_owner_test_deletion_identity(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_pending_invite_email_hash(invite_id: string, club_id: string, hash: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -6123,6 +6134,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.set_own_child_team(arg0, arg1, arg2);
         return from_candid_variant_n20(result);
+    }
+    async set_owner_test_deletion_identity(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_owner_test_deletion_identity(arg0);
+        return from_candid_variant_n17(result);
     }
     async set_pending_invite_email_hash(arg0: string, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";

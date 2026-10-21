@@ -2483,6 +2483,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
         [],
       ),
+    'set_owner_test_deletion_identity' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_pending_invite_email_hash' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

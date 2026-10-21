@@ -282,6 +282,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_21],
         [],
       ),
+    'read_owner_test_deletion_required' : IDL.Func([IDL.Text], [Result_21], []),
     'record_group_health' : IDL.Func(
         [IDL.Text, IDL.Nat64, IDL.Nat64, IDL.Nat64],
         [Result],

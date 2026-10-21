@@ -184,6 +184,9 @@ service : (Init) -> {
   read_new_club_creation_authorized : (principal, text, text, text) -> (
       Result_21,
     );
+  // No private approval data: admins deleting a different account still need
+  // the complete group inventory, even when they have no test-club membership.
+  read_owner_test_deletion_required : (text) -> (Result_21);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   register_group : (ShardGroup, nat64) -> (Result);
   register_group_placement : (GroupPlacement, nat64) -> (Result);

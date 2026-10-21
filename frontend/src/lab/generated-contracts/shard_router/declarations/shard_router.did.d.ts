@@ -260,6 +260,11 @@ export interface _SERVICE {
     [Principal, string, string, string],
     Result_21
   >,
+  /**
+   * No private approval data: admins deleting a different account still need
+   * the complete group inventory, even when they have no test-club membership.
+   */
+  'read_owner_test_deletion_required' : ActorMethod<[string], Result_21>,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,

@@ -1994,6 +1994,13 @@ type Main =
        Err: text;
        Ok: Child;
      });
+   /// Independent deletion-only configuration for an empty owner-test group.
+   /// Does not release linked-account sync or register lifecycle receivers.
+   set_owner_test_deletion_identity: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_pending_invite_email_hash: (invite_id: text, club_id: text, hash:
     text) -> (variant {
                 Err: text;
