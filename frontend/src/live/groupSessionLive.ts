@@ -61,6 +61,11 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext) {
       if ('Err' in reply) throw new Error(reply.Err);
       return reply.Ok.map(a => ({ clubId: a.club_id, groupId: a.group_id, revision: a.revision }));
     },
+    async readNewClubPlacement(clubId, revision) {
+      const reply = await router.read_my_new_club_placement(clubId, ctx.target.alias, revision);
+      if ('Err' in reply) throw new Error(reply.Err);
+      return { clubId: reply.Ok.club_id, groupId: reply.Ok.group_id, revision: reply.Ok.revision };
+    },
   });
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */

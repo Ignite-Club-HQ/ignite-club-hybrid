@@ -11,6 +11,8 @@ export type GroupSessionTransport = {
   readRegistry(): Promise<GroupRegistry>;
   readMemberships(ctx: FeatureBackendContext, offset: bigint, limit: number): Promise<{ clubs: string[]; next: bigint | null; aclRevision: bigint }>;
   readAssignments(clubs: string[], revision: bigint): Promise<ClubAssignment[]>;
+  /** Original creator's consensus receipt, not membership or permission. */
+  readNewClubPlacement?(clubId: string, revision: bigint): Promise<ClubAssignment>;
   /** Faster cursor pager (cost scales with the caller's own clubs). Throws APP_WIDE_INDEX_ERROR for app-wide accounts, which use the scan pager. */
   readMembershipsIndexed?(ctx: FeatureBackendContext, after: string | null, limit: number): Promise<{ clubs: string[]; next: string | null; aclRevision: bigint }>;
   /** Group of a club the caller may not belong to (e.g. a competition host). Returns location only; destinations keep their own access rules. */
@@ -199,11 +201,19 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     /** Create a brand-new club in the group the router just placed it in.
      * Single attempt (creates are never retried); the group must be in this
      * session's verified registry. Reopen the session afterwards. */
-    async createInGroup<T>(groupId: string, domain: GroupDomain, write: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
-      if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
+    async createInGroup<T>(placement: ClubAssignment, domain: GroupDomain, write: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
+      if (domain !== 'club_domain') throw new Error('New club creation requires club_domain');
       live();
-      if (!registry.groups.some(g => g.id === groupId)) throw new Error('Placed group is not in the verified registry');
-      const result = await write(targetFor(groupId)); live(); return result;
+      if (!placement.clubId || clubs.has(placement.clubId) || placement.revision < 1n || placement.revision > registry.revision ||
+          !registry.groups.some(g => g.id === placement.groupId)) throw new Error('Invalid new club placement');
+      if (!transport.readNewClubPlacement) throw new Error('Creator placement verification unavailable');
+      await assertRegistryUnchanged();
+      const current = await transport.readNewClubPlacement(placement.clubId, registry.revision);
+      live();
+      if (current.clubId !== placement.clubId || current.groupId !== placement.groupId || current.revision !== placement.revision) throw new Error('Creator placement changed');
+      await assertRegistryUnchanged();
+      // Exactly one attempt. Unknown creation outcomes require readback, not replay.
+      const result = await write(targetFor(placement.groupId)); live(); return result;
     },
     /** Bounded read across every group, for discovery that is not keyed by one
      * club (e.g. competitions a team entered, wherever they are hosted).
