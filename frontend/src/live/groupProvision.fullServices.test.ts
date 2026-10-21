@@ -70,7 +70,8 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
       const reply = await actor(name).read_group_opening_configuration();
       const rows = name === 'timer_jobs' ? ok(reply) : reply;
       expect(Array.isArray(rows), name).toBe(true);
-      await expect(actor(name, outsider).read_group_opening_configuration()).rejects.toThrow();
+      if (name === 'timer_jobs') expect(await actor(name, outsider).read_group_opening_configuration()).toHaveProperty('Err');
+      else await expect(actor(name, outsider).read_group_opening_configuration()).rejects.toThrow();
     }
     const clubConfig = await actor('club_domain').read_group_opening_configuration();
     expect(clubConfig).toContainEqual(['notification_queue', services.get('notification_queue').canisterId.toText()]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { verifyOwnerOpeningChecks, type OwnerCheckSpec, type ObservedService } from './ownerOpeningChecks';
+import { verifyOwnerOpeningChecks, verifyOwnerReciprocalConfiguration, type OwnerCheckSpec, type ObservedService } from './ownerOpeningChecks';
 import { GROUP_DOMAINS } from './groupRouting';
 const p = (text: string) => ({ toText: () => text });
 function fixture() {
@@ -21,4 +21,5 @@ describe('owner-only Group 2 opening checks', () => {
   it('requires exact approved modules and sole governor control', () => { const f = fixture(); f.observed[0].moduleHash = 'cd'.repeat(32); expect(f.check).toThrow('Unverified'); f.observed[0].moduleHash = f.spec.services[0].moduleHash; f.observed[0].controllers.push('other'); expect(f.check).toThrow('Unverified'); });
   it('requires creator binding and forbids mainnet rehearsal flags', () => { const f = fixture(); f.observed[0].environment.pop(); expect(f.check).toThrow('creator-placement'); const g = fixture(); g.observed[1].environment.push({ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }); expect(g.check).toThrow('Rehearsal'); });
   it('requires capacity and 1-10 explicit distinct club IDs', () => { const f = fixture(); f.observed[0].cycles = 9n; expect(f.check).toThrow('health'); const g = fixture(); g.spec.clubIds = []; expect(g.check).toThrow('1-10'); });
+  it('does not accept a configuration receipt instead of actual reciprocal reads', () => { const f = fixture(); expect(() => verifyOwnerReciprocalConfiguration({ ...f.spec, identityAccess: 'identity', pushWorker: 'worker' }, f.observed, [], [])).toThrow('Consensus configuration unavailable'); });
 });
