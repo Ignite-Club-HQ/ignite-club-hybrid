@@ -99,6 +99,17 @@ export const idlFactory = ({ IDL }) => {
     'total' : IDL.Nat,
     'items' : IDL.Vec(PointsHistoryEntry),
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
   const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
@@ -297,6 +308,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
@@ -377,6 +393,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubReward), 'Err' : IDL.Text })],
         [],
       ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
     'redeem_reward' : IDL.Func(
         [IDL.Text, Subject, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],
@@ -400,6 +421,11 @@ export const idlFactory = ({ IDL }) => {
     'save_club_points_settings' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool, IDL.Opt(IDL.Text), IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubPointsSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_domain_canister' : IDL.Func(

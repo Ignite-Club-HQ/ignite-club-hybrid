@@ -213,6 +213,11 @@ export interface Main {
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
@@ -273,6 +278,11 @@ export interface Main {
     { 'Ok' : Array<ClubReward> } |
       { 'Err' : string }
   >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'redeem_reward' : ActorMethod<
     [string, Subject, string, [] | [string]],
     { 'Ok' : RewardRedemption } |
@@ -296,6 +306,11 @@ export interface Main {
   'save_club_points_settings' : ActorMethod<
     [string, [] | [string], boolean, [] | [string], boolean],
     { 'Ok' : ClubPointsSettings } |
+      { 'Err' : string }
+  >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   'set_club_domain_canister' : ActorMethod<
@@ -355,6 +370,17 @@ export interface PointsHistoryEntry {
   'source_type' : string,
   'amount' : number,
   'club_id' : string,
+}
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface RewardRedemption {
   'id' : string,

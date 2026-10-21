@@ -142,6 +142,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not isFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?FenceSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (removalReceiver.snapshotDenied(snapshot)) return #Err("Snapshot references fenced account");
     let c = club;
     let rootA = s.assets;
     let inA = func(k : Text) : Bool = rootA.any(func(x) = x.id == k);

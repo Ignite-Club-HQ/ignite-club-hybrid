@@ -283,6 +283,11 @@ export interface Main {
   >,
   'my_availability' : ActorMethod<[], Array<MiniLeagueSessionAvailability>>,
   'my_leagues' : ActorMethod<[], Array<MiniLeague>>,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
@@ -403,6 +408,11 @@ export interface Main {
     Array<MiniLeagueSessionAvailability>
   >,
   'read_account_my_leagues' : ActorMethod<[], Array<MiniLeague>>,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'read_account_verify_child_guardian' : ActorMethod<
     [Principal, string],
     boolean
@@ -438,6 +448,11 @@ export interface Main {
   'rotate_mini_league_join_link' : ActorMethod<
     [string, string],
     { 'Ok' : MiniLeagueJoinLink } |
+      { 'Err' : string }
+  >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   'set_availability' : ActorMethod<
@@ -646,6 +661,17 @@ export interface PublicMiniLeagueSummary {
   'id' : string,
   'name' : string,
   'club_id' : string,
+}
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

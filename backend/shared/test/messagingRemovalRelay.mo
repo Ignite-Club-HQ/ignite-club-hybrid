@@ -11,6 +11,11 @@ persistent actor MessagingRemovalRelay {
   var released : Bool = true;
   var notificationHeld : Bool = false;
   var notificationCalls : Nat = 0;
+  var holdAdmission : Bool = false;
+  var admissionCalls : Nat = 0;
+  public shared func hold_admission() : async () { admissionCalls := 0; holdAdmission := true };
+  public shared func release_admission() : async () { holdAdmission := false };
+  public query func admission_progress() : async (Nat, Bool) { (admissionCalls, holdAdmission) };
   public shared func hold_notifications() : async () { notificationCalls := 0; notificationHeld := true };
   public shared func release_notifications() : async () { notificationHeld := false };
   public query func notification_progress() : async (Nat, Bool) { (notificationCalls, notificationHeld) };
@@ -24,6 +29,8 @@ persistent actor MessagingRemovalRelay {
   public query func progress() : async (Nat, Bool) { (calls, released) };
   public shared func pulse() : async () {};
   public shared func read_principal_eligibility(subject : Principal) : async { #Ok : AccountAdmission.Evidence; #Err : Text } {
+    admissionCalls += 1;
+    while (holdAdmission) { await MessagingRemovalRelay.pulse() };
     #Ok({ subject; decision = #Eligible; account_version = ?1; denied_through_version = null })
   };
   public shared func read_has_club_membership(_subject : Principal, _club : Text) : async Bool {
@@ -38,5 +45,9 @@ persistent actor MessagingRemovalRelay {
   public shared func drain(target : Principal, request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
     let receiver : actor { read_account_removal_drain : shared (RemovalReceiver.Request) -> async { #Ok : RemovalReceiver.Receipt; #Err : Text } } = actor(target.toText());
     await receiver.read_account_removal_drain(request)
+  };
+  public shared func seal(target : Principal, request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    let receiver : actor { seal_account_removal : shared (RemovalReceiver.Request) -> async { #Ok : RemovalReceiver.Receipt; #Err : Text } } = actor(target.toText());
+    await receiver.seal_account_removal(request)
   };
 }

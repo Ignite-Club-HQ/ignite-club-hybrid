@@ -28,6 +28,11 @@ impl Intent {
         }
         Ok(())
     }
+    pub fn validate_seal(&self, target: Principal, receipt: &Receipt) -> Result<(), String> {
+        self.validate_receipt(target, receipt)?;
+        if receipt.outstanding != candid::Nat::from(0u8) { return Err("Removal receiver not drained".into()); }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
@@ -79,6 +84,10 @@ mod tests {
             inventory_digest:vec![1;32], inventory, targets:vec![q] };
         let receipt = Receipt { request:intent.request(), receiver:q, outstanding:0u8.into() };
         assert_eq!(intent.validate_receipt(q, &receipt), Ok(()));
+        assert_eq!(intent.validate_seal(q, &receipt), Ok(()));
+        let mut pending = receipt.clone(); pending.outstanding = 1u8.into();
+        assert!(intent.validate_receipt(q, &pending).is_ok());
+        assert_eq!(intent.validate_seal(q, &pending), Err("Removal receiver not drained".into()));
         let mut bad = receipt.clone(); bad.request.generation = 6;
         assert!(intent.validate_receipt(q, &bad).is_err());
         bad = receipt.clone(); bad.request.subjects = vec![q];

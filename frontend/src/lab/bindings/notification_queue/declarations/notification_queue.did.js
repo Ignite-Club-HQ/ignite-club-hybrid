@@ -183,6 +183,17 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : PreferencesPage,
     'Err' : IDL.Text,
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
   const ChatNotifyBatchResult = IDL.Variant({
     'Ok' : IDL.Nat16,
     'Err' : IDL.Text,
@@ -360,6 +371,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
@@ -392,6 +408,11 @@ export const idlFactory = ({ IDL }) => {
     'read_account_list_scheduled' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [ScheduledResults],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'record_chat_notify_batch' : IDL.Func(
@@ -460,6 +481,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Nat64),
         ],
         [ScheduledResult],
+        [],
+      ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_domain_canister' : IDL.Func(

@@ -923,6 +923,11 @@ export interface Main {
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
@@ -1227,6 +1232,11 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   /**
    * / Location-only lookup for group routing: which club owns this event, if
    * / it lives in this canister. Viewers only; returns null when not held here.
@@ -1388,6 +1398,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'schema' : ActorMethod<[], string>,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'send_event_reminders' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -1743,6 +1758,11 @@ export interface Read {
   'player_stats_json' : string,
   'scores_hidden' : boolean,
 }
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
 export interface Recurrence {
   'until_ms' : bigint,
   'frequency' : string,
@@ -1754,6 +1774,12 @@ export interface ReminderLog {
   'recipient' : string,
   'event_id' : string,
   'channel' : string,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface Result { 'hasMore' : boolean, 'rows' : Array<Row> }
 export interface RoleGrant {

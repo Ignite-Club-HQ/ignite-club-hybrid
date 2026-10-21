@@ -9,4 +9,7 @@ mixin (gate : Receiver.Gate, self : Principal, pending : Receiver.Request -> Nat
   public shared ({ caller }) func read_account_removal_drain(request : Receiver.Request) : async { #Ok : Receiver.Receipt; #Err : Text } {
     gate.receipt(caller, request, self, pending(request))
   };
+  public shared ({ caller }) func seal_account_removal(request : Receiver.Request) : async { #Ok : Receiver.Receipt; #Err : Text } {
+    gate.seal(caller, request, self, pending(request))
+  };
 }

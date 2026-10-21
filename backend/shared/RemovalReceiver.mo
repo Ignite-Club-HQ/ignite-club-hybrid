@@ -10,6 +10,28 @@ module {
   public class Gate(enabled : Bool, authority : ?Principal,
     intents : Map.Map<Text, Request>, subjects : Map.Map<Principal, Text>, active : Map.Map<Principal, Nat>) {
     public func denied(subject : Principal) : Bool { subjects.containsKey(subject) };
+    // Fail closed on stale snapshot imports before any replacement. Matching
+    // raw principal bytes also catches nested Candid principal fields; UTF-8
+    // forms cover legacy principal-text references. False positives deny import.
+    public func snapshotDenied(snapshot : Blob) : Bool {
+      let hay = Blob.toArray(snapshot);
+      func contains(needle : Blob) : Bool {
+        let n = Blob.toArray(needle);
+        if (n.size() == 0 or n.size() > hay.size()) return false;
+        var i = 0;
+        while (i + n.size() <= hay.size()) {
+          var j = 0;
+          while (j < n.size() and hay[i+j] == n[j]) j += 1;
+          if (j == n.size()) return true;
+          i += 1;
+        };
+        false
+      };
+      for ((subject, _) in subjects.entries()) {
+        if (contains(Principal.toBlob(subject)) or contains(Text.encodeUtf8(subject.toText()))) return true;
+      };
+      false
+    };
     public func enter(subject : Principal) : Bool {
       if (not enabled) return true;
       if (denied(subject)) return false;
@@ -53,6 +75,14 @@ module {
         outstanding += switch (active.get(subject)) { case null 0; case (?n) n }
       };
       #Ok({ request; receiver; outstanding })
+    };
+    // A sealed receipt cannot be obtained from a cached observation or a
+    // timeout. Immutable fences reject new holds; outstanding work must settle.
+    public func seal(caller : Principal, request : Request, receiver : Principal, pending : Nat) : { #Ok : Receipt; #Err : Text } {
+      switch (receipt(caller, request, receiver, pending)) {
+        case (#Err(e)) #Err(e);
+        case (#Ok(r)) { if (r.outstanding != 0) #Err("Removal work remains outstanding") else #Ok(r) };
+      }
     }
   }
 }

@@ -266,6 +266,17 @@ export const idlFactory = ({ IDL }) => {
     'scope' : IDL.Text,
     'competition_id' : IDL.Text,
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
   const PlayHQStat = IDL.Record({
     'player_id' : IDL.Text,
     'team_id' : IDL.Text,
@@ -719,6 +730,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
@@ -807,6 +823,11 @@ export const idlFactory = ({ IDL }) => {
     'read_account_read_token_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'read_competition_club' : IDL.Func(
@@ -931,6 +952,11 @@ export const idlFactory = ({ IDL }) => {
     'rotate_competition_join_link' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
+        [],
+      ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'send_competition_broadcast' : IDL.Func(

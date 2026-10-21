@@ -149,6 +149,11 @@ export interface Main {
     { 'ok' : bigint } |
       { 'err' : string }
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
@@ -167,6 +172,11 @@ export interface Main {
   'read_account_list_scheduled' : ActorMethod<
     [string, [] | [string]],
     ScheduledResults
+  >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
   >,
   'record_chat_notify_batch' : ActorMethod<
     [string, string, string, string, Array<string>, Array<string>],
@@ -224,6 +234,11 @@ export interface Main {
       [] | [bigint],
     ],
     ScheduledResult
+  >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
   >,
   'set_club_domain_canister' : ActorMethod<
     [Principal],
@@ -363,10 +378,21 @@ export interface PushDeliveryHealth {
 }
 export type PushDeliveryHealthResult = { 'Ok' : PushDeliveryHealth } |
   { 'Err' : string };
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
 export type Recurrence = { 'Weekly' : null } |
   { 'None' : null } |
   { 'Daily' : null } |
   { 'Monthly' : null };
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
+}
 export type Result = { 'Ok' : Notification } |
   { 'Err' : string };
 export type ResultNat16 = { 'Ok' : number } |

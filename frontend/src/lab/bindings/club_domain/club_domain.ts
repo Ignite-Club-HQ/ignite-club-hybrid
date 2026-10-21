@@ -2158,6 +2158,13 @@ export interface MainInterface {
         Err: string;
     }>;
     schema(): Promise<string>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     send_fee_reminders(club_id: string, payment_period: string, payment_type: string, message: string): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -5828,6 +5835,16 @@ export class Club_domain implements club_domainInterface {
     async schema(): Promise<string> {
         const result = await this.actor.schema();
         return result;
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n255(result);
     }
     async send_fee_reminders(arg0: string, arg1: string, arg2: string, arg3: string): Promise<{
         __kind__: "Ok";

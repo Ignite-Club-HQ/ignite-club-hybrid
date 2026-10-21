@@ -316,6 +316,11 @@ export interface Main {
     { 'Ok' : Array<PhotoEngagementTotal> } |
       { 'Err' : string }
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
@@ -449,6 +454,11 @@ export interface Main {
     { 'Ok' : Array<PhotoEngagementTotal> } |
       { 'Err' : string }
   >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'record_active_user' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -539,6 +549,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'set_ad_active' : ActorMethod<
     [string, boolean],
     { 'Ok' : null } |
@@ -613,6 +628,17 @@ export interface PhotoEngagementTotal {
   'photo_id' : string,
   'comments' : bigint,
   'reactions' : bigint,
+}
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface SponsorBenchmarkRow {
   'ctr' : number,

@@ -542,6 +542,26 @@ async fn advance_account_removal_receiver(account_id: String, target: Principal)
     bump_removal_history();
     Ok(receipt)
 }
+/// Fresh, authenticated full-inventory seal verification. This does not erase
+/// data, release registry locks, restore histories or activate a group.
+#[ic_cdk::update]
+async fn verify_account_removal_seals(account_id: String) -> Outcome<Vec<removal_barrier::Receipt>> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    let intent = removal_intent(&account_id).ok_or("Removal intent missing")?;
+    let request = intent.request();
+    let mut seals = Vec::new();
+    for target in &intent.targets {
+        let reply = ic_cdk::call::Call::bounded_wait(*target, "seal_account_removal").with_arg(&request)
+            .await.map_err(|_| "Receiver seal unavailable; intent remains locked")?;
+        let result: Outcome<removal_barrier::Receipt> = reply.candid().map_err(|_| "Invalid receiver seal reply")?;
+        let seal = result?;
+        if removal_intent(&account_id).as_ref() != Some(&intent) { return Err("Removal intent changed".into()); }
+        intent.validate_seal(*target, &seal)?;
+        seals.push(seal);
+    }
+    if seals.len() != intent.targets.len() { return Err("Incomplete receiver seals".into()); }
+    Ok(seals)
+}
 fn group_inventory_binding() -> Option<group_inventory::Binding> {
     GROUP_INVENTORY_BINDING.with(|m| if m.borrow().get().is_empty() { None } else { Some(decode(m.borrow().get())) })
 }
@@ -2462,6 +2482,22 @@ mod tests {
         assert_eq!(persist_removal_intent(&restored,inventory,p(90)).unwrap(),intent);
         assert_eq!(REMOVAL_GENERATION.with(|m|*m.borrow().get()),1);
         assert_eq!(decode::<removal_barrier::Intent>(&encode(&intent)),intent);
+        let receipt = removal_barrier::Receipt { request: intent.request(), receiver: intent.targets[0], outstanding: 3u8.into() };
+        let receipt_key = format!("{}:{}", account.id, receipt.receiver.to_text());
+        REMOVAL_RECEIPTS.with(|m| m.borrow_mut().insert(receipt_key.clone(), encode(&receipt)));
+        bump_removal_history();
+        let manifest = history_manifest();
+        assert_eq!(manifest.removal_generation, 1);
+        assert_eq!(manifest.removal_barriers, 1);
+        assert_eq!(manifest.removal_subjects, 1);
+        assert_eq!(manifest.removal_receipts, 1);
+        let page = history_page(manifest.revision, RemovalHistoryCursor::RemovalBarriers(None), 1).unwrap();
+        assert_eq!(page.barriers, vec![(account.id.clone(), intent.clone())]);
+        assert!(history_page(manifest.revision, RemovalHistoryCursor::RemovalBarriers(Some("x".repeat(257))), 1).is_err());
+        let page = history_page(manifest.revision, RemovalHistoryCursor::RemovalSubjects(None), 1).unwrap();
+        assert_eq!(page.subjects, vec![(subject.to_text(), account.id.clone())]);
+        let page = history_page(manifest.revision, RemovalHistoryCursor::RemovalReceipts(None), 1).unwrap();
+        assert_eq!(page.receipts, vec![(receipt_key, receipt)]);
         let other=Account {id:"barrier-bystander".into(),principals:vec![principal(154)],version:1,status:AccountStatus::Active};
         put_account(&other); index_principal(other.principals[0],&other.id);
         assert_eq!(account_for(other.principals[0]).unwrap(),other);

@@ -4969,4 +4969,10 @@ persistent actor class Main(governorInit : Principal) = this {
     // reminder also has an original-subject hold through its queue reply.
     removalReceiver.receipt(caller, request, Principal.fromActor(this), if (photoReminderSweepRunning) 1 else 0)
   };
+
+  public shared ({ caller }) func seal_account_removal(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    // Timer-originated sweeps remain conservative pending work; each outgoing
+    // reminder also has an original-subject hold through its queue reply.
+    removalReceiver.seal(caller, request, Principal.fromActor(this), if (photoReminderSweepRunning) 1 else 0)
+  };
 }

@@ -52,7 +52,9 @@ try {
  events.setPrincipal(victim); assert.deepEqual(ok(await events.read_account_list_my_viewed_event_ids([])),[]);
  insights.setPrincipal(victim); ok(await insights.record_web_vital('LCP',12,'good','/local'));
  assert.equal(await league.read_account_verify_child_guardian(victim,'unknown'),false,'A human cannot invoke the self-only guardian helper');
- chat.setPrincipal(governor); const conversation=ok(await chat.create_conversation('club',[],[victim,governor]));
+ // This fixture tests personal admission independently of club membership;
+ // actual vault/club/photo authority and club removal are exercised below.
+ chat.setPrincipal(governor); const conversation=ok(await chat.create_conversation('dm',[],[victim,governor]));
  chat.setPrincipal(victim); ok(await chat.send_message(conversation.id,'local private message','m1',[],[]));
  assert.equal(ok(await chat.read_account_list_messages_page(conversation.id,[],10)).messages.length,1);
  await denied(()=>chat.list_messages_page(conversation.id,[],10));
@@ -279,11 +281,28 @@ try {
  assert.ok(heldDrain.outstanding>0n,'Held key request must prevent a drained receipt');
  ok(await pii.prepare_account_removal(receiverRequest));
  assert.ok('Err' in await pii.prepare_account_removal({...receiverRequest,generation:8n}));
- for (const receiver of [club,vault]) {
+ queue.setPrincipal(governor);
+ ok(await queue.enqueue('held-delivery',victim.toText(),'app','event','Held worker delivery','held-delivery-key'));
+ const heldDelivery=ok(await queue.claim(99999999999999n,100)).find(n=>n.id==='held-delivery');
+ assert.ok(heldDelivery,'Positive worker lease must exist before fencing');
+ queue.setPrincipal(victim);
+ assert.ok('Err' in await queue.delete_notification('held-delivery'));
+ assert.ok('Err' in await queue.clear_inbox(victim.toText(),[]));
+ for (const receiver of [club,vault,events,competition,league,points,media,insights,queue,chat]) {
   receiver.setPrincipal(identity.canisterId);
   ok(await receiver.prepare_account_removal(receiverRequest));
-  assert.equal(ok(await receiver.read_account_removal_drain(receiverRequest)).outstanding,0n);
+  assert.equal(ok(await receiver.read_account_removal_drain(receiverRequest)).outstanding,receiver===queue?1n:0n);
  }
+ queue.setPrincipal(governor);
+ assert.equal(ok(await queue.recover()),0,'Recovery must not reset an issued external capability');
+ assert.deepEqual(await queue.authorize_delivery('held-delivery','held-delivery-key'),{Ok:false});
+ await pic.upgradeCanister({canisterId:services[3].canisterId,wasm:process.env.NOTIFICATION_QUEUE_WASM,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
+ queue.setPrincipal(identity.canisterId);
+ assert.equal(ok(await queue.read_account_removal_drain(receiverRequest)).outstanding,1n,'Unsettled external delivery must survive upgrade');
+ queue.setPrincipal(stranger); await denied(()=>queue.acknowledge('held-delivery','held-delivery-key'));
+ queue.setPrincipal(governor); ok(await queue.acknowledge('held-delivery','held-delivery-key'));
+ queue.setPrincipal(identity.canisterId);
+ assert.equal(ok(await queue.read_account_removal_drain(receiverRequest)).outstanding,0n,'Only authenticated lease settlement releases delivery drain');
  // Existing local roles remain: denial must come from the durable human fence.
  vault.setPrincipal(victim); await denied(()=>vault.read_account_list_club_files('club',[],[]));
  club.setPrincipal(extra[0].canisterId); await denied(()=>club.read_has_club_staff_role(victim,'club'));
@@ -294,7 +313,9 @@ try {
  await pic.upgradeCanister({canisterId:services[1].canisterId,wasm:process.env.PII_ACCESS_CONTROL_WASM,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
  assert.equal(ok(await pii.read_account_removal_drain(receiverRequest)).outstanding,0n);
  pii.setPrincipal(governor); assert.ok('err' in await pii.rekey_principal(victim,stranger,false));
- for (const [receiver,canisterId,wasm] of [[club,extra[0].canisterId,process.env.CLUB_DOMAIN_WASM],[vault,services[2].canisterId,process.env.VAULT_DOMAIN_WASM]]) {
+ for (const [receiver,canisterId,wasm] of [[club,extra[0].canisterId,process.env.CLUB_DOMAIN_WASM],[vault,services[2].canisterId,process.env.VAULT_DOMAIN_WASM],
+  ...extra.slice(1,7).map(s=>[s.actor,s.canisterId,process.env[s.name.toUpperCase()+'_WASM']]),
+  [queue,services[3].canisterId,process.env.NOTIFICATION_QUEUE_WASM], [chat,services[0].canisterId,process.env.MESSAGING_DOMAIN_WASM]]) {
   await pic.upgradeCanister({canisterId,wasm,sender:governor,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]},arg:IDL.encode([IDL.Principal],[governor])});
   receiver.setPrincipal(identity.canisterId);
   assert.equal(ok(await receiver.read_account_removal_drain(receiverRequest)).outstanding,0n);
@@ -316,6 +337,7 @@ try {
   assert.deepEqual(Uint8Array.from(retained.body),photoCipher,'Public endpoint remains ciphertext, never plaintext');
  }
  console.log('PASS: real two-store ciphertext upload/read/decrypt, erase during post-derivation membership callback, fresh club-photo key denial, denied upload/chunk/finalize with no publication, and real vault-to-club original-human denial. Cached keys/previous downloads are not revoked.');
+ for (const actor of [club,events,competition,league,points,media,insights,blob,queue,chat]) actor.setPrincipal(victim);
  for (const call of domainCalls) await denied(call);
  await denied(()=>chat.read_account_list_messages_page(conversation.id,[],10));
  await denied(()=>chat.send_message(conversation.id,'must fail','m2',[],[]));

@@ -528,6 +528,11 @@ export interface Main {
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
@@ -606,6 +611,11 @@ export interface Main {
   'read_account_read_token_club' : ActorMethod<
     [string],
     { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   'read_competition_club' : ActorMethod<
@@ -720,6 +730,11 @@ export interface Main {
   'rotate_competition_join_link' : ActorMethod<
     [string],
     { 'Ok' : CompetitionJoinLink } |
+      { 'Err' : string }
+  >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   'send_competition_broadcast' : ActorMethod<
@@ -952,6 +967,17 @@ export interface PlayHQStat {
   'match_id' : string,
   'tenant' : string,
   'competition_id' : string,
+}
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export type Result = { 'Ok' : Settings } |
   { 'Err' : string };

@@ -66,6 +66,13 @@ type Result =
    hasMore: bool;
    rows: vec Row;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
 type ReminderLog = 
  record {
    channel: text;
@@ -79,6 +86,12 @@ type Recurrence =
    event_id: text;
    frequency: text;
    until_ms: nat64;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
  };
 type Read = 
  record {
@@ -798,6 +811,10 @@ type Main =
                        context: blob;
                        response: HttpRequestResult;
                      }) -> (HttpRequestResult) query;
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -1092,6 +1109,11 @@ type Main =
        Err: text;
        Ok: opt text;
      });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    /// Location-only lookup for group routing: which club owns this event, if
    /// it lives in this canister. Viewers only; returns null when not held here.
    read_event_club: (event_id: text) ->
@@ -1226,6 +1248,11 @@ type Main =
        Ok: PitchBoardSettings;
      });
    schema: () -> (text) query;
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    send_event_reminders: (event_id: text) -> (variant {
                                                 Err: text;
                                                 Ok: nat16;

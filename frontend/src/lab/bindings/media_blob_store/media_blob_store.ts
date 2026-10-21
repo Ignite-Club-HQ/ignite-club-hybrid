@@ -311,6 +311,17 @@ export interface media_blob_storeInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_pending_uploads(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<{
+            id: string;
+            path: string;
+            size: bigint;
+        }>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_physical_growth_capacity(): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -361,6 +372,13 @@ export interface media_blob_storeInterface {
             cursor: string;
             removed: bigint;
         };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    seal_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
     } | {
         __kind__: "Err";
         Err: string;
@@ -558,6 +576,20 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.read_pending_test_uploads(arg0);
         return from_candid_variant_n43(result);
     }
+    async read_pending_uploads(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<{
+            id: string;
+            path: string;
+            size: bigint;
+        }>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_pending_uploads();
+        return from_candid_variant_n43(result);
+    }
     async read_physical_growth_capacity(): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -629,6 +661,16 @@ export class Media_blob_store implements media_blob_storeInterface {
     }> {
         const result = await this.actor.retire_upload_outcomes(arg0);
         return from_candid_variant_n57(result);
+    }
+    async seal_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_account_removal(arg0);
+        return from_candid_variant_n42(result);
     }
     async set_capacity_limit(arg0: bigint): Promise<Result> {
         const result = await this.actor.set_capacity_limit(arg0);

@@ -1575,4 +1575,14 @@ persistent actor MediaBlobStore {
     for ((_, receipt) in retained_deletions.entries()) { if (request.subjects.any(func(p) = p == receipt.owner)) unresolved += 1 };
     removalReceiver.receipt(caller, request, Principal.fromActor(MediaBlobStore), unresolved)
   };
+
+  public shared ({ caller }) func seal_account_removal(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    var unresolved = 0;
+    for (upload in pending_uploads.values()) { if (request.subjects.any(func(p) = p == upload.owner)) unresolved += 1 };
+    for ((_, op) in quota_operations.entries()) {
+      if (request.subjects.any(func(p) = p == op.owner) and op.status != #committed and op.status != #aborted) unresolved += 1
+    };
+    for ((_, receipt) in retained_deletions.entries()) { if (request.subjects.any(func(p) = p == receipt.owner)) unresolved += 1 };
+    removalReceiver.seal(caller, request, Principal.fromActor(MediaBlobStore), unresolved)
+  };
 };

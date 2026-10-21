@@ -119,7 +119,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     await decryptPhoto();
     expect((await blob.actor.http_request({ url: '/clubs/new-club/gallery/one.jpg', method: 'GET', headers: [], body: [] })).status_code).toBe(200);
     blob.actor.setPrincipal(outsider);
-    await expect(blob.actor.begin_upload('clubs/new-club/gallery/denied.jpg', 'image/jpeg', 3n, 1)).rejects.toThrow();
+    expect(await blob.actor.begin_upload('clubs/new-club/gallery/denied.jpg', 'image/jpeg', 3n, 1)).toEqual({ Err: 'Club membership required for upload' });
     for (const [name, service] of services) {
       expect(await service.actor.cycles_balance(), name).toBeGreaterThan(0n);
       let stats; try { stats = await service.actor.memory_stats(); } catch (e) { throw Error(`${name} health: ${String(e)}`); } expect(stats.memory_bytes, name).toBeGreaterThan(0n);
@@ -135,7 +135,7 @@ describe.skipIf(!enabled)('complete closed new-group real-service wiring', () =>
     await decryptPhoto();
     ok(await actor('club_domain').remove_member('new-club', member));
     expect(await actor('mini_league_domain', member).create_mini_league('new-club', 'Removed', [], [], 5, 3, 10, ['red'], true)).toHaveProperty('Err');
-    await expect(actor('media_blob_store', member).begin_upload('clubs/new-club/gallery/removed.jpg', 'image/jpeg', 3n, 1)).rejects.toThrow();
+    expect(await actor('media_blob_store', member).begin_upload('clubs/new-club/gallery/removed.jpg', 'image/jpeg', 3n, 1)).toEqual({ Err: 'Club membership required for upload' });
     expect(await actor('pii_access_control', member).get_club_media_vetkey('new-club', TransportSecretKey.random().publicKeyBytes())).toHaveProperty('Err');
     expect(saved.phase).toBe('installed'); expect(saved.registration).toBeUndefined(); // Never enabled/registered by a health test.
   }, 120000);

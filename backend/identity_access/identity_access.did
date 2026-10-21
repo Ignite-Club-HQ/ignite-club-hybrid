@@ -157,24 +157,34 @@ type Receipt = record {
 };
 type RemovalHistoryCursor = variant {
   ErasedAccounts : opt text;
+  RemovalSubjects : opt text;
   Done;
   PendingIntents : nat64;
+  RemovalReceipts : opt text;
   PrincipalDenials : opt text;
+  RemovalBarriers : opt text;
 };
 type RemovalHistoryManifest = record {
+  removal_receipts : nat64;
   erased_accounts : nat64;
+  removal_generation : nat64;
+  removal_barriers : nat64;
   pending_intents : nat64;
+  removal_subjects : nat64;
   principal_denials : nat64;
   service_readers : vec principal;
   revision : nat64;
   club_authorities : vec principal;
 };
 type RemovalHistoryPage = record {
+  barriers : vec record { text; Intent };
   pending : vec UnlinkIntent;
+  subjects : vec record { text; text };
   denials : vec record { text; PrincipalDenial };
   erased : vec record { text; nat64 };
   next : RemovalHistoryCursor;
   revision : nat64;
+  receipts : vec record { text; Receipt };
 };
 type RemovalInventory = record {
   media : vec MediaEvidence;
@@ -206,6 +216,7 @@ type Result_22 = variant { Ok : nat64; Err : text };
 type Result_23 = variant { Ok : vec ProfileSearchResult; Err : text };
 type Result_24 = variant { Ok : PrivacyConsent; Err : text };
 type Result_25 = variant { Ok : TermsAcceptance; Err : text };
+type Result_26 = variant { Ok : vec Receipt; Err : text };
 type Result_3 = variant { Ok : Receipt; Err : text };
 type Result_4 = variant { Ok : Intent; Err : text };
 type Result_5 = variant { Ok : LinkChallenge; Err : text };
@@ -290,8 +301,8 @@ service : (Init) -> {
   begin_account_removal : (text, nat64) -> (Result_4);
   begin_link : (principal) -> (Result_5);
   bind_external_site : (text, text, text) -> (Result_6);
-  check_field_access : (text, text) -> (Result_7) query;
   cancel_account_deletion : (text) -> (Result_2);
+  check_field_access : (text, text) -> (Result_7) query;
   commit_account_deletion : (text) -> (Result_2);
   // Public: remaining cycles (shown in admin settings).
   cycles_balance : () -> (nat) query;
@@ -416,5 +427,8 @@ service : (Init) -> {
   // never called `set_profile`.
   set_theme_preference : (opt text) -> (Result_11);
   settle_account_deletion : (text) -> (Result_2);
+  // Fresh, authenticated full-inventory seal verification. This does not erase
+  // data, release registry locks, restore histories or activate a group.
+  verify_account_removal_seals : (text) -> (Result_26);
   whoami : () -> (Result) query;
 }

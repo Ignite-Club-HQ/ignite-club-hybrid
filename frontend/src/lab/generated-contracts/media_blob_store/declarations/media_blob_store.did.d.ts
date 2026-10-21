@@ -270,6 +270,11 @@ export interface _SERVICE {
     { 'Ok' : { 'cursor' : string, 'removed' : bigint } } |
       { 'Err' : string }
   >,
+  'seal_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
   'set_capacity_limit' : ActorMethod<[bigint], Result>,
   'set_club_domain_canister' : ActorMethod<[Principal], Result>,
   'set_club_media_transfer_fence' : ActorMethod<

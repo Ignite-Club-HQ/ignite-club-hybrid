@@ -16,6 +16,13 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
 type Reference = 
  record {
    content_hash: opt text;
@@ -23,6 +30,12 @@ type Reference =
    resource_id: text;
    store: opt text;
    url: text;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
  };
 type Reaction = 
  record {
@@ -116,6 +129,10 @@ type Main =
        err: text;
        ok: nat;
      });
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -128,6 +145,11 @@ type Main =
    read_account_list_gallery_chat_cards: (club_id: text, team_id: text) ->
     (vec GalleryChatCard);
    read_account_list_reactions: (asset_id: text) -> (vec Reaction);
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;
@@ -160,6 +182,11 @@ type Main =
     (variant {
        Err: text;
        Ok: GalleryChatCard;
+     });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
      });
    set_asset_scope: (asset_id: text, team_id: opt text, mini_league_id:
     opt text, competition_id: opt text, event_id: opt text, caption:

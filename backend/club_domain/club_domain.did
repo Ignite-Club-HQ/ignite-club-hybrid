@@ -1849,6 +1849,11 @@ type Main =
        Ok: TeamSubscription;
      });
    schema: () -> (text) query;
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    send_fee_reminders: (club_id: text, payment_period: text, payment_type:
     text, message: text) -> (variant {
                                Err: text;

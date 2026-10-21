@@ -78,6 +78,19 @@ type Result =
    Err: text;
    Ok: Settings;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
 type PlayHQStat = 
  record {
    competition_id: text;
@@ -523,6 +536,10 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -600,6 +617,11 @@ type Main =
     (variant {
        Err: text;
        Ok: opt text;
+     });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
      });
    read_competition_club: (id: text) -> (variant {
                                            Err: text;
@@ -714,6 +736,11 @@ type Main =
     (variant {
        Err: text;
        Ok: CompetitionJoinLink;
+     });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
      });
    send_competition_broadcast: (competition_id: text, title: text, body:
     text) -> (variant {

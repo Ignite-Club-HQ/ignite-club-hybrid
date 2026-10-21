@@ -309,6 +309,11 @@ service : {
             removed: nat;
           };
     });
+  seal_account_removal: (request: Request) ->
+   (variant {
+      Err: text;
+      Ok: Receipt;
+    });
   set_capacity_limit: (limit_bytes: nat64) -> (Result);
   set_club_domain_canister: (canister_id: principal) -> (Result);
   set_club_media_transfer_fence: (club: text, on: bool, expected: opt nat) ->
