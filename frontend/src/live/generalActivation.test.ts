@@ -43,7 +43,7 @@ const snapshot = (): RoutingGatesSnapshot => ({
   evidenceSha256: 'a'.repeat(64),
 });
 
-beforeEach(() => { clearGeneralRoutingCache(); state.snapshot = null; state.groups = []; });
+beforeEach(() => { clearGeneralRoutingCache(); state.snapshot = null; state.groups = []; state.revision = 7n; });
 
 describe('general routing switch', () => {
   it('is inactive without an approved snapshot and never touches the network', async () => {
