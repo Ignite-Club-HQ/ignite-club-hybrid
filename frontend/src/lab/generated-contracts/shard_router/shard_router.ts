@@ -373,6 +373,7 @@ export interface shard_routerInterface {
     release_deletion_lock(arg0: string, arg1: bigint): Promise<Result_7>;
     reserve_group_media_growth(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<Result>;
     set_deletion_authority(arg0: Principal): Promise<Result_7>;
+    stop_group_new_placements(arg0: string, arg1: string, arg2: bigint): Promise<Result>;
     stop_owner_test_group(arg0: string, arg1: bigint): Promise<Result_15>;
     version(): Promise<bigint>;
 }
@@ -530,6 +531,10 @@ export class Shard_router implements shard_routerInterface {
     async set_deletion_authority(arg0: Principal): Promise<Result_7> {
         const result = await this.actor.set_deletion_authority(arg0);
         return from_candid_Result_7_n15(result);
+    }
+    async stop_group_new_placements(arg0: string, arg1: string, arg2: bigint): Promise<Result> {
+        const result = await this.actor.stop_group_new_placements(arg0, arg1, arg2);
+        return from_candid_Result_n1(result);
     }
     async stop_owner_test_group(arg0: string, arg1: bigint): Promise<Result_15> {
         const result = await this.actor.stop_owner_test_group(arg0, arg1);
