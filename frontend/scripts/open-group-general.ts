@@ -123,7 +123,20 @@ if (action === 'register-closed') {
     { targetAlias: spec.targetAlias, deploymentId: spec.deploymentId, deploymentRevision: BigInt(spec.deploymentRevision), host: spec.host,
       networkKind: 'public_mainnet', primarySubnet: spec.primarySubnet, approvedSubnets: [spec.primarySubnet], additionalSubnetsEnabled: false },
     { maxClubs: spec.maxClubs, heapBudgetBytes: BigInt(spec.heapBudgetBytes), minCycles: BigInt(spec.minCycles) }, false);
-  const registry = await readRegistry();
+  // Resume: an earlier run may have registered the (closed) group but not its placement; the
+  // router then refuses whole-registry reads until the placement exists. Only finish that half.
+  let registry: Awaited<ReturnType<typeof readRegistry>> | null = null;
+  try { registry = await readRegistry(); } catch (e) {
+    if (!String((e as Error).message).includes('Incomplete group placement registry')) throw e;
+  }
+  if (!registry) {
+    const revision = await router.version();
+    save({ action, pending: 'placement-resume', revision: String(revision), group, placement });
+    const placed = ok(await router.register_group_placement(placement, revision));
+    save({ action, placementRevision: String(placed), pending: undefined, group, placement });
+    console.log(`Group 2 placement completed (resumed) at revision ${placed}; group remains CLOSED.`);
+    process.exit(0);
+  }
   const existing = registry.groups.find(g => g.id === 'g2');
   if (existing?.accepting) throw new Error('Group 2 is already open; run close first, not register-closed');
   const revision = await router.version();
