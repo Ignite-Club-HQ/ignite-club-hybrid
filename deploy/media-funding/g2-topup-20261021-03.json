@@ -164,7 +164,7 @@
       "name": "competition_domain",
       "amount": "507661939424",
       "beforeCycles": "992325697007",
-      "phase": "transferring"
+      "phase": "transfer-confirmed"
     }
   ]
 }
