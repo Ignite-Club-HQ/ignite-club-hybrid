@@ -85,7 +85,7 @@ DROP TRIGGER IF EXISTS trg_sync_competition_match_events_d ON public.competition
 DROP TRIGGER IF EXISTS trg_sync_competition_match_events_iu ON public.competition_matches;
 -- 6. Match->event sync: stop copying scores (handled by the results trigger now)
 CREATE OR REPLACE FUNCTION public.sync_competition_match_events() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-DECLARE c record;t record;side text;tid uuid;opponent text;ev uuid;h uuid;a uuid;title text;
+DECLARE c record;t record;side text;tid uuid;v_opponent text;ev uuid;h uuid;a uuid;v_title text;
 BEGIN
  IF pg_trigger_depth()>1 THEN RETURN NEW;END IF;
  IF TG_OP='DELETE' THEN UPDATE events SET is_cancelled=true WHERE competition_match_id=OLD.id;RETURN OLD;END IF;
@@ -96,15 +96,15 @@ BEGIN
   tid:=CASE WHEN side='home' THEN NEW.home_team_id ELSE NEW.away_team_id END;
   SELECT * INTO t FROM teams WHERE id=tid;
   IF NOT FOUND THEN UPDATE events SET is_cancelled=true WHERE competition_match_id=NEW.id AND competition_side=side;CONTINUE;END IF;
-  SELECT name INTO opponent FROM teams WHERE id=CASE WHEN side='home' THEN NEW.away_team_id ELSE NEW.home_team_id END;
-  title:=coalesce((SELECT name FROM teams WHERE id=NEW.home_team_id),'TBD')||' vs '||coalesce((SELECT name FROM teams WHERE id=NEW.away_team_id),'TBD');
-  IF NEW.round_number IS NOT NULL THEN title:='R'||NEW.round_number||': '||title;END IF;
+  SELECT name INTO v_opponent FROM teams WHERE id=CASE WHEN side='home' THEN NEW.away_team_id ELSE NEW.home_team_id END;
+  v_title:=coalesce((SELECT name FROM teams WHERE id=NEW.home_team_id),'TBD')||' vs '||coalesce((SELECT name FROM teams WHERE id=NEW.away_team_id),'TBD');
+  IF NEW.round_number IS NOT NULL THEN v_title:='R'||NEW.round_number||': '||v_title;END IF;
   SELECT id INTO ev FROM events WHERE competition_match_id=NEW.id AND competition_side=side AND team_id=tid LIMIT 1;
   IF ev IS NULL THEN
    INSERT INTO events(club_id,team_id,title,event_date,type,opponent,is_home_game,location,description,created_by,is_cancelled,competition_match_id,competition_side)
-   VALUES(t.club_id,tid,title,NEW.scheduled_at,'game',coalesce(opponent,'TBD'),side='home',NEW.venue,'Competition: '||c.name,coalesce(NEW.created_by,c.created_by),NEW.status IN ('cancelled','postponed'),NEW.id,side) RETURNING id INTO ev;
+   VALUES(t.club_id,tid,v_title,NEW.scheduled_at,'game',coalesce(v_opponent,'TBD'),side='home',NEW.venue,'Competition: '||c.name,coalesce(NEW.created_by,c.created_by),NEW.status IN ('cancelled','postponed'),NEW.id,side) RETURNING id INTO ev;
   ELSE
-   UPDATE events SET title=sync_competition_match_events.title,event_date=NEW.scheduled_at,opponent=coalesce(sync_competition_match_events.opponent,'TBD'),location=NEW.venue,is_cancelled=NEW.status IN ('cancelled','postponed') WHERE id=ev;
+   UPDATE events SET title=v_title,event_date=NEW.scheduled_at,opponent=coalesce(v_opponent,'TBD'),location=NEW.venue,is_cancelled=NEW.status IN ('cancelled','postponed') WHERE id=ev;
   END IF;
   IF side='home' THEN h:=ev;ELSE a:=ev;END IF;
  END LOOP;
