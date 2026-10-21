@@ -49,7 +49,10 @@ if (action === 'register-closed') {
   console.log(`Group 2 registered CLOSED at revision ${revision}; no owner opening or general accepting enabled.`);
 } else if (action === 'stop') {
   if (process.env.CONFIRMATION?.trim() !== 'STOP GROUP 2 TEST PLACEMENTS') throw new Error('Exact stop confirmation required');
+  save({ action, pending: 'stop', expectedRevision: spec.revision });
   const receipt = ok(await router.stop_owner_test_group(spec.targetAlias, BigInt(spec.revision)));
+  const readback = ok(await router.read_my_owner_test_opening(spec.targetAlias))[0];
+  if (!readback || readback.accepting_new || readback.opened_revision !== receipt.opened_revision) throw new Error('Stop outcome requires reconciliation');
   save({ action, receipt });
   console.log('Stopped new owner-test placements; existing clubs retain their assignments and access.');
 } else {
@@ -77,6 +80,7 @@ if (action === 'register-closed') {
       configuration: await readConfig(s.canisterId, s.name === 'timer_jobs') });
   }
   verifyOwnerOpeningChecks(spec, observations, group, placement);
+  if (BigInt(spec.minCycles) !== group.min_cycles || BigInt(spec.heapBudgetBytes) !== group.heap_budget_bytes) throw new Error('Approved health budgets must match the registered group');
   verifyOwnerReciprocalConfiguration(spec, observations, await readConfig(spec.routerId, true), await readConfig(spec.identityAccess, true));
   for (const club of spec.clubIds) {
     const existing = await router.read_hosted_club_assignment(club, spec.targetAlias, registry.revision);
