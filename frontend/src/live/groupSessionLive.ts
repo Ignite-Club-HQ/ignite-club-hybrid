@@ -14,6 +14,10 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
   // The router filters by its on-chain deployment name; the frontend's own
   // target alias is a different, local name for the same deployment.
   const routerAlias = ownerGroupId ? ctx.target.alias : (generalRoutingDeploymentAlias() ?? ctx.target.alias);
+  // Groups carry the router's on-chain deployment name; the frontend's own
+  // target alias is a different, local name for the same deployment. Routing
+  // must bind to the on-chain name or every resolve rejects as foreign.
+  let onChainAlias: string | undefined;
   return openGroupSession(ctx, {
     async readRegistry(): Promise<GroupRegistry> {
       const principal = ctx.identity.getPrincipal().toText();
