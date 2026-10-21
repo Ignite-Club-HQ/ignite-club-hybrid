@@ -6,7 +6,7 @@
  * Usage: tsx scripts/produce-routing-gates.ts <operator.pem> <report.json>
  * Env: ICP_HOST (default https://icp-api.io) */
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, openSync, fsyncSync, closeSync, renameSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, openSync, fsyncSync, closeSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { Actor, HttpAgent, CanisterStatus } from '@icp-sdk/core/agent';
 import { IDL } from '@icp-sdk/core/candid';
