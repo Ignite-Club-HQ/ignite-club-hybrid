@@ -58,6 +58,18 @@ try {
  const full=ok(await e.get_game_result(eventId))[0];
  assert.deepEqual(full.home_score,[23]); assert.equal(full.player_stats_json,players); assert.equal(full.period_scores_json,periods);
  e.setPrincipal(outsider); assert.ok('Err' in await e.get_game_result(eventId));
+ // Durable exact-match links survive rescheduling and snapshot transfer.
+ e.setPrincipal(competition.canisterId);
+ const exact=ok(await e.upsert_competition_match_events({competition_id:cup.id,match_id:'exact-match',creator:manager,teams:[{team_id:'team-1',club_id:'club'},{team_id:'team-2',club_id:'club'}],starts_at_ms:10n,ends_at_ms:60010n,title:'Exact game',venue:[]}));
+ const repeated=ok(await e.upsert_competition_match_events({competition_id:cup.id,match_id:'exact-match',creator:manager,teams:[{team_id:'team-1',club_id:'club'},{team_id:'team-2',club_id:'club'}],starts_at_ms:20n,ends_at_ms:60020n,title:'Exact game',venue:[]}));
+ assert.deepEqual(repeated,exact);
+ e.setPrincipal(outsider);assert.ok('Err' in await e.upsert_competition_match_events({competition_id:cup.id,match_id:'forged',creator:manager,teams:[{team_id:'team-1',club_id:'club'},{team_id:'team-2',club_id:'club'}],starts_at_ms:10n,ends_at_ms:20n,title:'Forged',venue:[]}));
+ e.setPrincipal(governor);ok(await e.set_transfer_fence('club',true));
+ const saved=ok(await e.export_club_snapshot('club'));
+ const restored=await pic.setupCanister({idlFactory:eventsIdl,wasm:eventsWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])});
+ restored.actor.setPrincipal(governor);ok(await restored.actor.set_transfer_fence('club',true));ok(await restored.actor.import_club_snapshot('club',saved));
+ assert.deepEqual(ok(await restored.actor.export_club_snapshot('club')),saved);
+ ok(await e.set_transfer_fence('club',false));
  c.setPrincipal(member); assert.ok('Err' in await c.read_history_score_access(cup.id,'team-1',1n,manager,false));
  c.setPrincipal(manager); ok(await c.set_score_privacy(cup.id,[],[false]));
  e.setPrincipal(member); assert.deepEqual(ok(await e.get_game_result(eventId))[0].home_score,[23]);

@@ -814,6 +814,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         [],
       ),
+    'read_history_match_result' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Principal],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'away' : IDL.Opt(IDL.Nat16),
+              'home' : IDL.Opt(IDL.Nat16),
+              'hidden' : IDL.Bool,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_history_score_access' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
@@ -1085,6 +1099,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Nat64,
         ],
         [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
+        [],
+      ),
+    'write_history_match_result' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Principal, IDL.Nat32, IDL.Nat32],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
   });

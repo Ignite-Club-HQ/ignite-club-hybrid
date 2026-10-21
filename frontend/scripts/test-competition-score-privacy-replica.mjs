@@ -86,5 +86,29 @@ try {
  for (const [key, rows] of Object.entries(cleared)) assert.deepEqual(rows, key === 'score_privacy' ? [[]] : [], key);
  c.setPrincipal(governor); ok(await c.set_transfer_fence('club',true));
  ok(await c.import_club_snapshot('club',IDL.encode([oldType],[snapshot]))); assert.deepEqual(await c.get_score_privacy('cup'),[]);
+ // Actual PlayHQ snapshot data must inherit match privacy and isolate claims.
+ const metaType=IDL.Record({match_id:IDL.Text,competition_id:IDL.Text,tenant:IDL.Text,grade_id:IDL.Text,game_id:IDL.Text,home_id:IDL.Text,away_id:IDL.Text,home_name:IDL.Text,away_name:IDL.Text,synced_revision:IDL.Nat64});
+ const statType=IDL.Record({competition_id:IDL.Text,match_id:IDL.Text,tenant:IDL.Text,game_id:IDL.Text,team_id:IDL.Text,player_id:IDL.Text,player_name:IDL.Text,stats_json:IDL.Text});
+ const phqType=IDL.Record({...fields,score_privacy:IDL.Opt(privacyType),playhq_metadata:IDL.Opt(IDL.Vec(metaType)),playhq_stats:IDL.Opt(IDL.Vec(statType))});
+ const phq={...snapshot,score_privacy:[privacy],playhq_metadata:[[{match_id:'match-0',competition_id:'cup',tenant:'tenant-a',grade_id:'grade',game_id:'game',home_id:'h',away_id:'a',home_name:'Home',away_name:'Away',synced_revision:1n}]],playhq_stats:[[{competition_id:'cup',match_id:'match-0',tenant:'tenant-a',game_id:'game',team_id:'h',player_id:'player',player_name:'Player',stats_json:'{"goals":4}'}]]};
+ ok(await c.import_club_snapshot('club',IDL.encode([phqType],[phq])));
+ ok(await c.set_transfer_fence('club',false));
+ c.setPrincipal(manager);assert.equal(ok(await c.read_playhq_stats('cup')).stats.length,1);
+ ok(await c.claim_playhq_player('cup','tenant-a','player'));
+ c.setPrincipal(member);assert.equal(ok(await c.read_playhq_stats('cup')).stats.length,0);
+ ok(await c.claim_playhq_player('cup','tenant-a','player')); // another self-identification cannot be blocked
+ c.setPrincipal(Principal.fromUint8Array(Uint8Array.from([9,1])));
+ assert.ok('Err' in await c.claim_playhq_player('cup','tenant-a','player'));
+ c.setPrincipal(manager);ok(await c.set_score_privacy('cup',[],[false]));
+ c.setPrincipal(member);assert.equal(ok(await c.read_playhq_stats('cup')).stats.length,1);
+ assert.deepEqual(ok(await c.read_playhq_stats('cup')).claims,[{player_id:'player',tenant:'tenant-a',mine:true}]);
+ c.setPrincipal(governor);ok(await c.set_events_domain_canister(governor));
+ ok(await c.write_history_match_result('match-0','h',manager,23,17));
+ const canonical=ok(await c.read_history_match_result('match-0','h',member));
+ assert.deepEqual(canonical.home,[23]);assert.deepEqual(canonical.away,[17]);
+ c.setPrincipal(manager);ok(await c.set_score_privacy('cup',[],[true]));
+ c.setPrincipal(governor);assert.equal(ok(await c.read_history_match_result('match-0','h',member)).hidden,true);
+ assert.ok('Err' in await c.write_history_match_result('match-0','h',member,99,99));
+ c.setPrincipal(member);assert.ok('Err' in await c.read_history_match_result('match-0','h',manager));
  console.log('PASS: manager/member/anonymous default/inherit/hide/show; two-canister export/import/source purge and older snapshot compatibility');
 } finally { if(pic) await pic.tearDown(); await server.stop(); rmSync(scratch, {recursive:true, force:true}); }

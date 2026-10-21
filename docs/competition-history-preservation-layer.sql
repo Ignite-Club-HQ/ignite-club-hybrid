@@ -19,8 +19,9 @@ $$;
 CREATE OR REPLACE FUNCTION public.can_read_history_row(p_team uuid,p_event uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
  SELECT auth.uid() IS NOT NULL AND (p_event IS NULL OR EXISTS(SELECT 1 FROM public.events e WHERE e.id=p_event AND e.team_id=p_team))
- AND (public.can_manage_game_result(_user_id=>auth.uid(),_team_id=>p_team,_event_id=>p_event)
- OR EXISTS(SELECT 1 FROM public.teams t WHERE t.id=p_team AND public.is_club_member(auth.uid(),t.club_id)))
+ AND CASE WHEN p_event IS NOT NULL THEN public.can_access_targeted_event(auth.uid(),p_event)
+ ELSE public.can_manage_game_result(_user_id=>auth.uid(),_team_id=>p_team,_event_id=>NULL)
+ OR EXISTS(SELECT 1 FROM public.teams t WHERE t.id=p_team AND public.is_club_member(auth.uid(),t.club_id)) END
 $$;
 CREATE OR REPLACE FUNCTION public.mask_history_players(p_players jsonb)
 RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path=public AS $$
@@ -36,9 +37,9 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
  SELECT jsonb_build_object('id',g.id,'team_id',g.team_id,'event_id',g.event_id,'sport',g.sport,
  'home_label',g.home_label,'away_label',g.away_label,'played_at',g.played_at,'saved_by',g.saved_by,
  'home_score',CASE WHEN v.visible THEN CASE WHEN g.competition_id IS NULL THEN g.home_score
- ELSE CASE WHEN g.competition_side='away' THEN r.away_score ELSE r.home_score END END END,
+ ELSE coalesce(CASE WHEN g.competition_side='away' THEN r.away_score ELSE r.home_score END,g.home_score) END END,
  'away_score',CASE WHEN v.visible THEN CASE WHEN g.competition_id IS NULL THEN g.away_score
- ELSE CASE WHEN g.competition_side='away' THEN r.home_score ELSE r.away_score END END END,
+ ELSE coalesce(CASE WHEN g.competition_side='away' THEN r.home_score ELSE r.away_score END,g.away_score) END END,
  'scores_hidden',NOT v.visible,'period_scores',CASE WHEN v.visible THEN g.period_scores ELSE '[]'::jsonb END,
  'player_stats',CASE WHEN v.visible THEN g.player_stats ELSE public.mask_history_players(g.player_stats) END,
  'mvp_player_id',g.mvp_player_id,'mvp_player_name',g.mvp_player_name,'notes',CASE WHEN v.visible THEN g.notes END,
@@ -121,7 +122,7 @@ BEGIN
  VALUES(e.team_id,e.id,coalesce(m.sport,'soccer'),coalesce((SELECT name FROM public.teams WHERE id=e.team_id),'Home'),coalesce(e.opponent,'Opponent'),
  CASE WHEN e.competition_side='away' THEN NEW.away_score ELSE NEW.home_score END,
  CASE WHEN e.competition_side='away' THEN NEW.home_score ELSE NEW.away_score END,coalesce(m.created_by,m.creator),e.event_date)
- ON CONFLICT(event_id) DO UPDATE SET home_score=excluded.home_score,away_score=excluded.away_score;
+ ON CONFLICT(event_id) WHERE event_id IS NOT NULL DO UPDATE SET home_score=excluded.home_score,away_score=excluded.away_score;
  END LOOP;END IF;RETURN NEW;
 END $$;
 CREATE TRIGGER privacy_result_fanout AFTER INSERT OR UPDATE ON public.competition_match_results FOR EACH ROW EXECUTE FUNCTION public.sync_competition_result_to_events();
@@ -145,16 +146,16 @@ BEGIN
  END IF;
  INSERT INTO public.game_results(team_id,event_id,sport,home_label,away_label,home_score,away_score,period_scores,player_stats,mvp_player_id,mvp_player_name,notes,saved_by)
  VALUES(team,event,p_result->>'sport',p_result->>'home_label',p_result->>'away_label',h,a,coalesce(p_result->'period_scores','[]'),coalesce(p_result->'player_stats','[]'),p_result->>'mvp_player_id',p_result->>'mvp_player_name',p_result->>'notes',uid)
- ON CONFLICT(event_id) DO UPDATE SET home_score=excluded.home_score,away_score=excluded.away_score,period_scores=excluded.period_scores,player_stats=excluded.player_stats,mvp_player_id=excluded.mvp_player_id,mvp_player_name=excluded.mvp_player_name,notes=excluded.notes;
+ ON CONFLICT(event_id) WHERE event_id IS NOT NULL DO UPDATE SET home_score=excluded.home_score,away_score=excluded.away_score,period_scores=excluded.period_scores,player_stats=excluded.player_stats,mvp_player_id=excluded.mvp_player_id,mvp_player_name=excluded.mvp_player_name,notes=excluded.notes;
 END $$;
 -- Protect raw score-bearing JSON while preserving unrelated games and service writers.
 CREATE POLICY game_stats_score_privacy ON public.game_player_stats AS RESTRICTIVE FOR SELECT TO anon,authenticated USING(public.history_scores_visible(event_id));
 CREATE POLICY game_summary_score_privacy ON public.game_summaries AS RESTRICTIVE FOR SELECT TO anon,authenticated USING(public.history_scores_visible(event_id));
 CREATE OR REPLACE FUNCTION public.read_competition_playhq(p_competition_id uuid)
 RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
- SELECT jsonb_build_object('matches',coalesce((SELECT jsonb_agg(jsonb_build_object('external_id',m.external_id,'external_home_team_id',m.external_home_team_id,'external_away_team_id',m.external_away_team_id,'home_team_name',m.home_team_name,'away_team_name',m.away_team_name,'division_id',m.division_id,'competition_divisions',jsonb_build_object('name',d.name))) FROM public.competition_matches m LEFT JOIN public.competition_divisions d ON d.id=m.division_id WHERE m.competition_id=p_competition_id AND m.source='playhq'),'[]'::jsonb),
+ SELECT jsonb_build_object('matches',coalesce((SELECT jsonb_agg(jsonb_build_object('tenant',coalesce(c.external_tenant,'default'),'external_id',m.external_id,'external_home_team_id',m.external_home_team_id,'external_away_team_id',m.external_away_team_id,'home_team_name',m.home_team_name,'away_team_name',m.away_team_name,'division_id',m.division_id,'competition_divisions',jsonb_build_object('name',d.name))) FROM public.competition_matches m LEFT JOIN public.competition_divisions d ON d.id=m.division_id WHERE m.competition_id=p_competition_id AND m.source='playhq'),'[]'::jsonb),
  'stats',coalesce((SELECT jsonb_agg(jsonb_build_object('playhq_game_id',s.playhq_game_id,'playhq_team_id',s.playhq_team_id,'playhq_player_id',s.playhq_player_id,'player_name',s.player_name,'stats',s.stats,'tenant',coalesce(c.external_tenant,'default'))) FROM public.playhq_player_stats s JOIN public.competition_matches m ON m.external_id=s.playhq_game_id AND m.source='playhq' WHERE m.competition_id=c.id AND public.competition_scores_visible(m.id)),'[]'::jsonb),
- 'links',coalesce((SELECT jsonb_agg(jsonb_build_object('playhq_player_id',l.playhq_player_id,'mine',l.user_id=auth.uid(),'tenant',l.tenant)) FROM public.playhq_player_links l WHERE l.tenant=coalesce(c.external_tenant,'default') AND EXISTS(SELECT 1 FROM public.playhq_player_stats s JOIN public.competition_matches m ON m.external_id=s.playhq_game_id WHERE m.competition_id=c.id AND s.playhq_player_id=l.playhq_player_id AND public.competition_scores_visible(m.id))),'[]'::jsonb))
+ 'links',coalesce((SELECT jsonb_agg(jsonb_build_object('playhq_player_id',l.playhq_player_id,'mine',true,'tenant',l.tenant)) FROM public.playhq_player_links l WHERE l.user_id=auth.uid() AND l.tenant=coalesce(c.external_tenant,'default') AND EXISTS(SELECT 1 FROM public.playhq_player_stats s JOIN public.competition_matches m ON m.external_id=s.playhq_game_id WHERE m.competition_id=c.id AND s.playhq_player_id=l.playhq_player_id AND public.competition_scores_visible(m.id))),'[]'::jsonb))
  FROM public.competitions c WHERE c.id=p_competition_id AND public.can_view_competition(auth.uid(),c.id)
 $$;
 CREATE OR REPLACE FUNCTION public.playhq_game_scores_visible(p_game text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$

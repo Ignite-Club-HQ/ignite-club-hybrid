@@ -613,6 +613,17 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_history_match_result' : ActorMethod<
+    [string, string, Principal],
+    {
+        'Ok' : {
+          'away' : [] | [number],
+          'home' : [] | [number],
+          'hidden' : boolean,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'read_history_score_access' : ActorMethod<
     [string, string, bigint, Principal, boolean],
     { 'Ok' : boolean } |
@@ -871,6 +882,11 @@ export interface Main {
       bigint,
     ],
     { 'Ok' : Match } |
+      { 'Err' : string }
+  >,
+  'write_history_match_result' : ActorMethod<
+    [string, string, Principal, number, number],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
 }

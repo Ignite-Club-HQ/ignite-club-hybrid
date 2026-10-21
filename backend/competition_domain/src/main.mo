@@ -5,6 +5,7 @@ import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
+import Nat32 "mo:core/Nat32";
 import Int "mo:core/Int";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
@@ -2008,6 +2009,33 @@ persistent actor class Main(governorInit : Principal) {
     result
   };
 
+  public shared ({caller}) func write_history_match_result(match_id:Text,team_id:Text,requester:Principal,own:Nat32,opponent:Nat32):async {#Ok;#Err:Text}{
+    let authority=eventsDomainCanister;
+    if(authority!=?caller)return #Err("Trusted events canister only");
+    auth(requester);await admitAccount(requester);
+    let before=switch(matches.find(func(m)=m.id==match_id)){case null return #Err("Match not found");case(?m)m};
+    await syncForCompetition(requester,before.competition_id);
+    if(authority!=eventsDomainCanister or matchFenced(match_id) or not canManageCompetition(requester,before.competition_id))return #Err("Competition manager required");
+    let current=switch(matches.find(func(m)=m.id==match_id and m.revision==before.revision)){case null return #Err("Match changed");case(?m)m};
+    if(team_id!=current.home_team and team_id!=current.away_team)return #Err("Match team mismatch");
+    if (own > 65535 or opponent > 65535) return #Err("Score too large");
+    let updated={current with home_score=Nat16.fromNat(Nat32.toNat(if(team_id==current.home_team)own else opponent));away_score=Nat16.fromNat(Nat32.toNat(if(team_id==current.home_team)opponent else own));status="completed";revision=current.revision+1};
+    matches:=matches.map(func(m)=if(m.id==match_id)updated else m);#Ok
+  };
+
+  public shared ({caller}) func read_history_match_result(match_id:Text,team_id:Text,requester:Principal):async {#Ok:{home:?Nat16;away:?Nat16;hidden:Bool};#Err:Text}{
+    let authority=eventsDomainCanister;
+    if(authority!=?caller)return #Err("Trusted events canister only");
+    auth(requester);await admitAccount(requester);
+    let before=switch(matches.find(func(m)=m.id==match_id)){case null return #Err("Match not found");case(?m)m};
+    await syncForCompetition(requester,before.competition_id);
+    if(authority!=eventsDomainCanister or matchFenced(match_id))return #Err("Competition authority changed");
+    let current=switch(matches.find(func(m)=m.id==match_id)){case null return #Err("Match not found");case(?m)m};
+    if(team_id!=current.home_team and team_id!=current.away_team)return #Err("Match team mismatch");
+    let hidden=not canManageCompetition(requester,current.competition_id) and ScorePrivacy.hidden(scorePrivacySettings,current.competition_id,current.division_id);
+    #Ok({hidden;home=if(hidden)null else ?(if(team_id==current.home_team)current.home_score else current.away_score);away=if(hidden)null else ?(if(team_id==current.home_team)current.away_score else current.home_score)})
+  };
+
   public shared ({caller}) func sync_playhq_grade(competition_id:Text,tenant:Text,grade:Text) : async {#Ok:Nat;#Err:Text} {
     auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
     if(compFenced(competition_id) or not canManageCompetition(caller,competition_id)) return #Err("Competition manager required");
@@ -2047,14 +2075,19 @@ persistent actor class Main(governorInit : Principal) {
     let manager=canManageCompetition(caller,competition_id);
     let meta=playhqMatchMetadata.filter(func(m)=m.competition_id==competition_id);
     let safe=playhqStats.filter(func(s)=s.competition_id==competition_id and matches.any(func(m)=m.id==s.match_id and (manager or not ScorePrivacy.hidden(scorePrivacySettings,competition_id,m.division_id))));
-    #Ok({matches=meta;stats=safe;claims=playhqClaims.filter(func(c)=safe.any(func(s)=s.tenant==c.tenant and s.player_id==c.player_id)).map(func(c)={player_id=c.player_id;tenant=c.tenant;mine=c.user==caller})})
+    #Ok({matches=meta;stats=safe;claims=playhqClaims.filter(func(c)=c.user==caller and safe.any(func(s)=s.tenant==c.tenant and s.player_id==c.player_id)).map(func(c)={player_id=c.player_id;tenant=c.tenant;mine=true})})
   };
   public shared ({caller}) func claim_playhq_player(competition_id:Text,tenant:Text,player_id:Text) : async {#Ok;#Err:Text} {
     auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
     if(compFenced(competition_id)) return #Err("Competition locked");
-    if(not canManageCompetition(caller,competition_id) and not (await participantVisible(caller,competition_id)) and not roles.any(func(r)=r.user==caller and r.competition_id==competition_id)) return #Err("Competition access denied");
+    var eligible=canManageCompetition(caller,competition_id) or roles.any(func(r)=r.user==caller and r.competition_id==competition_id);
+    let participantTeams=entries.filter(func(e)=e.competition_id==competition_id and (e.status=="accepted" or e.status=="registered"));
+    if (participantTeams.size() > 500) return #Err("Participant inventory too large");
+    for(entry in participantTeams.values()){if(not eligible and (await teamAccess(caller,entry.team_id)).is_member)eligible:=true};
+    if(not eligible) return #Err("Competition membership required");
     if(not playhqStats.any(func(s)=s.competition_id==competition_id and s.tenant==tenant and s.player_id==player_id)) return #Err("Player not found");
-    switch(playhqClaims.find(func(c)=c.tenant==tenant and c.player_id==player_id)){case(?c)if(c.user==caller)return #Ok else return #Err("Player already claimed");case null{}};
+    // Non-exclusive self-identification never grants player or guardian authority.
+    if(playhqClaims.any(func(c)=c.tenant==tenant and c.player_id==player_id and c.user==caller)) return #Ok;
     if(compFenced(competition_id)) return #Err("Competition locked");
     playhqClaims:=playhqClaims.concat([{tenant;player_id;user=caller}]);#Ok
   };
@@ -2160,6 +2193,7 @@ persistent actor class Main(governorInit : Principal) {
     conflicts += competitionJoinLinks.filter(func(item) = item.created_by.equal(new)).size();
     conflicts += eoiSubmissions.filter(func(item) = item.parent_user_id == ?new).size();
     conflicts += broadcasts.filter(func(item) = item.sender.equal(new)).size();
+    conflicts += playhqClaims.filter(func(item)=item.user==new).size();
     if (bulkAccessPrincipals.any(func(p) = p.equal(new))) { conflicts += 1 };
 
     if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in competition_domain");

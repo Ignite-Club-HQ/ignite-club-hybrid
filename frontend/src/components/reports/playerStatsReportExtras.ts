@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { readHistoryResult } from "@/features/competitions/history/historyRepository";
+import { readReportPlayerStats } from "@/features/competitions/history/reportRepository";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveTeam } from "@/live/features/club";
@@ -304,11 +305,7 @@ async function fetchReportExtrasSupabase(
       .from("match_goalkeepers")
       .select("event_id, user_id, child_id")
       .in("event_id", eventIds),
-    supabase
-      .from("game_player_stats")
-      .select("event_id, user_id, child_id, goals_scored, positions_played, position_minutes")
-      .eq("team_id", teamId)
-      .in("event_id", eventIds),
+    readReportPlayerStats(teamId,opts.eventId,opts.dateRange).then(data=>({data:data.filter(row=>eventIds.includes(row.event_id))})),
   ]);
 
   const captains = captainsRes.data ?? [];

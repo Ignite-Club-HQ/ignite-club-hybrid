@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { supabase } from "@/integrations/supabase/client";
+import { readReportPlayerStats, readReportSummary } from "@/features/competitions/history/reportRepository";
 import { useToast } from "@/hooks/use-toast";
 import { openHtmlReport, downloadTextReport } from "@/lib/reportExport";
 import { useReportExtras, playerKey, type PlayerHonours } from "./playerStatsReportExtras";
@@ -41,7 +41,7 @@ interface PlayerStat {
   position_minutes: Record<string, number> | null;
   substitutions_count: number;
   started_on_pitch: boolean;
-  goals_scored: number;
+  goals_scored: number | null;
   games_played?: number;
   starts_count?: number;
   profiles?: {
@@ -67,44 +67,7 @@ export default function PlayerStatsReportView({
   const { data: playerStats, isLoading } = useQuery({
     queryKey: ["player-stats-report", teamId, eventId, dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
     queryFn: async () => {
-      let query = supabase
-        .from("game_player_stats")
-        .select(`
-          id,
-          user_id,
-          child_id,
-          fill_in_player_name,
-          jersey_number,
-          minutes_played,
-          positions_played,
-          position_minutes,
-          substitutions_count,
-          started_on_pitch,
-          goals_scored,
-          profiles:user_id(display_name, avatar_url)
-        `)
-        .eq("team_id", teamId);
-
-      if (eventId) {
-        query = query.eq("event_id", eventId);
-      } else if (dateRange) {
-        // Get events in date range first
-        const { data: events } = await supabase
-          .from("events")
-          .select("id")
-          .eq("team_id", teamId)
-          .eq("type", "game")
-          .gte("event_date", dateRange.from.toISOString())
-          .lte("event_date", dateRange.to.toISOString());
-
-        if (!events || events.length === 0) return [];
-
-        const eventIds = events.map((e) => e.id);
-        query = query.in("event_id", eventIds);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = await readReportPlayerStats(teamId,eventId,dateRange);
 
       // Aggregate stats if date range
       if (dateRange && data) {
@@ -117,7 +80,7 @@ export default function PlayerStatsReportView({
           if (existing) {
             existing.minutes_played += stat.minutes_played;
             existing.substitutions_count += stat.substitutions_count;
-            existing.goals_scored += stat.goals_scored || 0;
+            existing.goals_scored = existing.goals_scored===null || stat.goals_scored===null ? null : existing.goals_scored+(stat.goals_scored??0);
             existing.games_played = (existing.games_played || 0) + 1;
             existing.starts_count = (existing.starts_count || 0) + (stat.started_on_pitch ? 1 : 0);
             stat.positions_played.forEach((pos: string) => {
@@ -131,7 +94,8 @@ export default function PlayerStatsReportView({
                 existing.position_minutes = {};
               }
               Object.entries(stat.position_minutes as Record<string, number>).forEach(([pos, mins]) => {
-                existing.position_minutes![pos] = (existing.position_minutes![pos] || 0) + mins;
+                const positions=existing.position_minutes;
+                if(positions)positions[pos]=(positions[pos]||0)+mins;
               });
             }
           } else {
@@ -139,7 +103,7 @@ export default function PlayerStatsReportView({
               ...stat,
               positions_played: [...stat.positions_played],
               position_minutes: stat.position_minutes ? { ...stat.position_minutes } : null,
-              goals_scored: stat.goals_scored || 0,
+              goals_scored: stat.goals_scored,
               games_played: 1,
               starts_count: stat.started_on_pitch ? 1 : 0,
             });
@@ -158,14 +122,8 @@ export default function PlayerStatsReportView({
   const { data: gameSummary } = useQuery({
     queryKey: ["game-summary-report", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("game_summaries")
-        .select("*")
-        .eq("event_id", eventId!)
-        .single();
-
-      if (error) throw error;
-      return data;
+      if (!eventId) return null;
+      return readReportSummary(eventId);
     },
     enabled: !!eventId,
   });
@@ -391,7 +349,7 @@ export default function PlayerStatsReportView({
                     <tr>
                       <td class="jersey">${stat.jersey_number || "-"}</td>
                       <td class="player-name">${stat.fill_in_player_name || stat.profiles?.display_name || "Unknown"}</td>
-                      <td style="text-align: center; font-weight: ${stat.goals_scored > 0 ? 'bold' : 'normal'}; color: ${stat.goals_scored > 0 ? '#f97316' : 'inherit'};">${stat.goals_scored || 0}</td>
+                      <td style="text-align: center; font-weight: ${(stat.goals_scored ?? 0) > 0 ? 'bold' : 'normal'}; color: ${(stat.goals_scored ?? 0) > 0 ? '#f97316' : 'inherit'};">${stat.goals_scored ?? "—"}</td>
                       <td>${formatMinutes(stat.minutes_played)}</td>
                       <td>${positionMinsHtml}</td>
                       <td style="text-align: center;">${stat.substitutions_count}</td>
@@ -482,7 +440,7 @@ export default function PlayerStatsReportView({
       rows.push([
         stat.jersey_number == null ? "" : String(stat.jersey_number),
         playerName(stat),
-        String(stat.goals_scored || 0),
+        stat.goals_scored===null ? "—" : String(stat.goals_scored),
         formatMinutes(stat.minutes_played),
         String(stat.substitutions_count),
         String(h.captain),
@@ -714,8 +672,8 @@ export default function PlayerStatsReportView({
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className={`text-center font-mono ${stat.goals_scored > 0 ? 'font-bold text-primary' : ''}`}>
-                    {stat.goals_scored || 0}
+                  <TableCell className={`text-center font-mono ${(stat.goals_scored ?? 0) > 0 ? 'font-bold text-primary' : ''}`}>
+                    {stat.goals_scored ?? "—"}
                   </TableCell>
                   <TableCell className="text-right font-mono">
                     {formatMinutes(stat.minutes_played)}
