@@ -180,7 +180,8 @@
       "name": "mini_league_domain",
       "amount": "505281022354",
       "beforeCycles": "994706712558",
-      "phase": "transfer-confirmed"
+      "phase": "verified",
+      "afterCycles": "1499985522832"
     }
   ]
 }
