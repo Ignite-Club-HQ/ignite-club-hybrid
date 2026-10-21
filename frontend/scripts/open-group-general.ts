@@ -117,6 +117,8 @@ if (action === 'register-closed') {
     || !(spec.maxClubs > 0 && spec.maxClubs <= 100_000)) {
     throw new Error('Approval budgets outside router limits (heapBudgetBytes 1..3 GiB, minCycles > 0, maxClubs 1..100000)');
   }
+  // Mirror shard_router discovery::validate (placement).
+  if (!(BigInt(spec.deploymentRevision) >= 1n)) throw new Error('Approval deploymentRevision must be 1 or higher (router placement rule)');
   const { group, placement } = routerGroupRecord(provision, { secret_workload_identity: spec.workloadIdentity },
     { targetAlias: spec.targetAlias, deploymentId: spec.deploymentId, deploymentRevision: BigInt(spec.deploymentRevision), host: spec.host,
       networkKind: 'public_mainnet', primarySubnet: spec.primarySubnet, approvedSubnets: [spec.primarySubnet], additionalSubnetsEnabled: false },
