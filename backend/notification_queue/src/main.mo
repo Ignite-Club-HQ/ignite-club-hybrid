@@ -1,4 +1,7 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import RemovalReceiver "../../shared/RemovalReceiver";
+import Map "mo:core/Map";
+import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -18,15 +21,21 @@ import ScheduleCalendar "scheduleCalendar";
 import SchedulePatch "schedulePatch";
 import UpdateReminderAccess "updateReminderAccess";
 
-persistent actor class Main(governorInit : Principal) {
+persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
   transient let accountAdmissionEnabled = Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") == ?"1";
   transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
     case (?id) ?Principal.fromText(id); case null null
   };
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
+  var removal_subjects : Map.Map<Principal, Text>;
+  var removal_active : Map.Map<Principal, Nat>;
+  transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
   func admitAccount(subject : Principal) : async () {
-    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
+    let eligible = await accountAdmission.eligible(subject);
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
@@ -173,7 +182,13 @@ persistent actor class Main(governorInit : Principal) {
       let subject = try { await async { ?Principal.fromText(user) } } catch (_) { null };
       switch (subject) {
         case null {};
-        case (?principal) { if (await accountAdmission.eligible(principal)) allowed := allowed.concat([user]) }
+        case (?principal) {
+          if (not removalReceiver.enter(principal)) continue;
+          try {
+            let eligible = await accountAdmission.eligible(principal);
+            if (eligible and not removalReceiver.denied(principal)) allowed := allowed.concat([user]);
+          } finally { removalReceiver.leave(principal) };
+        }
       };
     };
     allowed
@@ -667,7 +682,7 @@ persistent actor class Main(governorInit : Principal) {
         case null {};
         case (?index) {
           let item = items[index];
-          if (item == candidate and item.status == #Pending and not isFenced(item.club) and allowed.any(func(u) = u == item.user)) {
+          if (item == candidate and item.status == #Pending and not isFenced(item.club) and allowed.any(func(u) = u == item.user) and not recipientFenced(item.user)) {
             let processing : Types.Notification = { item with status = #Processing; attempts = item.attempts + 1 };
             replace(index, processing); setLease(item.id, caller); claimed := claimed.concat([processing]);
           }
@@ -705,6 +720,9 @@ persistent actor class Main(governorInit : Principal) {
     let subject = try { await async { ?Principal.fromText(captured.user) } } catch (_) { null };
     let ?user = subject else return #Err("Recipient identity unresolved");
     if (Principal.isAnonymous(user)) return #Ok(false);
+    if (not removalReceiver.enter(user)) return #Ok(false);
+    try {
+    await admitAccount(user);
     let cd = clubDomainCanister;
     let md = messagingDomainCanister;
     let allowed = try {
@@ -726,7 +744,9 @@ persistent actor class Main(governorInit : Principal) {
       case (?fresh) { if (fresh != captured or not ownsLease(id, caller)) return #Err("Notification changed") };
       case null return #Err("Notification removed")
     };
+    if (removalReceiver.denied(user)) return #Ok(false);
     #Ok(allowed and recipientAllowed(captured.user, captured.kind))
+    } finally { removalReceiver.leave(user) };
   };
 
   public shared ({ caller }) func fail(id : Text, error : Text, retry_at_ms : ?Nat64) : async Types.Result {
@@ -762,7 +782,7 @@ persistent actor class Main(governorInit : Principal) {
     var recovered : Nat16 = 0;
     var index = 0;
     for (item in items.values()) {
-      if (item.status == #Processing) {
+      if (item.status == #Processing and not accountAdmissionEnabled) {
         replace(index, { item with status = #Pending });
         clearLease(item.id);
         recovered += 1;
@@ -1480,6 +1500,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
+    if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Account removal fenced");
     authenticated(caller);
     let isGov = switch (governor) { case (?g) { g.equal(caller) }; case null { false } };
     if (not isGov) return #err("Forbidden");
@@ -1648,5 +1669,24 @@ persistent actor class Main(governorInit : Principal) {
       case (?settings) { settings };
       case null { defaultPushAlertSettings() };
     }
+  };
+  func recipientFenced(user : Text) : Bool {
+    removal_subjects.entries().any(func(entry) = entry.0.toText() == user or "principal:" # entry.0.toText() == user)
+  };
+  public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {
+    switch (removalReceiver.prepare(caller, request)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok) {
+        // Processing rows and worker leases remain durable drain obligations.
+        // Cancelling an unclaimed notification is not evidence an external send ended.
+        items := items.map(func(item) = if (recipientFenced(item.user) and item.status == #Pending) ({ item with status = #Failed }) else item);
+        scheduled := scheduled.map(func(item) = if (recipientFenced(item.author) and item.status == #Pending) ({ item with status = #Cancelled }) else item);
+        #Ok
+      }
+    }
+  };
+  public shared ({ caller }) func read_account_removal_drain(request : RemovalReceiver.Request) : async { #Ok : RemovalReceiver.Receipt; #Err : Text } {
+    let outstanding = items.filter(func(item) = item.status == #Processing and request.subjects.any(func(p) = p.toText() == item.user or "principal:" # p.toText() == item.user)).size();
+    removalReceiver.receipt(caller, request, Principal.fromActor(this), outstanding)
   };
 };
