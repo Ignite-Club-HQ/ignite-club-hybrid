@@ -21,6 +21,26 @@ function fixture() {
   return { ctx, registry, assignments, transport };
 }
 describe('integrated deployment-bound group read session', () => {
+  it('routes when the on-chain deployment alias differs from the frontend target alias', async () => {
+    const f = fixture();
+    // The router knows its deployment as 'mainnet'; the frontend target is a
+    // local name for the same deployment. Routing must bind to the on-chain name.
+    f.ctx.target.alias = 'icp-public-mainnet';
+    f.registry.deployment.alias = 'mainnet';
+    f.transport.deploymentAlias = () => 'mainnet';
+    const s = await openGroupSession(f.ctx, f.transport);
+    expect(s.clubIds).toEqual(['club-a', 'club-b']);
+    const seen = await s.readClub('club-a', 'club_domain', async ctx => ctx.target.canisterIds.club_domain);
+    expect(seen).toBe('a-0-cai');
+  });
+  it('refuses a registry whose alias matches neither the target nor the declared on-chain alias', async () => {
+    const f = fixture();
+    f.ctx.target.alias = 'icp-public-mainnet';
+    f.registry.deployment.alias = 'mainnet';
+    // Without the transport declaring the on-chain alias, the mismatch fails closed.
+    await expect(openGroupSession(f.ctx, f.transport)).rejects.toThrow('Invalid authoritative group registry');
+    expect(f.transport.readMemberships).not.toHaveBeenCalled();
+  });
   it('creates once only after an exact original-creator placement read at the current revision', async () => {
     const f = fixture(); const placement = { clubId: 'new-test-club', groupId: 'b', revision: 2n };
     f.transport.readNewClubPlacement = vi.fn(async () => placement);
