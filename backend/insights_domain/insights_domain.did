@@ -25,6 +25,19 @@ type SponsorBenchmarkRow =
    sponsor_id: text;
    unique_reach: nat32;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
 type PhotoEngagementTotal = 
  record {
    comments: nat;
@@ -252,6 +265,10 @@ type Main =
        Err: text;
        Ok: vec PhotoEngagementTotal;
      }) query;
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -393,6 +410,11 @@ type Main =
     (variant {
        Err: text;
        Ok: vec PhotoEngagementTotal;
+     });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
      });
    record_active_user: (club_id: text, account_id: text) ->
     (variant {

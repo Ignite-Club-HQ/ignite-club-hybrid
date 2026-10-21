@@ -60,12 +60,25 @@ type Result =
    Err: text;
    Ok: Notification;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
 type Recurrence = 
  variant {
    Daily;
    Monthly;
    None;
    Weekly;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
  };
 type PushDeliveryHealthResult = 
  variant {
@@ -258,6 +271,10 @@ type Main =
        err: text;
        ok: nat;
      });
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -274,6 +291,11 @@ type Main =
          });
    read_account_list_scheduled: (author: text, target: opt text) ->
     (ScheduledResults);
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    record_chat_notify_batch: (message_id: text, conversation_id: text,
     sender: text, preview: text, recipients: vec text, mute_list:
     vec text) -> (ChatNotifyBatchResult);

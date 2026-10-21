@@ -249,6 +249,13 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
+    prepare_account_removal(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     purge_club_snapshot(club: string): Promise<{
         __kind__: "Ok";
         Ok: bigint;
@@ -333,6 +340,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_account_removal_drain(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     redeem_reward(club_id: string, subject: Subject, reward_id: string, idempotency_key: string | null): Promise<{
         __kind__: "Ok";
         Ok: RewardRedemption;
@@ -397,23 +411,44 @@ export interface MainInterface {
         Err: string;
     }>;
 }
-export interface RewardRedemption {
-    id: string;
-    status: string;
-    points_spent: number;
-    redeemed_at_ms?: bigint;
-    user_id?: string;
-    child_id?: string;
-    verified_at_ms?: bigint;
-    created_at_ms: bigint;
-    reward_id: string;
-    verified_by?: Principal;
-    club_id: string;
-    idempotency_key?: string;
-}
 export interface LeaderboardEntry {
     subject_id: string;
     points: number;
+}
+export interface HistoryPage {
+    total: bigint;
+    items: Array<PointsHistoryEntry>;
+}
+export interface PointsHistoryEntry {
+    id: string;
+    balance_after: number;
+    season_id?: string;
+    description: string;
+    source_id?: string;
+    created_by?: Principal;
+    user_id?: string;
+    child_id?: string;
+    created_at_ms: bigint;
+    source_type: string;
+    amount: number;
+    club_id: string;
+}
+export interface RoleGrant {
+    role: string;
+    user: Principal;
+    team_id?: string;
+    club_id: string;
+}
+export interface Request {
+    account_id: string;
+    inventory_digest: Uint8Array;
+    subjects: Array<Principal>;
+    generation: bigint;
+}
+export interface Receipt {
+    outstanding: bigint;
+    request: Request;
+    receiver: Principal;
 }
 export interface ChildClubPoints {
     updated_at_ms: bigint;
@@ -438,10 +473,6 @@ export interface ClubReward {
     is_active: boolean;
     club_id: string;
 }
-export interface HistoryPage {
-    total: bigint;
-    items: Array<PointsHistoryEntry>;
-}
 export interface ClubPointsSettings {
     points_icon_url?: string;
     updated_at_ms: bigint;
@@ -456,20 +487,6 @@ export interface UserClubPoints {
     club_id: string;
     points: number;
 }
-export interface PointsHistoryEntry {
-    id: string;
-    balance_after: number;
-    season_id?: string;
-    description: string;
-    source_id?: string;
-    created_by?: Principal;
-    user_id?: string;
-    child_id?: string;
-    created_at_ms: bigint;
-    source_type: string;
-    amount: number;
-    club_id: string;
-}
 export type Subject = {
     __kind__: "User";
     User: string;
@@ -477,11 +494,19 @@ export type Subject = {
     __kind__: "Child";
     Child: string;
 };
-export interface RoleGrant {
-    role: string;
-    user: Principal;
-    team_id?: string;
+export interface RewardRedemption {
+    id: string;
+    status: string;
+    points_spent: number;
+    redeemed_at_ms?: bigint;
+    user_id?: string;
+    child_id?: string;
+    verified_at_ms?: bigint;
+    created_at_ms: bigint;
+    reward_id: string;
+    verified_by?: Principal;
     club_id: string;
+    idempotency_key?: string;
 }
 export enum Variant_User_Child {
     User = "User",
@@ -489,7 +514,7 @@ export enum Variant_User_Child {
 }
 export interface club_points_domainInterface extends MainInterface {
 }
-import type { ChildClubPoints as _ChildClubPoints, ClubPointsSettings as _ClubPointsSettings, ClubReward as _ClubReward, HistoryPage as _HistoryPage, LeaderboardEntry as _LeaderboardEntry, PointsCooldown as _PointsCooldown, PointsHistoryEntry as _PointsHistoryEntry, RewardRedemption as _RewardRedemption, RoleGrant as _RoleGrant, Subject as _Subject, UserClubPoints as _UserClubPoints } from "./declarations/club_points_domain.did";
+import type { ChildClubPoints as _ChildClubPoints, ClubPointsSettings as _ClubPointsSettings, ClubReward as _ClubReward, HistoryPage as _HistoryPage, LeaderboardEntry as _LeaderboardEntry, PointsCooldown as _PointsCooldown, PointsHistoryEntry as _PointsHistoryEntry, Receipt as _Receipt, RewardRedemption as _RewardRedemption, RoleGrant as _RoleGrant, Subject as _Subject, UserClubPoints as _UserClubPoints } from "./declarations/club_points_domain.did";
 export class Club_points_domain implements club_points_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async addBulkAccessPrincipal(arg0: Principal): Promise<{
@@ -754,6 +779,16 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.memory_stats();
         return result;
     }
+    async prepare_account_removal(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.prepare_account_removal(arg0);
+        return from_candid_variant_n1(result);
+    }
     async purge_club_snapshot(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: bigint;
@@ -874,6 +909,16 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.read_account_list_rewards(arg0, to_candid_opt_n10(arg1), arg2);
         return from_candid_variant_n43(result);
     }
+    async read_account_removal_drain(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_account_removal_drain(arg0);
+        return from_candid_variant_n44(result);
+    }
     async redeem_reward(arg0: string, arg1: Subject, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
         Ok: RewardRedemption;
@@ -902,7 +947,7 @@ export class Club_points_domain implements club_points_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n44(result);
+        return from_candid_variant_n45(result);
     }
     async removeBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -922,7 +967,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2, to_candid_opt_n10(arg3), arg4);
-        return from_candid_variant_n45(result);
+        return from_candid_variant_n46(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -1542,6 +1587,25 @@ function from_candid_variant_n43(value: {
     } : value;
 }
 function from_candid_variant_n44(value: {
+    Ok: _Receipt;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Receipt;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n45(value: {
     ok: bigint;
 } | {
     err: string;
@@ -1560,7 +1624,7 @@ function from_candid_variant_n44(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n45(value: {
+function from_candid_variant_n46(value: {
     Ok: _ClubPointsSettings;
 } | {
     Err: string;

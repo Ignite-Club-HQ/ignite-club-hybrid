@@ -92,6 +92,17 @@ export const idlFactory = ({ IDL }) => {
     'reactions' : IDL.Vec(Reaction),
     'roles' : IDL.Vec(RoleGrant),
   });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
   const Reference = IDL.Record({
     'url' : IDL.Text,
     'path' : IDL.Opt(IDL.Text),
@@ -197,6 +208,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
@@ -218,6 +234,11 @@ export const idlFactory = ({ IDL }) => {
     'read_account_list_reactions' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(Reaction)],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'read_club_media_references' : IDL.Func(

@@ -923,6 +923,11 @@ export interface Main {
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
   >,
+  'prepare_account_removal' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
@@ -1225,6 +1230,11 @@ export interface Main {
   'read_account_read_event_group_club' : ActorMethod<
     [string],
     { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_account_removal_drain' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
   /**
@@ -1743,6 +1753,11 @@ export interface Read {
   'player_stats_json' : string,
   'scores_hidden' : boolean,
 }
+export interface Receipt {
+  'outstanding' : bigint,
+  'request' : Request,
+  'receiver' : Principal,
+}
 export interface Recurrence {
   'until_ms' : bigint,
   'frequency' : string,
@@ -1754,6 +1769,12 @@ export interface ReminderLog {
   'recipient' : string,
   'event_id' : string,
   'channel' : string,
+}
+export interface Request {
+  'account_id' : string,
+  'inventory_digest' : Uint8Array,
+  'subjects' : Array<Principal>,
+  'generation' : bigint,
 }
 export interface Result { 'hasMore' : boolean, 'rows' : Array<Row> }
 export interface RoleGrant {
