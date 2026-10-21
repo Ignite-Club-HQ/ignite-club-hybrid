@@ -103,6 +103,9 @@ if (action === 'check') {
   let stored = exists ? api(`${path}?ref=${branch}`) : null;
   let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
   const binding = { release, governor: GROUP2_GOVERNOR, provisionHash: hash(provision), inventory: plans.map(({ file, ...p }) => p) };
+  if (journal?.complete === true && JSON.stringify(journal.binding) !== JSON.stringify(binding)) {
+    throw new Error('Group 2 was already upgraded by an earlier release, so nothing was changed. To make saved settings take effect, choose action "reload" with confirmation RELOAD GROUP 2 SETTINGS');
+  }
   if (journal) validateUpgradeJournal(journal, binding);
   const persist = () => {
     stored = persistGroup2Journal(api, path, branch, stored, journal, 'upgrade');
