@@ -156,7 +156,8 @@
       "name": "vault_domain",
       "amount": "504162155678",
       "beforeCycles": "995826159132",
-      "phase": "transfer-confirmed"
+      "phase": "verified",
+      "afterCycles": "1499986104260"
     }
   ]
 }
