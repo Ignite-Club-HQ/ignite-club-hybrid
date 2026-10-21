@@ -634,7 +634,6 @@ fn assign(request: AssignRequest) -> Outcome<AssignResult> {
             .insert(request.club_id.into_bytes(), encode(&route))
     });
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
-    bump_configuration_revision();
     let _ = previous;
     Ok(AssignResult {
         route,
@@ -678,7 +677,6 @@ fn begin_migration(
             .insert(club_id.into_bytes(), encode(&migration))
     });
     REVISION.with(|stored| stored.borrow_mut().set(migration_revision));
-    bump_configuration_revision();
     Ok(migration)
 }
 
@@ -705,7 +703,6 @@ fn commit_migration(club_id: String, expected_migration_revision: u64) -> Outcom
     });
     MIGRATIONS.with(|stored| stored.borrow_mut().remove(&club_id.as_bytes().to_vec()));
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
-    bump_configuration_revision();
     Ok(AssignResult {
         route,
         revision: next_revision,
@@ -725,7 +722,6 @@ fn abort_migration(club_id: String, expected_migration_revision: u64) -> Outcome
         .checked_add(1)
         .ok_or("Revision exhausted")?;
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
-    bump_configuration_revision();
     Ok(next_revision)
 }
 
@@ -762,7 +758,6 @@ fn assign_domain(request: AssignDomainRequest) -> Outcome<AssignDomainResult> {
     let key = domain_key(&request.club_id, &request.domain);
     DOMAIN_ROUTES.with(|routes| routes.borrow_mut().insert(key, encode(&route)));
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
-    bump_configuration_revision();
     Ok(AssignDomainResult {
         route,
         revision: next_revision,
@@ -805,7 +800,6 @@ fn begin_domain_migration(
     let key = domain_key(&club_id, &domain);
     DOMAIN_MIGRATIONS.with(|stored| stored.borrow_mut().insert(key, encode(&migration)));
     REVISION.with(|stored| stored.borrow_mut().set(migration_revision));
-    bump_configuration_revision();
     Ok(migration)
 }
 
@@ -836,7 +830,6 @@ fn commit_domain_migration(
     DOMAIN_ROUTES.with(|routes| routes.borrow_mut().insert(key.clone(), encode(&route)));
     DOMAIN_MIGRATIONS.with(|stored| stored.borrow_mut().remove(&key));
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
-    bump_configuration_revision();
     Ok(AssignDomainResult {
         route,
         revision: next_revision,
@@ -863,7 +856,6 @@ fn abort_domain_migration(
         .checked_add(1)
         .ok_or("Revision exhausted")?;
     REVISION.with(|stored| stored.borrow_mut().set(next_revision));
-    bump_configuration_revision();
     Ok(next_revision)
 }
 
