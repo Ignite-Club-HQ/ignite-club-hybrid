@@ -140,7 +140,7 @@
       "name": "events_domain",
       "amount": "512802647267",
       "beforeCycles": "987185035248",
-      "phase": "transferring"
+      "phase": "transfer-confirmed"
     }
   ]
 }
