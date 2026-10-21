@@ -388,10 +388,19 @@ fn read_my_new_club_placement(club_id: String, target_alias: String, expected_re
 /// Only the registered destination club authority can check a creator receipt.
 /// This does not authorize private reads or grant cross-club membership.
 #[ic_cdk::update]
-fn read_new_club_creation_authorized(user: Principal, club_id: String, target_alias: String, group_id: String) -> Outcome<bool> {
+async fn read_new_club_creation_authorized(user: Principal, club_id: String, target_alias: String, group_id: String) -> Outcome<bool> {
     registry_writable()?;
+    let revision = current_revision();
+    let requestor = caller();
+    if owner_opening(&target_alias).is_some_and(|r| r.approval.group.id == group_id) {
+        let receipt = owner_opening(&target_alias).ok_or("Owner opening missing")?;
+        if receipt.approval.owner != user || !receipt.approval.club_ids.contains(&club_id) { return Ok(false); }
+        if !owner_creation_eligible(user).await? { return Ok(false); }
+        registry_writable()?;
+        if current_revision() != revision || owner_opening(&target_alias).as_ref() != Some(&receipt) { return Err("Owner opening changed during eligibility check".into()); }
+    }
     let group = group_for(&group_id).ok_or("Unknown group")?;
-    if group.target_alias != target_alias || !group.domains.iter().any(|d| d.domain == "club_domain" && d.canister == caller()) {
+    if group.target_alias != target_alias || !group.domains.iter().any(|d| d.domain == "club_domain" && d.canister == requestor) {
         return Err("Registered destination club authority required".into());
     }
     if !GROUP_PLACEMENTS.with(|m| m.borrow().contains_key(&group_id.as_bytes().to_vec())) { return Err("Complete group placement required".into()); }
@@ -1013,8 +1022,23 @@ fn assign_new_club_group(club_id: String, target_alias: String, expected_revisio
 /// Any signed-in user creating a club asks for its group here; the router picks
 /// the healthiest accepting group. Capped per principal; retries are free.
 #[ic_cdk::update]
-fn place_my_new_club(club_id: String, target_alias: String) -> Outcome<GroupAssignment> {
-    place_new_club_for(caller(), club_id, target_alias, ic_cdk::api::time())
+async fn place_my_new_club(club_id: String, target_alias: String) -> Outcome<GroupAssignment> {
+    let user = caller();
+    if let Some(receipt) = owner_opening(&target_alias).filter(|r| r.approval.owner == user) {
+        registry_writable()?;
+        let revision = current_revision();
+        if !owner_creation_eligible(user).await? { return Err("Owner account cannot create a test club".into()); }
+        registry_writable()?;
+        if current_revision() != revision || owner_opening(&target_alias).as_ref() != Some(&receipt) { return Err("Owner opening changed during eligibility check".into()); }
+    }
+    place_new_club_for(user, club_id, target_alias, ic_cdk::api::time())
+}
+async fn owner_creation_eligible(user: Principal) -> Outcome<bool> {
+    let identity = deletion_authority().ok_or("Owner opening requires bound deletion authority")?;
+    let reply = ic_cdk::call::Call::bounded_wait(identity, "read_owner_test_creation_eligible").with_arg(&user)
+        .await.map_err(|_| "Owner identity verification unavailable")?;
+    let result: Outcome<bool> = reply.candid().map_err(|_| "Invalid owner identity reply")?;
+    result
 }
 
 fn assign_group_record(club_id: String, target_alias: String, expected_revision: u64, now: u64) -> Outcome<GroupAssignment> {

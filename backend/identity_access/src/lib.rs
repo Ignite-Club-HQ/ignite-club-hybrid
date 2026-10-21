@@ -850,6 +850,15 @@ fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
         ("deployment_id".into(), binding.deployment_id), ("host".into(), binding.host),
         ("network_kind".into(), binding.network_kind), ("bound_deletion_released".into(), bound_deletion_released().to_string())])
 }
+/// Only the pinned router may check a human before owner-test creation. This
+/// narrow predicate neither registers a reader nor releases global admission.
+#[ic_cdk::update]
+fn read_owner_test_creation_eligible(subject: Principal) -> Outcome<bool> {
+    let binding = group_inventory_binding().ok_or("Deletion registry not pinned")?;
+    if ic_cdk::api::msg_caller() != binding.registry || !bound_deletion_released() { return Err("Pinned router and bound deletion release required".into()); }
+    let account = match account_for_write(subject) { Ok(a) => a, Err(_) => return Ok(false) };
+    Ok(!DELETION_TICKETS.with(|m| m.borrow().contains_key(&account.id)) && removal_intent(&account.id).is_none())
+}
 
 #[ic_cdk::update]
 fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {
