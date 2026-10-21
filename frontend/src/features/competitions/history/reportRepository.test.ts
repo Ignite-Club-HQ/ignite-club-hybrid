@@ -3,11 +3,11 @@ const mocks=vi.hoisted(()=>({mode:process.env.IGNITE_TEST_BACKEND_MODE??"supabas
 vi.mock("@/integrations/supabase/client",()=>({supabase:{rpc:mocks.rpc}}));
 vi.mock("@/live/featureRouter",()=>({withFeatureBackend:(_:string,p:any)=>mocks.mode==="icp"?p.icp({}):p.supabase()}));
 vi.mock("@/live/features/events",()=>({listLiveEvents:mocks.events,listLiveGamePlayerStats:mocks.stats,getLiveGameResult:mocks.result}));
-import {readReportPlayerStats} from "./reportRepository";
+import {readReportPlayerStats,readReportEvents} from "./reportRepository";
 beforeEach(()=>vi.clearAllMocks());
 it("retains authorized playing time without reintroducing protected goals",async()=>{
  mocks.rpc.mockResolvedValue({data:[{minutes_played:12,goals_scored:null}],error:null});
- mocks.events.mockResolvedValue([{id:"game",event_type:"game",deleted:false,starts_at_ms:1000n},{id:"training",event_type:"training",deleted:false,starts_at_ms:1000n}]);
+ mocks.events.mockResolvedValue([{id:"game",team_id:["team"],event_type:"game",deleted:false,starts_at_ms:1000n},{id:"training",team_id:["team"],event_type:"training",deleted:false,starts_at_ms:1000n}]);
  mocks.stats.mockResolvedValue([{minutes_played:12,goals_scored:0,substitutions_count:1,user_id:[],fill_in_player_name:[],jersey_number:[]}]);
  mocks.result.mockResolvedValue([{scores_hidden:true}]);
  const rows=await readReportPlayerStats("team",undefined,{from:new Date(0),to:new Date(2000)});
@@ -18,5 +18,17 @@ it("retains authorized playing time without reintroducing protected goals",async
 it("propagates authorization denial rather than returning empty report totals",async()=>{
  mocks.rpc.mockResolvedValue({data:null,error:{message:"Forbidden"}});
  mocks.stats.mockRejectedValue(new Error("Forbidden"));
+ mocks.events.mockResolvedValue([]);
  await expect(readReportPlayerStats("team","game")).rejects.toThrow("Forbidden");
+});
+it("limits the report picker to the requested team in ICP mode",async()=>{
+ mocks.rpc.mockResolvedValue({data:[{id:"game"}],error:null});
+ mocks.events.mockResolvedValue([{id:"game",team_id:["team"],title:"Game",opponent:[],event_type:"game",deleted:false,starts_at_ms:1000n},{id:"other",team_id:["other"],event_type:"game",deleted:false,starts_at_ms:1000n}]);
+ expect((await readReportEvents("team")).map(e=>e.id)).toEqual(["game"]);
+});
+it("denies an event belonging to another team before reading player rows",async()=>{
+ mocks.rpc.mockResolvedValue({data:null,error:{message:"Forbidden"}});
+ mocks.events.mockResolvedValue([{id:"game",team_id:["other"],event_type:"game",deleted:false,starts_at_ms:1000n}]);
+ await expect(readReportPlayerStats("team","game")).rejects.toThrow("Forbidden");
+ expect(mocks.stats).not.toHaveBeenCalled();
 });

@@ -9,7 +9,9 @@ export async function readReportPlayerStats(teamId: string, eventId?: string, ra
     },
     icp:async(ctx)=>{
       const {listLiveEvents,listLiveGamePlayerStats,getLiveGameResult}=await import("@/live/features/events");
-      const events=eventId?[{id:eventId}]: (await listLiveEvents(ctx,null,teamId)).filter(e=>e.event_type==="game" && !e.deleted && (!range || (Number(e.starts_at_ms)>=range.from.getTime()&&Number(e.starts_at_ms)<=range.to.getTime())));
+      const scopedEvents=await listLiveEvents(ctx,null,teamId);
+      if(eventId && !scopedEvents.some(e=>e.id===eventId && e.team_id[0]===teamId && !e.deleted))throw new Error("Forbidden report event/team scope");
+      const events=scopedEvents.filter(e=>e.team_id[0]===teamId && e.event_type==="game" && !e.deleted && (!eventId || e.id===eventId) && (!range || (Number(e.starts_at_ms)>=range.from.getTime()&&Number(e.starts_at_ms)<=range.to.getTime())));
       const rows:any[]=[];
       for(const event of events){
         const stats=await listLiveGamePlayerStats(ctx,event.id);
@@ -29,6 +31,13 @@ export async function readReportSummary(eventId:string):Promise<any|null>{
 }
 
 export async function readReportEvents(teamId:string):Promise<any[]>{
-  const {data,error}=await historyRpc("read_history_report_events",{p_team_id:teamId});
-  if(error)throw new Error(error.message);return Array.isArray(data)?data:[];
+  return withFeatureBackend("events",{
+    supabase:async()=>{const {data,error}=await historyRpc("read_history_report_events",{p_team_id:teamId});if(error)throw new Error(error.message);return Array.isArray(data)?data:[];},
+    icp:async(ctx)=>{
+      const {listLiveEvents}=await import("@/live/features/events");
+      return (await listLiveEvents(ctx,null,teamId)).filter(e=>e.team_id[0]===teamId && e.event_type==="game" && !e.deleted)
+        .sort((a,b)=>Number(b.starts_at_ms-a.starts_at_ms)).slice(0,100)
+        .map(e=>({id:e.id,title:e.title,event_date:new Date(Number(e.starts_at_ms)).toISOString(),opponent:e.opponent[0]??null}));
+    },
+  },{teamId});
 }
