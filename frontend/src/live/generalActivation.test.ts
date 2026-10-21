@@ -19,9 +19,11 @@ vi.mock('./domains', () => ({
 }));
 
 const principal = 'renrk-eyaaa-aaaal-qadea-cai';
+// The frontend's own target alias deliberately differs from the on-chain
+// deployment name ('mainnet'); the snapshot binds by router canister id.
 const ctx = {
   identity: { getPrincipal: () => ({ toText: () => principal }) },
-  target: { alias: 'mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: { shard_router: 'jcdfe-vqaaa-aaaal-qxloq-cai' } },
+  target: { alias: 'icp-public-mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: { shard_router: 'jcdfe-vqaaa-aaaal-qxloq-cai' } },
 } as never;
 
 const liveGroup = (id: string) => ({
@@ -37,6 +39,7 @@ const snapshot = (): RoutingGatesSnapshot => ({
   generatedAt: '2026-10-21T00:00:00Z',
   targetAlias: 'mainnet',
   host: 'https://icp-api.io',
+  routerCanisterId: 'jcdfe-vqaaa-aaaal-qxloq-cai',
   registryRevision: '7',
   groups: [{ id: 'g2', domains: GROUP_DOMAINS.map(d => ({ domain: d, canisterId: `g2-${d}` })), photoStore: 'g2-photos', moduleHashes: {} }],
   removalWiring: { revision: '7', groupIds: ['g2'], checkedAtMs: 1 },
@@ -62,6 +65,16 @@ describe('general routing switch', () => {
     state.snapshot = snapshot();
     state.groups = [liveGroup('g2')];
     expect(await routingActive(ctx)).toBe(true);
+  });
+
+  it('is inactive when the snapshot names another router canister or none', async () => {
+    state.snapshot = { ...snapshot(), routerCanisterId: 'aaaaa-aa' };
+    state.groups = [liveGroup('g2')];
+    expect(await routingActive(ctx)).toBe(false);
+    const legacy = snapshot();
+    delete legacy.routerCanisterId;
+    state.snapshot = legacy;
+    expect(await routingActive(ctx)).toBe(false);
   });
 
   it('fails closed when the registry revision moved past the approved snapshot', async () => {
