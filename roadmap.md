@@ -1,6 +1,8 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Active scope — minimum Group 2 test opening (21 October 2026, 03:07 UTC)
+- [x] 07:38: Upgrade Group 2 (closed) completed on mainnet — 13/13 modules changed from the recorded pre-upgrade hashes, sole governor preserved, all canisters 1.483–1.497T. Evidence: docs/group-2-post-upgrade-verification-2026-10-21.md. Group 2 still closed/unregistered; opening is the next step.
+
 - [x] 06:13 request: added signed administrator-only **Stop Group 2 new clubs** check/stop workflow and revision-CAS router stop API independent of owner/test UUID approvals. Stops general and trial admission, preserves existing assignments/endpoints/access and other groups, respects deletion locks. 42 router tests, two workflow safeguards, GitHub validation, 17-contract drift and real local stop/unauthorized/stale/retry/upgrade checks pass. Runbook: docs/group-2-stop-controls.md. No live deployment/opening; general opening/app routing remains separate work.
 This supersedes the broad 1–5 implementation backlog below for current work. Existing safeguards remain; this is not deployment or opening approval.
 - [x] 05:29 request: built protected **Upgrade Group 2 (closed)** check/upgrade workflow for its thirteen existing services; exact inventory, 1T fuel floor, sole governor/certified subnet, original photo-key attestation, unchanged settings and memory-preserving upgrades. GitHub intent/readback journal refuses unknown replay; 35 focused tests and YAML/runner syntax checks pass. No live upgrade/opening; live GitHub execution, reviewer setup, shared upgrades and owner settings remain external prerequisites.
