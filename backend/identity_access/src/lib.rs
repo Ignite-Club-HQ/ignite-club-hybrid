@@ -542,6 +542,26 @@ async fn advance_account_removal_receiver(account_id: String, target: Principal)
     bump_removal_history();
     Ok(receipt)
 }
+/// Fresh, authenticated full-inventory seal verification. This does not erase
+/// data, release registry locks, restore histories or activate a group.
+#[ic_cdk::update]
+async fn verify_account_removal_seals(account_id: String) -> Outcome<Vec<removal_barrier::Receipt>> {
+    history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
+    let intent = removal_intent(&account_id).ok_or("Removal intent missing")?;
+    let request = intent.request();
+    let mut seals = Vec::new();
+    for target in &intent.targets {
+        let reply = ic_cdk::call::Call::bounded_wait(*target, "seal_account_removal").with_arg(&request)
+            .await.map_err(|_| "Receiver seal unavailable; intent remains locked")?;
+        let result: Outcome<removal_barrier::Receipt> = reply.candid().map_err(|_| "Invalid receiver seal reply")?;
+        let seal = result?;
+        if removal_intent(&account_id).as_ref() != Some(&intent) { return Err("Removal intent changed".into()); }
+        intent.validate_seal(*target, &seal)?;
+        seals.push(seal);
+    }
+    if seals.len() != intent.targets.len() { return Err("Incomplete receiver seals".into()); }
+    Ok(seals)
+}
 fn group_inventory_binding() -> Option<group_inventory::Binding> {
     GROUP_INVENTORY_BINDING.with(|m| if m.borrow().get().is_empty() { None } else { Some(decode(m.borrow().get())) })
 }
