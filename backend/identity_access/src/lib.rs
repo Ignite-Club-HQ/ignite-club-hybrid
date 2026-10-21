@@ -841,6 +841,15 @@ fn bound_deletion_released() -> bool {
     #[cfg(not(target_arch = "wasm32"))]
     { false }
 }
+/// Governor-only narrow opening evidence, not a lifecycle release or grant.
+#[ic_cdk::update]
+fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
+    require_governor(&state(), ic_cdk::api::msg_caller())?;
+    let binding = group_inventory_binding().ok_or("Deletion registry not pinned")?;
+    Ok(vec![("registry".into(), binding.registry.to_text()), ("target_alias".into(), binding.target_alias),
+        ("deployment_id".into(), binding.deployment_id), ("host".into(), binding.host),
+        ("network_kind".into(), binding.network_kind), ("bound_deletion_released".into(), bound_deletion_released().to_string())])
+}
 
 #[ic_cdk::update]
 fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {

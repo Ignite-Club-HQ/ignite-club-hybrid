@@ -6,14 +6,14 @@ import { Actor, HttpAgent, CanisterStatus } from '@icp-sdk/core/agent';
 import { IDL } from '@icp-sdk/core/candid';
 import { Principal } from '@icp-sdk/core/principal';
 import { loadOperatorIdentity } from '../src/live/operatorTransport';
-import { verifyOwnerOpeningChecks, type OwnerCheckSpec, type ObservedService } from '../src/live/ownerOpeningChecks';
+import { verifyOwnerOpeningChecks, verifyOwnerReciprocalConfiguration, type OwnerCheckSpec, type ObservedService } from '../src/live/ownerOpeningChecks';
 import { idlFactory } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/shard_router.did';
 import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
 
 const [action, file, pem, out] = process.argv.slice(2);
 if (!['check', 'open', 'stop'].includes(action) || !file || !pem || !out) throw new Error('Usage: owner-group-opening <check|open|stop> <approval.json> <operator.pem> <report.json>');
-const spec: OwnerCheckSpec = JSON.parse(readFileSync(file, 'utf8'));
+const spec: OwnerCheckSpec & { identityAccess: string; pushWorker: string } = JSON.parse(readFileSync(file, 'utf8'));
 if (!/^https:\/\/icp-api\.io$/.test(spec.host)) throw new Error('Owner opening supports the pinned public-mainnet gateway only');
 const identity = loadOperatorIdentity(pem);
 if (identity.getPrincipal().toText() !== spec.governor) throw new Error('Approved governor identity required');
@@ -22,6 +22,13 @@ const agent = await HttpAgent.create({ host: spec.host, identity });
 const router = Actor.createActor<_SERVICE>(idlFactory, { agent, canisterId: spec.routerId });
 const ok = <T>(r: { Ok: T } | { Err: string }): T => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
 const save = (v: unknown) => writeFileSync(out, JSON.stringify(v, (_, x) => typeof x === 'bigint' ? String(x) : x, 2));
+const readConfig = async (id: string, resultVariant = false) => {
+  const rows = IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text));
+  const factory = () => IDL.Service({ read_group_opening_configuration: IDL.Func([], [resultVariant ? IDL.Variant({ Ok: rows, Err: IDL.Text }) : rows], []) });
+  const actor = Actor.createActor(factory, { agent, canisterId: id }) as unknown as { read_group_opening_configuration(): Promise<[string, string][] | { Ok: [string, string][]; Err?: string }> };
+  const reply = await actor.read_group_opening_configuration();
+  return Array.isArray(reply) ? reply : ok(reply as { Ok: [string, string][] } | { Err: string });
+};
 if (action === 'stop') {
   if (process.env.CONFIRMATION?.trim() !== 'STOP GROUP 2 TEST PLACEMENTS') throw new Error('Exact stop confirmation required');
   const receipt = ok(await router.stop_owner_test_group(spec.targetAlias, BigInt(spec.revision)));
@@ -47,9 +54,11 @@ if (action === 'stop') {
     const health = Actor.createActor(({ IDL: I }: { IDL: typeof IDL }) => I.Service({ memory_stats: I.Func([], [I.Record({ heap_bytes: I.Nat })], ['query']) }), { agent, canisterId: id }) as unknown as { memory_stats(): Promise<{ heap_bytes: bigint }> };
     observations.push({ ...s, subnetId: String(subnet.subnetId), moduleHash: Buffer.from(actual.module_hash[0] ?? []).toString('hex'),
       controllers: actual.settings.controllers.map(p => p.toText()), environment: actual.settings.environment_variables, running: 'running' in actual.status,
-      cycles: actual.cycles, heapBytes: (await health.memory_stats()).heap_bytes });
+      cycles: actual.cycles, heapBytes: (await health.memory_stats()).heap_bytes,
+      configuration: await readConfig(s.canisterId, s.name === 'timer_jobs') });
   }
   verifyOwnerOpeningChecks(spec, observations, group, placement);
+  verifyOwnerReciprocalConfiguration(spec, observations, await readConfig(spec.routerId, true), await readConfig(spec.identityAccess, true));
   for (const club of spec.clubIds) {
     const existing = await router.read_hosted_club_assignment(club, spec.targetAlias, registry.revision);
     if ('Ok' in existing || existing.Err !== 'Missing club assignment') throw new Error('Test club UUID is assigned or cannot be verified fresh');

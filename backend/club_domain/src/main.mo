@@ -82,6 +82,7 @@ persistent actor class Main(governorInit : Principal) = this {
   /// Bounded consensus configuration evidence; never changes or grants access.
   public shared ({ caller }) func read_group_opening_configuration() : async [(Text, Text)] {
     if (not isGovernor(caller)) Runtime.trap("Governor required");
+    if (competitionAuthorities.size() > 64 or mediaQuotaStores.size() > 64) Runtime.trap("Opening authority set exceeds bounded owner scope");
     [
       ("club_domain", Principal.fromActor(this).toText()),
       ("identity_access", OpeningConfiguration.optional(identityAccessCanister)),

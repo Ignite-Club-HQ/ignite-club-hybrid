@@ -2,7 +2,7 @@
  * only the governor-signed router opening call may authorize new placement. */
 export type ServiceCheck = { name: string; canisterId: string; subnetId: string; moduleHash: string };
 export type ObservedService = ServiceCheck & { controllers: string[]; running: boolean; cycles: bigint; heapBytes: bigint;
-  environment: { name: string; value: string }[] };
+  environment: { name: string; value: string }[]; configuration?: [string, string][] };
 export type OwnerCheckSpec = { governor: string; owner: string; routerId: string; targetAlias: string; deploymentId: string;
   host: string; revision: string; clubIds: string[]; services: ServiceCheck[]; minCycles: string; heapBudgetBytes: string };
 export function verifyOwnerOpeningChecks(spec: OwnerCheckSpec, observed: ObservedService[], group: {
@@ -35,4 +35,36 @@ export function verifyOwnerOpeningChecks(spec: OwnerCheckSpec, observed: Observe
     }
   }
   return { checked: true as const, authorizesOpening: false as const };
+}
+
+export function verifyOwnerReciprocalConfiguration(spec: OwnerCheckSpec & { identityAccess: string; pushWorker: string }, observed: ObservedService[],
+  routerConfig: [string, string][], identityConfig: [string, string][]) {
+  const id = (name: string) => spec.services.find(s => s.name === name)?.canisterId ?? '';
+  const links: Record<string, string[]> = {
+    club_domain: ['notification_queue', 'mini_league_domain', 'competition_domain', 'events_domain', 'messaging_domain', 'pii_access_control'],
+    events_domain: ['club_domain', 'notification_queue', 'mini_league_domain', 'competition_domain'],
+    messaging_domain: ['club_domain', 'notification_queue', 'competition_domain'], vault_domain: ['club_domain', 'competition_domain'],
+    pii_access_control: ['club_domain', 'competition_domain'], competition_domain: ['club_domain', 'events_domain', 'vault_domain', 'pii_access_control'],
+    mini_league_domain: ['club_domain', 'events_domain'], club_points_domain: ['club_domain'], media_blob_store: ['club_domain'],
+    notification_queue: ['club_domain', 'messaging_domain'],
+  };
+  const value = (rows: [string, string][], key: string) => { const hits = rows.filter(r => r[0] === key); if (hits.length !== 1) throw new Error(`Missing/ambiguous configuration: ${key}`); return hits[0][1]; };
+  for (const [name, peers] of Object.entries(links)) {
+    const rows = observed.find(s => s.name === name)?.configuration;
+    if (!rows) throw new Error(`Consensus configuration unavailable: ${name}`);
+    for (const peer of peers) if (value(rows, peer) !== id(peer)) throw new Error(`Wrong reciprocal authority: ${name}.${peer}`);
+  }
+  const queue = observed.find(s => s.name === 'notification_queue')?.configuration ?? [];
+  if (value(queue, 'identity_access') !== spec.identityAccess || !queue.some(r => r[0] === 'worker' && r[1] === spec.pushWorker)) throw new Error('Shared identity or notification worker missing');
+  const timer = observed.find(s => s.name === 'timer_jobs')?.configuration ?? [];
+  if (!timer.some(r => r[0] === 'worker:*' && r[1] === spec.pushWorker)) throw new Error('Timer worker missing');
+  const club = observed.find(s => s.name === 'club_domain')?.configuration ?? [];
+  if (value(club, 'identity_access') !== spec.identityAccess || !club.some(r => r[0] === 'media_store' && r[1] === id('media_blob_store')) ||
+      !club.some(r => r[0] === 'competition_authority' && r[1] === id('competition_domain'))) throw new Error('Club identity/store/competition authority missing');
+  const competition = observed.find(s => s.name === 'competition_domain')?.configuration ?? [];
+  if (!competition.some(r => r[0] === 'participant_club_authority' && r[1] === id('club_domain'))) throw new Error('Competition participant authority missing');
+  if (value(routerConfig, 'deletion_authority') !== spec.identityAccess || value(identityConfig, 'registry') !== spec.routerId ||
+      value(identityConfig, 'target_alias') !== spec.targetAlias || value(identityConfig, 'deployment_id') !== spec.deploymentId ||
+      value(identityConfig, 'host') !== spec.host || value(identityConfig, 'network_kind') !== 'public_mainnet' ||
+      value(identityConfig, 'bound_deletion_released') !== 'true') throw new Error('Bound deletion configuration is not ready');
 }
