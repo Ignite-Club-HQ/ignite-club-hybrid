@@ -19,7 +19,7 @@ export function parseBalance(result) {
   return BigInt(value.replace(/ cycles$/, '').replaceAll('_', ''));
 }
 export function assertNoOpenPayment(records) {
-  if (records.some((r) => !['delivered', 'already-funded', 'topups-complete'].includes(r.phase) || (r.plan?.purpose === 'top-ups' && !r.topupsComplete))) {
+  if (records.some((r) => r.phase !== 'abandoned' && (!['delivered', 'already-funded', 'topups-complete'].includes(r.phase) || (r.plan?.purpose === 'top-ups' && !r.topupsComplete)))) {
     throw new Error('An earlier payment is unresolved. Use its saved link/status; do not create another order.');
   }
 }
