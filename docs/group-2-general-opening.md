@@ -83,3 +83,6 @@ controls, replacing the superseded owner-only trial
 
 ## Account-service link (part of `settings`)
 `settings` also links the shared account service once, skipping anything already correct and reading every value back: identity `IGNITE_BOUND_DELETION_RELEASE=1`, router `deletion_authority` = identity, identity pinned to this router (`pin_owner_test_deletion_registry`, mainnet), and each group's club service bound to the identity (only while it is empty). A different existing binding stops the run for review. `open`/`close` re-pin the identity forward to the new registry revision so account deletions keep working.
+
+## Reload after `settings` (Upgrade Group 2 → `reload`)
+Motoko services read their service settings only when installed or upgraded, so values written by `settings` are saved but inactive until a reload. Run "Upgrade Group 2 (closed)" with action `reload` and confirmation `RELOAD GROUP 2 SETTINGS`: it reinstalls each of the thirteen services in upgrade mode with the identical module (refuses if any staged build differs from the live module), keeps memory and settings, checks the photo key, journals each step on `group-2-upgrade-receipts`, and leaves fingerprints unchanged. Then rerun `settings` (it resumes, skipping finished links) and `check`.
