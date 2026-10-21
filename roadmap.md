@@ -1,6 +1,7 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
 ## Active scope — minimum Group 2 test opening (21 October 2026, 03:07 UTC)
+- [ ] Fix screenshot-reported snapshot/open blocker: normalize removal-wiring Nat64 revision to lossless decimal text before hashing and emitting the report/generated snapshot; exercise the actual emission path without live mutations.
 - [x] Fix successful-settings/failing-check notification-worker comparison: check/hash/snapshot resolve the existing CI delivery identity, reject conflicting approvals and retain exact queue/timer grants. 43 focused safeguards pass; preview build OK. No live changes; owner must rerun check after sync (empty confirmation); live grants remain unverified here.
 - [x] Fix reported reload checkpoint readback failure after eleven successful services: upgrade/reload persist against acknowledged immutable GitHub commit and exact blob, not lagging branch head. 39 safeguards pass, including actual reload-loop resume skipping eleven completed services and finishing timers/photo store; mismatched/unknown journal writes stop without replay. Live GitHub rerun remains owner-run; no live mutations here.
 - [x] Fix opening settings/snapshot/stop canister-list paths with script-relative URLs; real mapping reads pass from both root and frontend folders (23 opening/upgrade safeguards). Snapshot output also anchored to the script. Corrected registration-first runbook; GitHub execution remains owner-run.
