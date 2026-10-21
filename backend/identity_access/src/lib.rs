@@ -2702,6 +2702,39 @@ mod tests {
         assert_eq!(authority_eligibilities(principal(98), vec![principal(99)]), Err("Cross-group eligibility not released".into()));
     }
     #[test]
+    fn production_admission_releases_only_exact_readers_not_lifecycle() {
+        let reader=principal(98); let user=principal(99);
+        let account=Account { id:"production-reader".into(),principals:vec![user],version:1,status:AccountStatus::Active };
+        put_account(&account); index_principal(user,&account.id);
+        GROUP2_ADMISSION.with(|m|m.borrow_mut().set(encode(&admission::Config {enabled:true,readers:vec![reader]})));
+        assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Eligible);
+        assert_eq!(authority_eligibilities(user,vec![user]),Err("Configured authority required".into()));
+        assert!(authority_eligibilities(reader,vec![]).is_err());
+        assert!(authority_eligibilities(reader,vec![user,user]).is_err());
+        assert!(authority_eligibilities(reader,(0..201u32).map(|i|Principal::self_authenticating(i.to_be_bytes())).collect()).is_err());
+        assert!(!account_group_rehearsal_enabled());
+        assert_eq!(service_account(reader,user),Err("Service admission not released".into()));
+        assert_eq!(set_club_authorities(vec![reader]),Err("Cross-group account lifecycle not released".into()));
+        let restored:admission::Config=decode(&encode(&group2_admission()));
+        assert!(restored.enabled); assert_eq!(restored.readers,vec![reader]);
+    }
+    #[test]
+    fn production_admission_keeps_suspension_erasure_and_deletion_denied() {
+        let reader=principal(96);let user=principal(95);
+        GROUP2_ADMISSION.with(|m|m.borrow_mut().set(encode(&admission::Config {enabled:true,readers:vec![reader]})));
+        let mut account=Account {id:"production-denial".into(),principals:vec![user],version:2,status:AccountStatus::Active};
+        put_account(&account);index_principal(user,&account.id);
+        assert_eq!(authority_eligibilities(reader,vec![principal(94)]).unwrap()[0].decision,EligibilityDecision::Denied);
+        account.status=AccountStatus::Suspended;put_account(&account);
+        assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Denied);
+        account.status=AccountStatus::Active;put_account(&account);
+        DELETION_TICKETS.with(|m|m.borrow_mut().insert(account.id.clone(),vec![0]));
+        assert!(admission_configuration_clear().is_err());
+        DELETION_TICKETS.with(|m|m.borrow_mut().remove(&account.id));
+        erase_account_core(&mut empty_core_state(principal(93)),&account).unwrap();
+        assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Denied);
+    }
+    #[test]
     fn service_readers_remain_separate_and_unreleased() {
         assert_eq!(set_service_authorities(vec![principal(97)]), Err("Service admission not released".into()));
         assert_eq!(service_account(principal(97), principal(98)), Err("Service admission not released".into()));

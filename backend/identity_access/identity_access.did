@@ -291,6 +291,8 @@ type UnlinkIntent = record {
   authorities : vec principal;
 };
 service : (Init) -> {
+  authorize_group2_admission : (Binding) -> (Result_2);
+  disable_group2_admission : () -> (Result_2);
   accept_link : (nat64) -> (Result);
   access : (opt text, opt text, opt text) -> (Result_1) query;
   access_scoped : (opt text, opt text, opt text, opt text) -> (Result_1) query;
