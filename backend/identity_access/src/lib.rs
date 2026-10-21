@@ -593,7 +593,7 @@ async fn authorize_group2_admission(binding: group_inventory::Binding) -> Outcom
     let history = removal_history_revision();
     let prior = group2_admission();
     let prior_bytes = encode(&prior);
-    let recheck = || {
+    let recheck = || -> Outcome<()> {
         admission_configuration_clear()?;
         if group_inventory_binding().as_ref() != Some(&pinned) || removal_history_revision() != history || encode(&group2_admission()) != prior_bytes {
             return Err("Account configuration changed during authorization".into());
