@@ -1,4 +1,8 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import RemovalReceiver "../../shared/RemovalReceiver";
+import RemovalEndpoints "../../shared/RemovalEndpoints";
+import Map "mo:core/Map";
+import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -21,8 +25,15 @@ persistent actor class Main(governorInit : Principal) = this {
     case (?id) ?Principal.fromText(id); case null null
   };
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
+  var removal_subjects : Map.Map<Principal, Text>;
+  var removal_active : Map.Map<Principal, Nat>;
+  transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
+  include RemovalEndpoints(removalReceiver, Principal.fromActor(this), func _ = 0);
   func admitAccount(subject : Principal) : async () {
-    if (not (await accountAdmission.eligible(subject))) Runtime.trap("Account admission denied or unavailable");
+    if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
+    let eligible = await accountAdmission.eligible(subject);
+    if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
     if (accountAdmissionEnabled) Runtime.trap("Use protected consensus account read");
