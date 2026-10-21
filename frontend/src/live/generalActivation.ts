@@ -62,6 +62,13 @@ export async function routingActive(ctx: FeatureBackendContext): Promise<boolean
   return (await generalRoutingStatus(ctx)).active;
 }
 
+/** On-chain deployment name from the approved snapshot. Every shard_router
+ * call must send this, not the frontend's own target alias. */
+export function generalRoutingDeploymentAlias(): string | null {
+  const s = ROUTING_GATES_SNAPSHOT;
+  return s && s.approved === true ? s.targetAlias : null;
+}
+
 const inventory = (g: { domains: readonly { domain: string; canisterId: string }[]; photoStore?: string | null }): string =>
   [...g.domains.map(d => `${d.domain}=${d.canisterId}`)].sort().join(',') + '|' + (g.photoStore ?? '');
 
