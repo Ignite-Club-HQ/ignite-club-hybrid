@@ -34,15 +34,11 @@ const router = Actor.createActor<_SERVICE>(idlFactory, { agent, canisterId: Prin
 const ok = <T>(r: { Ok: T } | { Err: string }): T => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
 
 const saveFile = (path: string, data: string) => {
-  const { mkdirSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync } = await0(path);
-  function await0(p: string) {
-    const d = dirname(resolve(p)); mkdirSync(d, { recursive: true });
-    const temp = `${p}.tmp`, fd = openSync(temp, 'w', 0o600);
-    try { writeFileSync(fd, data); fsyncSync(fd); } finally { closeSync(fd); }
-    renameSync(temp, p);
-    const dir = openSync(d, 'r'); try { fsyncSync(dir); } finally { closeSync(dir); }
-    return { mkdirSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync };
-  }
+  const dir = dirname(resolve(path)); mkdirSync(dir, { recursive: true });
+  const temp = `${path}.tmp`, fd = openSync(temp, 'w', 0o600);
+  try { writeFileSync(fd, data); fsyncSync(fd); } finally { closeSync(fd); }
+  renameSync(temp, path);
+  const handle = openSync(dir, 'r'); try { fsyncSync(handle); } finally { closeSync(handle); }
 };
 const saveJson = (path: string, data: unknown) => saveFile(path, JSON.stringify(data, (_, v) => typeof v === 'bigint' ? String(v) : v, 2));
 
