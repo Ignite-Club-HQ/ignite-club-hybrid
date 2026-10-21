@@ -1,6 +1,6 @@
 /** Exact bounded opening evidence. The check report is not a grant:
  * only the governor-signed router opening call may authorize new placement. */
-import { ADMISSION_FLAG } from './groupRemovalWiring';
+import { ADMISSION_FLAG, ADMISSION_AUTHORITY } from './groupRemovalWiring';
 
 export type ServiceCheck = { name: string; canisterId: string; subnetId: string; moduleHash: string };
 export type ObservedService = ServiceCheck & { controllers: string[]; running: boolean; cycles: bigint; heapBytes: bigint;
@@ -75,4 +75,19 @@ export function verifyOwnerReciprocalConfiguration(spec: OwnerCheckSpec & { iden
       value(identityConfig, 'target_alias') !== spec.targetAlias || value(identityConfig, 'deployment_id') !== spec.deploymentId ||
       value(identityConfig, 'host') !== spec.host || value(identityConfig, 'network_kind') !== 'public_mainnet' ||
       value(identityConfig, 'bound_deletion_released') !== 'true') throw new Error('Bound deletion configuration is not ready');
+  // Environment settings on destinations alone cannot prove the identity
+  // service actually permits their consensus eligibility calls.
+  const admissionServices = observed.filter(s => s.environment.some(e => e.name === ADMISSION_FLAG && e.value === '1'));
+  if (admissionServices.length) {
+    if (value(identityConfig, 'account_admission_released') !== 'true') {
+      throw new Error('Account admission is not released on the shared identity service; group settings alone cannot authorize membership reads. Do not enable rehearsal flags to bypass this check.');
+    }
+    for (const service of admissionServices) {
+      const bindings = service.environment.filter(e => e.name === ADMISSION_AUTHORITY);
+      if (bindings.length !== 1 || bindings[0].value !== spec.identityAccess ||
+          !identityConfig.some(r => r[0] === 'eligibility_authority' && r[1] === service.canisterId)) {
+        throw new Error(`Account eligibility reader is not authorized: ${service.name}`);
+      }
+    }
+  }
 }

@@ -9,6 +9,27 @@ controls, replacing the superseded owner-only trial
 
 ## Order of operations (each step is its own GitHub run)
 
+### Account admission rejection during creation (22 October 2026)
+
+`read_my_club_memberships_indexed` can reject with `Account admission denied or
+unavailable` even after the old opening checks passed. Those checks verified
+destination environment settings and the separately released bound-deletion
+connection, but not whether shared identity permits the destination's
+`read_principal_eligibility` call. The current identity source still protects
+that endpoint behind the unreleased cross-group rehearsal gate and its
+authorized-reader inventory. Destination settings alone do not release it.
+
+The corrected check requires governor-read identity evidence
+`account_admission_released=true` plus `eligibility_authority` for each enabled
+destination. Missing evidence blocks check/snapshot/open. This change does not
+release admission, register readers, alter deployed settings, or fix live
+creation by itself. Do not set rehearsal flags, disable admission, or fall back
+to shared canisters. A separately verified production-safe admission connection
+is still needed; publishing alone cannot repair the live authorization.
+
+The app shows a short account-connection message instead of dumping the replica
+request, headers and identifiers into the pop-up; technical details stay in logs.
+
 ### Repair for the club-creation approval error (22 October 2026)
 
 Ordinary club reservations previously advanced the same revision used by the
