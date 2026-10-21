@@ -30,7 +30,8 @@ test('closes an interrupted top-up after on-chain verification', async () => {
   assert.equal(r.data.topupsComplete, true); assert.deepEqual(r.remaining, ['C']);
   const { assertNoOpenPayment } = await import('./media-card-funding-policy.mjs');
   assert.doesNotThrow(() => assertNoOpenPayment([r.data]));
-  assert.throws(() => finishInterruptedDecision({ ...args, liveCycles: () => '990' }), /never replay/);
+  const unapplied = finishInterruptedDecision({ ...args, liveCycles: () => '990' });
+  assert.equal(unapplied.data.transfers[1].phase, 'not-applied'); assert.deepEqual(unapplied.remaining, ['B', 'C']);
   assert.throws(() => finishInterruptedDecision({ ...args, confirm: 'yes', liveCycles: () => '1500' }));
   assert.throws(() => finishInterruptedDecision({ ...args, records: [{ path: 'p', data: { ...records[0].data, phase: 'checkout-ready' } }], liveCycles: () => '1500' }));
 });
