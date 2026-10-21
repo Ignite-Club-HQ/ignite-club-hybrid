@@ -92,7 +92,7 @@
     "feeCycles": "100000000",
     "targetT": "1.5"
   },
-  "phase": "transferring",
+  "phase": "topups-complete",
   "createdAt": "2026-10-21T06:46:39.608Z",
   "order": {
     "order_id": "co-53-a19ddede5da0cad536f480e606b77c04",
@@ -191,5 +191,17 @@
       "phase": "verified",
       "afterCycles": "1499985652210"
     }
-  ]
+  ],
+  "topupsComplete": true,
+  "closedInterrupted": {
+    "at": "2026-10-21T07:23:08.475Z",
+    "remaining": [
+      "insights_domain",
+      "notification_queue",
+      "pii_access_control",
+      "timer_jobs",
+      "media_blob_store"
+    ],
+    "note": "Interrupted top-up closed after on-chain verification. Remaining canisters need a fresh top-up run."
+  }
 }
