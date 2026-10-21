@@ -5,7 +5,7 @@
  * about unregistered groups; mutates nothing else.
  * Usage: tsx scripts/report-group-health.ts <operator.pem> <report.json>
  * Env: ICP_HOST (default https://icp-api.io). */
-import { writeFileSync, mkdirSync, openSync, writeSync, fsyncSync, closeSync, renameSync } from 'node:fs';
+import { mkdirSync, openSync, writeSync, fsyncSync, closeSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { Actor, HttpAgent, AnonymousIdentity } from '@icp-sdk/core/agent';
