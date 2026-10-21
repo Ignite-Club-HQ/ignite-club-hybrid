@@ -75,6 +75,7 @@ export async function restoreGroup(inventory, checkpoint, adapter, journal) {
   checkCheckpoint(inventory, checkpoint);
   const saved = await journal.read();
   if (!saved || saved.binding !== checkpoint.binding || saved.pending || !['checkpointed', 'restored'].includes(saved.phase)) throw Error('Unknown recovery outcome requires reconciliation');
+  if (digest(saved.snapshots) !== digest(checkpoint.snapshots) || digest(saved.anchor) !== digest(checkpoint.anchor) || digest(saved.semanticHistory) !== digest(checkpoint.semanticHistory)) throw Error('Checkpoint does not match durable recovery intent');
   await stopAll(inventory, adapter);
   const anchor = await adapter.readIndependentAnchor(checkpoint.binding);
   if (digest(anchor) !== digest(checkpoint.anchor) || await adapter.verifyHistoryAgainstAnchor(checkpoint.semanticHistory, anchor) !== true) throw Error('Rollback checkpoint rejected');
