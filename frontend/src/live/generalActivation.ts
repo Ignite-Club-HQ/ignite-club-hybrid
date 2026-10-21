@@ -55,8 +55,8 @@ export async function routingActive(ctx: FeatureBackendContext): Promise<boolean
   return (await generalRoutingStatus(ctx)).active;
 }
 
-const inventory = (g: { domains: readonly { domain: string; canisterId: string }[]; photoStore?: string | null }) =>
-  JSON.stringify([...g.domains.map(d => [d.domain, d.canisterId] as const)].sort(([a], [b]) => a.localeCompare(b)), null ? null : null) + '|' + (g.photoStore ?? '');
+const inventory = (g: { domains: readonly { domain: string; canisterId: string }[]; photoStore?: string | null }): string =>
+  [...g.domains.map(d => `${d.domain}=${d.canisterId}`)].sort().join(',') + '|' + (g.photoStore ?? '');
 
 async function compute(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   if (!ctx.target.canisterIds?.shard_router) return { active: false, missing: ['no group router on this deployment'] };
