@@ -671,6 +671,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not (do { let removalReply = await ownsInbox(caller, captured.user); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })) return #Err("Not your notification");
     let index = switch (findIndex(id)) { case null return #Err("Unknown notification"); case (?i) i };
     if (items[index] != captured) return #Err("Notification changed");
+    if (captured.status == #Processing) return #Err("Notification delivery must settle before deletion");
     items := items.filter(func(item) = item.id != id); clearLease(id); #Ok
   
     } finally { removalReceiver.leave(caller) };
