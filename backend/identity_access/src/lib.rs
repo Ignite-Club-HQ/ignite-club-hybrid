@@ -353,7 +353,7 @@ struct PrincipalEligibility {
     denied_through_version: Option<u64>,
 }
 fn principal_eligibility(subject: Principal) -> PrincipalEligibility {
-    let account = account_for_write(subject).ok();
+    let account = account_for_write(subject).ok().filter(|a| !DELETION_TICKETS.with(|m| m.borrow().contains_key(&a.id)));
     PrincipalEligibility {
         subject,
         decision: if account.is_some() { EligibilityDecision::Eligible } else { EligibilityDecision::Denied },
@@ -2730,6 +2730,7 @@ mod tests {
         account.status=AccountStatus::Active;put_account(&account);
         DELETION_TICKETS.with(|m|m.borrow_mut().insert(account.id.clone(),vec![0]));
         assert!(admission_configuration_clear().is_err());
+        assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Denied);
         DELETION_TICKETS.with(|m|m.borrow_mut().remove(&account.id));
         erase_account_core(&mut empty_core_state(principal(93)),&account).unwrap();
         assert_eq!(authority_eligibilities(reader,vec![user]).unwrap()[0].decision,EligibilityDecision::Denied);

@@ -60,7 +60,7 @@ const original=await observe();
 const live=await registry();
 const group=live.groups.find(g=>g.id==='g2'),placement=live.placements.find(p=>p.group_id==='g2');
 if (!group || !placement || placement.deployment_id!=='mainnet' || placement.host!=='https://icp-api.io' || placement.network_kind!=='public_mainnet') throw new Error('Exact registered mainnet Group 2 required');
-const targets=ADMISSION_DOMAINS.map(name=>({name,id:group.domains.find(d=>d.domain===name)?.canister.toText()}));
+const targets:{name:string;id:string|undefined}[]=ADMISSION_DOMAINS.map(name=>({name,id:group.domains.find(d=>d.domain===name)?.canister.toText()}));
 targets.push({name:'media_blob_store',id:group.photo_store[0]?.toText()});
 if(targets.some(t=>!t.id)||new Set(targets.map(t=>t.id)).size!==12)throw new Error('Complete 12 Group 2 admission services required');
 const provision=JSON.parse(readFileSync(new URL('deploy/groups/g2/provision.json',root),'utf8'));
