@@ -112,6 +112,11 @@ if (action === 'register-closed') {
   const provision = JSON.parse(readFileSync(resolve(spec.provisionFile), 'utf8'), (_, x) => x?.$bigint ? BigInt(x.$bigint) : x) as Provision;
   if (provision.groupId !== 'g2' || !['checked', 'configured'].includes(provision.phase) || provision.pending) throw new Error('Complete configured g2 provision required');
   if (!provision.dedicatedBlobStore?.installed) throw new Error('Group 2 needs its own installed photo store');
+  // Mirror shard_router groups::validate so a bad approval stops before any router call.
+  if (!(BigInt(spec.heapBudgetBytes) > 0n && BigInt(spec.heapBudgetBytes) <= 3n * 1024n ** 3n) || !(BigInt(spec.minCycles) > 0n)
+    || !(spec.maxClubs > 0 && spec.maxClubs <= 100_000)) {
+    throw new Error('Approval budgets outside router limits (heapBudgetBytes 1..3 GiB, minCycles > 0, maxClubs 1..100000)');
+  }
   const { group, placement } = routerGroupRecord(provision, { secret_workload_identity: spec.workloadIdentity },
     { targetAlias: spec.targetAlias, deploymentId: spec.deploymentId, deploymentRevision: BigInt(spec.deploymentRevision), host: spec.host,
       networkKind: 'public_mainnet', primarySubnet: spec.primarySubnet, approvedSubnets: [spec.primarySubnet], additionalSubnetsEnabled: false },
