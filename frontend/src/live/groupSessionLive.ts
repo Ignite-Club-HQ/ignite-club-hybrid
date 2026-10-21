@@ -38,6 +38,8 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
         snapshot.groups = snapshot.groups.filter(g => g.id === ownerGroupId);
         snapshot.placements = snapshot.placements.filter(p => p.group_id === ownerGroupId);
       }
+      onChainAlias = snapshot.groups[0]?.target_alias;
+      if (!onChainAlias || snapshot.groups.some(g => g.target_alias !== onChainAlias)) throw new Error('Mixed group deployment aliases');
       const first = snapshot.placements[0];
       if (!first) throw new Error('No complete group placement');
       for (const p of snapshot.placements) {
@@ -52,7 +54,7 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
           if (!(GROUP_DOMAINS as readonly string[]).includes(d.domain)) throw new Error('Unknown group domain');
           return { domain: d.domain as GroupDomain, canisterId: d.canister.toText() };
         }), photoStore: g.photo_store?.[0]?.toText() })),
-        deployment: { id: first.deployment_id, alias: ctx.target.alias, networkKind: first.network_kind, host: first.host,
+        deployment: { id: first.deployment_id, alias: onChainAlias, networkKind: first.network_kind, host: first.host,
           revision: first.deployment_revision, enabled: true, additionalSubnetsEnabled: first.additional_subnets_enabled,
           primarySubnet: first.primary_subnet.toText(), approvedSubnets: first.approved_subnets.map(s => s.toText()) },
         bindings: snapshot.placements.map(p => ({ groupId: p.group_id, deploymentId: p.deployment_id, deploymentRevision: p.deployment_revision,
@@ -62,6 +64,7 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
           }) })),
       };
     },
+    deploymentAlias: () => onChainAlias,
     async readMemberships(context, offset, limit) {
       const { actor } = await connectLiveClubDomain(context.target, context.identity);
       const reply = await actor.read_my_club_memberships(offset, limit);
