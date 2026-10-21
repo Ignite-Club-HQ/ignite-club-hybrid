@@ -44,6 +44,15 @@
     "feeCycles": "100000000",
     "targetT": "1.5"
   },
-  "phase": "already-funded",
-  "createdAt": "2026-10-21T07:25:04.492Z"
+  "phase": "transferring",
+  "createdAt": "2026-10-21T07:25:04.492Z",
+  "transfers": [
+    {
+      "id": "z57nw-dyaaa-aaaal-qxp4q-cai",
+      "name": "insights_domain",
+      "amount": "504921457165",
+      "beforeCycles": "995076343833",
+      "phase": "transferring"
+    }
+  ]
 }
