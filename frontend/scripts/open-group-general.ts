@@ -6,7 +6,7 @@
  * their assignments and access either way. No deploy, install or funding.
  * Usage: tsx scripts/open-group-general.ts <action> <approval.json> <operator.pem> <report.json>
  * Env: CONFIRMATION (REGISTER GROUP 2 CLOSED / OPEN GROUP 2 TO EVERYONE / CLOSE GROUP 2 TO NEW CLUBS) */
-import { readFileSync, writeFileSync, openSync, fsyncSync, closeSync, renameSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, openSync, fsyncSync, closeSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { Actor, HttpAgent, CanisterStatus } from '@icp-sdk/core/agent';
 import { IDL } from '@icp-sdk/core/candid';
@@ -44,14 +44,12 @@ const agent = await HttpAgent.create({ host: spec.host, identity });
 const router = Actor.createActor<_SERVICE>(idlFactory, { agent, canisterId: Principal.fromText(spec.routerId) });
 const ok = <T>(r: { Ok: T } | { Err: string }): T => { if ('Err' in r) throw new Error(r.Err); return r.Ok; };
 const save = (v: unknown) => {
-  mkdirSync2(dirname(out));
+  mkdirSync(dirname(out), { recursive: true });
   const temp = `${out}.tmp`, fd = openSync(temp, 'w', 0o600);
   try { writeFileSync(fd, JSON.stringify(v, (_, x) => typeof x === 'bigint' ? String(x) : x, 2)); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(temp, out);
   const directory = openSync(dirname(out), 'r'); try { fsyncSync(directory); } finally { closeSync(directory); }
 };
-function mkdirSync2(d: string) { (await0(d)); function await0(p: string) { const { mkdirSync } = nodeFs(); mkdirSync(p, { recursive: true }); } }
-function nodeFs() { return { mkdirSync: (p: string, o: { recursive: boolean }) => require('node:fs').mkdirSync(p, o) }; }
 
 const readRegistry = () => readPinnedGroupRegistry((rev, cursor, limit) => router.read_group_registry_page(spec.targetAlias, rev, cursor, limit));
 const readConfig = async (id: string, resultVariant = false) => {
@@ -118,8 +116,10 @@ if (action === 'register-closed') {
     { targetAlias: spec.targetAlias, deploymentId: spec.deploymentId, deploymentRevision: BigInt(spec.deploymentRevision), host: spec.host,
       networkKind: 'public_mainnet', primarySubnet: spec.primarySubnet, approvedSubnets: [spec.primarySubnet], additionalSubnetsEnabled: false },
     { maxClubs: spec.maxClubs, heapBudgetBytes: BigInt(spec.heapBudgetBytes), minCycles: BigInt(spec.minCycles) }, false);
+  const registry = await readRegistry();
+  const existing = registry.groups.find(g => g.id === 'g2');
+  if (existing?.accepting) throw new Error('Group 2 is already open; run close first, not register-closed');
   const revision = await router.version();
-  if (registry_group_open()) throw new Error('Group 2 is already registered and open; run close first, not register-closed');
   save({ action, pending: 'register', revision: String(revision), group, placement });
   const closed = ok(await router.register_group(group, revision));
   save({ action, closedRevision: String(closed), pending: 'placement', group, placement });
@@ -179,9 +179,4 @@ if (action === 'register-closed') {
     save({ action, closedRevision: String(newRevision), accepting: false });
     console.log('Group 2 is closed to new clubs. Existing clubs keep their assignment and access.');
   }
-}
-
-function registry_group_open(): boolean {
-  // Cheap synchronous guard used before registration; the real read is async.
-  return false;
 }
