@@ -1,5 +1,9 @@
 # Roadmap — ICP MCP / ChatGPT integration
 
+## Current request — test Group 2 opening (21 October 2026, 02:14 UTC)
+- [ ] Run the focused two-group access/removal, notification and activation-gate rehearsals; identify the exact remaining release dependencies without bypassing guards.
+- [ ] Open g2 only after all existing activation gates pass; GitHub-held deploy identity and live signed-in/device acceptance remain external prerequisites.
+
 ## Current request — Group 2 installation failures
 - [x] Correct compiled-file discovery using final CLI artifacts; nine focused checks pass.
 - [x] Reuse the existing notification-worker seed in closed install/configure workflows; eight focused checks and both workflow configurations pass. Live installation requires the owner's fresh GitHub run and existing worker secret or explicit principal variable.
