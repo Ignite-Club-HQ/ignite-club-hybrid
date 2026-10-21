@@ -145,5 +145,5 @@ Partial completion; **not release-ready**.
 
 ### Still not release-complete
 - The four Supabase drafts need full live-schema/policy/trigger compatibility verification and managed migration application. Until then, new protected RPCs do not exist live and affected Supabase screens can report read errors; never restore raw-data fallback.
-- ICP grade feeds refuse `hasMore` pages instead of importing partial data. Bounded cursor pagination and actual configured upstream acceptance remain unfinished; current tests cover a complete single page and local stored-stat authorization, not a live PlayHQ sync.
+- ICP grade/stat feeds now follow bounded cursor pages (10 pages, 200 fixtures, 2,000 stats), refusing missing/repeated/unsafe cursors and oversized partial imports. Parser tests and production compile pass; actual configured upstream acceptance remains unverified, including whether real cursors use the accepted unreserved URL alphabet.
 - Signed-in History/calendar/result/report/PlayHQ acceptance and mainnet canister upgrades remain release prerequisites. Do not claim the complete owner request or production rollout is finished from local tests.
