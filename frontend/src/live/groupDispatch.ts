@@ -10,6 +10,7 @@ import type { GroupDomain, ClubAssignment } from './groupRouting';
 import { activationStatus, SHIPPED_GATES, type ActivationGates } from './groupActivation';
 import { generalRoutingStatus, generalRoutingDeploymentAlias } from './generalActivation';
 import { clearOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
+import { markScopedContext } from './scopedContext';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
@@ -110,8 +111,9 @@ export function createClubDispatcher(deps: DispatchDeps) {
     },
     /** Data spanning the caller's clubs: shared canisters + every group, asked
      * at the same time (load time = slowest group, not the sum). */
-    readAcross: async <T, R>(feature: FeatureArea, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>, merge: (parts: T[]) => R): Promise<R> => {
-      if (!await active()) return merge([await deps.legacy(feature, '', fn)]);
+    readAcross: async <T, R>(feature: FeatureArea, domain: GroupDomain, fn0: (ctx: FeatureBackendContext) => Promise<T>, merge: (parts: T[]) => R): Promise<R> => {
+      if (!await active()) return merge([await deps.legacy(feature, '', fn0)]);
+      const fn = (ctx: FeatureBackendContext) => fn0(ctx && typeof ctx === 'object' ? markScopedContext(ctx) : ctx);
       const { s } = await sessionFor(deps);
       const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn), s.readEveryGroup(domain, async ctx => [await fn(ctx)], Number.MAX_SAFE_INTEGER)]);
       return merge([shared, ...groups]);
