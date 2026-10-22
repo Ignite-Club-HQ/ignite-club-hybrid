@@ -80,6 +80,20 @@ describe('integrated deployment-bound group read session', () => {
       f.registry.revision += 1n; return [];
     })).rejects.toThrow('registry changed');
   });
+  it('concurrent all-group reads share one post-read registry confirmation', async () => {
+    const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
+    const before = vi.mocked(f.transport.readRegistry).mock.calls.length;
+    await Promise.all([1, 2, 3, 4].map(() => s.readEveryGroup('club_domain', async () => [])));
+    expect(vi.mocked(f.transport.readRegistry).mock.calls.length - before).toBe(1);
+  });
+  it('a read finishing after a confirmation started still gets its own fresh check', async () => {
+    const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
+    let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    const fast = s.readEveryGroup('club_domain', async () => []);
+    const slow = s.readEveryGroup('club_domain', async () => { await gate; f.registry.revision += 1n; return []; });
+    await fast; release();
+    await expect(slow).rejects.toThrow('registry changed');
+  });
   it('discovers both groups then routes each full group context preserving duplicates and order', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
     expect(s.clubIds).toEqual(['club-a', 'club-b']);
