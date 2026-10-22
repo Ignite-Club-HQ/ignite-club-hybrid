@@ -126,7 +126,7 @@ async function publishChatImageToGallerySupabase(
       contentType: blob.type || `image/${ext}`,
       upsert: false,
       cacheControl: "31536000",
-    }));
+    }), supabase, teamId);
   if (uploadError) {
     console.error("[publishChatImageToGallery] upload failed", uploadError);
     throw new Error("Could not save image to the gallery");

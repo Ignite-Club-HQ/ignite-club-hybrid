@@ -25,6 +25,7 @@ import QuotaOperation "quotaOperation";
 import StableBytes "stableBytes";
 import MultiBytes "multiRegionBytes";
 import RetentionPage "retentionPage";
+import MediaRetentionPolicy "mediaRetentionPolicy";
 import MediaInventory "mediaInventory";
 import RetainedProtocol "retainedProtocol";
 import RetainedQuota "../../club_domain/src/mediaRetainedQuota";
@@ -1481,57 +1482,31 @@ persistent actor MediaBlobStore {
         }
       }
     };
-    let now = Time.now();
-    let stamps = Map.empty<Text, Int>();
-    for ((p, t) in blob_uploaded_at.values()) { Map.add(stamps, Text.compare, p, t) };
-    let expiredByClub = Map.empty<Text, [Text]>();
-    var fresh : [(Text, Int)] = [];
-    for (b in blobs.values()) {
-      switch (Map.get(stamps, Text.compare, b.path)) {
-        case null { fresh := fresh.concat([(b.path, now)]) };
-        case (?t) {
-          if (now - t > RETENTION_NS) {
-            switch (categoryForPath(b.path), clubIdFromPath(b.path)) {
-              case (?_, ?clubId) {
-                let prev = switch (Map.get(expiredByClub, Text.compare, clubId)) { case (?xs) xs; case null [] };
-                Map.add(expiredByClub, Text.compare, clubId, prev.concat([b.path]));
-              };
-              case _ {};
-            };
-          };
-        };
+    // Bound legacy work by files, not clubs: one large club must not issue
+    // unbounded lookups/deletes. Materialize paths before the first await.
+    let indices = RetentionPage.indices(blobs.size(), legacy_retention_cursor, 50);
+    legacy_retention_cursor := if (blobs.size() == 0) 0 else (legacy_retention_cursor + indices.size()) % blobs.size();
+    let paths = indices.map(func(index) { blobs[index].path });
+    for (p in paths.values()) {
+      if (retainedBlocked() or quota_mode == #frozen) break;
+      if (mediaFenced(p) or categoryForPath(p) == null or clubIdFromPath(p) == null) continue;
+      let stamp = switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
+        case (?(_, t)) t;
+        case null {
+          // Unknown ages are never considered expired.
+          blob_uploaded_at := blob_uploaded_at.concat([(p, Time.now())]);
+          continue
+        }
       };
-    };
-    if (fresh.size() > 0) { blob_uploaded_at := blob_uploaded_at.concat(fresh) };
-    // Cap club lookups per sweep; the rest are handled on following days.
-    // Materialize bounded club IDs before awaits; rotate past Pro/unavailable
-    // clubs so the same first 50 never starve later free clubs.
-    let clubs = Iter.toArray(expiredByClub.entries());
-    let indices = RetentionPage.indices(clubs.size(), legacy_retention_cursor, 50);
-    legacy_retention_cursor := if (clubs.size() == 0) 0 else (legacy_retention_cursor + indices.size()) % clubs.size();
-    for (index in indices.values()) {
-        let (clubId, paths) = clubs[index];
-        let status = await pathAllowance("clubs/" # clubId # "/photos/retention");
-        if (status == null or (switch (status) { case (?a) a.premium; case null true })) continue;
-          if (media_transfer_fences.get(clubId) != null or retainedBlocked() or quota_mode == #frozen) continue;
-          let doomed = Map.empty<Text, ()>();
-          for (p in paths.values()) {
-            // A replacement during subscription lookup must not be deleted.
-            switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
-              // Legacy team media stays until a bounded scoped-retention pass
-              // can verify its team entitlement; never erase Pro team files.
-              case (?(_, stamp)) { if (Time.now() - stamp > RETENTION_NS and mediaTeam(p) == null) Map.add(doomed, Text.compare, p, ()) };
-              case null {}
-            }
-          };
-          let pathsToDelete = Iter.toArray(doomed.keys());
-          for (p in pathsToDelete.values()) {
-            if (retainedBlocked() or quota_mode == #frozen or mediaFenced(p)) break;
-            switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
-              case (?(_, stamp)) { if (Time.now() - stamp > RETENTION_NS) { ignore await deleteRetained(p) } };
-              case null {}
-            }
-          };
+      if (Time.now() - stamp <= RETENTION_NS) continue;
+      let premium = switch (await pathAllowance(p)) { case (?a) ?a.premium; case null null };
+      if (mediaFenced(p) or retainedBlocked() or quota_mode == #frozen) continue;
+      switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
+        case (?(_, current)) {
+          if (MediaRetentionPolicy.mayDelete(premium, stamp, current, Time.now(), RETENTION_NS)) ignore await deleteRetained(p)
+        };
+        case null {}
+      }
     };
   };
   transient let _retentionTimer = Timer.recurringTimer<system>(#seconds(86_400), sweepRetention);

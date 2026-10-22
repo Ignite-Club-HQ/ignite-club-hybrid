@@ -554,7 +554,7 @@ export function UploadPhotoSheet({
 
     const { error: uploadError } = await uploadWithinClubMediaAllowance(clubId, file.size, () => supabase.storage
       .from("photos")
-      .upload(storagePath, file, { cacheControl: "31536000" }));
+      .upload(storagePath, file, { cacheControl: "31536000" }), supabase, teamId);
     if (uploadError) throw uploadError;
     const storageUrl = `${"REDACTED_LAB_VALUE"}/storage/v1/object/public/photos/${storagePath}`;
 
