@@ -12,6 +12,7 @@ type Snapshot = DehydratedState['queries'][number];
 interface Stored { scope: string; savedAt: number; bytes: number; snapshot: Snapshot }
 type ScopeReader = () => string | null;
 const active = new Map<QueryClient, () => void>();
+const resetters = new Map<QueryClient, () => void>();
 let generation = 0;
 
 function currentPrincipal(): string | null {
@@ -113,7 +114,7 @@ export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, s
   if (!isIcp || typeof indexedDB === 'undefined') return () => {};
   let stopped = false; let timer: ReturnType<typeof setTimeout> | undefined;
   let idleHandle: number | undefined; let working = false;
-  let owner = scope(); const epoch = generation;
+  let owner = scope(); let epoch = generation;
   let initializedOwner: string | null = null;
   const pending = new Map<string, Query | null>();
   const sizes = new Map<string, number>();
@@ -128,7 +129,8 @@ export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, s
     const next = pending.entries().next(); if (next.done) return;
     const [hash, query] = next.value; pending.delete(hash); working = true;
     const writeOwner = owner;
-    const writeValid = () => valid() && owner === writeOwner;
+    const writeEpoch = epoch;
+    const writeValid = () => valid() && owner === writeOwner && generation === writeEpoch;
     try {
       if (initializedOwner !== writeOwner) {
         const records = await transaction<Stored[]>('readonly', s => s.getAll(), writeValid);
@@ -178,8 +180,14 @@ export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, s
     if (timer !== undefined) clearTimeout(timer);
     if (idleHandle !== undefined) idleApi.cancelIdleCallback?.(idleHandle);
     if (active.get(client) === stop) active.delete(client);
+    resetters.delete(client);
   };
   active.set(client, stop);
+  resetters.set(client, () => {
+    pending.clear(); sizes.clear(); initializedOwner = null; owner = null; epoch = generation;
+    if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
+    if (idleHandle !== undefined) { idleApi.cancelIdleCallback?.(idleHandle); idleHandle = undefined; }
+  });
   // Seed once, bounded; subsequent writes only inspect changed queries.
   for (const q of client.getQueryCache().getAll().slice(-MAX_QUERIES)) pending.set(q.queryHash, q);
   schedule();
@@ -188,9 +196,9 @@ export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, s
 
 export async function clearPersistedIcpQueryCache(): Promise<void> {
   generation++;
-  // Keep the subscriber alive for the next sign-in; old pending writes fail
-  // their generation guard. The auth provider reattaches after restoration.
-  for (const stop of [...active.values()]) stop();
+  // A new sign-in may happen without remounting App. Reset pending work while
+  // retaining its subscriber; in-flight old writes fail their captured epoch.
+  for (const reset of resetters.values()) reset();
   if (typeof indexedDB === 'undefined') return;
   try { await transaction('readwrite', s => s.clear()); } catch { /* best effort */ }
 }

@@ -17,6 +17,7 @@ import { readClubsInOwnGroups, settleAll } from "@/live/crossGroupClubs";
 import { readContentInScope } from "@/live/contentRouting";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { resolveInboxAuthorNames, toInboxPreviewMessage } from "./inboxPreviewHydration";
+import { uniqueGroupSummaries } from "./uniqueGroupSummaries";
 
 async function getIcpFeatureBackendContext(): Promise<FeatureBackendContext> {
   const identity = await getCurrentInternetIdentity();
@@ -391,7 +392,7 @@ async function fetchIcpChatGroupsWithMessages() {
         clubs: { name: club.name, logo_url: club.logo_url?.[0] ?? null, deleted_at: null, purged_at: null },
       }));
   }));
-  const groups = perClub.flat();
+  const groups = uniqueGroupSummaries(perClub.flat());
   // Each chat's club is known here: record it so opening the chat (and its
   // polls/photos) goes straight to the right group without asking every group.
   await import("@/live/groupDispatch").then(({ clubDispatch }) =>
