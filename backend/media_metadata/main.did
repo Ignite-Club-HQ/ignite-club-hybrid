@@ -16,6 +16,18 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
+type Result = 
+ variant {
+   Err: text;
+   Ok: Page__1;
+ };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
 type Reference = 
  record {
    content_hash: opt text;
@@ -24,12 +36,24 @@ type Reference =
    store: opt text;
    url: text;
  };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
 type Reaction = 
  record {
    asset_id: text;
    created_at_ms: nat64;
    kind: text;
    user: principal;
+ };
+type Page__1 = 
+ record {
+   assets: vec Asset;
+   next: opt Cursor;
+   scanned: nat;
  };
 type Page = 
  record {
@@ -54,6 +78,14 @@ type Main =
     (variant {
        Err: text;
        Ok: Reaction;
+     });
+   build_asset_page_index: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             complete: bool;
+             scanned: nat;
+           };
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
@@ -101,6 +133,8 @@ type Main =
        Ok: vec principal;
      }) query;
    list_assets: (club_id: text) -> (vec Asset) query;
+   list_assets_page: (club_id: text, cursor: opt Cursor, limit: nat) ->
+    (Result) query;
    list_comments: (asset_id: text) -> (vec Comment) query;
    list_gallery_chat_cards: (club_id: text, team_id: text) ->
     (vec GalleryChatCard) query;
@@ -116,6 +150,10 @@ type Main =
        err: text;
        ok: nat;
      });
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -124,15 +162,26 @@ type Main =
    read_account_get_gallery_chat_card: (card_id: text) ->
     (opt GalleryChatCard);
    read_account_list_assets: (club_id: text) -> (vec Asset);
+   read_account_list_assets_page: (club_id: text, cursor: opt Cursor, limit:
+    nat) -> (Result);
    read_account_list_comments: (asset_id: text) -> (vec Comment);
    read_account_list_gallery_chat_cards: (club_id: text, team_id: text) ->
     (vec GalleryChatCard);
    read_account_list_reactions: (asset_id: text) -> (vec Reaction);
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;
                    Ok: Page;
                  });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    register_asset: (club_id: text, kind: text, mime: text, checksum: 
     text, storage_path: text, visibility: text, expires_at_ms: nat64) ->
     (variant {
@@ -160,6 +209,11 @@ type Main =
     (variant {
        Err: text;
        Ok: GalleryChatCard;
+     });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
      });
    set_asset_scope: (asset_id: text, team_id: opt text, mini_league_id:
     opt text, competition_id: opt text, event_id: opt text, caption:
@@ -199,6 +253,12 @@ type GalleryChatCard =
    team_id: text;
    updated_at_ms: nat64;
    uploader_id: principal;
+ };
+type Cursor = 
+ record {
+   before: text;
+   club_id: text;
+   revision: nat;
  };
 type Comment = 
  record {
