@@ -1513,7 +1513,6 @@ persistent actor MediaBlobStore {
     legacy_retention_cursor := if (clubs.size() == 0) 0 else (legacy_retention_cursor + indices.size()) % clubs.size();
     for (index in indices.values()) {
         let (clubId, paths) = clubs[index];
-        {
           if (media_transfer_fences.get(clubId) != null or retainedBlocked() or quota_mode == #frozen) continue;
           let doomed = Map.empty<Text, ()>();
           for (p in paths.values()) {
@@ -1531,7 +1530,6 @@ persistent actor MediaBlobStore {
               case null {}
             }
           };
-        };
     };
   };
   transient let _retentionTimer = Timer.recurringTimer<system>(#seconds(86_400), sweepRetention);
