@@ -622,6 +622,18 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
+  'get_media_allowance' : ActorMethod<
+    [string, [] | [string]],
+    {
+        'Ok' : {
+          'limit_bytes' : bigint,
+          'premium' : boolean,
+          'team_scoped' : boolean,
+          'base_bytes' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'get_my_accessibility_prefs' : ActorMethod<
     [],
     { 'Ok' : [] | [string] } |
