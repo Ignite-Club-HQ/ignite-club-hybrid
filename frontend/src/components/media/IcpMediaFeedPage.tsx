@@ -166,7 +166,8 @@ function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
       const misses: LiveAssetView[] = [];
       await Promise.all(
         pending.map(async (asset) => {
-          const src = asset.sourceUrl!;
+          const src = asset.sourceUrl;
+          if (!src) return;
           const known = sessionPhotoUrls.get(src) ?? localUploadPreviews.get(src);
           if (known) return show(asset, known, false);
           const cached = await readCachedIcpBlobObjectUrl(src).catch(() => null);
@@ -176,12 +177,13 @@ function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
         }),
       );
       const order = new Map(pending.map((a, i) => [a.id, i]));
-      misses.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+      misses.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
       const worker = async () => {
         while (!cancelled && misses.length) {
-          const asset = misses.shift()!;
+          const asset = misses.shift();
+          if (!asset?.sourceUrl) continue;
           try {
-            const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl!);
+            const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl);
             if (!cancelled) show(asset, resolved ?? UNAVAILABLE_PHOTO_URL, !!resolved);
           } catch (err) {
             console.warn("[icp-media-feed] could not load asset", asset.id, err);
@@ -224,7 +226,7 @@ function writeFeedSnapshot(principal: string, feed: LiveMediaFeed) {
   }
 }
 
-async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaFeed> {
+async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: LiveMediaFeed) => void): Promise<LiveMediaFeed> {
   // list_clubs returns every club on the canister, so scope it to the
   // caller's own role grants — same membership the Clubs page uses.
   const grants = await getLiveMyRoleGrants(ctx);
@@ -258,7 +260,8 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
   }[] = [];
 
   const clubById = new Map(clubsRaw.map(club => [club.id, club]));
-  const result = await readMediaSources(clubsRaw.map(club => club.id), async clubId => {
+  let sources: MediaSourceStatus[] = clubsRaw.map(club => ({ clubId: club.id, state: "loading" }));
+  const sourceRead = readMediaSources(clubsRaw.map(club => club.id), async clubId => {
       const club = clubById.get(clubId);
       if (!club) throw new Error('Club source unavailable');
       // Soft-deleted clubs keep their canister records (and assets) — never
@@ -297,8 +300,9 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
         if (asset.deleted) continue;
         if (asset.kind === "photo" || asset.kind === "video") rawAssets.push(asset);
       }
-    });
+    }, snapshot => { sources = snapshot.sources; onUpdate?.(buildFeed()); });
 
+  function buildFeed(): LiveMediaFeed {
   // Photos are unlocked in the background by the page (see useResolvedAssetUrls)
   // so the feed paints as soon as the post list is known instead of waiting
   // for every encrypted photo to download and decrypt.
@@ -336,38 +340,12 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     groups.set(key, group);
   }
 
-  const posts: LiveMediaPost[] = await Promise.all(
-    [...groups.entries()].map(async ([key, group]) => {
+  const posts: LiveMediaPost[] = [...groups.entries()].map(([key, group]) => {
       const sorted = [...group].sort((a, b) => Number(a.created_at_ms - b.created_at_ms));
       const first = sorted[0];
       const ownerId = first.owner.toText();
-      const [reactionsRaw, commentsRaw] = await Promise.all([
-        readContentInScope(ctx, "media", { clubId: first.club_id }, scoped => listLiveReactions(scoped, first.id)),
-        readContentInScope(ctx, "media", { clubId: first.club_id }, scoped => listLiveComments(scoped, first.id)),
-      ]);
-      const reactions = (reactionsRaw as unknown as {
-        kind: string;
-        user: { toText(): string };
-      }[]).map((r) => ({
-        user_id: r.user.toText(),
-        reaction_type: r.kind,
-        profiles: { display_name: null as string | null, avatar_url: null },
-      }));
-      const comments = (commentsRaw as unknown as {
-        id: string;
-        body: string;
-        author: { toText(): string };
-        created_at_ms: bigint;
-        deleted: boolean;
-      }[])
-        .filter((c) => !c.deleted)
-        .map((c) => ({
-          id: c.id,
-          text: c.body,
-          user_id: c.author.toText(),
-          created_at: new Date(Number(c.created_at_ms)).toISOString(),
-          profiles: { display_name: null as string | null, avatar_url: null },
-        }));
+      const reactions: LiveReactionView[] = [];
+      const comments: LiveCommentView[] = [];
       const teamId = first.team_id[0] ?? null;
       const miniLeagueId = first.mini_league_id[0] ?? null;
       const competitionId = first.competition_id[0] ?? null;
@@ -391,38 +369,14 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
         reactions,
         comments,
       } satisfies LiveMediaPost;
-    }),
-  );
-
-  // Profiles for uploaders, reactors and commenters, looked up in one
-  // batch once every id is known.
-  const nameIds = new Set<string>();
-  for (const post of posts) {
-    nameIds.add(post.ownerId);
-    post.reactions.forEach((r) => nameIds.add(r.user_id));
-    post.comments.forEach((c) => nameIds.add(c.user_id));
-  }
-  let profileById = mediaProfileDirectory([]);
-  try {
-    const profiles = (await listLiveProfilesByIds(ctx, [...nameIds])) as unknown as {
-      account_id: string;
-      display_name: string;
-      avatar_ref: [] | [string];
-    }[];
-    profileById = mediaProfileDirectory(profiles);
-  } catch {
-    // Names fall back to "Member".
-  }
-  for (const post of posts) {
-    post.ownerName = profileById.get(post.ownerId)?.display_name ?? "Member";
-    post.ownerAvatarUrl = profileById.get(post.ownerId)?.avatar_url ?? null;
-    for (const r of post.reactions) r.profiles = profileById.get(r.user_id) ?? { display_name: null, avatar_url: null };
-    for (const c of post.comments) c.profiles = profileById.get(c.user_id) ?? { display_name: null, avatar_url: null };
-  }
+    });
 
   posts.sort((a, b) => b.createdAtMs - a.createdAtMs);
   options.clubs.sort((a, b) => a.name.localeCompare(b.name));
-  return { posts, options, sources: result.sources, incomplete: clubProfiles.failed > 0 || result.sources.some(source => source.state !== 'ready') };
+  return { posts, options: { clubs: [...options.clubs], teams: [...options.teams], miniLeagues: [...options.miniLeagues], competitions: [...options.competitions] }, sources: [...sources], incomplete: clubProfiles.failed > 0 || sources.some(source => source.state !== "ready") };
+  }
+  await sourceRead;
+  return buildFeed();
 }
 
 // ---------------------------------------------------------------------------
@@ -483,13 +437,16 @@ export function IcpMediaFeedPage() {
     // Last visit's feed shows instantly; the fresh one replaces it when ready.
     initialData: () => readFeedSnapshot(principal),
     initialDataUpdatedAt: 0,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const feed = await withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
-        icp: (ctx) => loadLiveMediaFeed(ctx),
+        icp: (ctx) => loadLiveMediaFeed(ctx, next => {
+          if (!signal.aborted) queryClient.setQueryData(["icp-media-feed", principal], next);
+        }),
       }, { shared: "person" });
+      if (signal.aborted) throw new Error("Media request cancelled");
       if (principal) writeFeedSnapshot(principal, feed);
       return feed;
     },
@@ -762,7 +719,10 @@ export function IcpMediaFeedPage() {
             </Button>
           </div>
         )}
-        {feedQuery.data?.incomplete && (
+        {feedQuery.data?.sources?.some(source => source.state === "loading") && (
+          <div role="status" className="flex items-center gap-2 py-3 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">Loading more media…</span></div>
+        )}
+        {feedQuery.data?.incomplete && !feedQuery.data.sources?.some(source => source.state === "loading") && (
           <div className="flex items-center justify-between gap-3 py-3" role="status">
             <p className="text-sm text-muted-foreground">Some club media couldn't be loaded.</p>
             <Button variant="outline" onClick={() => feedQuery.refetch()}>Try again</Button>
@@ -803,67 +763,11 @@ export function IcpMediaFeedPage() {
           ))}
           {posts.map((post, index) => (
             <div key={post.id}>
-              <article className="overflow-hidden rounded-xl border border-border bg-card">
-                <div className="flex items-center gap-3 px-3 py-2.5">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={post.ownerAvatarUrl || undefined} alt={post.ownerName} className="object-cover" />
-                    <AvatarFallback>{((post.ownerId === user?.id || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName).slice(0, 2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{(post.ownerId === user?.id || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{subtitleFor(post)}</p>
-                  </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {post.createdAtMs > 0 ? formatTimeShort(new Date(post.createdAtMs)) : ""}
-                  </span>
-                </div>
-
-                <div
-                  onTouchStart={() => startLongPress(post)}
-                  onTouchMove={cancelLongPress}
-                  onTouchEnd={cancelLongPress}
-                  onTouchCancel={cancelLongPress}
-                >
-                  <AlbumCarousel
-                    photos={post.assets.map((asset) => ({
-                      id: asset.id,
-                      // Still-unlocked photos pass no URL so the carousel's
-                      // LazyImage renders its pulsing skeleton until the
-                      // decrypted bytes arrive.
-                      file_url: asset.loading ? null : asset.url,
-                    }))}
-                    onTap={(i) => openPostLightbox(post, i)}
-                    priority={index < 2}
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 px-3 py-2">
-                  <EmojiReactions
-                    reactions={post.reactions}
-                    currentUserId={principal}
-                    onReact={(type) => reactionMutation.mutate({ post, emoji: type })}
-                    onRemove={() => {
-                      const mine = post.reactions.find((r) => r.user_id === principal);
-                      if (mine) reactionMutation.mutate({ post, emoji: mine.reaction_type, remove: true });
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 text-muted-foreground"
-                    onClick={() => { setCommentError(null); setCommentPost(post); }}
-                    aria-label="Comments"
-                  >
-                    <MessageCircle className="h-5 w-5" />
-                    {post.comments.length > 0 && (
-                      <span className="text-xs">{post.comments.length}</span>
-                    )}
-                  </button>
-                </div>
-
-                {post.caption && (
-                  <p className="px-3 pb-3 text-sm">{post.caption}</p>
-                )}
-              </article>
+              <MediaPostArticle post={post} principal={principal} userId={user?.id} profile={profile} index={index}
+                onReact={(item, emoji) => reactionMutation.mutate({ post: item, emoji })}
+                onRemove={(item, emoji) => reactionMutation.mutate({ post: item, emoji, remove: true })}
+                onComments={item => { setCommentError(null); setCommentPost(item); }}
+                onLongPress={startLongPress} onCancelPress={cancelLongPress} onPhoto={openPostLightbox} />
               {(index + 1) % 8 === 0 && (
                 <div className="mt-6">
                   <MediaSponsorTile seed={index} clubId={post.clubId} />
@@ -997,4 +901,102 @@ export function IcpMediaFeedPage() {
       </Sheet>
     </div>
   );
+}
+
+/** Each visible post owns its ancillary read; photos never wait for comments or profiles. */
+function MediaPostArticle({ post: base, principal, userId, profile, index, onReact, onRemove, onComments, onLongPress, onCancelPress, onPhoto }: {
+  post: LiveMediaPost; principal?: string; userId?: string;
+  profile: { display_name?: string | null; avatar_url?: string | null } | null;
+  index: number; onReact: (post: LiveMediaPost, emoji: string) => void; onRemove: (post: LiveMediaPost, emoji: string) => void;
+  onComments: (post: LiveMediaPost) => void; onLongPress: (post: LiveMediaPost) => void; onCancelPress: () => void;
+  onPhoto: (post: LiveMediaPost, index: number) => void;
+}) {
+  const details = useQuery({
+    queryKey: ['icp-media-post-details', principal, base.clubId, base.representativeAssetId],
+    enabled: !!principal,
+    queryFn: () => withFeatureBackend('media', {
+      supabase: async () => { throw new Error('unreachable'); },
+      icp: async ctx => {
+        const [rawReactions, rawComments] = await Promise.all([
+          listLiveReactions(ctx, base.representativeAssetId), listLiveComments(ctx, base.representativeAssetId),
+        ]);
+        const reactions: LiveReactionView[] = rawReactions.map(r => ({ user_id: r.user.toText(), reaction_type: r.kind }));
+        const comments = rawComments.filter(c => !c.deleted).map(galleryCommentFromReceipt);
+        const ids = [...new Set([base.ownerId, ...reactions.map(r => r.user_id), ...comments.map(c => c.user_id)])];
+        const profiles = await listLiveProfilesByIds(ctx, ids);
+        const directory = mediaProfileDirectory(profiles as unknown as Parameters<typeof mediaProfileDirectory>[0]);
+        return { reactions: reactions.map(r => ({ ...r, profiles: directory.get(r.user_id) })),
+          comments: comments.map(c => ({ ...c, profiles: directory.get(c.user_id) })),
+          ownerName: directory.get(base.ownerId)?.display_name ?? 'Member',
+          ownerAvatarUrl: directory.get(base.ownerId)?.avatar_url ?? null };
+      },
+    }, { clubId: base.clubId }),
+    retry: 1,
+  });
+  const post = details.data ? { ...base, ...details.data, comments: mergeGalleryComments(details.data.comments, base.comments) } : base;
+  return <>
+              <article className="overflow-hidden rounded-xl border border-border bg-card">
+                <div className="flex items-center gap-3 px-3 py-2.5">
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={post.ownerAvatarUrl || undefined} alt={post.ownerName} className="object-cover" />
+                    <AvatarFallback>{((post.ownerId === userId || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName).slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{(post.ownerId === userId || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{post.teamName ? `${post.clubName} · ${post.teamName}` : post.miniLeagueName ? `${post.clubName} · ${post.miniLeagueName}` : post.competitionName ? `${post.clubName} · ${post.competitionName}` : post.clubName}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {post.createdAtMs > 0 ? formatTimeShort(new Date(post.createdAtMs)) : ""}
+                  </span>
+                </div>
+
+                <div
+                  onTouchStart={() => onLongPress(post)}
+                  onTouchMove={onCancelPress}
+                  onTouchEnd={onCancelPress}
+                  onTouchCancel={onCancelPress}
+                >
+                  <AlbumCarousel
+                    photos={post.assets.map((asset) => ({
+                      id: asset.id,
+                      // Still-unlocked photos pass no URL so the carousel's
+                      // LazyImage renders its pulsing skeleton until the
+                      // decrypted bytes arrive.
+                      file_url: asset.loading ? null : asset.url,
+                    }))}
+                    onTap={(i) => onPhoto(post, i)}
+                    priority={index < 2}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <EmojiReactions
+                    reactions={post.reactions}
+                    currentUserId={principal}
+                    onReact={(type) => onReact(post, type)}
+                    onRemove={() => {
+                      const mine = post.reactions.find((r) => r.user_id === principal);
+                      if (mine) onRemove(post, mine.reaction_type);
+                    }}
+                  />
+                  <Button
+                    variant="ghost" size="sm"
+                    className="flex items-center gap-1 text-muted-foreground"
+                    onClick={() => { onComments(post); }}
+                    aria-label="Comments"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    {post.comments.length > 0 && (
+                      <span className="text-xs">{post.comments.length}</span>
+                    )}
+                  </Button>
+                </div>
+
+                {post.caption && (
+                  <p className="px-3 pb-3 text-sm">{post.caption}</p>
+                )}
+              </article>
+    {details.isPending && <div role="status" className="py-1 text-xs text-muted-foreground">Loading comments and reactions…</div>}
+    {details.isError && <Button variant="ghost" size="sm" onClick={() => details.refetch()}>Retry comments and reactions</Button>}
+  </>;
 }
