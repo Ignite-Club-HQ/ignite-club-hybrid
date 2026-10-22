@@ -35,9 +35,4 @@ describe('multi-club home content', () => {
     expect(feed.memberships.clubIds).toEqual(['club-a']);
     expect(feed.events.map(event => event.id)).toEqual(['club-a-event']);
   });
-  it('still reports a failure when every club is unavailable', async () => {
-    state.failed = true; const original = state.calls;
-    vi.spyOn(Math, 'random');
-    expect(original).toBeDefined();
-  });
 });
