@@ -55,7 +55,10 @@ async function syncDefaultClubChats(ctx: FeatureBackendContext, clubId: string):
     const matching = candidates.filter((c) =>
       c.roles.some((r) => def.roles.includes(r.role) && (r.clubId === clubId || r.role === "app_admin")),
     );
-    const group = existing.find((g) => !g.teamId && g.name.trim().toLowerCase() === def.name.toLowerCase());
+    // If copies already exist, top up the oldest one only; never add another.
+    const group = existing
+      .filter((g) => !g.teamId && g.name.trim().toLowerCase() === def.name.toLowerCase())
+      .sort((a, b) => String(a.conversationId).localeCompare(String(b.conversationId)))[0];
     try {
       if (!group) {
         const entries: Array<[Principal, string]> = [[self, "owner"]];
