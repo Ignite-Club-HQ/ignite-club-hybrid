@@ -4,6 +4,7 @@ use candid::Principal;
 use ic_stable_structures::{Memory,StableBTreeMap};
 use serde::{Deserialize,Serialize};
 use sha2::{Digest,Sha256};
+use std::ops::Bound::{Excluded,Unbounded};
 use crate::{group_inventory, membership_materializer::{Binding,Builder,Edge},
     membership_namespace::{Pool,Lane}, membership_updates::Journal,
     membership_private_lookup::{Source,Viewer,Sessions,Page}};
@@ -65,7 +66,7 @@ impl<M:Memory+Clone> Coordinator<M>{
         }
         // Allocate before retiring: a capacity refusal preserves the old tree.
         let n=self.pool.allocate()?;let mut builder=Builder::open(self.pool.lanes(n)?);builder.begin(binding.clone())?;
-        if let Some(prior)=self.build(source){self.pool.retire(prior.namespace)?;}
+        if let Some(prior)=self.build(source){self.pool.retire(prior.namespace)?;self.rows.insert(format!("retired:{:020}",prior.namespace),encode(&prior.namespace));}
         match self.journal.source(source){
             Some(old) if old.binding.generation==binding.generation=>self.journal.invalidate(source,authority,binding.generation,revision,binding.inventory_digest)?,
             _=>self.journal.bind(source,binding.clone())?,
@@ -100,7 +101,7 @@ impl<M:Memory+Clone> Coordinator<M>{
         let inv=self.inventory()?;let mut out=vec![];
         for (id,authority) in inv.sources{
             let b=self.build(&id).ok_or("Directory source incomplete")?;
-            if b.binding.authority!=authority||b.binding.generation!=inv.generation||b.binding.inventory_digest!=inv.digest||!b.published||self.journal.pending(&id)?{return Err("Directory source incomplete")}
+            if b.binding.authority!=authority||b.binding.generation!=inv.generation||b.binding.inventory_digest!=inv.digest||!b.published||self.journal.pending(&id)?{return Err("Directory source incomplete".into());}
             out.push(Source{id,binding:b.binding,complete:true});
         }Ok(out)
     }
@@ -109,7 +110,14 @@ impl<M:Memory+Clone> Coordinator<M>{
         sessions.page_at(caller,viewer,sources,sequence,now,|s,p,after|self.builder(&s.id,&s.binding)?.effective_clubs_for(&s.binding,p,after))
     }
     pub fn retire_source(&mut self,source:&str)->Outcome<Option<u64>>{
-        if let Some(b)=self.build(source){self.pool.retire(b.namespace)?;self.rows.remove(&format!("source:{source}"));Ok(Some(b.namespace))}else{Ok(None)}
+        if let Some(b)=self.build(source){self.pool.retire(b.namespace)?;self.rows.insert(format!("retired:{:020}",b.namespace),encode(&b.namespace));self.rows.remove(&format!("source:{source}"));Ok(Some(b.namespace))}else{Ok(None)}
+    }
+    /// One retired namespace, <=100 blocks per invocation. The durable queue
+    /// survives callback loss/upgrades; source publication intents never expire.
+    pub fn reclaim_retired(&mut self)->Outcome<(usize,bool)>{
+        let row=self.rows.range((Excluded("retired:".to_string()),Unbounded)).next().map(|e|(e.key().clone(),e.value())).filter(|(k,_)|k.starts_with("retired:"));
+        let Some((key,bytes))=row else{return Ok((0,true))};let n:u64=decode(&bytes);
+        let (scanned,done)=self.pool.reclaim(n)?;if done{self.rows.remove(&key);}Ok((scanned,false))
     }
 }
 #[cfg(test)]mod tests{
@@ -117,7 +125,7 @@ impl<M:Memory+Clone> Coordinator<M>{
     type Mem=VirtualMemory<VectorMemory>;
     fn open(m:&MemoryManager<VectorMemory>)->Coordinator<Mem>{Coordinator::open(m.get(MemoryId::new(0)),Pool::open(m.get(MemoryId::new(1)),m.get(MemoryId::new(2)),10000,32).unwrap(),m.get(MemoryId::new(3)))}
     fn viewer(p:Principal)->Viewer{Viewer{account:"member".into(),version:1,aliases:vec![p]}}
-    #[test]fn real_two_source_join_publish_readback_reopen_and_removal(){
+    #[test]fn two_source_join_publish_readback_reopen_and_removal(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,authorities)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);
         let mut c=open(&manager);c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,1).unwrap()).unwrap();let mut sessions=Sessions::open(manager.get(MemoryId::new(4)));
         for (n,authority) in authorities.iter().enumerate(){
@@ -137,7 +145,7 @@ impl<M:Memory+Clone> Coordinator<M>{
         assert!(verify_inventory(&snapshot,&pin,&authorities[..1],1).is_err());let mut c=open(&manager);c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,1).unwrap()).unwrap();
         assert!(c.begin("g0",authorities[1],1).is_err());let old=c.begin("g0",authorities[0],1).unwrap();let current=c.begin("g0",authorities[0],2).unwrap();
         assert!(c.ingest("g0",authorities[0],&old,0,vec![],true).is_err());assert!(c.ingest("g0",authorities[1],&current,0,vec![],true).is_err());
-        assert!(c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,2).unwrap()).is_err());let retired=c.retire_source("g0").unwrap().unwrap();while !c.pool.reclaim(retired).unwrap().1{}
+        assert!(c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,2).unwrap()).is_err());c.retire_source("g0").unwrap();while !c.reclaim_retired().unwrap().1{}
         c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,2).unwrap()).unwrap();assert!(c.sources().is_err());assert!(c.begin("g0",authorities[0],1).is_ok());
     }
 }
