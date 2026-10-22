@@ -14,7 +14,7 @@ Older canisters and explicit index-not-ready first pages retain the unchanged co
 
 `frontend/scripts/test-gallery-paging-replica.mjs` installs the repository's recorded pre-index `main.wasm`, prints its public SHA-256, populates 405 photos, then upgrades to the local candidate. It checks 200/200/6 backfill batches, restart during backfill, concurrent registration, exact descending/duplicate-free traversal, empty nonterminal visibility-filtered pages, owner/public/member/anonymous checks, invalid limits/cross-club/stale cursors, role/delete/scope/blob/rekey invalidation, import/drop rebuild and surviving other-club records.
 
-The recorded fixture is not certified evidence of the current mainnet module. Before release, pin the actual deployed baseline and repeat preservation/readback checks. Local candidate compiles, generated contracts agree and focused regression checks pass in both backend modes. Full-suite and signed-in real-account timing acceptance are separate.
+The recorded fixture SHA-256 is `9e35b10adb835f01fa2b18a35d6b3419fcf7e257021f1ef01a8154402000874b`; it is not certified evidence of the current mainnet module. Before release, pin the actual deployed baseline and repeat preservation/readback checks. Local candidate compiles; 17 generated contracts agree; ICP guards and changed live-code lint pass. Complete suites: ICP 5854 passed/760 skipped; Supabase 6256 passed/358 skipped. Public `/media` reaches a visibly rendered `/auth` with zero page errors; private gallery behavior and actual account timings remain unverified. Preview build OK.
 
 ## Release gates
 
