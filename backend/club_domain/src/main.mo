@@ -37,6 +37,7 @@ import MediaGrowthReservations "mediaGrowthReservations";
 import MembershipPage "membershipPage";
 import MembershipIndex "membershipIndex";
 import MembershipDiscovery "membershipDiscovery";
+import MembershipSource "membershipSource";
 import SubscriptionPolicy "subscriptionPolicy";
 
 persistent actor class Main(governorInit : Principal) = this {
@@ -2751,6 +2752,39 @@ persistent actor class Main(governorInit : Principal) = this {
   // verified account, never a browser-supplied account/principal list.
   // At most 200 profile slots scanned per call. Cursor is not a snapshot:
   // consumers revalidate discovered memberships against current authority.
+  public shared ({ caller }) func read_membership_source_page(cursor : ?MembershipSource.Cursor) : async { #Ok : MembershipSource.Page; #Err : Text } {
+    // Source-wide personal relationship evidence is operator-only until the
+    // separate exact central-reader binding/propagation release is verified.
+    if (not isGovernor(caller)) return #Err("Governor required");
+    let sizes = [profiles.size(), acl.roles.size(), acl.children.size(), acl.guardians.size(), acl.teams.size(), teams.size(), acl.exclusions.size(), removedMembers.size()];
+    func width(phase : Nat, offset : Nat) : Nat {
+      if (phase == 2) acl.children[offset].teams.size() + 1 else 1
+    };
+    func edge(phase : Nat, offset : Nat, nested : Nat) : ?MembershipSource.Edge {
+      switch (phase) {
+        case (0) { let c = profiles[offset]; ?#Club({ id = c.id; deleted = c.deleted_at_ms != null }) };
+        case (1) { let g = acl.roles[offset]; ?#Role({ subject = g.user; club = g.club }) };
+        case (2) {
+          let c = acl.children[offset];
+          if (nested == 0) switch (c.parent) { case (?subject) ?#Parent({ child = c.id; subject }); case null null }
+          else ?#ChildTeam({ child = c.id; team = c.teams[nested - 1] })
+        };
+        case (3) { let g = acl.guardians[offset]; ?#Guardian({ child = g.child; subject = g.user }) };
+        case (4) { let t = acl.teams[offset]; ?#Team({ id = t.id; club = t.club; deleted = false }) };
+        case (5) { let t = teams[offset]; ?#Team({ id = t.id; club = t.club_id; deleted = t.deleted_at_ms != null }) };
+        case (6) { let e = acl.exclusions[offset]; ?#Excluded({ subject = e.user; club = e.club }) };
+        case (7) { let e = removedMembers[offset]; ?#Excluded({ subject = e.user; club = e.club }) };
+        case (_) null
+      }
+    };
+    MembershipSource.read(membershipEpoch(), cursor, sizes, width, edge)
+  };
+
+  public shared ({ caller }) func read_membership_discovery_status() : async { #Ok : { revision : Nat; acknowledged : Nat; pending : Bool }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok({ revision = membershipEpoch(); acknowledged = membershipDiscoveryJournal.acknowledged; pending = MembershipDiscovery.pending(membershipDiscoveryJournal) })
+  };
+
   public shared ({ caller }) func read_my_club_memberships(offset : Nat, limit : Nat16) : async {
     #Ok : { clubs : [Text]; next : ?Nat; acl_revision : Nat64 }; #Err : Text
   } {
@@ -3114,6 +3148,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
+    bumpMembershipDiscovery();
     removedMembers := removedMembers.filter(func(m) = not (m.club == club and m.user.equal(user)));
     #Ok
   

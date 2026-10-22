@@ -13,6 +13,7 @@ mod group_inventory;
 mod removal_barrier;
 mod deletion_timing;
 mod admission;
+mod membership_directory;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
