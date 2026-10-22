@@ -1325,6 +1325,7 @@ function withIcpTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export function IcpAuthProvider({ children, persona = "member" }: { children: ReactNode; persona?: string }) {
   markMountedAuthProvider("icp");
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<InternetIdentitySession | null>(() => {
     try {
       const raw = localStorage.getItem("ignite_icp_internet_identity_session");
@@ -1364,8 +1365,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     console.warn("[Auth] Stored Internet Identity session is no longer valid; returning to sign-in.");
     localStorage.removeItem("ignite_icp_internet_identity_session");
     clearIcpIdentityProfileCache();
+    queryClient.clear();
+    const { clearPersistedIcpQueryCache } = await import('@/lib/icpQueryCachePersist');
+    await clearPersistedIcpQueryCache();
     setSession(null);
-  }, []);
+  }, [queryClient]);
   useEffect(() => {
     if (!principal) {
       setIcpProfile(null);
@@ -1589,10 +1593,16 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       // tap opens the Internet Identity window straight away.
       setIiWarmGeneration((g) => g + 1);
       localStorage.removeItem("ignite_icp_internet_identity_session");
+      queryClient.clear();
       const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
       clearIcpIdentityProfileCache();
       const { clearPersistedIcpQueryCache } = await import("@/lib/icpQueryCachePersist");
       await clearPersistedIcpQueryCache();
+      const [{ clearGroupDispatchCache }, { clearPiiVetKeyCache }] = await Promise.all([
+        import('@/live/groupDispatch'), import('@/live/piiVetKeys'),
+      ]);
+      clearGroupDispatchCache();
+      await clearPiiVetKeyCache();
       const { clearIcpEntitlementsCache } = await import("@/live/identityEntitlementsCache");
       clearIcpEntitlementsCache(principal ?? undefined);
       const { disconnectChatRealtime } = await import("@/live/wsRealtime");
