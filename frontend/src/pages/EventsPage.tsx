@@ -776,7 +776,10 @@ export default function EventsPage() {
             // Fetch every club's events at once, then resolve all team/club
             // names in parallel so the loop below only reads from cache.
             const rowsByClub = scopeClubIds.length > 0
-              ? await Promise.all(scopeClubIds.map((clubId) => listLiveEvents(ctx, clubId, selectedTeamId)))
+              // Each club from its own group; one failing club never hides the others.
+              ? await settleAll(scopeClubIds.map((clubId) =>
+                  readContentInScope(ctx, "events", { clubId }, (scoped) => listLiveEvents(scoped, clubId, selectedTeamId)),
+                )).then((r) => r.values)
               : [];
             const visibleEventRows = rowsByClub.flatMap((rows) => (rows as any[]).filter((event) => !event.deleted));
             const dutyTeams = await listLiveEventDutyTeams(ctx, visibleEventRows.map((event) => event.id)).catch(() => []);

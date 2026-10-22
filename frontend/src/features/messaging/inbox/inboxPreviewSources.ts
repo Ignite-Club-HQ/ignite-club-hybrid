@@ -389,7 +389,7 @@ async function fetchIcpChatGroupsWithMessages() {
   const latestMessages: Record<string, InboxPreview> = {};
   await Promise.all(groups.map(async (group) => {
     try {
-      const page: any = await listLiveLatestMessagesPage(ctx, group.id, null, 1);
+      const page: any = await readContentInScope(ctx, "messaging", { clubId: group.club_id }, (scoped) => listLiveLatestMessagesPage(scoped, group.id, null, 1));
       const m = page.messages?.[0];
       if (!m) return;
       const att = m.attachment?.[0] ?? null;
