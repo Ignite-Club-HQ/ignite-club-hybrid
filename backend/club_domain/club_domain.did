@@ -476,6 +476,11 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   acknowledge_directory_membership_source: (binding: Binding, revision:
+    nat) -> (variant {
+               Err: text;
+               Ok;
+             });
    acknowledge_retained_media: (token: text) -> (variant {
                                                    Err: text;
                                                    Ok;
@@ -574,6 +579,11 @@ type Main =
                 Err: text;
                 Ok;
               });
+   configure_membership_directory_source: (binding: Binding) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    create_child_for_parent_in_club: (club_id: text, parent: principal) ->
     (variant {
        Err: text;
@@ -680,6 +690,10 @@ type Main =
                                            Err: text;
                                            Ok;
                                          });
+   disable_membership_directory_source: () -> (variant {
+                                                 Err: text;
+                                                 Ok;
+                                               });
    enrol_in_class: (club_id: text, term_id: text, class_id: text, member_id:
     text) -> (variant {
                 Err: text;
@@ -1595,6 +1609,20 @@ type Main =
        club_id: opt text;
        is_member: bool;
      }) query;
+   read_directory_membership_source_page: (binding: Binding, cursor:
+    opt Cursor) -> (variant {
+                      Err: text;
+                      Ok: Page;
+                    });
+   read_directory_membership_status: (binding: Binding) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             acknowledged: nat;
+             pending: bool;
+             revision: nat;
+           };
+     });
    /// Bounded consensus configuration evidence; never changes or grants access.
    read_group_opening_configuration: () -> (vec record {
                                                   text;
@@ -1612,6 +1640,14 @@ type Main =
            };
      });
    read_media_retained_ready: () -> (bool);
+   read_membership_directory_source_binding: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             binding: opt Binding;
+             enabled: bool;
+           };
+     });
    read_membership_discovery_status: () ->
     (variant {
        Err: text;
@@ -2459,6 +2495,15 @@ type Cell =
  record {
    name: text;
    value: Value;
+ };
+type Binding = 
+ record {
+   deployment: text;
+   generation: nat64;
+   group: text;
+   identity: principal;
+   inventory_digest: blob;
+   router: principal;
  };
 type Acl = 
  record {

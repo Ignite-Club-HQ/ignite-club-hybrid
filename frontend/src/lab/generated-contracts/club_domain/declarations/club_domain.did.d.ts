@@ -36,6 +36,14 @@ export interface Acl {
   'exclusions' : Array<Exclusion>,
   'roles' : Array<RoleGrant>,
 }
+export interface Binding {
+  'inventory_digest' : Uint8Array,
+  'deployment' : string,
+  'generation' : bigint,
+  'group' : string,
+  'identity' : Principal,
+  'router' : Principal,
+}
 export interface Cell { 'value' : Value, 'name' : string }
 export interface Challenge {
   'id' : bigint,
@@ -271,6 +279,11 @@ export interface Main {
     { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
+  'acknowledge_directory_membership_source' : ActorMethod<
+    [Binding, bigint],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'acknowledge_retained_media' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -379,6 +392,11 @@ export interface Main {
   >,
   'configure_media_growth_router' : ActorMethod<
     [Principal, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'configure_membership_directory_source' : ActorMethod<
+    [Binding],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -497,6 +515,11 @@ export interface Main {
   >,
   'delete_team_permanent' : ActorMethod<
     [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'disable_membership_directory_source' : ActorMethod<
+    [],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -1398,6 +1421,22 @@ export interface Main {
     [string, Principal],
     { 'can_manage' : boolean, 'is_member' : boolean, 'club_id' : [] | [string] }
   >,
+  'read_directory_membership_source_page' : ActorMethod<
+    [Binding, [] | [Cursor]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
+  >,
+  'read_directory_membership_status' : ActorMethod<
+    [Binding],
+    {
+        'Ok' : {
+          'pending' : boolean,
+          'acknowledged' : bigint,
+          'revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   /**
    * / Bounded consensus configuration evidence; never changes or grants access.
    */
@@ -1411,6 +1450,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_media_retained_ready' : ActorMethod<[], boolean>,
+  'read_membership_directory_source_binding' : ActorMethod<
+    [],
+    { 'Ok' : { 'enabled' : boolean, 'binding' : [] | [Binding] } } |
+      { 'Err' : string }
+  >,
   'read_membership_discovery_status' : ActorMethod<
     [],
     {

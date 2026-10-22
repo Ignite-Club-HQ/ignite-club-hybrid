@@ -21,6 +21,8 @@ mod membership_private_lookup;
 mod membership_namespace;
 mod membership_coordinator;
 mod membership_propagation;
+mod membership_transport;
+mod membership_runtime;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -63,6 +65,14 @@ const MEM_REMOVAL_SUBJECTS: u8 = 14;
 const MEM_REMOVAL_RECEIPTS: u8 = 15;
 const MEM_DELETION_TICKETS: u8 = 16;
 const MEM_GROUP2_ADMISSION: u8 = 17;
+// Directory-specific additive storage: never share lifecycle/admission maps.
+const MEM_DIRECTORY_POOL_META:u8=18;
+const MEM_DIRECTORY_POOL_BLOCKS:u8=19;
+const MEM_DIRECTORY_COORDINATOR:u8=20;
+const MEM_DIRECTORY_UPDATES:u8=21;
+const MEM_DIRECTORY_WORKER:u8=22;
+const MEM_DIRECTORY_SESSIONS:u8=23;
+const MEM_DIRECTORY_CONFIG:u8=24;
 // Stable B-tree rows grow independently of heap snapshots. Reserve a conservative
 // 8 KiB per account (including eight denial rows) within 32 GiB stable memory.
 const MAX_ACCOUNTS: usize = (32u64 * 1024 * 1024 * 1024 / 8192) as usize;
@@ -485,6 +495,152 @@ thread_local! {
     static GROUP2_ADMISSION: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(MEM_GROUP2_ADMISSION), Vec::new()));
     static REMOVAL_RECEIPTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_REMOVAL_RECEIPTS)));
+    static DIRECTORY_CONFIG:RefCell<StableCell<Vec<u8>,Memory>>=RefCell::new(StableCell::init(memory(MEM_DIRECTORY_CONFIG),Vec::new()));
+    static DIRECTORY_COORDINATOR:RefCell<membership_coordinator::Coordinator<Memory>>=RefCell::new(
+        membership_coordinator::Coordinator::open(memory(MEM_DIRECTORY_COORDINATOR),
+            membership_namespace::Pool::open(memory(MEM_DIRECTORY_POOL_META),memory(MEM_DIRECTORY_POOL_BLOCKS),16384,8192).expect("Directory namespace budget"),memory(MEM_DIRECTORY_UPDATES)));
+    static DIRECTORY_WORKER:RefCell<membership_propagation::Worker<Memory>>=RefCell::new(membership_propagation::Worker::open(memory(MEM_DIRECTORY_WORKER)));
+    static DIRECTORY_SESSIONS:RefCell<membership_private_lookup::Sessions<Memory>>=RefCell::new(membership_private_lookup::Sessions::open(memory(MEM_DIRECTORY_SESSIONS)));
+    static DIRECTORY_TIMER_BUSY:RefCell<bool>=const{RefCell::new(false)};
+}
+fn directory_config()->Outcome<membership_runtime::Config>{
+    DIRECTORY_CONFIG.with(|m|if m.borrow().get().is_empty(){Err("Membership directory unconfigured".into())}else{Ok(decode(m.borrow().get()))})
+}
+fn save_directory_config(config:&membership_runtime::Config){DIRECTORY_CONFIG.with(|m|m.borrow_mut().set(encode(config)));}
+fn recheck_directory(config:&membership_runtime::Config)->Outcome<()> {
+    let current=directory_config()?;
+    // Pending notifications may advance during awaits; they never alter the
+    // captured authority inventory and must not be overwritten by callbacks.
+    if !current.enabled || !current.same_configuration(config) { return Err("Directory configuration changed".into()); }
+    Ok(())
+}
+/// Configures transport only. Does not enable a public reader or certify
+/// legacy club ownership, source freshness, recovery or directory cutover.
+#[ic_cdk::update]
+async fn configure_membership_directory(binding:group_inventory::Binding,authorities:Vec<Principal>,generation:u64)->Outcome<Vec<membership_transport::SourceBinding>>{
+    require_governor(&state(),ic_cdk::api::msg_caller())?;
+    admission_configuration_clear()?;
+    let pinned=group_inventory_binding().ok_or("Existing deployment registry pin required")?;
+    let mut expected=pinned.clone();expected.registry_revision=binding.registry_revision;
+    if expected!=binding || binding.registry_revision<pinned.registry_revision {return Err("Pinned directory deployment required".into());}
+    let prior=directory_config().ok();
+    let recheck=||->Outcome<()>{
+        admission_configuration_clear()?;
+        let current=directory_config().ok();
+        let unchanged=match (&prior,&current){(None,None)=>true,(Some(a),Some(b))=>a.same_configuration(b),_=>false};
+        if group_inventory_binding().as_ref()!=Some(&pinned)||!unchanged{Err("Directory configuration changed during verification".into())}else{Ok(())}
+    };
+    let first=read_registry_pages(&binding,recheck).await?;
+    let second=read_registry_pages(&binding,recheck).await?;
+    if first!=second{return Err("Directory registry changed".into());}
+    let verified=membership_coordinator::verify_inventory(&first,&binding,&authorities,generation)?;
+    let digest=verified.digest().to_vec();let sources=verified.source_bindings();
+    recheck()?;
+    let config=match directory_config(){
+        Ok(existing)=>{
+            if existing.binding!=binding||existing.generation!=generation||existing.inventory_digest!=digest||existing.sources!=sources||!existing.enabled{return Err("Directory replacement requires fenced recovery; not released".into());}existing
+        },
+        Err(_)=>membership_runtime::Config{binding,generation,inventory_digest:digest,sources,pending:Default::default(),enabled:true,next_source:0},
+    };
+    DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().bind_inventory(verified))?;
+    let grants=config.sources.iter().map(|(id,_)|config.source_binding(ic_cdk::api::canister_self(),id)).collect::<Outcome<Vec<_>>>()?;
+    save_directory_config(&config);arm_directory_timer();Ok(grants)
+}
+#[ic_cdk::update]
+fn disable_membership_directory()->Outcome<()>{require_governor(&state(),ic_cdk::api::msg_caller())?;let mut c=directory_config()?;c.enabled=false;save_directory_config(&c);Ok(())}
+/// Only the exact configured source may notify; never accepts raw edges.
+#[ic_cdk::update]
+fn invalidate_membership_directory_source(binding:membership_transport::SourceBinding,revision:candid::Nat)->membership_transport::UnitReply {
+    let result=(||->Outcome<()>{let mut c=directory_config()?;c.invalidate(ic_cdk::api::canister_self(),ic_cdk::api::msg_caller(),&binding,membership_transport::number(&revision)?)?;save_directory_config(&c);Ok(())})();
+    match result{Ok(())=>membership_transport::UnitReply::Ok,Err(e)=>membership_transport::UnitReply::Err(e)}
+}
+async fn directory_source_status(config:&membership_runtime::Config,source:&str,authority:Principal)->Outcome<(u64,u64,bool)>{
+    let grant=config.source_binding(ic_cdk::api::canister_self(),source)?;recheck_directory(config)?;
+    let reply=ic_cdk::call::Call::bounded_wait(authority,"read_directory_membership_status").with_arg(&grant).await.map_err(|_|"Directory source status unavailable")?;
+    recheck_directory(config)?;
+    let status:membership_transport::Reply<membership_transport::Status>=reply.candid().map_err(|_|"Invalid directory source status reply")?;
+    let result=status.result()?.checked()?;
+    directory_config()?.check_watermark(source,result.0)?;Ok(result)
+}
+/// One exact source and one bounded unit per invocation; retries preserve
+/// requests/publications. Governor-only until live worker acceptance passes.
+#[ic_cdk::update]
+async fn advance_membership_directory_source(source:String)->Outcome<membership_runtime::Progress>{
+    require_governor(&state(),ic_cdk::api::msg_caller())?;
+    advance_directory_source(source).await
+}
+async fn advance_directory_source(source:String)->Outcome<membership_runtime::Progress>{
+    let config=directory_config()?;let authority=config.sources.iter().find(|(id,_)|id==&source).ok_or("Unknown directory source")?.1;
+    let (revision,_,_)=directory_source_status(&config,&source,authority).await?;
+    DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().start(&mut c.borrow_mut(),&source,authority,revision)))?;
+    let phase=DIRECTORY_WORKER.with(|w|w.borrow().phase(&source))?.0;
+    let mut scanned=0;
+    match phase {
+        "pull"=>{
+            let (captured,cursor)=DIRECTORY_WORKER.with(|w|w.borrow().request(&source))?;
+            let grant=config.source_binding(ic_cdk::api::canister_self(),&source)?;
+            let wire_cursor=cursor.clone().map(membership_transport::WireCursor::from);
+            let reply=ic_cdk::call::Call::bounded_wait(authority,"read_directory_membership_source_page").with_args(&(grant,wire_cursor)).await.map_err(|_|"Directory source page unavailable; request retained")?;
+            recheck_directory(&config)?;
+            let wire:membership_transport::Reply<membership_transport::WirePage>=reply.candid().map_err(|_|"Invalid directory source page")?;
+            let page=wire.result()?.checked()?;scanned=page.scanned as u64;
+            directory_config()?.check_watermark(&source,captured.revision)?;
+            DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().accept(&mut c.borrow_mut(),&source,&captured,&cursor,page)))?;
+        },
+        "materialize"=>{scanned=DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().advance(&mut c.borrow_mut(),&source)))? as u64;},
+        "published"|"acknowledged"=>{
+            let captured=DIRECTORY_WORKER.with(|w|w.borrow().published(&source))?;
+            let grant=config.source_binding(ic_cdk::api::canister_self(),&source)?;
+            // Source acknowledgement is idempotent. Never clear local work on
+            // a lost response; exact consensus status readback is mandatory.
+            let reply=ic_cdk::call::Call::bounded_wait(authority,"acknowledge_directory_membership_source").with_args(&(grant,candid::Nat::from(captured.revision))).await.map_err(|_|"Source acknowledgement unknown; publication retained")?;
+            recheck_directory(&config)?;
+            let ack:membership_transport::UnitReply=reply.candid().map_err(|_|"Invalid source acknowledgement")?;
+            if let membership_transport::UnitReply::Err(e)=ack{return Err(e);}
+            let (current,acknowledged,pending)=directory_source_status(&config,&source,authority).await?;
+            if pending||current!=captured.revision||acknowledged!=captured.revision{return Err("Source changed during acknowledgement; publication retained".into());}
+            directory_config()?.check_watermark(&source,captured.revision)?;
+            DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().acknowledge_readback(&mut c.borrow_mut(),&source,&captured,acknowledged)))?;
+        },
+        _=>return Err("Unknown directory worker phase".into()),
+    }
+    let (phase,revision)=DIRECTORY_WORKER.with(|w|w.borrow().phase(&source))?;
+    Ok(membership_runtime::Progress{source,phase:phase.into(),revision,scanned})
+}
+#[derive(CandidType,Deserialize)]
+struct DirectoryCleanup { scanned:u64, complete:bool }
+// Independent of start: an exhausted pool must still be reclaimable.
+#[ic_cdk::update]
+fn reclaim_membership_directory()->Outcome<DirectoryCleanup>{
+    require_governor(&state(),ic_cdk::api::msg_caller())?;
+    let (scanned,complete)=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired())?;
+    Ok(DirectoryCleanup{scanned:scanned as u64,complete})
+}
+// Native system timer: no public caller can trigger unbounded fan-out. Rotate
+// one source per tick, preserve position across upgrade, and poll even when a
+// notification was lost. Re-arm before awaiting so failures remain retryable.
+fn arm_directory_timer(){
+    if directory_config().is_ok_and(|c|c.enabled){
+        if let Some(at)=ic_cdk::api::time().checked_add(30_000_000_000){ic_cdk::api::global_timer_set(at);}
+    }
+}
+struct DirectoryTimerGuard;
+impl Drop for DirectoryTimerGuard{fn drop(&mut self){DIRECTORY_TIMER_BUSY.with(|b|*b.borrow_mut()=false);}}
+#[export_name="canister_global_timer"]
+extern "C" fn membership_directory_global_timer(){
+    arm_directory_timer();
+    let entered=DIRECTORY_TIMER_BUSY.with(|b|{let mut b=b.borrow_mut();if *b{false}else{*b=true;true}});
+    if !entered{return;}
+    ic_cdk::futures::internals::in_executor_context(||ic_cdk::futures::spawn(async {
+        let _guard=DirectoryTimerGuard;
+        let Ok(mut config)=directory_config() else{return;};
+        if !config.enabled||config.sources.is_empty(){return;}
+        let at=config.next_source%config.sources.len();let source=config.sources[at].0.clone();
+        config.next_source=(at+1)%config.sources.len();save_directory_config(&config);
+        // Cleanup is bounded and happens independently of allocation success.
+        let _=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired());
+        if let Err(error)=advance_directory_source(source).await{ic_cdk::println!("Directory refresh deferred: {}",error);}
+    }));
 }
 fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {
     REMOVAL_INTENTS.with(|m| m.borrow().get(&account_id.to_string())).map(|bytes| decode(&bytes))
@@ -1303,6 +1459,7 @@ fn init(init: Init) {
         next_challenge: 0,
     };
     store(&state);
+    arm_directory_timer();
 }
 
 /// Splits a legacy full-blob `State` (schema 1..4, accounts/profiles/
@@ -1363,6 +1520,7 @@ fn post_upgrade() {
         deny_unlinked_principal(job.principal, &job.account_id, job.version).expect("Invalid pending principal denial; upgrade refused");
     }
     store_link_lifecycle(&lifecycle);
+    arm_directory_timer();
 }
 
 #[ic_cdk::query]

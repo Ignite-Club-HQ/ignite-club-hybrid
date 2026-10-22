@@ -1,6 +1,6 @@
 # Stage B: authority-backed membership display directory
 
-Status: durable source invalidation, bounded reconstruction, multi-source coordinator, resume-safe source-pull worker core and optional complete-only frontend adapter implemented locally; production source transport/private API and cutover not implemented or released.
+Status: durable source invalidation, bounded reconstruction, dedicated source transport/grants, automatic canister timers and exact acknowledgement/readback are implemented and tested on two disposable local sources plus shared identity. The private public API, frontend connection and protected release workflow are not complete. Nothing deployed.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
 ## Scope and ownership
@@ -73,7 +73,7 @@ Every row requires actual helper/timer entry-point mapping and a regression befo
 
 ### Remaining integration and release gates
 
-The worker core is implemented but no live worker/timer, source acknowledgement endpoint or authenticated central reader is installed. An optional frontend transport seam now accepts only a complete, caller/full-registry-pinned directory; it is not registered by `groupSessionLive`. Bounded raw-source joins are locally parity-tested, but production integration still needs live exact registry/club-placement verification, shared account/source indexing, verified alias/version handling and rekey/merge/erasure acceptance. Production memory IDs have not been allocated. Multi-source build namespaces, shared logical-page/build budgets and bounded namespace/journal/worker/session reclamation are implemented; production allocation and physical-memory/instruction measurements remain required.
+Directory transport now runs on disposable local canisters with separate identity-only source status/page/ack endpoints and automatic retry/poll timers. Nothing is installed on mainnet. The optional complete-only frontend seam is not registered by `groupSessionLive`; no public directory reader is exposed. Exact club-placement/legacy coverage, shared account/source indexing, verified-current reads, concurrency/recovery acceptance and physical measurements remain required.
 
 ### Owner-requested implementation continuation (21:42)
 
@@ -86,8 +86,8 @@ The worker core is implemented but no live worker/timer, source acknowledgement 
 
 #### Engineering still required before a runnable release
 
-1. Dedicated production memory allocation with actual upgraded-canister acceptance; do not reuse identity memories 0–17.
-2. Governor-bound directory-specific source permissions and live identity-pull transport, Nat-to-u64 checked decoding, mutation-triggered invalidation delivery and exact source acknowledgement. Never reuse admission/lifecycle grants or put an await inside membership commits.
+1. Mainnet upgrade acceptance and physical measurements for the newly allocated identity memories 18–24; existing memories 0–17 remain unchanged.
+2. Broader concurrent-callback and populated legacy mutation acceptance for the now-connected transport. Source grants, checked Nat decoding, automatic invalidation/polling and exact acknowledgement/readback are locally exercised; no admission/lifecycle grants or awaited membership commits are used.
 3. Exact assigned-club verification and independently proven legacy Group 1 coverage, account/source indexing to avoid traversing every empty source for an ordinary member, and identity link/rekey/merge/removal acceptance.
 4. Concurrent-mutation progress: current dirty revisions safely restart snapshots but do not guarantee backfill completion under sustained mutations. Retained snapshots or ordered durable deltas require implementation and tests.
 5. Recovery-generation fences, upgrade-interruption/source-outage tests and physical storage/instruction measurements with real local canisters.
@@ -100,3 +100,15 @@ Rollback to older authority state is unsupported for directory cutover until an 
 Cover populated legacy backfill with concurrent additions/removals, last-family-link removal, linked aliases, app-wide roles, missed/duplicate/out-of-order acknowledgements, stale writer generations, identity erasure, authority loss, upgrades mid-backfill and failed sources. Verify bounded request/result work and caller privacy against real local canisters. Keep current on-chain admission/lifecycle gates and all photo authorities unchanged.
 
 Implementation and exact-target deployment remain separate work. Signed-in real-account traces and explicit release approval are required; this specification is not an installed directory or a performance claim.
+
+### Connected automatic-update batch (22 October, after 21:58 request)
+
+- Identity memory allocation: pool metadata/blocks 18/19, coordinator 20, update journal 21, worker 22, reserved private sessions 23, runtime binding/progress 24. Namespace budget is 16,384 logical pages with 8,192 builds; neither value is a measured physical limit.
+- New frozen club migration `20261109_000000` introduces a disabled-by-default directory-only source binding. Governor configuration pins identity/router/group/deployment/generation/digest. Other services, users and foreign bindings cannot read raw relationship edges or acknowledge source progress. Disable cannot be undone with the old generation.
+- Native identity timer rotates one source per 30-second tick and re-arms on upgrade. Club timers notify pending revisions separately from local membership commits. Identity polling repairs missed notifications; no notification clears source pending state.
+- Bounded source driver persists captured requests, checked-decodes Motoko Nat, rejects newer known invalidation watermarks and requires an exact source acknowledgement plus consensus status readback. Unknown outcomes retain publication; a newer mutation cannot be cleared by an older callback.
+- Namespace reclamation runs independently of allocation, both in the timer and through a bounded governor endpoint. Retired build budgets are recoverable; current unknown publications are not expired.
+- Real local three-canister integration exercises two registered sources, automatic initial backfill, timer recovery across identity upgrade, club upgrade-preserved bindings/acknowledgements, removed/restored membership, unrelated-caller refusal, source stop/restart and <=100-work cleanup. It deliberately asserts that no public directory reader exists and linked-account lifecycle stays closed.
+- Validation: 95 identity unit tests; source grant and journal Motoko tests; real local transport rehearsal; 35 frontend discovery/fallback tests; all 17 Candid contracts match. Current preview builds successfully. No live-account speed claim or runnable release workflow.
+
+**Still unfinished engineering:** complete independently proven legacy/assigned club locations; an efficient account-to-source read index; retained snapshots or ordered deltas for progress under continuous mutation; externally fenced restore generations; verified-current caller-only reader and frontend registration; exact-three-target protected one-click release. Keep Stage A active until these pass.

@@ -1,0 +1,26 @@
+import Principal "mo:core/Principal";
+import Blob "mo:core/Blob";
+import Source "../src/membershipDirectorySource";
+import Array "mo:core/Array";
+let identity = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
+let router = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+let state : Source.State = { var binding = null; var enabled = false };
+let binding : Source.Binding = {
+  identity; router; group = "g2"; deployment = "mainnet"; generation = 1;
+  inventory_digest = Blob.fromArray(Array.tabulate<Nat8>(32, func(_) = 1));
+};
+assert not Source.allowed(state, identity, binding);
+assert Source.configure(state, binding) == #Ok;
+assert Source.allowed(state, identity, binding);
+assert not Source.allowed(state, router, binding);
+assert not Source.allowed(state, Principal.anonymous(), binding);
+assert not Source.allowed(state, identity, { binding with group = "g1" });
+assert not Source.allowed(state, identity, { binding with generation = 2 });
+assert Source.configure(state, binding) == #Ok;
+assert Source.configure(state, { binding with group = "g1" }) == #Err("New directory generation required");
+state.enabled := false;
+assert not Source.allowed(state, identity, binding);
+assert Source.configure(state, binding) == #Err("New directory generation required");
+assert Source.configure(state, { binding with generation = 2 }) == #Ok;
+assert not Source.allowed(state, identity, binding);
+assert Source.allowed(state, identity, { binding with generation = 2 });

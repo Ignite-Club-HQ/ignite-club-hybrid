@@ -63,6 +63,14 @@ export const idlFactory = ({ IDL }) => {
     'created_at_ms' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
+  const Binding = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'deployment' : IDL.Text,
+    'generation' : IDL.Nat64,
+    'group' : IDL.Text,
+    'identity' : IDL.Principal,
+    'router' : IDL.Principal,
+  });
   const SeasonTeamAssignment = IDL.Record({
     'season_id' : IDL.Text,
     'added_at_ms' : IDL.Nat64,
@@ -670,6 +678,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
         [],
       ),
+    'acknowledge_directory_membership_source' : IDL.Func(
+        [Binding, IDL.Nat],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'acknowledge_retained_media' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -775,6 +788,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'configure_media_growth_router' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'configure_membership_directory_source' : IDL.Func(
+        [Binding],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -920,6 +938,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'delete_team_permanent' : IDL.Func(
         [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'disable_membership_directory_source' : IDL.Func(
+        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -2037,6 +2060,25 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'read_directory_membership_source_page' : IDL.Func(
+        [Binding, IDL.Opt(Cursor)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_directory_membership_status' : IDL.Func(
+        [Binding],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'pending' : IDL.Bool,
+              'acknowledged' : IDL.Nat,
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
@@ -2071,6 +2113,19 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_media_retained_ready' : IDL.Func([], [IDL.Bool], []),
+    'read_membership_directory_source_binding' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'enabled' : IDL.Bool,
+              'binding' : IDL.Opt(Binding),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_membership_discovery_status' : IDL.Func(
         [],
         [
