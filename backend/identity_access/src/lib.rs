@@ -639,7 +639,7 @@ extern "C" fn membership_directory_global_timer(){
         config.next_source=(at+1)%config.sources.len();save_directory_config(&config);
         // Cleanup is bounded and happens independently of allocation success.
         let _=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired());
-        let _=advance_directory_source(source).await;
+        if let Err(error)=advance_directory_source(source).await{ic_cdk::println!("Directory refresh deferred: {}",error);}
     });
 }
 fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {
