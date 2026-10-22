@@ -245,7 +245,8 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       live();
       await assertRegistryUnchanged();
       const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
-      await assertRegistryUnchanged();
+      // Fresh: a registry change while replies were in flight must discard them.
+      await assertRegistryUnchanged(true);
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Cross-group read exceeds row budget');
       return rows;
