@@ -9,7 +9,7 @@ import type { FeatureBackendContext } from './featureRouter';
 import type { GroupDomain, ClubAssignment } from './groupRouting';
 import { activationStatus, SHIPPED_GATES, type ActivationGates } from './groupActivation';
 import { generalRoutingStatus, generalRoutingDeploymentAlias } from './generalActivation';
-import { clearOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
+import { clearOwnerTestRouting, readOwnerTestRoute, readOwnerTestRouteCached } from './ownerTestRouting';
 import { markScopedContext } from './scopedContext';
 import { clearRoleGrantsMemo } from './roleGrantsMemo';
 
@@ -99,8 +99,10 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
 }
 
 export function createClubDispatcher(deps: DispatchDeps) {
-  const active = async () => activationStatus(deps.gates()).active || Boolean(await deps.ownerActive?.()) ||
-    Boolean(deps.generalActive && await deps.generalActive(await deps.context()));
+  // General routing first: when it's on (the normal case) the owner-opening
+  // lookup is never needed, so ordinary reads skip that consensus call.
+  const active = async () => activationStatus(deps.gates()).active ||
+    Boolean(deps.generalActive && await deps.generalActive(await deps.context())) || Boolean(await deps.ownerActive?.());
   return {
     /** List reads already know each item's club: record it so opening the item
      * later (e.g. from a notification) needs no group probe. Free when off. */
@@ -207,10 +209,10 @@ export const clubDispatch = createClubDispatcher({
     const [{ getCurrentInternetIdentityConfirmed }, { getActiveIcpTarget }] = await Promise.all([import('./internetIdentityAuth'), import('./targetRegistry')]);
     const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
     if (!identity) throw new Error('Sign in again to continue.');
-    return Boolean(await readOwnerTestRoute({ identity, target: getActiveIcpTarget() }));
+    return Boolean(await readOwnerTestRouteCached({ identity, target: getActiveIcpTarget() }));
   },
   open: async ctx => (await import('./groupSessionLive')).openLiveGroupReadSession(ctx,
-    (await generalRoutingStatus(ctx)).active ? undefined : (await readOwnerTestRoute(ctx))?.groupId),
+    (await generalRoutingStatus(ctx)).active ? undefined : (await readOwnerTestRouteCached(ctx))?.groupId),
   lookup: async (ctx, kind, id) => (await import('./groupSessionLive')).lookupEntityClub(ctx, kind, id),
   holdsInvite: async (ctx, token) => (await import('./groupSessionLive')).groupHoldsInvite(ctx, token),
   placeNewClub: async (ctx, clubId) => {

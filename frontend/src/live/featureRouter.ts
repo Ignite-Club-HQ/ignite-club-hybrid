@@ -6,7 +6,7 @@ import { routingActive } from "./generalActivation";
 import { clubDispatch } from "./groupDispatch";
 import type { GroupDomain } from "./groupRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
-import { readOwnerTestRoute, nextOwnerTestClubId } from './ownerTestRouting';
+import { readOwnerTestRouteCached, nextOwnerTestClubId } from './ownerTestRouting';
 
 /**
  * Runtime dispatcher that connects feature repositories to the hybrid
@@ -103,7 +103,10 @@ async function dispatchIcp<T>(feature: FeatureArea, providers: FeatureBackendPro
   // Group routing switch-on lock: shipped off, so every club uses the shared
   // canisters. If ever switched on without the club-scoped dispatcher, fail
   // closed instead of silently sending a moved club to the old group.
-  if (!scope?.legacy && (await routingActive(context) || Boolean(await readOwnerTestRoute(context)))) {
+  // Person/app-wide data always lives on the shared canisters: answer it
+  // without waiting on group routing checks (typing, DMs, notifications).
+  if (scope && 'shared' in scope && !scope.legacy) return providers.icp(context);
+  if (!scope?.legacy && (await routingActive(context) || Boolean(await readOwnerTestRouteCached(context)))) {
     const domain = FEATURE_GROUP_DOMAIN[feature];
     if (scope && 'shared' in scope) return providers.icp(context);
     if (scope && 'newClubId' in scope) return clubDispatch.forNewClub(feature, scope.newClubId, async ctx => providers.icp(ctx));

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 const state = vi.hoisted(() => ({ readAcross: vi.fn(), grants: vi.fn() }));
 vi.mock('./domains', () => ({ connectLiveClubDomain: async () => ({ actor: { my_role_grants: state.grants } }) }));
 vi.mock('./generalActivation', () => ({ routingActive: async () => true }));
-vi.mock('./ownerTestRouting', () => ({ readOwnerTestRoute: async () => null }));
+vi.mock('./ownerTestRouting', () => ({ readOwnerTestRoute: async () => null, readOwnerTestRouteCached: async () => null }));
 vi.mock('./groupDispatch', () => ({ clubDispatch: { readAcross: state.readAcross } }));
 import { fetchMyRoleGrantsEverywhere } from './features/myRoleGrants';
 import { markScopedContext } from './scopedContext';

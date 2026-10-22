@@ -1,7 +1,7 @@
 import { connectLiveClubDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { routingActive } from "../generalActivation";
-import { readOwnerTestRoute } from '../ownerTestRouting';
+import { readOwnerTestRouteCached } from '../ownerTestRouting';
 import { isScopedContext } from '../scopedContext';
 import { memoizedGrants } from '../roleGrantsMemo';
 
@@ -35,7 +35,7 @@ export function mergeRoleGrants(parts: Grant[][]): Grant[] {
 export async function fetchMyRoleGrantsEverywhere(ctx: FeatureBackendContext): Promise<Grant[]> {
   // Inside one leg of a fan-out: this canister only (no nested fan-out).
   if (isScopedContext(ctx)) return rawGrants(ctx);
-  if (!await routingActive(ctx) && !await readOwnerTestRoute(ctx)) return rawGrants(ctx);
+  if (!await routingActive(ctx) && !await readOwnerTestRouteCached(ctx)) return rawGrants(ctx);
   const { clubDispatch } = await import("../groupDispatch");
   return memoizedGrants(`all|${who(ctx)}`, async () => {
     const grants = await clubDispatch.readAcross("membership", "club_domain", rawGrants, mergeRoleGrants);

@@ -8,7 +8,7 @@ const keyFor = (ctx: FeatureBackendContext) => JSON.stringify([ctx.identity.getP
 export function hasOwnerTestRouting(ctx?: FeatureBackendContext): boolean {
   return Boolean(confirmed?.value && (!ctx || confirmed.key === keyFor(ctx)));
 }
-export function clearOwnerTestRouting() { confirmed = null; }
+export function clearOwnerTestRouting() { confirmed = null; cachedRoute = null; }
 export async function readOwnerTestRoute(ctx: FeatureBackendContext): Promise<OwnerRoute | null> {
   if (!ctx.target.canisterIds?.shard_router || ctx.identity.getPrincipal().toText() === '2vxsx-fae') return null;
   const key = keyFor(ctx);
@@ -37,6 +37,22 @@ export async function readOwnerTestRoute(ctx: FeatureBackendContext): Promise<Ow
       !/^[a-f0-9]{64}$/i.test(a.evidence_sha256)) throw new Error('Owner opening does not match this identity and deployment');
   const value: OwnerRoute = { groupId: 'g2', acceptingNew: receipt.accepting_new, clubIds: a.club_ids, evidence: a.evidence_sha256 };
   confirmed = { key, value }; return value;
+}
+
+/** Routing-decision variant: one shared answer per identity/deployment for
+ * 30s (and one in-flight read), so ordinary page reads don't each pay a
+ * consensus call. Creation still uses the fresh readOwnerTestRoute. */
+const ROUTE_TTL_MS = 30_000;
+let cachedRoute: { key: string; at: number; value: Promise<OwnerRoute | null> } | null = null;
+export function readOwnerTestRouteCached(ctx: FeatureBackendContext): Promise<OwnerRoute | null> {
+  if (!ctx.target.canisterIds?.shard_router) return Promise.resolve(null);
+  const key = keyFor(ctx);
+  if (cachedRoute && cachedRoute.key === key && Date.now() - cachedRoute.at < ROUTE_TTL_MS) return cachedRoute.value;
+  const value = readOwnerTestRoute(ctx);
+  const entry = { key, at: Date.now(), value };
+  cachedRoute = entry;
+  value.catch(() => { if (cachedRoute === entry) cachedRoute = null; });
+  return value;
 }
 
 /** All ordinary creation screens use the next explicitly approved UUID.
