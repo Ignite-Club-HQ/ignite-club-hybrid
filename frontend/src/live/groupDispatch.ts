@@ -18,6 +18,7 @@ type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendC
   isAssigned(c: string): boolean; dispose(): void;
   readHosted?<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   createInGroup?<T>(placement: ClubAssignment, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
+  readMemberGroups?<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]>;
   readEveryGroup<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]> };
 /** What a call is about. Non-club scopes are resolved to their owning club. */
 export type EntityScope = { clubId: string } | { photoId: string } | { galleryCardId: string } | { newsId: string } | { competitionId: string } | { competitionMatchId: string } | { eoiId: string } | { seasonId: string } | { vaultFileId: string } | { vaultFolderId: string } | { notificationId: string } | { scheduledMessageId: string } | { eventGroupId: string } | { miniLeagueId: string } | { eventId: string } | { conversationId: string } | { teamId: string } | { clubLinkId: string } | { roleRequestId: string };
@@ -148,6 +149,31 @@ export function createClubDispatcher(deps: DispatchDeps) {
   const active = async () => activationStatus(deps.gates()).active ||
     Boolean(deps.generalActive && await deps.generalActive(await deps.context())) || Boolean(await deps.ownerActive?.());
   return {
+    /** Atomically replace a discovery session; existing content keeps its session
+     * while the new membership sweep is in flight. Failure retains the old one. */
+    refreshMembershipSession: async (): Promise<void> => {
+      if (!await active()) return;
+      const previous = cached;
+      if (!previous) { await sessionFor(deps); return; }
+      if (!reopening) {
+        reopening = (async () => {
+          const ctx = await deps.context();
+          const next = await deps.open(ctx);
+          if (cached !== previous) { next.dispose(); return; }
+          cached = { ...previous, session: Promise.resolve(next) };
+          unplaced.clear(); hostedChecked.clear();
+        })();
+      }
+      try { await reopening; } finally { reopening = null; }
+    },
+    /** Member content is distinct from unrestricted discovery/foreign hosts. */
+    readMemberGroups: async <T, R>(feature: FeatureArea, domain: GroupDomain, fn0: (ctx: FeatureBackendContext) => Promise<T>, merge: (parts: T[]) => R): Promise<R> => {
+      if (!await active()) return merge([await deps.legacy(feature, '', fn0)]);
+      const { s } = await sessionFor(deps);
+      if (!s.readMemberGroups) throw new Error('Member-group reads unavailable');
+      const parts = await s.readMemberGroups(domain, async ctx => [await fn0(markScopedContext(ctx))], Number.MAX_SAFE_INTEGER);
+      return merge(parts);
+    },
     /** List reads already know each item's club: record it so opening the item
      * later (e.g. from a notification) needs no group probe. Free when off. */
     remember: async (kind: 'event' | 'conversation' | 'team' | 'miniLeague', pairs: ReadonlyArray<readonly [string, string]>): Promise<void> => {

@@ -4,6 +4,7 @@ import { routingActive } from "../generalActivation";
 import { readOwnerTestRouteCached } from '../ownerTestRouting';
 import { isScopedContext } from '../scopedContext';
 import { memoizedGrants } from '../roleGrantsMemo';
+import { readMembershipDiscovery } from '../membershipDiscoveryCache';
 
 type Grant = Awaited<ReturnType<Awaited<ReturnType<typeof connectLiveClubDomain>>["actor"]["my_role_grants"]>>[number];
 
@@ -37,7 +38,12 @@ export async function fetchMyRoleGrantsEverywhere(ctx: FeatureBackendContext): P
   if (isScopedContext(ctx)) return rawGrants(ctx);
   if (!await routingActive(ctx) && !await readOwnerTestRouteCached(ctx)) return rawGrants(ctx);
   const { clubDispatch } = await import("../groupDispatch");
-  return memoizedGrants(`all|${who(ctx)}`, async () => {
+  const target = ctx.target;
+  const key = JSON.stringify([who(ctx), target?.alias, target?.host, target?.networkKind,
+    Object.entries(target?.canisterIds ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
+  return readMembershipDiscovery(key, async () => {
+    // Refresh the verified session only for discovery, never for a page refresh.
+    if (typeof clubDispatch.refreshMembershipSession === 'function') await clubDispatch.refreshMembershipSession();
     const grants = await clubDispatch.readAcross("membership", "club_domain", rawGrants, mergeRoleGrants);
     // Team grants already name the team's club: record that so team-scoped
     // reads (events, names, chats) go straight to the club's group instead of

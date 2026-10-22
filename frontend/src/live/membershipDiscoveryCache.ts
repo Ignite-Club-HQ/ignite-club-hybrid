@@ -1,0 +1,71 @@
+/** Display discovery only: destinations still authorize every content operation. */
+export const MEMBERSHIP_RECONCILE_MS = 15 * 60 * 1000;
+type Entry = { value?: unknown; checkedAt: number; pending?: Promise<unknown>; load: () => Promise<unknown> };
+const entries = new Map<string, Entry>();
+let generation = 0;
+let teardown: (() => void) | undefined;
+
+function reconcile(key: string, entry: Entry): Promise<unknown> {
+  if (entry.pending) return entry.pending;
+  const captured = generation;
+  const pending = Promise.resolve().then(entry.load).then(value => {
+    if (captured !== generation || entries.get(key) !== entry) throw new Error('Membership discovery changed');
+    entry.value = value;
+    entry.checkedAt = Date.now();
+    return value;
+  }).finally(() => { if (entry.pending === pending) entry.pending = undefined; });
+  entry.pending = pending;
+  return pending;
+}
+
+export function reconcileMembershipDiscovery(): void {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  for (const [key, entry] of entries) {
+    if (Date.now() - entry.checkedAt >= MEMBERSHIP_RECONCILE_MS) void reconcile(key, entry).catch(() => undefined);
+  }
+}
+
+function watchForeground() {
+  if (teardown || typeof window === 'undefined') return;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const update = () => {
+    if (timer) clearInterval(timer);
+    timer = undefined;
+    if (document.visibilityState !== 'hidden') {
+      reconcileMembershipDiscovery();
+      timer = setInterval(reconcileMembershipDiscovery, MEMBERSHIP_RECONCILE_MS);
+    }
+  };
+  window.addEventListener('online', update);
+  document.addEventListener('visibilitychange', update);
+  // Do not synchronously reconcile while registering the first entry.
+  if (document.visibilityState !== 'hidden') timer = setInterval(reconcileMembershipDiscovery, MEMBERSHIP_RECONCILE_MS);
+  teardown = () => {
+    if (timer) clearInterval(timer);
+    window.removeEventListener('online', update);
+    document.removeEventListener('visibilitychange', update);
+  };
+}
+
+export async function readMembershipDiscovery<T>(key: string, load: () => Promise<T>): Promise<T> {
+  let entry = entries.get(key);
+  if (!entry) {
+    entry = { checkedAt: 0, load };
+    entries.set(key, entry);
+  } else entry.load = load;
+  watchForeground();
+  if (entry.value !== undefined) {
+    // Content callers never wait for an overdue background reconciliation.
+    if (Date.now() - entry.checkedAt >= MEMBERSHIP_RECONCILE_MS) reconcileMembershipDiscovery();
+    return entry.value as T;
+  }
+  return await reconcile(key, entry) as T;
+}
+
+export function clearMembershipDiscovery(): void {
+  generation++;
+  entries.clear();
+  teardown?.();
+  teardown = undefined;
+}

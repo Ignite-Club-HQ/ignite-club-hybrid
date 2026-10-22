@@ -1,5 +1,6 @@
 import { readContentInScope } from "@/live/contentRouting";
 import { acrossLists } from "@/live/featureScopes";
+import { readClubsInOwnGroups } from "@/live/crossGroupClubs";
 import { writeOnce } from "@/live/clubScope";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +24,7 @@ import { readCachedIcpBlobObjectUrl, resolveIcpBlobObjectUrl, storedIcpPrincipal
 import { listLiveTeams } from "@/live/features/club";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { listLiveCompetitions } from "@/live/features/competitions";
-import { getLiveMyRoleGrants, listLiveMembershipClubs } from "@/live/features/membership";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -226,7 +227,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
   const grants = await getLiveMyRoleGrants(ctx);
   const grantClubIds = new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c));
   const grantTeamIds = new Set(grants.map((g) => g.team[0]).filter((t): t is string => !!t));
-  const clubsRaw = (await readContentInScope(ctx, "membership", acrossLists, listLiveMembershipClubs)) as unknown as {
+  const clubsRaw = (await readClubsInOwnGroups(ctx, [...grantClubIds])).values as unknown as {
     id: string;
     name: string;
     sport: [] | [string];
