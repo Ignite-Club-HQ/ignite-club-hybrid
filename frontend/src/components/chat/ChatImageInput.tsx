@@ -330,7 +330,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       if (teamId && !effectiveClubId) throw new Error("Could not check this team's club storage. Please try again.");
       const { error: uploadError } = await uploadWithinClubMediaAllowance(effectiveClubId, fileToUpload.size, () => supabase.storage
         .from("chat-attachments")
-        .upload(fileName, fileToUpload, { contentType, upsert: false, cacheControl: "31536000" }), supabase, teamId);
+        .upload(fileName, fileToUpload, { contentType, upsert: false, cacheControl: "31536000" }), supabase, teamId, { bucket: "chat-attachments", path: fileName, file: fileToUpload });
 
       if (uploadError) throw new Error(uploadError.message || "Failed to upload image");
 
@@ -420,7 +420,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
 
       const { error: upErr } = await uploadWithinClubMediaAllowance(clubId, file.size, () => supabase.storage
         .from("chat-attachments")
-        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false, cacheControl: "31536000" }), supabase, teamId);
+        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false, cacheControl: "31536000" }), supabase, teamId, { bucket: "chat-attachments", path, file });
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(path);
       const fileUrl = pub.publicUrl;
