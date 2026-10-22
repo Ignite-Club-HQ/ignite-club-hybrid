@@ -64,6 +64,9 @@ impl<M:Memory+Clone> Coordinator<M>{
             if prior.binding==binding{return Ok(binding);}
             if prior.binding.authority!=authority||prior.binding.generation!=binding.generation||revision<=prior.binding.revision{return Err("Stale source reconstruction".into());}
         }
+        // An Err is not a transaction rollback. Check the persisted journal
+        // before allocating/retiring so stale requests consume no storage.
+        self.journal.validate_new_build(source,&binding)?;
         // Allocate before retiring: a capacity refusal preserves the old tree.
         let n=self.pool.allocate()?;let mut builder=Builder::open(self.pool.lanes(n)?);builder.begin(binding.clone())?;
         if let Some(prior)=self.build(source){self.pool.retire(prior.namespace)?;self.rows.insert(format!("retired:{:020}",prior.namespace),encode(&prior.namespace));}
@@ -119,6 +122,9 @@ impl<M:Memory+Clone> Coordinator<M>{
         let Some((key,bytes))=row else{return Ok((0,true))};let n:u64=decode(&bytes);
         let (scanned,done)=self.pool.reclaim(n)?;if done{self.rows.remove(&key);}Ok((scanned,false))
     }
+    pub fn reclaim_obsolete_updates(&mut self,after:Option<String>)->Outcome<(usize,Option<String>)>{
+        self.journal.reclaim_obsolete(self.inventory()?.generation,after)
+    }
 }
 #[cfg(test)]mod tests{
     use super::*;use ic_stable_structures::{VectorMemory,memory_manager::{MemoryManager,MemoryId,VirtualMemory}};
@@ -147,5 +153,20 @@ impl<M:Memory+Clone> Coordinator<M>{
         assert!(c.ingest("g0",authorities[0],&old,0,vec![],true).is_err());assert!(c.ingest("g0",authorities[1],&current,0,vec![],true).is_err());
         assert!(c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,2).unwrap()).is_err());c.retire_source("g0").unwrap();while !c.reclaim_retired().unwrap().1{}
         c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,2).unwrap()).unwrap();assert!(c.sources().is_err());assert!(c.begin("g0",authorities[0],1).is_ok());
+    }
+    #[test]fn retired_binding_cannot_reuse_an_acknowledgement_or_leak_namespaces_on_failed_begin(){
+        let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,authorities)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,1).unwrap()).unwrap();let b=c.begin("g0",authorities[0],2).unwrap();
+        c.ingest("g0",authorities[0],&b,0,vec![],true).unwrap();while c.advance("g0",&b).unwrap()>0{}c.publish("g0",&b).unwrap();c.acknowledge("g0",&b,2).unwrap();
+        c.retire_source("g0").unwrap();while !c.reclaim_retired().unwrap().1{}
+        for _ in 0..40{assert!(c.begin("g0",authorities[0],1).is_err());assert!(c.begin("g0",authorities[0],2).is_err());}
+        drop(c);let mut c=open(&manager);assert!(c.begin("g0",authorities[0],3).is_ok());assert!(c.journal.pending("g0").unwrap());
+    }
+    #[test]fn changed_group_inventory_reclaims_old_update_rows_only_after_generation_fence(){
+        let manager=MemoryManager::init(VectorMemory::default());let (mut s,mut pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();c.begin("g0",a[0],1).unwrap();c.retire_source("g0").unwrap();while !c.reclaim_retired().unwrap().1{}
+        s.revision+=1;pin.registry_revision=s.revision;s.groups[0].id="replacement".into();s.placements[0].group_id="replacement".into();
+        c.bind_inventory(verify_inventory(&s,&pin,&a,2).unwrap()).unwrap();c.begin("replacement",a[0],1).unwrap();c.reclaim_obsolete_updates(None).unwrap();
+        assert!(c.journal.source("g0").is_none());assert!(c.journal.pending("replacement").unwrap());assert!(c.begin("g0",a[0],100).is_err());
     }
 }

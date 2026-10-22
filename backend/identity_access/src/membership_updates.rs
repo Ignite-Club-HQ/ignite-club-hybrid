@@ -5,6 +5,8 @@ use candid::Principal;
 use ic_stable_structures::{Memory,StableBTreeMap};
 use serde::{Serialize,Deserialize};
 use crate::membership_materializer::Binding;
+use std::ops::Bound::{Excluded,Unbounded};
+const MAX_UPDATE_SOURCES:u64=8192;
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
 pub struct Update {
     pub binding: Binding,
@@ -17,12 +19,21 @@ fn decode(b:&[u8])->Update{ciborium::from_reader(b).expect("update decode")}
 impl<M:Memory> Journal<M>{
     pub fn open(memory:M)->Self{Self{rows:StableBTreeMap::init(memory)}}
     pub fn source(&self,source:&str)->Option<Update>{self.rows.get(&source.to_string()).map(|b|decode(&b))}
+    pub fn validate_new_build(&self,source:&str,binding:&Binding)->Result<(),String>{
+        if source.is_empty()||source.len()>128||source.contains('\u{1f}')||binding.generation==0||binding.revision==0||binding.inventory_digest==[0;32]||binding.authority==Principal::anonymous()||binding.authority==Principal::management_canister(){return Err("Invalid update binding".into());}
+        if let Some(prior)=self.source(source){
+            if binding.generation<prior.binding.generation ||
+                binding.generation==prior.binding.generation&&(binding.authority!=prior.binding.authority||binding.inventory_digest!=prior.binding.inventory_digest||binding.revision<=prior.binding.revision){return Err("New source revision or generation required".into());}
+        }else if self.rows.len()>=MAX_UPDATE_SOURCES{return Err("Update source budget reached".into());}
+        Ok(())
+    }
     pub fn bind(&mut self,source:&str,binding:Binding)->Result<(),String>{
         if source.is_empty()||source.len()>128||source.contains('\u{1f}')||binding.generation==0||binding.revision==0||binding.inventory_digest==[0;32]||binding.authority==Principal::anonymous()||binding.authority==Principal::management_canister(){return Err("Invalid update binding".into());}
         if let Some(prior)=self.source(source){
             if prior.binding==binding{return Ok(());}
             if binding.generation<=prior.binding.generation{return Err("Replacement source generation required".into());}
         }
+        if self.source(source).is_none()&&self.rows.len()>=MAX_UPDATE_SOURCES{return Err("Update source budget reached".into());}
         self.rows.insert(source.into(),encode(&Update{binding,acknowledged:0,published:0}));Ok(())
     }
     pub fn invalidate(&mut self,source:&str,caller:Principal,generation:u64,revision:u64,digest:[u8;32])->Result<(),String>{
@@ -44,6 +55,18 @@ impl<M:Memory> Journal<M>{
         if &row.binding!=binding||readback_revision!=binding.revision||row.published!=binding.revision{return Err("Unknown or stale source acknowledgement".into());}
         row.acknowledged=binding.revision;self.rows.insert(source.into(),encode(&row));Ok(())
     }
+    /// Only after a verified higher inventory generation fences every old
+    /// writer. Never remove current-generation pending/unknown publications.
+    pub fn reclaim_obsolete(&mut self,current_generation:u64,after:Option<String>)->Result<(usize,Option<String>),String>{
+        if current_generation==0{return Err("Verified replacement generation required".into());}
+        let mut at=after;let mut scanned=0;
+        while scanned<100{
+            let row=match &at{Some(c)=>self.rows.range((Excluded(c.clone()),Unbounded)).next(),None=>self.rows.iter().next()}.map(|e|(e.key().clone(),e.value()));
+            let Some((key,bytes))=row else{return Ok((scanned,None))};let update=decode(&bytes);
+            if update.binding.generation<current_generation{self.rows.remove(&key);}
+            at=Some(key);scanned+=1;
+        }Ok((scanned,at))
+    }
 }
 #[cfg(test)] mod tests{
     use super::*;use ic_stable_structures::VectorMemory;
@@ -63,5 +86,11 @@ impl<M:Memory> Journal<M>{
         assert!(j.invalidate("g2",Principal::from_slice(&[2,1]),1,100,[1;32]).is_err());
         assert!(j.invalidate("g2",b.authority,0,100,[1;32]).is_err());assert!(j.invalidate("g2",b.authority,1,100,[2;32]).is_err());assert_eq!(j.source("g2"),before);
         let mut new=b.clone();new.generation=2;new.revision=1;j.bind("g2",new).unwrap();assert!(j.publish("g2",&b,true).is_err());
+    }
+    #[test]fn replacement_reclamation_preserves_current_pending_and_preflight_rejects_reused_revision(){
+        let mut j=Journal::open(VectorMemory::default());let b=binding();j.bind("old",b.clone()).unwrap();
+        assert!(j.validate_new_build("old",&b).is_err());let mut fresh=b.clone();fresh.generation=2;j.bind("current",fresh.clone()).unwrap();
+        assert_eq!(j.reclaim_obsolete(2,None).unwrap(),(2,None));assert!(j.source("old").is_none());assert!(j.pending("current").unwrap());assert!(j.validate_new_build("current",&fresh).is_err());
+        fresh.revision=2;assert!(j.validate_new_build("current",&fresh).is_ok());
     }
 }
