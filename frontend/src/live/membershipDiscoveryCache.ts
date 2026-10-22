@@ -82,3 +82,9 @@ export function clearMembershipDiscovery(): void {
   teardown?.();
   teardown = undefined;
 }
+
+/** An acknowledged local mutation invalidates display inventories, not authority. */
+export function invalidateMembershipDisplays(): void {
+  clearMembershipDiscovery();
+  for (const prefix of MEMBER_QUERY_PREFIXES) void client?.invalidateQueries({ queryKey: [prefix] });
+}
