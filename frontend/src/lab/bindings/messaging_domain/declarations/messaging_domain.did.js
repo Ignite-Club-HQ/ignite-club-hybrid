@@ -486,6 +486,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
         [],
       ),
+    'ensure_default_club_chat' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Text)),
+        ],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        [],
+      ),
     'ensure_mini_league_chat' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : GroupSummary, 'Err' : IDL.Text })],

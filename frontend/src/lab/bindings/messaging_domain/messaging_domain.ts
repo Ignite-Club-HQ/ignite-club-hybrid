@@ -344,6 +344,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    ensure_default_club_chat(club_id: string, standard_key: string, existing_id: string | null, role_entries: Array<[Principal, string]>): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     ensure_mini_league_chat(club_id: string, league_id: string, name: string, members: Array<Principal>): Promise<{
         __kind__: "Ok";
         Ok: GroupSummary;
@@ -632,7 +639,7 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -998,7 +1005,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -1749,6 +1756,16 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.ensure_conversation(arg0, to_candid_opt_n12(arg1), arg2);
         return from_candid_variant_n13(result);
+    }
+    async ensure_default_club_chat(arg0: string, arg1: string, arg2: string | null, arg3: Array<[Principal, string]>): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.ensure_default_club_chat(arg0, arg1, to_candid_opt_n12(arg2), arg3);
+        return from_candid_variant_n2(result);
     }
     async ensure_mini_league_chat(arg0: string, arg1: string, arg2: string, arg3: Array<Principal>): Promise<{
         __kind__: "Ok";
