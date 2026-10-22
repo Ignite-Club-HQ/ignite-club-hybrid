@@ -586,19 +586,20 @@ async fn advance_membership_directory_source(source:String)->Outcome<membership_
 async fn advance_directory_source(source:String)->Outcome<membership_runtime::Progress>{
     let config=directory_config()?;let authority=config.sources.iter().find(|(id,_)|id==&source).ok_or("Unknown directory source")?.1;
     let (revision,_,_)=directory_source_status(&config,&source,authority).await?;
-    DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().start(&mut c.borrow_mut(),&source,authority,revision)))?;
+    DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().resume_or_start(&mut c.borrow_mut(),&source,authority,revision)))?;
     let phase=DIRECTORY_WORKER.with(|w|w.borrow().phase(&source))?.0;
     let mut scanned=0;
     match phase {
         "pull"=>{
             let (captured,cursor)=DIRECTORY_WORKER.with(|w|w.borrow().request(&source))?;
             let grant=config.source_binding(ic_cdk::api::canister_self(),&source)?;
-            let wire_cursor=cursor.clone().map(membership_transport::WireCursor::from);
+            // Pin the first capture too: a mutation between status and first
+            // page must retry, never silently capture a different generation.
+            let wire_cursor=Some(membership_transport::WireCursor::from(cursor.clone().unwrap_or(membership_propagation::Cursor{revision:captured.revision,phase:0,offset:0,nested:0})));
             let reply=ic_cdk::call::Call::bounded_wait(authority,"read_directory_membership_source_page").with_args(&(grant,wire_cursor)).await.map_err(|_|"Directory source page unavailable; request retained")?;
             recheck_directory(&config)?;
             let wire:membership_transport::Reply<membership_transport::WirePage>=reply.candid().map_err(|_|"Invalid directory source page")?;
             let page=wire.result()?.checked()?;scanned=page.scanned as u64;
-            directory_config()?.check_watermark(&source,captured.revision)?;
             // Positive source Club edges are checked against the existing
             // router location API. Missing legacy assignments remain unproven
             // and cannot enable a public directory; publication stays local.
@@ -606,7 +607,7 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
             for edge in &page.edges{
                 if let membership_materializer::Edge::Club{id,deleted:false}=edge{
                     let reply=ic_cdk::call::Call::bounded_wait(config.binding.registry,"read_hosted_club_assignment").with_args(&(id.clone(),config.binding.target_alias.clone(),config.binding.registry_revision)).await.map_err(|_|"Club ownership check unavailable; source page retained")?;
-                    recheck_directory(&config)?;directory_config()?.check_watermark(&source,captured.revision)?;
+                    recheck_directory(&config)?;
                     let location:membership_transport::Reply<membership_locations::Assignment>=reply.candid().map_err(|_|"Invalid club ownership reply")?;
                     match location{
                         membership_transport::Reply::Ok(assignment)=>membership_locations::verify(id,&source,authority,&assignment,&config.sources,config.binding.registry_revision)?,
@@ -633,8 +634,9 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
             let ack:membership_transport::UnitReply=reply.candid().map_err(|_|"Invalid source acknowledgement")?;
             if let membership_transport::UnitReply::Err(e)=ack{return Err(e);}
             let (current,acknowledged,pending)=directory_source_status(&config,&source,authority).await?;
-            if pending||current!=captured.revision||acknowledged!=captured.revision{return Err("Source changed during acknowledgement; publication retained".into());}
-            directory_config()?.check_watermark(&source,captured.revision)?;
+            // Live changes remain observed and unreadable, but cannot starve
+            // completion of the finite retained generation.
+            if current<captured.revision||acknowledged!=captured.revision||pending!=(current!=acknowledged){return Err("Source acknowledgement readback changed; publication retained".into());}
             DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().acknowledge_readback(&mut c.borrow_mut(),&source,&captured,acknowledged)))?;
         },
         _=>return Err("Unknown directory worker phase".into()),

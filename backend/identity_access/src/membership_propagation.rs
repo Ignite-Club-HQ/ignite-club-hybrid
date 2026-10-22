@@ -32,6 +32,15 @@ impl<M:Memory> Worker<M>{
         if let Ok(prior)=self.job(source){if prior.binding==binding{return Ok(());}}
         self.save(&Job{source:source.into(),binding,sequence:0,cursor:None,phase:Phase::Pull});Ok(())
     }
+    /// Finish one retained generation before starting the latest live one.
+    /// A source restored below the captured revision is never accepted.
+    pub fn resume_or_start<N:Memory+Clone>(&mut self,c:&mut Coordinator<N>,source:&str,authority:Principal,revision:u64)->Result<(),String>{
+        if let Ok(prior)=self.job(source){
+            if prior.binding.authority!=authority||revision<prior.binding.revision{return Err("Retained source authority or revision changed".into());}
+            if prior.phase!=Phase::Acknowledged{return Ok(());}
+        }
+        self.start(c,source,authority,revision)
+    }
     /// This request is persisted before the future runtime awaits a response.
     pub fn request(&self,source:&str)->Result<(Binding,Option<Cursor>),String>{
         let j=self.job(source)?;if j.phase!=Phase::Pull{return Err("Source pull is not pending".into());}Ok((j.binding,j.cursor))
@@ -59,7 +68,7 @@ impl<M:Memory> Worker<M>{
     pub fn published(&self,source:&str)->Result<Binding,String>{let j=self.job(source)?;if j.phase!=Phase::Published&&j.phase!=Phase::Acknowledged{return Err("Directory publication pending".into());}Ok(j.binding)}
     pub fn acknowledge_readback<N:Memory+Clone>(&mut self,c:&mut Coordinator<N>,source:&str,captured:&Binding,readback:u64)->Result<(),String>{
         let mut j=self.job(source)?;if &j.binding!=captured||j.phase!=Phase::Published&&j.phase!=Phase::Acknowledged{return Err("Source acknowledgement changed".into());}
-        c.acknowledge(source,captured,readback)?;j.phase=Phase::Acknowledged;self.save(&j);Ok(())
+        c.acknowledge_completed(source,captured,readback)?;j.phase=Phase::Acknowledged;self.save(&j);Ok(())
     }
     /// Bounded cleanup uses the coordinator's verified generation, never a
     /// caller-supplied generation that could discard current unknown work.

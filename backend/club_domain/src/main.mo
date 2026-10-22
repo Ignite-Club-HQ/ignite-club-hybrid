@@ -39,6 +39,7 @@ import MembershipIndex "membershipIndex";
 import MembershipDiscovery "membershipDiscovery";
 import MembershipSource "membershipSource";
 import MembershipDirectorySource "membershipDirectorySource";
+import MembershipSourceRetention "membershipSourceRetention";
 import SubscriptionPolicy "subscriptionPolicy";
 
 persistent actor class Main(governorInit : Principal) = this {
@@ -513,6 +514,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // index can only accelerate, never grant. Rebuilt after upgrade (transient).
   var membershipDiscoveryJournal : MembershipDiscovery.Journal;
   var membershipDirectorySource : MembershipDirectorySource.State;
+  var membershipSourceRetention : MembershipSourceRetention.State;
   func membershipEpoch() : Nat = membershipDiscoveryJournal.revision;
   func bumpMembershipDiscovery() { MembershipDiscovery.bump(membershipDiscoveryJournal) };
   transient var memberIndexEpoch : ?Nat = null;
@@ -2786,12 +2788,19 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public shared ({ caller }) func configure_membership_directory_source(binding : MembershipDirectorySource.Binding) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
-    MembershipDirectorySource.configure(membershipDirectorySource, binding)
+    let prior = membershipDirectorySource.binding;
+    switch (MembershipDirectorySource.configure(membershipDirectorySource, binding)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok) {
+        if (prior != ?binding) membershipSourceRetention.snapshot := null;
+        #Ok
+      }
+    }
   };
 
   public shared ({ caller }) func disable_membership_directory_source() : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
-    membershipDirectorySource.enabled := false; #Ok
+    membershipDirectorySource.enabled := false; membershipSourceRetention.snapshot := null; #Ok
   };
 
   public shared ({ caller }) func read_membership_directory_source_binding() : async { #Ok : { binding : ?MembershipDirectorySource.Binding; enabled : Bool }; #Err : Text } {
@@ -2806,12 +2815,23 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public shared ({ caller }) func read_directory_membership_source_page(binding : MembershipDirectorySource.Binding, cursor : ?MembershipSource.Cursor) : async { #Ok : MembershipSource.Page; #Err : Text } {
     if (not MembershipDirectorySource.allowed(membershipDirectorySource, caller, binding)) return #Err("Directory identity and exact source binding required");
-    membershipSourcePage(cursor)
+    func capture() : MembershipSourceRetention.Data {
+      { profiles; roles = acl.roles; children = acl.children; guardians = acl.guardians;
+        aclTeams = acl.teams; teams; exclusions = acl.exclusions; removed = removedMembers }
+    };
+    switch (MembershipSourceRetention.acquire(membershipSourceRetention, binding, membershipEpoch(), cursor, capture)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(snapshot)) MembershipSourceRetention.read(snapshot, cursor)
+    }
   };
 
   public shared ({ caller }) func acknowledge_directory_membership_source(binding : MembershipDirectorySource.Binding, revision : Nat) : async { #Ok; #Err : Text } {
     if (not MembershipDirectorySource.allowed(membershipDirectorySource, caller, binding)) return #Err("Directory identity and exact source binding required");
-    if (not MembershipDiscovery.acknowledge(membershipDiscoveryJournal, revision)) return #Err("Membership source revision changed");
+    if (revision == membershipDiscoveryJournal.acknowledged) return #Ok;
+    if (revision < membershipDiscoveryJournal.acknowledged or revision > membershipEpoch() or
+        not MembershipSourceRetention.complete(membershipSourceRetention, binding, revision)) return #Err("Completed retained source required");
+    // Completing R must not clear pending membership changes at live L > R.
+    membershipDiscoveryJournal.acknowledged := revision;
     #Ok
   };
 
