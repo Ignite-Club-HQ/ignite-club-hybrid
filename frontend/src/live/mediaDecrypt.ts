@@ -1,5 +1,5 @@
 import { cachedGeneralRoutingActive, routingActive } from "./generalActivation";
-import { hasOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
+import { hasOwnerTestRouting, readOwnerTestRouteCached } from './ownerTestRouting';
 import { getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
@@ -96,16 +96,36 @@ export async function readCachedIcpBlobObjectUrl(url: string): Promise<string | 
  */
 export async function resolveIcpBlobObjectUrl(url: string): Promise<string | null> {
   let target = getActiveIcpTarget();
+  const candidate = parseIcpBlobUrl(url, target, false);
+  // Public/Supabase images need no identity restoration or routing RPC.
+  if (!candidate) return null;
+  const storedPrincipal = storedSessionPrincipal();
+  if (storedPrincipal) {
+    const cached = await readCachedPhoto(storedPrincipal, candidate.canisterId, candidate.path);
+    if (cached) return URL.createObjectURL(cached);
+  }
   const routeIdentity = await getCurrentInternetIdentityConfirmed();
   const general = routeIdentity ? await routingActive({ target, identity: routeIdentity }) : false;
-  const owner = routeIdentity && !general ? await readOwnerTestRoute({ target, identity: routeIdentity }) : null;
-  if ((general || owner) && parseIcpBlobUrl(url, target, false)) {
+  const owner = routeIdentity && !general ? await readOwnerTestRouteCached({ target, identity: routeIdentity }) : null;
+  if (general || owner) {
     const { clubDispatch } = await import("./groupDispatch");
-    const targets = await clubDispatch.readAcross("media", "media_metadata", async ctx => parseIcpBlobUrl(url, ctx.target, true) ? [ctx.target] : [], parts => parts.flat());
-    const unique = [...new Map(targets.map(t => [JSON.stringify(t.canisterIds), t])).values()];
-    if (!unique.length) throw new Error("Photo store is not in the approved group inventory");
-    if (new Set(unique.map(t => t.canisterIds.pii_access_control)).size !== 1) throw new Error("Photo store has conflicting encryption authorities");
-    target = unique[0];
+    const clubId = clubIdFromMediaPath(candidate.path);
+    if (clubId) {
+      // The path gives the exact club. Its approved context binds both the
+      // original store and encryption authority, with no all-group scan.
+      target = await clubDispatch.read("media", clubId, "media_metadata", async ctx => {
+        if (!parseIcpBlobUrl(url, ctx.target, true)) throw new Error("Photo store is not in the approved group inventory for this club");
+        return ctx.target;
+      });
+    } else {
+      const targets = await clubDispatch.readAcross("media", "media_metadata", async ctx => parseIcpBlobUrl(url, ctx.target, true) ? [ctx.target] : [], parts => parts.flat());
+      const unique = [...new Map(targets.map(t => [JSON.stringify(t.canisterIds), t])).values()];
+      if (!unique.length) throw new Error("Photo store is not in the approved group inventory");
+      if (new Set(unique.map(t => t.canisterIds.pii_access_control)).size !== 1) throw new Error("Photo store has conflicting encryption authorities");
+      const approved = unique[0];
+      if (!approved) throw new Error("Photo store is not in the approved group inventory");
+      target = approved;
+    }
   }
   const match = parseIcpBlobUrl(url, target, true);
   if (!match) return null;
@@ -114,12 +134,7 @@ export async function resolveIcpBlobObjectUrl(url: string): Promise<string | nul
   // tab reload the confirmed identity can take a moment to restore, and a
   // cached photo needs no fresh proof — the bytes are already decrypted
   // on this device, scoped to the stored principal.
-  const storedPrincipal = storedSessionPrincipal();
-  if (storedPrincipal) {
-    const cached = await readCachedPhoto(storedPrincipal, match.canisterId, match.path);
-    if (cached) return URL.createObjectURL(cached);
-  }
-  const identity = await getCurrentInternetIdentityConfirmed();
+  const identity = routeIdentity;
   if (!identity) {
     throw new Error("Internet Identity sign-in required to decrypt blob-store media");
   }

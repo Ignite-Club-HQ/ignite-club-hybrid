@@ -1,49 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
-
-const { fetchProfilesWithCache, listLiveReactions } = vi.hoisted(() => ({
-  fetchProfilesWithCache: vi.fn(),
-  listLiveReactions: vi.fn(),
-}));
-
-vi.mock("@/lib/profileCache", () => ({ fetchProfilesWithCache }));
-vi.mock("@/live/features/messaging", () => ({
-  listLiveLatestMessagesPage: vi.fn(),
-  listLiveReactions,
-}));
-vi.mock("@/hooks/useChatPerfMarks", () => ({ markChatFetch: vi.fn() }));
-vi.mock("@/lib/messageCache", () => ({ getCachedMessages: vi.fn(), cacheMessages: vi.fn() }));
-
-import { mapLiveGroupRows } from "./useGroupMessagesQuery";
-
-describe("mapLiveGroupRows image attachments", () => {
-  it("maps a canister image URL into the message visible to group members", async () => {
-    const profile = { display_name: "Alex", avatar_url: null };
-    fetchProfilesWithCache.mockResolvedValue(new Map([[
-      "principal-1",
-      profile,
-    ]]));
-    listLiveReactions.mockResolvedValue([]);
-
-    const messages = await mapLiveGroupRows({ identity: {}, target: {} }, "group-1", [{
-      id: "message-1",
-      body: "Match photo",
-      sender: { toText: () => "principal-1" },
-      sequence: 1n,
-      created_at_ms: 1_700_000_000_000n,
-      edited_at_ms: [],
-      conversation_id: "group-1",
-      reply_to_id: [],
-      attachment: [{
-        kind: "image",
-        ref_id: "clubs/club-1/teams/team-1/chat/photo.jpg",
-        url: ["https://blob.example/photo.jpg"],
-      }],
-    }]);
-
-    expect(messages[0]).toEqual(expect.objectContaining({
-      id: "message-1",
-      image_url: "https://blob.example/photo.jpg",
-      author: profile,
-    }));
+import { describe, expect, it, vi } from 'vitest';
+const mocks = vi.hoisted(() => ({ profiles: vi.fn(), reactions: vi.fn() }));
+vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: mocks.profiles }));
+vi.mock('@/live/features/messaging', () => ({ listLiveLatestMessagesPage: vi.fn(), listLiveReactions: mocks.reactions }));
+import { mapLiveGroupRows } from './useGroupMessagesQuery';
+describe('ICP group message enrichment', () => {
+  it('starts reactions without waiting for author profiles', async () => {
+    let finish: ((value: Map<string, unknown>) => void) | undefined;
+    mocks.profiles.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    mocks.reactions.mockResolvedValue([]);
+    const result = mapLiveGroupRows({}, 'peanut', [{ id: 'message', sender: { toText: () => 'parent' }, sequence: 1n, body: 'hello', created_at_ms: 1000n, conversation_id: 'peanut' }]);
+    expect(mocks.reactions).toHaveBeenCalledWith({}, 'peanut');
+    finish?.(new Map());
+    expect((await result)[0].id).toBe('message');
   });
 });

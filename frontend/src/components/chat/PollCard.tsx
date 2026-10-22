@@ -49,9 +49,11 @@ export function PollCard({ pollId }: PollCardProps) {
   const [busyOptionId, setBusyOptionId] = useState<string | null>(null);
 
   const icpMode = isFeatureRoutedToIcp("messaging");
+  const scope = currentChatScope();
+  const pollKey = ["poll", pollId, user?.id, JSON.stringify(scope ?? null)];
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ["poll", pollId],
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: pollKey,
     queryFn: async () => {
       if (icpMode) {
         const results = await withFeatureBackend("messaging", {
@@ -59,7 +61,7 @@ export function PollCard({ pollId }: PollCardProps) {
             throw new Error("unreachable");
           },
           icp: (ctx) => getLivePollResults(ctx, pollId),
-        }, currentChatScope());
+        }, scope);
         const poll: PollRow = {
           id: results.poll.id,
           question: results.poll.question,
@@ -102,6 +104,8 @@ export function PollCard({ pollId }: PollCardProps) {
       };
     },
     staleTime: 15_000,
+    enabled: !icpMode || (!!user && !!scope),
+    retry: 1,
     // Each refresh is a canister call per poll on screen; 10s per card piled
     // up behind the chat's own reads. Refresh slower and only while visible.
     refetchInterval: icpMode ? 30_000 : false,
@@ -129,7 +133,7 @@ export function PollCard({ pollId }: PollCardProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [pollId, refetch]);
+  }, [pollId, refetch, icpMode]);
 
   const isClosed = useMemo(() => {
     if (!data?.poll) return false;
@@ -167,7 +171,7 @@ export function PollCard({ pollId }: PollCardProps) {
             throw new Error("unreachable");
           },
           icp: (ctx) => voteLivePoll(ctx, pollId, optionIndex),
-        }, chatWrite(currentChatScope()));
+        }, chatWrite(scope));
         setIcpMyOptionIndex((prev) => (prev === optionIndex ? null : optionIndex));
         return;
       }
@@ -218,7 +222,7 @@ export function PollCard({ pollId }: PollCardProps) {
             throw new Error("unreachable");
           },
           icp: (ctx) => closeLivePoll(ctx, pollId),
-        }, chatWrite(currentChatScope()));
+        }, chatWrite(scope));
         return;
       }
       const { error } = await supabase
@@ -242,7 +246,7 @@ export function PollCard({ pollId }: PollCardProps) {
             throw new Error("unreachable");
           },
           icp: (ctx) => deleteLivePoll(ctx, pollId),
-        }, chatWrite(currentChatScope()));
+        }, chatWrite(scope));
         return;
       }
       const { error } = await supabase.from("polls").delete().eq("id", pollId);
@@ -250,7 +254,7 @@ export function PollCard({ pollId }: PollCardProps) {
     },
     onSuccess: () => {
       toast.success("Poll deleted");
-      qc.invalidateQueries({ queryKey: ["poll", pollId] });
+      qc.invalidateQueries({ queryKey: pollKey });
     },
     onError: (e: any) => toast.error(e?.message || "Failed to delete poll"),
   });
@@ -263,6 +267,15 @@ export function PollCard({ pollId }: PollCardProps) {
         <div className="flex items-center gap-2 text-muted-foreground text-sm">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading poll…
         </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="rounded-xl border border-border bg-muted/30 p-3 max-w-sm text-sm text-muted-foreground">
+        <p>We couldn’t load this poll.</p>
+        <Button variant="ghost" size="sm" onClick={() => void refetch()}>Try again</Button>
       </div>
     );
   }

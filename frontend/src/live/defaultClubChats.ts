@@ -21,25 +21,37 @@ export const DEFAULT_CLUB_CHATS: Array<{ name: string; roles: string[] }> = [
 ];
 
 const syncedThisSession = new Set<string>();
+const syncing = new Map<string, Promise<string[]>>();
 
 export async function ensureLiveDefaultClubChats(
   ctx: FeatureBackendContext,
   clubId: string,
   opts: { force?: boolean } = {},
 ): Promise<string[]> {
+  if (!clubId) return [];
+  const key = JSON.stringify([ctx.target.host, ctx.target.canisterIds.messaging_domain, ctx.identity.getPrincipal().toText(), clubId]);
+  const pending = syncing.get(key);
+  if (pending) return pending;
+  if (!opts.force && syncedThisSession.has(key)) return [];
+  const task = syncDefaultClubChats(ctx, clubId).then((failures) => {
+    if (!failures.length) syncedThisSession.add(key);
+    return failures;
+  }).finally(() => syncing.delete(key));
+  syncing.set(key, task);
+  return task;
+}
+
+async function syncDefaultClubChats(ctx: FeatureBackendContext, clubId: string): Promise<string[]> {
   const failures: string[] = [];
-  if (!clubId) return failures;
-  if (!opts.force && syncedThisSession.has(clubId)) return failures;
-  syncedThisSession.add(clubId);
 
   const self = ctx.identity.getPrincipal();
   const selfText = self.toText();
   const [existing, candidates] = await Promise.all([
-    listLiveGroupsByClub(ctx, clubId).catch(() => []),
-    fetchLiveMessagingCandidates(ctx, [clubId]).catch(() => []),
+    listLiveGroupsByClub(ctx, clubId),
+    fetchLiveMessagingCandidates(ctx, [clubId]),
   ]);
 
-  for (const def of DEFAULT_CLUB_CHATS) {
+  await Promise.all(DEFAULT_CLUB_CHATS.map(async (def) => {
     const matching = candidates.filter((c) =>
       c.roles.some((r) => def.roles.includes(r.role) && (r.clubId === clubId || r.role === "app_admin")),
     );
@@ -58,10 +70,8 @@ export async function ensureLiveDefaultClubChats(
     } catch (err) {
       // Best-effort: callers without manage rights just skip the top-up.
       console.warn(`[defaultClubChats] ${def.name} sync failed`, err);
-      if (!group) failures.push(`${def.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
+      failures.push(`${def.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
     }
-  }
-  // A failed creation must be retried on the next load, not skipped all session.
-  if (failures.length) syncedThisSession.delete(clubId);
+  }));
   return failures;
 }

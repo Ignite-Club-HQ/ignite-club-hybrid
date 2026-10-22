@@ -152,12 +152,22 @@ describe('entity scopes', () => {
     expect(await x.readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1)).toBe('group');
     expect(s.readEveryGroup).not.toHaveBeenCalled();
   });
+  it('remembers a newly discovered Group 2 club after reopening the stale session', async () => {
+    const { d, s } = world({ g2: [] });
+    const open = vi.fn().mockResolvedValueOnce({ ...s, isAssigned: () => false }).mockResolvedValue({ ...s, isAssigned: (club: string) => club === 'new-club' });
+    const dispatcher = createClubDispatcher({ ...d, open } as never);
+    await dispatcher.remember('conversation', [['new-chat', 'new-club']]);
+    expect(await dispatcher.readFor('messaging', { conversationId: 'new-chat' }, 'messaging_domain', async () => 1)).toBe('group');
+    expect(s.readEveryGroup).not.toHaveBeenCalled();
+    expect(s.readClub).toHaveBeenCalledWith('new-club', 'messaging_domain', expect.any(Function));
+  });
   it('a chat listed for an original-group club opens from the shared canisters, not the hosted lookup', async () => {
     const { d, s } = world({ g2: [] }); const readHosted = vi.fn(async () => { throw new Error('No hosted assignment'); });
     const x = createClubDispatcher({ ...d, open: vi.fn(async () => ({ ...s, readHosted })) } as never);
     await x.remember('conversation', [['g1-chat', 'g1-club']]);
     expect(await x.readFor('messaging', { conversationId: 'g1-chat' }, 'messaging_domain', async () => 1)).toBe('legacy');
     expect(readHosted).not.toHaveBeenCalled();
+    expect(s.readEveryGroup).not.toHaveBeenCalled();
   });
   it('a stale device answer pointing at an original-group club is dropped and re-checked', async () => {
     const saved: Record<string, Record<string, string>> = { p1: { 'conversation:g1-chat': 'g1-club' } };

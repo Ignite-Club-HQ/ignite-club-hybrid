@@ -153,7 +153,12 @@ export function createClubDispatcher(deps: DispatchDeps) {
       const { s, principal } = await sessionFor(deps);
       // Only group-placed clubs: an original-group (unplaced) club's items live
       // on the shared canisters and must not be sent to the hosted lookup.
-      for (const [id, club] of pairs) if (s.isAssigned(club)) owners.set(`${kind}:${id}`, club);
+      for (const [id, club] of pairs) {
+        const { s: current } = await sessionKnowing(deps, club);
+        // A successful list read identifies original-group items too. Keep
+        // their shared route in memory only, never persist negative placement.
+        owners.set(`${kind}:${id}`, current.isAssigned(club) ? club : null);
+      }
       persist(deps, principal);
     },
     /** Data spanning the caller's clubs: shared canisters + every group, asked
