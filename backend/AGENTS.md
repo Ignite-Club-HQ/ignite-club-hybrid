@@ -85,3 +85,4 @@
 
 - League creation reads live club roles via bounded consensus with post-reply guards; timer install captures governor atomically and compatibility init requires a controller. Why: prevent stale-role creation and setup takeover.
 - Club membership index starts with no cached epoch, and marks it current only after rebuilding. Why: a first post-upgrade sync must not make an empty index appear valid and hide surviving memberships.
+- shard_router refreshes stale (>10 min) group health itself inside place_my_new_club by reading each group canister's public cycles_balance/memory_stats; it records only complete readings and never bumps the revision. Why: club creation must not depend on the external health-report job staying alive; partial reads stay fail-closed.
