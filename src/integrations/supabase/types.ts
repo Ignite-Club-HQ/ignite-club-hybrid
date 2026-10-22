@@ -13034,6 +13034,18 @@ export type Database = {
           p_club: string
           p_path: string
           p_team: string
+          p_user: string
+          p_vault?: boolean
+        }
+        Returns: string
+      }
+      reserve_measured_media_internal: {
+        Args: {
+          p_bucket: string
+          p_bytes: number
+          p_club: string
+          p_path: string
+          p_team: string
           p_vault?: boolean
         }
         Returns: string
