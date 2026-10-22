@@ -760,9 +760,7 @@ persistent actor MediaBlobStore {
   // Extra Regions are production storage in large mode (200 GiB policy).
   func multiRegionWrites() : Bool { multiRegionRehearsal or largeMode() };
 
-  /// Finalized + in-flight bytes under clubs/<club>/ across all categories
-  /// (vault, gallery and chat combined). Branding-exempt assets also count:
-  /// the club allowance is measured against everything the club stores.
+  /// Finalized + in-flight gallery, vault and chat bytes. Branding is exempt.
   func scopedMediaBytes(clubId : Text, teamId : ?Text) : (Nat, Nat) {
     let prefix = "clubs/" # clubId # "/";
     var used = 0;
@@ -1513,12 +1511,16 @@ persistent actor MediaBlobStore {
     legacy_retention_cursor := if (clubs.size() == 0) 0 else (legacy_retention_cursor + indices.size()) % clubs.size();
     for (index in indices.values()) {
         let (clubId, paths) = clubs[index];
+        let status = await pathAllowance("clubs/" # clubId # "/photos/retention");
+        if (status == null or (switch (status) { case (?a) a.premium; case null true })) continue;
           if (media_transfer_fences.get(clubId) != null or retainedBlocked() or quota_mode == #frozen) continue;
           let doomed = Map.empty<Text, ()>();
           for (p in paths.values()) {
             // A replacement during subscription lookup must not be deleted.
             switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
-              case (?(_, stamp)) { if (Time.now() - stamp > RETENTION_NS and (switch (await pathAllowance(p)) { case (?a) not a.premium; case null false })) Map.add(doomed, Text.compare, p, ()) };
+              // Legacy team media stays until a bounded scoped-retention pass
+              // can verify its team entitlement; never erase Pro team files.
+              case (?(_, stamp)) { if (Time.now() - stamp > RETENTION_NS and mediaTeam(p) == null) Map.add(doomed, Text.compare, p, ()) };
               case null {}
             }
           };
