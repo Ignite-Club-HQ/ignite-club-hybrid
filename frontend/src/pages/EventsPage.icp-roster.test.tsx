@@ -180,7 +180,8 @@ describe("EventsPage roster-derived team scope routing", () => {
     competitionMocks.listLiveCompetitionMatches.mockResolvedValue([{ id: 'foreign-match', home_team: 'home', away_team: 'away', scheduled_at_ms: [BigInt(Date.now() + 86400000)], status: 'scheduled', venue: [] }]);
     const client = renderPage();
     expect(await screen.findByText('Foreign Cup', { exact: false })).toBeInTheDocument();
-    const members = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events');
+    await waitFor(() => expect(scheduleMocks.events).toHaveBeenCalledWith(expect.anything(), 'member-club', null));
+    const members = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events' && query.state.fetchStatus === 'fetching');
     expect(members?.state.fetchStatus).toBe('fetching');
     expect(competitionMocks.listLiveCompetitionMatches).toHaveBeenCalledWith(expect.anything(), 'foreign-cup');
     finish?.([]);
