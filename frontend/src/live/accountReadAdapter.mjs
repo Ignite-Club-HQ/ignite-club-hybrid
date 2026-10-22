@@ -50,8 +50,23 @@ const PROTECTED_READ_TRAP = /protected consensus account read/i;
 /** Canister-level capability memory: once a canister tells us a legacy query
  * needs the protected consensus read, go straight to the twin next time.
  * Keyed by canister + method; never holds user data, so sign-out need not
- * clear it. */
-const protectedReadDecisions = new Set();
+ * clear it. Kept on the device so each app launch skips the refused query
+ * round trip (a canister that drops the gate still answers the twin). */
+const DECISIONS_KEY = 'ignite_protected_read_decisions_v1';
+const MAX_DECISIONS = 2000;
+function loadDecisions() {
+  try {
+    const raw = globalThis.localStorage?.getItem(DECISIONS_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(list) ? list.filter(k => typeof k === 'string' && k.length < 200).slice(-MAX_DECISIONS) : []);
+  } catch { return new Set(); }
+}
+const protectedReadDecisions = loadDecisions();
+function rememberDecision(key) {
+  if (protectedReadDecisions.has(key)) return;
+  protectedReadDecisions.add(key);
+  try { globalThis.localStorage?.setItem(DECISIONS_KEY, JSON.stringify([...protectedReadDecisions].slice(-MAX_DECISIONS))); } catch { /* memory copy still works */ }
+}
 
 /** Live groups run with account admission enabled, which makes legacy
  * account-scoped queries trap with "Use protected consensus account read".
