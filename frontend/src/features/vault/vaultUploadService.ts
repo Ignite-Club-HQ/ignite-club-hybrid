@@ -180,7 +180,7 @@ export async function uploadVaultItem(
     try {
       const { error: uploadError } = await uploadWithinClubMediaAllowance(clubId, options.file.size, () => client.storage
         .from(storageBucket)
-        .upload(storagePath, options.file, { cacheControl: "31536000" }), client, options.view.type === "team" ? options.view.teamId : null);
+        .upload(storagePath, options.file, { cacheControl: "31536000" }), client, options.view.type === "team" ? options.view.teamId : null, { bucket: storageBucket, path: storagePath, file: options.file, vault: true });
       if (uploadError) throw uploadError;
     } catch (error) {
       await dependencies.settleStorage(reservationId, false);

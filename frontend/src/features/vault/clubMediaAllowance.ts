@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { getActiveSupabaseTarget } from "@/live/targetRegistry";
+import { MEASURED_MEDIA_UPLOAD_ENABLED } from "./mediaUploadRelease";
 
 export const CLUB_MEDIA_BASE_BYTES = CLUB_MEDIA_BYTES;
 type Client = SupabaseClient<Database>;
@@ -61,6 +63,26 @@ export function assertClubMediaFits(used: number, requested: number, purchasedGb
 
 const uploads = new Map<string, Promise<unknown>>();
 
+type MeasuredUpload = { bucket: string; path: string; file: Blob; vault?: boolean };
+
+async function uploadMeasuredMedia(clubId: string, teamId: string | null | undefined, input: MeasuredUpload, client: Client) {
+  const { data: { session }, error } = await client.auth.getSession();
+  if (error || !session) throw new Error("Sign-in required");
+  const target = getActiveSupabaseTarget();
+  const response = await fetch(`${target.url}/functions/v1/verify-iap-receipt-icp?job=media-upload`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${session.access_token}`, apikey: target.anonKey,
+      "content-type": input.file.type || "application/octet-stream", "x-media-club": clubId,
+      "x-media-team": teamId ?? "", "x-media-bucket": input.bucket, "x-media-path": input.path,
+      "x-media-vault": String(input.vault ?? false) },
+    body: input.file,
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Upload could not be confirmed.");
+  if (result.path !== input.path || result.measured_bytes !== input.file.size) throw new Error("Upload confirmation did not match the file.");
+  return { data: { path: input.path }, error: null };
+}
+
 /** App-side only: serialize same-device uploads through the check and write. */
 export async function uploadWithinClubMediaAllowance<T>(
   clubId: string | null | undefined,
@@ -68,6 +90,7 @@ export async function uploadWithinClubMediaAllowance<T>(
   upload: () => Promise<T>,
   client: Client = supabase,
   teamId?: string | null,
+  measuredUpload?: MeasuredUpload,
 ): Promise<T> {
   assertSupabaseMediaAllowancePath();
   if (!clubId) return upload(); // Personal/competition-only chats have no club pot.
@@ -98,6 +121,7 @@ export async function uploadWithinClubMediaAllowance<T>(
       throw new Error(allowance.premium ? "Your storage allowance is full. Delete files or purchase more storage to keep uploading." : "Your club has used its 250 MB Free storage. Delete files or upgrade to Pro to keep uploading.");
     }
     assertSupabaseMediaAllowancePath();
+    if (MEASURED_MEDIA_UPLOAD_ENABLED && measuredUpload) return await uploadMeasuredMedia(clubId, teamId, measuredUpload, client) as T;
     return upload();
   });
   uploads.set(clubId, current);

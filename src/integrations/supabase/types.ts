@@ -5871,6 +5871,45 @@ export type Database = {
           },
         ]
       }
+      media_upload_reservations: {
+        Row: {
+          bucket: string
+          bytes: number
+          club_id: string
+          created_at: string
+          id: string
+          path: string
+          state: string
+          team_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bucket: string
+          bytes: number
+          club_id: string
+          created_at?: string
+          id?: string
+          path: string
+          state?: string
+          team_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bucket?: string
+          bytes?: number
+          club_id?: string
+          created_at?: string
+          id?: string
+          path?: string
+          state?: string
+          team_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       member_referrals: {
         Row: {
           created_at: string
@@ -12988,6 +13027,29 @@ export type Database = {
       }
       require_app_admin: { Args: never; Returns: boolean }
       require_club_admin: { Args: { p_club_id: string }; Returns: boolean }
+      reserve_measured_media: {
+        Args: {
+          p_bucket: string
+          p_bytes: number
+          p_club: string
+          p_path: string
+          p_team: string
+          p_user: string
+          p_vault?: boolean
+        }
+        Returns: string
+      }
+      reserve_measured_media_internal: {
+        Args: {
+          p_bucket: string
+          p_bytes: number
+          p_club: string
+          p_path: string
+          p_team: string
+          p_vault?: boolean
+        }
+        Returns: string
+      }
       reserve_vault_storage: {
         Args: { _bytes: number; _club_id: string }
         Returns: {
@@ -13174,6 +13236,10 @@ export type Database = {
           _version?: string
         }
         Returns: Json
+      }
+      settle_measured_media: {
+        Args: { p_completed: boolean; p_id: string }
+        Returns: undefined
       }
       settle_vault_storage: {
         Args: { _committed: boolean; _reservation_id: string }

@@ -94,7 +94,7 @@ export async function uploadScheduledImage(
 
     const { error } = await uploadWithinClubMediaAllowance(target.clubId, toUpload.size, () => supabase.storage
       .from("chat-attachments")
-      .upload(path, toUpload, { contentType, upsert: false, cacheControl: "31536000" }), supabase, target.teamId);
+      .upload(path, toUpload, { contentType, upsert: false, cacheControl: "31536000" }), supabase, target.teamId, { bucket: "chat-attachments", path, file: toUpload });
     if (error) throw new Error(error.message || "Upload failed");
 
     const { data } = supabase.storage.from("chat-attachments").getPublicUrl(path);
