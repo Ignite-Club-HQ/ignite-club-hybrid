@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { capacityBytesFor, assertEnlargeConfirmation } from './enlarge-photo-store-policy.mjs';
+import { capacityBytesFor, assertEnlargeConfirmation, NEW_GROUP_PHOTO_STORE_GIB } from './enlarge-photo-store-policy.mjs';
 
 test('enlargement confirmation accepts surrounding whitespace but requires the exact phrase', () => {
   assert.doesNotThrow(() => assertEnlargeConfirmation('ENLARGE GROUP 1 PHOTO STORE'));
@@ -28,4 +28,15 @@ test('new groups install their photo store in larger mode', () => {
   const s = readFileSync(new URL('../frontend/scripts/install-group-closed.ts', import.meta.url), 'utf8');
   assert.match(s, /IGNITE_MEDIA_LARGE_CAPACITY/);
   assert.match(s, /enable_stable_media_storage/);
+});
+test('confirmation names the chosen group', () => {
+  assert.doesNotThrow(() => assertEnlargeConfirmation('ENLARGE GROUP 2 PHOTO STORE', '2'));
+  assert.doesNotThrow(() => assertEnlargeConfirmation('ENLARGE GROUP 2 PHOTO STORE', 'g2'));
+  assert.throws(() => assertEnlargeConfirmation('ENLARGE GROUP 1 PHOTO STORE', '2'));
+});
+test('new groups install their photo store at 200 GB', () => {
+  assert.equal(NEW_GROUP_PHOTO_STORE_GIB, 200);
+  const s = readFileSync(new URL('../frontend/scripts/install-group-closed.ts', import.meta.url), 'utf8');
+  assert.match(s, /NEW_GROUP_PHOTO_STORE_GIB/);
+  assert.doesNotMatch(s, /GROUP_PHOTO_STORE_GIB \?\? '16'/);
 });
