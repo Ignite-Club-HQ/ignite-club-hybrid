@@ -75,14 +75,15 @@ export async function uploadWithinClubMediaAllowance<T>(
   const current = previous.catch(() => undefined).then(async () => {
     assertSupabaseMediaAllowancePath();
     const { data: sub, error } = await client.from("club_subscriptions")
-      .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, expires_at, is_trial, trial_ends_at, storage_purchased_gb")
+      .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, expires_at, is_trial, trial_ends_at, storage_purchased_gb, pricing_version")
       .eq("club_id", clubId).maybeSingle();
     if (error) throw error;
     const trial = sub?.is_trial && (!sub.trial_ends_at || new Date(sub.trial_ends_at) > new Date());
     const objects = await listStoredClubMedia(clubId, client);
     const used = objects.reduce((sum, object) => sum + object.size, 0);
     if (resolveClubProAccess(sub).hasPro || trial) {
-      assertClubMediaFits(used, bytes, Number(sub?.storage_purchased_gb ?? 0));
+      const base = sub?.pricing_version === "usd_v2" ? CLUB_MEDIA_BYTES : 5 * 1024 ** 3;
+      if (used + bytes > base + Number(sub?.storage_purchased_gb ?? 0) * 1024 ** 3) throw new Error("Your club has used all of its storage. Delete files or purchase more storage to keep uploading.");
     } else if (used + bytes > FREE_MEDIA_BYTES + Number(sub?.storage_purchased_gb ?? 0) * 1024 ** 3) {
       throw new Error("Your club has used its 250 MB Free storage. Delete files or upgrade to Pro to keep uploading.");
     }

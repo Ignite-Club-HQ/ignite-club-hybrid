@@ -1,3 +1,4 @@
+import { assertPurchaseCatalogReady } from "@/lib/subscriptionPlans";
 import { useState, useEffect } from "react";
 import { CLUB_PRICING as APPROVED_CLUB_PRICING, CLUB_PLAN_ORDER, CLUB_PLAN_NAMES, clubQuote, recommendedClubPlan, type ClubPlan } from "@/lib/subscriptionPlans";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -136,8 +137,8 @@ export default function ClubUpgradePage() {
     const paymentStatus = searchParams.get('payment');
     if (paymentStatus === 'success') {
       toast({
-        title: "Payment Successful!",
-        description: "Your club subscription is now active.",
+        title: "Payment returned",
+        description: "We’re checking your subscription. Paid features appear after verification.",
       });
       queryClient.invalidateQueries({ queryKey: ["club-subscription", clubId] });
       invalidateProAccessQueries(queryClient);
@@ -607,6 +608,11 @@ export default function ClubUpgradePage() {
   };
 
   const handleStripeCheckout = async (tier: "pro" | "pro_football", withTrial: boolean = false) => {
+    try { assertPurchaseCatalogReady("ignite_v2_club", []); } catch (error) {
+      toast({ title: "New plans are being prepared", description: error instanceof Error ? error.message : "Purchase unavailable", variant: "destructive" });
+      return;
+    }
+
     // Upgrading a band or buying additional team capacity is allowed.
     if (isNativePlatform()) {
       // On native, use In-App Purchases
@@ -663,7 +669,7 @@ export default function ClubUpgradePage() {
   };
 
   const handleNativeIAP = async (tier: "pro" | "pro_football", _withTrial: boolean = false) => {
-    const { useInAppPurchase, getClubUpgradeProductId } = await import("@/hooks/useInAppPurchase");
+    const { getClubUpgradeProductId } = await import("@/hooks/useInAppPurchase");
     // We can't use hooks dynamically, so we'll handle it inline
     const { Capacitor } = await import("@capacitor/core");
     if (!Capacitor.isNativePlatform()) return;
@@ -675,6 +681,7 @@ export default function ClubUpgradePage() {
 
     setIsCheckingOut(true);
     try {
+      assertPurchaseCatalogReady(productId, []);
       if (useIcpLab || isIcpRouted) {
         // Session-free path: verify-iap-receipt-icp mints an attestation and
         // the entitlement is redeemed on the identity_access canister.

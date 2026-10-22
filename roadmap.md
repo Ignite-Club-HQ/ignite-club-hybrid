@@ -1,8 +1,9 @@
 # USD subscription structure — approved 22 October 2026
-- [ ] Add shared USD prices, club bands 3/5/10/20, Single Team pricing and paid additional teams; update purchase and display surfaces in both modes.
-- [ ] Enforce verified team entitlements atomically for creation, restore and reassignment, including payment before team 21; preserve existing teams and paid terms.
-- [ ] Enforce Free 250 MB, Single Team 1 GB and shared paid club 3 GB media limits in both modes, preserving existing files, paid add-ons, monthly limits and retention.
-- [ ] Verify dual-mode pricing/authorization/storage/payment regressions and document live release/payment-provider prerequisites.
+- [x] Approved USD catalog, bands 3/5/10/20, Single Team prices and extra-team quotes; unconfigured v2 products refuse charging.
+- [x] Atomic Supabase capacity guard and ICP creation/restore/approval/reassignment guard. Existing teams retained; ICP requires deployment.
+- [ ] Configure and verify v2 entity-scoped fulfillment with provider products: hosted checkout/verifiers absent from this checkout; global ICP entitlement cannot grant club-specific seats.
+- [ ] Complete authoritative team-scoped media quota and Supabase aggregate reservations. Free ICP 250 MiB drafted/tested; existing paid 5 GiB preserved until versioned fulfillment.
+- [ ] Live signed-in purchase/readback blocked by external unmanaged auth, missing provider catalog setup and undeployed ICP updates. Catalog/quota tests and Motoko checks pass locally; no complete live billing claim.
 
 # Group 2 account-access repair
 - [x] Add isolated stable production eligibility release and governor-authorized exact Group 2 service readers derived from two pinned consensus registry reads; preserve removal and lifecycle gates.

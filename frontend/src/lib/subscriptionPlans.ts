@@ -58,3 +58,9 @@ export function effectiveTeamLimit(sub: { team_limit?: number | null; is_pro?: b
   if (limit == null || !Number.isSafeInteger(limit) || limit < 1) return 20;
   return trial && !paid && !override ? Math.min(20, limit) : limit;
 }
+/** A quote is not permission to charge for an unconfigured provider product. */
+export function assertPurchaseCatalogReady(productId: string, readyProducts: readonly string[]): void {
+  if (productId.startsWith("ignite_v2_") && !readyProducts.includes(productId)) {
+    throw new Error("The new plans are not available for purchase yet. Your existing subscription is unchanged.");
+  }
+}

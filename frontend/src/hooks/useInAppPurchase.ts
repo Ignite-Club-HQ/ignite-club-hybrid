@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { clubProductId, teamProductId, type ClubPlan } from "@/lib/subscriptionPlans";
+import { assertPurchaseCatalogReady, clubProductId, teamProductId, type ClubPlan } from "@/lib/subscriptionPlans";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -74,6 +74,7 @@ export function useInAppPurchase(): UseInAppPurchaseReturn {
       setError(null);
 
       try {
+        assertPurchaseCatalogReady(productId, []);
         if (!isIcp) {
           // Pre-validate authorization before triggering native payment
           const { data: authCheck, error: authCheckError } = await supabase.functions.invoke(
