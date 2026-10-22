@@ -936,9 +936,22 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
   onComments: (post: LiveMediaPost) => void; onLongPress: (post: LiveMediaPost) => void; onCancelPress: () => void;
   onPhoto: (post: LiveMediaPost, index: number) => void;
 }) {
+  const articleRef = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(index < 2);
+  useEffect(() => {
+    if (visible) return;
+    const element = articleRef.current;
+    if (!element) return;
+    if (typeof IntersectionObserver === 'undefined') { setVisible(true); return; }
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { setVisible(true); observer.disconnect(); }
+    }, { rootMargin: '400px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [visible]);
   const details = useQuery({
     queryKey: ['icp-media-post-details', principal, base.clubId, base.representativeAssetId],
-    enabled: !!principal,
+    enabled: !!principal && visible,
     queryFn: () => withFeatureBackend('media', {
       supabase: async () => { throw new Error('unreachable'); },
       icp: async ctx => {
@@ -959,7 +972,7 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
     retry: 1,
   });
   const post = details.data ? { ...base, ...details.data, comments: mergeGalleryComments(details.data.comments, base.comments) } : base;
-  return <>
+  return <div ref={articleRef}>
               <article className="overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex items-center gap-3 px-3 py-2.5">
                   <Avatar className="h-9 w-9">
@@ -1021,7 +1034,7 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
                   <p className="px-3 pb-3 text-sm">{post.caption}</p>
                 )}
               </article>
-    {details.isPending && <div role="status" className="py-1 text-xs text-muted-foreground">Loading comments and reactions…</div>}
+    {visible && details.isPending && <div role="status" className="py-1 text-xs text-muted-foreground">Loading comments and reactions…</div>}
     {details.isError && <Button variant="ghost" size="sm" onClick={() => details.refetch()}>Retry comments and reactions</Button>}
-  </>;
+  </div>;
 }
