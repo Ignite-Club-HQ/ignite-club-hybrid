@@ -36,8 +36,6 @@ const MAX_PAGES = 500;
 
 /** How long one confirmed registry/assignment check is reused. */
 export const RECHECK_WINDOW_MS = 15_000;
-/** Reads may use a confirmed check this old while a fresh one runs behind them. */
-export const READ_GRACE_MS = 10 * 60_000;
 export async function openGroupSession(context: FeatureBackendContext, transport: GroupSessionTransport) {
   const principal = context.identity.getPrincipal().toText();
   if (!principal || principal === '2vxsx-fae') throw new Error('Authenticated group session required');
@@ -154,7 +152,6 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   // Opening validated every discovered club; seed their check time.
   const assignmentCheckedAt = new Map<string, number>([...clubs].map(id => [id, openedAt]));
   const assignmentInflight = new Map<string, Promise<void>>();
-  let backgroundFailure: Error | null = null;
   const checkStale = async (requested: readonly string[], fresh: boolean) => {
     await assertRegistryUnchanged(fresh);
     const now = Date.now();
@@ -169,21 +166,9 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     }
     await Promise.all(waiting);
   };
-  /** Writes (and fresh=true) always wait for a confirmed check. Reads inside
-   * READ_GRACE_MS of the last confirmed check answer at once and recheck in
-   * the background; a failed background check fails every later call closed.
-   * Canisters still enforce access on every read. */
-  const revalidate = async (requested: readonly string[], fresh = false, read = false) => {
+  const revalidate = async (requested: readonly string[], fresh = false) => {
     live();
-    if (backgroundFailure) throw backgroundFailure;
     if (requested.length > MAX_CLUBS || requested.some(id => !clubs.has(id))) throw new Error('Club outside discovered membership');
-    const now = Date.now();
-    const recent = read && !fresh && now - registryCheckedAt < READ_GRACE_MS &&
-      requested.every(id => now - (assignmentCheckedAt.get(id) ?? 0) < READ_GRACE_MS);
-    if (recent) {
-      checkStale(requested, false).catch(e => { backgroundFailure = e instanceof Error ? e : new Error(String(e)); });
-      return;
-    }
     await checkStale(requested, fresh);
     live();
   };
@@ -198,7 +183,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     deletionRegistryRevision: registry.revision,
     async readClub<T>(clubId: string, domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
-      await revalidate([clubId], false, true);
+      await revalidate([clubId]);
       const route = resolveDeploymentClubDomain(table, registry.deployment, clubId, domain);
       groupRouteScope(route, principal);
       const result = await read(targetFor(route.groupId)); live(); return result;
@@ -278,9 +263,8 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       live();
       await assertRegistryUnchanged();
       const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
-      // Shares the windowed check: a registry change still fails later calls,
-      // but every cross-group read no longer pays two extra consensus reads.
-      await assertRegistryUnchanged();
+      // Fresh: a registry change while replies were in flight must discard them.
+      await assertRegistryUnchanged(true);
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Cross-group read exceeds row budget');
       return rows;
@@ -288,7 +272,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     async readClubs<T>(requested: readonly string[], domain: GroupDomain,
       read: (ctx: FeatureBackendContext, clubIds: readonly string[]) => Promise<readonly T[]>): Promise<T[]> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
-      await revalidate(requested, false, true);
+      await revalidate(requested);
       const batches = new Map<string, { ids: string[]; indices: number[] }>();
       requested.forEach((id, index) => {
         const route = resolveDeploymentClubDomain(table, registry.deployment, id, domain);
