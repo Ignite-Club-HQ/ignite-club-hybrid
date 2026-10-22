@@ -1,9 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearMembershipDiscovery, MEMBERSHIP_RECONCILE_MS, readMembershipDiscovery, reconcileMembershipDiscovery } from './membershipDiscoveryCache';
+import { QueryClient } from '@tanstack/react-query';
+import { bindMembershipDiscovery, clearMembershipDiscovery, MEMBERSHIP_RECONCILE_MS, readMembershipDiscovery, reconcileMembershipDiscovery } from './membershipDiscoveryCache';
 
 beforeEach(() => { clearMembershipDiscovery(); vi.useFakeTimers(); vi.setSystemTime(1000); });
 afterEach(() => { clearMembershipDiscovery(); vi.useRealTimers(); });
 describe('shared membership discovery', () => {
+  it('records bounded query data and invalidates visible membership pages after an external join', async () => {
+    const client = new QueryClient();
+    bindMembershipDiscovery(client);
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const load = vi.fn(async () => ['club-g1']);
+    await readMembershipDiscovery('account-target', load);
+    expect(client.getQueryData(['icp-membership-discovery', 'account-target'])).toEqual({ value: ['club-g1'], checkedAt: 1000 });
+    load.mockResolvedValue(['club-g1', 'club-g2']);
+    vi.setSystemTime(1000 + MEMBERSHIP_RECONCILE_MS);
+    reconcileMembershipDiscovery();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['my-chat-groups-with-messages'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['user-memberships-for-events'] });
+    clearMembershipDiscovery();
+    expect(client.getQueryData(['icp-membership-discovery', 'account-target'])).toBeUndefined();
+    client.clear();
+  });
+  it('never reconciles a suspended app', async () => {
+    const load = vi.fn(async () => ['club-g1']);
+    await readMembershipDiscovery('a', load);
+    vi.setSystemTime(1000 + MEMBERSHIP_RECONCILE_MS);
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    reconcileMembershipDiscovery();
+    expect(load).toHaveBeenCalledTimes(1);
+    visibility.mockRestore();
+  });
   it('coalesces pages and does not rediscover after the old 30 second memo expiry', async () => {
     const load = vi.fn(async () => ['club-g1']);
     expect(await Promise.all([readMembershipDiscovery('account-target', load), readMembershipDiscovery('account-target', load)])).toEqual([['club-g1'], ['club-g1']]);

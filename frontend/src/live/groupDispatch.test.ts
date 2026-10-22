@@ -15,6 +15,24 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it('verified legacy members do not reopen the session on every club read', async () => {
+    const { d, session } = deps(ON);
+    const dispatcher = createClubDispatcher({ ...d, open: vi.fn(async () => ({ ...session, isLegacyMember: (id: string) => id === 'legacy-club' })) });
+    await dispatcher.read('events', 'legacy-club', 'events_domain', async () => 'events');
+    await dispatcher.read('messaging', 'legacy-club', 'messaging_domain', async () => 'chats');
+    expect(d.legacy).toHaveBeenCalledTimes(2);
+    expect(session.dispose).not.toHaveBeenCalled();
+  });
+  it('member content never invokes unrestricted discovery', async () => {
+    const { d, session } = deps(ON);
+    const memberRead = vi.fn(async (_domain, read) => read({ target: { canisterIds: { club_domain: 'member-group' } } }));
+    const everyRead = vi.fn(async () => []);
+    const dispatcher = createClubDispatcher({ ...d, open: async () => ({ ...session, readEveryGroup: everyRead, readMemberGroups: memberRead }) } as never);
+    const result = await dispatcher.readMemberGroups('membership', 'club_domain', async ctx => [ctx.target.canisterIds.club_domain], parts => parts.flat());
+    expect(result).toEqual(['member-group']);
+    expect(everyRead).not.toHaveBeenCalled();
+    expect(d.legacy).not.toHaveBeenCalled();
+  });
   it.each([
     ['media', 'media_metadata', { photoId: 'photo-a' }, 'photo'],
     ['media', 'media_metadata', { galleryCardId: 'card-a' }, 'galleryCard'],
