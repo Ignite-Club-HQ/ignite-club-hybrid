@@ -1,5 +1,7 @@
 # USD subscription structure — approved 22 October 2026
-- [ ] 04:14 request: finish remaining safe enforcement and fulfillment preparation; retain disabled purchases. Live activation requires provider configuration, a deployed byte-receiving service, governor signing access and authenticated acceptance.
+- [x] 04:14 batch: deployed service-only atomic measured upload reservations, added bounded authenticated actual-byte handler and wired gallery/chat/scheduled/copy/Vault; 68 targeted tests pass (11 skipped), lint and ICP guards pass. Promo terms unchanged. Release notes: docs/subscription-enforcement-release.md.
+- [ ] Supabase cutover blocked: existing external service deployment failed twice with an internal error; measured release switch stays false and raw write restrictions are not activated, preserving current uploads. Requires successful service deployment, authenticated concurrent upload/readback, missing competition-vault provisioning and coordinated restrictive write-policy/app cutover.
+- [ ] Remaining release/fulfillment blocked: governor signing identity/GitHub token unavailable; website and Google/non-ICP verifiers absent from this checkout; provider product setup and verified account/entity binding, renewals/refunds/seat settlement and live acceptance required. All new purchases remain disabled.
 - [ ] Current batch: complete pre-store enforcement and preserve active Unlimited promos; leave all new purchases disabled until provider configuration.
 - [x] Approved USD catalog, bands 3/5/10/20, Single Team prices and extra-team quotes; unconfigured v2 products refuse charging.
 - [x] Atomic Supabase capacity guard and ICP creation/restore/approval/reassignment guard. Existing teams retained; ICP requires deployment.

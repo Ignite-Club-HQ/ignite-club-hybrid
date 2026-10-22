@@ -4,6 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getActiveSupabaseTarget } from "@/live/targetRegistry";
+import { MEASURED_MEDIA_UPLOAD_ENABLED } from "./mediaUploadRelease";
 
 export const CLUB_MEDIA_BASE_BYTES = CLUB_MEDIA_BYTES;
 type Client = SupabaseClient<Database>;
@@ -120,7 +121,7 @@ export async function uploadWithinClubMediaAllowance<T>(
       throw new Error(allowance.premium ? "Your storage allowance is full. Delete files or purchase more storage to keep uploading." : "Your club has used its 250 MB Free storage. Delete files or upgrade to Pro to keep uploading.");
     }
     assertSupabaseMediaAllowancePath();
-    if (measuredUpload) return await uploadMeasuredMedia(clubId, teamId, measuredUpload, client) as T;
+    if (MEASURED_MEDIA_UPLOAD_ENABLED && measuredUpload) return await uploadMeasuredMedia(clubId, teamId, measuredUpload, client) as T;
     return upload();
   });
   uploads.set(clubId, current);
