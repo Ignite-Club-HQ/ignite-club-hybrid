@@ -6,11 +6,13 @@ export async function readPinnedGroupRegistry<G extends { id: string }, P extend
   expected?: bigint, recheck: () => void = () => {},
 ) {
   let pinned = expected;
+  let pageCount = 0;
   const once = async () => {
     const groups: G[] = [], placements: P[] = [];
     let configurationRevision: bigint | undefined;
     let firstPage = true;
     let cursor: [] | [string] = [];
+    pageCount = 0;
     const ids = new Set<string>();
     for (let pages = 0; pages < 4096; pages++) {
       recheck();
@@ -28,6 +30,7 @@ export async function readPinnedGroupRegistry<G extends { id: string }, P extend
         if (ids.has(g.id)) throw new Error('Duplicate registry group');
         ids.add(g.id);
       }
+      pageCount++;
       groups.push(...page.groups); placements.push(...page.placements);
       if (groups.length > 4096) throw new Error('Registry safety bound exceeded');
       if (!page.next_cursor.length) return { revision: pinned, configurationRevision, groups, placements };
@@ -35,7 +38,12 @@ export async function readPinnedGroupRegistry<G extends { id: string }, P extend
     }
     throw new Error('Registry cursor safety bound exceeded');
   };
-  const first = await once(), second = await once();
+  const first = await once();
+  // One page = one atomic, revision-pinned consensus reply: nothing can change
+  // between pages, so the confirming second pass only adds a round trip.
+  // Multi-page registries still get both complete reads.
+  if (pageCount === 1) return first;
+  const second = await once();
   const fingerprint = (v: unknown) => JSON.stringify(v, (_, x) => typeof x === 'bigint' ? String(x) : x);
   if (fingerprint(first) !== fingerprint(second)) throw new Error('Registry changed between consensus reads');
   return second;
