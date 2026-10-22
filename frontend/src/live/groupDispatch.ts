@@ -49,9 +49,10 @@ const owners = new Map<string, string | null>(); // kind:id -> club (null = shar
 const inflight = new Map<string, Promise<string | null>>();
 let loadedFor: string | null = null;
 let cached: { principal: string; targetKey: string; session: Promise<Session> } | null = null;
-export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); reopening = null; }
+export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); hostedChecked.clear(); reopening = null; }
 // Clubs confirmed (after one reopen) to have no group assignment: legacy/shared.
 const unplaced = new Set<string>();
+const hostedChecked = new Set<string>();
 let reopening: Promise<void> | null = null;
 
 /** A club created or joined after the session opened is missing from it and
@@ -99,12 +100,13 @@ async function resolveScoped(deps: DispatchDeps, scope: EntityScope) {
   if ('clubId' in scope) { const r = await sessionKnowing(deps, scope.clubId); return { ...r, club: scope.clubId as string | null }; }
   let r = await sessionFor(deps);
   let club = await resolveClub(deps, r.s, r.principal, scope);
-  if (club && !r.s.isAssigned(club)) {
+  if (club && !r.s.isAssigned(club) && !hostedChecked.has(club)) {
     r = await sessionKnowing(deps, club);
     if (!r.s.isAssigned(club)) {
       for (const [k, v] of owners) if (v === club) owners.delete(k);
       persist(deps, r.principal);
       club = await resolveClub(deps, r.s, r.principal, scope);
+      if (club) hostedChecked.add(club); // a group really claims it: hosted, keep
     }
   }
   return { ...r, club };
