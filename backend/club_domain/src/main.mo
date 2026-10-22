@@ -2748,10 +2748,8 @@ persistent actor class Main(governorInit : Principal) = this {
     acl.roles.filter(func(grant) = grant.user.equal(caller))
   };
 
-  // Caller-only consensus read; linked principals come from this canister's
-  // verified account, never a browser-supplied account/principal list.
-  // At most 200 profile slots scanned per call. Cursor is not a snapshot:
-  // consumers revalidate discovered memberships against current authority.
+  // Operator-only consensus source export. Bounded raw edges pin the durable
+  // mutation revision; no member-index rebuild or resource permission grant.
   public shared ({ caller }) func read_membership_source_page(cursor : ?MembershipSource.Cursor) : async { #Ok : MembershipSource.Page; #Err : Text } {
     // Source-wide personal relationship evidence is operator-only until the
     // separate exact central-reader binding/propagation release is verified.

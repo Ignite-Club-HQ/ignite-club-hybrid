@@ -51,7 +51,7 @@ impl Directory {
         if caller != prior.authority || snapshot.authority != caller || snapshot.generation != self.generation || snapshot.revision == 0 {
             return Err("Exact current club authority and generation required".into());
         }
-        if snapshot.subjects.len() > 100_000 || snapshot.subjects.iter().any(|p| Principal::from_text(p).is_err() || p == &Principal::anonymous().to_text()) {
+        if snapshot.subjects.len() > 100_000 || snapshot.subjects.iter().any(|p| Principal::from_text(p).is_err() || p == &Principal::anonymous().to_text() || p == &Principal::management_canister().to_text()) {
             return Err("Invalid bounded membership subjects".into());
         }
         if snapshot.revision < prior.revision { return Err("Stale source snapshot".into()); }

@@ -1,6 +1,6 @@
 # Stage B: authority-backed membership display directory
 
-Status: source audit and contract specification; not implemented or released.
+Status: durable source invalidation, operator traversal and offline directory/staging core implemented locally; central propagation/read API and cutover not implemented or released.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
 ## Scope and ownership
@@ -11,7 +11,7 @@ Index effective active club membership from each exact club authority. League me
 
 ## Current authority and revision gaps
 
-`club_domain.isMember` combines explicit roles and parent/guardian relationships through assigned teams, exclusions and removed-member state. The transient `currentMemberIndex()` produces candidates and the indexed consensus endpoint rechecks membership. The index's transient `membershipEpoch` advances for ordinary mutations, but the returned ACL version is not a mutation revision. It cannot prove complete stable directory propagation.
+`club_domain.isMember` combines explicit roles and parent/guardian relationships through assigned teams, exclusions and removed-member state. The transient `currentMemberIndex()` produces candidates and the indexed consensus endpoint rechecks membership. It now uses the migration-backed discovery journal revision for ordinary mutations, while the returned ACL version remains distinct. The dirty journal cannot by itself prove complete stable directory propagation.
 
 Router placement establishes location only. Shared identity account roles/families and frontend acknowledgement invalidation cannot independently establish effective membership at every club authority.
 

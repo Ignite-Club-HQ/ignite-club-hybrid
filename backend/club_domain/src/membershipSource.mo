@@ -22,6 +22,7 @@ module {
         if (c.revision != revision) return #Err("Membership source revision changed");
         phase := c.phase; offset := c.offset; nested := c.nested;
         if (phase >= sizes.size() or offset > sizes[phase]) return #Err("Invalid membership source cursor");
+        if (offset == sizes[phase] and nested != 0) return #Err("Invalid exhausted membership source cursor");
       };
       case null {}
     };

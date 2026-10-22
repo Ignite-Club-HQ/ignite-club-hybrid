@@ -9,6 +9,7 @@ use crate::membership_directory::Source;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Stage {
     pub club: String,
+    pub authority: candid::Principal,
     pub generation: u64,
     pub revision: u64,
     pub next_sequence: u64,
@@ -28,12 +29,13 @@ impl<M: Memory> Store<M> {
     pub fn source(&self, club: &str) -> Option<Source> { self.manifests.get(&club.to_string()).map(|b|decode(&b)) }
     pub fn stage(&self, club: &str) -> Option<Stage> { self.stages.get(&club.to_string()).map(|b|decode(&b)) }
     pub fn begin(&mut self, source: &Source, revision: u64) -> Result<(), String> {
-        if source.club.is_empty() || source.club.len()>128 || source.club.contains('\u{1f}') || revision == 0 || revision < source.revision { return Err("Invalid snapshot stage".into()); }
+        if source.club.is_empty() || source.club.len()>128 || source.club.contains('\u{1f}') || source.generation==0 || source.authority==candid::Principal::anonymous() || source.authority==candid::Principal::management_canister() || revision == 0 || revision < source.revision { return Err("Invalid snapshot stage".into()); }
         if let Some(prior)=self.stage(&source.club) {
+            if prior.generation==source.generation && prior.authority!=source.authority { return Err("Conflicting generation authority".into()); }
             if prior.generation==source.generation && prior.revision==revision { return Ok(()); }
             if prior.generation>source.generation || (prior.generation==source.generation && prior.revision>revision) { return Err("Stale snapshot stage".into()); }
         }
-        let stage=Stage {club:source.club.clone(),generation:source.generation,revision,next_sequence:0,terminal:false};
+        let stage=Stage {club:source.club.clone(),authority:source.authority,generation:source.generation,revision,next_sequence:0,terminal:false};
         self.stages.insert(source.club.clone(),encode(&stage)); Ok(())
     }
     pub fn append(&mut self, club: &str, generation: u64, revision: u64, sequence: u64, rows: Vec<Vec<u8>>, terminal: bool) -> Result<(), String> {
@@ -61,7 +63,12 @@ impl<M: Memory> Store<M> {
     }
     pub fn persist_verified_source(&mut self, source: &Source) -> Result<(), String> {
         let stage=self.stage(&source.club).ok_or("Snapshot stage missing")?;
-        if !stage.terminal || !source.complete || stage.generation!=source.generation || stage.revision!=source.revision {return Err("Incomplete source snapshot".into());}
+        if !stage.terminal || !source.complete || stage.authority!=source.authority || stage.generation!=source.generation || stage.revision!=source.revision {return Err("Incomplete source snapshot".into());}
+        if source.subjects.len()>100_000 || source.subjects.iter().any(|p|candid::Principal::from_text(p).is_err() || p==&candid::Principal::anonymous().to_text() || p==&candid::Principal::management_canister().to_text()) { return Err("Invalid bounded membership subjects".into()); }
+        if let Some(prior)=self.source(&source.club) {
+            if prior.generation>source.generation || (prior.generation==source.generation && prior.revision>source.revision) {return Err("Stale verified manifest".into());}
+            if prior.generation==source.generation && prior.revision==source.revision {return if prior==*source {Ok(())} else {Err("Conflicting verified manifest".into())};}
+        }
         // This offline adapter stores verified manifests only. Effective-pair
         // materialization/indexing must be bounded before runtime integration.
         self.manifests.insert(source.club.clone(),encode(source)); Ok(())
@@ -96,5 +103,9 @@ impl<M: Memory> Store<M> {
         assert!(store.append("club",1,4,0,vec![],false).is_err());
         assert!(store.append("club",2,4,0,vec![vec![0;1025]],false).is_err());
         assert_eq!(store.stage("club").unwrap().next_sequence,0);
+        let mut other=source.clone();other.authority=Principal::from_slice(&[2,1]);
+        assert!(store.begin(&other,4).is_err());assert_eq!(store.stage("club").unwrap().authority,source.authority);
+        store.append("club",2,4,0,vec![],true).unwrap(); other.complete=true;
+        assert!(store.persist_verified_source(&other).is_err());assert!(store.source("club").is_none());
     }
 }
