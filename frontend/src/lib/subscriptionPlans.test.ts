@@ -50,3 +50,7 @@ it("preserves Unlimited promo storage and enforces Free after expiry", () => {
   expect(mediaAllowance({ is_pro:true, plan:"unlimited" }).limitBytes).toBe(5368709120);
   expect(mediaAllowance({ is_pro:true, plan:"unlimited", expires_at:"2020-01-01" }).limitBytes).toBe(262144000);
 });
+it("keeps legacy club allowances separate from new USD purchases", () => {
+  expect(mediaAllowance({ is_pro:true, plan:"standard" }).limitBytes).toBe(5368709120);
+  expect(mediaAllowance({ is_pro:true, plan:"standard", pricing_version:"usd_v2" }).limitBytes).toBe(3221225472);
+});

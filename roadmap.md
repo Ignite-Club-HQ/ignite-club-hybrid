@@ -3,7 +3,9 @@
 - [x] Approved USD catalog, bands 3/5/10/20, Single Team prices and extra-team quotes; unconfigured v2 products refuse charging.
 - [x] Atomic Supabase capacity guard and ICP creation/restore/approval/reassignment guard. Existing teams retained; ICP requires deployment.
 - [ ] Configure and verify v2 entity-scoped fulfillment with provider products: hosted checkout/verifiers absent from this checkout; global ICP entitlement cannot grant club-specific seats.
-- [ ] Complete authoritative team-scoped media quota and Supabase aggregate reservations. Free ICP 250 MiB drafted/tested; existing paid 5 GiB preserved until versioned fulfillment.
+- [x] Local ICP store reads authoritative club/team allowances, checks combined finalized + pending media, exempts branding and preserves legacy Unlimited/Starter/Standard allowances. Club/store policy tests and compilers pass; 38 frontend tests pass (4 skipped), 17 contracts match. This is not deployed or authenticated live acceptance.
+- [ ] Finish Supabase trusted actual-byte upload/reservation/finalization enforcement across gallery/chat/Vault; permission preflight alone cannot enforce streamed size. Current client preflight is not authoritative enforcement. This remains unfinished engineering, not a provider-configuration blocker.
+- [ ] Finish ICP plaintext-size accounting (currently counts ciphertext), versioned 3 GiB fulfillment for legacy-named bands, bounded legacy team retention and real canister upload/upgrade tests before release. No production rehearsal flags enabled.
 - [ ] Live signed-in purchase/readback blocked by external unmanaged auth, missing provider catalog setup and undeployed ICP updates. 26 focused pricing/quota/upgrade tests and both Motoko policy tests pass; both canisters check without errors. Public browser opens /auth without runtime errors; signed-in purchase/readback remains unverified.
 
 # Group 2 account-access repair

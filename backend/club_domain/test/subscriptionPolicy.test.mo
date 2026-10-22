@@ -15,6 +15,7 @@ assert Policy.limit(?{ base with team_limit = ?5 }, 100) == 5;
 assert Policy.limit(?{ base with plan = "unlimited"; team_limit = null }, 100) == 100_000;
 assert Policy.limit(?{ base with plan = "unlimited"; team_limit = null }, 200) == 20;
 assert Policy.mediaBase(null, 100) == 262_144_000;
-assert Policy.mediaBase(?base, 100) == 3_221_225_472;
+assert Policy.mediaBase(?base, 100) == 5_368_709_120;
+assert Policy.mediaBase(?{ base with plan = "small" }, 100) == 3_221_225_472;
 assert Policy.mediaBase(?{ base with plan = "unlimited" }, 100) == 5_368_709_120;
 assert Policy.mediaBase(?base, 200) == 262_144_000;
