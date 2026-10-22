@@ -3,7 +3,7 @@ import type { FeatureBackendContext } from "./featureRouter";
 import { fetchLiveMessagingCandidates } from "./messagingCandidates";
 import {
   addLiveGroupMembers,
-  createLiveGroupWithRoles,
+  ensureLiveStandardClubChat,
   listLiveGroupsByClub,
 } from "./features/messaging";
 
@@ -14,10 +14,10 @@ import {
  * creates any missing default chat and tops up membership with everyone
  * currently holding a matching role. Safe to call repeatedly (idempotent).
  */
-export const DEFAULT_CLUB_CHATS: Array<{ name: string; roles: string[] }> = [
-  { name: "Coaches", roles: ["coach", "club_admin", "app_admin"] },
-  { name: "Team Admins", roles: ["team_admin", "club_admin", "app_admin"] },
-  { name: "Club Committee", roles: ["committee_member", "club_admin", "app_admin"] },
+export const DEFAULT_CLUB_CHATS: Array<{ key: string; name: string; roles: string[] }> = [
+  { key: "coaches", name: "Coaches", roles: ["coach", "club_admin", "app_admin"] },
+  { key: "team_admins", name: "Team Admins", roles: ["team_admin", "club_admin", "app_admin"] },
+  { key: "club_committee", name: "Club Committee", roles: ["committee_member", "club_admin", "app_admin"] },
 ];
 
 const syncedThisSession = new Set<string>();
@@ -60,15 +60,14 @@ async function syncDefaultClubChats(ctx: FeatureBackendContext, clubId: string):
       .filter((g) => !g.teamId && g.name.trim().toLowerCase() === def.name.toLowerCase())
       .sort((a, b) => String(a.conversationId).localeCompare(String(b.conversationId)))[0];
     try {
-      if (!group) {
-        const entries: Array<[Principal, string]> = [[self, "owner"]];
-        for (const c of matching) {
-          if (c.id !== selfText) entries.push([c.principal, "member"]);
-        }
-        await createLiveGroupWithRoles(ctx, clubId, null, def.name, "group", entries);
-      } else if (matching.length > 0) {
+      const entries: Array<[Principal, string]> = [[self, "owner"]];
+      for (const c of matching) {
+        if (c.id !== selfText) entries.push([c.principal, "member"]);
+      }
+      const acknowledged = await ensureLiveStandardClubChat(ctx, clubId, def.key, group?.conversationId ?? null, entries);
+      if (matching.length > 0) {
         // Members already in the group are skipped canister-side.
-        await addLiveGroupMembers(ctx, group.conversationId, matching.map((c) => c.principal));
+        await addLiveGroupMembers(ctx, acknowledged.conversation_id, matching.map((c) => c.principal));
       }
     } catch (err) {
       // Best-effort: callers without manage rights just skip the top-up.

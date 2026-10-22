@@ -563,6 +563,21 @@ export async function createLiveGroupWithRoles(
   );
 }
 
+/** Canister-owned standard identity; never fall back to a create-only call. */
+export async function ensureLiveStandardClubChat(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  key: string,
+  existingId: string | null,
+  roleEntries: Array<[Principal, string]>,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.ensure_default_club_chat(clubId, key, candidOpt(existingId), roleEntries),
+    "Ensure standard chat",
+  );
+}
+
 export async function updateLiveGroup(
   ctx: FeatureBackendContext,
   conversationId: string,
