@@ -77,7 +77,7 @@ impl<M: Memory> Store<M> {
         if source.subjects.len()>100_000 || source.subjects.iter().any(|p|candid::Principal::from_text(p).is_err() || p==&candid::Principal::anonymous().to_text() || p==&candid::Principal::management_canister().to_text()) { return Err("Invalid bounded membership subjects".into()); }
         if let Some(prior)=self.source(&source.club) {
             if prior.generation>source.generation || (prior.generation==source.generation && prior.revision>source.revision) {return Err("Stale verified manifest".into());}
-            if prior.generation==source.generation && prior.revision==source.revision {return if prior==*source {Ok(())} else {Err("Conflicting verified manifest".into())};}
+            if prior.complete && prior.generation==source.generation && prior.revision==source.revision {return if prior==*source {Ok(())} else {Err("Conflicting verified manifest".into())};}
         }
         // This offline adapter stores verified manifests only. Effective-pair
         // materialization/indexing must be bounded before runtime integration.
