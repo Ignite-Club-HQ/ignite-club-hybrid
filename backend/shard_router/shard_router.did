@@ -102,6 +102,16 @@ type Result_19 = variant { Ok : vec GroupAssignment; Err : text };
 type Result_2 = variant { Ok : AssignResult; Err : text };
 type Result_20 = variant { Ok : opt OwnerOpening; Err : text };
 type Result_21 = variant { Ok : bool; Err : text };
+type Result_22 = variant { Ok : RoutingApproval; Err : text };
+type Result_23 = variant { Ok : opt RoutingApproval; Err : text };
+type RoutingApproval = record {
+  target_alias : text;
+  configuration_revision : nat64;
+  approved_configuration_sha256 : text;
+  removal_wiring_group_ids : vec text;
+  removal_checked_at_ms : nat64;
+  evidence_sha256 : text;
+};
 type Result_3 = variant { Ok : AssignDomainResult; Err : text };
 type Result_4 = variant { Ok : GroupAssignment; Err : text };
 type Result_5 = variant { Ok : DomainMigration; Err : text };
@@ -188,7 +198,10 @@ service : (Init) -> {
   // No private approval data: admins deleting a different account still need
   // the complete group inventory, even when they have no test-club membership.
   read_owner_test_deletion_required : (text) -> (Result_21);
+  read_routing_approval : (text) -> (Result_23);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
+  // Governor-only live routing approval; never changes groups or revisions.
+  record_routing_approval : (RoutingApproval, nat64) -> (Result_22);
   register_group : (ShardGroup, nat64) -> (Result);
   register_group_placement : (GroupPlacement, nat64) -> (Result);
   release_deletion_lock : (text, nat64) -> (Result_7);

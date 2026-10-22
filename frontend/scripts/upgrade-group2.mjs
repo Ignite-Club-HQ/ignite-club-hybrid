@@ -14,13 +14,17 @@ import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { validateGroup2Inventory, validateUpgradeJournal, wasmHash, verifyUpgradeStatus, upgradeArgs, reconcileUpgradeStep, GROUP2_GOVERNOR } from '../../scripts/group2-upgrade-rules.mjs';
 
 const [action, wasmDirectory, pemFile, reportDirectory] = process.argv.slice(2);
+const GROUP = (process.env.GROUP_ID || 'g2').trim();
+if (!/^g[1-9][0-9]{0,2}$/.test(GROUP) || GROUP === 'g1') throw new Error('GROUP_ID must be g2 or later');
+const NUM = GROUP.slice(1);
+const BRANCH = GROUP === 'g2' ? 'group-2-upgrade-receipts' : `group-${NUM}-receipts`;
 if (!['check', 'upgrade', 'reload'].includes(action) || !wasmDirectory || !pemFile || !reportDirectory) throw new Error('Usage: upgrade-group2 <check|upgrade|reload> <wasm-directory> <existing-key-file> <report-directory>');
-if (action === 'upgrade' && process.env.CONFIRMATION?.trim() !== 'UPGRADE GROUP 2') throw new Error('Type UPGRADE GROUP 2 to confirm');
-if (action === 'reload' && process.env.CONFIRMATION?.trim() !== 'RELOAD GROUP 2 SETTINGS') throw new Error('Type RELOAD GROUP 2 SETTINGS to confirm');
+if (action === 'upgrade' && process.env.CONFIRMATION?.trim() !== `UPGRADE GROUP ${NUM}`) throw new Error(`Type UPGRADE GROUP ${NUM} to confirm`);
+if (action === 'reload' && process.env.CONFIRMATION?.trim() !== `RELOAD GROUP ${NUM} SETTINGS`) throw new Error(`Type RELOAD GROUP ${NUM} SETTINGS to confirm`);
 const root = resolve(import.meta.dirname, '../..');
-const provision = JSON.parse(readFileSync(join(root, 'deploy/groups/g2/provision.json')));
+const provision = JSON.parse(readFileSync(join(root, `deploy/groups/${GROUP}/provision.json`)));
 const shared = JSON.parse(readFileSync(join(root, 'deploy/mainnet/.icp/data/mappings/ic.ids.json')));
-const services = validateGroup2Inventory(provision, shared);
+const services = validateGroup2Inventory(provision, shared, GROUP);
 const jwk = createPrivateKey(readFileSync(pemFile, 'utf8')).export({ format: 'jwk' });
 if (!jwk.d) throw new Error('Existing signing key required');
 const secret = new Uint8Array(Buffer.from(jwk.d, 'base64url'));
@@ -53,14 +57,14 @@ const observe = async service => {
 const router = Actor.createActor(routerIdl, { agent, canisterId: shared.shard_router });
 const closed = async () => {
   const reply = await router.read_group_registry('ic');
-  if ('Err' in reply) throw new Error('Shared router upgrade/configuration is required before g2 upgrade');
-  const group = reply.Ok.groups.find(g => g.id === 'g2');
-  if (group?.accepting) throw new Error('Group 2 must remain closed');
+  if ('Err' in reply) throw new Error(`Shared router upgrade/configuration is required before ${GROUP} upgrade`);
+  const group = reply.Ok.groups.find(g => g.id === GROUP);
+  if (group?.accepting) throw new Error(`Group ${NUM} must remain closed`);
   if (group && (group.domains.filter(d => d.domain !== 'secret_workload_identity').length !== 12 ||
     services.filter(s => s.name !== 'media_blob_store').some(s => !group.domains.some(d => d.domain === s.name && d.canister.toText() === s.canisterId)) ||
-    group.photo_store[0]?.toText() !== provision.dedicatedBlobStore.canisterId)) throw new Error('Registered g2 inventory differs');
+    group.photo_store[0]?.toText() !== provision.dedicatedBlobStore.canisterId)) throw new Error(`Registered ${GROUP} inventory differs`);
   const opening = await router.read_owner_test_deletion_required('ic');
-  if ('Err' in opening || opening.Ok) throw new Error('Group 2 owner opening already exists or cannot be verified; this initial closed upgrade refuses');
+  if ('Err' in opening || opening.Ok) throw new Error(`Group ${NUM} owner opening already exists or cannot be verified; this initial closed upgrade refuses`);
   return String(reply.Ok.revision);
 };
 const revision = await closed();
@@ -74,37 +78,37 @@ const plans = services.map(s => {
 const publicObservations = [];
 for (const s of plans) { const o = await observe(s); publicObservations.push({ ...s, file: undefined, oldHash: o.moduleHash, settingsHash: o.settingsHash,
   cycles: String(o.cycles), heapBytes: o.heapBytes, stableBytes: o.stableBytes }); }
-const mappingFile = join(reportDirectory, 'g2-mapping.json');
+const mappingFile = join(reportDirectory, `${GROUP}-mapping.json`);
 const keyFile = join(reportDirectory, 'original-photo-key.json');
 writeFileSync(mappingFile, JSON.stringify({ pii_access_control: provision.canisters.pii_access_control }));
 const keyGate = phase => {
   const result = spawnSync(process.execPath, [join(root, 'frontend/scripts/media-key-deploy-preflight.mjs'), phase, mappingFile, keyFile, 'mainnet', 'ic'], {
     env: { ...process.env, GOVERNOR: GROUP2_GOVERNOR, DEPLOYER_PEM_FILE: pemFile }, stdio: 'inherit' });
-  if (result.status !== 0) throw new Error('Original Group 2 photo-key attestation/preservation failed; no replay');
+  if (result.status !== 0) throw new Error(`Original Group ${NUM} photo-key attestation/preservation failed; no replay`);
 };
-const report = { groupId: 'g2', revision, release: process.env.GITHUB_SHA, authorizesOpening: false, services: publicObservations };
+const report = { groupId: GROUP, revision, release: process.env.GITHUB_SHA, authorizesOpening: false, services: publicObservations };
 writeFileSync(join(reportDirectory, 'upgrade-report.json'), JSON.stringify(report, null, 2));
 if (action === 'check') {
   keyGate('before');
-  console.log('All thirteen g2 services checked; no upgrades or opening performed.');
+  console.log(`All thirteen ${GROUP} services checked; no upgrades or opening performed.`);
 } else if (action === 'upgrade') {
   const repo = process.env.GITHUB_REPOSITORY, release = process.env.GITHUB_SHA;
   if (!repo || !release || !/^[a-f0-9]{40}$/.test(release)) throw new Error('GitHub release binding required');
   const api = createJournalApi(repo, JSON.stringify);
-  const branch = 'group-2-upgrade-receipts';
+  const branch = BRANCH;
   const refs = api(`git/matching-refs/heads/${branch}`);
   if (!refs.some(r => r.ref === `refs/heads/${branch}`)) {
     const metadata = api(''); const base = api(`git/ref/heads/${metadata.default_branch}`);
     api('git/refs', 'POST', { ref: `refs/heads/${branch}`, sha: base.object.sha });
   }
-  const directory = api(`contents/deploy/groups/g2?ref=${branch}`);
+  const directory = api(`contents/deploy/groups/${GROUP}?ref=${branch}`);
   const exists = directory.some(e => e.name === 'upgrade-progress.json');
-  const path = 'contents/deploy/groups/g2/upgrade-progress.json';
+  const path = `contents/deploy/groups/${GROUP}/upgrade-progress.json`;
   let stored = exists ? api(`${path}?ref=${branch}`) : null;
   let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
   const binding = { release, governor: GROUP2_GOVERNOR, provisionHash: hash(provision), inventory: plans.map(({ file, ...p }) => p) };
   if (journal?.complete === true && JSON.stringify(journal.binding) !== JSON.stringify(binding)) {
-    throw new Error('Group 2 was already upgraded by an earlier release, so nothing was changed. To make saved settings take effect, choose action "reload" with confirmation RELOAD GROUP 2 SETTINGS');
+    throw new Error(`Group ${NUM} was already upgraded by an earlier release, so nothing was changed. To make saved settings take effect, choose action "reload" with confirmation RELOAD GROUP ${NUM} SETTINGS`);
   }
   if (journal) validateUpgradeJournal(journal, binding);
   const persist = () => {
@@ -129,7 +133,7 @@ if (action === 'check') {
       step.phase = 'complete'; persist(); continue;
     }
     step.phase = 'pending'; persist();
-    console.log(`Upgrading existing g2 ${plan.name}`);
+    console.log(`Upgrading existing ${GROUP} ${plan.name}`);
     const result = spawnSync('icp', upgradeArgs(plan, plan.file, GROUP2_GOVERNOR), { cwd: reportDirectory, stdio: 'inherit' });
     if (result.status !== 0) throw new Error(`Upgrade failed or response unknown: ${plan.name}; pending intent retained`);
     const after = await observe(plan);
@@ -142,7 +146,7 @@ if (action === 'check') {
   for (const plan of plans) verifyUpgradeStatus(plan, await observe(plan), GROUP2_GOVERNOR, plan.newHash);
   if (await closed() !== revision) throw new Error('Router changed during final verification');
   journal.complete = true; persist();
-  console.log('Thirteen Group 2 modules verified; settings and photo key preserved. Group 2 remains closed.');
+  console.log(`Thirteen Group ${NUM} modules verified; settings and photo key preserved. Group ${NUM} remains closed.`);
 }
 if (action === 'reload') {
   // Same-module reload: Motoko services read their service settings into
@@ -158,15 +162,15 @@ if (action === 'reload') {
   const repo = process.env.GITHUB_REPOSITORY, release = process.env.GITHUB_SHA;
   if (!repo || !release || !/^[a-f0-9]{40}$/.test(release)) throw new Error('GitHub release binding required');
   const api = createJournalApi(repo, JSON.stringify);
-  const branch = 'group-2-upgrade-receipts';
+  const branch = BRANCH;
   const refs = api(`git/matching-refs/heads/${branch}`);
   if (!refs.some(r => r.ref === `refs/heads/${branch}`)) {
     const metadata = api(''); const base = api(`git/ref/heads/${metadata.default_branch}`);
     api('git/refs', 'POST', { ref: `refs/heads/${branch}`, sha: base.object.sha });
   }
   const name = 'reload-progress.json';
-  const path = `contents/deploy/groups/g2/${name}`;
-  const directory = api(`contents/deploy/groups/g2?ref=${branch}`);
+  const path = `contents/deploy/groups/${GROUP}/${name}`;
+  const directory = api(`contents/deploy/groups/${GROUP}?ref=${branch}`);
   let stored = directory.some(e => e.name === name) ? api(`${path}?ref=${branch}`) : null;
   let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
   const binding = { kind: 'reload', governor: GROUP2_GOVERNOR, provisionHash: hash(provision), inventory: plans.map(({ file, ...p }) => p) };
@@ -192,7 +196,7 @@ if (action === 'reload') {
     if (before.moduleHash !== plan.newHash) throw new Error(`Live module changed: ${plan.name}`);
     if (before.settingsHash !== step.settingsHash) throw new Error(`Settings changed since reload intent: ${plan.name}`);
     step.phase = 'pending'; persist();
-    console.log(`Reloading g2 ${plan.name} (same module)`);
+    console.log(`Reloading ${GROUP} ${plan.name} (same module)`);
     const result = spawnSync('icp', upgradeArgs(plan, plan.file, GROUP2_GOVERNOR), { cwd: reportDirectory, stdio: 'inherit' });
     if (result.status !== 0) throw new Error(`Reload failed or response unknown: ${plan.name}; rerun reload (same module, safe to repeat)`);
     const after = await observe(plan);
@@ -204,5 +208,5 @@ if (action === 'reload') {
   keyGate('after');
   if (await closed() !== revision) throw new Error('Router changed during final verification');
   journal.complete = true; persist();
-  console.log('Thirteen Group 2 services reloaded with identical modules; settings now active, fingerprints unchanged. Group 2 remains closed.');
+  console.log(`Thirteen Group ${NUM} services reloaded with identical modules; settings now active, fingerprints unchanged. Group ${NUM} remains closed.`);
 }

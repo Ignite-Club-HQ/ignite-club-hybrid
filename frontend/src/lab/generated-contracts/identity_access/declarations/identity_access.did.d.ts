@@ -384,6 +384,7 @@ export interface _SERVICE {
     Result_3
   >,
   'authorize_group2_admission' : ActorMethod<[Binding], Result_2>,
+  'authorize_group_admission' : ActorMethod<[string, Binding], Result_2>,
   'begin_account_removal' : ActorMethod<[string, bigint], Result_4>,
   'begin_link' : ActorMethod<[Principal], Result_5>,
   'bind_external_site' : ActorMethod<[string, string, string], Result_6>,

@@ -3,8 +3,11 @@
  * removal wiring, creator bindings and reciprocal configuration, then writes
  * the committed frontend snapshot (frontend/src/live/generated/routingGates.ts)
  * plus a JSON report. Read-only on canisters; writes files only.
+ * With RECORD_ROUTING_APPROVAL=1 it also records the verified approval on the
+ * router (revision-checked, governor-only), so the published app accepts the
+ * new configuration without another release.
  * Usage: tsx scripts/produce-routing-gates.ts <operator.pem> <report.json>
- * Env: ICP_HOST (default https://icp-api.io) */
+ * Env: ICP_HOST (default https://icp-api.io), RECORD_ROUTING_APPROVAL */
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, openSync, fsyncSync, closeSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -18,7 +21,7 @@ import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
 import { verifyRemovalWiring, ADMISSION_DOMAINS, type GroupDescriptor } from '../src/live/groupRemovalWiring';
 import { verifyOwnerReciprocalConfiguration, type OwnerCheckSpec, type ObservedService } from '../src/live/ownerOpeningChecks';
 import { resolveOpeningWorker } from './opening-worker.mjs';
-import { groupApprovalConfiguration } from '../src/live/groupApproval';
+import { groupApprovalConfiguration, approvalConfigurationSha256 } from '../src/live/groupApproval';
 
 const GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 const host = process.env.ICP_HOST || 'https://icp-api.io';
@@ -138,6 +141,20 @@ if (finalRegistry.configurationRevision !== registry.configurationRevision ||
   throw new Error('Configuration changed during snapshot verification');
 }
 
+/** Revision-checked, governor-only: refuses if anything changed since verification. */
+async function recordLiveApproval(approvedConfiguration: string, evidenceSha256: string) {
+  const approval = { target_alias: 'mainnet', configuration_revision: registry.configurationRevision!,
+    approved_configuration_sha256: await approvalConfigurationSha256(approvedConfiguration),
+    removal_wiring_group_ids: registry.groups.map(g => g.id).sort(), removal_checked_at_ms: BigInt(wiring.evidence!.checkedAtMs),
+    evidence_sha256: evidenceSha256 };
+  ok(await router.record_routing_approval(approval, approval.configuration_revision));
+  const stored = ok(await router.read_routing_approval('mainnet'))[0];
+  if (!stored || stored.configuration_revision !== approval.configuration_revision || stored.approved_configuration_sha256 !== approval.approved_configuration_sha256 ||
+      stored.evidence_sha256 !== evidenceSha256 || JSON.stringify(stored.removal_wiring_group_ids) !== JSON.stringify(approval.removal_wiring_group_ids)) {
+    throw new Error('Live routing approval readback failed');
+  }
+  console.log(`Live routing approval recorded on the router at configuration revision ${approval.configuration_revision}; the published app accepts it now.`);
+}
 const generatedAt = new Date().toISOString();
 // The wire revision is Nat64 (bigint); the shipped DTO requires lossless decimal text.
 // Normalize before hashing so the report and generated source carry identical evidence.
@@ -156,4 +173,8 @@ import type { RoutingGatesSnapshot } from '../generalActivation';
 export const ROUTING_GATES_SNAPSHOT: RoutingGatesSnapshot = ${JSON.stringify(snapshot, null, 2)};
 `);
 console.log(`Routing snapshot verified for ${snapshotGroups.map(g => g.id).join(', ')} at registry revision ${registry.revision}.`);
-console.log('Committed snapshot ships with the next frontend release; publish the frontend canister after this run.');
+if (globalThis.process?.env?.RECORD_ROUTING_APPROVAL === '1') {
+  recordLiveApproval(evidence.approvedConfiguration, evidenceSha256).catch(e => { console.error(e); process.exitCode = 1; });
+} else {
+  console.log('Committed snapshot ships with the next frontend release; publish the frontend canister after this run.');
+}

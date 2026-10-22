@@ -18,6 +18,8 @@ use scale_probe::Probe;
 mod discovery;
 mod media_growth;
 mod owner_opening;
+mod routing_approval;
+use routing_approval::RoutingApproval;
 #[cfg(test)]
 mod owner_opening_tests;
 use owner_opening::{OwnerOpening, OwnerOpeningApproval};
@@ -182,6 +184,8 @@ thread_local! {
     // Configuration approval is independent of assignment/deletion fencing (memory 2).
     static CONFIG_REVISION: RefCell<StableCell<u64, Memory>> = RefCell::new(StableCell::init(memory(16), 0));
     static OWNER_OPENINGS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(15)));
+    // Governor-recorded routing approvals keyed by target alias (memory 17).
+    static ROUTING_APPROVALS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(17)));
 }
 
 fn owner_opening(target: &str) -> Option<OwnerOpening> {
@@ -932,6 +936,37 @@ fn read_group_registry(target_alias: String) -> Outcome<GroupRegistrySnapshot> {
     Ok(GroupRegistrySnapshot { revision: page.revision, groups: page.groups, placements: page.placements })
 }
 
+fn registered_group_ids(target_alias: &str) -> Vec<String> {
+    GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).filter(|g| g.target_alias == target_alias).map(|g| g.id).collect())
+}
+fn record_routing_approval_for(operator: Principal, approval: RoutingApproval, expected_configuration_revision: u64) -> Outcome<RoutingApproval> {
+    if governor() != Some(operator) || operator == Principal::anonymous() { return Err("Forbidden".into()); }
+    registry_writable()?;
+    if expected_configuration_revision != configuration_revision() { return Err("Configuration revision conflict".into()); }
+    let registered = registered_group_ids(&approval.target_alias);
+    for id in &registered {
+        if !GROUP_PLACEMENTS.with(|m| m.borrow().contains_key(&id.as_bytes().to_vec())) { return Err("Complete group placement required".into()); }
+    }
+    routing_approval::validate(&approval, configuration_revision(), &registered)?;
+    // Recording is not a configuration change: neither revision moves, so the
+    // approval stays valid until the next real configuration mutation.
+    ROUTING_APPROVALS.with(|m| m.borrow_mut().insert(approval.target_alias.clone(), encode(&approval)));
+    Ok(approval)
+}
+/// Governor-only. Binds the exact configuration revision and approved digest;
+/// any later group/placement/policy change makes clients fail closed again.
+#[ic_cdk::update]
+fn record_routing_approval(approval: RoutingApproval, expected_configuration_revision: u64) -> Outcome<RoutingApproval> {
+    record_routing_approval_for(caller(), approval, expected_configuration_revision)
+}
+/// Consensus read for signed-in clients; infrastructure metadata only.
+#[ic_cdk::update]
+fn read_routing_approval(target_alias: String) -> Outcome<Option<RoutingApproval>> {
+    if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
+    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
+    Ok(ROUTING_APPROVALS.with(|m| m.borrow().get(&target_alias).map(|b| decode(&b))))
+}
+
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct GroupRegistryPage {
     pub revision: u64, pub groups: Vec<ShardGroup>, pub placements: Vec<GroupPlacement>,
@@ -1139,6 +1174,38 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn routing_approval_is_governor_only_revision_bound_and_does_not_move_revisions() {
+        let operator = Principal::from_slice(&[240, 1]);
+        init(Init { governor: operator });
+        let mut g = groups::tests::group("approval-g", 0);
+        g.target_alias = "approval-test".into();
+        save_group(&g);
+        let subnet = Principal::from_slice(&[241, 1]);
+        let placement = GroupPlacement { group_id: g.id.clone(), deployment_id: "mainnet".into(), deployment_revision: 1,
+            host: "https://icp-api.io".into(), network_kind: "public_mainnet".into(), primary_subnet: subnet,
+            approved_subnets: vec![subnet], additional_subnets_enabled: false,
+            domains: g.domains.iter().map(|d| discovery::DomainPlacement { domain: d.domain.clone(), canister: d.canister, subnet }).collect() };
+        GROUP_PLACEMENTS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(), encode(&placement)));
+        let rev = configuration_revision();
+        let assignments = current_revision();
+        let approval = RoutingApproval { target_alias: g.target_alias.clone(), configuration_revision: rev,
+            approved_configuration_sha256: "c".repeat(64), removal_wiring_group_ids: vec![g.id.clone()],
+            removal_checked_at_ms: 1, evidence_sha256: "d".repeat(64) };
+        assert!(record_routing_approval_for(Principal::from_slice(&[242, 1]), approval.clone(), rev).is_err());
+        assert!(record_routing_approval_for(operator, approval.clone(), rev + 1).is_err());
+        assert_eq!(record_routing_approval_for(operator, approval.clone(), rev).unwrap(), approval);
+        assert_eq!(configuration_revision(), rev);
+        assert_eq!(current_revision(), assignments);
+        let stored = ROUTING_APPROVALS.with(|m| m.borrow().get(&g.target_alias).map(|b| decode::<RoutingApproval>(&b)));
+        assert_eq!(stored, Some(approval.clone()));
+        // A later configuration change leaves the stale approval in place; clients compare revisions and fail closed.
+        stop_group_placements_for(operator, g.id.clone(), g.target_alias.clone(), current_revision()).unwrap();
+        assert_eq!(configuration_revision(), rev + 1);
+        assert!(record_routing_approval_for(operator, approval, rev).is_err());
+        post_upgrade();
+        assert!(ROUTING_APPROVALS.with(|m| m.borrow().contains_key(&g.target_alias)));
+    }
     #[test]
     fn consecutive_creator_reservations_preserve_configuration_and_upgrade() {
         let operator = Principal::from_slice(&[230, 1]);

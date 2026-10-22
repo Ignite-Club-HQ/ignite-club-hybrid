@@ -4,6 +4,7 @@
  * full opening case without mutating; open flips general admission on with a
  * revision CAS and fresh health; close flips it back off. Existing clubs keep
  * their assignments and access either way. No deploy, install or funding.
+ * Works for any new group named by the approval's groupId (default g2).
  * Usage: tsx scripts/open-group-general.ts <action> <approval.json> <operator.pem> <report.json>
  * Env: CONFIRMATION (REGISTER GROUP 2 CLOSED / OPEN GROUP 2 TO EVERYONE / CLOSE GROUP 2 TO NEW CLUBS) */
 import { mkdirSync, readFileSync, writeFileSync, openSync, fsyncSync, closeSync, renameSync } from 'node:fs';
@@ -22,21 +23,25 @@ import type { Provision } from '../src/live/groupProvisioner';
 import { resolveOpeningWorker } from './opening-worker.mjs';
 
 const GOVERNOR = 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
-const CONFIRMATIONS: Record<string, string> = {
-  'register-closed': 'REGISTER GROUP 2 CLOSED',
-  open: 'OPEN GROUP 2 TO EVERYONE',
-  close: 'CLOSE GROUP 2 TO NEW CLUBS',
-};
 
 const [action, file, pem, out] = process.argv.slice(2);
 if (!['register-closed', 'prepare-hashes', 'check', 'open', 'close'].includes(action) || !file || !pem || !out) {
   throw new Error('Usage: open-group-general <register-closed|prepare-hashes|check|open|close> <approval.json> <operator.pem> <report.json>');
 }
+const spec: OwnerCheckSpec & { identityAccess: string; pushWorker: string; provisionFile?: string; workloadIdentity?: string;
+  deploymentRevision?: string; primarySubnet?: string; maxClubs?: number } = JSON.parse(readFileSync(file, 'utf8'));
+// The approval names its group; the original Group 2 file predates the field.
+const GROUP = spec.groupId ?? 'g2';
+if (!/^g[1-9][0-9]{0,2}$/.test(GROUP) || GROUP === 'g1') throw new Error('Approval groupId must be g2 or later');
+const LABEL = `Group ${GROUP.slice(1)}`, UPPER = LABEL.toUpperCase();
+const CONFIRMATIONS: Record<string, string> = {
+  'register-closed': `REGISTER ${UPPER} CLOSED`,
+  open: `OPEN ${UPPER} TO EVERYONE`,
+  close: `CLOSE ${UPPER} TO NEW CLUBS`,
+};
 if (action in CONFIRMATIONS && process.env.CONFIRMATION?.trim() !== CONFIRMATIONS[action]) {
   throw new Error(`Exact confirmation required: ${CONFIRMATIONS[action]}`);
 }
-const spec: OwnerCheckSpec & { identityAccess: string; pushWorker: string; provisionFile?: string; workloadIdentity?: string;
-  deploymentRevision?: string; primarySubnet?: string; maxClubs?: number } = JSON.parse(readFileSync(file, 'utf8'));
 if (action !== 'register-closed') spec.pushWorker = resolveOpeningWorker(spec.pushWorker, process.env.PUSH_WORKER_PRINCIPAL);
 if (spec.host !== 'https://icp-api.io') throw new Error('General opening supports the pinned public-mainnet gateway only');
 if (spec.targetAlias !== 'mainnet' || spec.deploymentId !== 'mainnet') throw new Error('Exact mainnet deployment required');
@@ -127,8 +132,8 @@ if (action === 'register-closed') {
     throw new Error('register-closed needs provisionFile, workloadIdentity, deploymentRevision, primarySubnet and maxClubs in the approval');
   }
   const provision = JSON.parse(readFileSync(resolve(spec.provisionFile), 'utf8'), (_, x) => x?.$bigint ? BigInt(x.$bigint) : x) as Provision;
-  if (provision.groupId !== 'g2' || !['checked', 'configured'].includes(provision.phase) || provision.pending) throw new Error('Complete configured g2 provision required');
-  if (!provision.dedicatedBlobStore?.installed) throw new Error('Group 2 needs its own installed photo store');
+  if (provision.groupId !== GROUP || !['checked', 'configured'].includes(provision.phase) || provision.pending) throw new Error(`Complete configured ${GROUP} provision required`);
+  if (!provision.dedicatedBlobStore?.installed) throw new Error(`${LABEL} needs its own installed photo store`);
   // Mirror shard_router groups::validate so a bad approval stops before any router call.
   if (!(BigInt(spec.heapBudgetBytes) > 0n && BigInt(spec.heapBudgetBytes) <= 3n * 1024n ** 3n) || !(BigInt(spec.minCycles) > 0n)
     || !(spec.maxClubs > 0 && spec.maxClubs <= 100_000)) {
@@ -151,22 +156,22 @@ if (action === 'register-closed') {
     save({ action, pending: 'placement-resume', revision: String(revision), group, placement });
     const placed = ok(await router.register_group_placement(placement, revision));
     save({ action, placementRevision: String(placed), pending: undefined, group, placement });
-    console.log(`Group 2 placement completed (resumed) at revision ${placed}; group remains CLOSED.`);
+    console.log(`${LABEL} placement completed (resumed) at revision ${placed}; group remains CLOSED.`);
     process.exit(0);
   }
-  const existing = registry.groups.find(g => g.id === 'g2');
-  if (existing?.accepting) throw new Error('Group 2 is already open; run close first, not register-closed');
+  const existing = registry.groups.find(g => g.id === GROUP);
+  if (existing?.accepting) throw new Error(`${LABEL} is already open; run close first, not register-closed`);
   const revision = await router.version();
   save({ action, pending: 'register', revision: String(revision), group, placement });
   const closed = ok(await router.register_group(group, revision));
   save({ action, closedRevision: String(closed), pending: 'placement', group, placement });
   const placed = ok(await router.register_group_placement(placement, closed));
   save({ action, closedRevision: String(closed), placementRevision: String(placed), pending: undefined, group, placement });
-  console.log(`Group 2 registered CLOSED at revision ${placed}; run prepare-hashes, then check, then open.`);
+  console.log(`${LABEL} registered CLOSED at revision ${placed}; run prepare-hashes, then check, then open.`);
 } else if (action === 'prepare-hashes') {
   const registry = await readRegistry();
-  const group = registry.groups.find(g => g.id === 'g2'), placement = registry.placements.find(p => p.group_id === 'g2');
-  if (!group || !placement) throw new Error('Register Group 2 CLOSED before recording hashes');
+  const group = registry.groups.find(g => g.id === GROUP), placement = registry.placements.find(p => p.group_id === GROUP);
+  if (!group || !placement) throw new Error(`Register ${LABEL} CLOSED before recording hashes`);
   const { observed } = await observeServices(group, placement);
   for (const s of observed) {
     if (!s.running || s.controllers.length !== 1 || s.controllers[0] !== GOVERNOR || !/^[a-f0-9]{64}$/.test(s.moduleHash)) {
@@ -179,8 +184,8 @@ if (action === 'register-closed') {
   console.log(`Recorded 13 live module fingerprints into ${file}; commit this file, then run check.`);
 } else {
   const registry = await readRegistry();
-  const group = registry.groups.find(g => g.id === 'g2'), placement = registry.placements.find(p => p.group_id === 'g2');
-  if (!group || !placement) throw new Error('Group 2 is not registered; run register-closed first');
+  const group = registry.groups.find(g => g.id === GROUP), placement = registry.placements.find(p => p.group_id === GROUP);
+  if (!group || !placement) throw new Error(`${LABEL} is not registered; run register-closed first`);
   if (!spec.services?.length) throw new Error('Approval has no recorded module fingerprints; run prepare-hashes first');
   const { observed, lowestCycles, largestHeap } = await observeServices(group, placement);
   verifyOwnerOpeningChecks(spec, observed, group, placement);
@@ -191,31 +196,32 @@ if (action === 'register-closed') {
   }
   if (action === 'check') {
     save({ action, registryRevision: String(registry.revision), accepting: group.accepting, wiring, observed: observed.map(o => ({ name: o.name, moduleHash: o.moduleHash, cycles: String(o.cycles) })) });
-    console.log(`Group 2 is registered and ${group.accepting ? 'OPEN to new clubs' : 'closed'}; all checks passed.`);
+    console.log(`${LABEL} is registered and ${group.accepting ? 'OPEN to new clubs' : 'closed'}; all checks passed.`);
   } else if (action === 'open') {
-    if (group.accepting) throw new Error('Group 2 is already open');
+    if (group.accepting && process.env.ADD_GROUP_RESUME === '1') { console.log(`${LABEL} is already open (resumed); nothing changed.`); process.exit(0); }
+    if (group.accepting) throw new Error(`${LABEL} is already open`);
     const openRecord = { ...group, accepting: true };
     save({ action, pending: 'open', expectedRevision: String(registry.revision), openRecord });
     const newRevision = ok(await router.register_group(openRecord, registry.revision));
     save({ action, pending: 'health', openedRevision: String(newRevision) });
-    try { ok(await router.record_group_health('g2', largestHeap, lowestCycles, newRevision)); }
+    try { ok(await router.record_group_health(GROUP, largestHeap, lowestCycles, newRevision)); }
     catch { console.log('Health report refused; the scheduled reporter will refresh it.'); }
     const after = await readRegistry();
-    const reopened = after.groups.find(g => g.id === 'g2');
+    const reopened = after.groups.find(g => g.id === GROUP);
     if (!reopened || !reopened.accepting) throw new Error('Open readback failed; reconcile manually, do not replay the call');
     await repinDeletionRegistry(after.revision);
     save({ action, openedRevision: String(newRevision), accepting: true, wiring });
-    console.log(`Group 2 is OPEN to new clubs at revision ${after.revision}. Existing clubs keep their access.`);
+    console.log(`${LABEL} is OPEN to new clubs at revision ${after.revision}. Existing clubs keep their access.`);
   } else {
-    if (!group.accepting) throw new Error('Group 2 is already closed to new clubs');
+    if (!group.accepting) throw new Error(`${LABEL} is already closed to new clubs`);
     const closedRecord = { ...group, accepting: false };
     save({ action, pending: 'close', expectedRevision: String(registry.revision), closedRecord });
     const newRevision = ok(await router.register_group(closedRecord, registry.revision));
     const after = await readRegistry();
-    const closed = after.groups.find(g => g.id === 'g2');
+    const closed = after.groups.find(g => g.id === GROUP);
     if (!closed || closed.accepting) throw new Error('Close readback failed; reconcile manually, do not replay the call');
     await repinDeletionRegistry(after.revision);
     save({ action, closedRevision: String(newRevision), accepting: false });
-    console.log('Group 2 is closed to new clubs. Existing clubs keep their assignment and access.');
+    console.log(`${LABEL} is closed to new clubs. Existing clubs keep their assignment and access.`);
   }
 }

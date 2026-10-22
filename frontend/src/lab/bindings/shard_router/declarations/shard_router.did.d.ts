@@ -134,6 +134,18 @@ export type Result_2 = { 'Ok' : AssignResult } |
   { 'Err' : string };
 export type Result_20 = { 'Ok' : [] | [OwnerOpening] } |
   { 'Err' : string };
+export interface RoutingApproval {
+  'target_alias' : string,
+  'configuration_revision' : bigint,
+  'approved_configuration_sha256' : string,
+  'removal_wiring_group_ids' : Array<string>,
+  'removal_checked_at_ms' : bigint,
+  'evidence_sha256' : string,
+}
+export type Result_22 = { 'Ok' : RoutingApproval } |
+  { 'Err' : string };
+export type Result_23 = { 'Ok' : [] | [RoutingApproval] } |
+  { 'Err' : string };
 export type Result_21 = { 'Ok' : boolean } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : AssignDomainResult } |
@@ -266,7 +278,9 @@ export interface _SERVICE {
    * the complete group inventory, even when they have no test-club membership.
    */
   'read_owner_test_deletion_required' : ActorMethod<[string], Result_21>,
+  'read_routing_approval' : ActorMethod<[string], Result_23>,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
+  'record_routing_approval' : ActorMethod<[RoutingApproval, bigint], Result_22>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,
   'release_deletion_lock' : ActorMethod<[string, bigint], Result_7>,

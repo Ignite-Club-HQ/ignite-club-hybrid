@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GROUP_DOMAINS } from './groupRouting';
-import { groupApprovalConfiguration } from './groupApproval';
+import { groupApprovalConfiguration, approvalConfigurationSha256 } from './groupApproval';
 import { clearGeneralRoutingCache, routingActive, cachedGeneralRoutingActive, type RoutingGatesSnapshot } from './generalActivation';
 
 const state = vi.hoisted(() => ({
@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   revision: 7n,
   configurationRevision: 7n,
   groups: [] as unknown[],
+  approval: undefined as unknown,
 }));
 vi.mock('./generated/routingGates', () => ({ get ROUTING_GATES_SNAPSHOT() { return state.snapshot; } }));
 vi.mock('./domains', () => ({
@@ -16,6 +17,7 @@ vi.mock('./domains', () => ({
       read_group_registry_page: async () => ({
         Ok: { revision: state.revision, configuration_revision: [state.configurationRevision], groups: state.groups, placements: state.groups.map((g: { id: string }) => placement(g.id)), next_cursor: [] },
       }),
+      ...(state.approval === undefined ? {} : { read_routing_approval: async () => state.approval }),
     },
   }),
 }));
@@ -54,7 +56,7 @@ const snapshot = (): RoutingGatesSnapshot => ({
   evidenceSha256: 'a'.repeat(64),
 });
 
-beforeEach(() => { clearGeneralRoutingCache(); state.snapshot = null; state.groups = []; state.revision = 7n; state.configurationRevision = 7n; });
+beforeEach(() => { clearGeneralRoutingCache(); state.approval = undefined; state.snapshot = null; state.groups = []; state.revision = 7n; state.configurationRevision = 7n; });
 
 describe('general routing switch', () => {
   it('keeps approval active after two ordinary club reservations advance the assignment revision', async () => {
@@ -65,7 +67,7 @@ describe('general routing switch', () => {
   it('requires regeneration of legacy approval instead of trusting assignment drift', async () => {
     const old = snapshot(); delete old.configurationRevision;
     state.snapshot = old; state.groups = [liveGroup('g2')];
-    await expect(routingActive(ctx)).rejects.toThrow('updated router');
+    await expect(routingActive(ctx)).rejects.toThrow('configuration changed');
   });
   it('rejects a replaced domain even when the configuration revision is unchanged', async () => {
     state.snapshot = snapshot(); const g = liveGroup('g2');
@@ -123,5 +125,38 @@ describe('general routing switch', () => {
     state.snapshot = snapshot();
     state.groups = [liveGroup('g2'), liveGroup('g3')];
     await expect(routingActive(ctx)).rejects.toThrow('group set changed');
+  });
+
+  describe('live approval recorded on the router (no app release after opening)', () => {
+    const approve = async (groups: ReturnType<typeof liveGroup>[], revision: bigint, ids = groups.map(g => g.id)) => ({
+      Ok: [{ target_alias: 'mainnet', configuration_revision: revision, removal_wiring_group_ids: ids, removal_checked_at_ms: 5n, evidence_sha256: 'e'.repeat(64),
+        approved_configuration_sha256: await approvalConfigurationSha256(groupApprovalConfiguration(groups as never, groups.map(g => placement(g.id)) as never)) }],
+    });
+    it('activates a newly opened group from the live approval without a new snapshot', async () => {
+      state.snapshot = snapshot(); state.groups = [liveGroup('g2'), liveGroup('g3')]; state.configurationRevision = 9n;
+      state.approval = await approve(state.groups as never, 9n);
+      expect(await routingActive(ctx)).toBe(true);
+    });
+    it('fails closed when the live approval is for an older configuration', async () => {
+      state.snapshot = snapshot(); state.groups = [liveGroup('g2'), liveGroup('g3')]; state.configurationRevision = 10n;
+      state.approval = await approve(state.groups as never, 9n);
+      await expect(routingActive(ctx)).rejects.toThrow('configuration changed');
+    });
+    it('fails closed when the live registry differs from the approved digest', async () => {
+      state.snapshot = snapshot(); state.configurationRevision = 9n;
+      state.approval = await approve([liveGroup('g2'), liveGroup('g3')], 9n);
+      state.groups = [liveGroup('g2'), { ...liveGroup('g3'), max_clubs: 7 }];
+      await expect(routingActive(ctx)).rejects.toThrow('placement or policy changed');
+    });
+    it('fails closed when the approval does not cover every registered group', async () => {
+      state.snapshot = snapshot(); state.groups = [liveGroup('g2'), liveGroup('g3')]; state.configurationRevision = 9n;
+      state.approval = await approve(state.groups as never, 9n, ['g2']);
+      await expect(routingActive(ctx)).rejects.toThrow('group set changed');
+    });
+    it('fails closed when no live approval exists yet', async () => {
+      state.snapshot = snapshot(); state.groups = [liveGroup('g2'), liveGroup('g3')]; state.configurationRevision = 9n;
+      state.approval = { Ok: [] };
+      await expect(routingActive(ctx)).rejects.toThrow('configuration changed');
+    });
   });
 });

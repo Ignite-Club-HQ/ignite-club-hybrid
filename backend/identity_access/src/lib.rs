@@ -583,7 +583,18 @@ fn admission_configuration_clear() -> Outcome<()> {
 /// never from a browser-supplied principal list. No lifecycle gate is released.
 #[ic_cdk::update]
 async fn authorize_group2_admission(binding: group_inventory::Binding) -> Outcome<()> {
+    authorize_group_admission_inner("g2".into(), binding).await
+}
+/// Governor-only. Adds one new group's exact 12 readers (derived from two
+/// pinned router reads) to the existing set; never removes or replaces readers.
+/// Re-running for an already-authorized group is a no-op on the reader set.
+#[ic_cdk::update]
+async fn authorize_group_admission(group_id: String, binding: group_inventory::Binding) -> Outcome<()> {
+    authorize_group_admission_inner(group_id, binding).await
+}
+async fn authorize_group_admission_inner(group_id: String, binding: group_inventory::Binding) -> Outcome<()> {
     require_governor(&state(), ic_cdk::api::msg_caller())?;
+    if !admission::valid_group_id(&group_id) { return Err("New group id (g2 or later) required".into()); }
     admission_configuration_clear()?;
     let pinned = group_inventory_binding().ok_or("Deletion registry not pinned")?;
     let mut expected = pinned.clone(); expected.registry_revision = binding.registry_revision;
@@ -621,8 +632,8 @@ async fn authorize_group2_admission(binding: group_inventory::Binding) -> Outcom
         observed=Some((groups,placements));
     }
     let (groups,placements)=observed.ok_or("Admission inventory missing")?;
-    let readers=admission::readers(&groups,&placements,&binding)?;
-    if prior.readers.iter().any(|p| !readers.contains(p)) { return Err("Cannot replace an existing admission reader".into()); }
+    let group_readers=admission::group_readers(&group_id,&groups,&placements,&binding)?;
+    let readers=admission::merge(&prior.readers,&group_readers);
     recheck()?;
     GROUP2_ADMISSION.with(|m| m.borrow_mut().set(encode(&admission::Config { enabled:true,readers })));
     bump_removal_history();

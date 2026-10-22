@@ -129,8 +129,9 @@ test('snapshot hashes and emits lossless Nat64 removal revisions in both output 
 test('opening runner confirms every mutation behind its exact phrase before any register call', () => {
   const firstRegister = opening.indexOf('router.register_group');
   assert.ok(firstRegister > 0);
-  for (const phrase of ['OPEN GROUP 2 TO EVERYONE', 'CLOSE GROUP 2 TO NEW CLUBS', 'REGISTER GROUP 2 CLOSED']) {
-    const at = opening.indexOf(`'${phrase}'`);
+  // Phrases are templated by group (Group 2 keeps the exact original wording).
+  for (const phrase of ['`OPEN ${UPPER} TO EVERYONE`', '`CLOSE ${UPPER} TO NEW CLUBS`', '`REGISTER ${UPPER} CLOSED`']) {
+    const at = opening.indexOf(phrase);
     assert.ok(at > -1 && at < firstRegister, phrase);
   }
   assert.match(opening, /reconcile manually/);
@@ -139,13 +140,15 @@ test('opening runner confirms every mutation behind its exact phrase before any 
 test('opening refuses an already-open group and requires recorded fingerprints', () => {
   assert.match(opening, /already open; run close first/);
   assert.match(opening, /no recorded module fingerprints/);
-  assert.match(opening, /already open'/);
+  assert.match(opening, /is already open`\)/);
+  assert.match(opening, /ADD_GROUP_RESUME === '1'/);
 });
 
 test('open requires removal wiring for every registered group before flipping admission', () => {
   assert.match(opening, /Removal wiring incomplete; fix before opening/);
   assert.match(opening, /verifyOwnerOpeningChecks\(spec, observed, group, placement\)/);
-  assert.match(opening, /record_group_health\('g2', largestHeap, lowestCycles/);
+  assert.match(opening, /record_group_health\(GROUP, largestHeap, lowestCycles/);
+  assert.match(opening, /const GROUP = spec\.groupId \?\? 'g2'/);
 });
 
 test('committed g2 approval budgets fit the router limits (heap 1..3 GiB, cycles > 0, clubs 1..100000)', () => {
