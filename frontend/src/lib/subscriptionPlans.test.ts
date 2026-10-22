@@ -61,4 +61,6 @@ it("enforces versioned ICP team bands without inheriting legacy Unlimited", () =
   expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_starter", team_limit:21 })).toBe(10);
   expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_standard", team_limit:20 })).toBe(20);
   expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_standard", team_limit:21 })).toBe(21);
+  expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_standard", team_limit:3 })).toBe(20);
+  expect(effectiveTeamLimit({ is_trial:true, trial_ends_at:"2099-01-01", plan:"usd_v2_standard", team_limit:21 })).toBe(20);
 });

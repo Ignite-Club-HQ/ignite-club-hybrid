@@ -57,6 +57,10 @@ export function effectiveTeamLimit(sub: { team_limit?: number | null; is_pro?: b
   if (sub.plan === "usd_v2_small") return 3;
   if (sub.plan === "usd_v2_growing") return 5;
   if (sub.plan === "usd_v2_starter") return 10;
+  if (sub.plan === "usd_v2_standard") {
+    if (trial && !paid && !override) return 20;
+    return sub.team_limit != null && Number.isSafeInteger(sub.team_limit) && sub.team_limit > 20 ? sub.team_limit : 20;
+  }
   if ((override || paid) && sub.plan === "unlimited" && sub.team_limit == null) return 100_000;
   const limit = sub.team_limit;
   if (limit == null || !Number.isSafeInteger(limit) || limit < 1) return 20;
