@@ -35,7 +35,7 @@ assert captures == 1 and scanned == 351 and pages == 4;
 assert not Retention.complete(state, { binding with generation = 2 }, 7);
 assert not Retention.complete(state, binding, 8);
 assert Retention.complete(state, binding, 7);
-assert state.snapshot == null;
+assert (switch (state.snapshot) { case null true; case (_) false });
 assert (switch (Retention.acquire(state, binding, 20, ?start, capture)) { case (#Err(_)) true; case (_) false });
 assert captures == 1;
 let replacement = switch (Retention.acquire(state, binding, 20, null, capture)) { case (#Ok(s)) s; case (_) { assert false; loop {} } };

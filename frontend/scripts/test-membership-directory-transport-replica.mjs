@@ -83,6 +83,41 @@ try {
   await pic.startCanister({canisterId:clubs[0].canisterId,sender:governor});
   await finish('g1');
   clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.restore_member('club-0',member));await finish('g1');
+  // A finite retained source must finish even with a live membership write
+  // between every page/materialization call. Old completion stays pending.
+  const a=clubs[0].actor,grant=grants[0];
+  a.setPrincipal(governor);
+  const oldAcl=await a.export_acl();
+  ok(await a.replace_acl(oldAcl.acl_version,{...oldAcl.acl,roles:[...oldAcl.acl.roles,...Array.from({length:350},(_,n)=>({user:p(100+n%100),role:'member',club:['club-0'],team:[]}))]}));
+  a.setPrincipal(identity.canisterId);
+  const baseline=ok(await a.read_directory_membership_status(grant));
+  const cursor={revision:baseline.revision,phase:0n,offset:0n,nested:0n};
+  const firstPage=ok(await a.read_directory_membership_source_page(grant,[cursor]));assert.ok(firstPage.next.length===1);
+  // Identity's first page must replay this captured generation exactly.
+  identity.actor.setPrincipal(governor);
+  let historical,upgraded=false;
+  for(let step=0;step<100;step++) {
+    a.setPrincipal(governor);ok(await a.remove_member('club-0',member));ok(await a.restore_member('club-0',member));
+    if(!upgraded&&step===2){
+      await pic.upgradeCanister({canisterId:clubs[0].canisterId,wasm:process.env.CLUB_DOMAIN_WASM,sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+      await pic.upgradeCanister({canisterId:identity.canisterId,wasm:process.env.IDENTITY_ACCESS_WASM,sender:governor,arg:init});upgraded=true;
+    }
+    const result=await identity.actor.advance_membership_directory_source('g1');
+    // A new job initially polling after our capture must not invent a newer
+    // source revision. The normal case is capture by the worker itself.
+    if('Err' in result)throw new Error(result.Err);
+    const progress=ok(result);assert.ok(progress.scanned<=100n);
+    if(historical===undefined)historical=progress.revision;
+    assert.equal(progress.revision,historical,'ongoing writes must not replace retained job');
+    if(progress.phase==='acknowledged')break;
+    assert.ok(step<99,'historical reconstruction must finish under continuous writes');
+  }
+  a.setPrincipal(identity.canisterId);
+  const stale=ok(await a.read_directory_membership_status(grant));assert.ok(stale.revision>stale.acknowledged);assert.equal(stale.pending,true);
+  // Lost completion response is retried idempotently without releasing a
+  // newer pending generation. Once writes stop, polling catches up.
+  ok(await a.acknowledge_directory_membership_source(grant,stale.acknowledged));
+  identity.actor.setPrincipal(governor);await finish('g1');
   for(let n=0;n<2;n++) {
     const a=clubs[n].actor,grant=grants[n];a.setPrincipal(identity.canisterId);const status=ok(await a.read_directory_membership_status(grant));assert.equal(status.pending,false);assert.equal(status.acknowledged,status.revision);
     await pic.upgradeCanister({canisterId:clubs[n].canisterId,wasm:process.env.CLUB_DOMAIN_WASM,sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
