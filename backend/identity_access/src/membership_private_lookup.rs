@@ -143,6 +143,12 @@ impl<M:Memory> Sessions<M>{
         inventory[0].complete=false;assert!(read(p(1),viewer(),inventory,None,|_,_,_|panic!("incomplete skipped source")).is_err());
         let mut inventory=sources();inventory[0].eligible_aliases=Some(vec![p(3)]);assert!(read(p(1),viewer(),inventory,None,|_,_,_|panic!("foreign indexed alias")).is_err());
     }
+    #[test]fn two_hundred_empty_sources_do_not_add_content_page_reads(){
+        let mut inventory=vec![];
+        for n in 0..201{let mut source=sources()[0].clone();source.id=format!("g{n:03}");source.eligible_aliases=Some(if n==200{vec![p(1)]}else{vec![]});inventory.push(source);}
+        let mut calls=0;let page=read(p(1),viewer(),inventory.clone(),None,|source,_,_|{calls+=1;assert_eq!(source.id,"g200");Ok((vec!["club".into()],None,1))}).unwrap();assert_eq!(calls,1);assert_eq!(page.scanned,1);assert!(page.next.is_none());
+        inventory[80].complete=false;assert!(read(p(1),viewer(),inventory,None,|_,_,_|panic!("missing unrelated source cannot imply completion")).is_err());
+    }
     #[test]fn server_owned_cursor_rejects_skips_and_replays_after_reopen(){
         let memory=ic_stable_structures::VectorMemory::default();let mut s=Sessions::open(memory.clone());
         assert!(s.page(p(1),viewer(),sources(),3,|_,_,_|panic!("forged skip")).is_err());
