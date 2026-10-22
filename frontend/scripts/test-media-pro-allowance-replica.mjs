@@ -132,6 +132,9 @@ try {
   };
   ok(await clubActor.save_club_subscription(subscription));
   assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 5_368_709_120n);
+  clubActor.setPrincipal(owner);
+  assert.match((await clubActor.save_club_subscription({ ...subscription, plan: 'usd_v2_standard', team_limit: [21] })).Err, /Platform admin required/);
+  clubActor.setPrincipal(governor);
   ok(await clubActor.save_club_subscription({ ...subscription, plan: 'usd_v2_standard', team_limit: [20] }));
   assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 3_221_225_472n);
   ok(await clubActor.save_club_subscription({ ...subscription, expires_at_ms: [1n] }));
@@ -149,7 +152,7 @@ try {
   assert.equal(await readStatus(freePath), 404, 'Expired Free club media is removed');
   assert.equal(await readStatus('clubs/club-free/teams/team-one/photos/pending.jpg'), 200, 'Active Single Team media is retained');
 
-  console.log('PASS: combined media accounting, branding exemption, team-scoped entitlement, wrong-club refusal, legacy Unlimited preservation, expiry without cap deletion, pending upload upgrade/readback, six-month Free cleanup and Pro team retention.');
+  console.log('PASS: plaintext accounting excludes 136-byte SDK framing, unframed bytes charged in full, combined pending media, branding exemption, team scope, wrong-club refusal, denied self-granted seats, versioned 3 GiB and legacy 5 GiB allowances, expiry preserves files, upgrade/readback and Free/Pro retention.');
 } finally {
   await server.stop();
 }
