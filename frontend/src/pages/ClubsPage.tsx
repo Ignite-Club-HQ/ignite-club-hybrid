@@ -389,7 +389,6 @@ export default function ClubsPage() {
         )}
       </div>
 
-
       {/* My Clubs */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">My Clubs</h2>
