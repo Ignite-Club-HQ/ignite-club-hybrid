@@ -602,20 +602,24 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
             // Positive source Club edges are checked against the existing
             // router location API. Missing legacy assignments remain unproven
             // and cannot enable a public directory; publication stays local.
+            let mut unresolved_location=false;
             for edge in &page.edges{
-                if let membership_materializer::Edge::Club{id,..}=edge{
+                if let membership_materializer::Edge::Club{id,deleted:false}=edge{
                     let reply=ic_cdk::call::Call::bounded_wait(config.binding.registry,"read_hosted_club_assignment").with_args(&(id.clone(),config.binding.target_alias.clone(),config.binding.registry_revision)).await.map_err(|_|"Club ownership check unavailable; source page retained")?;
                     recheck_directory(&config)?;directory_config()?.check_watermark(&source,captured.revision)?;
                     let location:membership_transport::Reply<membership_locations::Assignment>=reply.candid().map_err(|_|"Invalid club ownership reply")?;
                     match location{
                         membership_transport::Reply::Ok(assignment)=>membership_locations::verify(id,&source,authority,&assignment,&config.sources,config.binding.registry_revision)?,
-                        membership_transport::Reply::Err(error) if error=="Missing club assignment"=>DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().unresolved_location(&source,&captured))?,
+                        membership_transport::Reply::Err(error) if error=="Missing club assignment"=>unresolved_location=true,
                         membership_transport::Reply::Err(error)=>return Err(error),
                     }
                 }
             }
             let terminal=page.next.is_none();
             DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().accept(&mut c.borrow_mut(),&source,&captured,&cursor,page)))?;
+            // Only the accepted exact request may change coverage. A delayed
+            // callback rejected by the worker must not poison a newer page.
+            if unresolved_location{DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().unresolved_location(&source,&captured))?;}
             if terminal{DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().finish_location_checks(&source,&captured))?;}
         },
         "materialize"=>{scanned=DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().advance(&mut c.borrow_mut(),&source)))? as u64;},
