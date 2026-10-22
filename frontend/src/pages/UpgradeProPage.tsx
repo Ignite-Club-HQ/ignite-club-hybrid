@@ -1,3 +1,4 @@
+import { assertPurchaseCatalogReady } from "@/lib/subscriptionPlans";
 import { TEAM_PRICING } from "@/lib/subscriptionPlans";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -456,6 +457,11 @@ function SupabaseUpgradeProPage() {
   };
 
   const handleStripeCheckout = async (tier: "pro" | "pro_football", withTrial: boolean = false) => {
+    try { assertPurchaseCatalogReady("ignite_v2_team", []); } catch (error) {
+      toast({ title: "New plans are being prepared", description: error instanceof Error ? error.message : "Purchase unavailable", variant: "destructive" });
+      return;
+    }
+
     // Block if already subscribed to this tier
     if ((tier === "pro" && isProActive && !isExpired) || (tier === "pro_football" && isProFootballActive && !isExpired)) {
       toast({ title: "Already Subscribed", description: "You already have an active subscription for this plan." });
@@ -514,6 +520,7 @@ function SupabaseUpgradeProPage() {
 
     setIsCheckingOut(true);
     try {
+      assertPurchaseCatalogReady(productId, []);
       if (isIcp) {
         // Session-free path: verify-iap-receipt-icp mints an attestation and
         // the entitlement is redeemed on the identity_access canister.
