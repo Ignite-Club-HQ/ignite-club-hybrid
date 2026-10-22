@@ -104,10 +104,13 @@ describe('remote protected read fallback', () => {
   it('keeps the twin decision on the device so the next launch skips the refused query', async () => {
     const store = new Map<string, string>();
     vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } });
+    vi.resetModules();
+    const first = await import('./accountReadAdapter.mjs');
     const legacy = vi.fn().mockRejectedValue(trap());
     const twin = vi.fn().mockResolvedValue('protected');
-    const wrapped = adaptRemoteAccountReads({ get_folder: legacy, read_account_get_folder: twin }, vaultIdl({ IDL }), 'ggggg-gg');
+    const wrapped = first.adaptRemoteAccountReads({ get_folder: legacy, read_account_get_folder: twin }, vaultIdl({ IDL }), 'ggggg-gg');
     await wrapped.get_folder('f');
+    expect(legacy).toHaveBeenCalledTimes(1);
     const saved = JSON.parse(localStorage.getItem('ignite_protected_read_decisions_v1') ?? '[]');
     expect(saved).toContain('ggggg-gg|get_folder');
     // A fresh module load (next app launch) goes straight to the twin.
