@@ -17,7 +17,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
-import { readClubsInOwnGroups, settleAll, grantClubId } from "@/live/crossGroupClubs";
+import { readClubsInOwnGroups, settleAll, grantClubId, type LiveClubRow } from "@/live/crossGroupClubs";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import type { FeatureBackendContext } from "@/live/featureRouter";
 
@@ -180,8 +180,7 @@ export default function ClubsPage() {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            const { values } = await readClubsInOwnGroups(ctx, await liveClubIds(ctx));
-            return values.map((p) => ({
+            const toClub = (p: LiveClubRow) => ({
               id: p.id,
               name: p.name,
               logo_url: p.logo_url[0] ?? null,
@@ -190,7 +189,12 @@ export default function ClubsPage() {
               is_pro: false,
               created_by: null,
               primary_sponsor_id: null,
-            }) as Club);
+            }) as Club;
+            // Show each club as soon as its own group answers instead of
+            // waiting for the slowest group.
+            const { values } = await readClubsInOwnGroups(ctx, await liveClubIds(ctx),
+              (loaded) => queryClient.setQueryData(["clubs"], loaded.map(toClub)));
+            return values.map(toClub);
           },
         }, { shared: "person" });
       }

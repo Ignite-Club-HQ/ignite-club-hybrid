@@ -31,11 +31,27 @@ export const grantTeamId = (g: Grant): string | null =>
 export type LiveClubRow = Awaited<ReturnType<typeof getLiveClubProfile>>[number];
 
 /** Active (not deleted) club profiles for the given ids, each from its own group. */
-export async function readClubsInOwnGroups(ctx: FeatureBackendContext, clubIds: readonly string[]): Promise<Settled<LiveClubRow>> {
+/** `onProgress` receives the active clubs loaded so far (in request order)
+ * each time another club arrives, so pages can render before the slowest
+ * group answers. The returned value is still the complete settled result. */
+export async function readClubsInOwnGroups(
+  ctx: FeatureBackendContext,
+  clubIds: readonly string[],
+  onProgress?: (loaded: LiveClubRow[]) => void,
+): Promise<Settled<LiveClubRow>> {
   const ids = [...new Set(clubIds)];
   if (ids.length === 0) return { values: [], failed: 0 };
-  const settled = await settleAll(ids.map(id => readMembershipInScope(ctx, { clubId: id }, scoped => getLiveClubProfile(scoped, id))));
-  return { values: settled.values.map(rows => rows[0]).filter((c): c is LiveClubRow => !!c && !c.deleted_at_ms?.length), failed: settled.failed };
+  const isActive = (c: LiveClubRow | undefined): c is LiveClubRow => !!c && !c.deleted_at_ms?.length;
+  const slots: (LiveClubRow | undefined)[] = new Array(ids.length);
+  const settled = await settleAll(ids.map((id, i) =>
+    readMembershipInScope(ctx, { clubId: id }, scoped => getLiveClubProfile(scoped, id)).then(rows => {
+      slots[i] = rows[0];
+      if (onProgress && isActive(rows[0])) {
+        try { onProgress(slots.filter(isActive)); } catch { /* render hook must not fail the read */ }
+      }
+      return rows;
+    })));
+  return { values: settled.values.map(rows => rows[0]).filter(isActive), failed: settled.failed };
 }
 
 /** All the caller's active clubs across every group. */

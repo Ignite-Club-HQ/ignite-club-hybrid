@@ -13,3 +13,25 @@ describe('cross-group partial results', () => {
     expect(await settleAll([])).toEqual({ values: [], failed: 0 });
   });
 });
+
+import { vi } from 'vitest';
+vi.mock('./membershipRouting', () => ({
+  readMembershipInScope: (_ctx: unknown, scope: { clubId: string }, fn: (s: unknown) => unknown) => fn(scope.clubId),
+}));
+vi.mock('./features/club', () => ({
+  getLiveClubProfile: (id: string) => id === 'slow'
+    ? new Promise(r => setTimeout(() => r([{ id, deleted_at_ms: [] }]), 20))
+    : Promise.resolve([{ id, deleted_at_ms: [] }]),
+}));
+vi.mock('./features/membership', () => ({ getLiveMyRoleGrants: async () => [] }));
+
+describe('progressive club loading', () => {
+  it('reports the fast group club before the slow group answers', async () => {
+    const { readClubsInOwnGroups } = await import('./crossGroupClubs');
+    const seen: string[][] = [];
+    const r = await readClubsInOwnGroups({} as never, ['slow', 'fast'], l => seen.push(l.map(c => c.id)));
+    expect(seen[0]).toEqual(['fast']);
+    expect(seen.at(-1)).toEqual(['slow', 'fast']);
+    expect(r.values.map(c => c.id)).toEqual(['slow', 'fast']);
+  });
+});
