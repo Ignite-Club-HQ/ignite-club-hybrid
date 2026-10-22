@@ -10,7 +10,7 @@
  */
 
 const CLUB_KEY_PREFIX = "ignite.clubkey.v1:";
-export const CLUB_KEY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const CLUB_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PHOTO_CACHE_PREFIX = "ignite-media-v1:";
 const PHOTO_CACHE_MAX_BYTES = 8 * 1024 * 1024;
 

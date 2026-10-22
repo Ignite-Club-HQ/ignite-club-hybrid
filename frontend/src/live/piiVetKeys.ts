@@ -109,7 +109,7 @@ export function fetchClubMediaVetKey(ctx: FeatureBackendContext, clubId: string)
       const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
       const cid = canisterId.toText();
       const principal = ctx.identity.getPrincipal().toText();
-      // Device-stored key (7 days) skips the slow, paid derivation.
+      // Device-stored key (30 days) skips the slow, paid derivation.
       const stored = loadStoredClubKey(cid, principal, clubId);
       if (stored) {
         try {
@@ -213,7 +213,7 @@ export async function fetchPiiVetKeys(
   const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   const cid = canisterId.toText();
   const principal = ctx.identity.getPrincipal().toText();
-  // Device-stored keys (7 days, cleared on sign-out) skip the paid
+  // Device-stored keys (30 days, cleared on sign-out) skip the paid
   // derivation — previously every app open re-derived every visible name.
   const memoryKey = (id: string) => `${ctx.target.host}|${cid}|${principal}|${fieldId}\u001f${id}`;
   const storeKey = (id: string) => `pii:${fieldId}:${id}`;
