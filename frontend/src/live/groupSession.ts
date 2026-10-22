@@ -217,14 +217,16 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const inflight = new Map<string, Promise<unknown>>();
   const api = {
     clubIds: [...clubs].sort(),
+    memberClubIds: [...clubs, ...legacyClubs].sort(),
     isLegacyMember(clubId: string) { return legacyClubs.has(clubId); },
     /** Ordinary member-content reads never query groups with no member clubs. */
     async readMemberGroups<T>(domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows = 1000): Promise<T[]> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       await revalidate([...clubs]);
       const memberGroups = new Set([...clubs].map(id => routing.assignments.get(id)?.groupId));
-      const parts = await Promise.all(registry.groups.filter(g => memberGroups.has(g.id)).map(g => read(targetFor(g.id))));
-      if (legacyClubs.size) parts.push(await read(context));
+      const reads = registry.groups.filter(g => memberGroups.has(g.id)).map(g => read(targetFor(g.id)));
+      if (legacyClubs.size) reads.push(read(context));
+      const parts = await Promise.all(reads);
       live();
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Member-group read exceeds row budget');

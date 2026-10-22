@@ -15,7 +15,7 @@ import { clearRoleGrantsMemo } from './roleGrantsMemo';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
-  isAssigned(c: string): boolean; isLegacyMember?(c: string): boolean; dispose(): void;
+  isAssigned(c: string): boolean; isLegacyMember?(c: string): boolean; memberClubIds?: string[]; dispose(): void;
   readHosted?<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   createInGroup?<T>(placement: ClubAssignment, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   readMemberGroups?<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]>;
@@ -149,6 +149,10 @@ export function createClubDispatcher(deps: DispatchDeps) {
   const active = async () => activationStatus(deps.gates()).active ||
     Boolean(deps.generalActive && await deps.generalActive(await deps.context())) || Boolean(await deps.ownerActive?.());
   return {
+    memberClubIds: async (): Promise<string[]> => {
+      const { s } = await sessionFor(deps);
+      return [...(s.memberClubIds ?? [])];
+    },
     /** Atomically replace a discovery session; existing content keeps its session
      * while the new membership sweep is in flight. Failure retains the old one. */
     refreshMembershipSession: async (): Promise<void> => {

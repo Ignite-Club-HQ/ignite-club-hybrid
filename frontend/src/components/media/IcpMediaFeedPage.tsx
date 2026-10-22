@@ -44,6 +44,7 @@ import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { mediaProfileDirectory } from "./mediaProfileDirectory";
 import { galleryCommentFromReceipt, mergeGalleryComments } from "./galleryComments";
+import { readMediaSources, type MediaSourceStatus } from './mediaSourceState';
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -107,6 +108,8 @@ interface LiveFilterOptions {
 interface LiveMediaFeed {
   posts: LiveMediaPost[];
   options: LiveFilterOptions;
+  sources?: MediaSourceStatus[];
+  incomplete?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +215,7 @@ function readFeedSnapshot(principal: string | undefined): LiveMediaFeed | undefi
 }
 
 function writeFeedSnapshot(principal: string, feed: LiveMediaFeed) {
+  if (feed.incomplete) return;
   try {
     const trimmed = { ...feed, posts: feed.posts.slice(0, 60) };
     localStorage.setItem(FEED_SNAPSHOT_PREFIX + principal, JSON.stringify(trimmed));
@@ -226,7 +230,10 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
   const grants = await getLiveMyRoleGrants(ctx);
   const grantClubIds = new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c));
   const grantTeamIds = new Set(grants.map((g) => g.team[0]).filter((t): t is string => !!t));
-  const clubsRaw = (await readClubsInOwnGroups(ctx, [...grantClubIds])).values as unknown as {
+  const { clubDispatch } = await import('@/live/groupDispatch');
+  const verifiedIds = await clubDispatch.memberClubIds();
+  const clubProfiles = await readClubsInOwnGroups(ctx, [...new Set([...verifiedIds, ...grantClubIds])]);
+  const clubsRaw = clubProfiles.values as unknown as {
     id: string;
     name: string;
     sport: [] | [string];
@@ -250,12 +257,14 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     deleted: boolean;
   }[] = [];
 
-  await Promise.all(
-    clubsRaw.map(async (club) => {
+  const clubById = new Map(clubsRaw.map(club => [club.id, club]));
+  const result = await readMediaSources(clubsRaw.map(club => club.id), async clubId => {
+      const club = clubById.get(clubId);
+      if (!club) throw new Error('Club source unavailable');
       // Soft-deleted clubs keep their canister records (and assets) — never
       // surface them in the feed, the filter drawer, or the upload sheet.
       if (club.deleted_at_ms.length > 0) return;
-      const directMember = grantClubIds.has(club.id);
+      const directMember = verifiedIds.includes(club.id) || grantClubIds.has(club.id);
       if (!directMember && grantTeamIds.size === 0) return;
       if (!directMember) {
         const clubTeams = (await readContentInScope(ctx, "membership", { clubId: club.id }, scoped => listLiveTeams(scoped, club.id))) as unknown as { id: string }[];
@@ -288,8 +297,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
         if (asset.deleted) continue;
         if (asset.kind === "photo" || asset.kind === "video") rawAssets.push(asset);
       }
-    }),
-  );
+    });
 
   // Photos are unlocked in the background by the page (see useResolvedAssetUrls)
   // so the feed paints as soon as the post list is known instead of waiting
@@ -414,7 +422,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
 
   posts.sort((a, b) => b.createdAtMs - a.createdAtMs);
   options.clubs.sort((a, b) => a.name.localeCompare(b.name));
-  return { posts, options };
+  return { posts, options, sources: result.sources, incomplete: clubProfiles.failed > 0 || result.sources.some(source => source.state !== 'ready') };
 }
 
 // ---------------------------------------------------------------------------
@@ -754,8 +762,14 @@ export function IcpMediaFeedPage() {
             </Button>
           </div>
         )}
+        {feedQuery.data?.incomplete && (
+          <div className="flex items-center justify-between gap-3 py-3" role="status">
+            <p className="text-sm text-muted-foreground">Some club media couldn't be loaded.</p>
+            <Button variant="outline" onClick={() => feedQuery.refetch()}>Try again</Button>
+          </div>
+        )}
 
-        {feedQuery.isSuccess && posts.length === 0 && pendingPreviews.length === 0 && (
+        {feedQuery.isSuccess && !feedQuery.data?.incomplete && posts.length === 0 && pendingPreviews.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-16 text-center">
             <Images className="h-10 w-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">No media yet</p>
