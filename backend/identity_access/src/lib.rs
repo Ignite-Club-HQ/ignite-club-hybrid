@@ -23,6 +23,7 @@ mod membership_coordinator;
 mod membership_propagation;
 mod membership_transport;
 mod membership_runtime;
+mod membership_locations;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -598,6 +599,21 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
             let wire:membership_transport::Reply<membership_transport::WirePage>=reply.candid().map_err(|_|"Invalid directory source page")?;
             let page=wire.result()?.checked()?;scanned=page.scanned as u64;
             directory_config()?.check_watermark(&source,captured.revision)?;
+            // Positive source Club edges are checked against the existing
+            // router location API. Missing legacy assignments remain unproven
+            // and cannot enable a public directory; publication stays local.
+            for edge in &page.edges{
+                if let membership_materializer::Edge::Club{id,..}=edge{
+                    let reply=ic_cdk::call::Call::bounded_wait(config.binding.registry,"read_hosted_club_assignment").with_args(&(id.clone(),config.binding.target_alias.clone(),config.binding.registry_revision)).await.map_err(|_|"Club ownership check unavailable; source page retained")?;
+                    recheck_directory(&config)?;directory_config()?.check_watermark(&source,captured.revision)?;
+                    let location:membership_transport::Reply<membership_locations::Assignment>=reply.candid().map_err(|_|"Invalid club ownership reply")?;
+                    match location{
+                        membership_transport::Reply::Ok(assignment)=>membership_locations::verify(id,&source,authority,&assignment,&config.sources,config.binding.registry_revision)?,
+                        membership_transport::Reply::Err(error) if error=="Missing club assignment"=>{},
+                        membership_transport::Reply::Err(error)=>return Err(error),
+                    }
+                }
+            }
             DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().accept(&mut c.borrow_mut(),&source,&captured,&cursor,page)))?;
         },
         "materialize"=>{scanned=DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().advance(&mut c.borrow_mut(),&source)))? as u64;},
