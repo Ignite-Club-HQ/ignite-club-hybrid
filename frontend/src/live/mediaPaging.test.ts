@@ -22,7 +22,7 @@ describe('bounded media compatibility', () => {
     await expect(readCompatibleMediaPage(async () => ({ Err: 'Media page index not ready' }), legacy, false)).rejects.toThrow('not ready');
     expect(legacy).not.toHaveBeenCalled();
   });
-  it.each(['Account admission denied', 'Network unavailable', 'Media page revision changed', 'IC0536 rejected'])('does not fall back on %s', async message => {
+  it.each(['Account admission denied', 'Network unavailable', 'Media page revision changed', 'IC0536 rejected', 'otherHelper is not a function', 'has no query method other_method'])('does not fall back on %s', async message => {
     const legacy = vi.fn();
     await expect(readCompatibleMediaPage(async () => { throw Error(message); }, legacy, true)).rejects.toThrow(message);
     expect(legacy).not.toHaveBeenCalled();

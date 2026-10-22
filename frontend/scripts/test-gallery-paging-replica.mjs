@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { Principal } from '@icp-sdk/core/principal';
 import { IDL } from '@icp-sdk/core/candid';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { idlFactory } from '../src/lab/bindings/media_metadata/declarations/media_metadata.did.js';
 const root = resolve(import.meta.dirname, '../..');
 const governor = Principal.fromUint8Array(Uint8Array.from([1, 1]));
@@ -13,6 +15,8 @@ const destination = Principal.fromUint8Array(Uint8Array.from([4, 1]));
 const ok = reply => { assert.ok('Ok' in reply); return reply.Ok; };
 const server = await PocketIcServer.start(); let pic;
 try {
+  const legacyHash = createHash('sha256').update(readFileSync(resolve(root, 'backend/media_metadata/main.wasm'))).digest('hex');
+  console.log('Pre-index fixture SHA-256:', legacyHash);
   pic = await PocketIc.create(server.getUrl());
   const fixture = await pic.setupCanister({ idlFactory, wasm: resolve(root, 'backend/media_metadata/main.wasm'),
     sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
@@ -73,6 +77,19 @@ try {
   assert.ok('Err' in await actor.list_assets_page('club', beforeRekey.next, 60n));
   assert.equal((await drain(destination)).length, 405);
   actor.setPrincipal(governor);
+  const beforeScope = ok(await actor.list_assets_page('club', [], 60n));
+  ok(await actor.set_asset_scope(assetIds[0], ['team'], [], [], [], ['Caption'], ['album']));
+  assert.ok('Err' in await actor.list_assets_page('club', beforeScope.next, 60n));
+  const beforeBlob = ok(await actor.list_assets_page('club', [], 60n));
+  ok(await actor.set_blob_ref(assetIds[0], [{ canister: 'aaaaa-aa', path: 'clubs/club/file', content_hash: 'hash' }]));
+  assert.ok('Err' in await actor.list_assets_page('club', beforeBlob.next, 60n));
+  const publicAsset = ok(await actor.register_asset('public-club', 'photo', 'image/jpeg', 'hash', 'clubs/public-club/file', 'public', 99_999_999_999_999n));
+  actor.setPrincipal(stranger);
+  assert.equal(ok(await actor.list_assets_page('public-club', [], 60n)).assets[0].id, publicAsset.id);
+  const own = ok(await actor.register_asset('own-club', 'photo', 'image/jpeg', 'hash', 'clubs/own-club/file', 'private', 99_999_999_999_999n));
+  assert.equal(ok(await actor.list_assets_page('own-club', [], 60n)).assets[0].id, own.id);
+  actor.setPrincipal(destination); assert.equal(ok(await actor.list_assets_page('own-club', [], 60n)).assets.length, 0);
+  actor.setPrincipal(governor);
   ok(await actor.set_transfer_fence('club', true));
   const snapshot = ok(await actor.export_club_snapshot('club'));
   ok(await actor.import_club_snapshot('club', snapshot));
@@ -80,6 +97,8 @@ try {
   for (let i = 0; i < 3; i++) ok(await actor.build_asset_page_index());
   assert.equal((await drain(governor)).length, 405);
   actor.setPrincipal(governor); ok(await actor.purge_club_snapshot('club'));
+  assert.equal((await actor.list_assets_page('club', [], 60n)).Err, 'Media page index not ready');
+  ok(await actor.build_asset_page_index());
   assert.equal(ok(await actor.list_assets_page('club', [], 60n)).assets.length, 0);
   console.log('PASS: populated pre-index upgrade, bounded resumable backfill, overlapping registration, ordering/visibility, empty continuation, role/delete/rekey invalidation, snapshot locator rebuild and purge. Disposable replica only.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }

@@ -52,6 +52,20 @@ describe('media loading stages', () => {
     expect(last?.sources).toEqual([{ clubId: 'club-1', state: 'failed' }]);
     expect(last?.incomplete).toBe(true);
   });
+  it('coalesces overlapping continuation clicks and stops cancelled requests from reading more pages', async () => {
+    const abort = new AbortController();
+    const continuation: MediaFeedContinuation = {};
+    mocks.assets.mockResolvedValueOnce({ assets: [photo], next: { club_id: 'club-1', revision: 1n, before: 'key' }, bounded: true });
+    await loadLiveMediaFeed(ctx, undefined, continuation, abort.signal);
+    let finish: ((value: unknown) => void) | undefined;
+    mocks.assets.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const first = continuation.loadMore?.(); const second = continuation.loadMore?.();
+    expect(first).toBe(second);
+    await vi.waitFor(() => expect(mocks.assets).toHaveBeenCalledTimes(2));
+    abort.abort(); finish?.({ assets: [{ ...photo, id: 'late' }], next: null, bounded: true });
+    const last = await first;
+    expect(last?.posts.flatMap(post => post.assets.map(a => a.id))).toEqual(['photo-1']);
+  });
   it('publishes deduplicated photos before delayed filter metadata and never reads comments as a feed prerequisite', async () => {
     let complete: ((value: unknown[]) => void) | undefined;
     mocks.teams.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
