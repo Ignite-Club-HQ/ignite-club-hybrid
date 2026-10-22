@@ -175,7 +175,7 @@ export default function TeamDetailPage() {
   const adminInviteEmail = locationState?.inviteEmail || "";
   const adminInviteTeamName = locationState?.teamName || "";
 
-  const { data: team, isLoading, fetchStatus: teamFetchStatus } = useQuery({
+  const { data: team, isLoading, error: teamError, refetch: refetchTeam, fetchStatus: teamFetchStatus } = useQuery({
     queryKey: ["team", id],
     queryFn: async () => {
       if (isFeatureRoutedToIcp("membership") && id) {
@@ -225,7 +225,7 @@ export default function TeamDetailPage() {
                 : null,
             };
           },
-        }, { teamId: id! });
+        }, getCachedTeam(id)?.club_id ? { clubId: getCachedTeam(id)?.club_id ?? "" } : { teamId: id });
       }
 
       const { data, error } = await supabase
@@ -1462,6 +1462,17 @@ export default function TeamDetailPage() {
         <Skeleton className="h-8 w-32" aria-hidden="true" />
         <Skeleton className="h-32 w-full" aria-hidden="true" />
         <span className="sr-only">Loading team…</span>
+      </div>
+    );
+  }
+
+  if (!team && teamError) {
+    return (
+      <div className="py-6 text-center space-y-3" role="alert">
+        <p className="text-muted-foreground">We couldn't load this team. Please try again.</p>
+        <Button variant="outline" onClick={() => void refetchTeam()}>
+          <RefreshCw className="h-4 w-4 mr-2" />Try again
+        </Button>
       </div>
     );
   }
