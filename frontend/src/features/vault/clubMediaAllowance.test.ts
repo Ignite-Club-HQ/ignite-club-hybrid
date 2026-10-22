@@ -13,7 +13,7 @@ function fakeClient(options: { error?: unknown; used?: number; purchased?: numbe
     error: options.error ?? null,
   }));
   const query = { select: () => query, eq: () => query, maybeSingle: async () => ({
-    data: { pricing_version: options.version ?? "usd_v2", is_pro: options.pro ?? true, storage_purchased_gb: options.purchased ?? 0 }, error: null,
+    data: { plan: "standard", pricing_version: options.version ?? "usd_v2", is_pro: options.pro ?? true, storage_purchased_gb: options.purchased ?? 0 }, error: null,
   }) };
   return { client: { from: () => query, storage: { from: () => ({ list }) } } as unknown as Client, list };
 }
@@ -87,4 +87,18 @@ it("blocks Free uploads above 250 MiB without deleting existing objects", async 
   const upload = vi.fn();
   await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, fakeClient({ used: 262144000, pro: false }).client)).rejects.toThrow("250 MB");
   expect(upload).not.toHaveBeenCalled();
+});
+it("checks only the paid team's 1 GiB, never another team's files", async () => {
+  const queries: Record<string, unknown> = {
+    club_subscriptions: { is_pro: false }, teams: { club_id: "club-a", deleted_at: null }, team_subscriptions: { is_pro: true },
+  };
+  const client = {
+    from: (table: string) => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: queries[table], error: null }) }; return q; },
+    storage: { from: () => ({ list: async (path: string) => ({ data: path === "clubs/club-a" ? [{ name: "teams", id: null, metadata: null }] : path.endsWith("/teams") ? [{ name: "team-a", id: null, metadata: null }, { name: "team-b", id: null, metadata: null }] : [{ name: "file.jpg", id: "file", metadata: { size: path.endsWith("team-a") ? gib / 3 : 4 * gib } }], error: null }) }) },
+  } as unknown as Client;
+  const upload = vi.fn().mockResolvedValue("stored");
+  await expect(uploadWithinClubMediaAllowance("club-a", 0, upload, client, "team-a")).resolves.toBe("stored");
+  await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, client, "team-a")).rejects.toThrow("full");
+  queries.teams = { club_id: "different-club", deleted_at: null };
+  await expect(uploadWithinClubMediaAllowance("club-a", 0, upload, client, "team-a")).rejects.toThrow("does not belong");
 });
