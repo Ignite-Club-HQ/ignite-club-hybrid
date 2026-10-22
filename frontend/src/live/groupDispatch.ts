@@ -49,7 +49,28 @@ const owners = new Map<string, string | null>(); // kind:id -> club (null = shar
 const inflight = new Map<string, Promise<string | null>>();
 let loadedFor: string | null = null;
 let cached: { principal: string; targetKey: string; session: Promise<Session> } | null = null;
-export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; }
+export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); reopening = null; }
+// Clubs confirmed (after one reopen) to have no group assignment: legacy/shared.
+const unplaced = new Set<string>();
+let reopening: Promise<void> | null = null;
+
+/** A club created or joined after the session opened is missing from it and
+ * would wrongly fall to the original group. Reopen once (shared by concurrent
+ * callers) before treating an unknown club as unplaced. */
+async function sessionKnowing(deps: DispatchDeps, clubId: string | null) {
+  let r = await sessionFor(deps);
+  if (!clubId || r.s.isAssigned(clubId) || unplaced.has(clubId)) return r;
+  if (!reopening) {
+    const stale = cached;
+    reopening = (async () => {
+      if (cached === stale) { stale?.session.then(x => x.dispose(), () => {}); cached = null; }
+    })();
+  }
+  try { await reopening; } finally { reopening = null; }
+  r = await sessionFor(deps);
+  if (!r.s.isAssigned(clubId)) unplaced.add(clubId);
+  return r;
+}
 
 function hydrate(deps: DispatchDeps, principal: string) {
   if (loadedFor === principal) return; loadedFor = principal;
@@ -131,7 +152,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
-      const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
+      const { s, principal } = await sessionKnowing(deps, 'clubId' in scope ? scope.clubId : null); const club = await resolveClub(deps, s, principal, scope);
       if (club && !s.isAssigned(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
         return s.readHosted(club, domain, fn);
@@ -140,7 +161,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
     },
     writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
-      const { s, principal } = await sessionFor(deps); const club = await resolveClub(deps, s, principal, scope);
+      const { s, principal } = await sessionKnowing(deps, 'clubId' in scope ? scope.clubId : null); const club = await resolveClub(deps, s, principal, scope);
       if (club && !s.isAssigned(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
         // Location only, one attempt: the destination verifies the actual
@@ -182,12 +203,12 @@ export function createClubDispatcher(deps: DispatchDeps) {
     },
     read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!await active()) return deps.legacy(feature, clubId, fn);
-      const { s } = await sessionFor(deps);
+      const { s } = await sessionKnowing(deps, clubId);
       return s.isAssigned(clubId) ? s.readClub(clubId, domain, fn) : deps.legacy(feature, clubId, fn);
     },
     write: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
       if (!await active()) return deps.legacy(feature, clubId, ctx => fn(ctx, key));
-      const { s } = await sessionFor(deps);
+      const { s } = await sessionKnowing(deps, clubId);
       return s.isAssigned(clubId) ? s.writeClub(clubId, domain, key, fn, attempts) : deps.legacy(feature, clubId, ctx => fn(ctx, key));
     },
   };
