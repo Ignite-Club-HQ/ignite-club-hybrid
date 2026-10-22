@@ -50,7 +50,7 @@ export function usePinnedMessages(
   const query = useQuery({
     queryKey: pinnedQueryKey(chatType, chatId ?? ""),
     enabled: enabledOpt && !!chatId,
-    refetchInterval: routedToIcp ? 3_000 : false,
+    refetchInterval: routedToIcp ? 15_000 : false,
     queryFn: async (): Promise<PinnedMessageWithContent[]> => {
       if (!chatId) return [];
 
