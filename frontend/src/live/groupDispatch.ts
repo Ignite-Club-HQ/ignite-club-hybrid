@@ -11,6 +11,7 @@ import { activationStatus, SHIPPED_GATES, type ActivationGates } from './groupAc
 import { generalRoutingStatus, generalRoutingDeploymentAlias } from './generalActivation';
 import { clearOwnerTestRouting, readOwnerTestRoute } from './ownerTestRouting';
 import { markScopedContext } from './scopedContext';
+import { clearRoleGrantsMemo } from './roleGrantsMemo';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
@@ -220,6 +221,7 @@ export const clubDispatch = createClubDispatcher({
 
 /** Sign-out: forget every entity→club answer kept on this device. */
 export function wipeGroupOwnerCache() {
+  clearRoleGrantsMemo();
   clearOwnerTestRouting();
   clearGroupDispatchCache();
   try { for (const k of Object.keys(localStorage)) if (k.startsWith('ignite.groupOwners.')) localStorage.removeItem(k); } catch { /* no storage */ }

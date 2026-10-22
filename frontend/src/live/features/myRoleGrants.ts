@@ -3,12 +3,16 @@ import type { FeatureBackendContext } from "../featureRouter";
 import { routingActive } from "../generalActivation";
 import { readOwnerTestRoute } from '../ownerTestRouting';
 import { isScopedContext } from '../scopedContext';
+import { memoizedGrants } from '../roleGrantsMemo';
 
 type Grant = Awaited<ReturnType<Awaited<ReturnType<typeof connectLiveClubDomain>>["actor"]["my_role_grants"]>>[number];
 
+const who = (ctx: FeatureBackendContext) => { try { return ctx.identity.getPrincipal().toText(); } catch { return '?'; } };
 async function rawGrants(ctx: FeatureBackendContext): Promise<Grant[]> {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return actor.my_role_grants();
+  return memoizedGrants(`raw|${who(ctx)}|${ctx.target?.canisterIds?.club_domain ?? ''}`, async () => {
+    const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+    return actor.my_role_grants();
+  });
 }
 
 /** Key identifying one grant so the shared and group copies of the same
@@ -33,5 +37,5 @@ export async function fetchMyRoleGrantsEverywhere(ctx: FeatureBackendContext): P
   if (isScopedContext(ctx)) return rawGrants(ctx);
   if (!await routingActive(ctx) && !await readOwnerTestRoute(ctx)) return rawGrants(ctx);
   const { clubDispatch } = await import("../groupDispatch");
-  return clubDispatch.readAcross("membership", "club_domain", rawGrants, mergeRoleGrants);
+  return memoizedGrants(`all|${who(ctx)}`, () => clubDispatch.readAcross("membership", "club_domain", rawGrants, mergeRoleGrants));
 }
