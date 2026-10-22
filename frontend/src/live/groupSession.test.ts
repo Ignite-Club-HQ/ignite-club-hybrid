@@ -151,11 +151,9 @@ describe('integrated deployment-bound group read session', () => {
   it('shares one assignment check across concurrent reads of the same club', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
     const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 16_000);
-    const original = f.transport.readAssignments; const calls = vi.fn(original);
-    f.transport.readAssignments = calls;
+    const spyFn = f.transport.readAssignments as ReturnType<typeof vi.fn>; const before = spyFn.mock.calls.length;
     try { await Promise.all([1, 2, 3].map(() => s.readClub('club-a', 'club_domain', async () => 1))); } finally { spy.mockRestore(); }
-    console.log('CALLS', JSON.stringify(calls.mock.calls, (_k, v) => typeof v === 'bigint' ? String(v) : v));
-    expect(calls).toHaveBeenCalledTimes(1);
+    expect(spyFn.mock.calls.length - before).toBe(1);
   });
   it('disposed session cannot read or release an in-flight result', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
