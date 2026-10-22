@@ -19,6 +19,15 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+// No Internet Identity exists in jsdom, so every private-URL resolution would
+// otherwise burn the full identity-restore wait (4 attempts × 1.5 s) before
+// falling through to Supabase signing — enough to push the batch-retry test
+// past the default 5 s timeout.
+vi.mock("@/live/internetIdentityAuth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/live/internetIdentityAuth")>();
+  return { ...actual, getCurrentInternetIdentityConfirmed: async () => null };
+});
+
 import {
   getSignedPhotoUrls,
   resolveSignedUrl,

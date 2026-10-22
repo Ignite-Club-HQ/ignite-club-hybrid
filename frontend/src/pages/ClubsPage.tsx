@@ -1,7 +1,7 @@
 import { mergeLists } from "@/live/featureRouter";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users, Plus, Crown, ChevronRight, Filter, Search, X, Info, RotateCcw, Trash2 } from "lucide-react";
+import { Users, Plus, Crown, ChevronRight, Search, X, Info, RotateCcw, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -25,7 +18,7 @@ import { writeOnce } from "@/live/clubScope";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
 import { PageLoading } from "@/components/ui/page-loading";
-import { getSportEmoji, SPORT_EMOJIS } from "@/lib/sportEmojis";
+import { getSportEmoji } from "@/lib/sportEmojis";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { ConfirmPurgeDialog } from "@/components/club/ConfirmPurgeDialog";
@@ -67,7 +60,6 @@ export default function ClubsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fromCreateTeam = (location.state as { fromCreateTeam?: boolean })?.fromCreateTeam === true;
-  const [sportFilter, setSportFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<{ id: string; name: string } | null>(null);
@@ -308,66 +300,33 @@ export default function ClubsPage() {
     enabled: !!user,
   });
 
-  // Get unique sports from clubs for filter options
-  const availableSports = useMemo(() => {
-    if (!clubs) return [];
-    const sports = new Set(clubs.map(c => c.sport).filter(Boolean) as string[]);
-    return Array.from(sports).sort();
-  }, [clubs]);
 
-  // Filter clubs by sport only (for My Clubs)
-  const filterBySport = (clubList: Club[] | undefined) => {
-    if (!clubList) return clubList;
-    
-    if (sportFilter === "all") return clubList;
-    
-    return clubList.filter(club => {
-      if (!club.sport) return false;
-      const lowerSport = club.sport.toLowerCase();
-      const lowerFilter = sportFilter.toLowerCase();
-      return lowerSport.includes(lowerFilter) || lowerFilter.includes(lowerSport);
-    });
-  };
 
-  // Filter clubs by sport and search query (for search results)
-  const filterBySearch = (clubList: Club[] | undefined) => {
+  // Search matches on name, description or sport. It only ever applies to the
+  // "Search Results" list below — never to My Clubs.
+  const matchSearch = (clubList: Club[] | undefined) => {
     if (!clubList) return clubList;
-    
-    let filtered = clubList;
-    
-    // Filter by sport
-    if (sportFilter !== "all") {
-      filtered = filtered.filter(club => {
-        if (!club.sport) return false;
-        const lowerSport = club.sport.toLowerCase();
-        const lowerFilter = sportFilter.toLowerCase();
-        return lowerSport.includes(lowerFilter) || lowerFilter.includes(lowerSport);
-      });
-    }
-    
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(club => 
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return clubList;
+    return clubList.filter(
+      (club) =>
         club.name.toLowerCase().includes(query) ||
         club.description?.toLowerCase().includes(query) ||
         club.sport?.toLowerCase().includes(query)
-      );
-    }
-    
-    return filtered;
+    );
   };
 
-  // My Clubs - filter by sport and active club theme
-  const myClubs = filterBySport(
-    clubs?.filter((club) => {
-      const isMember = userRoles?.some((role) => role.club_id === club.id);
-      if (!isMember) return false;
-      // If a club theme is active, only show that club
-      if (activeClubFilter) return club.id === activeClubFilter;
-      return true;
-    })
-  );
+
+  // My Clubs - every club the user belongs to. The club theme picker is the
+  // only thing that narrows this list.
+  const myClubs = clubs?.filter((club) => {
+    const isMember = userRoles?.some((role) => role.club_id === club.id);
+    if (!isMember) return false;
+    // If a club theme is active, only show that club
+    if (activeClubFilter) return club.id === activeClubFilter;
+    return true;
+  });
+
 
   // Recently removed: respect the active club filter so other clubs don't leak in
   const scopedRemovedClubs = (removedClubs ?? []).filter((club) =>
@@ -379,7 +338,7 @@ export default function ClubsPage() {
   // Only show search results (other clubs) when user is actively searching
   const isSearching = searchQuery.trim().length > 0;
   const searchResults = isSearching 
-    ? filterBySearch(clubs?.filter((club) => !userRoles?.some((role) => role.club_id === club.id)))
+    ? matchSearch(clubs?.filter((club) => !userRoles?.some((role) => role.club_id === club.id)))
     : [];
 
   if (isLoading) {
@@ -426,40 +385,6 @@ export default function ClubsPage() {
             onClick={() => setSearchQuery("")}
           >
             <X className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-
-      {/* Sport Filter */}
-      <div className="flex items-center gap-2">
-        <Filter className="h-4 w-4 text-muted-foreground" />
-        <Select value={sportFilter} onValueChange={setSportFilter}>
-          <SelectTrigger className="w-[180px] h-10">
-            <SelectValue placeholder="Filter by sport" />
-          </SelectTrigger>
-          <SelectContent className="bg-popover">
-            <SelectItem value="all">
-              <span className="flex items-center gap-2">
-                <span>🏆</span> All Sports
-              </span>
-            </SelectItem>
-            {Object.entries(SPORT_EMOJIS).map(([sport, emoji]) => (
-              <SelectItem key={sport} value={sport}>
-                <span className="flex items-center gap-2">
-                  <span>{emoji}</span> {sport}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {sportFilter !== "all" && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setSportFilter("all")}
-            className="text-muted-foreground"
-          >
-            Clear
           </Button>
         )}
       </div>
