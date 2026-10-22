@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { clearHomeSectionSnapshots } from "./homeSectionSnapshot";
+import { clearRoleGrantsMemo } from "@/live/roleGrantsMemo";
 
 const CAROUSEL_PREFIX = "ignite_my_teams_carousel_v2_";
 
@@ -54,6 +55,7 @@ export async function invalidateTeamLists(
   userId?: string | null,
 ): Promise<void> {
   clearMyTeamsCarouselCache(userId);
+  clearRoleGrantsMemo();
   // Home side-sections (Club News, Club Links) snapshot to localStorage too;
   // a deleted club's content must not repaint from the last-known snapshot.
   clearHomeSectionSnapshots();
