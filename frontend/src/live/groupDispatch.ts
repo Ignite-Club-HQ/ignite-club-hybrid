@@ -119,7 +119,9 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
   if ('clubId' in scope) return scope.clubId;
   const [kind, id] = 'photoId' in scope ? ['photo', scope.photoId] as const : 'galleryCardId' in scope ? ['galleryCard', scope.galleryCardId] as const : 'newsId' in scope ? ['news', scope.newsId] as const : 'competitionMatchId' in scope ? ['competitionMatch', scope.competitionMatchId] as const : 'eoiId' in scope ? ['eoi', scope.eoiId] as const : 'seasonId' in scope ? ['season', scope.seasonId] as const : 'vaultFileId' in scope ? ['vaultFile', scope.vaultFileId] as const : 'vaultFolderId' in scope ? ['vaultFolder', scope.vaultFolderId] as const : 'notificationId' in scope ? ['notification', scope.notificationId] as const : 'scheduledMessageId' in scope ? ['scheduledMessage', scope.scheduledMessageId] as const : 'eventGroupId' in scope ? ['eventGroup', scope.eventGroupId] as const : 'competitionId' in scope ? ['competition', scope.competitionId] as const : 'miniLeagueId' in scope ? ['miniLeague', scope.miniLeagueId] as const : 'eventId' in scope ? ['event', scope.eventId] as const : 'conversationId' in scope ? ['conversation', scope.conversationId] as const : 'clubLinkId' in scope ? ['clubLink', scope.clubLinkId] as const : 'roleRequestId' in scope ? ['roleRequest', scope.roleRequestId] as const : ['team', scope.teamId] as const;
   const key = `${kind}:${id}`;
-  if (owners.has(key)) return owners.get(key) ?? null;
+  // A shared-team answer can outlive creation in a newly opened group.
+  // Never let an old negative answer hide that team's current owner.
+  if (owners.has(key) && !(kind === 'team' && owners.get(key) === null)) return owners.get(key) ?? null;
   const pending = inflight.get(key); if (pending) return pending;
   if (!deps.lookup) throw new Error('Entity lookup unavailable');
   const lookup = deps.lookup;
@@ -127,7 +129,7 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
     const found = [...new Set(await s.readEveryGroup(ENTITY_DOMAIN[kind], async ctx => { const c = await lookup(ctx, kind, id); return c ? [c] : []; }, 2))];
     if (found.length > 1) throw new Error(`${kind} claimed by more than one group`);
     const club = found[0] ?? null;
-    if (!club && ['photo', 'galleryCard', 'news', 'competitionMatch', 'eoi', 'vaultFile', 'vaultFolder', 'notification', 'scheduledMessage'].includes(kind)) {
+    if (!club && ['team', 'photo', 'galleryCard', 'news', 'competitionMatch', 'eoi', 'vaultFile', 'vaultFolder', 'notification', 'scheduledMessage'].includes(kind)) {
       const shared = await deps.context();
       const sharedClub = await lookup(shared, kind, id);
       if (!sharedClub) throw new Error(`${kind} not found or not authorized`);
