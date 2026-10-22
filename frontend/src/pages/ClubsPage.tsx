@@ -389,39 +389,6 @@ export default function ClubsPage() {
         )}
       </div>
 
-      {/* Sport Filter */}
-      <div className="flex items-center gap-2">
-        <Filter className="h-4 w-4 text-muted-foreground" />
-        <Select value={sportFilter} onValueChange={setSportFilter}>
-          <SelectTrigger className="w-[180px] h-10">
-            <SelectValue placeholder="Filter by sport" />
-          </SelectTrigger>
-          <SelectContent className="bg-popover">
-            <SelectItem value="all">
-              <span className="flex items-center gap-2">
-                <span>🏆</span> All Sports
-              </span>
-            </SelectItem>
-            {Object.entries(SPORT_EMOJIS).map(([sport, emoji]) => (
-              <SelectItem key={sport} value={sport}>
-                <span className="flex items-center gap-2">
-                  <span>{emoji}</span> {sport}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {sportFilter !== "all" && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setSportFilter("all")}
-            className="text-muted-foreground"
-          >
-            Clear
-          </Button>
-        )}
-      </div>
 
       {/* My Clubs */}
       <section className="space-y-4">
