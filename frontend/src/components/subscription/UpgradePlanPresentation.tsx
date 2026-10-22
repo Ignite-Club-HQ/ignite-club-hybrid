@@ -177,7 +177,7 @@ export function UpgradePricingToggle({
         </span>
         {isAnnual && (
           <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/20">
-            Save 20%
+            Annual pricing
           </Badge>
         )}
       </div>
@@ -204,14 +204,14 @@ export function UpgradeOfferCard({
             disabled={pricing.annualDisabled}
           />
           <CardTitle className="text-3xl">
-            ${pricing.price}{" "}
+            US${pricing.price}{" "}
             <span className="text-lg font-normal text-muted-foreground">
-              AUD/{pricing.period}
+              USD/{pricing.period}
             </span>
           </CardTitle>
           {pricing.annualSavings !== undefined && pricing.isAnnual && (
             <p className="text-sm text-green-600 font-medium">
-              Save ${pricing.annualSavings} per year
+              Save US${pricing.annualSavings} per year
             </p>
           )}
           <p className="text-sm text-muted-foreground">{pricing.summary}</p>
@@ -242,7 +242,7 @@ export function UpgradeOfferCard({
               Subscribe Now
             </Button>
             <p className="text-xs text-center text-muted-foreground">
-              {pricing.checkoutSummary} AUD • Cancel anytime
+              {pricing.checkoutSummary} USD • Cancel anytime
             </p>
             <SubscriptionLegalLinks />
           </div>

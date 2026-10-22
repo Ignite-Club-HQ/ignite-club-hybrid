@@ -1,3 +1,4 @@
+import { TEAM_PRICING } from "@/lib/subscriptionPlans";
 import { useState, useEffect, Suspense } from "react";
 import { defaultClubHomeCountry } from "@/lib/clubHomeCountry";
 import { GOOGLE_SIGN_IN_ENABLED } from "@/lib/authProviderFlags";
@@ -50,8 +51,8 @@ const SPORTS = Object.keys(SPORT_EMOJIS);
 const PRO_FEATURES = [
   "Club-wide announcements & chat",
   "DMs & custom groups",
-  "Unlimited photo & media uploads (Free: 10/month)",
-  "Unlimited file storage (Free: 10 files / 25 MB)",
+  "No monthly photo count limit within storage allowance",
+  "1 GB team media storage (shared 3 GB if the club subscribes)",
   "Unlimited polls (Free: 2/month)",
   "Scheduled messages",
   "Pinned vault files in chat",
@@ -71,10 +72,7 @@ const PRO_FOOTBALL_FEATURES = [
   "Game Timer",
 ];
 
-const PRICING = {
-  pro: { monthly: 24.99, annual: 239 },
-  proFootball: { monthly: 39.99, annual: 379.99 },
-};
+const PRICING = TEAM_PRICING;
 
 const authSchema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -575,7 +573,7 @@ function SupabaseSignupProPage() {
           <span className={`text-sm ${isAnnual ? "font-semibold" : "text-muted-foreground"}`}>Annual</span>
           {isAnnual && (
             <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/20">
-              Save 20%
+              Annual pricing
             </Badge>
           )}
         </div>
@@ -589,7 +587,7 @@ function SupabaseSignupProPage() {
             <CardTitle className="text-3xl mt-2">
               ${price}{" "}
               <span className="text-lg font-normal text-muted-foreground">
-                AUD/{isAnnual ? "year" : "month"}
+                USD/{isAnnual ? "year" : "month"}
               </span>
             </CardTitle>
             {isAnnual && (
@@ -891,7 +889,7 @@ function SupabaseSignupProPage() {
             </div>
             <div className="border-t pt-3 flex justify-between items-center">
               <span className="font-semibold">Total</span>
-              <span className="text-xl font-bold text-primary">${price} AUD/{isAnnual ? "year" : "month"}</span>
+              <span className="text-xl font-bold text-primary">${price} USD/{isAnnual ? "year" : "month"}</span>
             </div>
           </CardContent>
         </Card>

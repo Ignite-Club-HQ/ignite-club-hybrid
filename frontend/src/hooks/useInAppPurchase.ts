@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { clubProductId, teamProductId, type ClubPlan } from "@/lib/subscriptionPlans";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -217,19 +218,18 @@ export function useInAppPurchase(): UseInAppPurchaseReturn {
 // Helper to get the correct product ID
 export function getClubUpgradeProductId(
   tier: "pro" | "pro_football",
-  plan: "starter" | "standard" | "unlimited",
-  isAnnual: boolean
+  plan: ClubPlan,
+  isAnnual: boolean,
+  extraTeams = 0
 ): string {
-  const key = `${tier === "pro" ? "pro" : "pro_football"}_${plan}_${isAnnual ? "annual" : "monthly"}` as keyof typeof IAP_PRODUCT_IDS;
-  return IAP_PRODUCT_IDS[key];
+  return clubProductId(tier, plan, isAnnual, extraTeams);
 }
 
 export function getTeamUpgradeProductId(
   tier: "pro" | "pro_football",
   isAnnual: boolean
 ): string {
-  const key = `team_${tier === "pro" ? "pro" : "pro_football"}_${isAnnual ? "annual" : "monthly"}` as keyof typeof IAP_PRODUCT_IDS;
-  return IAP_PRODUCT_IDS[key];
+  return teamProductId(tier, isAnnual);
 }
 
 export function getStorageProductId(

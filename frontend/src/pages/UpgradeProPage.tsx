@@ -1,3 +1,4 @@
+import { TEAM_PRICING } from "@/lib/subscriptionPlans";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { isNativePlatform } from "@/lib/nativePush";
@@ -54,8 +55,8 @@ import { useInAppPurchase } from "@/hooks/useInAppPurchase";
 const PRO_FEATURES = [
   "Team & club chat (club-wide messaging)",
   "DMs & custom groups",
-  "Unlimited photo & media uploads (Free: 10/month)",
-  "Unlimited file storage (Free: 10 files / 25 MB)",
+  "No monthly photo count limit within storage allowance",
+  "1 GB team media storage (shared 3 GB if the club subscribes)",
   "Unlimited polls (Free: 2/month)",
   "Scheduled messages",
   "Pinned vault files in chat",
@@ -76,16 +77,7 @@ const PRO_FOOTBALL_FEATURES = [
 ];
 
 // Pricing in AUD
-const PRICING = {
-  pro: {
-    monthly: 24.99,
-    annual: 239.00,
-  },
-  proFootball: {
-    monthly: 39.99,
-    annual: 379.99,
-  },
-};
+const PRICING = TEAM_PRICING;
 
 // Check if club sport is soccer/football
 const isSoccerClub = (sport: string | null | undefined): boolean => {
