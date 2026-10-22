@@ -354,10 +354,17 @@ type ParentInvite =
    invited_by: principal;
    team_id: opt text;
  };
-type Page = 
+type Page__1 = 
  record {
    next: opt nat;
    references: vec Reference;
+   revision: nat;
+   scanned: nat;
+ };
+type Page = 
+ record {
+   edges: vec Edge;
+   next: opt Cursor;
    revision: nat;
    scanned: nat;
  };
@@ -469,6 +476,11 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   acknowledge_directory_membership_source: (binding: Binding, revision:
+    nat) -> (variant {
+               Err: text;
+               Ok;
+             });
    acknowledge_retained_media: (token: text) -> (variant {
                                                    Err: text;
                                                    Ok;
@@ -567,6 +579,11 @@ type Main =
                 Err: text;
                 Ok;
               });
+   configure_membership_directory_source: (binding: Binding) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    create_child_for_parent_in_club: (club_id: text, parent: principal) ->
     (variant {
        Err: text;
@@ -673,6 +690,10 @@ type Main =
                                            Err: text;
                                            Ok;
                                          });
+   disable_membership_directory_source: () -> (variant {
+                                                 Err: text;
+                                                 Ok;
+                                               });
    enrol_in_class: (club_id: text, term_id: text, class_id: text, member_id:
     text) -> (variant {
                 Err: text;
@@ -1572,7 +1593,7 @@ type Main =
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;
-                   Ok: Page;
+                   Ok: Page__1;
                  });
    read_club_retained_media_bytes: (club_id: text) ->
     (variant {
@@ -1588,6 +1609,20 @@ type Main =
        club_id: opt text;
        is_member: bool;
      }) query;
+   read_directory_membership_source_page: (binding: Binding, cursor:
+    opt Cursor) -> (variant {
+                      Err: text;
+                      Ok: Page;
+                    });
+   read_directory_membership_status: (binding: Binding) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             acknowledged: nat;
+             pending: bool;
+             revision: nat;
+           };
+     });
    /// Bounded consensus configuration evidence; never changes or grants access.
    read_group_opening_configuration: () -> (vec record {
                                                   text;
@@ -1605,6 +1640,28 @@ type Main =
            };
      });
    read_media_retained_ready: () -> (bool);
+   read_membership_directory_source_binding: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             binding: opt Binding;
+             enabled: bool;
+           };
+     });
+   read_membership_discovery_status: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             acknowledged: nat;
+             pending: bool;
+             revision: nat;
+           };
+     });
+   read_membership_source_page: (cursor: opt Cursor) ->
+    (variant {
+       Err: text;
+       Ok: Page;
+     });
    read_my_club_memberships: (offset: nat, limit: nat16) ->
     (variant {
        Err: text;
@@ -2221,6 +2278,38 @@ type Exclusion =
    club: text;
    user: principal;
  };
+type Edge = 
+ variant {
+   ChildTeam: record {
+                child: text;
+                team: text;
+              };
+   Club: record {
+           deleted: bool;
+           id: text;
+         };
+   Excluded: record {
+               club: text;
+               subject: principal;
+             };
+   Guardian: record {
+               child: text;
+               subject: principal;
+             };
+   Parent: record {
+             child: text;
+             subject: principal;
+           };
+   Role: record {
+           club: opt text;
+           subject: principal;
+         };
+   Team: record {
+           club: text;
+           deleted: bool;
+           id: text;
+         };
+ };
 type Draft = 
  record {
    icon: text;
@@ -2229,6 +2318,13 @@ type Draft =
    subtitle: opt text;
    title: text;
    url: text;
+ };
+type Cursor = 
+ record {
+   nested: nat;
+   offset: nat;
+   phase: nat;
+   revision: nat;
  };
 type Config = 
  record {
@@ -2399,6 +2495,15 @@ type Cell =
  record {
    name: text;
    value: Value;
+ };
+type Binding = 
+ record {
+   deployment: text;
+   generation: nat64;
+   group: text;
+   identity: principal;
+   inventory_digest: blob;
+   router: principal;
  };
 type Acl = 
  record {

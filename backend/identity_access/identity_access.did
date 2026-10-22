@@ -150,6 +150,12 @@ type ProfileSearchResult = record {
   avatar_ref : opt text;
   display_name : text;
 };
+type Progress = record {
+  source : text;
+  scanned : nat64;
+  phase : text;
+  revision : nat64;
+};
 type Receipt = record {
   outstanding : nat;
   request : Request;
@@ -199,32 +205,34 @@ type Request = record {
 };
 type Result = variant { Ok : Account; Err : text };
 type Result_1 = variant { Ok : Access; Err : text };
-type Result_10 = variant { Ok : vec Entitlement; Err : text };
-type Result_11 = variant { Ok : Profile; Err : text };
-type Result_12 = variant { Ok : opt TermsAcceptance; Err : text };
-type Result_13 = variant { Ok : vec RoleGrant; Err : text };
-type Result_14 = variant { Ok : Ticket; Err : text };
-type Result_15 = variant { Ok : Evidence; Err : text };
-type Result_16 = variant { Ok : vec record { text; text }; Err : text };
-type Result_17 = variant { Ok : vec PrincipalEligibility; Err : text };
-type Result_18 = variant { Ok : PrincipalEligibility; Err : text };
-type Result_19 = variant { Ok : RemovalHistoryManifest; Err : text };
+type Result_10 = variant { Ok : State; Err : text };
+type Result_11 = variant { Ok : vec ExternalSiteBinding; Err : text };
+type Result_12 = variant { Ok : vec Entitlement; Err : text };
+type Result_13 = variant { Ok : Profile; Err : text };
+type Result_14 = variant { Ok : opt TermsAcceptance; Err : text };
+type Result_15 = variant { Ok : vec RoleGrant; Err : text };
+type Result_16 = variant { Ok : Ticket; Err : text };
+type Result_17 = variant { Ok : Evidence; Err : text };
+type Result_18 = variant { Ok : vec record { text; text }; Err : text };
+type Result_19 = variant { Ok : vec PrincipalEligibility; Err : text };
 type Result_2 = variant { Ok; Err : text };
-type Result_20 = variant { Ok : RemovalHistoryPage; Err : text };
-type Result_21 = variant { Ok : RemovalInventory; Err : text };
-type Result_22 = variant { Ok : Entitlement; Err : text };
-type Result_23 = variant { Ok : nat64; Err : text };
-type Result_24 = variant { Ok : vec ProfileSearchResult; Err : text };
-type Result_25 = variant { Ok : PrivacyConsent; Err : text };
-type Result_26 = variant { Ok : TermsAcceptance; Err : text };
-type Result_27 = variant { Ok : vec Receipt; Err : text };
+type Result_20 = variant { Ok : PrincipalEligibility; Err : text };
+type Result_21 = variant { Ok : RemovalHistoryManifest; Err : text };
+type Result_22 = variant { Ok : RemovalHistoryPage; Err : text };
+type Result_23 = variant { Ok : RemovalInventory; Err : text };
+type Result_24 = variant { Ok : Entitlement; Err : text };
+type Result_25 = variant { Ok : nat64; Err : text };
+type Result_26 = variant { Ok : vec ProfileSearchResult; Err : text };
+type Result_27 = variant { Ok : PrivacyConsent; Err : text };
+type Result_28 = variant { Ok : TermsAcceptance; Err : text };
+type Result_29 = variant { Ok : vec Receipt; Err : text };
 type Result_3 = variant { Ok : Receipt; Err : text };
-type Result_4 = variant { Ok : Intent; Err : text };
-type Result_5 = variant { Ok : LinkChallenge; Err : text };
-type Result_6 = variant { Ok : ExternalSiteBinding; Err : text };
-type Result_7 = variant { Ok : bool; Err : text };
-type Result_8 = variant { Ok : State; Err : text };
-type Result_9 = variant { Ok : vec ExternalSiteBinding; Err : text };
+type Result_4 = variant { Ok : Progress; Err : text };
+type Result_5 = variant { Ok : Intent; Err : text };
+type Result_6 = variant { Ok : LinkChallenge; Err : text };
+type Result_7 = variant { Ok : ExternalSiteBinding; Err : text };
+type Result_8 = variant { Ok : bool; Err : text };
+type Result_9 = variant { Ok : vec SourceBinding; Err : text };
 type RoleGrant = record {
   account_id : text;
   club : opt text;
@@ -236,6 +244,14 @@ type Snapshot = record {
   groups : vec Group;
   placements : vec Placement;
   revision : nat64;
+};
+type SourceBinding = record {
+  inventory_digest : blob;
+  deployment : text;
+  generation : nat64;
+  group : text;
+  identity : principal;
+  router : principal;
 };
 type State = record {
   privacy_consents : vec PrivacyConsent;
@@ -291,9 +307,6 @@ type UnlinkIntent = record {
   authorities : vec principal;
 };
 service : (Init) -> {
-  authorize_group2_admission : (Binding) -> (Result_2);
-  authorize_group_admission : (text, Binding) -> (Result_2);
-  disable_group2_admission : () -> (Result_2);
   accept_link : (nat64) -> (Result);
   access : (opt text, opt text, opt text) -> (Result_1) query;
   access_scoped : (opt text, opt text, opt text, opt text) -> (Result_1) query;
@@ -302,67 +315,86 @@ service : (Init) -> {
   // identity, once one is established).
   add_verifier : (principal) -> (Result_2);
   advance_account_removal_receiver : (text, principal) -> (Result_3);
-  begin_account_removal : (text, nat64) -> (Result_4);
-  begin_link : (principal) -> (Result_5);
-  bind_external_site : (text, text, text) -> (Result_6);
+  // One exact source and one bounded unit per invocation; retries preserve
+  // requests/publications. Governor-only until live worker acceptance passes.
+  advance_membership_directory_source : (text) -> (Result_4);
+  // Governor-only production repair. Derive readers from the pinned router,
+  // never from a browser-supplied principal list. No lifecycle gate is released.
+  authorize_group2_admission : (Binding) -> (Result_2);
+  // Governor-only. Adds one new group's exact 12 readers (derived from two
+  // pinned router reads) to the existing set; never removes or replaces readers.
+  // Re-running for an already-authorized group is a no-op on the reader set.
+  authorize_group_admission : (text, Binding) -> (Result_2);
+  begin_account_removal : (text, nat64) -> (Result_5);
+  begin_link : (principal) -> (Result_6);
+  bind_external_site : (text, text, text) -> (Result_7);
   cancel_account_deletion : (text) -> (Result_2);
-  check_field_access : (text, text) -> (Result_7) query;
+  check_field_access : (text, text) -> (Result_8) query;
   commit_account_deletion : (text) -> (Result_2);
+  // Configures transport only. Does not enable a public reader or certify
+  // legacy club ownership, source freshness, recovery or directory cutover.
+  configure_membership_directory : (Binding, vec principal, nat64) -> (
+      Result_9,
+    );
   // Public: remaining cycles (shown in admin settings).
   cycles_balance : () -> (nat) query;
+  disable_group2_admission : () -> (Result_2);
+  disable_membership_directory : () -> (Result_2);
   erase_account : (text) -> (Result_2);
-  export_state : () -> (Result_8) query;
-  get_external_bindings : (text) -> (Result_9) query;
+  export_state : () -> (Result_10) query;
+  get_external_bindings : (text) -> (Result_11) query;
   // The caller's own entitlement records (active and expired).
-  get_my_entitlements : () -> (Result_10) query;
-  get_privacy_consent : (text, text) -> (Result_7) query;
+  get_my_entitlements : () -> (Result_12) query;
+  get_privacy_consent : (text, text) -> (Result_8) query;
   // The caller's own profile, or an error when none has been set yet.
-  get_profile : () -> (Result_11) query;
+  get_profile : () -> (Result_13) query;
   // Batch profile lookup by account id (principal text / user id), used by
   // the frontend profile cache to resolve many ids in one round trip.
   // Unknown ids are skipped rather than causing an error.
   get_profiles_by_ids : (vec text) -> (vec Profile) query;
   // The terms acceptance record for an arbitrary account: the account owner
   // or the governor only.
-  get_terms_acceptance : (text) -> (Result_12) query;
+  get_terms_acceptance : (text) -> (Result_14) query;
   grant_role : (text, text, opt text, opt text) -> (Result_2);
   grant_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_2);
+  // Only the exact configured source may notify; never accepts raw edges.
+  invalidate_membership_directory_source : (SourceBinding, nat) -> (Result_2);
   // True when `principal` holds any non-expired Pro entitlement. Callable by
   // any authenticated principal (boolean only, no entitlement detail leaked).
-  is_pro : (principal) -> (Result_7) query;
+  is_pro : (principal) -> (Result_8) query;
   // Public: live memory reading for the admin health page.
   memory_stats : () -> (MemoryStats) query;
   // Every role grant held by the caller, across all clubs/teams.
-  my_roles : () -> (Result_13) query;
+  my_roles : () -> (Result_15) query;
   // The caller's own terms acceptance record, or `None` when they have never
   // accepted (used by the legal re-acceptance gate for Internet Identity
   // users).
-  my_terms_acceptance : () -> (Result_12) query;
+  my_terms_acceptance : () -> (Result_14) query;
   // Separate governor-only trust pin for the already-released deletion timing
   // protocol. Existing history/lifecycle gates remain unchanged.
   pin_owner_test_deletion_registry : (Binding) -> (Result_2);
-  prepare_account_deletion : (text, nat64) -> (Result_14);
-  read_account_removal_intent : (text) -> (Result_4);
-  read_group_inventory_evidence : (nat64) -> (Result_15);
+  prepare_account_deletion : (text, nat64) -> (Result_16);
+  read_account_removal_intent : (text) -> (Result_5);
+  read_group_inventory_evidence : (nat64) -> (Result_17);
   // Governor-only narrow opening evidence, not a lifecycle release or grant.
-  read_group_opening_configuration : () -> (Result_16);
+  read_group_opening_configuration : () -> (Result_18);
   // Only configured canisters may ask for another caller's links. No browser
   // supplies an account id or a principal list; the index is authoritative.
   read_linked_account : (principal) -> (Result);
   // Only the pinned router may check a human before owner-test creation. This
   // narrow predicate neither registers a reader nor releases global admission.
-  read_owner_test_creation_eligible : (principal) -> (Result_7);
-  read_principal_eligibilities : (vec principal) -> (Result_17);
+  read_owner_test_creation_eligible : (principal) -> (Result_8);
+  read_principal_eligibilities : (vec principal) -> (Result_19);
   // Consensus reads; never create an account or grant resource permissions.
   // Versions are account-scoped evidence, NOT globally atomic access tokens.
-  read_principal_eligibility : (principal) -> (Result_18);
+  read_principal_eligibility : (principal) -> (Result_20);
   // Local-only consensus recovery evidence. Reader lists/club receipts are NOT
   // a complete deployment inventory or an in-flight drain acknowledgement.
-  read_removal_history_manifest : () -> (Result_19);
+  read_removal_history_manifest : () -> (Result_21);
   read_removal_history_page : (nat64, RemovalHistoryCursor, nat16) -> (
-      Result_20,
+      Result_22,
     );
-  read_removal_inventory_evidence : (nat64) -> (Result_21);
+  read_removal_inventory_evidence : (nat64) -> (Result_23);
   // Subject-bound consensus ownership read; never implicitly registers an account.
   read_service_account : (principal) -> (Result);
   // Caller-authenticated: redeems a signed attestation minted by the
@@ -376,7 +408,7 @@ service : (Init) -> {
   // verified before the entitlement is written. A different principal cannot
   // replay the signature because it is bound to the principal that produced
   // it (changing the principal changes the signed message).
-  redeem_entitlement : (text, text, nat64, text, text) -> (Result_22);
+  redeem_entitlement : (text, text, nat64, text, text) -> (Result_24);
   register_account : () -> (Result);
   // Governor-only: moves one user's sign-in ID (`old`) to a new one (`new`).
   // Everything here except entitlements and link challenges is keyed by
@@ -386,7 +418,7 @@ service : (Init) -> {
   // any real data on it (profile, roles, ...) refuses the move. Returns the
   // number of records changed (or that would change when `dry_run`).
   // Any NEW stored principal / principal-text field must be added here.
-  rekey_principal : (principal, principal, bool) -> (Result_23);
+  rekey_principal : (principal, principal, bool) -> (Result_25);
   // Governor-only: revokes a verifier principal.
   remove_verifier : (principal) -> (Result_2);
   revoke : (principal, nat64) -> (Result);
@@ -400,7 +432,7 @@ service : (Init) -> {
   // matches; each result carries the account's first principal so the caller
   // can grant roles without a second lookup. Profiles without an account or
   // with a blank name are skipped.
-  search_profiles : (text, nat16) -> (Result_24) query;
+  search_profiles : (text, nat16) -> (Result_26) query;
   // Admin-gated (governor or an account holding the `app_admin` role):
   // suspends or reactivates an account. `Suspended` accounts are rejected by
   // `account_for_write`-gated self-service writes (see its doc comment);
@@ -414,33 +446,33 @@ service : (Init) -> {
   // Records that the caller has dismissed the club switcher coach-mark, so
   // it stays dismissed across devices. Creates a blank profile entry if the
   // caller has never called `set_profile`.
-  set_club_switcher_hint_seen : () -> (Result_11);
+  set_club_switcher_hint_seen : () -> (Result_13);
   // Governor- or verifier-only: records a Pro entitlement for an arbitrary
   // principal. Used by a trusted server-side writer; client-submitted IAP
   // receipts instead go through `redeem_entitlement` below.
-  set_entitlement : (principal, text, text, nat64, text) -> (Result_22);
+  set_entitlement : (principal, text, text, nat64, text) -> (Result_24);
   set_exclusion : (text, text, opt text) -> (Result_2);
   set_exclusion_scoped : (text, opt text, text, opt text) -> (Result_2);
   set_family : (text, text) -> (Result_2);
   set_group_inventory_binding : (Binding, nat64) -> (Result_2);
-  set_privacy_consent : (text, text, bool) -> (Result_25);
+  set_privacy_consent : (text, text, bool) -> (Result_27);
   // Sets (or replaces) the caller's profile. The account must already exist —
   // sign-in provisioning calls register_account first.
-  set_profile : (text, opt text) -> (Result_11);
+  set_profile : (text, opt text) -> (Result_13);
   set_removal_supplemental_inventory : (vec Supplemental, nat64) -> (Result_2);
   set_service_authorities : (vec principal) -> (Result_2);
   // Sets (records) the caller's acceptance of the current terms/privacy
   // version. Monotonic per-account: a version lower than (or equal to) the
   // caller's currently recorded version is rejected, so a stale client can
   // never roll the recorded acceptance backwards.
-  set_terms_acceptance : (nat32) -> (Result_26);
+  set_terms_acceptance : (nat32) -> (Result_28);
   // Sets (or clears) the caller's UI theme preference, so it follows the
   // account across devices. Creates a blank profile entry if the caller has
   // never called `set_profile`.
-  set_theme_preference : (opt text) -> (Result_11);
+  set_theme_preference : (opt text) -> (Result_13);
   settle_account_deletion : (text) -> (Result_2);
   // Fresh, authenticated full-inventory seal verification. This does not erase
   // data, release registry locks, restore histories or activate a group.
-  verify_account_removal_seals : (text) -> (Result_27);
+  verify_account_removal_seals : (text) -> (Result_29);
   whoami : () -> (Result) query;
 }
