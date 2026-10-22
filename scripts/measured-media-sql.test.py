@@ -46,7 +46,7 @@ CREATE FUNCTION public.is_team_member(u uuid,t uuid) RETURNS boolean LANGUAGE sq
 CREATE FUNCTION public.can_manage_competition_vault(c uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.test_competition_staff WHERE user_id=auth.uid() AND competition_id=c) $$;
 """)
         # Exact applied source, not a rewritten model of the business rules.
-        for stamp in ["20261022041723", "20261022041801", "20261022042440", "20261022042733", "20261022042948"]:
+        for stamp in ["20261022041723", "20261022041801", "20261022042440", "20261022042733", "20261022042939"]:
             files = list((ROOT / "supabase/migrations").glob(stamp + "_*.sql"))
             if len(files) != 1:
                 raise RuntimeError("Expected exactly one migration: " + stamp)
