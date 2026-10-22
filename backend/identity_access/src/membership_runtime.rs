@@ -9,6 +9,7 @@ pub struct Config {
     pub binding:group_inventory::Binding, pub generation:u64,
     pub inventory_digest:Vec<u8>, pub sources:Vec<(String,Principal)>,
     pub pending:BTreeMap<String,u64>, pub enabled:bool,
+    #[serde(default)] pub next_source:usize,
 }
 impl Config {
     pub fn same_configuration(&self,other:&Self)->bool {
@@ -35,7 +36,7 @@ pub struct Progress { pub source:String, pub phase:String, pub revision:u64, pub
     use super::*;
     #[test] fn only_exact_writer_can_raise_durable_watermark() {
         let (_,binding,a)=group_inventory::tests::fixture();let identity=Principal::from_slice(&[99,1]);
-        let mut c=Config{binding,generation:1,inventory_digest:vec![1;32],sources:vec![("g0".into(),a[0])],pending:BTreeMap::new(),enabled:true};
+        let mut c=Config{binding,generation:1,inventory_digest:vec![1;32],sources:vec![("g0".into(),a[0])],pending:BTreeMap::new(),enabled:true,next_source:0};
         let b=c.source_binding(identity,"g0").unwrap();
         assert!(c.invalidate(identity,a[1],&b,10).is_err());assert!(c.pending.is_empty());
         c.invalidate(identity,a[0],&b,10).unwrap();c.invalidate(identity,a[0],&b,1).unwrap();assert_eq!(c.pending["g0"],10);

@@ -501,6 +501,7 @@ thread_local! {
             membership_namespace::Pool::open(memory(MEM_DIRECTORY_POOL_META),memory(MEM_DIRECTORY_POOL_BLOCKS),16384,8192).expect("Directory namespace budget"),memory(MEM_DIRECTORY_UPDATES)));
     static DIRECTORY_WORKER:RefCell<membership_propagation::Worker<Memory>>=RefCell::new(membership_propagation::Worker::open(memory(MEM_DIRECTORY_WORKER)));
     static DIRECTORY_SESSIONS:RefCell<membership_private_lookup::Sessions<Memory>>=RefCell::new(membership_private_lookup::Sessions::open(memory(MEM_DIRECTORY_SESSIONS)));
+    static DIRECTORY_TIMER_BUSY:RefCell<bool>=const{RefCell::new(false)};
 }
 fn directory_config()->Outcome<membership_runtime::Config>{
     DIRECTORY_CONFIG.with(|m|if m.borrow().get().is_empty(){Err("Membership directory unconfigured".into())}else{Ok(decode(m.borrow().get()))})
@@ -539,11 +540,11 @@ async fn configure_membership_directory(binding:group_inventory::Binding,authori
         Ok(existing)=>{
             if existing.binding!=binding||existing.generation!=generation||existing.inventory_digest!=digest||existing.sources!=sources||!existing.enabled{return Err("Directory replacement requires fenced recovery; not released".into());}existing
         },
-        Err(_)=>membership_runtime::Config{binding,generation,inventory_digest:digest,sources,pending:Default::default(),enabled:true},
+        Err(_)=>membership_runtime::Config{binding,generation,inventory_digest:digest,sources,pending:Default::default(),enabled:true,next_source:0},
     };
     DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().bind_inventory(verified))?;
     let grants=config.sources.iter().map(|(id,_)|config.source_binding(ic_cdk::api::canister_self(),id)).collect::<Outcome<Vec<_>>>()?;
-    save_directory_config(&config);Ok(grants)
+    save_directory_config(&config);arm_directory_timer();Ok(grants)
 }
 #[ic_cdk::update]
 fn disable_membership_directory()->Outcome<()>{require_governor(&state(),ic_cdk::api::msg_caller())?;let mut c=directory_config()?;c.enabled=false;save_directory_config(&c);Ok(())}
@@ -566,6 +567,9 @@ async fn directory_source_status(config:&membership_runtime::Config,source:&str,
 #[ic_cdk::update]
 async fn advance_membership_directory_source(source:String)->Outcome<membership_runtime::Progress>{
     require_governor(&state(),ic_cdk::api::msg_caller())?;
+    advance_directory_source(source).await
+}
+async fn advance_directory_source(source:String)->Outcome<membership_runtime::Progress>{
     let config=directory_config()?;let authority=config.sources.iter().find(|(id,_)|id==&source).ok_or("Unknown directory source")?.1;
     let (revision,_,_)=directory_source_status(&config,&source,authority).await?;
     DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().start(&mut c.borrow_mut(),&source,authority,revision)))?;
@@ -611,6 +615,32 @@ fn reclaim_membership_directory()->Outcome<DirectoryCleanup>{
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     let (scanned,complete)=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired())?;
     Ok(DirectoryCleanup{scanned:scanned as u64,complete})
+}
+// Native system timer: no public caller can trigger unbounded fan-out. Rotate
+// one source per tick, preserve position across upgrade, and poll even when a
+// notification was lost. Re-arm before awaiting so failures remain retryable.
+fn arm_directory_timer(){
+    if directory_config().is_ok_and(|c|c.enabled){
+        if let Some(at)=ic_cdk::api::time().checked_add(30_000_000_000){ic_cdk::api::global_timer_set(at);}
+    }
+}
+struct DirectoryTimerGuard;
+impl Drop for DirectoryTimerGuard{fn drop(&mut self){DIRECTORY_TIMER_BUSY.with(|b|*b.borrow_mut()=false);}}
+#[export_name="canister_global_timer"]
+extern "C" fn membership_directory_global_timer(){
+    arm_directory_timer();
+    let entered=DIRECTORY_TIMER_BUSY.with(|b|{let mut b=b.borrow_mut();if *b{false}else{*b=true;true}});
+    if !entered{return;}
+    ic_cdk::futures::spawn(async {
+        let _guard=DirectoryTimerGuard;
+        let Ok(mut config)=directory_config() else{return;};
+        if !config.enabled||config.sources.is_empty(){return;}
+        let at=config.next_source%config.sources.len();let source=config.sources[at].0.clone();
+        config.next_source=(at+1)%config.sources.len();save_directory_config(&config);
+        // Cleanup is bounded and happens independently of allocation success.
+        let _=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired());
+        let _=advance_directory_source(source).await;
+    });
 }
 fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {
     REMOVAL_INTENTS.with(|m| m.borrow().get(&account_id.to_string())).map(|bytes| decode(&bytes))
@@ -1429,6 +1459,7 @@ fn init(init: Init) {
         next_challenge: 0,
     };
     store(&state);
+    arm_directory_timer();
 }
 
 /// Splits a legacy full-blob `State` (schema 1..4, accounts/profiles/
@@ -1489,6 +1520,7 @@ fn post_upgrade() {
         deny_unlinked_principal(job.principal, &job.account_id, job.version).expect("Invalid pending principal denial; upgrade refused");
     }
     store_link_lifecycle(&lifecycle);
+    arm_directory_timer();
 }
 
 #[ic_cdk::query]
