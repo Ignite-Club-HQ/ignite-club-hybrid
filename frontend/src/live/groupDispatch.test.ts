@@ -62,7 +62,10 @@ describe('club-scoped dispatcher', () => {
     expect(await x.write('events', 'moved', 'events_domain', 'k', async () => 'w', 1)).toBe('group');
     expect(session.writeClub).toHaveBeenCalledWith('moved', 'events_domain', 'k', expect.any(Function), 1);
     expect(await x.read('events', 'legacy-club', 'events_domain', async () => 'r')).toBe('legacy');
-    expect(d.open).toHaveBeenCalledTimes(1);
+    // An unknown club reopens the session once (it may be newly created), then is remembered as unplaced.
+    expect(d.open).toHaveBeenCalledTimes(2);
+    expect(await x.read('events', 'legacy-club', 'events_domain', async () => 'again')).toBe('again');
+    expect(d.open).toHaveBeenCalledTimes(2);
   });
   it('a group failure is reported, never retried on the shared canisters', async () => {
     const { d, session } = deps(ON); session.readClub.mockRejectedValueOnce(new Error('Request timed out'));
