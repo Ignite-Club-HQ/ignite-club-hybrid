@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "dist-live/**", "node_modules/**", ".vitest-cache/**", "src/live/generated/**/*.ts", "!src/live/generated/deployedCanisterIds.ts"],
+    ignores: ["dist/**", "dist-live/**", "node_modules/**", ".vitest-cache/**", "src/live/generated/club_domain/**"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
