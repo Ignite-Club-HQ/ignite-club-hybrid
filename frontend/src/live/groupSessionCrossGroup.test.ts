@@ -24,6 +24,17 @@ function fixture() {
 }
 
 describe('cross-group reads', () => {
+  it('keeps verified original-group membership separate from unknown ownership', async () => {
+    const f = fixture();
+    f.transport.readLegacyMemberships = vi.fn(async () => ({ clubs: ['original-club'], next: null, aclRevision: 1n }));
+    const s = await openGroupSession(f.ctx, f.transport);
+    expect(s.isLegacyMember('original-club')).toBe(true);
+    expect(s.isLegacyMember('unknown-club')).toBe(false);
+    expect(s.isAssigned('original-club')).toBe(false);
+    const read = vi.fn(async ctx => [ctx.target.canisterIds.club_domain ?? 'original']);
+    expect(await s.readMemberGroups('club_domain', read)).toEqual(['a-0-cai', 'original']);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
   it.each([2, 10, 100])('member content skips unrelated groups in a %i-group registry', async count => {
     const f = fixture();
     const template = f.registry.groups[1];

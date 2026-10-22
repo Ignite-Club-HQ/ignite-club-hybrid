@@ -158,6 +158,10 @@ export function createClubDispatcher(deps: DispatchDeps) {
       if (!reopening) {
         reopening = (async () => {
           const ctx = await deps.context();
+          if (ctx.identity.getPrincipal().toText() !== previous.principal) throw new Error('Membership identity changed');
+          const targetKey = JSON.stringify([ctx.target.alias, ctx.target.host, ctx.target.networkKind,
+            Object.entries(ctx.target.canisterIds ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
+          if (targetKey !== previous.targetKey) throw new Error('Membership target changed');
           const next = await deps.open(ctx);
           if (cached !== previous) { next.dispose(); return; }
           cached = { ...previous, session: Promise.resolve(next) };
@@ -219,7 +223,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
       const { s, principal, club } = await resolveScoped(deps, scope);
-      if (club && !s.isAssigned(club) && !('clubId' in scope)) {
+      if (club && !s.isAssigned(club) && !s.isLegacyMember?.(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
         return s.readHosted(club, domain, fn);
       }
@@ -228,7 +232,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
     writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
       const { s, club } = await resolveScoped(deps, scope);
-      if (club && !s.isAssigned(club) && !('clubId' in scope)) {
+      if (club && !s.isAssigned(club) && !s.isLegacyMember?.(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
         // Location only, one attempt: the destination verifies the actual
         // participant/claimant permission. Never manufacture club membership.
