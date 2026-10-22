@@ -4,6 +4,7 @@ use candid::Principal;
 use serde::{Serialize,Deserialize};
 use sha2::{Digest,Sha256};
 use ic_stable_structures::{Memory,StableBTreeMap};
+use std::{collections::BTreeMap, ops::Bound::{Excluded,Unbounded}};
 use crate::membership_materializer::Binding;
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
 pub struct Viewer{pub account:String,pub version:u64,pub aliases:Vec<Principal>}
@@ -39,15 +40,29 @@ where F:FnMut(&Source,Principal,Option<String>)->Result<(Vec<String>,Option<Stri
 // Only opaque sequence numbers cross the future public boundary. Positions
 // stay server-owned; a client cannot skip a source or manufacture completion.
 #[derive(Clone,Debug,Serialize,Deserialize)]
-struct Session{viewer:[u8;32],sources:[u8;32],sequence:u64,page:Page}
+struct Session{viewer:[u8;32],sources:[u8;32],sequence:u64,page:Page,
+    #[serde(default)] seen:BTreeMap<String,(String,Principal)>,
+    #[serde(default)] expires_at:u64}
+const MAX_SESSION_CLUBS:usize=1000;
+const MAX_SESSIONS:u64=10000;
+const SESSION_TTL_NS:u64=15*60*1_000_000_000;
 pub struct Sessions<M:Memory>{rows:StableBTreeMap<String,Vec<u8>,M>}
 impl<M:Memory> Sessions<M>{
     pub fn open(memory:M)->Self{Self{rows:StableBTreeMap::init(memory)}}
     pub fn page<F>(&mut self,caller:Principal,viewer:Viewer,sources:Vec<Source>,sequence:u64,reader:F)->Result<(Page,Option<u64>),String>
     where F:FnMut(&Source,Principal,Option<String>)->Result<(Vec<String>,Option<String>,usize),String>{
+        self.page_at(caller,viewer,sources,sequence,0,reader)
+    }
+    /// The runtime passes consensus time, and refreshes identity eligibility
+    /// before this method even for persisted reply replays.
+    pub fn page_at<F>(&mut self,caller:Principal,viewer:Viewer,sources:Vec<Source>,sequence:u64,now:u64,reader:F)->Result<(Page,Option<u64>),String>
+    where F:FnMut(&Source,Principal,Option<String>)->Result<(Vec<String>,Option<String>,usize),String>{
+        if sequence>50000{return Err("Lookup page budget reached".into());}
+        // Validate the initiating identity/inventory before a replay shortcut.
+        read(caller,viewer.clone(),sources.clone(),None,|_,_,_|Ok((vec![],None,0)))?;
         let viewer_hash=digest(&(caller,&viewer));let sources_hash=digest(&sources);let key=caller.to_text();
         let prior=self.rows.get(&key).map(|b|ciborium::from_reader::<Session,_>(b.as_slice()).expect("lookup session"));
-        let same=prior.as_ref().filter(|s|s.viewer==viewer_hash&&s.sources==sources_hash);
+        let same=prior.as_ref().filter(|s|s.viewer==viewer_hash&&s.sources==sources_hash&&s.expires_at>now);
         if let Some(prior)=same {
             if sequence==prior.sequence {
                 let next=if prior.page.next.is_some(){Some(sequence.checked_add(1).ok_or("Lookup sequence exhausted")?)}else{None};
@@ -59,10 +74,35 @@ impl<M:Memory> Sessions<M>{
             if sequence!=prior.sequence.checked_add(1).ok_or("Lookup sequence exhausted")?{return Err("Lookup sequence gap".into());}
             Some(prior.page.next.clone().ok_or("Lookup already exhausted")?)
         };
-        let page=read(caller,viewer,sources,cursor,reader)?;
+        if prior.is_none()&&self.rows.len()>=MAX_SESSIONS{return Err("Lookup session capacity reached".into());}
+        let mut seen=if sequence==0{BTreeMap::new()}else{same.ok_or("Lookup session expired")?.seen.clone()};
+        let mut page=read(caller,viewer,sources,cursor,reader)?;
+        let mut unique=vec![];
+        for row in page.rows {
+            let owner=(row.source.clone(),row.authority);
+            match seen.get(&row.club){
+                Some(prior) if prior!=&owner=>return Err("Club claimed by multiple directory sources".into()),
+                Some(_)=>{},
+                None=>{if seen.len()>=MAX_SESSION_CLUBS{return Err("Lookup club budget reached".into());}seen.insert(row.club.clone(),owner);unique.push(row);},
+            }
+        }
+        page.rows=unique;
         let next=if page.next.is_some(){Some(sequence.checked_add(1).ok_or("Lookup sequence exhausted")?)}else{None};
-        let state=Session{viewer:viewer_hash,sources:sources_hash,sequence,page:page.clone()};let mut bytes=vec![];ciborium::into_writer(&state,&mut bytes).expect("lookup session");
+        let expires_at=if sequence==0{now.checked_add(SESSION_TTL_NS).ok_or("Lookup time exhausted")?}else{same.ok_or("Lookup session expired")?.expires_at};
+        let state=Session{viewer:viewer_hash,sources:sources_hash,sequence,page:page.clone(),seen,expires_at};let mut bytes=vec![];ciborium::into_writer(&state,&mut bytes).expect("lookup session");
         self.rows.insert(key,bytes);Ok((page,next))
+    }
+    /// Bounded governor/timer cleanup. Never expire source publication intents.
+    pub fn reclaim(&mut self,now:u64,after:Option<String>)->(usize,Option<String>){
+        let mut at=after;let mut scanned=0;
+        while scanned<100{
+            let row=match &at{Some(c)=>self.rows.range((Excluded(c.clone()),Unbounded)).next(),None=>self.rows.iter().next()}.map(|e|(e.key().clone(),e.value()));
+            let Some((key,bytes))=row else{return (scanned,None)};
+            let state:Session=ciborium::from_reader(bytes.as_slice()).expect("lookup session");
+            if state.expires_at<=now{self.rows.remove(&key);}
+            at=Some(key);scanned+=1;
+        }
+        (scanned,at)
     }
 }
 #[cfg(test)]mod tests{
@@ -93,5 +133,21 @@ impl<M:Memory> Sessions<M>{
         let mut changed=viewer();changed.version+=1;assert!(s.page(p(1),changed,sources(),1,|_,_,_|panic!("old account continuation")).is_err());
         assert!(s.page(p(2),viewer(),sources(),1,|_,_,_|panic!("other caller continuation")).is_err());
         let (second,_)=s.page(p(1),viewer(),sources(),1,|source,alias,_|{assert_eq!(source.id,"g1");assert_eq!(alias,p(2));Ok((vec![],None,0))}).unwrap();assert!(second.rows.is_empty());
+    }
+    #[test]fn linked_alias_duplicates_are_removed_across_persisted_pages_but_conflicting_owners_reject(){
+        let memory=ic_stable_structures::VectorMemory::default();let mut s=Sessions::open(memory.clone());
+        s.page(p(1),viewer(),sources(),0,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();drop(s);
+        let mut s=Sessions::open(memory);let (page,next)=s.page(p(1),viewer(),sources(),1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();assert!(page.rows.is_empty());assert_eq!(next,Some(2));
+        assert!(s.page(p(1),viewer(),sources(),2,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap_err().contains("multiple"));
+        let (page,_)=s.page(p(1),viewer(),sources(),2,|_,_,_|Ok((vec!["b".into()],None,1))).unwrap();assert_eq!(page.rows[0].club,"b");
+    }
+    #[test]fn expired_sessions_restart_without_reusing_old_continuations_and_reclaim_is_bounded(){
+        let mut s=Sessions::open(ic_stable_structures::VectorMemory::default());
+        s.page_at(p(1),viewer(),sources(),0,10,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();
+        assert!(s.page_at(p(1),viewer(),sources(),1,SESSION_TTL_NS+10,|_,_,_|panic!("expired cursor")).is_err());
+        let (page,_)=s.page_at(p(1),viewer(),sources(),0,SESSION_TTL_NS+10,|_,_,_|Ok((vec!["b".into()],None,1))).unwrap();assert_eq!(page.rows[0].club,"b");
+        assert_eq!(s.reclaim(SESSION_TTL_NS+11,None),(1,None));assert_eq!(s.rows.len(),1);
+        assert_eq!(s.reclaim(2*SESSION_TTL_NS+10,None),(1,None));assert_eq!(s.rows.len(),0);
+        assert!(s.page_at(p(1),viewer(),sources(),50001,0,|_,_,_|panic!("over budget")).is_err());
     }
 }

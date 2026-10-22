@@ -18,6 +18,9 @@ mod membership_directory_store;
 mod membership_materializer;
 mod membership_updates;
 mod membership_private_lookup;
+mod membership_namespace;
+mod membership_coordinator;
+mod membership_propagation;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;

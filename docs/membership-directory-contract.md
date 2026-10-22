@@ -1,6 +1,6 @@
 # Stage B: authority-backed membership display directory
 
-Status: durable source invalidation, operator traversal, bounded membership reconstruction and offline directory/staging core implemented locally; central propagation/read API and cutover not implemented or released.
+Status: durable source invalidation, bounded reconstruction, multi-source coordinator, resume-safe source-pull worker core and optional complete-only frontend adapter implemented locally; production source transport/private API and cutover not implemented or released.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
 ## Scope and ownership
@@ -73,11 +73,29 @@ Every row requires actual helper/timer entry-point mapping and a regression befo
 
 ### Remaining integration and release gates
 
-No propagation worker, source acknowledgement endpoint, authenticated central reader or frontend directory cutover is installed. Bounded raw-source joins are locally parity-tested, but production integration still needs exact registry/placement bindings, shared account/source indexing, verified alias/version handling and rekey/merge/erasure acceptance. Production memory IDs have not been allocated. Builder stages currently use isolated test memories; a multi-source generation namespace and bounded reclamation/budgets are mandatory before production allocation.
+The worker core is implemented but no live worker/timer, source acknowledgement endpoint or authenticated central reader is installed. An optional frontend transport seam now accepts only a complete, caller/full-registry-pinned directory; it is not registered by `groupSessionLive`. Bounded raw-source joins are locally parity-tested, but production integration still needs live exact registry/club-placement verification, shared account/source indexing, verified alias/version handling and rekey/merge/erasure acceptance. Production memory IDs have not been allocated. Multi-source build namespaces, shared logical-page/build budgets and bounded namespace/journal/worker/session reclamation are implemented; production allocation and physical-memory/instruction measurements remain required.
+
+### Owner-requested implementation continuation (21:42)
+
+- `membership_namespace` stores isolated eight-lane source trees behind two supplied stable memories rather than spending eight top-level memory IDs per source/revision. Monotonic namespace IDs never reuse old generations; sparse zero reads, a shared page/build budget and <=100-block durable cleanup are tested through reopen. This logical budget is not a measured production physical-memory ceiling.
+- `membership_coordinator` connects verified complete group/placement evidence to reconstruction, journal publication, exact readback acknowledgement and caller-private paging. Missing/duplicate/foreign authorities, incomplete sources and stale callbacks fail closed. Retiring a tree cannot reuse its old acknowledgement; journal preflight precedes namespace allocation, so stale requests consume no namespaces. Only a verified higher inventory generation permits bounded obsolete-journal reclamation.
+- `membership_propagation` persists exact source bindings and source-owned traversal positions before the future runtime await. It accepts <=100 scanned edges / <=100 KiB encoded edges, rejects revision/cursor drift and late callbacks, materializes in <=100-step calls and separates publication from exact readback. Its jobs are capped and only obsolete verified-generation jobs are reclaimable. No browser-supplied edges, live endpoint, source reader grant or timer was added.
+- Private lookup sessions deduplicate a club across linked aliases and persisted pages, reject conflicting owning sources, cap total clubs/sessions/page sequence, expire after 15 minutes and support <=100-session cleanup. Fresh identity eligibility remains a prerequisite before any replay, not a session-cache permission shortcut.
+- `membershipDirectoryDiscovery` requires complete sequential pages pinned to the caller, account version, directory generation/revision and full registry fingerprint. `openGroupSession` skips broad membership reads only with such a complete result, and still validates destination membership/assignment. Unavailable, partial or foreign directory answers discard all provisional directory rows and run complete Stage A discovery. The live adapter remains absent.
+- Local acceptance: isolated two-source reconstruction/publication/readback/reopen/removal tests; storage refusal/cleanup and stale callback tests; alias deduplication and conflicting owners; frontend single/multiple-group directory, destination revocation and complete fallback. These are local tests, not mainnet speed measurements or source-transport acceptance.
+
+#### Engineering still required before a runnable release
+
+1. Dedicated production memory allocation with actual upgraded-canister acceptance; do not reuse identity memories 0–17.
+2. Governor-bound directory-specific source permissions and live identity-pull transport, Nat-to-u64 checked decoding, mutation-triggered invalidation delivery and exact source acknowledgement. Never reuse admission/lifecycle grants or put an await inside membership commits.
+3. Exact assigned-club verification and independently proven legacy Group 1 coverage, account/source indexing to avoid traversing every empty source for an ordinary member, and identity link/rekey/merge/removal acceptance.
+4. Concurrent-mutation progress: current dirty revisions safely restart snapshots but do not guarantee backfill completion under sustained mutations. Retained snapshots or ordered durable deltas require implementation and tests.
+5. Recovery-generation fences, upgrade-interruption/source-outage tests and physical storage/instruction measurements with real local canisters.
+6. Dedicated exact-three-target release workflow (G1/G2 `club_domain` plus shared `identity_access`), automatic bounded backfill/readback, verified-current public reader and live frontend registration. No workflow is represented as ready until these engineering gates pass.
 
 Source-binding investigation confirms `read_hosted_club_assignment` can verify assigned clubs at a pinned router revision, resolved against the matching group registry. It returns an error for missing assignments; that must not imply legacy Group 1 ownership. Legacy source coverage needs independently verified exact mappings. The directory coordinator must not repurpose membership checks, admission reader grants or registry location alone as completeness evidence.
 
-Rollback to older authority state is unsupported for directory cutover until an externally fenced replacement generation is bound into source cursors and propagation evidence. A restored local counter cannot discover the central high watermark. Ordinary upgrades must continue preserving revisions. Old staging-chunk reclamation and bounded storage budgets also remain required before enabling ingestion.
+Rollback to older authority state is unsupported for directory cutover until an externally fenced replacement generation is bound into source cursors and propagation evidence. A restored local counter cannot discover the central high watermark. Ordinary upgrades must continue preserving revisions. The earlier offline `membership_directory_store` adapter's old chunks are not used by the new namespace coordinator; they still require reclamation if that adapter is ever integrated.
 
 Cover populated legacy backfill with concurrent additions/removals, last-family-link removal, linked aliases, app-wide roles, missed/duplicate/out-of-order acknowledgements, stale writer generations, identity erasure, authority loss, upgrades mid-backfill and failed sources. Verify bounded request/result work and caller privacy against real local canisters. Keep current on-chain admission/lifecycle gates and all photo authorities unchanged.
 
