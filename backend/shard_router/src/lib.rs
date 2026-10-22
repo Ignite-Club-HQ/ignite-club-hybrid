@@ -9,6 +9,7 @@ use ic_stable_structures::{
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 mod groups;
+mod self_health;
 mod group_index;
 #[cfg(feature = "scale-probe")]
 mod scale_probe;
@@ -873,10 +874,10 @@ fn version() -> u64 {
 
 // Control-plane preparation only: these assignments do not activate live
 // frontend routing. Activation requires tested discovery/ACL/migration wiring.
-fn group_for(id: &str) -> Option<ShardGroup> {
+pub(crate) fn group_for(id: &str) -> Option<ShardGroup> {
     GROUPS.with(|items| items.borrow().get(&id.as_bytes().to_vec()).map(|bytes| decode(&bytes)))
 }
-fn save_group(group: &ShardGroup) {
+pub(crate) fn save_group(group: &ShardGroup) {
     GROUPS.with(|items| items.borrow_mut().insert(group.id.as_bytes().to_vec(), encode(group)));
     GROUP_INDEX.with(|index| { if let Some(index) = index.borrow_mut().as_mut() { index.upsert(group); } });
 }
@@ -1086,6 +1087,11 @@ async fn place_my_new_club(club_id: String, target_alias: String) -> Outcome<Gro
         if !owner_creation_eligible(user).await? { return Err("Owner account cannot create a test club".into()); }
         registry_writable()?;
         if current_revision() != revision || owner_opening(&target_alias).as_ref() != Some(&receipt) { return Err("Owner opening changed during eligibility check".into()); }
+    }
+    // The router refreshes stale group health itself, so club creation never
+    // depends on an external reporting job staying alive.
+    if user != Principal::anonymous() && group_assignment_for(&club_id).is_none() {
+        self_health::refresh_stale(&target_alias).await;
     }
     place_new_club_for(user, club_id, target_alias, ic_cdk::api::time())
 }
