@@ -22,6 +22,10 @@ impl<M:Memory> Worker<M>{
     pub fn open(memory:M)->Self{Self{jobs:StableBTreeMap::init(memory)}}
     fn job(&self,source:&str)->Result<Job,String>{self.jobs.get(&source.into()).map(|b|decode(&b)).ok_or("Source propagation not started".into())}
     fn save(&mut self,j:&Job){self.jobs.insert(j.source.clone(),encode(j));}
+    pub fn phase(&self,source:&str)->Result<(&'static str,u64),String>{
+        let j=self.job(source)?;
+        Ok((match j.phase{Phase::Pull=>"pull",Phase::Materialize=>"materialize",Phase::Published=>"published",Phase::Acknowledged=>"acknowledged"},j.binding.revision))
+    }
     pub fn start<N:Memory+Clone>(&mut self,c:&mut Coordinator<N>,source:&str,authority:Principal,revision:u64)->Result<(),String>{
         if !self.jobs.contains_key(&source.to_string())&&self.jobs.len()>=MAX_WORKER_JOBS{return Err("Source worker budget reached".into());}
         let binding=c.begin(source,authority,revision)?;

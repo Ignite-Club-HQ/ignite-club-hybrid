@@ -14,6 +14,10 @@ struct Inventory {generation:u64,digest:[u8;32],sources:Vec<(String,Principal)>}
 /// Construction is deliberately private to this module. Runtime verification
 /// must obtain complete consensus evidence before calling `verify_inventory`.
 pub struct VerifiedInventory(Inventory);
+impl VerifiedInventory {
+    pub fn digest(&self)->[u8;32]{self.0.digest}
+    pub fn source_bindings(&self)->Vec<(String,Principal)>{self.0.sources.clone()}
+}
 #[derive(Clone,Debug,Serialize,Deserialize)]
 struct Build {namespace:u64,binding:Binding,published:bool}
 pub struct Coordinator<M:Memory+Clone> {
