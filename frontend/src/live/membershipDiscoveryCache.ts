@@ -8,7 +8,7 @@ let teardown: (() => void) | undefined;
 let client: QueryClient | undefined;
 const MEMBER_QUERY_PREFIXES = ['clubs', 'user-memberships-and-events', 'user-memberships-for-events', 'user-clubs-for-filter',
   'member-clubs-with-messages', 'my-teams-with-messages', 'my-chat-groups-with-messages', 'my-teams-premium-v2',
-  'user-roles', 'icp-media-feed', 'user-clubs-for-upgrade'];
+  'user-roles', 'icp-media-feed', 'user-clubs-for-upgrade', 'removed-clubs', 'icp-my-mini-leagues'];
 const cacheKey = (key: string) => ['icp-membership-discovery', key];
 const fingerprint = (value: unknown) => JSON.stringify(value, (_, v) => typeof v === 'bigint' ? String(v) : v);
 export function bindMembershipDiscovery(client0: QueryClient): void { client = client0; }
@@ -81,4 +81,10 @@ export function clearMembershipDiscovery(): void {
   client?.removeQueries({ queryKey: ['icp-membership-discovery'] });
   teardown?.();
   teardown = undefined;
+}
+
+/** An acknowledged local mutation invalidates display inventories, not authority. */
+export function invalidateMembershipDisplays(): void {
+  clearMembershipDiscovery();
+  for (const prefix of MEMBER_QUERY_PREFIXES) void client?.invalidateQueries({ queryKey: [prefix] });
 }

@@ -1,3 +1,4 @@
+import { readDiscoveredMiniLeagues } from "@/live/accountDiscovery";
 import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
 import { readContentInScope } from "@/live/contentRouting";
 import { readMembershipInScope } from "@/live/membershipRouting";
@@ -60,7 +61,7 @@ import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
 import { fetchViewableCompetitionMatchIds, makeCompetitionFixtureVisibility } from "@/features/events/competitionFixtureVisibility";
 import { readScheduleEvents } from "@/features/events/scheduleReadRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
+import { listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { getLiveAccountRosterScope, listLiveEventDutyTeams, listLiveEvents } from "@/live/features/events";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
@@ -83,8 +84,7 @@ async function getLiveEventMemberships(
     clubIds: [] as string[],
     childIds: [] as string[],
   }));
-  // League membership can exist outside club membership; keep genuine discovery.
-  const miniLeaguesPromise = readContentInScope(ctx, 'mini_leagues', { everyGroup: true, merge: (parts: Array<Array<{ id: string }>>) => parts.flat() }, listMyLiveMiniLeagues).catch(() => [] as { id: string }[]);
+  // Independent league discovery is owned by a separate query below; club events never wait for it.
   const grants = await getLiveMyRoleGrants(ctx);
   const roles = grants.map((g) => ({
     club_id: (g.club[0] ?? null) as string | null,
@@ -119,8 +119,7 @@ async function getLiveEventMemberships(
     }),
   );
 
-  const miniLeagues = await miniLeaguesPromise;
-  const miniLeagueIds = Array.from(new Set(miniLeagues.map((l) => l.id)));
+  const miniLeagueIds: string[] = [];
 
   return {
     roles,
@@ -393,7 +392,7 @@ export default function EventsPage() {
     placeholderData: (prev) => prev,
   });
   // Get user's accessible team, club, and mini league IDs for event filtering
-  const { data: userMemberships, isLoading: membershipsLoading, error: membershipsError, refetch: refetchMemberships } = useQuery({
+  const { data: baseMemberships, isLoading: membershipsLoading, error: membershipsError, refetch: refetchMemberships } = useQuery({
     queryKey: ["user-memberships-for-events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona],
     queryFn: async () => {
       if (useIcpLab) {
@@ -530,10 +529,10 @@ export default function EventsPage() {
           // and admin leagues for the caller's principal, so it covers this
           // leg; mlaRes below returns [] under ICP to avoid double counting.
           icp: async (ctx) => {
-            const leagues = await listMyLiveMiniLeagues(ctx);
+            const leagues = await readDiscoveredMiniLeagues(ctx);
             return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
           },
-        }, { everyGroup: true, merge: (parts) => ({ data: [...new Map(parts.flatMap(p => p.data ?? []).map(r => [r.mini_league_id, r])).values()], error: null }) }),
+        }, { shared: 'person' }),
         withFeatureBackend<{ data: { mini_league_id: string }[] | null; error: any }>("mini_leagues", {
           supabase: async () =>
             supabase
@@ -607,6 +606,20 @@ export default function EventsPage() {
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
     placeholderData: (prev) => prev,
   });
+
+  const leagueDiscovery = useQuery({
+    queryKey: ['icp-my-mini-leagues', user?.id],
+    enabled: isIcpAuthBackend && !!user && !useIcpLab,
+    queryFn: () => withFeatureBackend('mini_leagues', {
+      supabase: async () => [], icp: readDiscoveredMiniLeagues,
+    }, { shared: 'person' }),
+    retry: 1,
+  });
+  const userMemberships = useMemo(() => baseMemberships && ({ ...baseMemberships,
+    miniLeagueIds: isIcpAuthBackend && !useIcpLab
+      ? [...new Set([...(baseMemberships.miniLeagueIds ?? []), ...(leagueDiscovery.data ?? []).map(league => league.id)])]
+      : baseMemberships.miniLeagueIds,
+  }), [baseMemberships, isIcpAuthBackend, useIcpLab, leagueDiscovery.data]);
 
   // Teams the user can filter the schedule by — names for memberships.teamIds,
   // optionally narrowed to the current club filter. Reuses membership team IDs
@@ -1316,6 +1329,9 @@ export default function EventsPage() {
       className="py-6 space-y-6 [overflow-anchor:none]"
       data-schedule-scroll-anchor="disabled"
     >
+      {leagueDiscovery.isPending && isIcpAuthBackend && <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading league events…</div>}
+      <QueryErrorBanner hasError={leagueDiscovery.isError} onRetry={() => leagueDiscovery.refetch().then(() => undefined)} message="League events couldn't be refreshed." />
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Schedule</h1>
         <div className="flex items-center gap-2">

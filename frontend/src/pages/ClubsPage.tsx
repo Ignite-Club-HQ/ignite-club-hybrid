@@ -1,4 +1,5 @@
-import { mergeLists } from "@/live/featureRouter";
+import { readDiscoveredRemovedClubs } from "@/live/accountDiscovery";
+import { invalidateTeamLists } from "@/lib/invalidateTeamLists";
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Users, Plus, Crown, ChevronRight, Search, X, Info, RotateCcw, Trash2 } from "lucide-react";
@@ -82,8 +83,8 @@ export default function ClubsPage() {
       if (useIcpLab) {
         const rows = await withFeatureBackend("membership", {
           supabase: async () => [],
-          icp: async (ctx) => (await import("@/live/features/club")).listLiveMyRemovedClubs(ctx),
-        }, { everyGroup: true, merge: mergeLists });
+          icp: readDiscoveredRemovedClubs,
+        }, { shared: 'person' });
         const o = (v: any) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
         return (rows as any[])
           .map((c) => ({
@@ -119,7 +120,7 @@ export default function ClubsPage() {
         await withFeatureBackend("membership", {
           supabase: async () => undefined,
           icp: async (ctx) => { await (await import("@/live/features/club")).restoreLiveClub(ctx, clubId, true); },
-        }, writeOnce({ clubId: clubId! }));
+        }, writeOnce({ clubId }));
       } catch (e) {
         error = { message: e instanceof Error ? e.message : "Unknown error" };
       }
@@ -135,6 +136,7 @@ export default function ClubsPage() {
       return;
     }
     toast({ title: "Club restored", description: "Teams and chats have been restored too." });
+    void invalidateTeamLists(queryClient, user?.id);
     queryClient.invalidateQueries({ queryKey: ["removed-clubs", user?.id] });
     queryClient.invalidateQueries({ queryKey: ["clubs"] });
     queryClient.invalidateQueries({ queryKey: membershipKeys.userRolesFor(user?.id) });
@@ -164,6 +166,7 @@ export default function ClubsPage() {
     }
     toast({ title: "Club permanently deleted", description: "Data is retained in the archive for recovery by an app admin." });
     clearClubSetupLocalState(purgeTarget.id);
+    void invalidateTeamLists(queryClient, user?.id);
     setPurgeTarget(null);
     setPurgeConfirmText("");
     queryClient.invalidateQueries({ queryKey: ["removed-clubs", user?.id] });

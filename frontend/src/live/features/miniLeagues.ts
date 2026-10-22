@@ -1,3 +1,4 @@
+import { afterMembershipAcknowledgement } from "../roleGrantsMemo";
 import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveMiniLeagueDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
@@ -89,7 +90,7 @@ export async function createLiveMiniLeague(
   input: LiveMiniLeagueInput,
 ) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  return afterMembershipAcknowledgement(unwrapCandid(
     actor.create_mini_league(
       clubId,
       input.name,
@@ -102,7 +103,7 @@ export async function createLiveMiniLeague(
       input.showMatchesToMembers,
     ),
     "Create mini league",
-  );
+  ));
 }
 
 export async function updateLiveMiniLeague(
@@ -266,7 +267,7 @@ export async function updateLivePlayer(
 
 export async function removeLivePlayer(ctx: FeatureBackendContext, id: string) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.remove_player(id), "Remove player");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.remove_player(id), "Remove player"));
 }
 
 /**
@@ -280,7 +281,7 @@ export async function linkLiveMiniLeagueGuardian(
   guardianUserId: Principal,
 ) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.link_mini_league_guardian(childId, guardianUserId), "Link guardian");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.link_mini_league_guardian(childId, guardianUserId), "Link guardian"));
 }
 
 export interface LivePlayerGuardianStatus {
@@ -330,7 +331,7 @@ export async function createLiveInvite(
 
 export async function claimLiveInvite(ctx: FeatureBackendContext, token: string, playerName: string) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.claim_invite(token, playerName), "Claim invite");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.claim_invite(token, playerName), "Claim invite"));
 }
 
 // ---------------------------------------------------------------------------
@@ -492,12 +493,12 @@ export async function listLiveAdmins(ctx: FeatureBackendContext, miniLeagueId: s
 
 export async function addLiveAdmin(ctx: FeatureBackendContext, miniLeagueId: string, userId: Principal) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.add_admin(miniLeagueId, userId), "Add admin");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.add_admin(miniLeagueId, userId), "Add admin"));
 }
 
 export async function removeLiveAdmin(ctx: FeatureBackendContext, miniLeagueId: string, userId: Principal) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.remove_admin(miniLeagueId, userId), "Remove admin");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.remove_admin(miniLeagueId, userId), "Remove admin"));
 }
 
 // ---------------------------------------------------------------------------
@@ -515,7 +516,7 @@ export async function grantLiveMiniLeagueRole(
   teamId?: string | null,
 ) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.grant_role(principal, role, clubId, candidOpt(teamId)), "Grant role");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.grant_role(principal, role, clubId, candidOpt(teamId)), "Grant role"));
 }
 
 // ---------------------------------------------------------------------------
@@ -568,7 +569,7 @@ export async function getLiveJoinLinkByToken(ctx: FeatureBackendContext, token: 
 /** Claims an admin join link: grants the caller league-admin rights. */
 export async function claimLiveAdminJoinLink(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.claim_admin_join_link(token), "Claim admin join link");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.claim_admin_join_link(token), "Claim admin join link"));
 }
 
 export async function joinLiveMiniLeagueByToken(
@@ -577,7 +578,7 @@ export async function joinLiveMiniLeagueByToken(
   playerName: string,
 ) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.join_mini_league_by_token(token, playerName), "Join mini league");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.join_mini_league_by_token(token, playerName), "Join mini league"));
 }
 
 export async function getLivePlayerInvitePreview(ctx: FeatureBackendContext, token: string) {
