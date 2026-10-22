@@ -137,7 +137,9 @@ describe('integrated deployment-bound group read session', () => {
     f.transport.readAssignments = async () => { throw new Error('Club membership required'); };
     await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('membership');
     f.registry.revision = 3n;
-    await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('registry changed');
+    // A confirmed registry check is reused for RECHECK_WINDOW_MS; after it the change is caught.
+    const later = Date.now() + 16_000; const spy = vi.spyOn(Date, 'now').mockReturnValue(later);
+    try { await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('registry changed'); } finally { spy.mockRestore(); }
     expect(read).not.toHaveBeenCalled();
   });
   it('disposed session cannot read or release an in-flight result', async () => {
