@@ -2,7 +2,7 @@ import type { Identity } from "@icp-sdk/core/agent";
 import type { Principal } from "@icp-sdk/core/principal";
 import { createLiveActor } from "./icpAgent";
 import { IDL } from '@icp-sdk/core/candid';
-import { adaptLocalAccountReads, isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
+import { adaptLocalAccountReads, adaptRemoteAccountReads, isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
 import type { IcpTargetConfig } from "./targetRegistry";
 
 import { idlFactory as clubDomainIdl } from "../lab/bindings/club_domain/declarations/club_domain.did.js";
