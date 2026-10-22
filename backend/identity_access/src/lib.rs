@@ -2560,6 +2560,18 @@ fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
 mod tests {
     use super::*;
     #[test]
+    fn private_lookup_resolves_verified_aliases_and_fails_on_lifecycle_changes(){
+        let caller=Principal::from_slice(&[51,1]);let alias=Principal::from_slice(&[52,1]);
+        let id=ensure_account(caller).unwrap();let mut account=get_account(&id).unwrap();
+        account.principals.push(alias);account.version=2;put_account(&account);index_principal(alias,&id);
+        let viewer=membership_lookup_viewer(caller).unwrap();assert_eq!(viewer.aliases,vec![caller,alias]);assert_eq!(viewer.version,2);
+        account.status=AccountStatus::Suspended;put_account(&account);assert!(membership_lookup_viewer(caller).is_err());
+        account.status=AccountStatus::Active;put_account(&account);
+        deny_principals(&[alias],&id,3,DenialReason::Unlinked).unwrap();assert_eq!(membership_lookup_viewer(caller).unwrap().aliases,vec![caller]);assert!(membership_lookup_viewer(alias).is_err());
+        account.principals=vec![alias];put_account(&account);assert!(membership_lookup_viewer(caller).is_err());
+        account.principals=vec![caller];put_account(&account);ERASED_ACCOUNTS.with(|m|m.borrow_mut().insert(id,3));assert!(membership_lookup_viewer(caller).is_err());
+    }
+    #[test]
     fn history_retains_beyond_old_lifetime_caps() {
         assert!(MAX_ACCOUNTS > 10_001);
         for i in 0..80_001u32 {
