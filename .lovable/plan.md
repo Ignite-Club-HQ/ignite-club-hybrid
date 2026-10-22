@@ -5,17 +5,10 @@ A member whose clubs are all in Group 1 loads their club content from Group 1 on
 
 Cross-group discovery is separate from opening pages. It is not permanently one-off: someone can be added to a club elsewhere by another administrator or device. The design must detect that without scanning every group on ordinary navigation.
 
-## Current defects this replaces
-- Session opening checks every group; its result is reused only in memory.
-- A second role-grant path repeats all-group discovery after a 30-second memo expires when a caller refetches.
-- Home, Events, Media and removed-club queries independently request every group.
-- Known legacy Group 1 ownership and genuinely unknown ownership are not consistently distinguished.
-- A central routing-directory check is currently mixed into page loading; it is not the same as membership discovery.
-
 ## 1. One shared membership directory in the app
 Create one account-and-deployment-scoped coordinator consumed by every page and widget. Its snapshot contains verified club IDs, owning groups, role/team references, per-source status, completeness evidence and generation/revision metadata. Store bounded snapshots using the existing per-query device storage, not a whole-cache rewrite.
 
-On startup, restore the last snapshot for fast display and verify it in the background. Cached membership is a display/routing hint, never permission. A new account or changed deployment cannot reuse it.
+On startup, restore the last snapshot for fast display and verify it in the background. Cached membership is a display/routing hint, never permission. Isolate accounts and deployments.
 
 Replace the independent 30-second all-group grant memo with this coordinator. Content freshness and membership freshness are separate: refreshing events or messages must not rediscover memberships.
 
@@ -39,9 +32,9 @@ This is the first connected app implementation batch, with no canister upgrade r
 Use an authenticated on-chain caller membership directory with a lightweight per-account change revision. This requires a completeness audit and, if existing contracts cannot supply it, a narrowly scoped canister extension under separate release approval.
 
 - Cover original Group 1 clubs and all registered groups, principal/account aliases, parent memberships, team-only grants, administrative role changes, invitations, restores and removals.
-- Only verified club authorities may register/update membership references; browsers cannot nominate their own memberships or groups.
+- Only verified club authorities update references, never browsers.
 - Commit durable notification/outbox intent with the club membership mutation. Retry directory propagation idempotently with source ordering; older replies must not undo removals. Source club authorization remains authoritative during any propagation delay.
-- Existing memberships need a bounded, revision-checked backfill and readback before marking the directory complete. Account-side historical/removal records or router club placements alone are not proof of current membership completeness.
+- Require bounded revision-checked legacy backfill/readback before declaring completeness; historical records and placements alone are insufficient.
 - One small revision read on startup, foreground resume and a coalesced visible-session interval replaces broad scans. An unchanged revision means no membership discovery. A changed revision fetches bounded directory deltas/pages and updates only affected clubs/groups.
 - Where completeness or delivery lag cannot be proven, retain Stage A reconciliation. Never switch it off merely because the new endpoint exists.
 
@@ -79,12 +72,7 @@ Progressive display must not corrupt pagination or create authoritative empty li
 - Deleted clubs are excluded before their live sections are published; failed deletion checks are not absence.
 
 ## Technical implementation
-- Add a browser-safe discovery coordinator with injected transports; preserve existing lazy ICP imports and supported preview/dependency setup.
-- Adapt groupDispatch/groupSession to accept verified discovery state without an independent page-driven membership sweep. Persisted state cannot authorize writes; required consensus validation remains.
-- Move membership query keys/invalidation into one account-and-full-target-scoped contract; remove target-incomplete aggregated role keys.
-- Audit every `everyGroup` caller and classify it as member content, genuine wider discovery, personal/shared or operator/security inventory. Replace only the member-content fan-outs.
-- Keep global registry configuration revisions separate from per-account membership changes and ordinary content refreshes; adding a group must not rescan all memberships for every navigation click.
-- Record request reasons/counts and timings without message bodies, child names, credentials or decrypted media.
+Add an account/full-target-scoped coordinator with injected transports and lazy ICP imports. Adapt groupDispatch/groupSession to reuse verified discovery without page-driven membership sweeps; cached state never authorizes writes. Centralize membership keys/invalidation. Classify every `everyGroup` caller before replacing member-content fan-outs; retain genuine wider discovery and security inventory. Keep configuration revisions separate from membership/content revisions. Record privacy-safe call counts/reasons and timings.
 
 ## Verification gates
 Add behaviour tests with real call counters, not source-text assertions:
@@ -97,7 +85,7 @@ Add behaviour tests with real call counters, not source-text assertions:
 7. Gallery late sources do not skip/duplicate assets; chat histories and acknowledged comments are preserved.
 8. Simulate 2, 10 and 100 registered groups: ordinary known-club content request counts depend on relevant clubs, not total group count.
 
-Run focused suites in both backend modes and delayed/denied source integration checks. Then capture signed-in one-group and mixed-group request traces, cold/warm content times and navigation responsiveness on browser and Android. Target the existing recovery gates: tap feedback p95 ≤100 ms, warm useful content ≤300 ms, cold first useful content ≤3 seconds; report uncached media unlock separately. These are acceptance targets, not established timings.
+Run both backend modes and delayed/denied-source checks, then signed-in browser/Android traces. Existing recovery targets: tap p95 ≤100 ms, warm content ≤300 ms, cold first useful ≤3 seconds; media unlock separate. These are targets, not verified timings.
 
 ## Delivery order and completion
 1. Implement Stage A coordinator, routing reuse and all affected member-content pages as one connected batch, including safe media cursors and mutation invalidation.
