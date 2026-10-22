@@ -1,7 +1,7 @@
 import { mergeLists } from "@/live/featureRouter";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users, Plus, Crown, ChevronRight, Filter, Search, X, Info, RotateCcw, Trash2 } from "lucide-react";
+import { Users, Plus, Crown, ChevronRight, Search, X, Info, RotateCcw, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -25,7 +18,7 @@ import { writeOnce } from "@/live/clubScope";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
 import { PageLoading } from "@/components/ui/page-loading";
-import { getSportEmoji, SPORT_EMOJIS } from "@/lib/sportEmojis";
+import { getSportEmoji } from "@/lib/sportEmojis";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { ConfirmPurgeDialog } from "@/components/club/ConfirmPurgeDialog";
@@ -67,7 +60,6 @@ export default function ClubsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fromCreateTeam = (location.state as { fromCreateTeam?: boolean })?.fromCreateTeam === true;
-  const [sportFilter, setSportFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<{ id: string; name: string } | null>(null);
