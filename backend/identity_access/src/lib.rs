@@ -510,8 +510,7 @@ fn recheck_directory(config:&membership_runtime::Config)->Outcome<()> {
     let current=directory_config()?;
     // Pending notifications may advance during awaits; they never alter the
     // captured authority inventory and must not be overwritten by callbacks.
-    if !current.enabled || current.binding!=config.binding || current.generation!=config.generation ||
-        current.inventory_digest!=config.inventory_digest || current.sources!=config.sources { return Err("Directory configuration changed".into()); }
+    if !current.enabled || !current.same_configuration(config) { return Err("Directory configuration changed".into()); }
     Ok(())
 }
 /// Configures transport only. Does not enable a public reader or certify
@@ -523,8 +522,13 @@ async fn configure_membership_directory(binding:group_inventory::Binding,authori
     let pinned=group_inventory_binding().ok_or("Existing deployment registry pin required")?;
     let mut expected=pinned.clone();expected.registry_revision=binding.registry_revision;
     if expected!=binding || binding.registry_revision<pinned.registry_revision {return Err("Pinned directory deployment required".into());}
-    let prior=DIRECTORY_CONFIG.with(|m|m.borrow().get().clone());
-    let recheck=||->Outcome<()>{admission_configuration_clear()?;if group_inventory_binding().as_ref()!=Some(&pinned)||DIRECTORY_CONFIG.with(|m|m.borrow().get().clone())!=prior{Err("Directory configuration changed during verification".into())}else{Ok(())}};
+    let prior=directory_config().ok();
+    let recheck=||->Outcome<()>{
+        admission_configuration_clear()?;
+        let current=directory_config().ok();
+        let unchanged=match (&prior,&current){(None,None)=>true,(Some(a),Some(b))=>a.same_configuration(b),_=>false};
+        if group_inventory_binding().as_ref()!=Some(&pinned)||!unchanged{Err("Directory configuration changed during verification".into())}else{Ok(())}
+    };
     let first=read_registry_pages(&binding,recheck).await?;
     let second=read_registry_pages(&binding,recheck).await?;
     if first!=second{return Err("Directory registry changed".into());}
@@ -554,7 +558,8 @@ async fn directory_source_status(config:&membership_runtime::Config,source:&str,
     let reply=ic_cdk::call::Call::bounded_wait(authority,"read_directory_membership_status").with_arg(&grant).await.map_err(|_|"Directory source status unavailable")?;
     recheck_directory(config)?;
     let status:membership_transport::Reply<membership_transport::Status>=reply.candid().map_err(|_|"Invalid directory source status reply")?;
-    status.result()?.checked()
+    let result=status.result()?.checked()?;
+    directory_config()?.check_watermark(source,result.0)?;Ok(result)
 }
 /// One exact source and one bounded unit per invocation; retries preserve
 /// requests/publications. Governor-only until live worker acceptance passes.
@@ -575,6 +580,7 @@ async fn advance_membership_directory_source(source:String)->Outcome<membership_
             recheck_directory(&config)?;
             let wire:membership_transport::Reply<membership_transport::WirePage>=reply.candid().map_err(|_|"Invalid directory source page")?;
             let page=wire.result()?.checked()?;scanned=page.scanned as u64;
+            directory_config()?.check_watermark(&source,captured.revision)?;
             DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().accept(&mut c.borrow_mut(),&source,&captured,&cursor,page)))?;
         },
         "materialize"=>{scanned=DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().advance(&mut c.borrow_mut(),&source)))? as u64;},
@@ -589,12 +595,22 @@ async fn advance_membership_directory_source(source:String)->Outcome<membership_
             if let membership_transport::UnitReply::Err(e)=ack{return Err(e);}
             let (current,acknowledged,pending)=directory_source_status(&config,&source,authority).await?;
             if pending||current!=captured.revision||acknowledged!=captured.revision{return Err("Source changed during acknowledgement; publication retained".into());}
+            directory_config()?.check_watermark(&source,captured.revision)?;
             DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().acknowledge_readback(&mut c.borrow_mut(),&source,&captured,acknowledged)))?;
         },
         _=>return Err("Unknown directory worker phase".into()),
     }
     let (phase,revision)=DIRECTORY_WORKER.with(|w|w.borrow().phase(&source))?;
     Ok(membership_runtime::Progress{source,phase:phase.into(),revision,scanned})
+}
+#[derive(CandidType,Deserialize)]
+struct DirectoryCleanup { scanned:u64, complete:bool }
+// Independent of start: an exhausted pool must still be reclaimable.
+#[ic_cdk::update]
+fn reclaim_membership_directory()->Outcome<DirectoryCleanup>{
+    require_governor(&state(),ic_cdk::api::msg_caller())?;
+    let (scanned,complete)=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired())?;
+    Ok(DirectoryCleanup{scanned:scanned as u64,complete})
 }
 fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {
     REMOVAL_INTENTS.with(|m| m.borrow().get(&account_id.to_string())).map(|bytes| decode(&bytes))
