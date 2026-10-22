@@ -188,7 +188,7 @@ export default function CreateTeamPage() {
           icp: async (ctx) => {
             const sub = await getLiveClubSubscription(ctx, clubId!);
             return sub
-              ? { team_limit: sub.team_limit.length ? Number(sub.team_limit[0]) : null, is_pro: sub.is_pro, is_pro_football: sub.is_pro_football, admin_pro_override: sub.admin_pro_override, admin_pro_football_override: sub.admin_pro_football_override, expires_at: sub.expires_at_ms[0] == null ? null : new Date(Number(sub.expires_at_ms[0])).toISOString(), is_trial: sub.is_trial, trial_ends_at: sub.trial_ends_at_ms[0] == null ? null : new Date(Number(sub.trial_ends_at_ms[0])).toISOString() }
+              ? { plan: sub.plan, team_limit: sub.team_limit.length ? Number(sub.team_limit[0]) : null, is_pro: sub.is_pro, is_pro_football: sub.is_pro_football, admin_pro_override: sub.admin_pro_override, admin_pro_football_override: sub.admin_pro_football_override, expires_at: sub.expires_at_ms[0] == null ? null : new Date(Number(sub.expires_at_ms[0])).toISOString(), is_trial: sub.is_trial, trial_ends_at: sub.trial_ends_at_ms[0] == null ? null : new Date(Number(sub.trial_ends_at_ms[0])).toISOString() }
               : null;
           },
         }, { clubId: clubId! });

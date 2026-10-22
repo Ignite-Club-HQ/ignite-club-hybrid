@@ -48,12 +48,13 @@ export function teamProductId(tier: PaidTier, annual: boolean): string {
 /** Free retains existing team rules up to 20. No missing/expired row grants team 21. */
 export function effectiveTeamLimit(sub: { team_limit?: number | null; is_pro?: boolean; is_pro_football?: boolean;
   admin_pro_override?: boolean; admin_pro_football_override?: boolean; expires_at?: string | null;
-  is_trial?: boolean; trial_ends_at?: string | null } | null | undefined, now = Date.now()): number {
+  is_trial?: boolean; trial_ends_at?: string | null; plan?: string | null } | null | undefined, now = Date.now()): number {
   if (!sub) return 20;
   const override = sub.admin_pro_override || sub.admin_pro_football_override;
   const paid = (sub.is_pro || sub.is_pro_football) && (!sub.expires_at || Date.parse(sub.expires_at) > now);
   const trial = sub.is_trial && !!sub.trial_ends_at && Date.parse(sub.trial_ends_at) > now;
   if (!(override || paid || trial)) return 20;
+  if ((override || paid) && sub.plan === "unlimited" && sub.team_limit == null) return 100_000;
   const limit = sub.team_limit;
   if (limit == null || !Number.isSafeInteger(limit) || limit < 1) return 20;
   return trial && !paid && !override ? Math.min(20, limit) : limit;
@@ -63,4 +64,20 @@ export function assertPurchaseCatalogReady(productId: string, readyProducts: rea
   if (productId.startsWith("ignite_v2_") && !readyProducts.includes(productId)) {
     throw new Error("The new plans are not available for purchase yet. Your existing subscription is unchanged.");
   }
+}
+
+export type MediaSubscription = Parameters<typeof effectiveTeamLimit>[0] & { storage_purchased_gb?: number | null };
+export function hasActiveMediaSubscription(sub: MediaSubscription, now = Date.now()): boolean {
+  if (!sub) return false;
+  return !!(sub.admin_pro_override || sub.admin_pro_football_override ||
+    ((sub.is_pro || sub.is_pro_football) && (!sub.expires_at || Date.parse(sub.expires_at) > now)) ||
+    (sub.is_trial && sub.trial_ends_at && Date.parse(sub.trial_ends_at) > now));
+}
+export function mediaAllowance(sub: MediaSubscription, teamSub?: MediaSubscription, now = Date.now()) {
+  const premiumClub = hasActiveMediaSubscription(sub, now);
+  const premiumTeam = !premiumClub && hasActiveMediaSubscription(teamSub, now);
+  const baseBytes = premiumClub ? (sub?.plan === "unlimited" ? 5 * 1024 ** 3 : CLUB_MEDIA_BYTES) : premiumTeam ? TEAM_MEDIA_BYTES : FREE_MEDIA_BYTES;
+  const purchased = sub?.storage_purchased_gb ?? 0;
+  if (!Number.isSafeInteger(purchased) || purchased < 0) throw new Error("Could not check storage allowance.");
+  return { baseBytes, limitBytes: baseBytes + (premiumTeam ? 0 : purchased * 1024 ** 3), teamScoped: premiumTeam, premium: premiumClub || premiumTeam };
 }

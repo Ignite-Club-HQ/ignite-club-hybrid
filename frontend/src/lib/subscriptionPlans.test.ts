@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLUB_PRICING, TEAM_PRICING, FREE_MEDIA_BYTES, CLUB_MEDIA_BYTES, TEAM_MEDIA_BYTES, clubQuote, clubProductId, effectiveTeamLimit, assertPurchaseCatalogReady } from "./subscriptionPlans";
+import { CLUB_PRICING, TEAM_PRICING, FREE_MEDIA_BYTES, CLUB_MEDIA_BYTES, TEAM_MEDIA_BYTES, clubQuote, clubProductId, effectiveTeamLimit, assertPurchaseCatalogReady, mediaAllowance } from "./subscriptionPlans";
 describe("Approved USD subscriptions", () => {
   it.each([
     ["small",3,44.99,489,59.99,649], ["growing",5,64.99,699,84.99,929],
@@ -36,4 +36,17 @@ describe("Approved USD subscriptions", () => {
 it("does not charge for an unconfigured new plan", () => {
   expect(() => assertPurchaseCatalogReady("ignite_v2_pro_standard_21_monthly", [])).toThrow("not available");
   expect(() => assertPurchaseCatalogReady("ignite_v2_pro_standard_21_monthly", ["ignite_v2_pro_standard_21_monthly"])).not.toThrow();
+});
+
+it("preserves active Unlimited grants without granting unlimited to expired promos", () => {
+  expect(effectiveTeamLimit({ is_pro:true, plan:"unlimited", team_limit:null })).toBe(100000);
+  expect(effectiveTeamLimit({ is_pro:true, plan:"unlimited", team_limit:null, expires_at:"2020-01-01" })).toBe(20);
+});
+it("scopes Single Team storage and never stacks it onto club Pro", () => {
+  expect(mediaAllowance(null, { is_pro:true })).toEqual({ baseBytes:1073741824, limitBytes:1073741824, teamScoped:true, premium:true });
+  expect(mediaAllowance({ is_pro:true, plan:"small" }, { is_pro:true }).limitBytes).toBe(3221225472);
+});
+it("preserves Unlimited promo storage and enforces Free after expiry", () => {
+  expect(mediaAllowance({ is_pro:true, plan:"unlimited" }).limitBytes).toBe(5368709120);
+  expect(mediaAllowance({ is_pro:true, plan:"unlimited", expires_at:"2020-01-01" }).limitBytes).toBe(262144000);
 });
