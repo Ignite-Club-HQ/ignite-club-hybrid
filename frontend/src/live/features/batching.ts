@@ -55,8 +55,11 @@ export function batched<A, R>(
           results =
             ids.length === 1 ? new Map([[ids[0], await runSingle(actor, ids[0])]]) : await runBatch(actor, ids);
         } catch (err) {
-          if (!isMissingCanisterMethod(err)) throw err;
-          batchUnsupported.add(key);
+          // A batch is all-or-nothing on the canister: one id the caller may
+          // not read (e.g. one forbidden club) rejects every sibling. Retry
+          // each id alone so only the refused one fails.
+          if (ids.length === 1) throw err;
+          if (isMissingCanisterMethod(err)) batchUnsupported.add(key);
           const singles = await Promise.allSettled(ids.map((i) => runSingle(actor, i)));
           for (const w of fresh.waiters) {
             const r = singles[ids.indexOf(w.id)];
