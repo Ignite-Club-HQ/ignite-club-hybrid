@@ -136,9 +136,10 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   // access on every call. Creation passes fresh=true and always re-reads.
   // The registry was just read while opening: seed the window.
   let registryCheckedAt = openedAt; let registryCheck: Promise<void> | null = null;
-  const assertRegistryUnchanged = async (fresh = false) => {
+  // strict: writes and hosted lookups never rely on the open-time read alone.
+  const assertRegistryUnchanged = async (fresh = false, strict = false) => {
     live();
-    if (!fresh && Date.now() - registryCheckedAt < RECHECK_WINDOW_MS) return;
+    if (!fresh && !(strict && registryCheckedAt === openedAt) && Date.now() - registryCheckedAt < RECHECK_WINDOW_MS) return;
     if (!fresh && registryCheck) return registryCheck;
     const run = (async () => {
       const current = await transport.readRegistry();
@@ -152,13 +153,14 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   // Opening validated every discovered club; seed their check time.
   const assignmentCheckedAt = new Map<string, number>([...clubs].map(id => [id, openedAt]));
   const assignmentInflight = new Map<string, Promise<void>>();
-  const checkStale = async (requested: readonly string[], fresh: boolean) => {
-    await assertRegistryUnchanged(fresh);
+  const checkStale = async (requested: readonly string[], fresh: boolean, strict = false) => {
+    await assertRegistryUnchanged(fresh, strict);
     const now = Date.now();
+    const checkedAt = (id: string) => { const t = assignmentCheckedAt.get(id) ?? 0; return strict && t === openedAt ? 0 : t; };
     const unique = [...new Set(requested)];
     // Concurrent asks for the same club share one in-flight check.
     const waiting = fresh ? [] : unique.map(id => assignmentInflight.get(id)).filter((p): p is Promise<void> => !!p);
-    const stale = unique.filter(id => (fresh || now - (assignmentCheckedAt.get(id) ?? 0) >= RECHECK_WINDOW_MS) && (fresh || !assignmentInflight.has(id)));
+    const stale = unique.filter(id => (fresh || now - checkedAt(id) >= RECHECK_WINDOW_MS) && (fresh || !assignmentInflight.has(id)));
     if (stale.length) {
       const run = validateAssignments(stale).then(() => { for (const id of stale) assignmentCheckedAt.set(id, Date.now()); });
       for (const id of stale) assignmentInflight.set(id, run);
@@ -166,10 +168,10 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     }
     await Promise.all(waiting);
   };
-  const revalidate = async (requested: readonly string[], fresh = false) => {
+  const revalidate = async (requested: readonly string[], fresh = false, strict = false) => {
     live();
     if (requested.length > MAX_CLUBS || requested.some(id => !clubs.has(id))) throw new Error('Club outside discovered membership');
-    await checkStale(requested, fresh);
+    await checkStale(requested, fresh, strict);
     live();
   };
   const inflight = new Map<string, Promise<unknown>>();
@@ -201,7 +203,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       const run = (async () => {
         let pinned: string | undefined; let uncertain = false;
         for (let attempt = 1; ; attempt++) {
-          try { await revalidate([clubId], attempt > 1); }
+          try { await revalidate([clubId], attempt > 1, true); }
           catch (e) { if (uncertain) throw new Error(`Write outcome uncertain; ${(e as Error).message}`); throw e; }
           const route = resolveDeploymentClubDomain(table, registry.deployment, clubId, domain);
           if (pinned && pinned !== route.groupId) throw new Error('Write group changed during retry');
@@ -228,7 +230,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       if (!hostClubId || hostClubId.length > 64) throw new Error('Invalid host club');
       if (clubs.has(hostClubId)) return api.readClub(hostClubId, domain, read);
       if (!transport.readHostedAssignment) throw new Error('Hosted club lookup unavailable');
-      await assertRegistryUnchanged();
+      await assertRegistryUnchanged(false, true);
       const row = await transport.readHostedAssignment(hostClubId, registry.revision); live();
       if (row.clubId !== hostClubId || !routing.groups.has(row.groupId) || row.revision < 1n || row.revision > registry.revision) throw new Error('Foreign or stale club assignment');
       routing.assignments.set(hostClubId, row);
