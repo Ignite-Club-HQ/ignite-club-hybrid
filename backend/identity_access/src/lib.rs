@@ -16,6 +16,8 @@ mod admission;
 mod membership_directory;
 mod membership_directory_store;
 mod membership_materializer;
+mod membership_updates;
+mod membership_private_lookup;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -1136,6 +1138,15 @@ fn account_for_write(principal: Principal) -> Outcome<Account> {
         return Err("Account suspended".into());
     }
     Ok(account)
+}
+// No public reader until exact source binding/propagation is released. This
+// adapter uses identity-owned aliases freshly on every bounded lookup page.
+fn membership_lookup_viewer(caller: Principal) -> Outcome<membership_private_lookup::Viewer> {
+    let account=account_for_write(caller)?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)){return Err("Account deletion pending".into());}
+    let account=effective_account(account,&link_lifecycle());
+    if !account.principals.contains(&caller){return Err("Identity revocation pending".into());}
+    Ok(membership_private_lookup::Viewer{account:account.id,version:account.version,aliases:account.principals})
 }
 fn valid_id(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 128
