@@ -323,6 +323,15 @@ type Main =
                          Err: text;
                          Ok: Conversation;
                        });
+   ensure_default_club_chat: (club_id: text, standard_key: text, existing_id:
+    opt text, role_entries: vec record {
+                                  principal;
+                                  text;
+                                }) ->
+    (variant {
+       Err: text;
+       Ok: GroupMetadata;
+     });
    ensure_mini_league_chat: (club_id: text, league_id: text, name: text,
     members: vec principal) -> (variant {
                                   Err: text;
@@ -546,7 +555,7 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
-   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -823,7 +832,7 @@ type Main =
        Err: text;
        Ok;
      });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;

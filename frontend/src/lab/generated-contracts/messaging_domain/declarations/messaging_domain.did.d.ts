@@ -254,6 +254,11 @@ export interface Main {
     { 'Ok' : Conversation } |
       { 'Err' : string }
   >,
+  'ensure_default_club_chat' : ActorMethod<
+    [string, string, [] | [string], Array<[Principal, string]>],
+    { 'Ok' : GroupMetadata } |
+      { 'Err' : string }
+  >,
   'ensure_mini_league_chat' : ActorMethod<
     [string, string, string, Array<Principal>],
     { 'Ok' : GroupSummary } |

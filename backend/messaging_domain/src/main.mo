@@ -27,6 +27,7 @@ import IcWebSocketCdkTypes "mo:ic-websocket-cdk/Types";
 import Types "types";
 import Timer "mo:core/Timer";
 import PhotoReminderPolicy "photoReminderPolicy";
+import DefaultChatPolicy "defaultChatPolicy";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
@@ -85,6 +86,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var unread : [Types.Unread];
   var bulkAccessPrincipals : [Principal];
   var groupMetadata : [Types.GroupMetadata];
+  var defaultClubChats : Map.Map<Text, Text>;
   var clubMemberships : [Types.ClubMembership];
   var competitionAdmins : [Types.CompetitionAdmin];
   var dmAttachmentsDisabled : [Principal];
@@ -2165,6 +2167,77 @@ persistent actor class Main(governorInit : Principal) = this {
   // user-driven growth (matches the 500-recipient cap used by the chat
   // notify / WS poke fan-outs).
   transient let GROUP_MEMBER_LIMIT = 500;
+
+  // Explicit standard-chat identity. Ordinary create_group_with_roles remains
+  // create-only: custom chats may share names and retain separate histories.
+  // Authorize externally first, then reload/claim/create with NO await between
+  // the lookup and commit. Concurrent devices therefore receive the same ID.
+  public shared ({ caller }) func ensure_default_club_chat(
+    club_id : Text, standard_key : Text, existing_id : ?Text,
+    role_entries : [(Principal, Text)],
+  ) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      await admitAccount(caller);
+      await* requireChatClubMember(caller, club_id);
+      auth(caller);
+      if (isFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
+      let ?standardName = DefaultChatPolicy.name(standard_key) else return #Err("Unknown standard chat");
+      if (not valid(club_id)) return #Err("Invalid club id");
+      if (role_entries.size() == 0 or role_entries.size() > GROUP_MEMBER_LIMIT) return #Err("Invalid chat audience");
+      if (role_entries.any(func((p, r)) = p.equal(Principal.anonymous()) or not validGroupRole(r))) return #Err("Invalid role entry");
+      if (not role_entries.any(func((p, _)) = p.equal(caller))) return #Err("Creator must be a member");
+      let identity = DefaultChatPolicy.identity(club_id, standard_key);
+      // A saved binding is authoritative even if a stale device proposes a
+      // different legacy copy. Return only to existing members/managers; never
+      // add the caller or apply caller-supplied owner roles on a reuse.
+      switch (defaultClubChats.get(identity)) {
+        case (?id) {
+          switch (getGroupMetadataFor(id)) {
+            case (?meta) {
+              if (meta.club_id != ?club_id or meta.team_id != null) return #Err("Standard chat scope changed");
+              if (meta.deleted) return #Err("Standard chat deleted; administrator restore required");
+              if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, id)) return #Err("Group management forbidden");
+              return #Ok(meta);
+            };
+            case null { return #Err("Standard chat missing; administrator review required") };
+          };
+        };
+        case null {};
+      };
+      // Adopt an explicitly selected existing chat only with its existing
+      // management permission. No name-only scan, no membership/history edit.
+      switch (existing_id) {
+        case (?id) {
+          let ?meta = getGroupMetadataFor(id) else return #Err("Existing chat not found");
+          if (meta.club_id != ?club_id or meta.team_id != null or meta.kind != "group" or meta.name != standardName or meta.deleted) return #Err("Existing chat is not an active standard candidate");
+          if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, id)) return #Err("Group management forbidden");
+          defaultClubChats.add(identity, id);
+          return #Ok(meta);
+        };
+        case null {};
+      };
+      let members = role_entries.map(func((p, _)) = p);
+      // Reuse the existing creator authorization/audience contract. The new
+      // operation changes uniqueness, not who may create or invite members.
+      let conversation : Types.Conversation = {
+        id = identity; club_id; team_id = null; participants = members; next_sequence = 1;
+      };
+      if (conversations.any(func(c) = c.id == identity)) return #Err("Standard chat identity conflict");
+      let meta : Types.GroupMetadata = {
+        conversation_id = identity; name = standardName; kind = "group";
+        club_id = ?club_id; team_id = null; members; created_at_ms = nowMs();
+        avatar = null; description = null; deleted = false; admin_only_posting = false;
+        deleted_at_ms = null; deleted_by = null;
+      };
+      mediaEvidenceRevision += 1;
+      conversations := conversations.concat([conversation]);
+      groupMetadata := groupMetadata.concat([meta]);
+      groupRoles := groupRoles.concat(role_entries.map(func((p, r)) = { conversation_id = identity; user = p; role = r }));
+      defaultClubChats.add(identity, identity);
+      #Ok(meta)
+    } finally { removalReceiver.leave(caller) };
+  };
 
   public shared ({ caller }) func create_group_with_roles(
     club_id : Text,
