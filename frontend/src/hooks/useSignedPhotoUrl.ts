@@ -194,7 +194,7 @@ function readCachedSignedUrl(url: string | null | undefined): string | null {
   // ICP blob-store URLs serve IBE ciphertext — they are never directly
   // loadable, so they must always fall through to the decrypt path in
   // resolveSignedUrl rather than being treated as "needs no signing".
-  if (parseIcpBlobUrl(url, getActiveIcpTarget())) return null;
+  if (parseIcpBlobUrl(url, getActiveIcpTarget(), false)) return null;
   // If the URL doesn't need signing, treat it as immediately resolvable so
   // virtualised chat rows don't flash a skeleton on remount.
   if (!extractPrivateStoragePath(url)) return url;

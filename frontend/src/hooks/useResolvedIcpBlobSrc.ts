@@ -24,13 +24,16 @@ export function isIcpBlobUrl(src: string): boolean {
   try {
     const target = getActiveIcpTarget();
     const stores = listBlobStoreCanisterIds(target);
-    if (stores.length === 0) return false;
     const url = new URL(src);
+    // A new group's store is not in the shared target's static IDs. Club
+    // paths still need asynchronous approved-owner resolution, never <img>
+    // with the raw ciphertext URL, even before routing has warmed up.
+    const clubPath = /^\/clubs\/[^/]+\//.test(url.pathname);
     if (url.hostname === "icp0.io" || url.hostname === "raw.icp0.io") {
       return stores.includes(url.pathname.replace(/^\/+/, "").split("/")[0]);
     }
     const sub = /^([a-z0-9-]+)\.(?:raw\.)?icp0\.io$/.exec(url.hostname)?.[1];
-    return !!sub && stores.includes(sub);
+    return !!sub && (stores.includes(sub) || clubPath);
   } catch {
     return false;
   }
