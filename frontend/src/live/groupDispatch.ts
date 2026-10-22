@@ -197,7 +197,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
     },
     /** Data spanning the caller's clubs: shared canisters + every group, asked
      * at the same time (load time = slowest group, not the sum). */
-    readAcross: async <T, R>(feature: FeatureArea, domain: GroupDomain, fn0: (ctx: FeatureBackendContext) => Promise<T>, merge: (parts: T[]) => R): Promise<R> => {
+    readAcross: async <T, R>(feature: FeatureArea, domain: GroupDomain, fn0: (ctx: FeatureBackendContext) => Promise<T>, merge: (parts: T[]) => R, requireComplete = false): Promise<R> => {
       if (!await active()) return merge([await deps.legacy(feature, '', fn0)]);
       const fn = (ctx: FeatureBackendContext) => fn0(ctx && typeof ctx === 'object' ? markScopedContext(ctx) : ctx);
       const { s } = await sessionFor(deps);
@@ -207,6 +207,10 @@ export function createClubDispatcher(deps: DispatchDeps) {
       const attempt = async (ctx: FeatureBackendContext): Promise<Part> => { try { return { ok: true, value: await fn(ctx) }; } catch (error) { return { ok: false, error }; } };
       const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn).then((value): Part => ({ ok: true, value }), (error): Part => ({ ok: false, error })), s.readEveryGroup(domain, async ctx => [await attempt(ctx)], Number.MAX_SAFE_INTEGER)]);
       const parts = [shared, ...groups];
+      if (requireComplete) {
+        const failure = parts.find(p => !p.ok);
+        if (failure && !failure.ok) throw failure.error;
+      }
       const ok = parts.filter((p): p is { ok: true; value: T } => p.ok);
       if (ok.length === 0) { const first = parts.find(p => !p.ok) as { ok: false; error: unknown }; throw first.error; }
       return merge(ok.map(p => p.value));

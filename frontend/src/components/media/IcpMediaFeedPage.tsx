@@ -1,5 +1,4 @@
 import { readContentInScope } from "@/live/contentRouting";
-import { acrossLists } from "@/live/featureScopes";
 import { readClubsInOwnGroups } from "@/live/crossGroupClubs";
 import { writeOnce } from "@/live/clubScope";
 import { useSearchParams } from "react-router-dom";

@@ -24,6 +24,23 @@ function fixture() {
 }
 
 describe('cross-group reads', () => {
+  it.each([2, 10, 100])('member content skips unrelated groups in a %i-group registry', async count => {
+    const f = fixture();
+    const template = f.registry.groups[1];
+    const binding = f.registry.bindings[1];
+    for (let i = 2; i < count; i++) {
+      const id = `extra-${i}`;
+      const domains = template.domains.map(d => ({ ...d, canisterId: `${id}-${d.domain}` }));
+      f.registry.groups.push({ ...template, id, domains });
+      f.registry.bindings.push({ ...binding, groupId: id, domains: domains.map(d => ({ ...d, subnetId: 's1' })) });
+    }
+    const s = await openGroupSession(f.ctx, f.transport);
+    const read = vi.fn(async ctx => [ctx.target.canisterIds.club_domain]);
+    for (const domain of ['club_domain', 'events_domain', 'messaging_domain', 'media_metadata'] as const) await s.readMemberGroups(domain, read);
+    expect(read).toHaveBeenCalledTimes(4);
+    expect(read.mock.calls.every(([ctx]) => f.inGroupA(ctx))).toBe(true);
+    expect(f.transport.readMemberships).toHaveBeenCalledTimes(count);
+  });
   it('reads a competition hosted by a club in another group from the host group only', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
     expect(s.clubIds).toEqual(['club-a']);

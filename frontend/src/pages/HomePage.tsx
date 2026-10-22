@@ -891,7 +891,7 @@ export default function HomePage() {
             if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
             return fetchLiveCallerIapPro(ctx);
           },
-        }, { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) });
+        }, { memberGroups: true, merge: (parts: boolean[]) => parts.some(Boolean) });
       }
 
       // Check club subs, team subs, and teams table (for trial is_pro) in parallel
@@ -1330,7 +1330,7 @@ export default function HomePage() {
       if (error) throw error;
       return data as Club[];
     },
-    enabled: !!user && (teamDialogOpen || !!activeClubFilter),
+    enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });

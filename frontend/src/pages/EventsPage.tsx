@@ -363,7 +363,7 @@ export default function EventsPage() {
           const scope = await getLiveAccountRosterScope(ctx, user!.id);
           return scope.teamIds;
         },
-      }, { everyGroup: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
+      }, { memberGroups: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
       childDerivedTeamIds.forEach((tid) => teamIds.add(tid));
       
       // Get clubs from teams
@@ -414,7 +414,7 @@ export default function EventsPage() {
             });
             return memberships;
           },
-        }, { everyGroup: true, merge: mergeMemberships });
+        }, { memberGroups: true, merge: mergeMemberships });
       }
 
       // Proactively refresh JWT if it's near expiry — prevents an expired
@@ -495,7 +495,7 @@ export default function EventsPage() {
           const scope = await getLiveAccountRosterScope(ctx, user!.id);
           return scope.teamIds;
         },
-      }, { everyGroup: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
+      }, { memberGroups: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
       membershipDerivedTeamIds.forEach((tid) => {
         if (!teamIds.includes(tid)) teamIds.push(tid);
       });
