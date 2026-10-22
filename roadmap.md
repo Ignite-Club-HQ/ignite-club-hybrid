@@ -3,7 +3,7 @@
 - [x] Atomic Supabase capacity guard and ICP creation/restore/approval/reassignment guard. Existing teams retained; ICP requires deployment.
 - [ ] Configure and verify v2 entity-scoped fulfillment with provider products: hosted checkout/verifiers absent from this checkout; global ICP entitlement cannot grant club-specific seats.
 - [ ] Complete authoritative team-scoped media quota and Supabase aggregate reservations. Free ICP 250 MiB drafted/tested; existing paid 5 GiB preserved until versioned fulfillment.
-- [ ] Live signed-in purchase/readback blocked by external unmanaged auth, missing provider catalog setup and undeployed ICP updates. Catalog/quota tests and Motoko checks pass locally; no complete live billing claim.
+- [ ] Live signed-in purchase/readback blocked by external unmanaged auth, missing provider catalog setup and undeployed ICP updates. 26 focused pricing/quota/upgrade tests and both Motoko policy tests pass; both canisters check without errors. Public browser opens /auth without runtime errors; signed-in purchase/readback remains unverified.
 
 # Group 2 account-access repair
 - [x] Add isolated stable production eligibility release and governor-authorized exact Group 2 service readers derived from two pinned consensus registry reads; preserve removal and lifecycle gates.

@@ -811,7 +811,7 @@ function SupabaseVaultPage() {
     return null;
   }, [currentView, userClubs, currentClubHasPro]);
 
-  // 3GB base storage limit for Pro tier (in bytes)
+  // Existing 5GB base storage limit for Pro tier (in bytes)
   const BASE_STORAGE_LIMIT = 5 * 1024 * 1024 * 1024; // Existing paid terms; v2 fulfillment is not enabled.
 
   // Query for purchased storage and scheduled downgrade info for current club
