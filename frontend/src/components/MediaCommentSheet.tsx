@@ -42,6 +42,7 @@ interface MediaCommentSheetProps {
   onCommentInputChange: (value: string) => void;
   onSubmitComment: () => void;
   isPending?: boolean;
+  errorMessage?: string | null;
   replyingTo?: { id: string; name: string } | null;
   onSetReplyingTo: (reply: { id: string; name: string } | undefined) => void;
   currentUserId?: string;
@@ -62,6 +63,7 @@ export function MediaCommentSheet({
   onCommentInputChange,
   onSubmitComment,
   isPending,
+  errorMessage,
   replyingTo,
   onSetReplyingTo,
   currentUserId,
@@ -341,9 +343,9 @@ export function MediaCommentSheet({
   }, [isIOS, stabilizeIOSViewport]);
 
   const handleSubmit = useCallback(() => {
-    if (!commentInput.trim()) return;
+    if (isPending || !commentInput.trim()) return;
     onSubmitComment();
-  }, [commentInput, onSubmitComment]);
+  }, [commentInput, onSubmitComment, isPending]);
 
   // ---- @mention autocomplete ----
   const [mentionSearch, setMentionSearch] = useState("");
@@ -661,6 +663,7 @@ export function MediaCommentSheet({
         )}
 
         <div className="px-3 pt-2">
+          {errorMessage && <p role="alert" className="text-sm text-destructive pb-2">{errorMessage}</p>}
           <div className="relative flex min-h-[52px] items-center gap-1.5 bg-muted/60 rounded-3xl px-1.5 py-1 focus-within:bg-muted/80 transition-colors">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center">
               <EmojiPicker onEmojiSelect={handleEmojiSelect} />

@@ -43,6 +43,7 @@ import { IcpUploadPhotoSheet, type IcpPendingUploadPreview } from "@/components/
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { mediaProfileDirectory } from "./mediaProfileDirectory";
+import { galleryCommentFromReceipt, mergeGalleryComments } from "./galleryComments";
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -333,8 +334,8 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       const first = sorted[0];
       const ownerId = first.owner.toText();
       const [reactionsRaw, commentsRaw] = await Promise.all([
-        readContentInScope(ctx, "media", { photoId: first.id }, scoped => listLiveReactions(scoped, first.id)),
-        readContentInScope(ctx, "media", { photoId: first.id }, scoped => listLiveComments(scoped, first.id)),
+        readContentInScope(ctx, "media", { clubId: first.club_id }, scoped => listLiveReactions(scoped, first.id)),
+        readContentInScope(ctx, "media", { clubId: first.club_id }, scoped => listLiveComments(scoped, first.id)),
       ]);
       const reactions = (reactionsRaw as unknown as {
         kind: string;
@@ -463,6 +464,7 @@ export function IcpMediaFeedPage() {
   const [commentPost, setCommentPost] = useState<LiveMediaPost | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [pendingComments, setPendingComments] = useState<Record<string, LiveCommentView[]>>({});
+  const [commentError, setCommentError] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [actionPost, setActionPost] = useState<LiveMediaPost | null>(null);
   const pressTimerRef = useRef<number | null>(null);
@@ -488,6 +490,23 @@ export function IcpMediaFeedPage() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["icp-media-feed"] });
 
+  // Opening comments reads only this album, not the entire multi-group gallery.
+  const commentQueryKey = ["icp-gallery-comments", principal, commentPost?.clubId, commentPost?.representativeAssetId];
+  const commentsQuery = useQuery({
+    queryKey: commentQueryKey,
+    enabled: !!principal && !!commentPost,
+    queryFn: async () => {
+      if (!commentPost) return [];
+      const post = commentPost;
+      const rows = await withFeatureBackend("media", {
+        supabase: async () => { throw new Error("unreachable"); },
+        icp: ctx => listLiveComments(ctx, post.representativeAssetId),
+      }, { clubId: post.clubId });
+      return rows.filter(c => !c.deleted).map(galleryCommentFromReceipt);
+    },
+    retry: 1,
+  });
+
   const reactionMutation = useMutation({
     mutationFn: async ({ post, emoji, remove }: { post: LiveMediaPost; emoji: string; remove?: boolean }) =>
       withFeatureBackend("media", {
@@ -500,7 +519,7 @@ export function IcpMediaFeedPage() {
           const mine = reactions.find(r => r.user.toText() === ctx.identity.getPrincipal().toText());
           if (mine) return removeLiveReaction(ctx, mine.id);
         },
-      }, writeOnce({ photoId: post.representativeAssetId })),
+      }, writeOnce({ clubId: post.clubId })),
     // Instant on-screen update; the canister save finishes in the background.
     onMutate: async ({ post, emoji, remove }) => {
       const key = ["icp-media-feed", principal];
@@ -537,10 +556,11 @@ export function IcpMediaFeedPage() {
           throw new Error("unreachable");
         },
         icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text, Date.now()),
-      }, writeOnce({ photoId: post.representativeAssetId })),
+      }, writeOnce({ clubId: post.clubId })),
     // Show the comment the moment Send is tapped; the feed refetch replaces
     // it with the canister copy (the sheet reads the live post).
     onMutate: ({ post, text }) => {
+      setCommentError(null);
       setCommentInput("");
       const pendingId = `pending-${Date.now()}`;
       setPendingComments((prev) => ({
@@ -558,12 +578,32 @@ export function IcpMediaFeedPage() {
       }));
       return { pendingId };
     },
+    onSuccess: (receipt, { post }, context) => {
+      const saved = {
+        ...galleryCommentFromReceipt(receipt),
+        profiles: { display_name: profile?.display_name ?? "You", avatar_url: profile?.avatar_url ?? null },
+      };
+      setPendingComments(prev => ({ ...prev, [post.id]: mergeGalleryComments(
+        (prev[post.id] ?? []).filter(c => c.id !== context?.pendingId), [saved]),
+      }));
+      const key = ["icp-gallery-comments", principal, post.clubId, post.representativeAssetId];
+      queryClient.setQueryData<LiveCommentView[]>(key, old => mergeGalleryComments(old ?? [], [saved]));
+      queryClient.setQueryData<LiveMediaFeed>(["icp-media-feed", principal], old => {
+        if (!old) return old;
+        const next = { ...old, posts: old.posts.map(p => p.id === post.id
+          ? { ...p, comments: mergeGalleryComments(p.comments, [saved]) } : p) };
+        if (principal) writeFeedSnapshot(principal, next);
+        return next;
+      });
+      void queryClient.invalidateQueries({ queryKey: key });
+    },
     onError: (err, { post, text }, context) => {
       setPendingComments((prev) => ({
         ...prev,
         [post.id]: (prev[post.id] ?? []).filter((c) => c.id !== context?.pendingId),
       }));
       setCommentInput(text);
+      setCommentError("Your comment wasn't posted. Please try sending it again.");
       toast.error(err instanceof Error ? err.message : "Comment failed");
     },
     onSettled: invalidate,
@@ -613,18 +653,15 @@ export function IcpMediaFeedPage() {
   const activeComments = useMemo<LiveCommentView[]>(() => {
     if (!commentPost) return [];
     const live = feedQuery.data?.posts.find((p) => p.id === commentPost.id) ?? commentPost;
-    const pending = (pendingComments[commentPost.id] ?? []).filter(
-      (pc) => !live.comments.some((c) => c.text === pc.text),
-    );
     // Your own comments always show your name, even if the batch profile
     // lookup missed it (e.g. linked accounts keyed by an older id).
     const ownName = profile?.display_name || null;
-    return [...live.comments, ...pending].map((c) =>
+    return mergeGalleryComments(mergeGalleryComments(commentsQuery.data ?? [], live.comments), pendingComments[commentPost.id] ?? []).map((c) =>
       ownName && principal && c.user_id === principal && (!c.profiles?.display_name || c.profiles.display_name === "You")
         ? { ...c, profiles: { ...c.profiles, display_name: ownName, avatar_url: c.profiles?.avatar_url ?? profile?.avatar_url ?? null } }
         : c,
     );
-  }, [commentPost, feedQuery.data?.posts, pendingComments, principal, profile?.display_name, profile?.avatar_url]);
+  }, [commentPost, feedQuery.data?.posts, commentsQuery.data, pendingComments, principal, profile?.display_name, profile?.avatar_url]);
 
   const options = feedQuery.data?.options;
   const hasFilters = (options?.clubs.length ?? 0) > 1 || (options?.teams.length ?? 0) > 0;
@@ -799,7 +836,7 @@ export function IcpMediaFeedPage() {
                   <button
                     type="button"
                     className="flex items-center gap-1 text-muted-foreground"
-                    onClick={() => setCommentPost(post)}
+                    onClick={() => { setCommentError(null); setCommentPost(post); }}
                     aria-label="Comments"
                   >
                     <MessageCircle className="h-5 w-5" />
@@ -893,6 +930,7 @@ export function IcpMediaFeedPage() {
           if (commentPost && text) commentMutation.mutate({ post: commentPost, text });
         }}
         isPending={commentMutation.isPending}
+        errorMessage={commentError ?? (commentsQuery.isError ? "We couldn't refresh comments. Please reopen to try again." : null)}
         replyingTo={null}
         onSetReplyingTo={() => undefined}
         currentUserId={principal}
