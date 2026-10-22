@@ -145,12 +145,12 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     try { await run; } finally { if (registryCheck === run) registryCheck = null; }
   };
   const assignmentCheckedAt = new Map<string, number>();
-  const revalidate = async (requested: readonly string[]) => {
+  const revalidate = async (requested: readonly string[], fresh = false) => {
     live();
     if (requested.length > MAX_CLUBS || requested.some(id => !clubs.has(id))) throw new Error('Club outside discovered membership');
-    await assertRegistryUnchanged();
+    await assertRegistryUnchanged(fresh);
     const now = Date.now();
-    const stale = [...new Set(requested)].filter(id => now - (assignmentCheckedAt.get(id) ?? 0) >= RECHECK_WINDOW_MS);
+    const stale = [...new Set(requested)].filter(id => fresh || now - (assignmentCheckedAt.get(id) ?? 0) >= RECHECK_WINDOW_MS);
     if (stale.length) { await validateAssignments(stale); for (const id of stale) assignmentCheckedAt.set(id, Date.now()); }
     live();
   };
@@ -183,7 +183,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       const run = (async () => {
         let pinned: string | undefined; let uncertain = false;
         for (let attempt = 1; ; attempt++) {
-          try { await revalidate([clubId]); }
+          try { await revalidate([clubId], attempt > 1); }
           catch (e) { if (uncertain) throw new Error(`Write outcome uncertain; ${(e as Error).message}`); throw e; }
           const route = resolveDeploymentClubDomain(table, registry.deployment, clubId, domain);
           if (pinned && pinned !== route.groupId) throw new Error('Write group changed during retry');
@@ -233,6 +233,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       const current = await transport.readNewClubPlacement(placement.clubId, registry.revision);
       live();
       if (current.clubId !== placement.clubId || current.groupId !== placement.groupId || current.revision !== placement.revision) throw new Error('Creator placement changed');
+      await assertRegistryUnchanged(true);
       // Exactly one attempt. Unknown creation outcomes require readback, not replay.
       const result = await write(targetFor(placement.groupId)); live(); return result;
     },
@@ -244,7 +245,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       live();
       await assertRegistryUnchanged();
       const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
-      await assertRegistryUnchanged();
+      await assertRegistryUnchanged(true);
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Cross-group read exceeds row budget');
       return rows;
