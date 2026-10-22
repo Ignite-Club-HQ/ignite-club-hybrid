@@ -198,6 +198,7 @@ if (action === 'register-closed') {
     save({ action, registryRevision: String(registry.revision), accepting: group.accepting, wiring, observed: observed.map(o => ({ name: o.name, moduleHash: o.moduleHash, cycles: String(o.cycles) })) });
     console.log(`${LABEL} is registered and ${group.accepting ? 'OPEN to new clubs' : 'closed'}; all checks passed.`);
   } else if (action === 'open') {
+    if (group.accepting && process.env.ADD_GROUP_RESUME === '1') { console.log(`${LABEL} is already open (resumed); nothing changed.`); process.exit(0); }
     if (group.accepting) throw new Error(`${LABEL} is already open`);
     const openRecord = { ...group, accepting: true };
     save({ action, pending: 'open', expectedRevision: String(registry.revision), openRecord });

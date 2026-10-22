@@ -1,0 +1,91 @@
+# One click: add a new club group on mainnet and open it to new clubs.
+# Creates the 13 services (200 GB photo store), configures, verifies, opens and
+# records the live approval so the published app uses it with no new release.
+# Re-run to resume after any stop; finished steps are skipped.
+name: Add new group
+
+on:
+  workflow_dispatch:
+    inputs:
+      group_id:
+        description: "Leave as auto (next group, or resume an unfinished one) or type e.g. g3"
+        required: true
+        default: auto
+      confirm:
+        description: "Type ADD GROUP (spends fuel to create the services)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      ICP_HOME: ${{ github.workspace }}/.icp-home
+    steps:
+      - name: Confirm
+        env:
+          RAW_CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          c="$(printf '%s' "$RAW_CONFIRM" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//' | tr '[:lower:]' '[:upper:]')"
+          test "$c" = "ADD GROUP" || { echo "::error::Type ADD GROUP to confirm"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install build tools (pinned)
+        run: npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
+      - name: Safety tests
+        run: node --test scripts/add-group-plan.test.mjs scripts/stage-group-wasm.test.mjs scripts/resolve-group-push-worker.test.mjs
+      - name: Build group services
+        working-directory: deploy/mainnet
+        run: |
+          set -euo pipefail
+          icp build club_domain events_domain messaging_domain vault_domain competition_domain club_points_domain \
+            mini_league_domain media_metadata insights_domain notification_queue pii_access_control timer_jobs media_blob_store
+          node ../../scripts/stage-group-wasm.mjs . "$RUNNER_TEMP/wasm"
+      - name: Install frontend dependencies
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Resolve existing notification worker
+        env:
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
+        run: bash scripts/resolve-group-push-worker.sh
+      - name: Operator key
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM" || { echo "::error::DEPLOYER_PEM secret missing"; exit 1; }
+          umask 077
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/operator.pem"
+          mkdir -p "$ICP_HOME/identity/keys"
+          icp identity import --from-pem "$RUNNER_TEMP/operator.pem" --storage plaintext ignite-governor
+          icp identity default ignite-governor
+      - name: Add group
+        env:
+          CONFIRMATION: ${{ inputs.confirm }}
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_BY: ${{ github.actor }}
+          REQUEST_ID: manual
+        run: node scripts/add-group.mjs "${{ inputs.group_id }}" "$RUNNER_TEMP/operator.pem" "$RUNNER_TEMP/wasm" "$RUNNER_TEMP/add-group"
+      - name: Save progress
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/operator.pem"; rm -rf "$ICP_HOME"
+          test -n "${GROUP_ID:-}" || exit 0
+          git config user.name "ignite-operator"; git config user.email "operator@users.noreply.github.com"
+          git add "deploy/groups/$GROUP_ID" frontend/src/live/generated/routingGates.ts
+          git commit -m "Add group $GROUP_ID progress [skip ci]" || exit 0
+          for i in 1 2 3; do git pull --rebase && git push && exit 0; sleep 5; done
+          echo "::error::Could not save progress to GitHub; the run's changes are live, re-run Add new group to continue"; exit 1
