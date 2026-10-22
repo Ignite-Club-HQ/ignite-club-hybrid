@@ -150,6 +150,28 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     if (!fresh) registryCheck = run;
     try { await run; } finally { if (registryCheck === run) registryCheck = null; }
   };
+  // Post-read confirmation shared by concurrent all-group reads. A read may
+  // join a check only if that check's registry read starts after the read's
+  // replies arrived (monotonic tick), so the in-flight guarantee is unchanged;
+  // a page firing several all-group reads pays one confirmation, not one each.
+  let checkTick = 0;
+  let pendingFresh: { tick: number; run: Promise<void> } | null = null;
+  const confirmUnchangedAfter = (after: number): Promise<void> => {
+    live();
+    if (pendingFresh && pendingFresh.tick > after) return pendingFresh.run;
+    const entry: { tick: number; run: Promise<void> } = { tick: Number.POSITIVE_INFINITY, run: Promise.resolve() };
+    entry.run = (async () => {
+      // Let siblings whose replies land in the same turn join this check.
+      await Promise.resolve(); await Promise.resolve();
+      entry.tick = ++checkTick;
+      const current = await transport.readRegistry();
+      live();
+      if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
+      registryCheckedAt = Date.now();
+    })().finally(() => { if (pendingFresh === entry) pendingFresh = null; });
+    pendingFresh = entry;
+    return entry.run;
+  };
   // Opening validated every discovered club; seed their check time.
   const assignmentCheckedAt = new Map<string, number>([...clubs].map(id => [id, openedAt]));
   const assignmentInflight = new Map<string, Promise<void>>();
@@ -266,7 +288,8 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       await assertRegistryUnchanged();
       const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
       // Fresh: a registry change while replies were in flight must discard them.
-      await assertRegistryUnchanged(true);
+      // Sibling reads that finished before one fresh check started share it.
+      await confirmUnchangedAfter(++checkTick);
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Cross-group read exceeds row budget');
       return rows;

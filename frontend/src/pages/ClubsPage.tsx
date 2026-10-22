@@ -16,7 +16,16 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
-import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
+import { getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
+import { readClubsInOwnGroups, settleAll, grantClubId } from "@/live/crossGroupClubs";
+import { readMembershipInScope } from "@/live/membershipRouting";
+import type { FeatureBackendContext } from "@/live/featureRouter";
+
+/** The caller's club ids from one shared, memoized all-group grants read. */
+async function liveClubIds(ctx: FeatureBackendContext): Promise<string[]> {
+  const grants = await getLiveMyRoleGrants(ctx);
+  return [...new Set(grants.map((g) => grantClubId(g)).filter((c): c is string => !!c))];
+}
 import { PageLoading } from "@/components/ui/page-loading";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -165,34 +174,27 @@ export default function ClubsPage() {
     queryKey: ["clubs"],
     queryFn: async () => {
       if (useIcpLab) {
+        // One shared grants read (all groups at once, memoized for every
+        // query on the page), then each club straight from its own group —
+        // no per-query fan-out and no Group 1 club looked up in Group 2.
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            // The caller's clubs come from their club_domain role grants —
-            // the same store create_club writes the creator's club_admin
-            // grant to. There is no public club directory on the canister,
-            // so the search box only searches within these.
-            const grants = await getLiveMyRoleGrants(ctx);
-            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
-            const clubs = await Promise.all(clubIds.map(async (clubId) => {
-              const row = await getLiveClubProfile(ctx, clubId);
-              const p = row.length ? row[0] : null;
-              if (!p || p.deleted_at_ms.length) return null;
-              return {
-                id: p.id,
-                name: p.name,
-                logo_url: p.logo_url[0] ?? null,
-                description: p.description[0] ?? null,
-                sport: p.sport[0] ?? null,
-                is_pro: false,
-                created_by: null,
-                primary_sponsor_id: null,
-              } as Club;
-            }));
-            return clubs.filter((c): c is Club => c !== null);
+            const { values } = await readClubsInOwnGroups(ctx, await liveClubIds(ctx));
+            return values.map((p) => ({
+              id: p.id,
+              name: p.name,
+              logo_url: p.logo_url[0] ?? null,
+              description: p.description[0] ?? null,
+              sport: p.sport[0] ?? null,
+              is_pro: false,
+              created_by: null,
+              primary_sponsor_id: null,
+            }) as Club);
           },
-        }, { everyGroup: true, merge: mergeLists });
+        }, { shared: "person" });
       }
+
 
       const { data, error } = await supabase
         .from("clubs")
@@ -215,9 +217,9 @@ export default function ClubsPage() {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            const grants = await getLiveMyRoleGrants(ctx);
-            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
-            const perClub = await Promise.all(clubIds.map((clubId) => listLiveSponsors(ctx, clubId)));
+            const ids = await liveClubIds(ctx);
+            const { values: perClub } = await settleAll(ids.map((clubId) =>
+              readMembershipInScope(ctx, { clubId }, (scoped) => listLiveSponsors(scoped, clubId))));
             return perClub.flat()
               .filter((s) => s.is_active)
               .map((s) => ({
@@ -228,7 +230,7 @@ export default function ClubsPage() {
                 club_id: s.club_id,
               }) as Sponsor);
           },
-        }, { everyGroup: true, merge: mergeLists });
+        }, { shared: "person" });
       }
       const { data, error } = await supabase
         .from("sponsors")
@@ -248,9 +250,9 @@ export default function ClubsPage() {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            const grants = await getLiveMyRoleGrants(ctx);
-            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
-            const subs = await Promise.all(clubIds.map((clubId) => getLiveClubSubscription(ctx, clubId)));
+            const ids = await liveClubIds(ctx);
+            const { values: subs } = await settleAll(ids.map((clubId) =>
+              readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubSubscription(scoped, clubId))));
             return subs.filter((s): s is NonNullable<typeof s> => s !== null).map((s) => ({
               club_id: s.club_id,
               is_pro: s.is_pro,
@@ -259,7 +261,7 @@ export default function ClubsPage() {
               admin_pro_football_override: s.admin_pro_football_override,
             }) as ClubSubscription);
           },
-        }, { everyGroup: true, merge: mergeLists });
+        }, { shared: "person" });
       }
       const { data, error } = await supabase
         .from("club_subscriptions")
