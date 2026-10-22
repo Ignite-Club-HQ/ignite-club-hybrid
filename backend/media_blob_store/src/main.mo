@@ -714,7 +714,7 @@ persistent actor MediaBlobStore {
     try {
       switch (await clubDomain.get_club_subscription(clubId)) {
         case (#Ok(?sub)) {
-          let now = nowMs();
+          let now = Nat64.fromNat(Int.abs(Time.now()) / 1_000_000);
           let paid = (sub.is_pro or sub.is_pro_football) and (switch (sub.expires_at_ms) { case null true; case (?end) end > now });
           let trial = sub.is_trial and (switch (sub.trial_ends_at_ms) { case null false; case (?end) end > now });
           sub.admin_pro_override or sub.admin_pro_football_override or paid or trial

@@ -7,13 +7,13 @@ import { assertClubMediaFits, clubMediaLimit, listStoredClubMedia, uploadWithinC
 type Client = SupabaseClient<Database>;
 const gib = 1024 ** 3;
 
-function fakeClient(options: { error?: unknown; used?: number; purchased?: number; pro?: boolean } = {}) {
+function fakeClient(options: { error?: unknown; used?: number; purchased?: number; pro?: boolean; version?: string } = {}) {
   const list = vi.fn(async (folder: string) => ({
     data: folder === "clubs/club-a" ? [{ id: "object", name: "image.jpg", metadata: { size: (options.used ?? 0) / 3 } }] : [],
     error: options.error ?? null,
   }));
   const query = { select: () => query, eq: () => query, maybeSingle: async () => ({
-    data: { is_pro: options.pro ?? true, storage_purchased_gb: options.purchased ?? 0 }, error: null,
+    data: { pricing_version: options.version ?? "usd_v2", is_pro: options.pro ?? true, storage_purchased_gb: options.purchased ?? 0 }, error: null,
   }) };
   return { client: { from: () => query, storage: { from: () => ({ list }) } } as unknown as Client, list };
 }
@@ -78,4 +78,13 @@ describe("Combined club media allowance", () => {
     expect((await listStoredClubMedia("club-a", client)).reduce((sum, object) => sum + object.size, 0)).toBe(6009);
     expect(list).toHaveBeenCalledWith("clubs/club-a/teams", expect.objectContaining({ offset: 1000 }));
   });
+});
+it("preserves legacy paid 5 GiB through its existing term", async () => {
+  const upload = vi.fn().mockResolvedValue("stored");
+  await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, fakeClient({ used: 3 * gib, version: "legacy" }).client)).resolves.toBe("stored");
+});
+it("blocks Free uploads above 250 MiB without deleting existing objects", async () => {
+  const upload = vi.fn();
+  await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, fakeClient({ used: 262144000, pro: false }).client)).rejects.toThrow("250 MB");
+  expect(upload).not.toHaveBeenCalled();
 });

@@ -1,3 +1,4 @@
+import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Types "types";
 module {
