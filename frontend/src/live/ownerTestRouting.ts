@@ -45,6 +45,7 @@ export async function readOwnerTestRoute(ctx: FeatureBackendContext): Promise<Ow
 const ROUTE_TTL_MS = 30_000;
 let cachedRoute: { key: string; at: number; value: Promise<OwnerRoute | null> } | null = null;
 export function readOwnerTestRouteCached(ctx: FeatureBackendContext): Promise<OwnerRoute | null> {
+  if (!ctx.target.canisterIds?.shard_router) return Promise.resolve(null);
   const key = keyFor(ctx);
   if (cachedRoute && cachedRoute.key === key && Date.now() - cachedRoute.at < ROUTE_TTL_MS) return cachedRoute.value;
   const value = readOwnerTestRoute(ctx);
