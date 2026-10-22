@@ -1,6 +1,6 @@
 # Stage B: authority-backed membership display directory
 
-Status: source audit and contract specification; not implemented or released.
+Status: durable source invalidation, operator traversal and offline directory/staging core implemented locally; central propagation/read API and cutover not implemented or released.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
 ## Scope and ownership
@@ -11,7 +11,7 @@ Index effective active club membership from each exact club authority. League me
 
 ## Current authority and revision gaps
 
-`club_domain.isMember` combines explicit roles and parent/guardian relationships through assigned teams, exclusions and removed-member state. The transient `currentMemberIndex()` produces candidates and the indexed consensus endpoint rechecks membership. The index's transient `membershipEpoch` advances for ordinary mutations, but the returned ACL version is not a mutation revision. It cannot prove complete stable directory propagation.
+`club_domain.isMember` combines explicit roles and parent/guardian relationships through assigned teams, exclusions and removed-member state. The transient `currentMemberIndex()` produces candidates and the indexed consensus endpoint rechecks membership. It now uses the migration-backed discovery journal revision for ordinary mutations, while the returned ACL version remains distinct. The dirty journal cannot by itself prove complete stable directory propagation.
 
 Router placement establishes location only. Shared identity account roles/families and frontend acknowledgement invalidation cannot independently establish effective membership at every club authority.
 
@@ -50,6 +50,22 @@ Every row requires actual helper/timer entry-point mapping and a regression befo
 - Verify exact inventory, account binding and authority generations again before switching discovery. Changes invalidate completeness, not source permissions.
 
 ## Acceptance before release
+
+### Local implementation evidence (22 October)
+
+- Club mutation epochs are migration-backed dirty state. `restore_member` also invalidates discovery. A new migration initializes revision 1 as pending; normal upgrades retain it.
+- Governor-only consensus exports scan at most 100 raw edges, including individual nested child/team assignments; mutation invalidates cursors. They do not expose relationships to browsers or the configured identity service.
+- Offline central state enforces exact writer/generation, complete-source watermarks, conflicting/stale replay rejection and same-revision completion after invalidation. Delayed same-revision invalidations do not undo completion.
+- Isolated stable staging uses separate caller-provided memories, <=100 rows of <=1024 bytes per chunk, exact ordered replay and resumable progress across reopen. It allocates no production memory IDs and has no public methods. Source manifests remain incomplete during replacement staging.
+- Populated legacy local upgrade passes: 251 child/team edges across bounded pages, normal upgrade/cursor preservation, governor-only access, removal/restore revisions and last-family-assignment removal preserving another club.
+- Real two-group encrypted-media regression passes: fresh key/upload denial after removal (including pending work), retained-member and other-club access, authority outage, marker restore and upgrade persistence.
+- 68 identity tests and 35 existing frontend membership/discovery tests pass; new Motoko discovery tests and existing membership index/page tests pass. All 17 interfaces match; ICP-mode guards and preview checks pass.
+
+### Remaining integration and release gates
+
+No propagation worker, source acknowledgement endpoint, authenticated central reader or frontend directory cutover is installed. Stable staging deliberately does not verify raw-edge-to-effective-membership equivalence: bounded materialization and an account/source index must be added before runtime integration. Production memory IDs, account alias/version handling, rekey/merge/erasure and exact registry/placement writer binding need their own acceptance checks.
+
+Rollback to older authority state is unsupported for directory cutover until an externally fenced replacement generation is bound into source cursors and propagation evidence. A restored local counter cannot discover the central high watermark. Ordinary upgrades must continue preserving revisions. Old staging-chunk reclamation and bounded storage budgets also remain required before enabling ingestion.
 
 Cover populated legacy backfill with concurrent additions/removals, last-family-link removal, linked aliases, app-wide roles, missed/duplicate/out-of-order acknowledgements, stale writer generations, identity erasure, authority loss, upgrades mid-backfill and failed sources. Verify bounded request/result work and caller privacy against real local canisters. Keep current on-chain admission/lifecycle gates and all photo authorities unchanged.
 

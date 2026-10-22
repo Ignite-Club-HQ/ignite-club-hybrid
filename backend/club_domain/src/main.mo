@@ -36,6 +36,8 @@ import MediaJournalToken "../../shared/MediaJournalToken";
 import MediaGrowthReservations "mediaGrowthReservations";
 import MembershipPage "membershipPage";
 import MembershipIndex "membershipIndex";
+import MembershipDiscovery "membershipDiscovery";
+import MembershipSource "membershipSource";
 import SubscriptionPolicy "subscriptionPolicy";
 
 persistent actor class Main(governorInit : Principal) = this {
@@ -449,18 +451,18 @@ persistent actor class Main(governorInit : Principal) = this {
     if (themeChanged) { changed += 1 };
 
     if (not dry_run) {
-      membershipEpoch += 1;
+      bumpMembershipDiscovery();
       acl := { acl with roles = newRoles; guardians = newGuardians; exclusions = newExclusions; children = newChildren };
-      membershipEpoch += 1;
+      bumpMembershipDiscovery();
       accounts := newAccounts;
-      membershipEpoch += 1;
+      bumpMembershipDiscovery();
       accountExclusions := newAccountExclusions;
       accountRoles := newAccountRoles;
-      membershipEpoch += 1;
+      bumpMembershipDiscovery();
       accountFamilies := newAccountFamilies;
       accountChallenges := newAccountChallenges;
       teamFolders := newTeamFolders;
-      membershipEpoch += 1;
+      bumpMembershipDiscovery();
       teams := newTeams;
       mediaEvidenceRevision += 1;
       newsPosts := newNewsPosts;
@@ -508,13 +510,15 @@ persistent actor class Main(governorInit : Principal) = this {
   // membership-bearing state bumps membershipEpoch; a stale index is rebuilt
   // on the next read. Candidates are always re-verified with isMember, so the
   // index can only accelerate, never grant. Rebuilt after upgrade (transient).
-  transient var membershipEpoch : Nat = 0;
+  var membershipDiscoveryJournal : MembershipDiscovery.Journal;
+  func membershipEpoch() : Nat = membershipDiscoveryJournal.revision;
+  func bumpMembershipDiscovery() { MembershipDiscovery.bump(membershipDiscoveryJournal) };
   transient var memberIndexEpoch : ?Nat = null;
   transient var memberIndex : MembershipIndex.Index = MembershipIndex.empty();
   transient let APP_WIDE = "\u{1F}*";
 
   func currentMemberIndex() : MembershipIndex.Index {
-    if (memberIndexEpoch == ?membershipEpoch) return memberIndex;
+    if (memberIndexEpoch == ?membershipEpoch()) return memberIndex;
     let ix = MembershipIndex.empty();
     for (g in acl.roles.values()) {
       MembershipIndex.add(ix, g.user.toText(), switch (g.club) { case (?c) c; case null APP_WIDE });
@@ -527,7 +531,7 @@ persistent actor class Main(governorInit : Principal) = this {
         for (t in teams.values()) if (t.id == teamId and t.deleted_at_ms == null) for (u in parents.concat(guardians).values()) MembershipIndex.add(ix, u.toText(), t.club_id);
       };
     };
-    memberIndex := ix; memberIndexEpoch := ?membershipEpoch; ix
+    memberIndex := ix; memberIndexEpoch := ?membershipEpoch(); ix
   };
 
   func isMember(caller : Principal, club : Text) : Bool {
@@ -602,7 +606,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid identity authority required");
     if (Runtime.envVar<system>("IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL") != ?"1") return #Err("Cross-group account lifecycle not released");
     if (identityUnlinkReceipts.size() > 0 and identityAccessCanister != ?id) return #Err("Cannot replace identity authority after unlink");
-    identityAccessCanister := ?id; membershipEpoch += 1; #Ok
+    identityAccessCanister := ?id; bumpMembershipDiscovery(); #Ok
   };
   /// Independent deletion-only configuration for an empty owner-test group.
   /// Does not release linked-account sync or register lifecycle receivers.
@@ -621,10 +625,10 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     auth(caller);
     let authority = switch (identityAccessCanister) { case null return #Err("Identity authority not configured"); case (?id) id };
-    let epoch = membershipEpoch;
+    let epoch = membershipEpoch();
     let service : actor { read_linked_account : shared (Principal) -> async { #Ok : LinkedAccount; #Err : Text } } = actor(authority.toText());
     let reply = try { await (with timeout = 10) service.read_linked_account(caller) } catch (_) { return #Err("Identity authority unavailable") };
-    if (identityAccessCanister != ?authority or epoch != membershipEpoch) return #Err("Account authority changed; retry");
+    if (identityAccessCanister != ?authority or epoch != membershipEpoch()) return #Err("Account authority changed; retry");
     let account = switch (reply) { case (#Err(e)) return #Err(e); case (#Ok(a)) a };
     if (account.status != #Active or account.principals.size() == 0 or account.principals.size() > 8 or not account.principals.any(func(p) = p == caller)
         or account.principals.any(Principal.isAnonymous)) return #Err("Invalid linked account");
@@ -641,7 +645,7 @@ persistent actor class Main(governorInit : Principal) = this {
     // Drop obsolete local aliases instead of trusting old local link challenges.
     accounts := accounts.filter(func(a) = a.id != account.id and not a.principals.any(func(p) = account.principals.any(func(q) = p == q)))
       .concat([{ id = account.id; version = account.version; principals = account.principals; legacy_subject = caller }]);
-    membershipEpoch += 1; #Ok
+    bumpMembershipDiscovery(); #Ok
   
     } finally { removalReceiver.leave(caller) };
   };
@@ -661,7 +665,7 @@ persistent actor class Main(governorInit : Principal) = this {
       children = acl.children.map(func(c) = if (c.parent == ?user) ({ c with parent = null }) else c) };
     accounts := accounts.map(func(a) = { a with principals = a.principals.filter(func(p) = p != user) });
     identityUnlinkReceipts := identityUnlinkReceipts.filter(func(r) = not (r.0 == account_id and r.1 == user)).concat([(account_id, user, version)]);
-    membershipEpoch += 1; #Ok
+    bumpMembershipDiscovery(); #Ok
   };
 
   func getListing(club : Text) : Types.Listing {
@@ -703,9 +707,9 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     auth(caller);
     if (not isAdmin(caller, profile.id)) return #Err("Club admin required");
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     profiles := profiles.filter(func(p) = p.id != profile.id);
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     profiles := profiles.concat([profile]);
     #Ok(profile)
   
@@ -869,9 +873,9 @@ persistent actor class Main(governorInit : Principal) = this {
     } else if (not isAdmin(caller, team.club_id)) {
       return #Err("Club admin required");
     };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     teams := teams.filter(func(t) = t.id != team.id);
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     teams := teams.concat([team]);
     if (team.club_id == "") {
       if (isNew and not isPersonalTeamOwner(caller, team.id)) {
@@ -1020,7 +1024,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not isAdmin(caller, folder.club_id)) return #Err("Club admin required");
         teamFolders := teamFolders.filter(func(f) = f.id != folder_id);
         // Teams in the deleted folder fall back to the unfiled group.
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         teams := teams.map(func(t) = if (t.folder_id == ?folder_id) ({ t with folder_id = null }) else t);
         #Ok
       };
@@ -1056,7 +1060,7 @@ persistent actor class Main(governorInit : Principal) = this {
           case null {};
         };
         let updated = { team with folder_id = folder_id };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         teams := teams.map(func(t) = if (t.id == team_id) updated else t);
         #Ok(updated)
       };
@@ -1705,13 +1709,13 @@ persistent actor class Main(governorInit : Principal) = this {
             switch (acl.children.find(func(c) = c.id == invite.child_id)) {
               case null {
                 let child : Types.Child = { id = invite.child_id; teams = [team]; parent = null; club_id = ?invite.club_id };
-                membershipEpoch += 1;
+                bumpMembershipDiscovery();
                 acl := { acl with children = acl.children.concat([child]) };
               };
               case (?child) {
                 if (not child.teams.any(func(t) = t == team)) {
                   let updated : Types.Child = { child with teams = child.teams.concat([team]) };
-                  membershipEpoch += 1;
+                  bumpMembershipDiscovery();
                   acl := { acl with children = acl.children.map(func(c) = if (c.id == invite.child_id) updated else c) };
                 };
               };
@@ -1720,13 +1724,13 @@ persistent actor class Main(governorInit : Principal) = this {
           case null {};
         };
         if (not acl.guardians.any(func(g) = g.child == invite.child_id and g.user.equal(caller))) {
-          membershipEpoch += 1;
+          bumpMembershipDiscovery();
           acl := { acl with guardians = acl.guardians.concat([{ child = invite.child_id; user = caller }]) };
         };
         switch (accountFor(caller)) {
           case (?account) {
             if (not accountFamilies.any(func(f) = f.account_id == account.id and f.child_id == invite.child_id)) {
-              membershipEpoch += 1;
+              bumpMembershipDiscovery();
               accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = invite.child_id }]);
             };
           };
@@ -2446,7 +2450,7 @@ persistent actor class Main(governorInit : Principal) = this {
   func dropClubScope(club : Text) {
     let ids = clubTeamIds(club);
     let newsIds = newsPosts.filter(func(n) = n.club_id == club).map(func(n) = n.id);
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     profiles := profiles.filter(func(p) = p.id != club);
     settings := settings.filter(func(x) = x.club_id != club);
     teams := teams.filter(func(t) = t.club_id != club);
@@ -2597,7 +2601,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func replace_acl(rev : Nat64, new_acl : Types.Acl) : async { #Ok : Nat64; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor required");
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := new_acl;
     aclVersion := rev;
     #Ok(rev)
@@ -2695,7 +2699,7 @@ persistent actor class Main(governorInit : Principal) = this {
         };
       };
     };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with roles = acl.roles.filter(func(g) = AccountErasure.keepRole(g, principals)); exclusions };
     accountRoles := accountRoles.filter(func(g) = g.account_id != accountId);
     #Ok
@@ -2744,10 +2748,41 @@ persistent actor class Main(governorInit : Principal) = this {
     acl.roles.filter(func(grant) = grant.user.equal(caller))
   };
 
-  // Caller-only consensus read; linked principals come from this canister's
-  // verified account, never a browser-supplied account/principal list.
-  // At most 200 profile slots scanned per call. Cursor is not a snapshot:
-  // consumers revalidate discovered memberships against current authority.
+  // Operator-only consensus source export. Bounded raw edges pin the durable
+  // mutation revision; no member-index rebuild or resource permission grant.
+  public shared ({ caller }) func read_membership_source_page(cursor : ?MembershipSource.Cursor) : async { #Ok : MembershipSource.Page; #Err : Text } {
+    // Source-wide personal relationship evidence is operator-only until the
+    // separate exact central-reader binding/propagation release is verified.
+    if (not isGovernor(caller)) return #Err("Governor required");
+    let sizes = [profiles.size(), acl.roles.size(), acl.children.size(), acl.guardians.size(), acl.teams.size(), teams.size(), acl.exclusions.size(), removedMembers.size()];
+    func width(phase : Nat, offset : Nat) : Nat {
+      if (phase == 2) acl.children[offset].teams.size() + 1 else 1
+    };
+    func edge(phase : Nat, offset : Nat, nested : Nat) : ?MembershipSource.Edge {
+      switch (phase) {
+        case (0) { let c = profiles[offset]; ?#Club({ id = c.id; deleted = c.deleted_at_ms != null }) };
+        case (1) { let g = acl.roles[offset]; ?#Role({ subject = g.user; club = g.club }) };
+        case (2) {
+          let c = acl.children[offset];
+          if (nested == 0) switch (c.parent) { case (?subject) ?#Parent({ child = c.id; subject }); case null null }
+          else ?#ChildTeam({ child = c.id; team = c.teams[nested - 1] })
+        };
+        case (3) { let g = acl.guardians[offset]; ?#Guardian({ child = g.child; subject = g.user }) };
+        case (4) { let t = acl.teams[offset]; ?#Team({ id = t.id; club = t.club; deleted = false }) };
+        case (5) { let t = teams[offset]; ?#Team({ id = t.id; club = t.club_id; deleted = t.deleted_at_ms != null }) };
+        case (6) { let e = acl.exclusions[offset]; ?#Excluded({ subject = e.user; club = e.club }) };
+        case (7) { let e = removedMembers[offset]; ?#Excluded({ subject = e.user; club = e.club }) };
+        case (_) null
+      }
+    };
+    MembershipSource.read(membershipEpoch(), cursor, sizes, width, edge)
+  };
+
+  public shared ({ caller }) func read_membership_discovery_status() : async { #Ok : { revision : Nat; acknowledged : Nat; pending : Bool }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok({ revision = membershipEpoch(); acknowledged = membershipDiscoveryJournal.acknowledged; pending = MembershipDiscovery.pending(membershipDiscoveryJournal) })
+  };
+
   public shared ({ caller }) func read_my_club_memberships(offset : Nat, limit : Nat16) : async {
     #Ok : { clubs : [Text]; next : ?Nat; acl_revision : Nat64 }; #Err : Text
   } {
@@ -2983,7 +3018,7 @@ persistent actor class Main(governorInit : Principal) = this {
             let account = accounts[accountIndex];
             if (account.version != challenge.expected_version or not account.principals.any(func(item) = item.equal(challenge.issuer))) return #Err("Link authorization changed");
             let updated : Types.Account = { account with version = account.version + 1; principals = account.principals.concat([caller]) };
-            membershipEpoch += 1;
+            bumpMembershipDiscovery();
             accounts := Array.tabulate<Types.Account>(accounts.size(), func(position) { if (position == accountIndex) updated else accounts[position] });
             let accepted : Types.Challenge = { challenge with accepted = true };
             accountChallenges := Array.tabulate<Types.Challenge>(accountChallenges.size(), func(position) { if (position == index) accepted else accountChallenges[position] });
@@ -3015,7 +3050,7 @@ persistent actor class Main(governorInit : Principal) = this {
         switch (Array.findIndex(accounts, func(account) = account.id == current.id)) {
           case null { #Err("Account unavailable") };
           case (?index) {
-            membershipEpoch += 1;
+            bumpMembershipDiscovery();
             accounts := Array.tabulate<Types.Account>(accounts.size(), func(position) { if (position == index) updated else accounts[position] });
             #Ok(updated)
           };
@@ -3046,7 +3081,7 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     if (role == "") return #Err("Invalid role");
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with roles = acl.roles.concat([{ user; role; club = ?club; team }]) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.concat([{ account_id = accountId; club = ?club; role; team }]);
@@ -3067,7 +3102,7 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with roles = acl.roles.filter(func(g) = not (g.user.equal(user) and g.role == role and g.club == ?club and g.team == team)) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.filter(func(g) = not (g.account_id == accountId and g.role == role and g.club == ?club and g.team == team));
@@ -3089,7 +3124,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with roles = acl.roles.filter(func(g) = not (g.user.equal(user) and g.club == ?club)) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.filter(func(g) = not (g.account_id == accountId and g.club == ?club));
@@ -3111,6 +3146,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
+    bumpMembershipDiscovery();
     removedMembers := removedMembers.filter(func(m) = not (m.club == club and m.user.equal(user)));
     #Ok
   
@@ -3168,7 +3204,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?req) {
         if (not isAdmin(caller, req.club)) return #Err("Club admin required");
         if (req.status != "pending") return #Err("Request already processed");
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = req.role; club = ?req.club; team = req.team }]) };
         accountRoles := accountRoles.concat([{ account_id = req.account_id; club = ?req.club; role = req.role; team = req.team }]);
         ignore fanOutEnsureConversation(req.club, null, clubChatParticipants(req.club));
@@ -3216,7 +3252,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         let updated : Types.ClubTeam = { team with deleted_at_ms = ?nowMs() };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         teams := teams.map(func(t) = if (t.id == id) updated else t);
         #Ok(updated)
       };
@@ -3236,7 +3272,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         if (team.deleted_at_ms != null) { switch (teamCapacityError(team.club_id, 1)) { case (?error) return #Err(error); case null {} } };
         let updated : Types.ClubTeam = { team with deleted_at_ms = null };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         teams := teams.map(func(t) = if (t.id == id) updated else t);
         #Ok(updated)
       };
@@ -3288,10 +3324,10 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?club) {
         let now = nowMs();
         let updated : Types.ClubProfile = { club with deleted_at_ms = ?now };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         profiles := profiles.map(func(p) = if (p.id == id) updated else p);
         if (cascade_teams) {
-          membershipEpoch += 1;
+          bumpMembershipDiscovery();
           teams := teams.map(func(t) = if (t.club_id == id and t.deleted_at_ms == null) ({ t with deleted_at_ms = ?now }) else t);
         };
         #Ok(updated)
@@ -3320,12 +3356,12 @@ persistent actor class Main(governorInit : Principal) = this {
           switch (teamCapacityError(id, count)) { case (?error) return #Err(error); case null {} }
         };
         let updated : Types.ClubProfile = { club with deleted_at_ms = null };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         profiles := profiles.map(func(p) = if (p.id == id) updated else p);
         if (cascade_teams) {
           switch (deletedAt) {
             case (?ts) {
-              membershipEpoch += 1;
+              bumpMembershipDiscovery();
               teams := teams.map(func(t) = if (t.club_id == id and t.deleted_at_ms == ?ts) ({ t with deleted_at_ms = null }) else t);
             };
             case null {};
@@ -3415,7 +3451,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (invite.accepted_by != null) return #Err("Invite already accepted");
         if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         acl := { acl with roles = acl.roles.concat([{ user = caller; role = invite.role; club = ?invite.club_id; team = ?invite.team_id }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?invite.club_id; role = invite.role; team = ?invite.team_id }]);
         let accepted : Types.TeamInvite = { invite with accepted_by = ?caller };
@@ -3477,7 +3513,7 @@ persistent actor class Main(governorInit : Principal) = this {
       playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
       folder_id = null;
     };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     teams := teams.concat([team]);
     #Ok(team)
   
@@ -3510,9 +3546,9 @@ persistent actor class Main(governorInit : Principal) = this {
         if (team.shell_claimed_by != null) return #Err("Shell team already claimed");
         if (team.deleted_at_ms != null) return #Err("Team no longer available");
         let updated : Types.ClubTeam = { team with shell_claimed_at_ms = ?nowMs(); shell_claimed_by = ?caller };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         teams := teams.map(func(t) = if (t.id == team.id) updated else t);
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         acl := { acl with roles = acl.roles.concat([{ user = caller; role = "team_admin"; club = ?team.club_id; team = ?team.id }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?team.club_id; role = "team_admin"; team = ?team.id }]);
         #Ok(updated)
@@ -3661,7 +3697,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (isExcluded(caller, link.club_id)) return #Err("Forbidden");
         if (not acl.roles.any(func(g) = g.user.equal(caller) and g.role == link.role and g.club == ?link.club_id and g.team == ?link.team_id)) {
           let grant : Types.RoleGrant = { user = caller; role = link.role; club = ?link.club_id; team = ?link.team_id };
-          membershipEpoch += 1;
+          bumpMembershipDiscovery();
           acl := { acl with roles = acl.roles.concat([grant]) };
         };
         #Ok(link)
@@ -3887,13 +3923,13 @@ persistent actor class Main(governorInit : Principal) = this {
                   switch (acl.children.find(func(c) = c.id == childId)) {
                     case null {
                       let child : Types.Child = { id = childId; teams = [team]; parent = null; club_id = ?invite.club_id };
-                      membershipEpoch += 1;
+                      bumpMembershipDiscovery();
                       acl := { acl with children = acl.children.concat([child]) };
                     };
                     case (?child) {
                       if (not child.teams.any(func(t) = t == team)) {
                         let updatedChild : Types.Child = { child with teams = child.teams.concat([team]) };
-                        membershipEpoch += 1;
+                        bumpMembershipDiscovery();
                         acl := { acl with children = acl.children.map(func(c) = if (c.id == childId) updatedChild else c) };
                       };
                     };
@@ -3902,13 +3938,13 @@ persistent actor class Main(governorInit : Principal) = this {
                 case null {};
               };
               if (not acl.guardians.any(func(g) = g.child == childId and g.user.equal(caller))) {
-                membershipEpoch += 1;
+                bumpMembershipDiscovery();
                 acl := { acl with guardians = acl.guardians.concat([{ child = childId; user = caller }]) };
               };
               switch (accountFor(caller)) {
                 case (?account) {
                   if (not accountFamilies.any(func(fam) = fam.account_id == account.id and fam.child_id == childId)) {
-                    membershipEpoch += 1;
+                    bumpMembershipDiscovery();
                     accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = childId }]);
                   };
                 };
@@ -3924,7 +3960,7 @@ persistent actor class Main(governorInit : Principal) = this {
             case (?role) {
               if (not acl.roles.any(func(g) = g.user.equal(caller) and g.role == role and g.club == ?invite.club_id and g.team == invite.team_id)) {
                 let grant : Types.RoleGrant = { user = caller; role; club = ?invite.club_id; team = invite.team_id };
-                membershipEpoch += 1;
+                bumpMembershipDiscovery();
                 acl := { acl with roles = acl.roles.concat([grant]) };
               };
             };
@@ -3973,7 +4009,7 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (not canManageChild(caller, child_id)) return #Err("Club admin required");
     if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))) {
-      membershipEpoch += 1;
+      bumpMembershipDiscovery();
       acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user }]) };
     };
     #Ok
@@ -3987,7 +4023,7 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     auth(caller);
     if (not (canManageChild(caller, child_id) or caller.equal(user))) return #Err("Forbidden");
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with guardians = acl.guardians.filter(func(g) = not (g.child == child_id and g.user.equal(user))) };
     guardianMeta := guardianMeta.filter(func(m) = not (m.child_id == child_id and m.user.equal(user)));
     #Ok
@@ -4029,10 +4065,10 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Child not found") };
       case (?child) {
         let updated : Types.Child = { child with parent = ?parent };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
         if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(parent))) {
-          membershipEpoch += 1;
+          bumpMembershipDiscovery();
           acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user = parent }]) };
         };
         #Ok(updated)
@@ -4056,9 +4092,9 @@ persistent actor class Main(governorInit : Principal) = this {
       parent = ?parent;
       club_id = ?club_id;
     };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with children = acl.children.concat([child]) };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = parent }]) };
     #Ok(child)
   
@@ -4082,9 +4118,9 @@ persistent actor class Main(governorInit : Principal) = this {
       parent = ?parent;
       club_id = ?club_id;
     };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with children = acl.children.concat([child]) };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = parent }]) };
     #Ok(child)
   
@@ -4134,12 +4170,12 @@ persistent actor class Main(governorInit : Principal) = this {
       parent = ?caller;
       club_id = null;
     };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with children = acl.children.concat([child]) };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = caller }]) };
     switch (accountFor(caller)) {
-      case (?account) { membershipEpoch += 1; accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = child.id }]) };
+      case (?account) { bumpMembershipDiscovery(); accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = child.id }]) };
       case null {};
     };
     #Ok(child)
@@ -4156,12 +4192,12 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Child not found") };
       case (?child) {
         if (not isChildPrimary(caller, child)) return #Err("Only the primary parent can remove this child");
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         acl := { acl with
           children = acl.children.filter(func(c) = c.id != child_id);
           guardians = acl.guardians.filter(func(g) = g.child != child_id);
         };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         accountFamilies := accountFamilies.filter(func(f) = f.child_id != child_id);
         #Ok
       };
@@ -4186,7 +4222,7 @@ persistent actor class Main(governorInit : Principal) = this {
           if (child.teams.any(func(t) = t == team_id)) child.teams else child.teams.concat([team_id])
         } else child.teams.filter(func(t) = t != team_id);
         let updated : Types.Child = { child with teams };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
         #Ok(updated)
       };
@@ -4209,11 +4245,11 @@ persistent actor class Main(governorInit : Principal) = this {
         if (isChildPrimary(user, child) and not linked) return #Err("Cannot remove the primary parent");
         if (linked) {
           if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))) {
-            membershipEpoch += 1;
+            bumpMembershipDiscovery();
             acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user }]) };
           };
         } else {
-          membershipEpoch += 1;
+          bumpMembershipDiscovery();
           acl := { acl with guardians = acl.guardians.filter(func(g) = not (g.child == child_id and g.user.equal(user))) };
         };
         #Ok
@@ -4233,7 +4269,7 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (not teamInClub(to_team, club_id)) return #Err("Target team not found in club");
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with roles = acl.roles.map(func(g) = if (g.user.equal(user) and g.club == ?club_id and g.team == from_team) ({ g with team = ?to_team }) else g) };
     accountRoles := accountRoles.map(func(g) = if (g.account_id == accountIdFor(user) and g.club == ?club_id and g.team == from_team) ({ g with team = ?to_team }) else g);
     #Ok
@@ -4259,7 +4295,7 @@ persistent actor class Main(governorInit : Principal) = this {
             };
             let newTeams = if (keptTeams.any(func(t) = t == to_team)) keptTeams else keptTeams.concat([to_team]);
             let updated : Types.Child = { child with teams = newTeams };
-            membershipEpoch += 1;
+            bumpMembershipDiscovery();
             acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
             #Ok(updated)
           };
@@ -4282,7 +4318,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (role == "") return #Err("Invalid role");
     if (users.size() > 200) return #Err("Too many members");
     for (user in users.values()) {
-      membershipEpoch += 1;
+      bumpMembershipDiscovery();
       acl := { acl with roles = acl.roles.concat([{ user; role; club = ?club_id; team = ?team_id }]) };
       accountRoles := accountRoles.concat([{ account_id = accountIdFor(user); club = ?club_id; role; team = ?team_id }]);
     };
@@ -4305,7 +4341,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         let updated : Types.ClubTeam = { team with archived = true };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         teams := teams.map(func(t) = if (t.id == id) updated else t);
         #Ok(updated)
       };
@@ -4324,7 +4360,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         let updated : Types.ClubTeam = { team with archived = false };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         teams := teams.map(func(t) = if (t.id == id) updated else t);
         #Ok(updated)
       };
@@ -4394,7 +4430,7 @@ persistent actor class Main(governorInit : Principal) = this {
           playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
           folder_id = null;
         };
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         teams := teams.concat([team]);
         let updated : Types.TeamCreationRequest = { req with status = "approved"; decided_at_ms = ?now; decided_by = ?caller; team_id = ?team.id };
         teamCreationRequests := teamCreationRequests.map(func(r) = if (r.id == id) updated else r);
@@ -4555,9 +4591,9 @@ persistent actor class Main(governorInit : Principal) = this {
       deleted_at_ms = null;
       playhq_tenant = null; playhq_org_id = null;
     };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     profiles := profiles.concat([profile]);
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := { acl with roles = acl.roles.concat([{ user = caller; role = "club_admin"; club = ?id; team = null }]) };
     accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?id; role = "club_admin"; team = null }]);
     // Provision the club chat on the messaging canister (best-effort).
@@ -4648,7 +4684,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?req) {
         if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
         if (req.status != "pending") return #Err("Request already processed");
-        membershipEpoch += 1;
+        bumpMembershipDiscovery();
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = "member"; club = ?req.club_id; team = null }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(req.user); club = ?req.club_id; role = "member"; team = null }]);
         ignore fanOutEnsureConversation(req.club_id, null, clubChatParticipants(req.club_id));
@@ -5287,9 +5323,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // Removes every club_domain record scoped to one team. Callers must have
   // already verified the team is soft-deleted and the caller may delete it.
   func purgeTeamLocal(teamId : Text) {
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     teams := teams.filter(func(t) = t.id != teamId);
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := {
       teams = acl.teams.filter(func(t) = t.id != teamId);
       guardians = acl.guardians;
@@ -5320,17 +5356,17 @@ persistent actor class Main(governorInit : Principal) = this {
     let clubTeamIds = teams.filter(func(t) = t.club_id == id).map(func(t) = t.id);
     let clubNewsIds = newsPosts.filter(func(post) = post.club_id == id).map(func(post) = post.id);
     func isClubTeam(teamId : Text) : Bool { clubTeamIds.any(func(t) = t == teamId) };
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     profiles := profiles.filter(func(p) = p.id != id);
     settings := settings.filter(func(s) = s.club_id != id);
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     teams := teams.filter(func(t) = t.club_id != id);
     teamFolders := teamFolders.filter(func(f) = f.club_id != id);
     sponsors := sponsors.filter(func(s) = s.club_id != id);
     clubListings := clubListings.filter(func(e) = e.0 != id);
     mediaEvidenceRevision += 1;
     frozenClubs := frozenClubs.filter(func(e) = e.0 != id);
-    membershipEpoch += 1;
+    bumpMembershipDiscovery();
     acl := {
       teams = acl.teams.filter(func(t) = t.club != id);
       guardians = acl.guardians;

@@ -610,10 +610,38 @@ export const idlFactory = ({ IDL }) => {
     'store' : IDL.Opt(IDL.Text),
     'resource_id' : IDL.Text,
   });
-  const Page = IDL.Record({
+  const Page__1 = IDL.Record({
     'references' : IDL.Vec(Reference),
     'next' : IDL.Opt(IDL.Nat),
     'scanned' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Cursor = IDL.Record({
+    'offset' : IDL.Nat,
+    'nested' : IDL.Nat,
+    'phase' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Edge = IDL.Variant({
+    'Parent' : IDL.Record({ 'subject' : IDL.Principal, 'child' : IDL.Text }),
+    'Club' : IDL.Record({ 'id' : IDL.Text, 'deleted' : IDL.Bool }),
+    'Role' : IDL.Record({
+      'subject' : IDL.Principal,
+      'club' : IDL.Opt(IDL.Text),
+    }),
+    'Team' : IDL.Record({
+      'id' : IDL.Text,
+      'deleted' : IDL.Bool,
+      'club' : IDL.Text,
+    }),
+    'ChildTeam' : IDL.Record({ 'child' : IDL.Text, 'team' : IDL.Text }),
+    'Guardian' : IDL.Record({ 'subject' : IDL.Principal, 'child' : IDL.Text }),
+    'Excluded' : IDL.Record({ 'subject' : IDL.Principal, 'club' : IDL.Text }),
+  });
+  const Page = IDL.Record({
+    'next' : IDL.Opt(Cursor),
+    'scanned' : IDL.Nat,
+    'edges' : IDL.Vec(Edge),
     'revision' : IDL.Nat,
   });
   const Main = IDL.Service({
@@ -1985,7 +2013,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_club_media_references' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
-        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Page__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_club_retained_media_bytes' : IDL.Func(
@@ -2043,6 +2071,25 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_media_retained_ready' : IDL.Func([], [IDL.Bool], []),
+    'read_membership_discovery_status' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'pending' : IDL.Bool,
+              'acknowledged' : IDL.Nat,
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_membership_source_page' : IDL.Func(
+        [IDL.Opt(Cursor)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
+        [],
+      ),
     'read_my_club_memberships' : IDL.Func(
         [IDL.Nat, IDL.Nat16],
         [

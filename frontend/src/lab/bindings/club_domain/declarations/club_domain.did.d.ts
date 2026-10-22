@@ -189,6 +189,12 @@ export interface Config {
   'governor' : Principal,
   'acl_version' : bigint,
 }
+export interface Cursor {
+  'offset' : bigint,
+  'nested' : bigint,
+  'phase' : bigint,
+  'revision' : bigint,
+}
 export interface Draft {
   'url' : string,
   'title' : string,
@@ -197,6 +203,13 @@ export interface Draft {
   'open_mode' : string,
   'subtitle' : [] | [string],
 }
+export type Edge = { 'Parent' : { 'subject' : Principal, 'child' : string } } |
+  { 'Club' : { 'id' : string, 'deleted' : boolean } } |
+  { 'Role' : { 'subject' : Principal, 'club' : [] | [string] } } |
+  { 'Team' : { 'id' : string, 'deleted' : boolean, 'club' : string } } |
+  { 'ChildTeam' : { 'child' : string, 'team' : string } } |
+  { 'Guardian' : { 'subject' : Principal, 'child' : string } } |
+  { 'Excluded' : { 'subject' : Principal, 'club' : string } };
 export interface Exclusion { 'club' : string, 'user' : Principal }
 export interface Family { 'account_id' : string, 'child_id' : string }
 export interface Guardian { 'child' : string, 'user' : Principal }
@@ -1373,7 +1386,7 @@ export interface Main {
   >,
   'read_club_media_references' : ActorMethod<
     [string, bigint, [] | [bigint]],
-    { 'Ok' : Page } |
+    { 'Ok' : Page__1 } |
       { 'Err' : string }
   >,
   'read_club_retained_media_bytes' : ActorMethod<
@@ -1398,6 +1411,22 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_media_retained_ready' : ActorMethod<[], boolean>,
+  'read_membership_discovery_status' : ActorMethod<
+    [],
+    {
+        'Ok' : {
+          'pending' : boolean,
+          'acknowledged' : bigint,
+          'revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'read_membership_source_page' : ActorMethod<
+    [[] | [Cursor]],
+    { 'Ok' : Page } |
+      { 'Err' : string }
+  >,
   'read_my_club_memberships' : ActorMethod<
     [bigint, number],
     {
@@ -2059,6 +2088,12 @@ export type Operation__1 = {
   { 'Remove' : { 'id' : string } } |
   { 'Reorder' : { 'first' : string, 'second' : string } };
 export interface Page {
+  'next' : [] | [Cursor],
+  'scanned' : bigint,
+  'edges' : Array<Edge>,
+  'revision' : bigint,
+}
+export interface Page__1 {
   'references' : Array<Reference>,
   'next' : [] | [bigint],
   'scanned' : bigint,
