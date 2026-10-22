@@ -1,3 +1,4 @@
+# Superseded for new groups by "Add new group" (add-group.yml); kept for maintenance.
 # Configure an already-installed new club group on mainnet, kept CLOSED.
 # Signs with the DEPLOYER_PEM secret; never registers or opens the group.
 # Input: path to the group's committed provision.json (phase "installed").

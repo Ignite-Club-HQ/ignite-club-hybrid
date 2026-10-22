@@ -1,3 +1,4 @@
+# Superseded for new groups by "Add new group" (add-group.yml); kept for maintenance.
 # Create, install and configure a NEW club group on mainnet, kept CLOSED.
 # Signs with DEPLOYER_PEM. Spends cycles from the deploy identity (about
 # 1.6T per service, 13 services). Never registers or opens the group, never
