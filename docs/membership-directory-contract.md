@@ -1,6 +1,6 @@
 # Stage B: authority-backed membership display directory
 
-Status: durable source invalidation, operator traversal and offline directory/staging core implemented locally; central propagation/read API and cutover not implemented or released.
+Status: durable source invalidation, operator traversal, bounded membership reconstruction and offline directory/staging core implemented locally; central propagation/read API and cutover not implemented or released.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
 ## Scope and ownership
@@ -59,11 +59,14 @@ Every row requires actual helper/timer entry-point mapping and a regression befo
 - Isolated stable staging uses separate caller-provided memories, <=100 rows of <=1024 bytes per chunk, exact ordered replay and resumable progress across reopen. It allocates no production memory IDs and has no public methods. Source manifests remain incomplete during replacement staging.
 - Populated legacy local upgrade passes: 251 child/team edges across bounded pages, normal upgrade/cursor preservation, governor-only access, removal/restore revisions and last-family-assignment removal preserving another club.
 - Real two-group encrypted-media regression passes: fresh key/upload denial after removal (including pending work), retained-member and other-club access, authority outage, marker restore and upgrade persistence.
-- 68 identity tests and 35 existing frontend membership/discovery tests pass; new Motoko discovery tests and existing membership index/page tests pass. All 17 interfaces match; ICP-mode guards and preview checks pass.
+- Bounded stable materialization now indexes roles, family relationships, child teams, live-team OR evidence, exclusions and active clubs. Each ingest/join/read advances at most 100 edges/steps/rows; join cursors survive reopening stable memories. A complete pinned authority/generation/revision/inventory digest is required; drift rejects instead of reusing an old stage.
+- Null-club roles remain explicit, with bounded caller-scoped active-club paging rather than expanding all app-wide accounts across every club during backfill. Removed/deleted clubs and excluded subjects never appear in effective outputs.
+- The disposable populated-canister test feeds real exported edges into the Rust builder and compares results to `is_club_member`, including parents, guardians, app-wide roles, removal/restore, last-assignment loss and club deletion/restore. Unit tests cover 251-team resume, live/deleted team overlap, missing teams, direct-role veto, ordered replay and a 205-club app-wide read in bounded pages.
+- 72 identity tests and 35 existing frontend membership/discovery tests pass; new Motoko discovery tests and existing membership index/page tests pass. All 17 interfaces match; ICP-mode guards and preview checks pass.
 
 ### Remaining integration and release gates
 
-No propagation worker, source acknowledgement endpoint, authenticated central reader or frontend directory cutover is installed. Stable staging deliberately does not verify raw-edge-to-effective-membership equivalence: bounded materialization and an account/source index must be added before runtime integration. Production memory IDs, account alias/version handling, rekey/merge/erasure and exact registry/placement writer binding need their own acceptance checks.
+No propagation worker, source acknowledgement endpoint, authenticated central reader or frontend directory cutover is installed. Bounded raw-source joins are locally parity-tested, but production integration still needs exact registry/placement bindings, shared account/source indexing, verified alias/version handling and rekey/merge/erasure acceptance. Production memory IDs have not been allocated. Builder stages currently use isolated test memories; a multi-source generation namespace and bounded reclamation/budgets are mandatory before production allocation.
 
 Rollback to older authority state is unsupported for directory cutover until an externally fenced replacement generation is bound into source cursors and propagation evidence. A restored local counter cannot discover the central high watermark. Ordinary upgrades must continue preserving revisions. Old staging-chunk reclamation and bounded storage budgets also remain required before enabling ingestion.
 
