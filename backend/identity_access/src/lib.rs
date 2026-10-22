@@ -609,7 +609,7 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
                     let location:membership_transport::Reply<membership_locations::Assignment>=reply.candid().map_err(|_|"Invalid club ownership reply")?;
                     match location{
                         membership_transport::Reply::Ok(assignment)=>membership_locations::verify(id,&source,authority,&assignment,&config.sources,config.binding.registry_revision)?,
-                        membership_transport::Reply::Err(error) if error=="Missing club assignment"=>{},
+                        membership_transport::Reply::Err(error) if error=="Missing club assignment"=>DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().unresolved_location(&source,&captured))?,
                         membership_transport::Reply::Err(error)=>return Err(error),
                     }
                 }
