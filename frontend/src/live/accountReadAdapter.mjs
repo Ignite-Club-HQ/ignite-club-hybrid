@@ -93,7 +93,7 @@ export function adaptRemoteAccountReads(actor, service, canisterId) {
           return await value.apply(target, args);
         } catch (e) {
           if (!PROTECTED_READ_TRAP.test(String((e && e.message) || e))) throw e;
-          protectedReadDecisions.add(`${canisterId}|${property}`);
+          rememberDecision(`${canisterId}|${property}`);
           return twin.apply(target, args);
         }
       };
