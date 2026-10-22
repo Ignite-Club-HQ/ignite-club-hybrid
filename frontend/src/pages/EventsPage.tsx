@@ -65,7 +65,7 @@ import { listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/mi
 import { getLiveAccountRosterScope, listLiveEventDutyTeams, listLiveEvents } from "@/live/features/events";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
-import { listLiveCompetitionMatches, listLiveCompetitionsMulti, listLiveMyNewsCompetitions, listLivePublicCompetitions } from "@/live/features/competitions";
+import { loadScheduleFixtures, type FixtureSnapshot } from "@/live/scheduleFixtures";
 
 /** Derive the memberships shape the schedule filters need from the caller's
  * club_domain role grants + events_domain roster scope (live ICP path).
@@ -723,6 +723,29 @@ export default function EventsPage() {
     [user?.id, filter, teamFilter, clubFilter, viewerRoleScope]
   );
 
+  // Wider foreign-host fixture discovery is separate from the member schedule.
+  // A slow host must not hold the club events query (or vice versa).
+  const fixturesKey = ['icp-schedule-fixtures', user?.id, viewerRoleScope, filter, teamFilter, clubFilter, viewMode, pastDaysBack];
+  const fixtureQuery = useQuery({
+    queryKey: fixturesKey,
+    enabled: isIcpAuthBackend && !!userMemberships && (filter === 'all' || filter === 'game'),
+    queryFn: ({ signal }) => withFeatureBackend('events', {
+      supabase: async () => { throw new Error('unreachable'); },
+      icp: ctx => {
+        const from = new Date(); from.setDate(from.getDate() - Math.max(30, pastDaysBack));
+        const to = new Date(); to.setDate(to.getDate() + (viewMode === 'calendar' ? 240 : 45));
+        return loadScheduleFixtures(ctx, {
+          leagueClubIds: userMemberships?.leagueAdminClubIds ?? [], clubId: clubFilter ?? null,
+          teamId: teamFilter && !teamFilter.startsWith('ml:') ? teamFilter : null,
+          fromMs: from.getTime(), toMs: to.getTime(),
+        }, next => { if (!signal.aborted) queryClient.setQueryData<FixtureSnapshot>(fixturesKey, next); });
+      },
+    }, { shared: 'person' }),
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
+  });
+
   const { data: eventsData, isLoading, isFetching, isError: eventsIsError, refetch: refetchEvents } = useQuery({
     queryKey: ["events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, userMemberships?.miniLeagueIds, viewerRoleScope],
     queryFn: async () => {
@@ -792,16 +815,6 @@ export default function EventsPage() {
 
             // Fetch every club's events at once, then resolve all team/club
             // names in parallel so the loop below only reads from cache.
-            const leagueClubIdsEarly = userMemberships?.leagueAdminClubIds ?? [];
-            const competitionSources = (filter === "all" || filter === "game")
-              ? Promise.all([
-                  listLiveMyNewsCompetitions(ctx).catch(() => [] as any[]),
-                  leagueClubIdsEarly.length > 0
-                    ? listLiveCompetitionsMulti(ctx, leagueClubIdsEarly).catch(() => [] as any[])
-                    : Promise.resolve([] as any[]),
-                  listLivePublicCompetitions(ctx).catch(() => [] as any[]),
-                ])
-              : null;
             const rowsByClub = scopeClubIds.length > 0
               // Each club from its own group; one failing club never hides the others.
               ? await Promise.allSettled(scopeClubIds.map((clubId) =>
@@ -876,63 +889,6 @@ export default function EventsPage() {
               }
             }
             all.sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
-
-            const finalEvents: Event[] =
-              viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
-
-            if (filter === "all" || filter === "game") {
-              const [managed, leagueClubCompetitions, publicCompetitions] = await competitionSources!;
-              const competitions = [...new Map([...managed, ...leagueClubCompetitions, ...publicCompetitions]
-                .filter((competition: any) => competition.status !== "archived")
-                .filter((competition: any) => competition.visibility === "public" ||
-                  managed.some((item: any) => item.id === competition.id) ||
-                  leagueClubCompetitions.some((item: any) => item.id === competition.id))
-                .filter((competition: any) => !clubFilter || competition.club_id === clubFilter)
-                .map((competition: any) => [competition.id, competition])).values()];
-              const fixtures = await Promise.all(competitions.map(async (competition: any) => {
-                const matches = await listLiveCompetitionMatches(ctx, competition.id).catch(() => [] as any[]);
-                const scheduled = matches.filter((match: any) => {
-                  const raw = Array.isArray(match.scheduled_at_ms) ? match.scheduled_at_ms[0] : match.scheduled_at_ms;
-                  if (raw == null || match.status === "cancelled") return false;
-                  const startsAt = new Date(Number(raw));
-                  return startsAt >= thirtyDaysAgo && startsAt <= upperBound &&
-                    (!selectedTeamId || match.home_team === selectedTeamId || match.away_team === selectedTeamId);
-                });
-                const teamIdsForMatches = new Set<string>(scheduled.flatMap((match: any) => [match.home_team, match.away_team]));
-                await Promise.all([...teamIdsForMatches].map(getTeamName));
-                const club = await getClubInfo(competition.club_id);
-                return scheduled.map((match: any) => {
-                  const raw = Array.isArray(match.scheduled_at_ms) ? match.scheduled_at_ms[0] : match.scheduled_at_ms;
-                  const start = new Date(Number(raw));
-                  const home = teamNameCache.get(match.home_team) ?? "Home team";
-                  const away = teamNameCache.get(match.away_team) ?? "Away team";
-                  return {
-                    id: `competition-fixture-${match.id}`,
-                    title: competition.name,
-                    type: "game" as EventType,
-                    event_date: start.toISOString(),
-                    start_time: start.toISOString(),
-                    address: match.venue?.[0] ?? null,
-                    suburb: null,
-                    location_name: match.venue?.[0] ?? null,
-                    club_id: competition.club_id,
-                    team_id: null,
-                    mini_league_id: null,
-                    is_cancelled: false,
-                    is_bye: false,
-                    is_recurring: false,
-                    parent_event_id: null,
-                    opponent: `${home} vs ${away}`,
-                    teams: null,
-                    clubs: club,
-                    competition_id: competition.id,
-                    is_competition_fixture: true,
-                  } satisfies Event;
-                });
-              }));
-              all.push(...fixtures.flat());
-              all.sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
-            }
 
             const scheduleEvents: Event[] = viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
             cacheEventsList(eventsScopeKey, scheduleEvents, user?.id);
@@ -1090,8 +1046,14 @@ export default function EventsPage() {
 
   // Never let a failed/never-resolving network query blank out cached data.
   const events = useMemo(
-    () => (eventsData ?? offlineCachedEvents)?.filter(hasValidScheduleDate),
-    [eventsData, offlineCachedEvents],
+    () => {
+      const memberEvents = eventsData ?? offlineCachedEvents;
+      const fixtures = isIcpAuthBackend && (filter === 'all' || filter === 'game') ? fixtureQuery.data?.events : undefined;
+      if (!memberEvents && !fixtures) return undefined;
+      return [...new Map([...(memberEvents ?? []), ...(fixtures ?? [])].map(event => [event.id, event])).values()]
+        .filter(hasValidScheduleDate).sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
+    },
+    [eventsData, offlineCachedEvents, fixtureQuery.data?.events, isIcpAuthBackend, filter],
   );
   const showingOfflineCache = !isOnline && !eventsData && !!offlineCachedEvents;
   const offlineNoCache = !isOnline && !events;
@@ -1330,6 +1292,8 @@ export default function EventsPage() {
       data-schedule-scroll-anchor="disabled"
     >
       {leagueDiscovery.isPending && isIcpAuthBackend && <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading league events…</div>}
+      {isIcpAuthBackend && (filter === 'all' || filter === 'game') && fixtureQuery.isFetching && <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading competition fixtures…</div>}
+      <QueryErrorBanner hasError={isIcpAuthBackend && (filter === 'all' || filter === 'game') && (fixtureQuery.isError || (fixtureQuery.data?.failed.length ?? 0) > 0)} onRetry={() => fixtureQuery.refetch().then(() => undefined)} message="Some competition fixtures couldn't be refreshed." />
       <QueryErrorBanner hasError={leagueDiscovery.isError} onRetry={() => leagueDiscovery.refetch().then(() => undefined)} message="League events couldn't be refreshed." />
 
       <div className="flex items-center justify-between">
