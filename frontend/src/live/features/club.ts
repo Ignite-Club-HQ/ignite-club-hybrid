@@ -1,3 +1,4 @@
+import { afterMembershipAcknowledgement } from "../roleGrantsMemo";
 import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain } from "../domains";
 import { fetchMyRoleGrantsEverywhere } from "./myRoleGrants";
@@ -469,7 +470,7 @@ export async function getLiveParentInvite(ctx: FeatureBackendContext, token: str
 
 export async function acceptLiveParentInvite(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.accept_parent_invite(token), "Accept parent invite");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.accept_parent_invite(token), "Accept parent invite"));
 }
 
 export async function liveClubWhoami(ctx: FeatureBackendContext) {
@@ -506,7 +507,7 @@ export async function softDeleteLiveClub(
   cascadeTeams = true,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.soft_delete_club(clubId, cascadeTeams), "Delete club");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.soft_delete_club(clubId, cascadeTeams), "Delete club"));
 }
 
 export async function restoreLiveClub(
@@ -515,7 +516,7 @@ export async function restoreLiveClub(
   cascadeTeams = true,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.restore_club(clubId, cascadeTeams), "Restore club");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.restore_club(clubId, cascadeTeams), "Restore club"));
 }
 
 export async function listLiveMyRemovedClubs(ctx: FeatureBackendContext) {
@@ -525,7 +526,7 @@ export async function listLiveMyRemovedClubs(ctx: FeatureBackendContext) {
 
 export async function deleteLiveClubPermanent(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.delete_club_permanent(clubId), "Permanently delete club");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.delete_club_permanent(clubId), "Permanently delete club"));
 }
 
 /**
@@ -1000,10 +1001,10 @@ export async function createLiveClub(
   homeCountry?: string | null,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const created = await unwrapCandid(
+  const created = await afterMembershipAcknowledgement(unwrapCandid(
     actor.create_club(id, name, slug, candidOpt(description || null), candidOpt(sport || null)),
     "Create club",
-  );
+  ));
   // Record the club's home country (jurisdiction routing metadata, mirroring
   // Supabase clubs.home_country). Set-once for admins; the club already
   // exists if this fails, so log rather than fail the creation.
@@ -1045,10 +1046,10 @@ export async function requestLiveClubJoin(ctx: FeatureBackendContext, clubId: st
 
 export async function approveLiveClubJoinRequest(ctx: FeatureBackendContext, requestId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  return afterMembershipAcknowledgement(unwrapCandid(
     actor.approve_club_join_request(requestId),
     "Approve club join request",
-  );
+  ));
 }
 
 export async function rejectLiveClubJoinRequest(ctx: FeatureBackendContext, requestId: string) {
@@ -1179,7 +1180,7 @@ export async function myLiveRoleGrants(ctx: FeatureBackendContext) {
 /** Auto-accept a pending email invite under the ICP backend (PendingInviteWelcomeDialog). */
 export async function acceptPendingLiveInvite(ctx: FeatureBackendContext, inviteId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const accepted = await unwrapCandid(actor.accept_pending_invite(inviteId), "Accept pending invite");
+  const accepted = await afterMembershipAcknowledgement(unwrapCandid(actor.accept_pending_invite(inviteId), "Accept pending invite"));
   syncAvatarClubGrantsBestEffort(ctx);
   return accepted;
 }
@@ -1201,7 +1202,7 @@ export async function getLivePendingInvite(ctx: FeatureBackendContext, inviteId:
 /** Redeem a shareable team-invite link token (grants the link's role, idempotent). */
 export async function acceptLiveTeamInviteLink(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const accepted = await unwrapCandid(actor.accept_team_invite_link(token), "Accept team invite link");
+  const accepted = await afterMembershipAcknowledgement(unwrapCandid(actor.accept_team_invite_link(token), "Accept team invite link"));
   syncAvatarClubGrantsBestEffort(ctx);
   return accepted;
 }
