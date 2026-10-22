@@ -33,11 +33,12 @@ describe('dev-only domain protected reads', () => {
   });
   it('passes published loopback reads through unchanged until the canister demands a protected read', async () => {
     vi.stubEnv('DEV', false);
-    mocks.actor.get_folder.mockResolvedValue({ Ok: [] });
+    mocks.actor.list_files = vi.fn().mockResolvedValue({ Ok: [] });
+    mocks.actor.read_account_list_files = vi.fn();
     const connection = await connectLiveVaultDomain(target('http://localhost:4943'), identity);
-    expect(await connection.actor.get_folder('f')).toEqual({ Ok: [] });
-    expect(mocks.actor.get_folder).toHaveBeenCalledWith('f');
-    expect(mocks.actor.read_account_get_folder).not.toHaveBeenCalled();
+    expect(await connection.actor.list_files('c')).toEqual({ Ok: [] });
+    expect(mocks.actor.list_files).toHaveBeenCalledWith('c');
+    expect(mocks.actor.read_account_list_files).not.toHaveBeenCalled();
   });
   it('connects real mapped reads only for a dev loopback target', async () => {
     vi.stubEnv('DEV', true);
