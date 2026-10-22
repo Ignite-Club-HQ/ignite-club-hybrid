@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateRequest, validateTargets, validateJournal, executeUpgrades } from './subscription-upgrade-policy.mjs';
+import { validateRequest, validateTargets, validateRegisteredPair, validateJournal, executeUpgrades } from './subscription-upgrade-policy.mjs';
 const hash = n => String(n).repeat(64);
 const targets = ['g1','g2'].flatMap(groupId => ['club_domain','media_blob_store'].map(name => ({ groupId, name, canisterId: `${groupId}-${name}`, subnetId: 'subnet', newHash: hash(2) })));
 const binding = { governor: 'governor', pii: { g1: 'pii1', g2: 'pii2' }, targets };
@@ -23,6 +23,21 @@ test('journal binds all four modules/settings and both original photo keys', () 
     const j=make(); mutate(j); assert.throws(()=>validateJournal(j,binding));
   }
   assert.throws(()=>validateJournal(make(), {...binding,governor:'other'}));
+});
+test('registered Group 1 and Group 2 must match the paired authority and placement', () => {
+  const p = value => ({toText:()=>value});
+  for (const groupId of ['g1','g2']) {
+    const club=targets.find(t=>t.groupId===groupId&&t.name==='club_domain');
+    const store=targets.find(t=>t.groupId===groupId&&t.name==='media_blob_store');
+    const group={id:groupId,target_alias:'mainnet',domains:[{domain:'club_domain',canister:p(club.canisterId)}],photo_store:[p(store.canisterId)]};
+    const placement={group_id:groupId,deployment_id:'mainnet',host:'https://icp-api.io',network_kind:'public_mainnet',domains:[{domain:'club_domain',canister:p(club.canisterId),subnet:p('subnet')}]};
+    validateRegisteredPair(groupId,targets,[group],[placement]);
+    assert.throws(()=>validateRegisteredPair(groupId,targets,[{...group,photo_store:[p('foreign')]}],[placement]));
+    assert.throws(()=>validateRegisteredPair(groupId,targets,[group],[{...placement,host:'https://other.invalid'}]));
+    assert.throws(()=>validateRegisteredPair(groupId,targets,[group],[{...placement,domains:[]} ]));
+  }
+  validateRegisteredPair('g1',targets,[],[]);
+  assert.throws(()=>validateRegisteredPair('g2',targets,[],[]));
 });
 function transport(journal, options={}) {
   const modules=new Map(journal.steps.map(s=>[s.canisterId,s.oldHash]));

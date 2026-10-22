@@ -13,7 +13,7 @@ import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/sha
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, validateGroup2Inventory, verifyUpgradeStatus, upgradeArgs, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
-import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades } from '../../scripts/subscription-upgrade-policy.mjs';
+import { digest, validateRequest, validateTargets, validateRegisteredPair, validateJournal, executeUpgrades } from '../../scripts/subscription-upgrade-policy.mjs';
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
@@ -50,6 +50,7 @@ const targets = ['g1', 'g2'].flatMap(groupId => ['club_domain', 'media_blob_stor
     subnetId: groupId === 'g1' ? primarySubnet : s.subnetId, newHash: wasmHash(readFileSync(file)) };
 }));
 validateTargets(targets);
+for (const groupId of ['g1', 'g2']) validateRegisteredPair(groupId, targets, initial.groups, initial.placements);
 type Target = typeof targets[number];
 const mgmtIdl = () => IDL.Service({ canister_status: IDL.Func([IDL.Record({ canister_id: IDL.Principal })], [IDL.Record({
   status: IDL.Variant({ running: IDL.Null, stopped: IDL.Null, stopping: IDL.Null }), module_hash: IDL.Opt(IDL.Vec(IDL.Nat8)), cycles: IDL.Nat,
@@ -81,6 +82,17 @@ const keyGate = (groupId: 'g1' | 'g2', phase: string) => {
 };
 const observations = [];
 for (const t of targets) observations.push({ ...t, ...(await observe(t)) });
+// Both stores must still point at their original club authority, including
+// the legacy Group 1 pair not covered by registered-group snapshot checks.
+for (const groupId of ['g1', 'g2']) {
+  const store = targets.find(t => t.groupId === groupId && t.name === 'media_blob_store');
+  const club = targets.find(t => t.groupId === groupId && t.name === 'club_domain');
+  if (!store || !club) throw new Error('Missing paired authority');
+  const reader = Actor.createActor(() => IDL.Service({ read_group_opening_configuration: IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], []) }),
+    { agent, canisterId: store.canisterId }) as unknown as { read_group_opening_configuration(): Promise<[string, string][]> };
+  const rows = await reader.read_group_opening_configuration();
+  if (rows.filter(r => r[0] === 'club_domain').length !== 1 || rows.find(r => r[0] === 'club_domain')?.[1] !== club.canisterId) throw new Error('Media authority wiring differs');
+}
 await gate();
 if (action === 'check') {
   for (const group of ['g1', 'g2'] as const) keyGate(group, 'before');

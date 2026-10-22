@@ -12,6 +12,20 @@ export function validateTargets(targets) {
       ['g1', 'g2'].some(groupId => SUBSCRIPTION_SERVICES.some(name => targets.filter(t => t.groupId === groupId && t.name === name).length !== 1)) ||
       targets.some(t => !t.canisterId || !t.subnetId || !/^[a-f0-9]{64}$/.test(t.newHash))) throw new Error('Exact four existing club/media targets required');
 }
+export function validateRegisteredPair(groupId, targets, groups, placements) {
+  const group = groups.find(g => g.id === groupId);
+  // Original Group 1 predates router registration; its pinned mapping is mandatory.
+  if (!group && groupId === 'g1') return;
+  const placement = placements.find(p => p.group_id === groupId);
+  const club = targets.find(t => t.groupId === groupId && t.name === 'club_domain');
+  const store = targets.find(t => t.groupId === groupId && t.name === 'media_blob_store');
+  if (!group || !placement || !club || !store || placement.deployment_id !== 'mainnet' || placement.host !== 'https://icp-api.io' ||
+      placement.network_kind !== 'public_mainnet' || group.target_alias !== 'mainnet' ||
+      group.domains.find(d => d.domain === 'club_domain')?.canister.toText() !== club.canisterId ||
+      group.photo_store[0]?.toText() !== store.canisterId ||
+      placement.domains.find(d => d.domain === 'club_domain')?.canister.toText() !== club.canisterId ||
+      placement.domains.find(d => d.domain === 'club_domain')?.subnet.toText() !== club.subnetId || store.subnetId !== club.subnetId) throw new Error(`Registered ${groupId} club/media pair differs`);
+}
 export function validateJournal(journal, binding) {
   validateTargets(binding.targets);
   if (digest(journal.binding) !== digest(binding) || typeof journal.complete !== 'boolean' || journal.steps?.length !== 4 ||
