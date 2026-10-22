@@ -11,7 +11,7 @@ const p=n=>Principal.fromUint8Array(Uint8Array.from([n,1]));
 const governor=p(1),member=p(2),stranger=p(3);
 const ok=r=>{assert.ok('Ok' in r,r.Err);return r.Ok;};
 const names=['club_domain','events_domain','messaging_domain','vault_domain','competition_domain','club_points_domain','mini_league_domain','media_metadata','insights_domain','notification_queue','pii_access_control','timer_jobs','secret_workload_identity'];
-const server=await PocketIcServer.start();let pic;
+const server=await PocketIcServer.start({showCanisterLogs:true});let pic;
 try {
   pic=await PocketIc.create(server.getUrl());
   const init=IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor}]);

@@ -631,7 +631,7 @@ extern "C" fn membership_directory_global_timer(){
     arm_directory_timer();
     let entered=DIRECTORY_TIMER_BUSY.with(|b|{let mut b=b.borrow_mut();if *b{false}else{*b=true;true}});
     if !entered{return;}
-    ic_cdk::futures::spawn(async {
+    ic_cdk::futures::internals::in_executor_context(||ic_cdk::futures::spawn(async {
         let _guard=DirectoryTimerGuard;
         let Ok(mut config)=directory_config() else{return;};
         if !config.enabled||config.sources.is_empty(){return;}
@@ -640,7 +640,7 @@ extern "C" fn membership_directory_global_timer(){
         // Cleanup is bounded and happens independently of allocation success.
         let _=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired());
         if let Err(error)=advance_directory_source(source).await{ic_cdk::println!("Directory refresh deferred: {}",error);}
-    });
+    }));
 }
 fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {
     REMOVAL_INTENTS.with(|m| m.borrow().get(&account_id.to_string())).map(|bytes| decode(&bytes))
