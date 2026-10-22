@@ -15,6 +15,7 @@ mod deletion_timing;
 mod admission;
 mod membership_directory;
 mod membership_directory_store;
+mod membership_materializer;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;

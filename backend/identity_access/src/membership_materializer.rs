@@ -1,0 +1,169 @@
+//! Bounded, resumable raw-source joins. Offline until registry/account/recovery
+//! binding is accepted; these display pairs never authorize resource access.
+use candid::Principal;
+use ic_stable_structures::{Memory, StableBTreeMap};
+use serde::{Deserialize, Serialize};
+use std::ops::Bound::{Excluded, Unbounded};
+
+const SEP: char = '\u{1f}';
+const BATCH: usize = 100;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Edge {
+    Club { id: String, deleted: bool },
+    Role { subject: Principal, club: Option<String> },
+    Parent { child: String, subject: Principal },
+    Guardian { child: String, subject: Principal },
+    ChildTeam { child: String, team: String },
+    Team { id: String, club: String, deleted: bool },
+    Excluded { subject: Principal, club: String },
+}
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Progress {
+    pub sequence: u64,
+    pub terminal: bool,
+    pub complete: bool,
+    pub role: Option<String>,
+    pub roles_done: bool,
+    pub relation: Option<String>,
+    pub relation_active: bool,
+    pub team: Option<String>,
+    pub team_active: bool,
+    pub club: Option<String>,
+}
+// Each new builder owns isolated memories for one pinned source generation
+// and revision. No old-generation tree is reused or cleared in a bulk loop.
+pub struct Builder<M: Memory> {
+    progress: StableBTreeMap<String, Vec<u8>, M>,
+    clubs: StableBTreeMap<String, u8, M>,
+    roles: StableBTreeMap<String, u8, M>,
+    relations: StableBTreeMap<String, u8, M>,
+    child_teams: StableBTreeMap<String, u8, M>,
+    team_clubs: StableBTreeMap<String, u8, M>,
+    exclusions: StableBTreeMap<String, u8, M>,
+    pairs: StableBTreeMap<String, u8, M>,
+}
+fn encode<T: Serialize>(v: &T) -> Vec<u8> { let mut b=vec![];ciborium::into_writer(v,&mut b).expect("source encode");b }
+fn decode<T: for<'a> Deserialize<'a>>(b: &[u8]) -> T {ciborium::from_reader(b).expect("source decode")}
+fn valid_id(s: &str) -> bool { !s.is_empty() && s.len()<=128 && !s.contains(SEP) }
+fn valid_subject(p: &Principal) -> bool { *p!=Principal::anonymous() && *p!=Principal::management_canister() }
+fn pair(a: &str,b: &str)->String {format!("{a}{SEP}{b}")}
+fn split(s: &str)->(&str,&str) {s.split_once(SEP).expect("validated source key")}
+fn after<M: Memory>(map: &StableBTreeMap<String,u8,M>, cursor: &Option<String>, prefix: Option<&str>) -> Option<String> {
+    let row=match cursor {Some(c)=>map.range((Excluded(c.clone()),Unbounded)).next(),None=>match prefix {Some(p)=>map.range(p.to_string()..).next(),None=>map.iter().next()}};
+    row.map(|e|e.key().clone()).filter(|k|prefix.is_none_or(|p|k.starts_with(p)))
+}
+impl<M: Memory> Builder<M> {
+    pub fn open(memories: [M;8]) -> Self {
+        let [a,b,c,d,e,f,g,h]=memories;
+        Self {progress:StableBTreeMap::init(a),clubs:StableBTreeMap::init(b),roles:StableBTreeMap::init(c),relations:StableBTreeMap::init(d),child_teams:StableBTreeMap::init(e),team_clubs:StableBTreeMap::init(f),exclusions:StableBTreeMap::init(g),pairs:StableBTreeMap::init(h)}
+    }
+    pub fn status(&self)->Progress {self.progress.get(&"progress".into()).map(|b|decode(&b)).unwrap_or_default()}
+    fn save(&mut self,p:&Progress){self.progress.insert("progress".into(),encode(p));}
+    pub fn ingest(&mut self,sequence:u64,edges:Vec<Edge>,terminal:bool)->Result<(),String>{
+        let mut p=self.status();
+        if edges.len()>BATCH {return Err("Source batch exceeds 100 edges".into());}
+        for edge in &edges {
+            let valid=match edge {
+                Edge::Club{id,..}=>valid_id(id),
+                Edge::Role{subject,club}=>valid_subject(subject)&&club.as_deref().is_none_or(valid_id),
+                Edge::Parent{child,subject}|Edge::Guardian{child,subject}=>valid_id(child)&&valid_subject(subject),
+                Edge::ChildTeam{child,team}=>valid_id(child)&&valid_id(team),
+                Edge::Team{id,club,..}=>valid_id(id)&&valid_id(club),
+                Edge::Excluded{subject,club}=>valid_subject(subject)&&valid_id(club),
+            };
+            if !valid {return Err("Invalid source edge".into());}
+        }
+        let payload=encode(&(edges.clone(),terminal));let ack=format!("chunk:{sequence:020}");
+        if sequence<p.sequence {return if self.progress.get(&ack)==Some(payload) {Ok(())} else {Err("Conflicting source replay".into())};}
+        if p.terminal||sequence!=p.sequence {return Err("Source gap or terminal snapshot".into());}
+        p.sequence=p.sequence.checked_add(1).ok_or("Source sequence exhausted")?;
+        // Complete validation precedes every stable write.
+        for edge in edges {match edge {
+            Edge::Club{id,deleted}=>{let value=if deleted {2} else {1}; let old=self.clubs.get(&id).unwrap_or(0);self.clubs.insert(id,old|value);},
+            Edge::Role{subject,club}=>{self.roles.insert(pair(&subject.to_text(),club.as_deref().unwrap_or("*")),1);},
+            Edge::Parent{child,subject}|Edge::Guardian{child,subject}=>{self.relations.insert(pair(&child,&subject.to_text()),1);},
+            Edge::ChildTeam{child,team}=>{self.child_teams.insert(pair(&child,&team),1);},
+            Edge::Team{id,club,deleted}=>{let key=pair(&id,&club);let live=self.team_clubs.get(&key).unwrap_or(0);self.team_clubs.insert(key,live|u8::from(!deleted));},
+            Edge::Excluded{subject,club}=>{self.exclusions.insert(pair(&subject.to_text(),&club),1);},
+        }}
+        p.terminal=terminal;self.progress.insert(ack,payload);self.save(&p);Ok(())
+    }
+    fn admit(&mut self,subject:&str,club:&str){
+        if self.clubs.get(&club.to_string())==Some(1) && self.exclusions.get(&pair(subject,club)).is_none(){self.pairs.insert(pair(subject,club),1);}
+    }
+    pub fn advance(&mut self)->Result<usize,String>{
+        let mut p=self.status();if !p.terminal {return Err("Incomplete raw source".into());}
+        if p.complete {return Ok(0);}
+        let mut scanned=0;
+        while scanned<BATCH && !p.complete {
+            scanned+=1;
+            if !p.roles_done {
+                match after(&self.roles,&p.role,None){
+                    Some(key)=>{let (subject,club)=split(&key);if club!="*"{self.admit(subject,club);}p.role=Some(key);},
+                    None=>p.roles_done=true,
+                }
+                continue;
+            }
+            if !p.relation_active {
+                match after(&self.relations,&p.relation,None){Some(key)=>{p.relation=Some(key);p.relation_active=true;p.team=None;},None=>p.complete=true}
+                continue;
+            }
+            let relation=p.relation.as_deref().ok_or("Missing join relation")?;
+            let (child,subject)=split(relation);
+            if !p.team_active {
+                match after(&self.child_teams,&p.team,Some(&format!("{child}{SEP}"))){
+                    Some(key)=>{p.team=Some(key);p.team_active=true;p.club=None;},
+                    None=>{p.relation_active=false;},
+                }
+                continue;
+            }
+            let (_,team)=split(p.team.as_deref().ok_or("Missing join team")?);
+            match after(&self.team_clubs,&p.club,Some(&format!("{team}{SEP}"))){
+                Some(key)=>{let (_,club)=split(&key);if self.team_clubs.get(&key)==Some(1){self.admit(subject,club);}p.club=Some(key);},
+                None=>{p.team_active=false;},
+            }
+        }
+        self.save(&p);Ok(scanned)
+    }
+    // App-wide roles are retained separately; a caller-private coordinator
+    // must page active clubs for such accounts instead of expanding globally.
+    pub fn app_wide(&self,subject:Principal)->Result<bool,String>{
+        if !self.status().complete{return Err("Incomplete materialization".into());}
+        Ok(self.roles.get(&pair(&subject.to_text(),"*")).is_some())
+    }
+    pub fn clubs_for(&self,subject:Principal,cursor:Option<String>)->Result<(Vec<String>,Option<String>,usize),String>{
+        if !self.status().complete{return Err("Incomplete materialization".into());}
+        if !valid_subject(&subject){return Err("Invalid subject".into());}
+        let prefix=format!("{}{SEP}",subject.to_text());
+        if cursor.as_ref().is_some_and(|c|!c.starts_with(&prefix)){return Err("Foreign source cursor".into());}
+        let mut at=cursor;let mut clubs=vec![];let mut scanned=0;
+        while scanned<BATCH {match after(&self.pairs,&at,Some(&prefix)){Some(k)=>{clubs.push(split(&k).1.to_string());at=Some(k);scanned+=1;},None=>return Ok((clubs,None,scanned))}}
+        Ok((clubs,at,scanned))
+    }
+}
+
+#[cfg(test)] mod tests {
+    use super::*;
+    use ic_stable_structures::{VectorMemory,memory_manager::{MemoryManager,MemoryId}};
+    fn p(n:u8)->Principal {Principal::from_slice(&[n,1])}
+    fn open(manager:&MemoryManager<VectorMemory>)->Builder<ic_stable_structures::memory_manager::VirtualMemory<VectorMemory>>{Builder::open(std::array::from_fn(|i|manager.get(MemoryId::new(i as u8))))}
+    #[test] fn family_join_resumes_with_251_teams_and_preserves_or_exclusion_semantics(){
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);
+        b.ingest(0,vec![Edge::Club{id:"a".into(),deleted:false},Edge::Club{id:"b".into(),deleted:false},Edge::Club{id:"deleted".into(),deleted:true},Edge::Parent{child:"child".into(),subject:p(1)},Edge::Guardian{child:"child".into(),subject:p(2)},Edge::Role{subject:p(1),club:Some("b".into())},Edge::Excluded{subject:p(2),club:"a".into()},Edge::Role{subject:p(3),club:None}],false).unwrap();
+        let mut edges=vec![];for i in 0..251{let team=format!("t{i}");edges.push(Edge::ChildTeam{child:"child".into(),team:team.clone()});edges.push(Edge::Team{id:team.clone(),club:"a".into(),deleted:true});edges.push(Edge::Team{id:team,club:"a".into(),deleted:false});}
+        let mut sequence=1;for chunk in edges.chunks(100){b.ingest(sequence,chunk.to_vec(),false).unwrap();sequence+=1;}
+        b.ingest(sequence,vec![],true).unwrap();assert!(b.clubs_for(p(1),None).is_err());assert_eq!(b.advance().unwrap(),100);drop(b);
+        let mut b=open(&manager);let mut calls=0;while !b.status().complete{assert!(b.advance().unwrap()<=100);calls+=1;assert!(calls<100);}
+        assert_eq!(b.clubs_for(p(1),None).unwrap().0,vec!["a","b"]);assert!(b.clubs_for(p(2),None).unwrap().0.is_empty());assert!(b.app_wide(p(3)).unwrap());assert!(b.clubs_for(p(3),None).unwrap().0.is_empty());
+    }
+    #[test] fn validation_and_exact_replay_leave_progress_unchanged(){
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);
+        let edges=vec![Edge::Club{id:"a".into(),deleted:false},Edge::Role{subject:p(1),club:Some("a".into())}];
+        b.ingest(0,edges.clone(),true).unwrap();let before=b.status();b.ingest(0,edges,true).unwrap();assert_eq!(before,b.status());
+        assert!(b.ingest(0,vec![],true).is_err());assert!(b.ingest(2,vec![],true).is_err());while !b.status().complete{b.advance().unwrap();}
+        assert_eq!(b.clubs_for(p(1),None).unwrap().0,vec!["a"]);assert!(b.clubs_for(p(2),Some(pair(&p(1).to_text(),"a"))).is_err());
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);
+        assert!(b.ingest(0,vec![Edge::Club{id:"bad\u{1f}id".into(),deleted:false}],false).is_err());assert_eq!(b.status(),Progress::default());
+        assert!(b.ingest(0,vec![Edge::Club{id:"a".into(),deleted:false};101],false).is_err());
+    }
+}
