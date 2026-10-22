@@ -2162,7 +2162,9 @@ export default function HomePage() {
   // ICP reads are slow on cold start; when we already have a last-seen
   // snapshot, show it immediately instead of waiting for every section.
   const icpCachedReveal = resolveAuthBackend() === "icp" && initialized && (!!nextUpCachedSnapshot || events.length > 0);
-  const showContent = computedShowContent || hasRevealed || revealTimedOut || icpCachedReveal;
+  // ICP sections have their own loading states: don't hide My Teams while
+  // Next Up resolves photo ownership (or vice versa).
+  const showContent = (resolveAuthBackend() === "icp" && initialized) || computedShowContent || hasRevealed || revealTimedOut || icpCachedReveal;
 
   // Empty-state gate: only show the "Find or Join a Club" welcome once we
   // authoritatively know the user has zero clubs AND zero teams. The

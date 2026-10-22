@@ -1,3 +1,4 @@
+- [ ] Home missing-asset error and latency: nullable non-owning-group photo lookup, parallel club/team validation, independent ICP section reveal; validate regression tests. Live timing requires Internet Identity.
 - [x] Gallery comments: known-club album reads/writes, direct comment refresh, acknowledged IDs update the visible feed/device snapshot, same-text comments remain distinct, and failed sends appear inside the sheet with the draft restored. 34 focused tests pass across both modes; preview build OK.
 - [ ] Verify gallery comment send/readback on the signed-in account: blocked by unavailable Internet Identity session.
 - [x] U9 Group 2 team page: stale negative team ownership is rechecked, known teams route by their club, and read failures show Try again instead of “Team not found”. 41 focused checks pass; preview build OK.
