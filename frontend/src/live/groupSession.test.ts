@@ -154,6 +154,7 @@ describe('integrated deployment-bound group read session', () => {
     const original = f.transport.readAssignments; const calls = vi.fn(original);
     f.transport.readAssignments = calls;
     try { await Promise.all([1, 2, 3].map(() => s.readClub('club-a', 'club_domain', async () => 1))); } finally { spy.mockRestore(); }
+    console.log('CALLS', JSON.stringify(calls.mock.calls, (_k, v) => typeof v === 'bigint' ? String(v) : v));
     expect(calls).toHaveBeenCalledTimes(1);
   });
   it('disposed session cannot read or release an in-flight result', async () => {
