@@ -2265,7 +2265,9 @@ export type Database = {
           last_stripe_event_id: string | null
           member_payments_enabled: boolean
           member_subscription_amount: number | null
+          paid_extra_teams: number
           plan: Database["public"]["Enums"]["club_subscription_plan"]
+          pricing_version: string
           promo_code_id: string | null
           scheduled_storage_downgrade_gb: number | null
           storage_downgrade_at: string | null
@@ -2296,7 +2298,9 @@ export type Database = {
           last_stripe_event_id?: string | null
           member_payments_enabled?: boolean
           member_subscription_amount?: number | null
+          paid_extra_teams?: number
           plan?: Database["public"]["Enums"]["club_subscription_plan"]
+          pricing_version?: string
           promo_code_id?: string | null
           scheduled_storage_downgrade_gb?: number | null
           storage_downgrade_at?: string | null
@@ -2327,7 +2331,9 @@ export type Database = {
           last_stripe_event_id?: string | null
           member_payments_enabled?: boolean
           member_subscription_amount?: number | null
+          paid_extra_teams?: number
           plan?: Database["public"]["Enums"]["club_subscription_plan"]
+          pricing_version?: string
           promo_code_id?: string | null
           scheduled_storage_downgrade_gb?: number | null
           storage_downgrade_at?: string | null
@@ -9232,6 +9238,45 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_price_catalog: {
+        Row: {
+          annual_usd: number
+          created_at: string
+          entity_type: string
+          media_bytes: number
+          monthly_usd: number
+          plan: string | null
+          product_id: string
+          team_limit: number | null
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          annual_usd: number
+          created_at?: string
+          entity_type: string
+          media_bytes: number
+          monthly_usd: number
+          plan?: string | null
+          product_id: string
+          team_limit?: number | null
+          tier: string
+          updated_at?: string
+        }
+        Update: {
+          annual_usd?: number
+          created_at?: string
+          entity_type?: string
+          media_bytes?: number
+          monthly_usd?: number
+          plan?: string | null
+          product_id?: string
+          team_limit?: number | null
+          tier?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       system_messages: {
         Row: {
           created_at: string
@@ -9808,6 +9853,7 @@ export type Database = {
           pitch_notify_coach: boolean
           pitch_notify_subs_manager: boolean
           pitch_notify_team_admin: boolean
+          pricing_version: string
           rotate_gk_at_halftime: boolean | null
           rotation_speed: number | null
           show_lineup_picker: boolean
@@ -9845,6 +9891,7 @@ export type Database = {
           pitch_notify_coach?: boolean
           pitch_notify_subs_manager?: boolean
           pitch_notify_team_admin?: boolean
+          pricing_version?: string
           rotate_gk_at_halftime?: boolean | null
           rotation_speed?: number | null
           show_lineup_picker?: boolean
@@ -9882,6 +9929,7 @@ export type Database = {
           pitch_notify_coach?: boolean
           pitch_notify_subs_manager?: boolean
           pitch_notify_team_admin?: boolean
+          pricing_version?: string
           rotate_gk_at_halftime?: boolean | null
           rotation_speed?: number | null
           show_lineup_picker?: boolean
@@ -11533,6 +11581,7 @@ export type Database = {
           guardian_id: string
         }[]
       }
+      club_team_capacity: { Args: { p_club: string }; Returns: number }
       competition_scores_visible: {
         Args: { match_id: string }
         Returns: boolean
@@ -13353,7 +13402,12 @@ export type Database = {
         | "committee_member"
         | "association_admin"
         | "competition_admin"
-      club_subscription_plan: "starter" | "standard" | "unlimited"
+      club_subscription_plan:
+        | "starter"
+        | "standard"
+        | "unlimited"
+        | "small"
+        | "growing"
       duty_status: "open" | "completed"
       enrolment_status: "enrolled" | "waitlisted" | "withdrawn"
       eoi_source: "website" | "app" | "admin"
@@ -13531,7 +13585,13 @@ export const Constants = {
         "association_admin",
         "competition_admin",
       ],
-      club_subscription_plan: ["starter", "standard", "unlimited"],
+      club_subscription_plan: [
+        "starter",
+        "standard",
+        "unlimited",
+        "small",
+        "growing",
+      ],
       duty_status: ["open", "completed"],
       enrolment_status: ["enrolled", "waitlisted", "withdrawn"],
       eoi_source: ["website", "app", "admin"],

@@ -95,6 +95,7 @@ async function callAppleVerifyReceipt(
 async function verifyAppleReceipt(
   receiptData: string,
   transactionId: string,
+  productId: string,
   sharedSecret: string | undefined,
 ): Promise<{ expiresAtMs: number }> {
   let result = await callAppleVerifyReceipt(receiptData, sharedSecret, APPLE_VERIFY_RECEIPT_PROD);
@@ -108,6 +109,12 @@ async function verifyAppleReceipt(
   const match = candidates.find((entry) => entry.transaction_id === transactionId);
   if (!match) {
     throw new Error("Transaction id not found in verified Apple receipt.");
+  }
+  if (match.product_id !== productId) {
+    throw new Error("Verified product does not match requested subscription.");
+  }
+  if (!match.expires_date_ms) {
+    throw new Error("Subscription expiry is required.");
   }
   const expiresAtMs = match.expires_date_ms
     ? Number(match.expires_date_ms)
@@ -158,8 +165,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    if (product_id.startsWith("ignite_v2_")) {
+      throw new Error("New scoped plans are not yet configured for verified fulfillment.");
+    }
     const appleSharedSecret = Deno.env.get("APPLE_SHARED_SECRET");
-    const { expiresAtMs } = await verifyAppleReceipt(receipt_data, transaction_id, appleSharedSecret);
+    const { expiresAtMs } = await verifyAppleReceipt(receipt_data, transaction_id, product_id, appleSharedSecret);
     const source = "app_store";
 
     const message = `${principal}|${product_id}|${transaction_id}|${expiresAtMs}|${source}`;

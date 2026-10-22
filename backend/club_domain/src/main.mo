@@ -36,6 +36,7 @@ import MediaJournalToken "../../shared/MediaJournalToken";
 import MediaGrowthReservations "mediaGrowthReservations";
 import MembershipPage "membershipPage";
 import MembershipIndex "membershipIndex";
+import SubscriptionPolicy "subscriptionPolicy";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -845,12 +846,24 @@ persistent actor class Main(governorInit : Principal) = this {
     personalTeamOwners.any(func(pair) = pair.0 == team_id and pair.1.equal(caller))
   };
 
+  func teamCapacityError(club : Text, additions : Nat) : ?Text {
+    if (club == "") return null;
+    let cap = SubscriptionPolicy.limit(clubSubscriptions.find(func(s) = s.club_id == club), nowMs());
+    let used = teams.filter(func(t) = t.club_id == club and t.deleted_at_ms == null).size();
+    if (used + additions > cap) ?"TeamLimitReached: Upgrade your club plan or pay for additional teams before adding another team." else null
+  };
+
   public shared ({ caller }) func save_team(team : Types.ClubTeam) : async { #Ok : Types.ClubTeam; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
     auth(caller);
-    let isNew = not teams.any(func(t) = t.id == team.id);
+    let prior = teams.find(func(t) = t.id == team.id);
+    let isNew = prior == null;
+    if (isTransferFenced(team.club_id)) return #Err("Club is temporarily locked for a transfer");
+    switch (prior) { case (?old) { if (old.club_id != team.club_id and not isAdmin(caller, old.club_id)) return #Err("Original club admin required") }; case null {} };
+    let addsSeat = team.deleted_at_ms == null and (switch (prior) { case null true; case (?old) old.deleted_at_ms != null or old.club_id != team.club_id });
+    if (addsSeat) { switch (teamCapacityError(team.club_id, 1)) { case (?error) return #Err(error); case null {} } };
     if (team.club_id == "") {
       if (not (isGovernor(caller) or isNew or isPersonalTeamOwner(caller, team.id))) return #Err("Team owner required");
     } else if (not isAdmin(caller, team.club_id)) {
@@ -3221,6 +3234,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Team not found") };
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
+        if (team.deleted_at_ms != null) { switch (teamCapacityError(team.club_id, 1)) { case (?error) return #Err(error); case null {} } };
         let updated : Types.ClubTeam = { team with deleted_at_ms = null };
         membershipEpoch += 1;
         teams := teams.map(func(t) = if (t.id == id) updated else t);
@@ -3301,6 +3315,10 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Club not found") };
       case (?club) {
         let deletedAt = club.deleted_at_ms;
+        if (cascade_teams) {
+          let count = teams.filter(func(t) = t.club_id == id and t.deleted_at_ms != null and t.deleted_at_ms == deletedAt).size();
+          switch (teamCapacityError(id, count)) { case (?error) return #Err(error); case null {} }
+        };
         let updated : Types.ClubProfile = { club with deleted_at_ms = null };
         membershipEpoch += 1;
         profiles := profiles.map(func(p) = if (p.id == id) updated else p);
@@ -3440,6 +3458,7 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (name == "" or name.size() > 160) return #Err("Invalid team name");
+    switch (teamCapacityError(club_id, 1)) { case (?error) return #Err(error); case null {} };
     let now = nowMs();
     let token = "shell-" # club_id # "-" # Nat.toText(teams.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
     let team : Types.ClubTeam = {
@@ -4357,6 +4376,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?req) {
         if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
         if (req.status != "pending") return #Err("Request already processed");
+        switch (teamCapacityError(req.club_id, 1)) { case (?error) return #Err(error); case null {} };
         let now = nowMs();
         let team : Types.ClubTeam = {
           id = "team-" # req.club_id # "-" # Nat.toText(teams.size() + 1) # "-" # Nat64.toText(now);

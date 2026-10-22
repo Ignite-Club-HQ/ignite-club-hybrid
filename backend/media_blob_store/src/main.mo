@@ -709,11 +709,16 @@ persistent actor MediaBlobStore {
   func clubIsPro(clubId : Text) : async Bool {
     let ?cid = club_domain_canister else return false;
     let clubDomain : actor {
-      get_club_subscription : shared query Text -> async { #Ok : ?{ is_pro : Bool; admin_pro_override : Bool; is_pro_football : Bool; admin_pro_football_override : Bool; is_trial : Bool }; #Err : Text };
+      get_club_subscription : shared query Text -> async { #Ok : ?{ is_pro : Bool; admin_pro_override : Bool; is_pro_football : Bool; admin_pro_football_override : Bool; is_trial : Bool; expires_at_ms : ?Nat64; trial_ends_at_ms : ?Nat64 }; #Err : Text };
     } = actor (Principal.toText(cid));
     try {
       switch (await clubDomain.get_club_subscription(clubId)) {
-        case (#Ok(?sub)) { sub.is_pro or sub.admin_pro_override or sub.is_pro_football or sub.admin_pro_football_override or sub.is_trial };
+        case (#Ok(?sub)) {
+          let now = Nat64.fromNat(Int.abs(Time.now()) / 1_000_000);
+          let paid = (sub.is_pro or sub.is_pro_football) and (switch (sub.expires_at_ms) { case null true; case (?end) end > now });
+          let trial = sub.is_trial and (switch (sub.trial_ends_at_ms) { case null false; case (?end) end > now });
+          sub.admin_pro_override or sub.admin_pro_football_override or paid or trial
+        };
         case _ { false };
       }
     } catch (_) { false }
@@ -997,10 +1002,7 @@ persistent actor MediaBlobStore {
         case (?clubId) { await clubIsPro(clubId) };
         case null { false };
       };
-      // Pro media allowance (5 GiB + purchased) across vault, gallery and
-      // chat combined, so one Pro club cannot crowd out the whole store.
-      // Fail closed when unreadable.
-      let allowanceClub : ?Text = if (isPro) clubIdFromPath(path) else null;
+      let allowanceClub = if (categoryForPath(path) != null) clubIdFromPath(path) else null;
       let purchasedGb : ?Nat = switch (allowanceClub) { case (?c) await clubMediaPurchasedGb(c); case null null };
       if (allowanceClub != null and purchasedGb == null) return #Err("StorageAllowanceUnavailable");
       if (accountAdmissionEnabled) await admitAccount(caller);
@@ -1015,7 +1017,8 @@ persistent actor MediaBlobStore {
       switch (allowanceClub, purchasedGb) {
         case (?c, ?gb) {
           let (used, pending) = clubMediaBytes(c);
-          if (not UploadPolicy.withinProMediaAllowance(used, pending, total_size.toNat(), gb)) return #Err("StorageAllowanceFull");
+          let limit = (if (isPro) 5_368_709_120 else UploadPolicy.freeMediaBaseBytes) + gb * 1_073_741_824; // Preserve legacy paid terms until versioned fulfillment.
+          if (not UploadPolicy.withinMediaAllowance(used, pending, total_size.toNat(), limit)) return #Err("StorageAllowanceFull");
         };
         case _ {};
       };

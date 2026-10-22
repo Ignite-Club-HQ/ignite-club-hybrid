@@ -25,12 +25,12 @@ assert Policy.withinFreeQuota(8, 0, 1, 0, 1, 10, null);
 assert not Policy.withinFreeQuota(9, 0, 1, 0, 1, 10, null);
 assert Policy.withinFreeQuota(0, 25_165_824, 0, 0, 1_048_576, 10, ?26_214_400);
 assert not Policy.withinFreeQuota(0, 25_165_824, 1, 1, 1_048_576, 10, ?26_214_400);
-// Pro media allowance: 5 GiB base plus purchased GB, counting vault, gallery
+// Pro media allowance: 3 GiB base plus purchased GB, counting vault, gallery
 // and chat bytes combined, including in-flight uploads.
-assert Policy.withinProMediaAllowance(5_368_709_119, 0, 1, 0);
-assert not Policy.withinProMediaAllowance(5_368_709_119, 1, 1, 0);
-assert Policy.withinProMediaAllowance(6_442_450_944, 0, 0, 1);
-assert not Policy.withinProMediaAllowance(6_442_450_944, 0, 1, 1);
+assert Policy.withinProMediaAllowance(3_221_225_471, 0, 1, 0);
+assert not Policy.withinProMediaAllowance(3_221_225_471, 1, 1, 0);
+assert Policy.withinProMediaAllowance(4_294_967_296, 0, 0, 1);
+assert not Policy.withinProMediaAllowance(4_294_967_296, 0, 1, 1);
 // Large capacity is opt-in: default ceiling unchanged, large mode 200 GiB.
 assert Policy.effectiveCapacityFor(42_949_672_960, false) == 2_147_483_648;
 assert Policy.effectiveCapacityFor(42_949_672_960, true) == 42_949_672_960;
@@ -51,12 +51,17 @@ assert not Policy.canAdmitFor(34_359_738_368, 20_000_000_000, 0, 1_000, 0, false
 assert Policy.canAdmitFor(34_359_738_368, 27_487_790_693, 0, 1, 0, true);
 assert not Policy.canAdmitFor(34_359_738_368, 27_487_790_693, 1, 1, 0, true);
 assert not Policy.canAdmitFor(34_359_738_368, 0, 0, 10, Policy.heapBudget - 159, true);
-// Five full base Pro commitments fit the byte-only large-store threshold;
-// six do not. Allocator/metadata/processing headroom must be measured separately.
-assert Policy.proMediaBaseBytes * 5 <= Policy.thresholdFor(34_359_738_368, true);
-assert Policy.proMediaBaseBytes * 6 > Policy.thresholdFor(34_359_738_368, true);
+// Eight full base Pro commitments fit the byte-only large-store threshold;
+// nine do not. Allocator/metadata/processing headroom must be measured separately.
+assert Policy.proMediaBaseBytes * 8 <= Policy.thresholdFor(34_359_738_368, true);
+assert Policy.proMediaBaseBytes * 9 > Policy.thresholdFor(34_359_738_368, true);
 // Multi-bank rehearsal uses an explicit runtime-bound ceiling, never the
 // platform's 500 GiB figure; 80% admission and heap checks remain mandatory.
 assert Policy.canAdmitWithCeiling(214_748_364_800, 171_798_691_839, 0, 1, 0, 214_748_364_800);
 assert not Policy.canAdmitWithCeiling(214_748_364_800, 171_798_691_839, 1, 1, 0, 214_748_364_800);
 assert not Policy.canAdmitWithCeiling(536_870_912_000, 171_798_691_840, 0, 1, 0, 214_748_364_800);
+
+assert Policy.freeMediaBaseBytes == 262_144_000;
+assert Policy.teamMediaBaseBytes == 1_073_741_824;
+assert Policy.withinMediaAllowance(262_143_999, 0, 1, Policy.freeMediaBaseBytes);
+assert not Policy.withinMediaAllowance(262_143_999, 1, 1, Policy.freeMediaBaseBytes);

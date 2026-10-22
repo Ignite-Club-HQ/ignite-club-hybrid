@@ -1,3 +1,10 @@
+# USD subscription structure — approved 22 October 2026
+- [x] Approved USD catalog, bands 3/5/10/20, Single Team prices and extra-team quotes; unconfigured v2 products refuse charging.
+- [x] Atomic Supabase capacity guard and ICP creation/restore/approval/reassignment guard. Existing teams retained; ICP requires deployment.
+- [ ] Configure and verify v2 entity-scoped fulfillment with provider products: hosted checkout/verifiers absent from this checkout; global ICP entitlement cannot grant club-specific seats.
+- [ ] Complete authoritative team-scoped media quota and Supabase aggregate reservations. Free ICP 250 MiB drafted/tested; existing paid 5 GiB preserved until versioned fulfillment.
+- [ ] Live signed-in purchase/readback blocked by external unmanaged auth, missing provider catalog setup and undeployed ICP updates. 26 focused pricing/quota/upgrade tests and both Motoko policy tests pass; both canisters check without errors. Public browser opens /auth without runtime errors; signed-in purchase/readback remains unverified.
+
 # Group 2 account-access repair
 - [x] Add isolated stable production eligibility release and governor-authorized exact Group 2 service readers derived from two pinned consensus registry reads; preserve removal and lifecycle gates.
 - [x] Add protected identity-only release and automatic verified snapshot refresh using existing immutable-commit journal tools. Passed 58 identity tests, 8 release/journal/workflow tests, 30 frontend regressions, 17-contract drift and a real local router/identity authorization/suspension/upgrade/disable rehearsal.

@@ -9,9 +9,12 @@ module {
   public let largeCapacityCeiling : Nat64 = 214_748_364_800; // 200 GiB (build page cap 240 GiB, runtime table 256 GiB)
   // Finalized + pending file records per store.
   public let maxStoredFiles : Nat = 1_000_000;
-  // Pro media allowance: 5 GiB per club across vault, gallery and chat combined,
+  // Pro media allowance: 3 GiB per club across vault, gallery and chat combined,
   // plus purchased add-on GB.
-  public let proMediaBaseBytes : Nat = 5_368_709_120;
+  public let proMediaBaseBytes : Nat = 3_221_225_472;
+  public let freeMediaBaseBytes : Nat = 262_144_000;
+  public let teamMediaBaseBytes : Nat = 1_073_741_824;
+  public func withinMediaAllowance(used : Nat, pending : Nat, requested : Nat, limit : Nat) : Bool { used + pending + requested <= limit };
   let gib : Nat = 1_073_741_824;
   public let heapBudget : Nat = 3_221_225_472;
   public let maxWireBytes : Nat64 = 10_551_296; // 10 MiB plaintext + encryption framing
@@ -36,7 +39,7 @@ module {
   public func threshold(configured : Nat64) : Nat { thresholdFor(configured, false) };
 
   /// Pro allowance: finalized + in-flight media bytes for the club (vault,
-  /// gallery and chat combined) plus this upload must fit within 5 GiB + purchased GB.
+  /// gallery and chat combined) plus this upload must fit within 3 GiB + purchased GB.
   public func withinProMediaAllowance(used : Nat, pending : Nat, requested : Nat, purchasedGb : Nat) : Bool {
     used + pending + requested <= proMediaBaseBytes + purchasedGb * gib
   };

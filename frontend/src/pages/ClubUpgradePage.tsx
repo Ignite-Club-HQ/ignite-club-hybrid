@@ -1,4 +1,6 @@
+import { assertPurchaseCatalogReady } from "@/lib/subscriptionPlans";
 import { useState, useEffect } from "react";
+import { CLUB_PRICING as APPROVED_CLUB_PRICING, CLUB_PLAN_ORDER, CLUB_PLAN_NAMES, clubQuote, recommendedClubPlan, type ClubPlan } from "@/lib/subscriptionPlans";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { isNativePlatform } from "@/lib/nativePush";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -57,8 +59,8 @@ import { useInAppPurchase } from "@/hooks/useInAppPurchase";
 const PRO_FEATURES = [
   "Club Chat (club-wide messaging)",
   "DMs & custom groups",
-  "Unlimited photo & media uploads (Free: 10/month)",
-  "Unlimited file storage (Free: 10 files / 25 MB)",
+  "No monthly photo count limit within storage allowance",
+  "3 GB shared gallery, chat and Vault storage (Free: 250 MB)",
   "Unlimited polls (Free: 2/month)",
   "Scheduled messages",
   "Pinned vault files in chat",
@@ -79,19 +81,7 @@ const PRO_FOOTBALL_FEATURES = [
   "Automated Substitutions",
 ];
 
-// Club pricing in AUD
-const CLUB_PRICING = {
-  pro: {
-    starter: { monthly: 89.99, annual: 949.99, teamLimit: 10 },
-    standard: { monthly: 149.99, annual: 1449.99, teamLimit: 20 },
-    unlimited: { monthly: 199, annual: null, teamLimit: null },
-  },
-  proFootball: {
-    starter: { monthly: 149, annual: null, teamLimit: 10 },
-    standard: { monthly: 229.99, annual: null, teamLimit: 20 },
-    unlimited: { monthly: 299, annual: null, teamLimit: null },
-  },
-};
+const CLUB_PRICING = APPROVED_CLUB_PRICING;
 
 // Check if club sport is soccer/football
 const isSoccerClub = (sport: string | null | undefined): boolean => {
@@ -100,7 +90,7 @@ const isSoccerClub = (sport: string | null | undefined): boolean => {
   return lowerSport.includes("soccer") || lowerSport.includes("football") || lowerSport.includes("futsal");
 };
 
-type PlanTier = "starter" | "standard" | "unlimited";
+type PlanTier = ClubPlan;
 type UpgradeClub = Pick<
   Database["public"]["Tables"]["clubs"]["Row"],
   "id" | "name" | "sport" | "class_mode_enabled"
@@ -124,11 +114,12 @@ export default function ClubUpgradePage() {
   const [promoCodeFootball, setPromoCodeFootball] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [selectedTab, setSelectedTab] = useState("pro");
-  const [selectedPlan, setSelectedPlan] = useState<PlanTier>("starter");
-  const [selectedPlanFootball, setSelectedPlanFootball] = useState<PlanTier>("starter");
+  const [selectedPlan, setSelectedPlan] = useState<PlanTier>("small");
+  const [selectedPlanFootball, setSelectedPlanFootball] = useState<PlanTier>("small");
   const [isAnnualPro, setIsAnnualPro] = useState(false);
   const [isAnnualProFootball, setIsAnnualProFootball] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [extraTeams, setExtraTeams] = useState(0);
   const [teamSelectOpen, setTeamSelectOpen] = useState(false);
   const { showIfDesktop, dialog: desktopUpgradeDialog } = useDesktopUpgradeGate();
   const { purchaseProduct } = useInAppPurchase();
@@ -146,8 +137,8 @@ export default function ClubUpgradePage() {
     const paymentStatus = searchParams.get('payment');
     if (paymentStatus === 'success') {
       toast({
-        title: "Payment Successful!",
-        description: "Your club subscription is now active.",
+        title: "Payment returned",
+        description: "We’re checking your subscription. Paid features appear after verification.",
       });
       queryClient.invalidateQueries({ queryKey: ["club-subscription", clubId] });
       invalidateProAccessQueries(queryClient);
@@ -389,11 +380,7 @@ export default function ClubUpgradePage() {
   };
 
   // Determine recommended plan based on team count
-  const getRecommendedPlan = (count: number): PlanTier => {
-    if (count <= 10) return "starter";
-    if (count <= 20) return "standard";
-    return "unlimited";
-  };
+  const getRecommendedPlan = recommendedClubPlan;
 
   const recommendedPlan = getRecommendedPlan(teamCount);
 
@@ -602,7 +589,7 @@ export default function ClubUpgradePage() {
   const handleApplyPromo = async (tier: "pro" | "pro_football") => {
     const code = tier === "pro" ? promoCode : promoCodeFootball;
     const plan = tier === "pro" ? selectedPlan : selectedPlanFootball;
-    const annualDisabled = tier === "pro_football" || (tier === "pro" && plan === "unlimited");
+    const annualDisabled = false;
     const isAnnual = annualDisabled ? false : (tier === "pro" ? isAnnualPro : isAnnualProFootball);
     if (!code.trim()) return;
     setIsValidating(true);
@@ -621,11 +608,12 @@ export default function ClubUpgradePage() {
   };
 
   const handleStripeCheckout = async (tier: "pro" | "pro_football", withTrial: boolean = false) => {
-    // Block if already subscribed to this tier
-    if ((tier === "pro" && isProActive && !isExpired) || (tier === "pro_football" && isProFootballActive && !isExpired)) {
-      toast({ title: "Already Subscribed", description: "You already have an active subscription for this plan." });
+    try { assertPurchaseCatalogReady("ignite_v2_club", []); } catch (error) {
+      toast({ title: "New plans are being prepared", description: error instanceof Error ? error.message : "Purchase unavailable", variant: "destructive" });
       return;
     }
+
+    // Upgrading a band or buying additional team capacity is allowed.
     if (isNativePlatform()) {
       // On native, use In-App Purchases
       handleNativeIAP(tier, withTrial);
@@ -643,7 +631,7 @@ export default function ClubUpgradePage() {
       return;
     }
     const plan = tier === "pro" ? selectedPlan : selectedPlanFootball;
-    const annualDisabledCheckout = tier === "pro_football" || (tier === "pro" && plan === "unlimited");
+    const annualDisabledCheckout = false;
     const isAnnual = annualDisabledCheckout ? false : (tier === "pro" ? isAnnualPro : isAnnualProFootball);
     setIsCheckingOut(true);
 
@@ -654,6 +642,9 @@ export default function ClubUpgradePage() {
           entityId: clubId,
           tier: tier,
           plan: plan,
+          pricingVersion: "usd_v2",
+          extraTeams: plan === "standard" ? extraTeams : 0,
+          currency: "USD",
           isAnnual: isAnnual,
           withTrial: withTrial,
           successUrl: `${window.location.origin}/clubs/${clubId}/upgrade?payment=success`,
@@ -678,18 +669,19 @@ export default function ClubUpgradePage() {
   };
 
   const handleNativeIAP = async (tier: "pro" | "pro_football", _withTrial: boolean = false) => {
-    const { useInAppPurchase, getClubUpgradeProductId } = await import("@/hooks/useInAppPurchase");
+    const { getClubUpgradeProductId } = await import("@/hooks/useInAppPurchase");
     // We can't use hooks dynamically, so we'll handle it inline
     const { Capacitor } = await import("@capacitor/core");
     if (!Capacitor.isNativePlatform()) return;
 
     const plan = tier === "pro" ? selectedPlan : selectedPlanFootball;
-    const annualDisabledIAP = tier === "pro_football" || (tier === "pro" && plan === "unlimited");
+    const annualDisabledIAP = false;
     const isAnnual = annualDisabledIAP ? false : (tier === "pro" ? isAnnualPro : isAnnualProFootball);
-    const productId = getClubUpgradeProductId(tier, plan, isAnnual);
+    const productId = getClubUpgradeProductId(tier, plan, isAnnual, plan === "standard" ? extraTeams : 0);
 
     setIsCheckingOut(true);
     try {
+      assertPurchaseCatalogReady(productId, []);
       if (useIcpLab || isIcpRouted) {
         // Session-free path: verify-iap-receipt-icp mints an attestation and
         // the entitlement is redeemed on the identity_access canister.
@@ -869,13 +861,14 @@ export default function ClubUpgradePage() {
       <div className="space-y-3 mb-4">
         <Label className="text-sm font-medium">Select Plan</Label>
         <div className="grid gap-2">
-          {(["starter", "standard", "unlimited"] as PlanTier[]).map((p) => {
+          {CLUB_PLAN_ORDER.map((p) => {
             const planPricing = pricing[p];
             const isRecommended = p === recommendedPlan;
-            const isDisabled = planPricing.teamLimit !== null && teamCount > planPricing.teamLimit;
+            const isDisabled = p !== "standard" && teamCount > planPricing.teamLimit;
 
             return (
-              <button
+              <Button
+                variant="outline"
                 key={p}
                 onClick={() => !isDisabled && setPlan(p)}
                 disabled={isDisabled}
@@ -889,7 +882,7 @@ export default function ClubUpgradePage() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium capitalize">{p}</span>
+                    <span className="font-medium">{CLUB_PLAN_NAMES[p]}</span>
                     {isRecommended && !isDisabled && (
                       <Badge variant="secondary" className="text-xs">Recommended</Badge>
                     )}
@@ -899,12 +892,12 @@ export default function ClubUpgradePage() {
                       </Badge>
                     )}
                   </div>
-                  <span className="font-bold">${planPricing.monthly}/mo</span>
+                  <span className="font-bold">US${planPricing.monthly}/mo</span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {planPricing.teamLimit ? `Up to ${planPricing.teamLimit} teams` : "Unlimited teams"}
+                  {`Up to ${planPricing.teamLimit} teams${p === "standard" ? " • additional teams paid separately" : ""}`}
                 </p>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -1113,10 +1106,10 @@ export default function ClubUpgradePage() {
     const setIsAnnual = isPro ? setIsAnnualPro : setIsAnnualProFootball;
     const code = isPro ? promoCode : promoCodeFootball;
     const setCode = isPro ? setPromoCode : setPromoCodeFootball;
-    const annualDisabled = !isPro || plan === "unlimited";
+    const annualDisabled = false;
     const effectiveIsAnnual = annualDisabled ? false : isAnnual;
-    const monthlyPrice = pricing[plan].monthly;
-    const annualPrice = pricing[plan].annual;
+    const monthlyPrice = clubQuote(tier, plan, plan === "standard" ? extraTeams : 0, false).amount;
+    const annualPrice = clubQuote(tier, plan, plan === "standard" ? extraTeams : 0, true).amount;
     const annualSavings = annualPrice ? Math.round(monthlyPrice * 12 - annualPrice) : undefined;
 
     return (
@@ -1134,6 +1127,12 @@ export default function ClubUpgradePage() {
               <span>Your club: {teamCount} teams</span>
             </div>
             {renderPlanSelector(plan, setPlan, isPro ? "pro" : "proFootball")}
+            {plan === "standard" && <div className="space-y-2 text-left mb-4">
+              <Label htmlFor={`extra-teams-${tier}`}>Additional teams above 20</Label>
+              <Input id={`extra-teams-${tier}`} type="number" min={Math.max(0, teamCount - 20)} max={99980} step={1}
+                value={extraTeams} onChange={event => setExtraTeams(Math.min(99980, Math.max(0, teamCount - 20, Math.floor(Number(event.target.value) || 0))))} />
+              <p className="text-sm text-muted-foreground">US${isPro ? "15/month or 165/year" : "20/month or 220/year"} per additional team. Capacity activates after payment verification.</p>
+            </div>}
           </>
         }
         appearance={{
@@ -1227,7 +1226,7 @@ export default function ClubUpgradePage() {
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-base">Try Club Pro free for 30 days</h3>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Unlock sponsors, branding, unlimited storage, scheduled messages and more. No charge for 30 days — cancel anytime before the trial ends and you won't be billed.
+                  Unlock sponsors, branding, 3 GB shared media storage, scheduled messages and more. No charge for 30 days — cancel anytime before the trial ends and you won't be billed.
                 </p>
               </div>
             </div>
@@ -1319,7 +1318,7 @@ export default function ClubUpgradePage() {
                             <p className="text-xs text-muted-foreground">{t.level_age}</p>
                           )}
                         </div>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </DialogContent>

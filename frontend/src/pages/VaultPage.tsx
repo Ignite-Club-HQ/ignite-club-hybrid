@@ -811,8 +811,8 @@ function SupabaseVaultPage() {
     return null;
   }, [currentView, userClubs, currentClubHasPro]);
 
-  // 5GB base storage limit for Pro tier (in bytes)
-  const BASE_STORAGE_LIMIT = 5 * 1024 * 1024 * 1024;
+  // Existing 5GB base storage limit for Pro tier (in bytes)
+  const BASE_STORAGE_LIMIT = 5 * 1024 * 1024 * 1024; // Existing paid terms; v2 fulfillment is not enabled.
 
   // Query for purchased storage and scheduled downgrade info for current club
   const { data: storageSubscriptionData } = useQuery({
@@ -861,11 +861,11 @@ function SupabaseVaultPage() {
     return 0;
   }, [currentView, storageBreakdown]);
 
-  // Pro tier has 5GB limit + purchased storage
+  // Existing Pro tier has 5GB limit + purchased storage
   const isStorageLimitReached = useMemo(() => {
     if (isAppAdmin) return false;
     if (!hasProClub) return true; // Free tier can't access vault
-    // Pro tier has 5GB base limit + purchased storage (total club storage)
+    // Existing Pro tier has 5GB base limit + purchased storage (total club storage)
     return totalClubStorageUsed >= PRO_STORAGE_LIMIT;
   }, [isAppAdmin, hasProClub, totalClubStorageUsed]);
 

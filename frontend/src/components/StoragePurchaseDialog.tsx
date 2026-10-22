@@ -428,7 +428,7 @@ export function StoragePurchaseDialog({
     }, 100);
   };
 
-  const baseStorageGb = 5; // Base Pro storage
+  const baseStorageGb = 5; // Preserve existing paid storage until v2 fulfillment.
   const totalStorageGb = baseStorageGb + purchasedStorageGb;
 
   const formatPrice = (monthly: number, annual: number) => {
