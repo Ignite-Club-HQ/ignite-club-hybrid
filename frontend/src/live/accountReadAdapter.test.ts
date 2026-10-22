@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { IDL } from '@icp-sdk/core/candid';
-import { adaptLocalAccountReads, isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
+import { adaptLocalAccountReads, adaptRemoteAccountReads, isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
 import { idlFactory as vaultIdl } from '../lab/bindings/vault_domain/declarations/vault_domain.did.js';
 
 describe('local protected read adapter', () => {
