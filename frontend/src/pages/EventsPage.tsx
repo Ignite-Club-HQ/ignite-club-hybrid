@@ -49,7 +49,7 @@ import { useToast } from "@/hooks/use-toast";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logScheduleOpenLatency, resetScheduleOpenLog } from "@/lib/scheduleOpenLatency";
 import { format, parseISO, startOfDay, isSameDay, subHours } from "date-fns";
-import { hasValidScheduleDate, scheduleTimestampDate } from "@/lib/scheduleDates";
+import { hasValidScheduleDate } from "@/lib/scheduleDates";
 import { formatCompactDateTime } from "@/lib/eventRelativeDate";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useClubTheme } from "@/hooks/useClubTheme";
@@ -62,7 +62,7 @@ import { fetchViewableCompetitionMatchIds, makeCompetitionFixtureVisibility } fr
 import { readScheduleEvents } from "@/features/events/scheduleReadRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { getLiveAccountRosterScope, listLiveEventDutyTeams, listLiveEvents } from "@/live/features/events";
+import { getLiveAccountRosterScope } from "@/live/features/events";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
 import { loadScheduleFixtures, type FixtureSnapshot } from "@/live/scheduleFixtures";
@@ -747,7 +747,7 @@ export default function EventsPage() {
     refetchOnReconnect: 'always',
   });
 
-  const memberScheduleKey = ['icp-member-schedule', user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, viewerRoleScope];
+  const memberScheduleKey = ['events', 'icp-member-schedule', user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, viewerRoleScope];
   const memberScheduleQuery = useQuery({
     queryKey: memberScheduleKey,
     enabled: isIcpAuthBackend && !!userMemberships,
@@ -1248,7 +1248,7 @@ export default function EventsPage() {
                 await Promise.all([
                   queryClient.invalidateQueries({ queryKey: ["user-memberships-for-events"] }),
                   queryClient.invalidateQueries({ queryKey: eventKeys.lists() }),
-                  ...(isIcpAuthBackend ? [queryClient.invalidateQueries({ queryKey: ['icp-schedule-fixtures'] }), queryClient.invalidateQueries({ queryKey: ['icp-member-schedule'] })] : []),
+                  ...(isIcpAuthBackend ? [queryClient.invalidateQueries({ queryKey: ['icp-schedule-fixtures'] }), queryClient.invalidateQueries({ queryKey: ['events', 'icp-member-schedule'] })] : []),
                 ]);
               } finally {
                 setTimeout(() => setIsRefreshing(false), 600);
