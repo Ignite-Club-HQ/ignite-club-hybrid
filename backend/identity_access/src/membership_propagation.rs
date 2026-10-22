@@ -32,6 +32,15 @@ impl<M:Memory> Worker<M>{
         if let Ok(prior)=self.job(source){if prior.binding==binding{return Ok(());}}
         self.save(&Job{source:source.into(),binding,sequence:0,cursor:None,phase:Phase::Pull});Ok(())
     }
+    /// Finish one retained generation before starting the latest live one.
+    /// A source restored below the captured revision is never accepted.
+    pub fn resume_or_start<N:Memory+Clone>(&mut self,c:&mut Coordinator<N>,source:&str,authority:Principal,revision:u64)->Result<(),String>{
+        if let Ok(prior)=self.job(source){
+            if prior.binding.authority!=authority||revision<prior.binding.revision{return Err("Retained source authority or revision changed".into());}
+            if prior.phase!=Phase::Acknowledged{return Ok(());}
+        }
+        self.start(c,source,authority,revision)
+    }
     /// This request is persisted before the future runtime awaits a response.
     pub fn request(&self,source:&str)->Result<(Binding,Option<Cursor>),String>{
         let j=self.job(source)?;if j.phase!=Phase::Pull{return Err("Source pull is not pending".into());}Ok((j.binding,j.cursor))
@@ -59,7 +68,7 @@ impl<M:Memory> Worker<M>{
     pub fn published(&self,source:&str)->Result<Binding,String>{let j=self.job(source)?;if j.phase!=Phase::Published&&j.phase!=Phase::Acknowledged{return Err("Directory publication pending".into());}Ok(j.binding)}
     pub fn acknowledge_readback<N:Memory+Clone>(&mut self,c:&mut Coordinator<N>,source:&str,captured:&Binding,readback:u64)->Result<(),String>{
         let mut j=self.job(source)?;if &j.binding!=captured||j.phase!=Phase::Published&&j.phase!=Phase::Acknowledged{return Err("Source acknowledgement changed".into());}
-        c.acknowledge(source,captured,readback)?;j.phase=Phase::Acknowledged;self.save(&j);Ok(())
+        c.acknowledge_completed(source,captured,readback)?;j.phase=Phase::Acknowledged;self.save(&j);Ok(())
     }
     /// Bounded cleanup uses the coordinator's verified generation, never a
     /// caller-supplied generation that could discard current unknown work.
@@ -94,6 +103,26 @@ impl<M:Memory> Worker<M>{
         assert!(w.accept(&mut c,"g0",&b,&cursor,SourcePage{revision:2,edges:vec![],next:None,scanned:0}).is_err());
         assert!(w.accept(&mut c,"g0",&b,&cursor,SourcePage{revision:1,edges:vec![],next:Some(Cursor{revision:1,phase:0,offset:1,nested:0}),scanned:0}).is_err());
         assert_eq!(w.request("g0").unwrap(),(b,cursor));
+    }
+    #[test]fn ongoing_mutations_finish_retained_job_but_never_certify_current_reads(){
+        let m=MemoryManager::init(VectorMemory::default());let mem=|n|m.get(MemoryId::new(n));let (s,p,a)=group_inventory::tests::fixture();
+        let mut c=Coordinator::open(mem(0),Pool::open(mem(1),mem(2),10000,16).unwrap(),mem(3));c.bind_inventory(verify_inventory(&s,&p,&a,1).unwrap()).unwrap();
+        let mut w=Worker::open(mem(4));w.resume_or_start(&mut c,"g0",a[0],1).unwrap();let (b,first)=w.request("g0").unwrap();
+        for n in 0..4 {
+            let mut newer=b.clone();newer.revision=10+n;c.observe_invalidation("g0",&newer).unwrap();
+            w.resume_or_start(&mut c,"g0",a[0],newer.revision).unwrap();let (captured,cursor)=w.request("g0").unwrap();assert_eq!(captured,b);
+            w.accept(&mut c,"g0",&b,&cursor,SourcePage{revision:1,edges:vec![Edge::Club{id:format!("club{n}"),deleted:false}],next:if n<3{Some(Cursor{revision:1,phase:0,offset:n+1,nested:0})}else{None},scanned:1}).unwrap();
+        }
+        drop(w);let mut w=Worker::open(mem(4));
+        for live in 20..100 {
+            w.resume_or_start(&mut c,"g0",a[0],live).unwrap();assert_eq!(w.phase("g0").unwrap().1,1);
+            if w.published("g0").is_ok(){break;}assert!(w.advance(&mut c,"g0").unwrap()<=100);
+        }
+        assert!(w.published("g0").is_ok());assert!(c.acknowledge("g0",&b,1).is_err());
+        w.acknowledge_readback(&mut c,"g0",&b,1).unwrap();assert_eq!(w.phase("g0").unwrap(),("acknowledged",1));assert!(c.sources().is_err());
+        w.resume_or_start(&mut c,"g0",a[0],100).unwrap();assert_eq!(w.request("g0").unwrap().0.revision,100);
+        assert!(w.accept(&mut c,"g0",&b,&first,SourcePage{revision:1,edges:vec![],next:None,scanned:0}).is_err());
+        assert!(w.resume_or_start(&mut c,"g0",a[0],99).is_err());
     }
     #[test]fn fenced_replacement_reclaims_old_jobs_and_retains_current_pending_after_reopen(){
         let m=MemoryManager::init(VectorMemory::default());let mem=|n|m.get(MemoryId::new(n));let (mut s,mut p,a)=group_inventory::tests::fixture();

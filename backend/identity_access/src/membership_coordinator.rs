@@ -137,9 +137,14 @@ impl<M:Memory+Clone> Coordinator<M>{
         b.published=true;self.save(source,&b);Ok(())
     }
     pub fn acknowledge(&mut self,source:&str,binding:&Binding,readback:u64)->Outcome<()>{
+        self.check_observed_watermark(source,binding)?;
+        self.acknowledge_completed(source,binding,readback)
+    }
+    /// Historical completion is not readable freshness: sources() continues
+    /// to reject builds behind the separately observed live watermark.
+    pub fn acknowledge_completed(&mut self,source:&str,binding:&Binding,readback:u64)->Outcome<()>{
         let b=self.build(source).ok_or("Source missing")?;
         if !b.published||&b.binding!=binding{return Err("Unknown directory publication".into());}
-        self.check_observed_watermark(source,binding)?;
         self.journal.acknowledge(source,binding,readback)
     }
     /// An authenticated notification blocks private reads immediately, before
