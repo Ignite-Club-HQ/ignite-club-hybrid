@@ -102,6 +102,8 @@ describe('remote protected read fallback', () => {
   });
 
   it('keeps the twin decision on the device so the next launch skips the refused query', async () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } });
     const legacy = vi.fn().mockRejectedValue(trap());
     const twin = vi.fn().mockResolvedValue('protected');
     const wrapped = adaptRemoteAccountReads({ get_folder: legacy, read_account_get_folder: twin }, vaultIdl({ IDL }), 'ggggg-gg');
@@ -116,5 +118,6 @@ describe('remote protected read fallback', () => {
     const again = fresh.adaptRemoteAccountReads({ get_folder: legacy2, read_account_get_folder: twin2 }, vaultIdl({ IDL }), 'ggggg-gg');
     expect(await again.get_folder('f')).toBe('protected');
     expect(legacy2).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });
