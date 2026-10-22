@@ -1,4 +1,5 @@
 import { readContentInScope } from "@/live/contentRouting";
+import { settleAll } from "@/live/crossGroupClubs";
 import { acrossLists } from "@/live/featureScopes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,10 +75,14 @@ export async function fetchMediaFeedPage(
     icp: async (ctx) => {
       const clubIds = options.clubId ? [options.clubId] : await (async () => {
         const { listLiveMembershipClubs } = await import("@/live/features/membership");
-        const clubs = await readContentInScope(ctx, "membership", acrossLists, listLiveMembershipClubs);
-        return [...new Set(clubs.filter(c => !c.deleted_at_ms?.length).map(c => c.id))];
+        // Club ids from role grants (every group), not one group's club list.
+        const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+        const { grantClubId } = await import("@/live/crossGroupClubs");
+        const grants = await getLiveMyRoleGrants(ctx) as unknown as Parameters<typeof grantClubId>[0][];
+        return [...new Set(grants.map(grantClubId).filter((c): c is string => !!c))];
       })();
-      const parts = await Promise.all(clubIds.map(clubId => readContentInScope(ctx, "media", { clubId }, scoped => listLiveAssets(scoped, clubId))));
+      // Each club's photos come from its own group; one failing club never empties the feed.
+      const parts = (await settleAll(clubIds.map(clubId => readContentInScope(ctx, "media", { clubId }, scoped => listLiveAssets(scoped, clubId))))).values;
       const assets = [...new Map(parts.flat().map(asset => [asset.id, asset])).values()];
       const photos = assets
         .filter(asset => !asset.deleted && (!options.cardId || options.cardPhotoIds?.includes(asset.id)))

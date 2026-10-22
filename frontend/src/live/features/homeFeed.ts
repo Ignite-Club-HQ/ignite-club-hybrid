@@ -1,4 +1,5 @@
 import { readContentInScope } from "../contentRouting";
+import { settleAll } from "../crossGroupClubs";
 import { acrossLists } from "../featureScopes";
 import type { FeatureBackendContext } from "../featureRouter";
 import { getLiveClubProfile, getLiveTeam, listLivePersonalTeams } from "./club";
@@ -201,8 +202,10 @@ export async function fetchLiveHomeFeed(
   for (const clubId of raw.clubIds) eventPromises.set(`c:${clubId}`, readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, clubId, null)));
   for (const teamId of raw.teamIds) eventPromises.set(`t:${teamId}`, readContentInScope(ctx, "events", { teamId }, scoped => listLiveEvents(scoped, null, teamId)));
   for (const p of eventPromises.values()) p.catch(() => {});
+  // Each club/team is checked in its own group; one slow or refusing club no
+  // longer drops every club (only that one is left out). All failing throws.
   const activeClubIds = new Set<string>();
-  await Promise.all(
+  await settleAll(
     candidateClubIds.map(async (clubId) => {
       const profile = await clubProfile(clubId);
       const club = profile[0];
@@ -210,7 +213,7 @@ export async function fetchLiveHomeFeed(
     }),
   );
   const activeTeamIds = new Set<string>();
-  await Promise.all(
+  await settleAll(
     raw.teamIds.map(async (teamId) => {
       const teamOpt = (await teamRecord(teamId)) as unknown as Array<{
         club_id: string;
@@ -244,14 +247,15 @@ export async function fetchLiveHomeFeed(
     ),
   };
 
-  const eventResults = await Promise.all([
+  const eventResults = await Promise.allSettled([
     ...memberships.clubIds.map((clubId) => eventPromises.get(`c:${clubId}`) ?? readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, clubId, null))),
     ...memberships.teamIds.map((teamId) => eventPromises.get(`t:${teamId}`) ?? readContentInScope(ctx, "events", { teamId }, scoped => listLiveEvents(scoped, null, teamId))),
   ]);
 
   const mergedById = new Map<string, LiveEvent>();
-  for (const events of eventResults) {
-    for (const event of events) mergedById.set(event.id, event);
+  for (const result of eventResults) {
+    if (result.status !== "fulfilled") continue;
+    for (const event of result.value) mergedById.set(event.id, event);
   }
   const merged = [...mergedById.values()]
     .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms))
