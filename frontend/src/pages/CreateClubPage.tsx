@@ -207,6 +207,9 @@ export default function CreateClubPage() {
             sport || null,
             homeCountry,
           );
+          // Independent follow-up steps run together instead of one after another.
+          await Promise.all([
+            (async () => {
           try {
             await setLiveClubGeneralSettings(ctx, profile.id, {
               classModeEnabled: isClassModeSport(sport),
@@ -217,6 +220,8 @@ export default function CreateClubPage() {
           } catch (err) {
             console.warn("[CreateClub] class mode setting failed", err);
           }
+            })(),
+            (async () => {
           if (logoFile) {
             try {
               const { compressImage } = await import("@/lib/imageCompression");
@@ -235,12 +240,16 @@ export default function CreateClubPage() {
               console.warn("[CreateClub] logo upload failed", err);
             }
           }
+            })(),
+            (async () => {
           try {
             const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
             await ensureLiveDefaultClubChats(ctx, profile.id, { force: true });
           } catch (err) {
             console.warn("[CreateClub] default chats failed", err);
           }
+            })(),
+          ]);
           return profile.id;
         },
         supabase: async () => {
