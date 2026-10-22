@@ -120,50 +120,47 @@ export function ClubDaySummary({
           return all;
         },
         icp: async (ctx) => {
-          // Suburb stays null: the canister record has a single address
-          // string, no suburb column.
-          const all: ClubDayEvent[] = [];
-          const teamNameCache = new Map<string, string | null>();
-          for (const clubId of clubIds) {
-            const events = await listLiveEvents(ctx, clubId, null);
-            for (const ev of events as any[]) {
-              if (ev.deleted) continue;
-              const start = new Date(Number(ev.starts_at_ms));
-              if (format(start, "yyyy-MM-dd") !== dKey) continue;
-              const end = new Date(Number(ev.ends_at_ms));
-              const teamId = (ev.team_id?.[0] ?? null) as string | null;
-              let teamName: string | null = null;
-              if (teamId) {
-                if (!teamNameCache.has(teamId)) {
-                  try {
-                    const teamOpt = await getLiveTeam(ctx, teamId);
-                    teamNameCache.set(teamId, (teamOpt as any)?.[0]?.name ?? null);
-                  } catch {
-                    teamNameCache.set(teamId, null);
-                  }
-                }
-                teamName = teamNameCache.get(teamId) ?? null;
-              }
-              all.push({
-                id: ev.id,
-                title: ev.title,
-                type: ev.event_type,
-                event_date: format(start, "yyyy-MM-dd"),
-                start_time: format(start, "HH:mm"),
-                end_time: format(end, "HH:mm"),
-                location_name: (ev.location?.[0] ?? null) as string | null,
-                address: (ev.address?.[0] ?? null) as string | null,
-                suburb: null,
-                team_id: teamId,
-                team_name: teamName,
-                opponent: (ev.opponent?.[0] ?? null) as string | null,
-                is_cancelled: !!ev.cancelled,
-              });
+          // Each club is read from its own group, all at once; one slow or
+          // refusing club no longer blanks the day. Team names in parallel.
+          // Suburb stays null: the canister record has one address string.
+          const { readContentInScope } = await import("@/live/contentRouting");
+          const { readMembershipInScope } = await import("@/live/membershipRouting");
+          const settled = await Promise.allSettled(clubIds.map((clubId) =>
+            readContentInScope(ctx, "events", { clubId }, (scoped) => listLiveEvents(scoped, clubId, null))));
+          if (settled.length && settled.every((r) => r.status === "rejected")) throw (settled[0] as PromiseRejectedResult).reason;
+          const dayEvents = settled.flatMap((r) => (r.status === "fulfilled" ? (r.value as any[]) : []))
+            .filter((ev) => !ev.deleted && format(new Date(Number(ev.starts_at_ms)), "yyyy-MM-dd") === dKey);
+          const teamIds = [...new Set(dayEvents.map((ev) => (ev.team_id?.[0] ?? null) as string | null).filter(Boolean))] as string[];
+          const names = new Map<string, string | null>(await Promise.all(teamIds.map(async (teamId) => {
+            try {
+              const teamOpt = await readMembershipInScope(ctx, { teamId }, (scoped) => getLiveTeam(scoped, teamId));
+              return [teamId, (teamOpt as any)?.[0]?.name ?? null] as [string, string | null];
+            } catch {
+              return [teamId, null] as [string, string | null];
             }
-          }
-          return all;
+          })));
+          return dayEvents.map((ev): ClubDayEvent => {
+            const start = new Date(Number(ev.starts_at_ms));
+            const end = new Date(Number(ev.ends_at_ms));
+            const teamId = (ev.team_id?.[0] ?? null) as string | null;
+            return {
+              id: ev.id,
+              title: ev.title,
+              type: ev.event_type,
+              event_date: format(start, "yyyy-MM-dd"),
+              start_time: format(start, "HH:mm"),
+              end_time: format(end, "HH:mm"),
+              location_name: (ev.location?.[0] ?? null) as string | null,
+              address: (ev.address?.[0] ?? null) as string | null,
+              suburb: null,
+              team_id: teamId,
+              team_name: teamId ? names.get(teamId) ?? null : null,
+              opponent: (ev.opponent?.[0] ?? null) as string | null,
+              is_cancelled: !!ev.cancelled,
+            };
+          });
         },
-      }, { everyGroup: true, merge: (parts: ClubDayEvent[][]) => parts.flat() }).then((all) =>
+      }, { shared: "person" }).then((all) =>
         all.sort((a, b) => {
           const at = a.start_time || a.event_date;
           const bt = b.start_time || b.event_date;
@@ -264,7 +261,7 @@ export function ClubDaySummary({
         </ToggleGroupItem>
       </ToggleGroup>
 
-      {isLoading ? (
+      {isLoading && (scope === "club" || visible.length === 0) ? (
         <div className="space-y-2">
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
