@@ -10,7 +10,7 @@ const governor = Principal.fromUint8Array(Uint8Array.from([1, 1]));
 const stranger = Principal.fromUint8Array(Uint8Array.from([2, 1]));
 const member = Principal.fromUint8Array(Uint8Array.from([3, 1]));
 const destination = Principal.fromUint8Array(Uint8Array.from([4, 1]));
-const ok = reply => { assert.ok('Ok' in reply, JSON.stringify(reply)); return reply.Ok; };
+const ok = reply => { assert.ok('Ok' in reply); return reply.Ok; };
 const server = await PocketIcServer.start(); let pic;
 try {
   pic = await PocketIc.create(server.getUrl());
