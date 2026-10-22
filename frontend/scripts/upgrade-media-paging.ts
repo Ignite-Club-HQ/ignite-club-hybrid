@@ -25,7 +25,7 @@ const provision = json('deploy/groups/g2/provision.json');
 const approval = json('deploy/groups/g2/general-opening.json');
 if (shared.shard_router !== 'jcdfe-vqaaa-aaaal-qxloq-cai' || shared.identity_access !== 'mq2sj-fiaaa-aaaal-qxlqa-cai' ||
     shared.messaging_domain !== 'mx3u5-iqaaa-aaaal-qxlqq-cai' || shared.media_blob_store !== 'jlaoy-dyaaa-aaaal-qxlpa-cai' ||
-    shared.pii_access_control !== 'iui5p-aaaaa-aaaal-qxllq-cai') throw new Error('Pinned original mainnet mappings required');
+    shared.pii_access_control !== 'iui5p-aaaaa-aaaal-qxllq-cai' || shared.media_metadata !== 'mc4fq-jyaaa-aaaal-qxlta-cai') throw new Error('Pinned original mainnet mappings required');
 const g2 = validateGroup2Inventory(provision, shared);
 const identity = loadOperatorIdentity(pem);
 if (identity.getPrincipal().toText() !== GROUP2_GOVERNOR) throw new Error('Original governor identity required');
@@ -142,4 +142,4 @@ for (const s of approval.services) {
   if (t) { if (s.canisterId !== t.canisterId) throw new Error('Approval inventory changed'); s.moduleHash = t.newHash; }
 }
 writeFileSync(new URL('deploy/groups/g2/general-opening.json', root), JSON.stringify(approval, null, 2) + '\n');
-console.log('Two messaging modules verified; routing state/settings/photo keys preserved. Snapshot refresh and signed-in acceptance still required.');
+console.log('Two photo metadata modules upgraded and page indexes complete; settings/photo keys preserved. Snapshot refresh and signed-in acceptance follow.');
