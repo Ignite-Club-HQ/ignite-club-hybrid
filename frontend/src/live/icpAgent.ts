@@ -130,12 +130,24 @@ export async function createLiveActor<T>(
 ): Promise<{ actor: T; canisterId: Principal }> {
   const canisterId = resolveLiveCanisterId(target, domainKey, domainLabel);
   const agent = await createLiveAgent(target, identity);
+  // Building an actor constructs the whole Candid interface (hundreds of
+  // methods) several times over — synchronous work on the UI thread. Reuse
+  // one actor per agent + canister + interface instead of rebuilding per call.
+  let perAgent = liveActorCache.get(agent);
+  if (!perAgent) { perAgent = new WeakMap(); liveActorCache.set(agent, perAgent); }
+  let perFactory = perAgent.get(idlFactoryForDomain);
+  if (!perFactory) { perFactory = new Map(); perAgent.set(idlFactoryForDomain, perFactory); }
+  const key = canisterId.toText();
+  const hit = perFactory.get(key);
+  if (hit) return { actor: hit as T, canisterId };
   const actor = wrapUpdateCallsForPendingIndicator(
     Actor.createActor<T>(idlFactoryForDomain, { agent, canisterId }),
     idlFactoryForDomain,
   );
+  perFactory.set(key, actor);
   return { actor, canisterId };
 }
+const liveActorCache = new WeakMap<object, WeakMap<IDL.InterfaceFactory, Map<string, unknown>>>();
 
 /**
  * Wraps an actor's methods so in-flight calls register with the global
