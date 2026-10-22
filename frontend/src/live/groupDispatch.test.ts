@@ -152,6 +152,22 @@ describe('entity scopes', () => {
     expect(await x.readFor('events', { eventId: 'm-ev' }, 'events_domain', async () => 1)).toBe('group');
     expect(s.readEveryGroup).not.toHaveBeenCalled();
   });
+  it('a chat listed for an original-group club opens from the shared canisters, not the hosted lookup', async () => {
+    const { d, s } = world({ g2: [] }); const readHosted = vi.fn(async () => { throw new Error('No hosted assignment'); });
+    const x = createClubDispatcher({ ...d, open: vi.fn(async () => ({ ...s, readHosted })) } as never);
+    await x.remember('conversation', [['g1-chat', 'g1-club']]);
+    expect(await x.readFor('messaging', { conversationId: 'g1-chat' }, 'messaging_domain', async () => 1)).toBe('legacy');
+    expect(readHosted).not.toHaveBeenCalled();
+  });
+  it('a stale device answer pointing at an original-group club is dropped and re-checked', async () => {
+    const saved: Record<string, Record<string, string>> = { p1: { 'conversation:g1-chat': 'g1-club' } };
+    const store = { load: (p: string) => saved[p] ?? {}, save: (p: string, o: Record<string, string>) => { saved[p] = o; } };
+    const { d, s } = world({ g2: [] }); const readHosted = vi.fn(async () => { throw new Error('No hosted assignment'); });
+    const x = createClubDispatcher({ ...d, store, open: vi.fn(async () => ({ ...s, readHosted })) } as never);
+    expect(await x.readFor('messaging', { conversationId: 'g1-chat' }, 'messaging_domain', async () => 1)).toBe('legacy');
+    expect(readHosted).not.toHaveBeenCalled();
+    expect(saved.p1['conversation:g1-chat']).toBeUndefined();
+  });
 });
 
 describe('lists spanning several clubs', () => {
