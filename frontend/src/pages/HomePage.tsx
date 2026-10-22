@@ -1,3 +1,4 @@
+import { readDiscoveredMiniLeagues } from "@/live/accountDiscovery";
 import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
 import { readMembershipInScope } from '@/live/membershipRouting';
 import { readContentInScope } from '@/live/contentRouting';
@@ -57,7 +58,7 @@ import {
 } from "@/live/features/proAccess";
 import { getLiveClubPointsSettings } from "@/live/features/points";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, listLivePublicMiniLeagues } from "@/live/features/miniLeagues";
+import { listLiveMiniLeaguesByClub, listLivePublicMiniLeagues } from "@/live/features/miniLeagues";
 import {
   fetchLiveHomeChildren,
   fetchLiveHomeFeed,
@@ -465,10 +466,10 @@ export default function HomePage() {
             // returns every league the caller is linked to (admin or
             // claimed player), so we reuse it here and let the merge below
             // de-duplicate against adminLeaguesResult.
-            const leagues = await listMyLiveMiniLeagues(ctx);
+            const leagues = await readDiscoveredMiniLeagues(ctx);
             return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
           },
-        }, { everyGroup: true, merge: (parts: Array<{ data: { mini_league_id: string }[] | null; error: unknown }>) => { const failed = parts.find(p => p.error); if (failed) throw failed.error; return { data: [...new Map(parts.flatMap(p => p.data ?? []).map(r => [r.mini_league_id, r])).values()], error: null }; } }),
+        }, { shared: 'person' }),
         leagueAdminArr.length > 0
           ? withFeatureBackend<{ data: { id: string }[] | null; error: any }>("mini_leagues", {
               supabase: async () => supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr),
