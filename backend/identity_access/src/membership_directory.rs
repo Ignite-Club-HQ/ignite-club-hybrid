@@ -55,8 +55,8 @@ impl Directory {
             return Err("Invalid bounded membership subjects".into());
         }
         if snapshot.revision < prior.revision { return Err("Stale source snapshot".into()); }
-        if snapshot.revision == prior.revision {
-            return if prior.complete && prior.subjects == snapshot.subjects { Ok(()) } else { Err("Conflicting source snapshot".into()) };
+        if snapshot.revision == prior.revision && prior.complete {
+            return if prior.subjects == snapshot.subjects { Ok(()) } else { Err("Conflicting source snapshot".into()) };
         }
         let revision = self.data_revision.checked_add(1).ok_or("Directory revision exhausted")?;
         let next = Source { club: snapshot.club.clone(), authority: caller, generation: snapshot.generation,
@@ -66,10 +66,10 @@ impl Directory {
     pub fn complete(&self) -> bool {
         !self.required.is_empty() && self.required.iter().all(|club| self.sources.get(club).is_some_and(|s| s.complete && s.generation == self.generation))
     }
-    pub fn invalidate(&mut self, caller: Principal, club: &str, revision: u64) -> Result<(), String> {
+    pub fn invalidate(&mut self, caller: Principal, club: &str, generation: u64, revision: u64) -> Result<(), String> {
         let prior = self.sources.get(club).ok_or("Unregistered club source")?;
-        if caller != prior.authority || revision < prior.revision { return Err("Invalid source invalidation".into()); }
-        if revision == prior.revision && !prior.complete { return Ok(()); }
+        if caller != prior.authority || generation != self.generation || revision < prior.revision { return Err("Invalid source invalidation".into()); }
+        if revision == prior.revision { return Ok(()); }
         let next_revision = self.data_revision.checked_add(1).ok_or("Directory revision exhausted")?;
         let source = self.sources.get_mut(club).ok_or("Unregistered club source")?;
         source.revision = revision; source.complete = false; self.data_revision = next_revision; Ok(())
@@ -103,9 +103,9 @@ impl Directory {
     }
     #[test] fn invalidation_requires_a_complete_replacement() {
         let mut d=fixture(); d.commit_complete_snapshot(p(1),snap("g1-club",p(1),1,&[p(3)])).unwrap();
-        d.invalidate(p(1),"g1-club",2).unwrap(); assert!(!d.sources["g1-club"].complete);
-        // Same revision is incomplete, not a successful replay or completion.
-        assert!(d.commit_complete_snapshot(p(1),snap("g1-club",p(1),2,&[])).is_err());
-        d.commit_complete_snapshot(p(1),snap("g1-club",p(1),3,&[])).unwrap(); assert!(d.sources["g1-club"].complete);
+        d.invalidate(p(1),"g1-club",1,2).unwrap(); assert!(!d.sources["g1-club"].complete);
+        d.commit_complete_snapshot(p(1),snap("g1-club",p(1),2,&[])).unwrap(); assert!(d.sources["g1-club"].complete);
+        let revision = d.data_revision;
+        d.invalidate(p(1),"g1-club",1,2).unwrap(); assert!(d.sources["g1-club"].complete); assert_eq!(d.data_revision,revision);
     }
 }
