@@ -36,6 +36,7 @@ import MediaJournalToken "../../shared/MediaJournalToken";
 import MediaGrowthReservations "mediaGrowthReservations";
 import MembershipPage "membershipPage";
 import MembershipIndex "membershipIndex";
+import MembershipDiscovery "membershipDiscovery";
 import SubscriptionPolicy "subscriptionPolicy";
 
 persistent actor class Main(governorInit : Principal) = this {
@@ -508,7 +509,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // membership-bearing state bumps membershipEpoch; a stale index is rebuilt
   // on the next read. Candidates are always re-verified with isMember, so the
   // index can only accelerate, never grant. Rebuilt after upgrade (transient).
-  transient var membershipEpoch : Nat = 0;
+  var membershipDiscoveryJournal : MembershipDiscovery.Journal;
+  func membershipEpoch() : Nat = membershipDiscoveryJournal.revision;
+  func bumpMembershipDiscovery() { MembershipDiscovery.bump(membershipDiscoveryJournal) };
   transient var memberIndexEpoch : ?Nat = null;
   transient var memberIndex : MembershipIndex.Index = MembershipIndex.empty();
   transient let APP_WIDE = "\u{1F}*";
