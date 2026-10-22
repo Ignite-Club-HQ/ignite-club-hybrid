@@ -328,7 +328,7 @@ export default function CreateClubPage() {
       }, creationScope);
 
       setSaving(false);
-      void queryClient.invalidateQueries();
+      void import("@/live/roleGrantsMemo").then(m => { m.clearRoleGrantsMemo(); void queryClient.invalidateQueries(); });
       // A selected club theme filters lists to that one club — clear it so
       // the new club is visible under Clubs & Teams straight away.
       if (activeClubFilter && activeClubFilter !== clubId) setActiveClubTheme(null);
