@@ -126,7 +126,8 @@ async function compute(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   return activationStatus(gates);
 }
 
-type LiveRegistry = Awaited<ReturnType<typeof import('./groupRegistryPager').readPinnedGroupRegistry>>;
+type LiveRegistry = { configurationRevision?: bigint; groups: Parameters<typeof groupApprovalConfiguration>[0];
+  placements: Parameters<typeof groupApprovalConfiguration>[1] };
 const STALE = 'Group configuration changed since approval; finish the group setup run before creating clubs';
 
 async function liveApprovalStatus(actor: { read_routing_approval?: (alias: string) => Promise<unknown> },
