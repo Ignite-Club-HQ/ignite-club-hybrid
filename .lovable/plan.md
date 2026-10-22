@@ -6,7 +6,7 @@ A member whose clubs are all in Group 1 loads their club content from Group 1 on
 Discovery stays separate from navigation, while still detecting clubs joined through another device or administrator.
 
 ## 1. One shared membership directory in the app
-Create one account-and-deployment-scoped coordinator consumed by every page and widget. Its snapshot contains verified club IDs, owning groups, role/team references, per-source status, completeness evidence and generation/revision metadata. Store bounded snapshots using the existing per-query device storage, not a whole-cache rewrite.
+Create one account/deployment-scoped coordinator for every page. Its snapshot contains verified club IDs, owning groups, role/team references, per-source status, completeness evidence and generation/revision metadata. Persist bounded snapshots using existing per-query storage.
 
 On startup, restore the last snapshot for fast display and verify it in the background. Cached membership is a display/routing hint, never permission. Isolate accounts and deployments.
 
@@ -24,7 +24,7 @@ This is the first connected app implementation batch, with no canister upgrade r
 - Preserve positive, verified Group 1 and newer-group routes across page opens. Do not reopen the session merely because a verified legacy club has no newer-group assignment.
 - Refetch role details only from known membership sources. Do not run all-group grants after 30 seconds.
 - Refresh after acknowledged create/join/leave/removal/role changes in this app. Carry an invite’s verified destination into the update; unknown tokens use separate bounded discovery.
-- Until a trustworthy cross-group change signal exists, run a coalesced **15-minute foreground background reconciliation**, plus reconciliation on online resume if overdue and explicit refresh. No hidden background timer while the app is suspended. Ordinary content refresh does not trigger it.
+- Until a trustworthy cross-group change signal exists, run a coalesced **15-minute foreground background reconciliation**, plus reconciliation on online resume if overdue and explicit refresh. No timer while suspended. Ordinary content refresh does not trigger it.
 - External additions can therefore take up to the reconciliation interval to appear while continuously active. State this limitation; do not call Stage A a permanently one-off solution.
 - An unsuccessful group reply is unknown/failed, never evidence that the member has no clubs there. Background discovery cannot block navigation or replace the complete snapshot with an empty/partial list.
 
