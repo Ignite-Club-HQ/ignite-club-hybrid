@@ -102,6 +102,16 @@ type Result_19 = variant { Ok : vec GroupAssignment; Err : text };
 type Result_2 = variant { Ok : AssignResult; Err : text };
 type Result_20 = variant { Ok : opt OwnerOpening; Err : text };
 type Result_21 = variant { Ok : bool; Err : text };
+type Result_22 = variant { Ok : RoutingApproval; Err : text };
+type Result_23 = variant { Ok : opt RoutingApproval; Err : text };
+type RoutingApproval = record {
+  target_alias : text;
+  configuration_revision : nat64;
+  approved_configuration_sha256 : text;
+  removal_wiring_group_ids : vec text;
+  removal_checked_at_ms : nat64;
+  evidence_sha256 : text;
+};
 type Result_3 = variant { Ok : AssignDomainResult; Err : text };
 type Result_4 = variant { Ok : GroupAssignment; Err : text };
 type Result_5 = variant { Ok : DomainMigration; Err : text };
