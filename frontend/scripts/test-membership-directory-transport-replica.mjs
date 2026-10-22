@@ -74,6 +74,15 @@ try {
   ok(await identity.actor.advance_membership_directory_source('g1'));
   await pic.upgradeCanister({canisterId:identity.canisterId,wasm:process.env.IDENTITY_ACCESS_WASM,sender:governor,arg:init});
   await finish('g1');await finish('g2');
+  // A stopped authority refuses progress without acknowledging away dirty
+  // state; the other source continues and restart resumes the pending job.
+  clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.remove_member('club-0',member));
+  await pic.stopCanister({canisterId:clubs[0].canisterId,sender:governor});
+  assert.ok('Err' in await identity.actor.advance_membership_directory_source('g1'));
+  await finish('g2');
+  await pic.startCanister({canisterId:clubs[0].canisterId,sender:governor});
+  await finish('g1');
+  clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.restore_member('club-0',member));await finish('g1');
   for(let n=0;n<2;n++) {
     const a=clubs[n].actor,grant=grants[n];a.setPrincipal(identity.canisterId);const status=ok(await a.read_directory_membership_status(grant));assert.equal(status.pending,false);assert.equal(status.acknowledged,status.revision);
     await pic.upgradeCanister({canisterId:clubs[n].canisterId,wasm:process.env.CLUB_DOMAIN_WASM,sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
@@ -90,5 +99,5 @@ try {
   for(let i=0;i<40;i++){const r=ok(await identity.actor.reclaim_membership_directory());assert.ok(r.scanned<=100n);if(r.complete)break;assert.ok(i<39);}
   assert.ok('Err' in await identity.actor.set_club_authorities(clubs.map(c=>c.canisterId)),'lifecycle release remains closed');
   assert.equal(typeof identity.actor.read_my_membership_directory_page,'undefined','no premature public cutover');
-  console.log('PASS: real two-source identity pull, exact permissions, durable upgrade progress, source acknowledgement/readback, member removal refresh, bounded cleanup; Stage A retained.');
+  console.log('PASS: real two-source automatic polling, exact permissions, durable timer/upgrade progress, source acknowledgement/readback, removal refresh, source outage/restart and bounded cleanup; Stage A retained.');
 } finally {if(pic)await pic.tearDown();await server.stop();}
