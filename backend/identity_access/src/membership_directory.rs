@@ -108,4 +108,8 @@ impl Directory {
         let revision = d.data_revision;
         d.invalidate(p(1),"g1-club",1,2).unwrap(); assert!(d.sources["g1-club"].complete); assert_eq!(d.data_revision,revision);
     }
+    #[test] fn obsolete_generation_invalidation_cannot_poison_replacement_source() {
+        let mut d=fixture(); d.bind(2,vec![("g1-club".into(),p(1))]).unwrap(); let before=d.clone();
+        assert!(d.invalidate(p(1),"g1-club",1,u64::MAX).is_err()); assert_eq!(d,before);
+    }
 }

@@ -38,8 +38,8 @@ try {
  assert.ok('Err'in await a.read_membership_source_page(first.next));
  ok(await a.restore_member('club-a',guardian));const restored=ok(await a.read_membership_discovery_status());assert.ok(restored.revision>removed.revision);
  a.setPrincipal(guardian);const memberships=ok(await a.read_my_club_memberships(0n,100));assert.ok(memberships.clubs.includes('club-a'));
- a.setPrincipal(governor);ok(await a.set_own_child_team('child',[]).catch(()=>({Ok:null}))); // Explicit guardian/parent mutation exercised below.
- a.setPrincipal(parent);ok(await a.set_own_child_team('child',[]));
+ a.setPrincipal(parent);
+ for(const team of child.teams)ok(await a.set_own_child_team('child',team,false));
  a.setPrincipal(governor);assert.ok(ok(await a.read_membership_discovery_status()).revision>restored.revision);
  a.setPrincipal(guardian);assert.ok(!ok(await a.read_my_club_memberships(0n,100)).clubs.includes('club-a'));
  a.setPrincipal(parent);assert.ok(ok(await a.read_my_club_memberships(0n,100)).clubs.includes('club-b'));
