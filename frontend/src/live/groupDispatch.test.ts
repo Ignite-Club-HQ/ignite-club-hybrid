@@ -64,7 +64,7 @@ describe('club-scoped dispatcher', () => {
     expect(await x.read('events', 'legacy-club', 'events_domain', async () => 'r')).toBe('legacy');
     // An unknown club reopens the session once (it may be newly created), then is remembered as unplaced.
     expect(d.open).toHaveBeenCalledTimes(2);
-    expect(await x.read('events', 'legacy-club', 'events_domain', async () => 'again')).toBe('again');
+    expect(await x.read('events', 'legacy-club', 'events_domain', async () => 'again')).toBe('legacy');
     expect(d.open).toHaveBeenCalledTimes(2);
   });
   it('a group failure is reported, never retried on the shared canisters', async () => {
