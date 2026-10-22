@@ -11,6 +11,8 @@ const CAROUSEL_PREFIX = "ignite_my_teams_carousel_v2_";
  */
 const TEAM_LIST_KEY_PREFIXES = [
   "clubs",
+  "removed-clubs",
+  "icp-my-mini-leagues",
   "home-data",
   "home-feed",
   "user-memberships-and-events",
