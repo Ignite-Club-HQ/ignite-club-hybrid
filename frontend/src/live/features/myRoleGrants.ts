@@ -37,5 +37,13 @@ export async function fetchMyRoleGrantsEverywhere(ctx: FeatureBackendContext): P
   if (isScopedContext(ctx)) return rawGrants(ctx);
   if (!await routingActive(ctx) && !await readOwnerTestRoute(ctx)) return rawGrants(ctx);
   const { clubDispatch } = await import("../groupDispatch");
-  return memoizedGrants(`all|${who(ctx)}`, () => clubDispatch.readAcross("membership", "club_domain", rawGrants, mergeRoleGrants));
+  return memoizedGrants(`all|${who(ctx)}`, async () => {
+    const grants = await clubDispatch.readAcross("membership", "club_domain", rawGrants, mergeRoleGrants);
+    // Team grants already name the team's club: record that so team-scoped
+    // reads (events, names, chats) go straight to the club's group instead of
+    // asking every group which one owns each team.
+    const pairs = grants.flatMap((g) => (g.team?.[0] && g.club?.[0] ? [[g.team[0], g.club[0]] as const] : []));
+    await clubDispatch.remember("team", pairs).catch(() => undefined);
+    return grants;
+  });
 }
