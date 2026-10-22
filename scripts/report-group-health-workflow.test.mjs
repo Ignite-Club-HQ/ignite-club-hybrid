@@ -6,12 +6,12 @@ const runner = readFileSync(new URL('../frontend/scripts/report-group-health.ts'
 
 test('scheduled reporting is frequent enough for the two-hour health window', () => {
   assert.match(workflow, /schedule:/);
-  assert.match(workflow, /cron: '\*\/15 \* \* \* \*'/);
+  assert.match(workflow, /cron: '\*\/10 \* \* \* \*'/);
 });
 
 test('reporting is governor-signed, serialized and never leaves the key behind', () => {
   assert.match(workflow, /secrets\.DEPLOYER_PEM/);
-  assert.match(workflow, /group: ignite-mainnet-governor-deployment/);
+  assert.match(workflow, /group: ignite-group-health-report/);
   assert.ok(workflow.indexOf('rm -f "$RUNNER_TEMP/operator.pem"') > workflow.indexOf('report-group-health.ts'));
   assert.match(workflow, /if: always\(\)/);
 });

@@ -79,10 +79,18 @@ for (const group of registry.groups) {
   if (services.some(s => liveIds.has(s.canister))) { problems.push(`${group.id}: lists a live legacy canister; refusing to report health for it`); continue; }
   const largestHeap = services.reduce((a, s) => s.heapBytes > a ? s.heapBytes : a, 0n);
   const lowestCycles = services.reduce((a, s) => s.cycles < a ? s.cycles : a, services[0].cycles);
-  const revision = Number(registry.revision);
-  let applied: { Ok: bigint } | { Err: string };
-  try { applied = await router.record_group_health(group.id, largestHeap, lowestCycles, revision); }
-  catch (error) { problems.push(`${group.id}: health report failed: ${error instanceof Error ? error.message : String(error)}`); continue; }
+  // New-club placements advance the registry revision at any time; a stale
+  // revision is a race, not a failure, so re-read and retry a few times.
+  let revision = Number(registry.revision);
+  let applied: { Ok: bigint } | { Err: string } = { Err: 'not attempted' };
+  let failed = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try { applied = await router.record_group_health(group.id, largestHeap, lowestCycles, revision); }
+    catch (error) { problems.push(`${group.id}: health report failed: ${error instanceof Error ? error.message : String(error)}`); failed = true; break; }
+    if (!('Err' in applied) || applied.Err !== 'Revision conflict') break;
+    revision = Number((await readPinnedGroupRegistry((rev, cursor, limit) => router.read_group_registry_page('mainnet', rev, cursor, limit))).revision);
+  }
+  if (failed) continue;
   if ('Err' in applied) { problems.push(`${group.id}: health report rejected: ${applied.Err}`); continue; }
   const evidence = createHash('sha256').update(JSON.stringify({ group: group.id, revision, largestHeap: String(largestHeap), lowestCycles: String(lowestCycles) })).digest('hex');
   groups.push({ id: group.id, revision, largestHeap: String(largestHeap), lowestCycles: String(lowestCycles), services: services.length, evidence });
@@ -94,6 +102,8 @@ if (registry.groups.length === 0) {
   process.exit(0);
 }
 if (groups.length === 0) throw new Error(`No group health reported:\n${problems.join('\n')}`);
+// Any skipped group goes stale and silently stops accepting clubs: fail loudly.
+if (problems.length) { save({ reportedAt: new Date().toISOString(), host, routerId, revision: String(registry.revision), groups, problems }); throw new Error(`Some groups were not reported:\n${problems.join('\n')}`); }
 save({ reportedAt: new Date().toISOString(), host, routerId, revision: String(registry.revision), groups, problems });
 console.log(`Reported health for ${groups.length} group(s) at revision ${registry.revision}.`);
 for (const p of problems) console.error(`problem: ${p}`);

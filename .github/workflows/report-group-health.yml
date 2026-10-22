@@ -2,11 +2,13 @@ name: Report group health to the router
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/10 * * * *'
 permissions:
   contents: write
+# Own queue: health readings never change the registry revision, so they must
+# not wait behind long deploy/repair runs (that let readings go stale).
 concurrency:
-  group: ignite-mainnet-governor-deployment
+  group: ignite-group-health-report
   cancel-in-progress: false
 jobs:
   report-health:
