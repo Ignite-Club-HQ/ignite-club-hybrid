@@ -36,15 +36,15 @@ describe("Combined club media allowance", () => {
     expect(from).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
   });
-  it("allows exactly 5 GiB combined and refuses one byte more", () => {
-    expect(clubMediaLimit(0)).toBe(5_368_709_120);
-    expect(() => assertClubMediaFits(3 * gib, 2 * gib, 0)).not.toThrow();
-    expect(() => assertClubMediaFits(3 * gib, 2 * gib + 1, 0)).toThrow();
+  it("allows exactly 3 GiB combined and refuses one byte more", () => {
+    expect(clubMediaLimit(0)).toBe(3_221_225_472);
+    expect(() => assertClubMediaFits(2 * gib, gib, 0)).not.toThrow();
+    expect(() => assertClubMediaFits(2 * gib, gib + 1, 0)).toThrow();
   });
   it("adds purchased GB to the one shared allowance", () => {
-    expect(clubMediaLimit(2)).toBe(7 * gib);
-    expect(() => assertClubMediaFits(5 * gib, 2 * gib, 2)).not.toThrow();
-    expect(() => assertClubMediaFits(5 * gib, 2 * gib + 1, 2)).toThrow();
+    expect(clubMediaLimit(2)).toBe(5 * gib);
+    expect(() => assertClubMediaFits(3 * gib, 2 * gib, 2)).not.toThrow();
+    expect(() => assertClubMediaFits(3 * gib, 2 * gib + 1, 2)).toThrow();
   });
   it("counts gallery, vault and chat physical objects rather than duplicate row references", async () => {
     const fake = fakeClient({ used: 600 });
@@ -55,7 +55,7 @@ describe("Combined club media allowance", () => {
   });
   it("refuses upload when gallery plus chat plus vault are full", async () => {
     const upload = vi.fn();
-    await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, fakeClient({ used: 5 * gib }).client)).rejects.toThrow();
+    await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, fakeClient({ used: 3 * gib }).client)).rejects.toThrow();
     expect(upload).not.toHaveBeenCalled();
   });
   it("refuses upload when storage cannot be read", async () => {
@@ -63,11 +63,11 @@ describe("Combined club media allowance", () => {
     await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, fakeClient({ error: new Error("denied") }).client)).rejects.toThrow("denied");
     expect(upload).not.toHaveBeenCalled();
   });
-  it("leaves free-club cycle rules unchanged", async () => {
+  it("checks Free combined storage as well as cycle rules", async () => {
     const fake = fakeClient({ pro: false });
     const upload = vi.fn().mockResolvedValue("uploaded");
     await expect(uploadWithinClubMediaAllowance("club-a", 1, upload, fake.client)).resolves.toBe("uploaded");
-    expect(fake.list).not.toHaveBeenCalled();
+    expect(fake.list).toHaveBeenCalled();
   });
   it("walks nested folders and pages past 1000 objects", async () => {
     const list = vi.fn(async (folder: string, options: { offset: number }) => ({ data:

@@ -997,10 +997,7 @@ persistent actor MediaBlobStore {
         case (?clubId) { await clubIsPro(clubId) };
         case null { false };
       };
-      // Pro media allowance (5 GiB + purchased) across vault, gallery and
-      // chat combined, so one Pro club cannot crowd out the whole store.
-      // Fail closed when unreadable.
-      let allowanceClub : ?Text = if (isPro) clubIdFromPath(path) else null;
+      let allowanceClub = if (categoryForPath(path) != null) clubIdFromPath(path) else null;
       let purchasedGb : ?Nat = switch (allowanceClub) { case (?c) await clubMediaPurchasedGb(c); case null null };
       if (allowanceClub != null and purchasedGb == null) return #Err("StorageAllowanceUnavailable");
       if (accountAdmissionEnabled) await admitAccount(caller);
@@ -1015,7 +1012,8 @@ persistent actor MediaBlobStore {
       switch (allowanceClub, purchasedGb) {
         case (?c, ?gb) {
           let (used, pending) = clubMediaBytes(c);
-          if (not UploadPolicy.withinProMediaAllowance(used, pending, total_size.toNat(), gb)) return #Err("StorageAllowanceFull");
+          let limit = (if (isPro) UploadPolicy.proMediaBaseBytes else UploadPolicy.freeMediaBaseBytes) + gb * 1_073_741_824;
+          if (not UploadPolicy.withinMediaAllowance(used, pending, total_size.toNat(), limit)) return #Err("StorageAllowanceFull");
         };
         case _ {};
       };

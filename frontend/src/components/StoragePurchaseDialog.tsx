@@ -228,7 +228,7 @@ export function StoragePurchaseDialog({
     onSuccess: ({ newStorageGb, downgradeDate }) => {
       const formattedDate = downgradeDate.toLocaleDateString();
       toast.success(newStorageGb === 0 
-        ? `Storage downgrade to base (5GB) scheduled for ${formattedDate}` 
+        ? `Storage downgrade to base (3GB) scheduled for ${formattedDate}` 
         : `Storage downgrade to ${newStorageGb}GB scheduled for ${formattedDate}`
       );
       setShowDowngradeConfirm(false);
@@ -428,7 +428,7 @@ export function StoragePurchaseDialog({
     }, 100);
   };
 
-  const baseStorageGb = 5; // Base Pro storage
+  const baseStorageGb = 3; // Base Pro storage
   const totalStorageGb = baseStorageGb + purchasedStorageGb;
 
   const formatPrice = (monthly: number, annual: number) => {
@@ -447,12 +447,12 @@ export function StoragePurchaseDialog({
   // Generate downgrade options
   const downgradeOptions = [];
   if (purchasedStorageGb > 0) {
-    downgradeOptions.push({ gb: 0, label: "Reset to Base (5GB)" });
+    downgradeOptions.push({ gb: 0, label: "Reset to Base (3GB)" });
     if (purchasedStorageGb > 10) {
       downgradeOptions.push({ gb: 10, label: "Reduce to +10GB" });
     }
     if (purchasedStorageGb > 25) {
-      downgradeOptions.push({ gb: 25, label: "Reduce to +25GB" });
+      downgradeOptions.push({ gb: 25, label: "Reduce to +23GB" });
     }
     if (purchasedStorageGb > 50) {
       downgradeOptions.push({ gb: 50, label: "Reduce to +50GB" });
@@ -539,7 +539,7 @@ export function StoragePurchaseDialog({
                   <span className="text-xs font-medium">Downgrade Scheduled</span>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Storage will reduce to {scheduledDowngradeGb === 0 ? "base 5GB" : `${scheduledDowngradeGb}GB`} on {new Date(storageDowngradeAt).toLocaleDateString()}
+                  Storage will reduce to {scheduledDowngradeGb === 0 ? "base 3GB" : `${scheduledDowngradeGb}GB`} on {new Date(storageDowngradeAt).toLocaleDateString()}
                 </p>
                 <Button
                   variant="outline"
@@ -719,7 +719,7 @@ export function StoragePurchaseDialog({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {downgradeTarget === 0 
-                ? "This will schedule your storage to reset to the base 5GB Pro allocation at the end of your current billing period."
+                ? "This will schedule your storage to reset to the base 3GB Pro allocation at the end of your current billing period."
                 : `This will schedule your storage reduction to ${downgradeTarget}GB (${baseStorageGb + downgradeTarget}GB total) at the end of your current billing period.`
               }
               <br /><br />

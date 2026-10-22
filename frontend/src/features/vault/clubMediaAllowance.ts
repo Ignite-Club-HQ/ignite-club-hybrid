@@ -1,10 +1,11 @@
+import { CLUB_MEDIA_BYTES, FREE_MEDIA_BYTES } from "@/lib/subscriptionPlans";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveClubProAccess } from "@/lib/proEntitlement";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
-export const CLUB_MEDIA_BASE_BYTES = 5 * 1024 ** 3;
+export const CLUB_MEDIA_BASE_BYTES = CLUB_MEDIA_BYTES;
 type Client = SupabaseClient<Database>;
 export type StoredClubMedia = { path: string; bucket: string; size: number };
 
@@ -78,9 +79,12 @@ export async function uploadWithinClubMediaAllowance<T>(
       .eq("club_id", clubId).maybeSingle();
     if (error) throw error;
     const trial = sub?.is_trial && (!sub.trial_ends_at || new Date(sub.trial_ends_at) > new Date());
+    const objects = await listStoredClubMedia(clubId, client);
+    const used = objects.reduce((sum, object) => sum + object.size, 0);
     if (resolveClubProAccess(sub).hasPro || trial) {
-      const objects = await listStoredClubMedia(clubId, client);
-      assertClubMediaFits(objects.reduce((sum, object) => sum + object.size, 0), bytes, Number(sub?.storage_purchased_gb ?? 0));
+      assertClubMediaFits(used, bytes, Number(sub?.storage_purchased_gb ?? 0));
+    } else if (used + bytes > FREE_MEDIA_BYTES + Number(sub?.storage_purchased_gb ?? 0) * 1024 ** 3) {
+      throw new Error("Your club has used its 250 MB Free storage. Delete files or upgrade to Pro to keep uploading.");
     }
     assertSupabaseMediaAllowancePath();
     return upload();
