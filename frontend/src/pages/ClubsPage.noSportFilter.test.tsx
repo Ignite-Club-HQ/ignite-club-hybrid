@@ -48,6 +48,7 @@ vi.mock("@/hooks/useClubTheme", () => ({
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: { id: "principal-abc", email: "member@example.com" }, profile: null }),
+  useOptionalAuth: () => ({ user: null, sessionRestoration: "signed-out" }),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
