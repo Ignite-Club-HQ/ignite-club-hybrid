@@ -16,6 +16,8 @@ mod admission;
 mod membership_directory;
 mod membership_directory_store;
 mod membership_materializer;
+mod membership_updates;
+mod membership_private_lookup;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -1136,6 +1138,15 @@ fn account_for_write(principal: Principal) -> Outcome<Account> {
         return Err("Account suspended".into());
     }
     Ok(account)
+}
+// No public reader until exact source binding/propagation is released. This
+// adapter uses identity-owned aliases freshly on every bounded lookup page.
+fn membership_lookup_viewer(caller: Principal) -> Outcome<membership_private_lookup::Viewer> {
+    let account=account_for_write(caller)?;
+    if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)){return Err("Account deletion pending".into());}
+    let account=effective_account(account,&link_lifecycle());
+    if !account.principals.contains(&caller){return Err("Identity revocation pending".into());}
+    Ok(membership_private_lookup::Viewer{account:account.id,version:account.version,aliases:account.principals})
 }
 fn valid_id(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 128
@@ -2548,6 +2559,18 @@ fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn private_lookup_resolves_verified_aliases_and_fails_on_lifecycle_changes(){
+        let caller=Principal::from_slice(&[51,1]);let alias=Principal::from_slice(&[52,1]);
+        let id=ensure_account(caller).unwrap();let mut account=get_account(&id).unwrap();
+        account.principals.push(alias);account.version=2;put_account(&account);index_principal(alias,&id);
+        let viewer=membership_lookup_viewer(caller).unwrap();assert_eq!(viewer.aliases,vec![caller,alias]);assert_eq!(viewer.version,2);
+        account.status=AccountStatus::Suspended;put_account(&account);assert!(membership_lookup_viewer(caller).is_err());
+        account.status=AccountStatus::Active;put_account(&account);
+        deny_principals(&[alias],&id,3,DenialReason::Unlinked).unwrap();assert_eq!(membership_lookup_viewer(caller).unwrap().aliases,vec![caller]);assert!(membership_lookup_viewer(alias).is_err());
+        account.principals=vec![alias];put_account(&account);assert!(membership_lookup_viewer(caller).is_err());
+        account.principals=vec![caller];put_account(&account);ERASED_ACCOUNTS.with(|m|m.borrow_mut().insert(id,3));assert!(membership_lookup_viewer(caller).is_err());
+    }
     #[test]
     fn history_retains_beyond_old_lifetime_caps() {
         assert!(MAX_ACCOUNTS > 10_001);
