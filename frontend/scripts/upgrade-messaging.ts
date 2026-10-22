@@ -91,7 +91,14 @@ for (const groupId of ['g1', 'g2']) {
   const reader = Actor.createActor(() => IDL.Service({ read_group_opening_configuration: IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], []) }),
     { agent, canisterId: store.canisterId }) as unknown as { read_group_opening_configuration(): Promise<[string, string][]> };
   const rows = await reader.read_group_opening_configuration();
-  if (rows.filter(r => r[0] === 'club_domain').length !== 1 || rows.find(r => r[0] === 'club_domain')?.[1] !== club.canisterId) throw new Error('Messaging authority wiring differs');
+  const expected = {
+    club_domain: club.canisterId,
+    notification_queue: groupId === 'g1' ? shared.notification_queue : provision.canisters.notification_queue,
+    competition_domain: groupId === 'g1' ? shared.competition_domain : provision.canisters.competition_domain,
+  };
+  for (const [name, id] of Object.entries(expected)) {
+    if (rows.filter(r => r[0] === name).length !== 1 || rows.find(r => r[0] === name)?.[1] !== id) throw new Error('Messaging authority wiring differs');
+  }
 }
 await gate();
 if (action === 'check') {
