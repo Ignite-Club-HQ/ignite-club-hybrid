@@ -1,4 +1,4 @@
-/** Consensus-only transport. Pin every page and both complete reads; never retry
+/** Consensus-only transport. Pin every page; multi-page registries get both complete reads; never retry
  * a revision conflict into a different inventory. Recheck identity per await. */
 export async function readPinnedGroupRegistry<G extends { id: string }, P extends { group_id: string }>(
   read: (revision: [] | [bigint], cursor: [] | [string], limit: number) => Promise<
