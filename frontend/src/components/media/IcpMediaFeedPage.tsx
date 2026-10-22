@@ -13,7 +13,7 @@ import {
   addLiveComment,
   addLiveReaction,
   deleteLiveAsset,
-  listLiveAssets,
+  listLiveAssetsPage,
   listLiveComments,
   listLiveReactions,
   liveAssetSource,
@@ -46,6 +46,7 @@ import { mediaProfileDirectory } from "./mediaProfileDirectory";
 import { galleryCommentFromReceipt, mergeGalleryComments } from "./galleryComments";
 import { readMediaSources, type MediaSourceStatus } from './mediaSourceState';
 import { updateMemberReaction } from './reactionUpdates';
+import type { MediaPageCursor } from '@/live/mediaPaging';
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -111,7 +112,9 @@ interface LiveMediaFeed {
   options: LiveFilterOptions;
   sources?: MediaSourceStatus[];
   incomplete?: boolean;
+  hasMore?: boolean;
 }
+export interface MediaFeedContinuation { loadMore?: () => Promise<LiveMediaFeed> }
 type LivePostDetails = Pick<LiveMediaPost, 'reactions' | 'comments' | 'ownerName' | 'ownerAvatarUrl'>;
 
 // ---------------------------------------------------------------------------
@@ -228,7 +231,8 @@ function writeFeedSnapshot(principal: string, feed: LiveMediaFeed) {
   }
 }
 
-export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: LiveMediaFeed) => void): Promise<LiveMediaFeed> {
+export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: LiveMediaFeed) => void,
+  continuation?: MediaFeedContinuation, signal?: AbortSignal): Promise<LiveMediaFeed> {
   // list_clubs returns every club on the canister, so scope it to the
   // caller's own role grants — same membership the Clubs page uses.
   const { clubDispatch } = await import('@/live/groupDispatch');
@@ -262,6 +266,18 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
   }[] = [];
 
   let sources: MediaSourceStatus[] = clubIds.map(clubId => ({ clubId, state: "loading" }));
+  const cursors = new Map<string, MediaPageCursor>();
+  const publish = () => { if (!signal?.aborted) onUpdate?.(buildFeed()); };
+  async function readPage(clubId: string, cursor: MediaPageCursor | null) {
+    if (signal?.aborted) throw new Error('Media request cancelled');
+    const page = await readContentInScope(ctx, 'media', { clubId }, scoped => listLiveAssetsPage(scoped, clubId, cursor));
+    if (signal?.aborted) throw new Error('Media request cancelled');
+    for (const asset of page.assets as unknown as (typeof rawAssets)[number][]) {
+      if (!asset.deleted && (asset.kind === 'photo' || asset.kind === 'video')) rawAssets.push(asset);
+    }
+    if (page.next) cursors.set(clubId, page.next); else cursors.delete(clubId);
+    publish();
+  }
   const sourceRead = readMediaSources(clubIds, async clubId => {
       // Each profile gates only its own assets, never another club's source.
       // Keep the authorized owning-group profile/tombstone check before media.
@@ -284,11 +300,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
         readContentInScope(ctx, "competitions", { clubId: club.id }, scoped => listLiveCompetitions(scoped, club.id)),
       ]);
       metadata.catch(() => undefined);
-      const assets = await readContentInScope(ctx, "media", { clubId: club.id }, scoped => listLiveAssets(scoped, club.id));
-      for (const asset of assets as unknown as (typeof rawAssets)[number][]) {
-        if (!asset.deleted && (asset.kind === 'photo' || asset.kind === 'video')) rawAssets.push(asset);
-      }
-      onUpdate?.(buildFeed());
+      await readPage(club.id, null);
       const [teams, miniLeagues, competitions] = await metadata;
       for (const team of teams as unknown as {
         id: string;
@@ -306,7 +318,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
       for (const comp of competitions as unknown as { id: string; name: string; club_id: string }[]) {
         options.competitions.push({ id: comp.id, name: comp.name, club_id: comp.club_id });
       }
-    }, snapshot => { sources = snapshot.sources; onUpdate?.(buildFeed()); });
+    }, snapshot => { sources = snapshot.sources; publish(); });
 
   function buildFeed(): LiveMediaFeed {
   // Photos are unlocked in the background by the page (see useResolvedAssetUrls)
@@ -379,9 +391,34 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
 
   posts.sort((a, b) => b.createdAtMs - a.createdAtMs);
   options.clubs.sort((a, b) => a.name.localeCompare(b.name));
-  return { posts, options: { clubs: [...options.clubs], teams: [...options.teams], miniLeagues: [...options.miniLeagues], competitions: [...options.competitions] }, sources: [...sources], incomplete: sources.some(source => source.state !== "ready") };
+  return { posts, options: { clubs: [...options.clubs], teams: [...options.teams], miniLeagues: [...options.miniLeagues], competitions: [...options.competitions] }, sources: [...sources], hasMore: cursors.size > 0, incomplete: cursors.size > 0 || sources.some(source => source.state !== "ready") };
   }
   await sourceRead;
+  if (continuation) {
+    let pending: Promise<LiveMediaFeed> | undefined;
+    continuation.loadMore = () => {
+      if (pending) return pending;
+      pending = (async () => {
+        await Promise.all([...cursors].map(async ([clubId, cursor]) => {
+          sources = sources.map(s => s.clubId === clubId ? { ...s, state: 'loading' } : s);
+          publish();
+          try {
+            await readPage(clubId, cursor);
+            sources = sources.map(s => s.clubId === clubId ? { ...s, state: 'ready' } : s);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const denied = /forbidden|not authorized|access denied|admission denied|removal fenced/i.test(message);
+            // Never silently restart an invalidated cursor or erase another club.
+            cursors.delete(clubId);
+            sources = sources.map(s => s.clubId === clubId ? { ...s, state: denied ? 'denied' : 'failed' } : s);
+          }
+          publish();
+        }));
+        return buildFeed();
+      })().finally(() => { pending = undefined; });
+      return pending;
+    };
+  }
   return buildFeed();
 }
 
@@ -406,6 +443,8 @@ export function IcpMediaFeedPage() {
   });
   const principal = principalQuery.data ?? undefined;
   const queryClient = useQueryClient();
+  const continuationRef = useRef<MediaFeedContinuation>({});
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -444,19 +483,33 @@ export function IcpMediaFeedPage() {
     initialData: () => readFeedSnapshot(principal),
     initialDataUpdatedAt: 0,
     queryFn: async ({ signal }) => {
+      const continuation: MediaFeedContinuation = {};
+      continuationRef.current = continuation;
       const feed = await withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
         icp: (ctx) => loadLiveMediaFeed(ctx, next => {
           if (!signal.aborted) queryClient.setQueryData(["icp-media-feed", principal], next);
-        }),
+        }, continuation, signal),
       }, { shared: "person" });
       if (signal.aborted) throw new Error("Media request cancelled");
       if (principal) writeFeedSnapshot(principal, feed);
       return feed;
     },
   });
+
+  const loadOlder = async () => {
+    const continuation = continuationRef.current;
+    if (!continuation.loadMore || loadingOlder || feedQuery.isFetching) return;
+    setLoadingOlder(true);
+    try {
+      const feed = await continuation.loadMore();
+      if (continuationRef.current !== continuation) return;
+      queryClient.setQueryData(['icp-media-feed', principal], feed);
+      if (principal) writeFeedSnapshot(principal, feed);
+    } finally { setLoadingOlder(false); }
+  };
 
   const invalidate = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["icp-media-feed"] }),
@@ -742,7 +795,7 @@ export function IcpMediaFeedPage() {
         {feedQuery.data?.sources?.some(source => source.state === "loading") && (
           <div role="status" className="flex items-center gap-2 py-3 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">Loading more media…</span></div>
         )}
-        {feedQuery.data?.incomplete && !feedQuery.data.sources?.some(source => source.state === "loading") && (
+        {feedQuery.data?.sources?.some(source => source.state === 'failed' || source.state === 'denied') && !feedQuery.data.sources?.some(source => source.state === "loading") && (
           <div className="flex items-center justify-between gap-3 py-3" role="status">
             <p className="text-sm text-muted-foreground">Some club media couldn't be loaded.</p>
             <Button variant="outline" onClick={() => feedQuery.refetch()}>Try again</Button>
@@ -796,6 +849,14 @@ export function IcpMediaFeedPage() {
             </div>
           ))}
         </div>
+        {feedQuery.data?.hasMore && (
+          <div className="flex justify-center py-6">
+            <Button variant="outline" disabled={loadingOlder || feedQuery.isFetching} onClick={() => void loadOlder()}>
+              {loadingOlder ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Images className="mr-2 h-4 w-4" />}
+              Load older media
+            </Button>
+          </div>
+        )}
       </main>
 
       <Drawer open={filterOpen} onOpenChange={setFilterOpen}>
