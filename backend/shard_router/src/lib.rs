@@ -18,6 +18,8 @@ use scale_probe::Probe;
 mod discovery;
 mod media_growth;
 mod owner_opening;
+mod routing_approval;
+use routing_approval::RoutingApproval;
 #[cfg(test)]
 mod owner_opening_tests;
 use owner_opening::{OwnerOpening, OwnerOpeningApproval};
@@ -182,6 +184,8 @@ thread_local! {
     // Configuration approval is independent of assignment/deletion fencing (memory 2).
     static CONFIG_REVISION: RefCell<StableCell<u64, Memory>> = RefCell::new(StableCell::init(memory(16), 0));
     static OWNER_OPENINGS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(15)));
+    // Governor-recorded routing approvals keyed by target alias (memory 17).
+    static ROUTING_APPROVALS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(17)));
 }
 
 fn owner_opening(target: &str) -> Option<OwnerOpening> {
@@ -930,6 +934,37 @@ fn read_group_registry(target_alias: String) -> Outcome<GroupRegistrySnapshot> {
     let page = read_group_registry_page(target_alias, None, None, 64)?;
     if page.next_cursor.is_some() { return Err("Registry exceeds legacy reply; use read_group_registry_page".into()); }
     Ok(GroupRegistrySnapshot { revision: page.revision, groups: page.groups, placements: page.placements })
+}
+
+fn registered_group_ids(target_alias: &str) -> Vec<String> {
+    GROUPS.with(|m| m.borrow().iter().map(|e| decode::<ShardGroup>(&e.value())).filter(|g| g.target_alias == target_alias).map(|g| g.id).collect())
+}
+fn record_routing_approval_for(operator: Principal, approval: RoutingApproval, expected_configuration_revision: u64) -> Outcome<RoutingApproval> {
+    if governor() != Some(operator) || operator == Principal::anonymous() { return Err("Forbidden".into()); }
+    registry_writable()?;
+    if expected_configuration_revision != configuration_revision() { return Err("Configuration revision conflict".into()); }
+    let registered = registered_group_ids(&approval.target_alias);
+    for id in &registered {
+        if !GROUP_PLACEMENTS.with(|m| m.borrow().contains_key(&id.as_bytes().to_vec())) { return Err("Complete group placement required".into()); }
+    }
+    routing_approval::validate(&approval, configuration_revision(), &registered)?;
+    // Recording is not a configuration change: neither revision moves, so the
+    // approval stays valid until the next real configuration mutation.
+    ROUTING_APPROVALS.with(|m| m.borrow_mut().insert(approval.target_alias.clone(), encode(&approval)));
+    Ok(approval)
+}
+/// Governor-only. Binds the exact configuration revision and approved digest;
+/// any later group/placement/policy change makes clients fail closed again.
+#[ic_cdk::update]
+fn record_routing_approval(approval: RoutingApproval, expected_configuration_revision: u64) -> Outcome<RoutingApproval> {
+    record_routing_approval_for(caller(), approval, expected_configuration_revision)
+}
+/// Consensus read for signed-in clients; infrastructure metadata only.
+#[ic_cdk::update]
+fn read_routing_approval(target_alias: String) -> Outcome<Option<RoutingApproval>> {
+    if caller() == Principal::anonymous() { return Err("Authentication required".into()); }
+    if target_alias.is_empty() || target_alias.len() > 64 { return Err("Invalid target alias".into()); }
+    Ok(ROUTING_APPROVALS.with(|m| m.borrow().get(&target_alias).map(|b| decode(&b))))
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]

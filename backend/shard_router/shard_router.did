@@ -188,7 +188,10 @@ service : (Init) -> {
   // No private approval data: admins deleting a different account still need
   // the complete group inventory, even when they have no test-club membership.
   read_owner_test_deletion_required : (text) -> (Result_21);
+  read_routing_approval : (text) -> (Result_23);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
+  // Governor-only live routing approval; never changes groups or revisions.
+  record_routing_approval : (RoutingApproval, nat64) -> (Result_22);
   register_group : (ShardGroup, nat64) -> (Result);
   register_group_placement : (GroupPlacement, nat64) -> (Result);
   release_deletion_lock : (text, nat64) -> (Result_7);
