@@ -194,4 +194,22 @@ impl<M:Memory> Sessions<M>{
         let mut incomplete=sources();incomplete[1].complete=false;
         assert!(s.page_at(p(1),viewer(),incomplete,1,next,1,|_,_,_|panic!("incomplete replay")).is_err());
     }
+    #[test]fn completed_traversal_can_refresh_on_a_new_consumer_without_mixing_old_pages(){
+        let mut s=Sessions::open(ic_stable_structures::VectorMemory::default());let mut inventory=sources();inventory[0].eligible_aliases=Some(vec![p(1)]);inventory[1].eligible_aliases=Some(vec![]);
+        let (first,next)=s.page_at(p(1),viewer(),inventory.clone(),1,None,1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();assert_eq!(next,None);assert_eq!(first.rows[0].club,"a");
+        let (fresh,next)=s.page_at(p(1),viewer(),inventory,2,None,2,|_,_,_|Ok((vec!["b".into()],None,1))).unwrap();assert_eq!(next,None);assert_eq!(fresh.rows[0].club,"b");
+    }
+    #[test]fn failed_start_does_not_consume_instance_and_counter_exhaustion_rejects_before_read(){
+        let mut s=Sessions::open(ic_stable_structures::VectorMemory::default());
+        assert!(s.page_at(p(1),viewer(),sources(),1,None,1,|_,_,_|Err("unavailable".into())).is_err());assert_eq!(s.rows.len(),0);
+        let mut bytes=vec![];ciborium::into_writer(&u64::MAX,&mut bytes).unwrap();s.rows.insert(COUNTER.into(),bytes);
+        assert!(s.page_at(p(1),viewer(),sources(),1,None,1,|_,_,_|panic!("exhausted instance counter")).is_err());assert_eq!(s.rows.len(),1);
+    }
+    #[test]fn cleanup_scans_at_most_one_hundred_rows_and_never_recycles_instance_counter(){
+        let memory=ic_stable_structures::VectorMemory::default();let mut s=Sessions::open(memory.clone());
+        for n in 0..105u16{let caller=Principal::from_slice(&[n as u8,3]);let viewer=Viewer{account:format!("account{n}"),version:1,aliases:vec![caller]};s.page_at(caller,viewer,sources(),1,None,1,|_,_,_|Ok((vec![],None,0))).unwrap();}
+        let (scanned,next)=s.reclaim(SESSION_TTL_NS+1,None);assert_eq!(scanned,100);assert!(next.is_some());drop(s);
+        let mut s=Sessions::open(memory);let (scanned,next)=s.reclaim(SESSION_TTL_NS+1,next);assert_eq!(scanned,6);assert!(next.is_none());assert_eq!(s.rows.len(),1);
+        let (_,next)=s.page_at(p(1),viewer(),sources(),1,None,SESSION_TTL_NS+1,|_,_,_|Ok((vec![],None,0))).unwrap();assert!(next.unwrap().instance>105);
+    }
 }
