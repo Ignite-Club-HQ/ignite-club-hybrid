@@ -43,6 +43,26 @@ try {
     const start=ok(await a.read_directory_membership_status(grant));assert.equal(start.pending,true);
     assert.ok('Err' in await a.acknowledge_directory_membership_source(grant,start.revision+1n));
   }
+  // Background polling and source notifications alone must progress both
+  // sources, without an operator invoking the advance endpoint.
+  for(let tick=0;tick<30;tick++) {
+    await pic.advanceTime(31_000);await pic.tick(15);
+    const statuses=[];
+    for(let n=0;n<2;n++){clubs[n].actor.setPrincipal(identity.canisterId);statuses.push(ok(await clubs[n].actor.read_directory_membership_status(grants[n])));}
+    if(statuses.every(s=>!s.pending))break;
+    assert.ok(tick<29,'automatic polling must complete both sources');
+  }
+  // Dirty one source again; the persisted automatic scheduler re-arms on
+  // an ordinary upgrade without resetting acknowledgements or aliases.
+  clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.remove_member('club-0',member));
+  await pic.upgradeCanister({canisterId:identity.canisterId,wasm:process.env.IDENTITY_ACCESS_WASM,sender:governor,arg:init});
+  for(let tick=0;tick<30;tick++){
+    await pic.advanceTime(31_000);await pic.tick(15);
+    clubs[0].actor.setPrincipal(identity.canisterId);
+    if(!ok(await clubs[0].actor.read_directory_membership_status(grants[0])).pending)break;
+    assert.ok(tick<29,'automatic scheduler must resume after upgrade');
+  }
+  clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.restore_member('club-0',member));
   identity.actor.setPrincipal(governor);
   const finish=async source=>{
     for(let i=0;i<80;i++) {
