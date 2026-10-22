@@ -9,7 +9,10 @@ use crate::membership_materializer::Binding;
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
 pub struct Viewer{pub account:String,pub version:u64,pub aliases:Vec<Principal>}
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
-pub struct Source{pub id:String,pub binding:Binding,pub complete:bool}
+pub struct Source{pub id:String,pub binding:Binding,pub complete:bool,
+    /// None retains the explicit full traversal used by offline callers.
+    /// Some is supplied only by the coordinator's revision-bound index.
+    #[serde(default)] pub eligible_aliases:Option<Vec<Principal>>}
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
 pub struct Cursor{
     pub viewer_digest:[u8;32],pub sources_digest:[u8;32],pub source:usize,pub alias:usize,pub after:Option<String>,
@@ -27,14 +30,23 @@ where F:FnMut(&Source,Principal,Option<String>)->Result<(Vec<String>,Option<Stri
     if sources.is_empty()||sources.len()>4096||sources.iter().any(|s|!s.complete){return Err("Directory incomplete; existing discovery required".into());}
     if sources.iter().any(|s|s.id.is_empty()||s.id.len()>128||s.id.contains('\u{1f}')||s.binding.generation==0||s.binding.revision==0||s.binding.inventory_digest==[0;32]||s.binding.authority==Principal::anonymous()||s.binding.authority==Principal::management_canister()){return Err("Invalid verified source inventory".into());}
     if sources.windows(2).any(|w|w[0].id>=w[1].id){return Err("Canonical complete source inventory required".into());}
+    for source in &sources{if let Some(aliases)=&source.eligible_aliases{let mut unique=aliases.clone();unique.sort();unique.dedup();if unique.len()!=aliases.len()||aliases.iter().any(|p|!viewer.aliases.contains(p)){return Err("Foreign indexed account alias".into());}}}
     let viewer_digest=digest(&(caller,&viewer));let sources_digest=digest(&sources);
     let mut at=cursor.unwrap_or(Cursor{viewer_digest,sources_digest,source:0,alias:0,after:None});
     if at.viewer_digest!=viewer_digest||at.sources_digest!=sources_digest||at.source>=sources.len()||at.alias>=viewer.aliases.len()||at.after.as_ref().is_some_and(|s|s.len()>256||s.is_empty()){return Err("Account or directory continuation changed".into());}
-    // One source/alias page only, <=100 scanned rows. No serial all-group calls.
+    // Skip index-proven empty source/alias pairs locally. Full inventory
+    // completeness and binding digests remain pinned above, including skipped
+    // sources; an unavailable unrelated source still cannot imply completion.
+    while at.source<sources.len()&&sources[at.source].eligible_aliases.as_ref().is_some_and(|aliases|!aliases.contains(&viewer.aliases[at.alias])){
+        at.after=None;at.alias+=1;if at.alias==viewer.aliases.len(){at.alias=0;at.source+=1;}
+    }
+    if at.source==sources.len(){return Ok(Page{rows:vec![],next:None,scanned:0});}
+    // One relevant source/alias page only, <=100 scanned rows.
     let source=&sources[at.source];let (clubs,next,scanned)=read_source(source,viewer.aliases[at.alias],at.after.clone())?;
     if scanned>100||clubs.len()>100||clubs.len()>scanned||clubs.iter().any(|c|c.is_empty()||c.len()>128||c.contains('\u{1f}'))||scanned==0&&next.is_some()||next.as_ref().is_some_and(|s|s.is_empty()||s.len()>256)||next.as_ref().zip(at.after.as_ref()).is_some_and(|(n,a)|n<=a){return Err("Invalid bounded source page".into());}
     let mut rows=vec![];for club in clubs{if !rows.iter().any(|r:&Row|r.club==club){rows.push(Row{club,source:source.id.clone(),authority:source.binding.authority});}}
     at.after=next;if at.after.is_none(){at.alias+=1;if at.alias==viewer.aliases.len(){at.alias=0;at.source+=1;}}
+    while at.source<sources.len()&&sources[at.source].eligible_aliases.as_ref().is_some_and(|aliases|!aliases.contains(&viewer.aliases[at.alias])){at.after=None;at.alias+=1;if at.alias==viewer.aliases.len(){at.alias=0;at.source+=1;}}
     let next=if at.source==sources.len(){None}else{Some(at)};Ok(Page{rows,next,scanned})
 }
 // Only opaque sequence numbers cross the future public boundary. Positions
@@ -109,7 +121,7 @@ impl<M:Memory> Sessions<M>{
     use super::*;
     fn p(n:u8)->Principal{Principal::from_slice(&[n,1])}
     fn viewer()->Viewer{Viewer{account:"account".into(),version:3,aliases:vec![p(1),p(2)]}}
-    fn sources()->Vec<Source>{vec![Source{id:"g1".into(),binding:Binding{authority:p(9),generation:1,revision:1,inventory_digest:[1;32]},complete:true},Source{id:"g2".into(),binding:Binding{authority:p(8),generation:1,revision:1,inventory_digest:[1;32]},complete:true}]}
+    fn sources()->Vec<Source>{vec![Source{id:"g1".into(),binding:Binding{authority:p(9),generation:1,revision:1,inventory_digest:[1;32]},complete:true,eligible_aliases:None},Source{id:"g2".into(),binding:Binding{authority:p(8),generation:1,revision:1,inventory_digest:[1;32]},complete:true,eligible_aliases:None}]}
     #[test]fn one_local_source_page_per_call_and_alias_version_pinned(){
         let mut count=0;let page=read(p(1),viewer(),sources(),None,|s,p,_|{count+=1;assert_eq!(s.id,"g1");assert_eq!(p,super::tests::p(1));Ok((vec!["a".into()],None,1))}).unwrap();assert_eq!(count,1);assert_eq!(page.scanned,1);assert_eq!(page.rows[0].club,"a");
         let cursor=page.next;let mut changed=viewer();changed.version+=1;

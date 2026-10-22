@@ -94,7 +94,7 @@ impl<M: Memory> Builder<M> {
         // Complete validation precedes every stable write.
         for edge in edges {match edge {
             Edge::Club{id,deleted}=>{let value=if deleted {2} else {1}; let old=self.clubs.get(&id).unwrap_or(0);self.clubs.insert(id,old|value);},
-            Edge::Role{subject,club}=>{self.roles.insert(pair(&subject.to_text(),club.as_deref().unwrap_or("*")),1);},
+            Edge::Role{subject,club}=>{if club.is_none(){self.progress.insert(format!("subject:{}",subject.to_text()),vec![1]);}self.roles.insert(pair(&subject.to_text(),club.as_deref().unwrap_or("*")),1);},
             Edge::Parent{child,subject}|Edge::Guardian{child,subject}=>{self.relations.insert(pair(&child,&subject.to_text()),1);},
             Edge::ChildTeam{child,team}=>{self.child_teams.insert(pair(&child,&team),1);},
             Edge::Team{id,club,deleted}=>{let key=pair(&id,&club);let live=self.team_clubs.get(&key).unwrap_or(0);self.team_clubs.insert(key,live|u8::from(!deleted));},
@@ -103,7 +103,7 @@ impl<M: Memory> Builder<M> {
         p.terminal=terminal;self.progress.insert(ack,payload);self.save(&p);Ok(())
     }
     fn admit(&mut self,subject:&str,club:&str){
-        if self.clubs.get(&club.to_string())==Some(1) && self.exclusions.get(&pair(subject,club)).is_none(){self.pairs.insert(pair(subject,club),1);}
+        if self.clubs.get(&club.to_string())==Some(1) && self.exclusions.get(&pair(subject,club)).is_none(){self.pairs.insert(pair(subject,club),1);self.progress.insert(format!("subject:{subject}"),vec![1]);}
     }
     pub fn advance(&mut self)->Result<usize,String>{
         let mut p=self.status();if !p.terminal {return Err("Incomplete raw source".into());}
@@ -138,6 +138,21 @@ impl<M: Memory> Builder<M> {
             }
         }
         self.save(&p);Ok(scanned)
+    }
+    /// Exact candidate subjects for the completed isolated source tree.
+    /// Includes app-wide roles without expanding their club memberships.
+    pub fn subjects(&self,binding:&Binding,cursor:Option<String>)->Result<(Vec<Principal>,Option<String>,usize),String>{
+        let status=self.status();
+        if !status.complete||status.binding.as_ref()!=Some(binding){return Err("Incomplete subject index or binding drift".into());}
+        if cursor.as_ref().is_some_and(|c|!c.starts_with("subject:")){return Err("Foreign subject cursor".into());}
+        let mut at=cursor;let mut subjects=vec![];
+        while subjects.len()<BATCH{
+            let row=match &at{Some(c)=>self.progress.range((Excluded(c.clone()),Unbounded)).next(),None=>self.progress.range("subject:".to_string()..).next()}.map(|e|e.key().clone()).filter(|k|k.starts_with("subject:"));
+            let Some(key)=row else{let scanned=subjects.len();return Ok((subjects,None,scanned));};
+            let subject=Principal::from_text(&key[8..]).map_err(|_|"Invalid indexed subject")?;
+            subjects.push(subject);at=Some(key);
+        }
+        Ok((subjects,at,BATCH))
     }
     // App-wide roles are retained separately; a caller-private coordinator
     // must page active clubs for such accounts instead of expanding globally.
