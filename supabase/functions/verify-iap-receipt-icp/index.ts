@@ -26,6 +26,7 @@
 //                                   App Store Server API credentials, used
 //                                   instead of verifyReceipt when present
 import { corsHeaders } from "../_shared/cors.ts";
+import { handleMeasuredMediaUpload } from "../_shared/measuredMediaUpload.ts";
 
 const APPLE_VERIFY_RECEIPT_PROD = "https://buy.itunes.apple.com/verifyReceipt";
 const APPLE_VERIFY_RECEIPT_SANDBOX = "https://sandbox.itunes.apple.com/verifyReceipt";
@@ -135,6 +136,35 @@ Deno.serve(async (req: Request) => {
   // Second, unrelated job hosted here: instant ICP chat push (?job=push-kick).
   if (new URL(req.url).searchParams.get("job") === "push-kick") {
     return handlePushKick();
+  }
+
+  // External byte-receiving API reused by the existing SPA/native clients.
+  // Isolated from payment attestation and push delivery.
+  if (new URL(req.url).searchParams.get("job") === "media-upload") {
+    const { createClient } = await import("npm:@supabase/supabase-js@2.117.1");
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !key) return new Response(JSON.stringify({ error: "Upload service unavailable" }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    return handleMeasuredMediaUpload(req, {
+      authenticate: async token => {
+        const { data, error } = await admin.auth.getUser(token);
+        return error ? null : data.user?.id ?? null;
+      },
+      reserve: async input => {
+        const { data, error } = await admin.rpc("reserve_measured_media", { p_user: input.user, p_club: input.club, p_team: input.team, p_bucket: input.bucket, p_path: input.path, p_bytes: input.bytes, p_vault: input.vault });
+        if (error || typeof data !== "string") throw new Error("Reservation refused");
+        return data;
+      },
+      upload: async (bucket, path, bytes, mime) => {
+        const { error } = await admin.storage.from(bucket).upload(path, bytes, { upsert: false, contentType: mime, cacheControl: "31536000" });
+        if (error) throw new Error("Upload failed");
+      },
+      settle: async (id, completed) => {
+        const { error } = await admin.rpc("settle_measured_media", { p_id: id, p_completed: completed });
+        if (error) throw new Error("Upload confirmation failed");
+      },
+    }, corsHeaders);
   }
 
 
