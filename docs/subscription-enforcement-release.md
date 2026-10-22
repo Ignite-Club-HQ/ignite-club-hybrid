@@ -13,7 +13,7 @@
 1. Deploying `verify-iap-receipt-icp` failed twice with an internal deployment error on 22 October 2026. No function deployment succeeded. The measured upload release switch therefore stays **false**, so the current upload path keeps working. This is not authoritative aggregate enforcement yet.
 2. Complete an authenticated service upload/readback with a real Supabase user, including simultaneous uploads near quota, wrong-team denial, staff-only Vault, lost Storage reply and preserved old files. The external unmanaged session is unavailable in this sandbox.
 3. Only then apply restrictive INSERT **and** UPDATE policies to `storage.objects`, rejecting browser writes to `clubs/*` paths in `photos`, `chat-attachments` and `competition-vault`; cover both authenticated and anon roles. Keep reads, deletes, personal paths and exempt branding buckets unchanged. Use the migration tool, not ad-hoc SQL. Enable the measured release switch in the same coordinated release. Older app versions will need updating before this cutover.
-4. The live bucket inventory has `photos` and `chat-attachments`, both private. `competition-vault` is absent: provision via the Storage API and preserve competition-specific access rules before competition Vault acceptance. Do not create buckets with SQL.
+4. `competition-vault` is now provisioned privately with a 10 MiB file limit. Private reads/deletes use exact current competition staff permissions; the old broader participant helper is absent from this live database, so participant access is not inferred from public competition visibility. Competition staff and participant acceptance remain required before cutover.
 5. Reservations have no automatic expiry: a lost upload response may have committed the object. Reconcile by reading the exact object and reservation; complete only when its size matches, abort only with confirmed absence and no in-flight write. Never repeat an unknown upload or delete an uncertain object automatically. Aborted/terminal paths remain non-reusable.
 6. Upgrade the existing Group 1 and Group 2 club/media canisters through the governor-signed workflows, preserving settings, encryption-key evidence and memory. No signing identity/GitHub token is available in this sandbox. Verify exact new paid identifiers, legacy promo terms and encrypted upload/readback in each group.
 7. Website purchase/verification code is not checked into this project. Configure provider products and authenticated entity-scoped purchase intents, verified/idempotent purchase and renewal settlement, cancellation/refund ordering, extra-seat quantity and promo-preserving entitlement updates. Do not use global ICP Pro or URL success as fulfillment.
@@ -27,3 +27,12 @@
 - Database migrations applied with no new security warnings after service-only privilege hardening. Existing 757 security findings are unrelated to this change and remain unreviewed.
 
 Local tests are not signed-in production upload or purchase acceptance.
+
+## 04:23 continuation
+
+- Another existing-function deployment attempt failed with the same internal error; the receiver remains undeployed and the release switch remains false.
+- Fixed authoritative Supabase legacy Starter/Standard storage to preserve 5 GiB like the frontend; new `usd_v2` paid clubs remain 3 GiB, Unlimited promos remain 5 GiB.
+- Reject null byte counts/scopes; validate exact team, mini-league and competition ownership and current staff authorization. Competition staff authorization does not use a generic club-admin bypass.
+- Finalization now rechecks current allowance plus other pending uploads. Existing bytes are retained if an entitlement expires mid-upload.
+- Added an isolated PostgreSQL regression suite using the **actual migration SQL**, not a rewritten quota model. It covers Free pending/concurrent admission, team isolation, legacy/new amounts, null-size and wrong-team refusals, staff revocation, competition authority, expiry preservation, finalize rechecks, no double accounting, unknown-upload retention and RPC privileges.
+- Run with `nix shell nixpkgs#postgresql --command python3 scripts/measured-media-sql.test.py`; it never connects to production and creates/stops its own temporary database.

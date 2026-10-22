@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CLUB = "11111111-1111-4111-8111-111111111111"
@@ -96,6 +97,29 @@ INSERT INTO public.user_roles VALUES('{USER}','{CLUB}',NULL,'club_admin');
 
     def test_null_size_cannot_bypass_quota(self):
         self.assertNotEqual(self.reserve(size="NULL", ok=False).returncode, 0)
+
+    def test_concurrent_devices_cannot_overbook_free_storage(self):
+        self.sql(f"INSERT INTO storage.objects VALUES('photos','clubs/{CLUB}/old.jpg','{{\"size\":262143999}}');")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda path: self.reserve(path, size=1, ok=False), ["device-a.jpg", "device-b.jpg"]))
+        self.assertEqual(sum(result.returncode == 0 for result in results), 1)
+        self.assertEqual(self.sql("SELECT count(*) FROM public.media_upload_reservations WHERE state='pending';").stdout.strip(), "1")
+
+    def test_revoked_team_staff_cannot_upload_vault(self):
+        self.sql(f"DELETE FROM public.user_roles WHERE user_id='{USER}'; INSERT INTO public.user_roles VALUES('{USER}','{CLUB}','{TEAM}','player');")
+        self.assertNotEqual(self.reserve(f"teams/{TEAM}/one.jpg", team=f"'{TEAM}'", vault="true", ok=False).returncode, 0)
+
+    def test_expired_subscription_does_not_delete_existing_files(self):
+        self.sql(f"INSERT INTO public.club_subscriptions(club_id,plan,is_pro,pricing_version,expires_at) VALUES('{CLUB}','starter',true,'usd_v2',now()-interval '1 day'); INSERT INTO storage.objects VALUES('photos','clubs/{CLUB}/old.jpg','{{\"size\":3221225472}}');")
+        self.assertNotEqual(self.reserve(ok=False).returncode, 0)
+        self.assertEqual(self.sql("SELECT count(*) FROM storage.objects;").stdout.strip(), "1")
+
+    def test_finalize_rechecks_changed_entitlement(self):
+        self.sql(f"INSERT INTO public.club_subscriptions(club_id,plan,is_pro,pricing_version) VALUES('{CLUB}','starter',true,'usd_v2'); INSERT INTO storage.objects VALUES('photos','clubs/{CLUB}/old.jpg','{{\"size\":262144000}}');")
+        token = self.reserve(size=2).stdout.strip()
+        self.sql(f"UPDATE public.club_subscriptions SET expires_at=now()-interval '1 day'; INSERT INTO storage.objects VALUES('photos','clubs/{CLUB}/one.jpg','{{\"size\":2}}');")
+        self.assertNotEqual(self.sql(f"SELECT public.settle_measured_media('{token}',true);", ok=False).returncode, 0)
+        self.assertEqual(self.sql("SELECT count(*) FROM storage.objects;").stdout.strip(), "2")
 
     def test_wrong_team_path_denied(self):
         self.assertNotEqual(self.reserve("other.jpg", team=f"'{TEAM}'", ok=False).returncode, 0)
