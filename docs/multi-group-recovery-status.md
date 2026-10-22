@@ -12,7 +12,7 @@ No canister has been deployed, reopened, reinstalled, moved or re-keyed by this 
 - Updated the outdated pinned-message polling test to match the already-shipped 15-second interval; no polling-policy change in this batch.
 
 ## Source-confirmed outstanding integration work
-- `crossGroupClubs.settleAll` waits for all branches; retaining partial success is not progressive rendering.
+- Clubs page now renders each club as its own group answers (`readClubsInOwnGroups` onProgress). Home, Events, Messages and Media still wait for every branch.
 - `groupSession.readEveryGroup` retains complete discovery and fresh post-read confirmation. Do not turn security-critical complete discovery into partial authorization evidence.
 - Inbox default setup is still on the list-read path. `create_group_with_roles` is create-only; independent devices can create separate IDs for a missing default. Durable repair needs a dedicated authoritative default identity/provisioning contract and canister-level concurrency tests, not name-based deduplication. No backend release was included.
 - Page-level scope/invalidation review and progressive section composition remain to be measured and implemented against signed-in expected records.
