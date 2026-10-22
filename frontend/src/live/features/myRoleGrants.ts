@@ -10,7 +10,7 @@ type Grant = Awaited<ReturnType<Awaited<ReturnType<typeof connectLiveClubDomain>
 
 const who = (ctx: FeatureBackendContext) => { try { return ctx.identity.getPrincipal().toText(); } catch { return '?'; } };
 async function rawGrants(ctx: FeatureBackendContext): Promise<Grant[]> {
-  return memoizedGrants(`raw|${who(ctx)}|${ctx.target?.canisterIds?.club_domain ?? ''}`, async () => {
+  return memoizedGrants(JSON.stringify(['raw', who(ctx), ctx.target?.host, ctx.target?.networkKind, ctx.target?.canisterIds?.club_domain]), async () => {
     const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
     return actor.my_role_grants();
   });

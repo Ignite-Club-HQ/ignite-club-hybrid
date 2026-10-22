@@ -19,4 +19,4 @@ export function scheduleTargetScope(target: { chat_type: string; club_id?: strin
 export const acrossLists: ClubScope = { everyGroup: true, merge: (parts: unknown[]) => [...new Map((parts as Array<Array<{ id?: unknown }>>).flat().map(row => [row.id ?? JSON.stringify(row, (_, v) => typeof v === 'bigint' ? String(v) : v), row])).values()] };
 export const acrossVoid: ClubScope = { everyGroup: true, merge: () => undefined };
 /** Caller club content only; foreign-host discovery must keep acrossLists. */
-export const memberLists: ClubScope = { memberGroups: true, merge: acrossLists.merge };
+export const memberLists: ClubScope = { memberGroups: true, merge: (parts: unknown[]) => (parts as unknown[][]).flat() };
