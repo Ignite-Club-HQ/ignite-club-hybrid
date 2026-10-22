@@ -13,6 +13,9 @@ vi.mock("@/live/features/membership", () => ({
   getLiveMyRoleGrants: mocks.roles, listLiveMembershipClubs: mocks.clubs, listLiveMembershipTeams: vi.fn(),
 }));
 vi.mock("@/live/features/messaging", () => ({ listLiveLatestMessagesPage: mocks.latest }));
+vi.mock("@/live/contentRouting", () => ({ readContentInScope: (ctx: unknown, _f: string, _s: unknown, fn: (c: unknown) => unknown) => fn(ctx) }));
+vi.mock("@/live/membershipRouting", () => ({ readMembershipInScope: (ctx: unknown, _s: unknown, fn: (c: unknown) => unknown) => fn(ctx) }));
+vi.mock("@/live/features/club", () => ({ getLiveClubProfile: async (_ctx: unknown, id: string) => (await mocks.clubs()).filter((c: { id: string }) => c.id === id) }));
 import { fetchMemberClubsWithMessages } from "./inboxPreviewSources";
 
 describe("ICP club photo previews", () => {

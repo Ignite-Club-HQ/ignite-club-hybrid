@@ -29,8 +29,10 @@ describe('multi-club home content', () => {
     expect(state.calls).toContainEqual(['events', 'club-a']);
     expect(state.calls).toContainEqual(['events', 'club-b']);
   });
-  it('reports an unavailable group instead of saving an incomplete homepage', async () => {
+  it('shows the clubs that loaded when another group is unavailable', async () => {
     state.failed = true;
-    await expect(fetchLiveHomeFeed({} as never)).rejects.toThrow('group-b offline');
+    const feed = await fetchLiveHomeFeed({} as never);
+    expect(feed.memberships.clubIds).toEqual(['club-a']);
+    expect(feed.events.map(event => event.id)).toEqual(['club-a-event']);
   });
 });

@@ -116,8 +116,15 @@ export function createClubDispatcher(deps: DispatchDeps) {
       if (!await active()) return merge([await deps.legacy(feature, '', fn0)]);
       const fn = (ctx: FeatureBackendContext) => fn0(ctx && typeof ctx === 'object' ? markScopedContext(ctx) : ctx);
       const { s } = await sessionFor(deps);
-      const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn), s.readEveryGroup(domain, async ctx => [await fn(ctx)], Number.MAX_SAFE_INTEGER)]);
-      return merge([shared, ...groups]);
+      // Each group answers for itself: one failing group no longer empties
+      // every other group's results. All failing still throws (keeps cache).
+      type Part = { ok: true; value: T } | { ok: false; error: unknown };
+      const attempt = async (ctx: FeatureBackendContext): Promise<Part> => { try { return { ok: true, value: await fn(ctx) }; } catch (error) { return { ok: false, error }; } };
+      const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn).then((value): Part => ({ ok: true, value }), (error): Part => ({ ok: false, error })), s.readEveryGroup(domain, async ctx => [await attempt(ctx)], Number.MAX_SAFE_INTEGER)]);
+      const parts = [shared, ...groups];
+      const ok = parts.filter((p): p is { ok: true; value: T } => p.ok);
+      if (ok.length === 0) { const first = parts.find(p => !p.ok) as { ok: false; error: unknown }; throw first.error; }
+      return merge(ok.map(p => p.value));
     },
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {

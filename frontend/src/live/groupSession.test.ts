@@ -71,7 +71,8 @@ describe('integrated deployment-bound group read session', () => {
   it('rejects same-revision authority substitution during deletion inventory validation', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
     f.registry.groups[1].domains[0].canisterId = 'replacement-cai';
-    await expect(s.assertRegistryUnchanged()).rejects.toThrow('registry changed');
+    // Deletion validation always asks fresh (the open-time read is otherwise reused briefly).
+    await expect(s.assertRegistryUnchanged(true)).rejects.toThrow('registry changed');
   });
   it('rejects a registry change while all-group discovery replies are in flight', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
@@ -127,7 +128,8 @@ describe('integrated deployment-bound group read session', () => {
     const f = fixture();
     f.transport.readMembershipsIndexed = vi.fn(async () => { throw new Error('Account admission denied or unavailable'); });
     await expect(openGroupSession(f.ctx, f.transport)).rejects.toThrow('Account admission denied or unavailable');
-    expect(f.transport.readMembershipsIndexed).toHaveBeenCalledTimes(1);
+    // Groups are asked together; each refuses once and nothing falls back.
+    expect(f.transport.readMembershipsIndexed).toHaveBeenCalledTimes(f.registry.groups.length);
     expect(f.transport.readMemberships).not.toHaveBeenCalled();
     expect(f.transport.readAssignments).not.toHaveBeenCalled();
   });
@@ -135,12 +137,23 @@ describe('integrated deployment-bound group read session', () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport); const read = vi.fn(async () => ['ok']);
     await expect(s.readClubs(['foreign'], 'events_domain', read)).rejects.toThrow('outside');
     f.transport.readAssignments = async () => { throw new Error('Club membership required'); };
-    await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('membership');
-    f.registry.revision = 3n;
-    // A confirmed registry check is reused for RECHECK_WINDOW_MS; after it the change is caught.
-    const later = Date.now() + 16_000; const spy = vi.spyOn(Date, 'now').mockReturnValue(later);
-    try { await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('registry changed'); } finally { spy.mockRestore(); }
+    // Opening's confirmed checks are reused for RECHECK_WINDOW_MS; after it revocation is caught.
+    const base = Date.now();
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(base + 16_000);
+    try {
+      await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('membership');
+      f.registry.revision = 3n;
+      spy.mockReturnValue(base + 40_000);
+      await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('registry changed');
+    } finally { spy.mockRestore(); }
     expect(read).not.toHaveBeenCalled();
+  });
+  it('shares one assignment check across concurrent reads of the same club', async () => {
+    const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 16_000);
+    const spyFn = f.transport.readAssignments as ReturnType<typeof vi.fn>; const before = spyFn.mock.calls.length;
+    try { await Promise.all([1, 2, 3].map(() => s.readClub('club-a', 'club_domain', async () => 1))); } finally { spy.mockRestore(); }
+    expect(spyFn.mock.calls.length - before).toBe(1);
   });
   it('disposed session cannot read or release an in-flight result', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);

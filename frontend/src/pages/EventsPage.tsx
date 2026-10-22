@@ -1,4 +1,5 @@
 import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
+import { readContentInScope } from "@/live/contentRouting";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { mergeMemberships } from "@/live/membershipMerge";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
@@ -776,7 +777,14 @@ export default function EventsPage() {
             // Fetch every club's events at once, then resolve all team/club
             // names in parallel so the loop below only reads from cache.
             const rowsByClub = scopeClubIds.length > 0
-              ? await Promise.all(scopeClubIds.map((clubId) => listLiveEvents(ctx, clubId, selectedTeamId)))
+              // Each club from its own group; one failing club never hides the others.
+              ? await Promise.allSettled(scopeClubIds.map((clubId) =>
+                  readContentInScope(ctx, "events", { clubId }, (scoped) => listLiveEvents(scoped, clubId, selectedTeamId)),
+                )).then((results) => {
+                  const ok = results.filter((r) => r.status === "fulfilled").length;
+                  if (ok === 0) throw (results[0] as PromiseRejectedResult).reason;
+                  return results.map((r) => (r.status === "fulfilled" ? r.value : []));
+                })
               : [];
             const visibleEventRows = rowsByClub.flatMap((rows) => (rows as any[]).filter((event) => !event.deleted));
             const dutyTeams = await listLiveEventDutyTeams(ctx, visibleEventRows.map((event) => event.id)).catch(() => []);
