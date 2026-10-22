@@ -98,8 +98,15 @@ async function connect<T>(
   // exact-signature read_account_ consensus twins and leaves every other
   // canister (shared services, groups without the gate) untouched.
   const canisterId = typeof connection.canisterId === 'string' ? connection.canisterId : connection.canisterId.toText();
-  return { ...connection, actor: adaptRemoteAccountReads(connection.actor, idlFactory({ IDL }), canisterId) };
+  // The actor is reused per agent+canister, so wrap it once too (the wrapper
+  // compares ~60 method signatures — heavy UI-thread work if done per call).
+  const cached = adaptedActors.get(connection.actor as object);
+  if (cached) return { ...connection, actor: cached as T };
+  const actor = adaptRemoteAccountReads(connection.actor, idlFactory({ IDL }), canisterId);
+  adaptedActors.set(connection.actor as object, actor);
+  return { ...connection, actor };
 }
+const adaptedActors = new WeakMap<object, unknown>();
 
 export const connectLiveClubDomain = (target: IcpTargetConfig, identity: Identity) =>
   connect<ClubDomainActor>(target, identity, "club_domain", clubDomainIdl);
