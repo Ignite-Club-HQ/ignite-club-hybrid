@@ -8,10 +8,8 @@ export function isLoopbackRehearsalHost(host) {
   } catch { return false; }
 }
 
-/** Bind only exact-signature additive consensus twins from the real Candid
- * service. Keep writes/control-plane methods intact; never retry/fallback. */
-export function adaptLocalAccountReads(actor, service, host) {
-  if (!isLoopbackRehearsalHost(host)) throw new Error('Protected-read rehearsal requires a loopback host');
+/** Exact-signature additive consensus twins from the real Candid service. */
+function exactSignatureTwins(service, onIncompatible) {
   const fields = new Map(service._fields);
   const mapped = new Map();
   for (const [name, signature] of fields) {
@@ -21,10 +19,19 @@ export function adaptLocalAccountReads(actor, service, host) {
     if (!legacy) continue;
     const types = sig => JSON.stringify([sig.argTypes.map(t => t.display()), sig.retTypes.map(t => t.display())]);
     if (types(signature) !== types(legacy) || signature.annotations.includes('query') || signature.annotations.includes('composite_query')) {
-      throw new Error(`Incompatible protected read: ${name}`);
+      onIncompatible(name);
+      continue;
     }
     mapped.set(legacyName, name);
   }
+  return mapped;
+}
+
+/** Bind only exact-signature additive consensus twins from the real Candid
+ * service. Keep writes/control-plane methods intact; never retry/fallback. */
+export function adaptLocalAccountReads(actor, service, host) {
+  if (!isLoopbackRehearsalHost(host)) throw new Error('Protected-read rehearsal requires a loopback host');
+  const mapped = exactSignatureTwins(service, name => { throw new Error(`Incompatible protected read: ${name}`); });
   return new Proxy(actor, {
     get(target, property) {
       const protectedName = mapped.get(property);
