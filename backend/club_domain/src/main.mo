@@ -2827,6 +2827,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public shared ({ caller }) func acknowledge_directory_membership_source(binding : MembershipDirectorySource.Binding, revision : Nat) : async { #Ok; #Err : Text } {
     if (not MembershipDirectorySource.allowed(membershipDirectorySource, caller, binding)) return #Err("Directory identity and exact source binding required");
+    if (revision == 0) return #Err("Completed retained source required");
     if (revision == membershipDiscoveryJournal.acknowledged) return #Ok;
     if (revision < membershipDiscoveryJournal.acknowledged or revision > membershipEpoch() or
         not MembershipSourceRetention.complete(membershipSourceRetention, binding, revision)) return #Err("Completed retained source required");

@@ -41,6 +41,7 @@ try {
     a.setPrincipal(router.canisterId);assert.ok('Err' in await a.read_directory_membership_status(grant),'other infrastructure denied');
     a.setPrincipal(identity.canisterId);assert.ok('Err' in await a.read_directory_membership_status({...grant,group:'foreign'}));
     const start=ok(await a.read_directory_membership_status(grant));assert.equal(start.pending,true);
+    assert.ok('Err' in await a.acknowledge_directory_membership_source(grant,0n));
     assert.ok('Err' in await a.acknowledge_directory_membership_source(grant,start.revision+1n));
   }
   // Background polling and source notifications alone must progress both

@@ -18,11 +18,18 @@ let start : Source.Cursor = { revision = 7; phase = 0; offset = 0; nested = 0 };
 let snapshot = switch (Retention.acquire(state, binding, 7, ?start, capture)) { case (#Ok(s)) s; case (_) { assert false; loop {} } };
 assert not Retention.complete(state, binding, 7);
 var cursor : ?Source.Cursor = ?start;
-var scanned = 0; var pages = 0;
+var scanned = 0; var pages = 0; var childTeams = 0; var parents = 0;
 loop {
   let page = switch (Retention.read(snapshot, cursor)) { case (#Ok(p)) p; case (_) { assert false; loop {} } };
   assert page.revision == 7 and page.scanned <= 100;
   assert Retention.read(snapshot, cursor) == #Ok(page);
+  for (e in page.edges.values()) {
+    switch (e) {
+      case (#Parent(p)) { assert p.child == "child" and p.subject == identity; parents += 1 };
+      case (#ChildTeam(t)) { assert t.child == "child" and t.team == childTeams.toText(); childTeams += 1 };
+      case (_) { assert false }
+    }
+  };
   scanned += page.scanned; pages += 1;
   // Replace and compact every live relationship between pages; retained
   // nested edges must remain the original finite 351-slot traversal.
@@ -32,6 +39,7 @@ loop {
   if (cursor == null) break;
 };
 assert captures == 1 and scanned == 351 and pages == 4;
+assert parents == 1 and childTeams == 350;
 assert not Retention.complete(state, { binding with generation = 2 }, 7);
 assert not Retention.complete(state, binding, 8);
 assert Retention.complete(state, binding, 7);
