@@ -3,7 +3,7 @@
 ## Outcome
 A member whose clubs are all in Group 1 loads their club content from Group 1 only. Group 2 must not delay their Home, Clubs, Messages, Events or Media pages. Members in several groups load each club from its own group, with healthy sections appearing independently.
 
-Cross-group discovery is separate from opening pages. It is not permanently one-off: someone can be added to a club elsewhere by another administrator or device. The design must detect that without scanning every group on ordinary navigation.
+Discovery stays separate from navigation, while still detecting clubs joined through another device or administrator.
 
 ## 1. One shared membership directory in the app
 Create one account-and-deployment-scoped coordinator consumed by every page and widget. Its snapshot contains verified club IDs, owning groups, role/team references, per-source status, completeness evidence and generation/revision metadata. Store bounded snapshots using the existing per-query device storage, not a whole-cache rewrite.
@@ -38,7 +38,7 @@ The audit found no complete central caller-membership API today. Existing `acl_r
 - One small revision read on startup, foreground resume and a coalesced visible-session interval replaces broad scans. An unchanged revision means no membership discovery. A changed revision fetches bounded directory deltas/pages and updates only affected clubs/groups.
 - Where completeness or delivery lag cannot be proven, retain Stage A reconciliation. Never switch it off merely because the new endpoint exists.
 
-This separates app recovery from an optional later upgrade rather than blocking all speed improvements on new infrastructure.
+App recovery does not wait for the later upgrade.
 
 ## 3. Normal page loading
 | Area | New source and behaviour |
@@ -67,7 +67,7 @@ Search for clubs to join, unknown invitations, foreign-host resources, operator 
 Use per-club loading/empty/failed/denied state and cursors. Ready gallery sources may render, but do not declare a globally sorted page complete until every included source supplies its boundary. Retain unresolved cursors and deduplicate by exact asset ID. Reconcile acknowledged comments/messages by ID. Exclude confirmed deleted clubs before publishing sections; failed deletion checks are not absence.
 
 ## Technical implementation
-Add an account/full-target-scoped coordinator with injected transports and lazy ICP imports. Adapt groupDispatch/groupSession to reuse verified discovery without page-driven membership sweeps; cached state never authorizes writes. Centralize membership keys/invalidation. Classify every `everyGroup` caller before replacing member-content fan-outs; retain genuine wider discovery and security inventory. Keep configuration revisions separate from membership/content revisions. Record privacy-safe call counts/reasons and timings.
+Use injected transports, lazy ICP imports and account/full-target-scoped keys. Reuse verified discovery in groupDispatch/groupSession; retain consensus write validation. Audit every `everyGroup` caller before replacing it. Separate membership, content and configuration revisions; record privacy-safe request counts/timings.
 
 ## Verification gates
 Add behaviour tests with real call counters, not source-text assertions:
