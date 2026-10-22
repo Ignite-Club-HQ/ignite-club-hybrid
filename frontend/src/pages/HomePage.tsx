@@ -1344,9 +1344,10 @@ export default function HomePage() {
           icp: async (ctx) => {
             const filterOut = /test|demo|sample/i;
             const liveClubs = (await listLiveClubs(ctx)).filter((c) => !filterOut.test(c.name));
+            // One club failing in this group must not hide its other clubs.
             const teamsByClub = await Promise.all(
               liveClubs.map(async (c) => {
-                const rows = await listLiveTeams(ctx, c.id);
+                const rows = await listLiveTeams(ctx, c.id).catch(() => [] as Awaited<ReturnType<typeof listLiveTeams>>);
                 return rows
                   .filter((t) => t.deleted_at_ms.length === 0 && !filterOut.test(t.name))
                   .map((t) => ({

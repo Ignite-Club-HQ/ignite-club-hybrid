@@ -1,6 +1,5 @@
 import { readContentInScope } from "@/live/contentRouting";
 import { settleAll } from "@/live/crossGroupClubs";
-import { acrossLists } from "@/live/featureScopes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -74,7 +73,6 @@ export async function fetchMediaFeedPage(
     },
     icp: async (ctx) => {
       const clubIds = options.clubId ? [options.clubId] : await (async () => {
-        const { listLiveMembershipClubs } = await import("@/live/features/membership");
         // Club ids from role grants (every group), not one group's club list.
         const { getLiveMyRoleGrants } = await import("@/live/features/membership");
         const { grantClubId } = await import("@/live/crossGroupClubs");
