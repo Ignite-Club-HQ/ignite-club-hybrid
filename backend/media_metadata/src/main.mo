@@ -464,6 +464,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (principal.equal(Principal.anonymous()) or not validRoleAssignment(role, club_id, team_id)) return #Err("Invalid role assignment");
     if (not roles.any(func(grant) = grant.user.equal(principal) and grant.role == role and grant.club_id == club_id and grant.team_id == team_id)) {
       if (roles.size() >= MAX_ROLES) return #Err("Role limit reached");
+      mediaEvidenceRevision += 1;
       roles := roles.concat([{ user = principal; role; club_id; team_id }]);
     };
     #Ok

@@ -143,6 +143,10 @@ export async function listLiveAssets(ctx: FeatureBackendContext, clubId: string)
 /** One genuinely bounded owning-canister page; never silently drain a gallery. */
 export async function listLiveAssetsPage(ctx: FeatureBackendContext, clubId: string, cursor: MediaPageCursor | null = null) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  if (typeof actor.list_assets_page !== 'function') {
+    if (cursor) throw new Error('Media paging method unavailable during continuation');
+    return { assets: await actor.list_assets(clubId), next: null, bounded: false };
+  }
   return readCompatibleMediaPage(
     () => actor.list_assets_page(clubId, cursor ? [cursor] : [], 60n),
     () => actor.list_assets(clubId),
