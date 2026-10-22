@@ -100,4 +100,21 @@ describe('remote protected read fallback', () => {
     expect(await b.list_files('c')).toBe('fast');
     expect(twinB).not.toHaveBeenCalled();
   });
+
+  it('keeps the twin decision on the device so the next launch skips the refused query', async () => {
+    const legacy = vi.fn().mockRejectedValue(trap());
+    const twin = vi.fn().mockResolvedValue('protected');
+    const wrapped = adaptRemoteAccountReads({ get_folder: legacy, read_account_get_folder: twin }, vaultIdl({ IDL }), 'ggggg-gg');
+    await wrapped.get_folder('f');
+    const saved = JSON.parse(localStorage.getItem('ignite_protected_read_decisions_v1') ?? '[]');
+    expect(saved).toContain('ggggg-gg|get_folder');
+    // A fresh module load (next app launch) goes straight to the twin.
+    vi.resetModules();
+    const fresh = await import('./accountReadAdapter.mjs');
+    const legacy2 = vi.fn().mockRejectedValue(trap());
+    const twin2 = vi.fn().mockResolvedValue('protected');
+    const again = fresh.adaptRemoteAccountReads({ get_folder: legacy2, read_account_get_folder: twin2 }, vaultIdl({ IDL }), 'ggggg-gg');
+    expect(await again.get_folder('f')).toBe('protected');
+    expect(legacy2).not.toHaveBeenCalled();
+  });
 });
