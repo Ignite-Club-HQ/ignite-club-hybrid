@@ -26,6 +26,7 @@ import StableBytes "stableBytes";
 import MultiBytes "multiRegionBytes";
 import RetentionPage "retentionPage";
 import MediaRetentionPolicy "mediaRetentionPolicy";
+import MediaByteAccounting "mediaByteAccounting";
 import MediaInventory "mediaInventory";
 import RetainedProtocol "retainedProtocol";
 import RetainedQuota "../../club_domain/src/mediaRetainedQuota";
@@ -767,11 +768,11 @@ persistent actor MediaBlobStore {
     var used = 0;
     label scan for ((path, r) in stable_blobs.entriesFrom(prefix)) {
       if (not path.startsWith(#text prefix)) break scan;
-      if (categoryForPath(path) != null and (teamId == null or mediaTeam(path) == teamId)) used += r.slice.length
+      if (categoryForPath(path) != null and (teamId == null or mediaTeam(path) == teamId)) used += MediaByteAccounting.storedBytes(MultiBytes.read(multi_bytes, r.slice, 0, 8), r.slice.length)
     };
-    for (r in blobs.values()) { if (r.path.startsWith(#text prefix) and stable_blobs.get(r.path) == null and categoryForPath(r.path) != null and (teamId == null or mediaTeam(r.path) == teamId)) used += r.bytes.size() };
+    for (r in blobs.values()) { if (r.path.startsWith(#text prefix) and stable_blobs.get(r.path) == null and categoryForPath(r.path) != null and (teamId == null or mediaTeam(r.path) == teamId)) used += MediaByteAccounting.storedBytes(r.bytes, r.bytes.size()) };
     var pending = 0;
-    for (u in pending_uploads.values()) { if (u.path.startsWith(#text prefix) and categoryForPath(u.path) != null and (teamId == null or mediaTeam(u.path) == teamId)) pending += u.total_size.toNat() };
+    for (u in pending_uploads.values()) { if (u.path.startsWith(#text prefix) and categoryForPath(u.path) != null and (teamId == null or mediaTeam(u.path) == teamId)) pending += MediaByteAccounting.pendingBytes(u.total_size.toNat()) };
     (used, pending)
   };
 
@@ -1012,7 +1013,7 @@ persistent actor MediaBlobStore {
         case (?c, ?a) {
           let (used, pending) = scopedMediaBytes(c, if (a.team_scoped) mediaTeam(path) else null);
           let limit = a.limit_bytes;
-          if (not UploadPolicy.withinMediaAllowance(used, pending, total_size.toNat(), limit)) return #Err("StorageAllowanceFull");
+          if (not UploadPolicy.withinMediaAllowance(used, pending, MediaByteAccounting.pendingBytes(total_size.toNat()), limit)) return #Err("StorageAllowanceFull");
         };
         case _ {};
       };
@@ -1113,6 +1114,12 @@ persistent actor MediaBlobStore {
       case (null, ?op) op.path;
       case _ return #Err("Unknown upload")
     };
+    // Fetch the current allowance before taking the final upload snapshot.
+    // The synchronous recheck below charges malformed/legacy raw bytes in
+    // full instead of granting an unearned framing discount.
+    let needsAllowance = quota_mode == #local and categoryForPath(path) != null and clubIdFromPath(path) != null and not isGovernor<system>(caller);
+    let finalAllowance = if (needsAllowance) await pathAllowance(path) else null;
+    if (needsAllowance and finalAllowance == null) return #Err("StorageAllowanceUnavailable");
     bumpInventory();
     switch (quota_operations.get(upload_id)) {
       case (?op) {
@@ -1134,6 +1141,16 @@ persistent actor MediaBlobStore {
         let assembled = AssembleChunks.assemble(upload.chunks, upload.total_size.toNat());
         if (Nat.toNat64(assembled.size()) != upload.total_size) {
           return #Err("Accumulated byte count does not match total_size");
+        };
+        switch (finalAllowance, clubIdFromPath(upload.path)) {
+          case (?a, ?club) {
+            let actual = MediaByteAccounting.storedBytes(assembled, assembled.size());
+            if (actual > MediaByteAccounting.maxPlaintextBytes) return #Err("FileTooLarge");
+            let (used, pending) = scopedMediaBytes(club, if (a.team_scoped) mediaTeam(upload.path) else null);
+            let ownPending = MediaByteAccounting.pendingBytes(upload.total_size.toNat());
+            if (pending < ownPending or not UploadPolicy.withinMediaAllowance(used, pending - ownPending, actual, a.limit_bytes)) return #Err("StorageAllowanceFull");
+          };
+          case _ {}
         };
         let content_hash = hexDigest(assembled);
         let record : BlobRecord = {

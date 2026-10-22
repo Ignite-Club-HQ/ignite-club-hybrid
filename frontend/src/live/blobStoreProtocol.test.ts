@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IDL } from "@icp-sdk/core/candid";
+import { IbeCiphertext } from "@icp-sdk/vetkeys";
 import {
   BLOB_CHUNK_SIZE,
   chunkBytes,
@@ -11,6 +12,11 @@ import { MEDIA_BLOB_STORE_KEY } from "./mediaStorage";
 import { idlFactory as blobStoreIdl } from "../lab/bindings/media_blob_store/declarations/media_blob_store.did.js";
 
 describe("blob store protocol", () => {
+  it("matches the photo store's 136-byte framing charge exclusion to the SDK", () => {
+    expect(IbeCiphertext.ciphertextSize(1_000)).toBe(1_136);
+    expect(IbeCiphertext.plaintextSize(1_136)).toBe(1_000);
+    expect(IbeCiphertext.plaintextSize(10_485_896)).toBe(10_485_760);
+  });
   it("splits bytes into consecutive fixed-size chunks", () => {
     const bytes = new Uint8Array(2507).map((_, i) => i % 251);
     const chunks = chunkBytes(bytes, 1000);
