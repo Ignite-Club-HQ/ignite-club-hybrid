@@ -47,12 +47,14 @@ export const mapLiveGroupRows = async (
   rows: any[],
 ): Promise<GroupMessage[]> => {
   const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
-  const profilesMap = await fetchProfilesWithCache(authorIds);
+  const [profilesMap, liveReactions] = await Promise.all([
+    fetchProfilesWithCache(authorIds),
+    listLiveReactions(ctx, groupId).catch(() => []),
+  ]);
   // Reactions persist on the canister; restore them on every refetch.
   // Tolerate older canisters that lack list_reactions.
   const reactionsByMessage = new Map<string, any[]>();
   try {
-    const liveReactions = await listLiveReactions(ctx, groupId);
     for (const r of liveReactions) {
       const uid = r.user.toText();
       const list = reactionsByMessage.get(r.message_id) ?? [];

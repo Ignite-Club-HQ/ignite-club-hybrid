@@ -158,6 +158,7 @@ describe('entity scopes', () => {
     await x.remember('conversation', [['g1-chat', 'g1-club']]);
     expect(await x.readFor('messaging', { conversationId: 'g1-chat' }, 'messaging_domain', async () => 1)).toBe('legacy');
     expect(readHosted).not.toHaveBeenCalled();
+    expect(s.readEveryGroup).not.toHaveBeenCalled();
   });
   it('a stale device answer pointing at an original-group club is dropped and re-checked', async () => {
     const saved: Record<string, Record<string, string>> = { p1: { 'conversation:g1-chat': 'g1-club' } };

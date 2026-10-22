@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ active: true, dispatch: vi.fn() }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: state.active }) }));
 vi.mock('./generalActivation', () => ({ routingActive: async () => state.active, generalRoutingStatus: async () => ({ active: state.active, missing: [] }), cachedGeneralRoutingActive: () => state.active, clearGeneralRoutingCache: () => {} }));
-import { createContentReader } from './contentRouting';
+import { createContentReader, readContentInScope as productionRead } from './contentRouting';
 const readContentInScope = createContentReader(() => state.active, async () => state.dispatch);
 describe('club content routing', () => {
   beforeEach(() => { state.active = true; state.dispatch.mockReset(); });
@@ -21,5 +21,13 @@ describe('club content routing', () => {
     const context = {} as never;
     expect(await readContentInScope(context, 'home', { clubId: 'club-a' }, async ctx => ctx)).toBe(context);
     expect(state.dispatch).not.toHaveBeenCalled();
+  });
+  it('passes the actual identity and deployment to activation before routing', async () => {
+    const context = { identity: { principal: 'parent' }, target: { alias: 'mainnet' } } as never;
+    const active = vi.fn((ctx) => ctx === context);
+    state.dispatch.mockImplementation(async (_feature, providers) => providers.icp({ target: { alias: 'group-2' } }));
+    const reader = createContentReader(active, async () => state.dispatch);
+    expect(await reader(context, 'messaging', { clubId: 'group-2-test' }, async ctx => ctx.target.alias)).toBe('group-2');
+    expect(active).toHaveBeenCalledWith(context);
   });
 });
