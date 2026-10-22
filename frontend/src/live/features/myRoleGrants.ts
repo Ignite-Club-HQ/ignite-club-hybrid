@@ -43,7 +43,7 @@ export async function fetchMyRoleGrantsEverywhere(ctx: FeatureBackendContext): P
     // reads (events, names, chats) go straight to the club's group instead of
     // asking every group which one owns each team.
     const pairs = grants.flatMap((g) => (g.team?.[0] && g.club?.[0] ? [[g.team[0], g.club[0]] as const] : []));
-    await clubDispatch.remember("team", pairs).catch(() => undefined);
+    if (pairs.length && typeof clubDispatch.remember === "function") await clubDispatch.remember("team", pairs).catch(() => undefined);
     return grants;
   });
 }
