@@ -111,7 +111,7 @@ describe('remote protected read fallback', () => {
     const wrapped = first.adaptRemoteAccountReads({ get_folder: legacy, read_account_get_folder: twin }, vaultIdl({ IDL }), 'ggggg-gg');
     await wrapped.get_folder('f');
     expect(legacy).toHaveBeenCalledTimes(1);
-    const saved = JSON.parse(localStorage.getItem('ignite_protected_read_decisions_v1') ?? '[]');
+    const saved = JSON.parse(store.get('ignite_protected_read_decisions_v1') ?? '[]');
     expect(saved).toContain('ggggg-gg|get_folder');
     // A fresh module load (next app launch) goes straight to the twin.
     vi.resetModules();
