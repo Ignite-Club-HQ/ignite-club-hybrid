@@ -88,7 +88,48 @@ try {
   }));
   ok(await actor.begin_upload('clubs/club-free/photos/small.jpg', 'image/jpeg', 1_000n, 1));
 
-  console.log('PASS: the photo store counts gallery, vault and chat bytes into one combined Pro pot, and get_club_media_bytes reports the exact finalized + pending figures the admission check uses.');
+  // The authoritative query distinguishes legacy grants from new tiers and
+  // refuses a team ID from another club; no frontend status is trusted.
+  assert.equal(ok(await clubActor.get_media_allowance('club-free', [])).limit_bytes, 262_144_000n);
+  assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 3_221_225_472n);
+  const team = {
+    id: 'team-one', club_id: 'club-free', name: 'Team One', archived: false,
+    is_active: true, is_shell: false, playhq_auto_create_events: false,
+    age_group: [], deleted_at_ms: [], description: [], division: [], folder_id: [], gender: [], logo_url: [],
+    playhq_competition_id: [], playhq_team_id: [], shell_claim_token: [], shell_claimed_at_ms: [],
+    shell_claimed_by: [], shell_contact_email: [], shell_contact_name: [], shell_invited_by: [], team_type: [],
+  };
+  ok(await clubActor.save_team(team));
+  ok(await clubActor.save_team_subscription({
+    team_id: team.id, is_pro: true, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false,
+    cancelled_at_ms: [], disable_auto_subs: false, disable_batch_subs: false, disable_position_swaps: false,
+    disable_team_pom_rewards: false, formation: [], is_trial: false, max_spread_minutes: [], minutes_per_half: [],
+    rotate_gk_at_halftime: false, rotation_speed: 1, show_lineup_picker: false, team_size: [], trial_ends_at_ms: [],
+  }));
+  assert.deepEqual(ok(await clubActor.get_media_allowance('club-free', [team.id])), {
+    base_bytes: 1_073_741_824n, limit_bytes: 1_073_741_824n, team_scoped: true, premium: true,
+  });
+  assert.match((await clubActor.get_media_allowance('club-pro', [team.id])).Err, /does not belong/);
+  const teamUpload = ok(await reserve('clubs/club-free/teams/team-one/photos/pending.jpg', 1_000n));
+  const retainedPending = await actor.get_club_media_bytes('club-free');
+  await pic.upgradeCanister({ canisterId: store.canisterId, wasm, sender: governor,
+    upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  assert.deepEqual(await actor.get_club_media_bytes('club-free'), retainedPending);
+  ok(await actor.put_chunk(teamUpload, 0, new Uint8Array(1_000)));
+  ok(await actor.finalize_upload(teamUpload));
+  assert.equal((await actor.get_club_media_bytes('club-free')).finalized, 1_000n);
+  const subscription = {
+    activated_at_ms: [], admin_pro_football_override: false, admin_pro_override: false, cancelled_at_ms: [],
+    club_id: 'club-pro', expires_at_ms: [], is_pro: true, is_pro_football: false, is_trial: false,
+    plan: 'unlimited', team_limit: [], trial_ends_at_ms: [],
+  };
+  ok(await clubActor.save_club_subscription(subscription));
+  assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 5_368_709_120n);
+  ok(await clubActor.save_club_subscription({ ...subscription, expires_at_ms: [1n] }));
+  assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 262_144_000n);
+  assert.equal((await actor.get_club_media_bytes('club-pro')).finalized, 1_000n, 'Expiry does not delete existing files');
+
+  console.log('PASS: combined media accounting, branding exemption, team-scoped entitlement, wrong-club refusal, legacy Unlimited preservation, expiry without deletion, and pending upload upgrade/readback.');
 } finally {
   await server.stop();
 }
