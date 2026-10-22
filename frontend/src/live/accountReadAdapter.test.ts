@@ -45,3 +45,59 @@ describe('local protected read adapter', () => {
     expect(() => adaptLocalAccountReads({}, wrong, 'http://localhost')).toThrow('Incompatible');
   });
 });
+
+describe('remote protected read fallback', () => {
+  const trap = () => new Error("Canister called `ic0.trap` with message: 'Use protected consensus account read'");
+
+  it('keeps the fast legacy query when the canister does not refuse it', async () => {
+    const legacy = vi.fn().mockResolvedValue('fast');
+    const twin = vi.fn().mockResolvedValue('slow');
+    const wrapped = adaptRemoteAccountReads({ get_folder: legacy, read_account_get_folder: twin }, vaultIdl({ IDL }), 'aaaaa-aa');
+    expect(await wrapped.get_folder('f')).toBe('fast');
+    expect(legacy).toHaveBeenCalledTimes(1);
+    expect(twin).not.toHaveBeenCalled();
+  });
+
+  it('retries through the exact-signature twin only when the canister demands it, then goes straight to the twin', async () => {
+    const legacy = vi.fn().mockRejectedValue(trap());
+    const twin = vi.fn().mockResolvedValue('protected');
+    const wrapped = adaptRemoteAccountReads({ get_folder: legacy, read_account_get_folder: twin }, vaultIdl({ IDL }), 'bbbbb-bb');
+    expect(await wrapped.get_folder('f')).toBe('protected');
+    expect(legacy).toHaveBeenCalledTimes(1);
+    expect(twin).toHaveBeenCalledWith('f');
+    // Decision is remembered per canister+method: no more trapped queries.
+    legacy.mockClear();
+    expect(await wrapped.get_folder('g')).toBe('protected');
+    expect(legacy).not.toHaveBeenCalled();
+    expect(twin).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates unrelated errors without retrying', async () => {
+    const legacy = vi.fn().mockRejectedValue(new Error('Club admin required'));
+    const twin = vi.fn();
+    const wrapped = adaptRemoteAccountReads({ get_folder: legacy, read_account_get_folder: twin }, vaultIdl({ IDL }), 'ccccc-cc');
+    await expect(wrapped.get_folder('f')).rejects.toThrow('Club admin required');
+    expect(twin).not.toHaveBeenCalled();
+  });
+
+  it('leaves methods without an exact twin and writes untouched', async () => {
+    const legacy = vi.fn().mockRejectedValue(trap());
+    const write = vi.fn().mockResolvedValue('done');
+    const wrapped = adaptRemoteAccountReads({ get_club_media_bytes: legacy, create_folder: write }, vaultIdl({ IDL }), 'ddddd-dd');
+    await expect(wrapped.get_club_media_bytes('c')).rejects.toThrow('protected consensus account read');
+    expect(await wrapped.create_folder('n')).toBe('done');
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('scopes the twin decision to the canister that demanded it', async () => {
+    const legacyA = vi.fn().mockRejectedValue(trap());
+    const twinA = vi.fn().mockResolvedValue('protected');
+    const legacyB = vi.fn().mockResolvedValue('fast');
+    const twinB = vi.fn();
+    const a = adaptRemoteAccountReads({ list_files: legacyA, read_account_list_files: twinA }, vaultIdl({ IDL }), 'eeeee-ee');
+    const b = adaptRemoteAccountReads({ list_files: legacyB, read_account_list_files: twinB }, vaultIdl({ IDL }), 'fffff-ff');
+    expect(await a.list_files('c')).toBe('protected');
+    expect(await b.list_files('c')).toBe('fast');
+    expect(twinB).not.toHaveBeenCalled();
+  });
+});
