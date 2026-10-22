@@ -20,8 +20,10 @@ test('manual upgrade is protected and serialized with existing mainnet deploymen
   assert.doesNotMatch(workflow, /identity new|cycles mint|icp deploy|install-group-closed/);
 });
 test('explicit confirmation is checked before any upgrade', () => {
-  assert.ok(runner.indexOf("CONFIRMATION?.trim() !== 'UPGRADE GROUP 2'") < runner.indexOf("spawnSync('icp'"));
-  assert.match(runner, /validateGroup2Inventory\(provision, shared\)/);
+  assert.ok(runner.indexOf("CONFIRMATION?.trim() !== `UPGRADE GROUP ${NUM}`") > 0);
+  assert.ok(runner.indexOf("CONFIRMATION?.trim() !== `UPGRADE GROUP ${NUM}`") < runner.indexOf("spawnSync('icp'"));
+  assert.match(runner, /validateGroup2Inventory\(provision, shared, GROUP\)/);
+  assert.match(runner, /const GROUP = \(process\.env\.GROUP_ID \|\| 'g2'\)\.trim\(\)/);
   assert.match(runner, /read_owner_test_deletion_required/);
 });
 test('durable GitHub intent readback precedes the upgrade call', () => {
@@ -44,7 +46,7 @@ test('PII attestation is preserved in durable progress before upgrading', () => 
 });test('reload only reinstalls identical modules, behind its own confirmation and durable intent', () => {
   assert.match(workflow, /options: \[check, upgrade, reload\]/);
   assert.match(workflow, /RELOAD GROUP 2 SETTINGS/);
-  assert.match(runner, /CONFIRMATION\?\.trim\(\) !== 'RELOAD GROUP 2 SETTINGS'/);
+  assert.match(runner, /CONFIRMATION\?\.trim\(\) !== `RELOAD GROUP \$\{NUM\} SETTINGS`/);
   const reload = runner.slice(runner.indexOf("if (action === 'reload') {\n"));
   assert.ok(reload.indexOf('Reload refused: the staged') < reload.indexOf("spawnSync('icp'"));
   assert.ok(reload.indexOf("step.phase = 'pending'; persist();") < reload.indexOf("spawnSync('icp'"));
@@ -66,7 +68,7 @@ test('resume after the eleventh saved completion reloads only timers and photo s
     plans: names.map(name => ({ name, newHash: 'module', file: name })), journal, revision: '1',
     closed: async () => '1', observe: async () => ({ moduleHash: 'module', settingsHash: 'settings' }),
     persist: () => { savedPhase = journal.steps.find(s => s.phase === 'pending')?.name; },
-    upgradeArgs: plan => [plan.name], GROUP2_GOVERNOR: 'governor', reportDirectory: '/tmp',
+    upgradeArgs: plan => [plan.name], GROUP2_GOVERNOR: 'governor', GROUP: 'g2', reportDirectory: '/tmp',
     spawnSync: (_command, args) => {
       assert.equal(savedPhase, args[0]); installed.push(args[0]); return { status: 0 };
     }, verifyUpgradeStatus: () => {}, keyGate: () => {}, console: { log: () => {} },
