@@ -102,7 +102,7 @@ impl<M:Memory+Clone> Coordinator<M>{
         for subject in subjects{
             self.rows.insert(format!("subject:{}:{source}",subject.to_text()),encode(binding));
             // Namespace-keyed reverse rows support bounded retirement cleanup.
-            self.rows.insert(format!("index:{:020}:{}",build.namespace,subject.to_text()),encode(&format!("subject:{}:{source}",subject.to_text())));
+            self.rows.insert(format!("index:{:020}:{}",build.namespace,subject.to_text()),encode(&(format!("subject:{}:{source}",subject.to_text()),binding)));
         }
         build.subject_cursor=next;build.indexed=build.subject_cursor.is_none();self.save(source,&build);
         // A terminal nonempty page is still work; publication waits one tick.
@@ -129,6 +129,7 @@ impl<M:Memory+Clone> Coordinator<M>{
         }Ok(out)
     }
     pub fn private_page(&self,sessions:&mut Sessions<M>,caller:Principal,viewer:Viewer,sequence:u64,now:u64)->Outcome<(Page,Option<u64>)>{
+        if caller==Principal::anonymous()||viewer.aliases.is_empty()||viewer.aliases.len()>8||!viewer.aliases.contains(&caller){return Err("Caller-private verified account required".into());}
         let mut sources=self.sources()?;
         // Verified aliases are identity-owned. Read at most 100 indexed source
         // candidates per alias; unusually broad accounts fall back explicitly.
@@ -156,9 +157,9 @@ impl<M:Memory+Clone> Coordinator<M>{
         let prefix=format!("index:{n:020}:");let mut removed=0;
         while removed<100{
             let row=self.rows.range(prefix.clone()..).next().map(|e|(e.key().clone(),e.value())).filter(|(k,_)|k.starts_with(&prefix));
-            let Some((reverse,bytes))=row else{break;};let subject_key:String=decode(&bytes);
+            let Some((reverse,bytes))=row else{break;};let (subject_key,retired_binding):(String,Binding)=decode(&bytes);
             // A newer build may have replaced the same subject/source entry.
-            if let Some(current)=self.rows.get(&subject_key){let binding:Binding=decode(&current);let source=subject_key.rsplit(':').next().unwrap_or("");if !self.build(source).is_some_and(|b|b.binding==binding){self.rows.remove(&subject_key);}}
+            if let Some(current)=self.rows.get(&subject_key){let binding:Binding=decode(&current);if binding==retired_binding{self.rows.remove(&subject_key);}}
             self.rows.remove(&reverse);removed+=1;
         }
         if removed>0{return Ok((removed,false));}
@@ -210,5 +211,51 @@ impl<M:Memory+Clone> Coordinator<M>{
         s.revision+=1;pin.registry_revision=s.revision;s.groups[0].id="replacement".into();s.placements[0].group_id="replacement".into();
         c.bind_inventory(verify_inventory(&s,&pin,&a,2).unwrap()).unwrap();c.begin("replacement",a[0],1).unwrap();c.reclaim_obsolete_updates(None).unwrap();
         assert!(c.journal.source("g0").is_none());assert!(c.journal.pending("replacement").unwrap());assert!(c.begin("g0",a[0],100).is_err());
+    }
+    fn finish(c:&mut Coordinator<Mem>,source:&str,authority:Principal,revision:u64,edges:Vec<Edge>){
+        let binding=c.begin(source,authority,revision).unwrap();
+        for (sequence,chunk) in edges.chunks(100).enumerate(){c.ingest(source,authority,&binding,sequence as u64,chunk.to_vec(),(sequence+1)*100>=edges.len()).unwrap();}
+        if edges.is_empty(){c.ingest(source,authority,&binding,0,vec![],true).unwrap();}
+        while c.advance(source,&binding).unwrap()>0{}
+        c.publish(source,&binding).unwrap();c.acknowledge(source,&binding,revision).unwrap();
+    }
+    #[test]fn single_source_members_skip_empty_groups_after_reopen_and_removal_clears_the_index(){
+        let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
+        finish(&mut c,"g0",a[0],1,vec![Edge::Club{id:"empty".into(),deleted:false}]);
+        finish(&mut c,"g1",a[1],1,vec![Edge::Club{id:"member".into(),deleted:false},Edge::Role{subject:user,club:Some("member".into())}]);drop(c);
+        let mut c=open(&manager);let mut sessions=Sessions::open(manager.get(MemoryId::new(4)));
+        let (page,next)=c.private_page(&mut sessions,user,viewer(user),0,1).unwrap();assert_eq!(page.rows[0].source,"g1");assert_eq!(page.scanned,1);assert_eq!(next,None);
+        finish(&mut c,"g1",a[1],2,vec![Edge::Club{id:"member".into(),deleted:false}]);
+        let (page,next)=c.private_page(&mut sessions,user,viewer(user),0,2).unwrap();assert!(page.rows.is_empty());assert_eq!(page.scanned,0);assert_eq!(next,None);
+        while !c.reclaim_retired().unwrap().1{}
+        assert!(c.rows.get(&format!("subject:{}:g1",user.to_text())).is_none());
+    }
+    #[test]fn bounded_subject_staging_blocks_publication_and_cleanup_preserves_newer_members(){
+        let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();let binding=c.begin("g0",a[0],1).unwrap();
+        let mut edges=vec![Edge::Club{id:"club".into(),deleted:false}];
+        for n in 0..251u16{edges.push(Edge::Role{subject:Principal::from_slice(&n.to_be_bytes()),club:Some("club".into())});}
+        for (n,chunk) in edges.chunks(100).enumerate(){c.ingest("g0",a[0],&binding,n as u64,chunk.to_vec(),n==2).unwrap();}
+        while !c.builder("g0",&binding).unwrap().status().complete{assert!(c.advance("g0",&binding).unwrap()<=100);}
+        assert!(c.publish("g0",&binding).is_err());assert_eq!(c.advance("g0",&binding).unwrap(),100);drop(c);
+        let mut c=open(&manager);assert_eq!(c.advance("g0",&binding).unwrap(),100);assert_eq!(c.advance("g0",&binding).unwrap(),51);assert_eq!(c.advance("g0",&binding).unwrap(),0);
+        c.publish("g0",&binding).unwrap();c.acknowledge("g0",&binding,1).unwrap();let user=Principal::from_slice(&0u16.to_be_bytes());
+        finish(&mut c,"g0",a[0],2,vec![Edge::Club{id:"club".into(),deleted:false},Edge::Role{subject:user,club:Some("club".into())}]);
+        let (scanned,done)=c.reclaim_retired().unwrap();assert_eq!(scanned,100);assert!(!done);while !c.reclaim_retired().unwrap().1{}
+        let current:Binding=decode(&c.rows.get(&format!("subject:{}:g0",user.to_text())).unwrap());assert_eq!(current.revision,2);
+    }
+    #[test]fn app_wide_and_family_aliases_are_indexed_but_exclusions_and_incomplete_sources_cannot_hide_access(){
+        let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();let user=Principal::from_slice(&[99,1]);let guardian=Principal::from_slice(&[98,1]);let excluded=Principal::from_slice(&[97,1]);
+        finish(&mut c,"g0",a[0],1,vec![Edge::Club{id:"family".into(),deleted:false},Edge::Parent{child:"child".into(),subject:user},Edge::Guardian{child:"child".into(),subject:guardian},Edge::ChildTeam{child:"child".into(),team:"team".into()},Edge::Team{id:"team".into(),club:"family".into(),deleted:false},Edge::Role{subject:excluded,club:Some("family".into())},Edge::Excluded{subject:excluded,club:"family".into()}]);
+        let mut sessions=Sessions::open(manager.get(MemoryId::new(4)));assert!(c.private_page(&mut sessions,user,viewer(user),0,1).is_err());
+        finish(&mut c,"g1",a[1],1,vec![Edge::Club{id:"global".into(),deleted:false},Edge::Role{subject:guardian,club:None}]);
+        let linked=Viewer{account:"linked".into(),version:1,aliases:vec![user,guardian]};
+        let (first,next)=c.private_page(&mut sessions,user,linked.clone(),0,1).unwrap();assert_eq!(first.rows[0].club,"family");assert_eq!(next,Some(1));
+        let (duplicate,next)=c.private_page(&mut sessions,user,linked.clone(),1,1).unwrap();assert!(duplicate.rows.is_empty());assert_eq!(next,Some(2));
+        let (global,next)=c.private_page(&mut sessions,user,linked,2,1).unwrap();assert_eq!(global.rows[0].club,"global");assert_eq!(next,None);
+        assert!(c.rows.get(&format!("subject:{}:g0",excluded.to_text())).is_none());
+        c.begin("g1",a[1],2).unwrap();assert!(c.private_page(&mut sessions,user,viewer(user),0,2).is_err());
     }
 }

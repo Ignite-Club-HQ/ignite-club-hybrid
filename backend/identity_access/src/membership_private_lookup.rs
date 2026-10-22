@@ -136,6 +136,13 @@ impl<M:Memory> Sessions<M>{
         assert!(read(p(1),viewer(),changed,page.next,|_,_,_|panic!("drift read")).is_err());
         assert!(read(p(1),viewer(),sources(),None,|_,_,_|Ok((vec![],None,101))).is_err());
     }
+    #[test]fn proven_empty_sources_skip_all_reads_but_remain_in_the_completeness_pin(){
+        let mut inventory=sources();inventory[0].eligible_aliases=Some(vec![]);inventory[1].eligible_aliases=Some(vec![p(2)]);
+        let mut calls=0;let page=read(p(1),viewer(),inventory.clone(),None,|source,alias,_|{calls+=1;assert_eq!(source.id,"g2");assert_eq!(alias,p(2));Ok((vec!["club".into()],None,1))}).unwrap();assert_eq!(calls,1);assert!(page.next.is_none());
+        inventory[1].eligible_aliases=Some(vec![]);let page=read(p(1),viewer(),inventory.clone(),None,|_,_,_|panic!("empty index must not read source")).unwrap();assert!(page.rows.is_empty());assert_eq!(page.scanned,0);assert!(page.next.is_none());
+        inventory[0].complete=false;assert!(read(p(1),viewer(),inventory,None,|_,_,_|panic!("incomplete skipped source")).is_err());
+        let mut inventory=sources();inventory[0].eligible_aliases=Some(vec![p(3)]);assert!(read(p(1),viewer(),inventory,None,|_,_,_|panic!("foreign indexed alias")).is_err());
+    }
     #[test]fn server_owned_cursor_rejects_skips_and_replays_after_reopen(){
         let memory=ic_stable_structures::VectorMemory::default();let mut s=Sessions::open(memory.clone());
         assert!(s.page(p(1),viewer(),sources(),3,|_,_,_|panic!("forged skip")).is_err());
