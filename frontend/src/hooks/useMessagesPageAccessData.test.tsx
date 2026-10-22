@@ -18,8 +18,9 @@ beforeEach(() => {
 });
 function mount(client: { from: (table: string) => unknown }) {
   const queries = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return renderHook(() => useMessagesPageAccessData({ client: client as never, userId: 'caller', initialized: true, useIcpLab: false,
+  const hook = renderHook(() => useMessagesPageAccessData({ client: client as never, userId: 'caller', initialized: true, useIcpLab: false,
     memberClubs: [{ id: 'g2-club' }] }), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={queries}>{children}</QueryClientProvider> });
+  return { ...hook, queries };
 }
 describe('Messages access reads', () => {
   it('starts owned and guarded children together and combines their assignment IDs once', async () => {
@@ -45,6 +46,7 @@ describe('Messages access reads', () => {
   it('runs ICP subscription aggregation once, not once for every registered group', async () => {
     mocks.mode = 'icp'; mocks.grants.mockResolvedValue([{ club: ['g2-club'], team: ['g2-team'] }]);
     const from = vi.fn(); const hook = mount({ from });
+    await waitFor(() => expect(hook.queries.getQueryCache().find({ queryKey: ['club-pro-status'] })?.state.error).toBeNull());
     await waitFor(() => expect(hook.result.current.clubProStatus).toEqual({ 'g2-club': true }));
     await waitFor(() => expect(hook.result.current.hasAnyProAccess).toBe(true));
     expect(mocks.routing.mock.calls.map(call => call[0])).toEqual([{ shared: 'person' }, { shared: 'person' }]);
