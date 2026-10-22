@@ -11,6 +11,8 @@ export type GroupSessionTransport = {
   readRegistry(): Promise<GroupRegistry>;
   readMemberships(ctx: FeatureBackendContext, offset: bigint, limit: number): Promise<{ clubs: string[]; next: bigint | null; aclRevision: bigint }>;
   readAssignments(clubs: string[], revision: bigint): Promise<ClubAssignment[]>;
+  /** Required only where original shared clubs are not registered as a group. */
+  readLegacyMemberships?(ctx: FeatureBackendContext, offset: bigint, limit: number): Promise<{ clubs: string[]; next: bigint | null; aclRevision: bigint }>;
   /** Original creator's consensus receipt, not membership or permission. */
   readNewClubPlacement?(clubId: string, revision: bigint): Promise<ClubAssignment>;
   /** Faster cursor pager (cost scales with the caller's own clubs). Throws APP_WIDE_INDEX_ERROR for app-wide accounts, which use the scan pager. */
@@ -112,6 +114,22 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   await Promise.all(registry.groups.map(group => transport.readMembershipsIndexed
     ? indexedGroup(group, transport.readMembershipsIndexed.bind(transport))
     : scanGroup(group)));
+  const legacyClubs = new Set<string>();
+  const sharedRegistered = registry.groups.some(g => g.domains.some(d => d.domain === 'club_domain' && d.canisterId === context.target.canisterIds.club_domain));
+  if (!sharedRegistered && transport.readLegacyMemberships) {
+    let offset = 0n;
+    for (let pageCount = 0; ; pageCount++) {
+      if (pageCount >= MAX_PAGES) throw new Error('Legacy membership scan exceeds budget');
+      const page = await transport.readLegacyMemberships(context, offset, 100);
+      sameIdentity();
+      if (page.clubs.length > 100 || page.clubs.some(id => !id || id.length > 64 || clubs.has(id) || legacyClubs.has(id)) ||
+        (page.next !== null && page.next <= offset)) throw new Error('Invalid legacy membership page');
+      for (const id of page.clubs) legacyClubs.add(id);
+      if (legacyClubs.size + clubs.size > MAX_CLUBS) throw new Error('Membership discovery exceeds club budget');
+      if (page.next === null) break;
+      offset = page.next;
+    }
+  }
   const validateAssignments = async (requested: readonly string[]) => {
     const chunks: string[][] = [];
     for (let offset = 0; offset < requested.length; offset += 20) chunks.push(requested.slice(offset, offset + 20));
@@ -199,12 +217,14 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const inflight = new Map<string, Promise<unknown>>();
   const api = {
     clubIds: [...clubs].sort(),
+    isLegacyMember(clubId: string) { return legacyClubs.has(clubId); },
     /** Ordinary member-content reads never query groups with no member clubs. */
     async readMemberGroups<T>(domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows = 1000): Promise<T[]> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       await revalidate([...clubs]);
       const memberGroups = new Set([...clubs].map(id => routing.assignments.get(id)?.groupId));
       const parts = await Promise.all(registry.groups.filter(g => memberGroups.has(g.id)).map(g => read(targetFor(g.id))));
+      if (legacyClubs.size) parts.push(await read(context));
       live();
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Member-group read exceeds row budget');

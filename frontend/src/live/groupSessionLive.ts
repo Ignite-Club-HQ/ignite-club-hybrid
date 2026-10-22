@@ -65,6 +65,12 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
       };
     },
     deploymentAlias: () => onChainAlias,
+    async readLegacyMemberships(context, offset, limit) {
+      const { actor } = await connectLiveClubDomain(context.target, context.identity);
+      const reply = await actor.read_my_club_memberships(offset, limit);
+      if ('Err' in reply) throw new Error(reply.Err);
+      return { clubs: reply.Ok.clubs, next: reply.Ok.next[0] ?? null, aclRevision: reply.Ok.acl_revision };
+    },
     async readMemberships(context, offset, limit) {
       const { actor } = await connectLiveClubDomain(context.target, context.identity);
       const reply = await actor.read_my_club_memberships(offset, limit);

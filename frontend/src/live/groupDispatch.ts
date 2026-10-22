@@ -15,7 +15,7 @@ import { clearRoleGrantsMemo } from './roleGrantsMemo';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
-  isAssigned(c: string): boolean; dispose(): void;
+  isAssigned(c: string): boolean; isLegacyMember?(c: string): boolean; dispose(): void;
   readHosted?<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   createInGroup?<T>(placement: ClubAssignment, d: GroupDomain, w: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   readMemberGroups?<T>(d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows?: number): Promise<T[]>;
@@ -61,7 +61,7 @@ let reopening: Promise<void> | null = null;
  * callers) before treating an unknown club as unplaced. */
 async function sessionKnowing(deps: DispatchDeps, clubId: string | null) {
   let r = await sessionFor(deps);
-  if (!clubId || r.s.isAssigned(clubId) || unplaced.has(clubId)) return r;
+  if (!clubId || r.s.isAssigned(clubId) || r.s.isLegacyMember?.(clubId) || unplaced.has(clubId)) return r;
   if (!reopening) {
     const stale = cached;
     reopening = (async () => {
@@ -101,7 +101,7 @@ async function resolveScoped(deps: DispatchDeps, scope: EntityScope) {
   if ('clubId' in scope) { const r = await sessionKnowing(deps, scope.clubId); return { ...r, club: scope.clubId as string | null }; }
   let r = await sessionFor(deps);
   let club = await resolveClub(deps, r.s, r.principal, scope);
-  if (club && !r.s.isAssigned(club) && !hostedChecked.has(club)) {
+  if (club && !r.s.isAssigned(club) && !r.s.isLegacyMember?.(club) && !hostedChecked.has(club)) {
     r = await sessionKnowing(deps, club);
     if (!r.s.isAssigned(club)) {
       for (const [k, v] of owners) if (v === club) owners.delete(k);
@@ -180,7 +180,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
       if (pairs.length === 0 || !await active()) return;
       let current = await sessionFor(deps);
       const clubs = [...new Set(pairs.map(([, club]) => club))];
-      const unknown = clubs.find(club => !current.s.isAssigned(club) && !unplaced.has(club));
+      const unknown = clubs.find(club => !current.s.isAssigned(club) && !current.s.isLegacyMember?.(club) && !unplaced.has(club));
       if (unknown) {
         // One refresh checks the complete list, not one reopen per legacy club.
         current = await sessionKnowing(deps, unknown);

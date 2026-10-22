@@ -30,7 +30,7 @@ describe('cross-group reads', () => {
     const binding = f.registry.bindings[1];
     for (let i = 2; i < count; i++) {
       const id = `extra-${i}`;
-      const domains = template.domains.map(d => ({ ...d, canisterId: `${id}-${d.domain}` }));
+      const domains = template.domains.map((d, index) => ({ ...d, canisterId: `${id}-${index}-cai` }));
       f.registry.groups.push({ ...template, id, domains });
       f.registry.bindings.push({ ...binding, groupId: id, domains: domains.map(d => ({ ...d, subnetId: 's1' })) });
     }
