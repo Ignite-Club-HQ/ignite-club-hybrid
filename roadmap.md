@@ -1,6 +1,7 @@
 ## Approved multi-group recovery — 22 October 2026
-- [ ] Implement shared routing/ownership lifecycle repair and bounded account-safe cache persistence; keep approval and write checks intact.
-- [ ] Complete progressive page/section loading, chat identity/default-chat review and connected feature regression checks.
+- [x] First shared-layer recovery batch: one refreshed session for list ownership; bounded per-query account/target snapshots; generation-safe hydration/writes; sign-out memory/key/dispatch cleanup; exact-ID chat listing deduplication. Real-browser IndexedDB roundtrip/isolation pass; preview build OK; full ICP 5775 passed/760 skipped and Supabase 6177 passed/358 skipped.
+- [x] Default-chat audit: backend create is not cross-device idempotent; preserve distinct histories and require explicit default identity/provisioning contract rather than name-based cleanup. Evidence in docs/multi-group-recovery-status.md.
+- [ ] Progressive page/section loading and connected default-chat contract recovery: waiting on the approved signed-in baseline/expected-data gate before further behavior changes or selecting canister upgrades; no claim of restored production timing.
 - [ ] Signed-in data inventory and cold/warm timing acceptance for both groups, Peanut, Group 2 U9/chats, comments and navigation: blocked by unavailable Internet Identity session in this remote sandbox; CLI link requires a browser on the same machine.
 - [ ] Published/native release acceptance: requires signed-in evidence and explicit publication/upgrade approval.
 

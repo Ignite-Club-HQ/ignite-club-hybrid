@@ -26,5 +26,11 @@ Required evidence: authorized expected club/team/chat/event/photo IDs, actual ap
 ## Acceptance targets (unverified)
 Tap selection ≤100 ms p95; warm content ≤300 ms p95; cold first useful content ≤3 s p95 on the controlled healthy-network profile. Report uncached media/key latency separately. The present code/tests do not substantiate those production timings.
 
+## Verification completed for this batch
+- Full ICP suite: 5775 passed, 760 skipped; full Supabase suite: 6177 passed, 358 skipped. Skipped tests are not live evidence.
+- Actual Chromium IndexedDB: synthetic BigInt snapshot write/restoration succeeds; a different scope cannot hydrate it; test records cleared afterwards. No private club data was accessed.
+- Public `/index` redirects to `/auth` without page errors at 411 × 770. This does not verify signed-in navigation or ICP functionality.
+- Latest preview build reports OK. No production timing measurements or private write/readback flows were obtained.
+
 ## Next release boundary
 Collect the signed-in baseline and expected-data inventory before claiming recovery or choosing protected-read canister upgrades. Complete the connected page/default-chat changes, then run real-account acceptance and obtain explicit publication/exact-upgrade approval. Web publication does not replace the installed native bundle.
