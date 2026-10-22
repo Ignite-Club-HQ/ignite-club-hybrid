@@ -73,7 +73,7 @@ vi.mock("@/hooks/useAuth", () => ({
 }));
 vi.mock("@/hooks/usePageTitle", () => ({ usePageTitle: () => {} }));
 vi.mock("@/hooks/useOnlineStatus", () => ({ useOnlineStatus: () => ({ isOnline: true }) }));
-vi.mock("@/hooks/useEventViews", () => ({ useUserEventViews: () => ({ data: [] }) }));
+vi.mock("@/hooks/useEventViews", () => ({ useUserEventViews: () => ({ data: new Set<string>() }) }));
 vi.mock("@/hooks/useScheduleBroadcastListener", () => ({ useScheduleBroadcastListener: () => {} }));
 vi.mock("@/hooks/useClubTheme", () => ({ useClubTheme: () => ({ activeClubFilter: null, setActiveClubTheme: vi.fn() }) }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
