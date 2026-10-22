@@ -776,6 +776,16 @@ export default function EventsPage() {
 
             // Fetch every club's events at once, then resolve all team/club
             // names in parallel so the loop below only reads from cache.
+            const leagueClubIdsEarly = userMemberships?.leagueAdminClubIds ?? [];
+            const competitionSources = (filter === "all" || filter === "game")
+              ? Promise.all([
+                  listLiveMyNewsCompetitions(ctx).catch(() => [] as any[]),
+                  leagueClubIdsEarly.length > 0
+                    ? listLiveCompetitionsMulti(ctx, leagueClubIdsEarly).catch(() => [] as any[])
+                    : Promise.resolve([] as any[]),
+                  listLivePublicCompetitions(ctx).catch(() => [] as any[]),
+                ])
+              : null;
             const rowsByClub = scopeClubIds.length > 0
               // Each club from its own group; one failing club never hides the others.
               ? await Promise.allSettled(scopeClubIds.map((clubId) =>
@@ -787,8 +797,7 @@ export default function EventsPage() {
                 })
               : [];
             const visibleEventRows = rowsByClub.flatMap((rows) => (rows as any[]).filter((event) => !event.deleted));
-            const dutyTeams = await listLiveEventDutyTeams(ctx, visibleEventRows.map((event) => event.id)).catch(() => []);
-            const dutyTeamByEventId = new Map(dutyTeams.map((assignment) => [assignment.event_id, assignment.team_id]));
+            const dutyTeamsPromise = listLiveEventDutyTeams(ctx, visibleEventRows.map((event) => event.id)).catch(() => []);
             const neededTeamIds = new Set<string>();
             const neededClubIds = new Set<string>();
             for (const rows of rowsByClub) {
@@ -803,6 +812,8 @@ export default function EventsPage() {
               ...[...neededTeamIds].map(getTeamName),
               ...[...neededClubIds].map(getClubInfo),
             ]);
+            const dutyTeams = await dutyTeamsPromise;
+            const dutyTeamByEventId = new Map(dutyTeams.map((assignment) => [assignment.event_id, assignment.team_id]));
 
             const all: Event[] = [];
             for (const [clubIndex, clubId] of scopeClubIds.entries()) {
@@ -854,14 +865,7 @@ export default function EventsPage() {
               viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
 
             if (filter === "all" || filter === "game") {
-              const leagueClubIds = userMemberships?.leagueAdminClubIds ?? [];
-              const [managed, leagueClubCompetitions, publicCompetitions] = await Promise.all([
-                listLiveMyNewsCompetitions(ctx).catch(() => [] as any[]),
-                leagueClubIds.length > 0
-                  ? listLiveCompetitionsMulti(ctx, leagueClubIds).catch(() => [] as any[])
-                  : Promise.resolve([] as any[]),
-                listLivePublicCompetitions(ctx).catch(() => [] as any[]),
-              ]);
+              const [managed, leagueClubCompetitions, publicCompetitions] = await competitionSources!;
               const competitions = [...new Map([...managed, ...leagueClubCompetitions, ...publicCompetitions]
                 .filter((competition: any) => competition.status !== "archived")
                 .filter((competition: any) => competition.visibility === "public" ||
@@ -918,7 +922,9 @@ export default function EventsPage() {
             cacheEventsList(eventsScopeKey, scheduleEvents, user?.id);
             diagLog("events:icp-end", { count: scheduleEvents.length });
             return scheduleEvents;},
-        }, { everyGroup: true, merge: (parts: unknown[][]) => parts.flat() });
+        // Body already reads each club from its own group: run it once, not
+        // once per group (that tripled the work and duplicated events).
+        }, { shared: "person" });
       }
 
       const viewableCompetitionMatchIds = await fetchViewableCompetitionMatchIds(supabase).catch((error) => {
