@@ -20,8 +20,8 @@ export const CLUB_PRICING = {
   },
 } as const;
 export const TEAM_PRICING = {
-  pro: { monthly: 24.99, annual: 269 },
-  proFootball: { monthly: 34.99, annual: 379 },
+  pro: { monthly: 14.99, annual: 159 },
+  proFootball: { monthly: 19.99, annual: 215 },
 } as const;
 export const FREE_MEDIA_BYTES = 250 * 1024 ** 2;
 export const CLUB_MEDIA_BYTES = 3 * 1024 ** 3;
@@ -34,7 +34,7 @@ export function clubQuote(tier: PaidTier, plan: ClubPlan, extraTeams: number, an
     throw new Error("Additional teams require the Large Club plan.");
   }
   const pricing = tier === "pro" ? CLUB_PRICING.pro : CLUB_PRICING.proFootball;
-  const extraPrice = tier === "pro" ? (annual ? 165 : 15) : (annual ? 220 : 20);
+  const extraPrice = tier === "pro" ? (annual ? 121 : 11) : (annual ? 154 : 14);
   return { currency: "USD" as const, amount: pricing[plan][annual ? "annual" : "monthly"] + extraTeams * extraPrice,
     teamLimit: pricing[plan].teamLimit + extraTeams, storageBytes: CLUB_MEDIA_BYTES };
 }

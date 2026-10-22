@@ -1131,7 +1131,7 @@ export default function ClubUpgradePage() {
               <Label htmlFor={`extra-teams-${tier}`}>Additional teams above 20</Label>
               <Input id={`extra-teams-${tier}`} type="number" min={Math.max(0, teamCount - 20)} max={99980} step={1}
                 value={extraTeams} onChange={event => setExtraTeams(Math.min(99980, Math.max(0, teamCount - 20, Math.floor(Number(event.target.value) || 0))))} />
-              <p className="text-sm text-muted-foreground">US${isPro ? "15/month or 165/year" : "20/month or 220/year"} per additional team. Capacity activates after payment verification.</p>
+              <p className="text-sm text-muted-foreground">US${isPro ? "11/month or 121/year" : "14/month or 154/year"} per additional team. Capacity activates after payment verification.</p>
             </div>}
           </>
         }

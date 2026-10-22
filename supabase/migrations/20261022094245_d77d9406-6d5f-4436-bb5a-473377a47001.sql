@@ -1,0 +1,2 @@
+UPDATE public.subscription_price_catalog SET monthly_usd = 14.99, annual_usd = 159, updated_at = now() WHERE product_id = 'team_pro';
+UPDATE public.subscription_price_catalog SET monthly_usd = 19.99, annual_usd = 215, updated_at = now() WHERE product_id = 'team_pf';

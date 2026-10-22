@@ -9,13 +9,13 @@ describe("Approved USD subscriptions", () => {
     expect(CLUB_PRICING.proFootball[plan]).toEqual({ monthly: fm, annual: fa, teamLimit: limit });
   });
   it("prices Single Team separately", () => {
-    expect(TEAM_PRICING).toEqual({ pro: { monthly:24.99, annual:269 }, proFootball:{ monthly:34.99, annual:379 } });
+    expect(TEAM_PRICING).toEqual({ pro: { monthly:14.99, annual:159 }, proFootball:{ monthly:19.99, annual:215 } });
   });
   it("charges for team 21 without increasing storage", () => {
-    expect(clubQuote("pro", "standard", 1, false)).toEqual({ currency:"USD", amount:224.99, teamLimit:21, storageBytes:3221225472 });
-    expect(clubQuote("pro", "standard", 1, true).amount).toBe(2464);
-    expect(clubQuote("pro_football", "standard", 1, false).amount).toBe(279.99);
-    expect(clubQuote("pro_football", "standard", 1, true).amount).toBe(3069);
+    expect(clubQuote("pro", "standard", 1, false)).toEqual({ currency:"USD", amount:220.99, teamLimit:21, storageBytes:3221225472 });
+    expect(clubQuote("pro", "standard", 1, true).amount).toBe(2420);
+    expect(clubQuote("pro_football", "standard", 1, false).amount).toBe(273.99);
+    expect(clubQuote("pro_football", "standard", 1, true).amount).toBe(3003);
   });
   it("sets the three nonstacking media allowances", () => {
     expect([FREE_MEDIA_BYTES,TEAM_MEDIA_BYTES,CLUB_MEDIA_BYTES]).toEqual([262144000,1073741824,3221225472]);
