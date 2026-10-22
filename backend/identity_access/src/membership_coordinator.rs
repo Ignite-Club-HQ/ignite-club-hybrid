@@ -21,7 +21,7 @@ impl VerifiedInventory {
 #[derive(Clone,Debug,Serialize,Deserialize)]
 struct Build {namespace:u64,binding:Binding,published:bool,
     #[serde(default)] subject_cursor:Option<String>,#[serde(default)] indexed:bool,
-    #[serde(default)] unresolved_locations:bool}
+    #[serde(default)] unresolved_locations:bool,#[serde(default)] locations_checked:bool}
 pub struct Coordinator<M:Memory+Clone> {
     rows:StableBTreeMap<String,Vec<u8>,M>,pool:Pool<M>,journal:Journal<M>,
 }
@@ -81,7 +81,7 @@ impl<M:Memory+Clone> Coordinator<M>{
             Some(old) if old.binding.generation==binding.generation=>self.journal.invalidate(source,authority,binding.generation,revision,binding.inventory_digest)?,
             _=>self.journal.bind(source,binding.clone())?,
         }
-        self.save(source,&Build{namespace:n,binding:binding.clone(),published:false,subject_cursor:None,indexed:false,unresolved_locations:false});Ok(binding)
+        self.save(source,&Build{namespace:n,binding:binding.clone(),published:false,subject_cursor:None,indexed:false,unresolved_locations:false,locations_checked:false});Ok(binding)
     }
     fn builder(&self,source:&str,binding:&Binding)->Outcome<Builder<Lane<M>>>{
         let inv=self.inventory()?;let build=self.build(source).ok_or("Source reconstruction missing")?;
@@ -117,8 +117,14 @@ impl<M:Memory+Clone> Coordinator<M>{
     }
     pub fn require_resolved_locations(&self)->Outcome<()>{
         for source in self.sources()?{
-            if self.build(&source.id).is_none_or(|b|b.unresolved_locations){return Err("Club ownership coverage unresolved; existing discovery required".into());}
+            if self.build(&source.id).is_none_or(|b|b.unresolved_locations||!b.locations_checked){return Err("Club ownership coverage unresolved; existing discovery required".into());}
         }Ok(())
+    }
+    /// Called only by the authenticated runtime after accepting the terminal
+    /// source page. Older stable builds default to unchecked, never verified.
+    pub fn finish_location_checks(&mut self,source:&str,binding:&Binding)->Outcome<()>{
+        if !self.builder(source,binding)?.status().terminal{return Err("Incomplete club ownership traversal".into());}
+        let mut build=self.build(source).ok_or("Source missing")?;build.locations_checked=true;self.save(source,&build);Ok(())
     }
     /// Exact club-assignment verification is an additional runtime release
     /// gate, not inferred here from membership rows or registry location.
@@ -305,6 +311,8 @@ impl<M:Memory+Clone> Coordinator<M>{
     #[test]fn unresolved_legacy_ownership_survives_reopen_and_cannot_certify_readiness(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
         finish(&mut c,"g0",a[0],1,vec![]);finish(&mut c,"g1",a[1],1,vec![]);
+        assert!(c.require_resolved_locations().is_err());
+        for source in ["g0","g1"]{let binding=c.build(source).unwrap().binding;c.finish_location_checks(source,&binding).unwrap();}assert!(c.require_resolved_locations().is_ok());
         let binding=c.build("g0").unwrap().binding;c.unresolved_location("g0",&binding).unwrap();drop(c);
         let c=open(&manager);assert!(c.sources().is_ok());assert!(c.require_resolved_locations().is_err());let mut stale=binding;stale.revision=2;assert!(c.builder("g0",&stale).is_err());
     }

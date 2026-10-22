@@ -614,7 +614,9 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
                     }
                 }
             }
+            let terminal=page.next.is_none();
             DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().accept(&mut c.borrow_mut(),&source,&captured,&cursor,page)))?;
+            if terminal{DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().finish_location_checks(&source,&captured))?;}
         },
         "materialize"=>{scanned=DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().advance(&mut c.borrow_mut(),&source)))? as u64;},
         "published"|"acknowledged"=>{
