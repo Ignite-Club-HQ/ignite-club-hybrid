@@ -14,6 +14,8 @@ vi.mock("@/live/authBackendMode", () => ({
 }));
 
 const getLiveAccountRosterScopeMock = vi.fn();
+const leagueDiscoveryMock = vi.hoisted(() => vi.fn());
+vi.mock('@/live/accountDiscovery', () => ({ readDiscoveredMiniLeagues: (...args: unknown[]) => leagueDiscoveryMock(...args) }));
 const competitionMocks = vi.hoisted(() => ({
   listLivePublicCompetitions: vi.fn(),
   listLiveCompetitionMatches: vi.fn(),
@@ -143,6 +145,8 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  leagueDiscoveryMock.mockReset();
+  leagueDiscoveryMock.mockResolvedValue([]);
   eventsRoutedToIcp = false;
   getLiveAccountRosterScopeMock.mockReset();
   getLiveAccountRosterScopeMock.mockResolvedValue({ teamIds: ["icp-team-1"], clubIds: [], miniLeagueIds: [] });
@@ -161,6 +165,16 @@ beforeEach(() => {
 });
 
 describe("EventsPage roster-derived team scope routing", () => {
+  it('loads ordinary club scope while independent league discovery is still pending', async () => {
+    eventsRoutedToIcp = true;
+    let finish: ((rows: unknown[]) => void) | undefined;
+    leagueDiscoveryMock.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const client = renderPage();
+    await waitFor(() => expect(client.getQueryCache().getAll().some(query => query.queryKey[0] === 'user-memberships-for-events' && query.state.status === 'success')).toBe(true));
+    expect(client.getQueryData(['icp-my-mini-leagues', 'principal-abc'])).toBeUndefined();
+    expect(leagueDiscoveryMock).toHaveBeenCalledTimes(1);
+    finish?.([]);
+  });
   it("Supabase branch (not ICP-routed): queries child_guardians/children/child_team_assignments and never calls the ICP roster scope helper", async () => {
     eventsRoutedToIcp = false;
     renderPage();
