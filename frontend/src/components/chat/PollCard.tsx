@@ -102,7 +102,10 @@ export function PollCard({ pollId }: PollCardProps) {
       };
     },
     staleTime: 15_000,
-    refetchInterval: icpMode ? 10_000 : false,
+    // Each refresh is a canister call per poll on screen; 10s per card piled
+    // up behind the chat's own reads. Refresh slower and only while visible.
+    refetchInterval: icpMode ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 
   // Realtime: refresh on any vote change for this poll. Skipped when

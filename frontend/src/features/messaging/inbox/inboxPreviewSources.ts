@@ -392,6 +392,10 @@ async function fetchIcpChatGroupsWithMessages() {
       }));
   }));
   const groups = perClub.flat();
+  // Each chat's club is known here: record it so opening the chat (and its
+  // polls/photos) goes straight to the right group without asking every group.
+  void import("@/live/groupDispatch").then(({ clubDispatch }) =>
+    clubDispatch.remember("conversation", groups.map((g) => [g.id, g.club_id] as const))).catch(() => undefined);
   const latestMessages: Record<string, InboxPreview> = {};
   await Promise.all(groups.map(async (group) => {
     try {
