@@ -34,6 +34,8 @@ export const APP_WIDE_INDEX_ERROR = /app-wide accounts/i;
 const MAX_CLUBS = 1000;
 const MAX_PAGES = 500;
 
+/** How long one confirmed registry/assignment check is reused. */
+export const RECHECK_WINDOW_MS = 15_000;
 export async function openGroupSession(context: FeatureBackendContext, transport: GroupSessionTransport) {
   const principal = context.identity.getPrincipal().toText();
   if (!principal || principal === '2vxsx-fae') throw new Error('Authenticated group session required');
@@ -125,17 +127,32 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   await validateAssignments([...clubs]);
   let disposed = false;
   const live = () => { if (disposed || context.identity.getPrincipal().toText() !== principal) throw new Error('Group session changed or disposed'); };
-  const assertRegistryUnchanged = async () => {
+  // A registry check is two full consensus reads (seconds). Consecutive calls
+  // within a short window share one confirmed check; canisters still enforce
+  // access on every call. Creation passes fresh=true and always re-reads.
+  let registryCheckedAt = 0; let registryCheck: Promise<void> | null = null;
+  const assertRegistryUnchanged = async (fresh = false) => {
     live();
-    const current = await transport.readRegistry();
-    live();
-    if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
+    if (!fresh && Date.now() - registryCheckedAt < RECHECK_WINDOW_MS) return;
+    if (!fresh && registryCheck) return registryCheck;
+    const run = (async () => {
+      const current = await transport.readRegistry();
+      live();
+      if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
+      registryCheckedAt = Date.now();
+    })();
+    if (!fresh) registryCheck = run;
+    try { await run; } finally { if (registryCheck === run) registryCheck = null; }
   };
+  const assignmentCheckedAt = new Map<string, number>();
   const revalidate = async (requested: readonly string[]) => {
     live();
     if (requested.length > MAX_CLUBS || requested.some(id => !clubs.has(id))) throw new Error('Club outside discovered membership');
     await assertRegistryUnchanged();
-    await validateAssignments([...new Set(requested)]); live();
+    const now = Date.now();
+    const stale = [...new Set(requested)].filter(id => now - (assignmentCheckedAt.get(id) ?? 0) >= RECHECK_WINDOW_MS);
+    if (stale.length) { await validateAssignments(stale); for (const id of stale) assignmentCheckedAt.set(id, Date.now()); }
+    live();
   };
   const inflight = new Map<string, Promise<unknown>>();
   const api = {
@@ -212,11 +229,10 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       if (!placement.clubId || clubs.has(placement.clubId) || placement.revision < 1n || placement.revision > registry.revision ||
           !registry.groups.some(g => g.id === placement.groupId)) throw new Error('Invalid new club placement');
       if (!transport.readNewClubPlacement) throw new Error('Creator placement verification unavailable');
-      await assertRegistryUnchanged();
+      await assertRegistryUnchanged(true);
       const current = await transport.readNewClubPlacement(placement.clubId, registry.revision);
       live();
       if (current.clubId !== placement.clubId || current.groupId !== placement.groupId || current.revision !== placement.revision) throw new Error('Creator placement changed');
-      await assertRegistryUnchanged();
       // Exactly one attempt. Unknown creation outcomes require readback, not replay.
       const result = await write(targetFor(placement.groupId)); live(); return result;
     },
