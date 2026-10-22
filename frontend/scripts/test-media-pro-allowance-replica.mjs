@@ -128,8 +128,19 @@ try {
   ok(await clubActor.save_club_subscription({ ...subscription, expires_at_ms: [1n] }));
   assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 262_144_000n);
   assert.equal((await actor.get_club_media_bytes('club-pro')).finalized, 1_000n, 'Expiry does not delete existing files');
+  // Exercise the real timer for both club-only Free media and media under a
+  // Free club whose individual team remains Pro.
+  const freePath = 'clubs/club-free/photos/expired.jpg';
+  const freeUpload = ok(await reserve(freePath, 1_000n));
+  ok(await actor.put_chunk(freeUpload, 0, new Uint8Array(1_000)));
+  ok(await actor.finalize_upload(freeUpload));
+  await pic.advanceTime(181 * 86_400_000);
+  await pic.tick(100);
+  const readStatus = async path => (await actor.http_request({ url: `/${path}`, method: 'GET', headers: [], body: [] })).status_code;
+  assert.equal(await readStatus(freePath), 404, 'Expired Free club media is removed');
+  assert.equal(await readStatus('clubs/club-free/teams/team-one/photos/pending.jpg'), 200, 'Active Single Team media is retained');
 
-  console.log('PASS: combined media accounting, branding exemption, team-scoped entitlement, wrong-club refusal, legacy Unlimited preservation, expiry without deletion, and pending upload upgrade/readback.');
+  console.log('PASS: combined media accounting, branding exemption, team-scoped entitlement, wrong-club refusal, legacy Unlimited preservation, expiry without cap deletion, pending upload upgrade/readback, six-month Free cleanup and Pro team retention.');
 } finally {
   await server.stop();
 }
