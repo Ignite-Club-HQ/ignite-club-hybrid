@@ -186,7 +186,8 @@ describe("EventsPage roster-derived team scope routing", () => {
     await waitFor(() => expect(client.getQueryCache().getAll().some(query => query.queryKey[0] === 'events' &&
       (query.state.data as { events?: { id: string }[] } | undefined)?.events?.some(row => row.id === 'g1-event'))).toBe(true));
     expect(screen.getByText('Schedule')).toBeInTheDocument();
-    const schedule = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events' && query.queryKey[1] === 'icp-member-schedule');
+    const schedule = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events' && query.queryKey[1] === 'icp-member-schedule' &&
+      (query.state.data as { events?: { id: string }[] } | undefined)?.events?.some(row => row.id === 'g1-event'));
     expect(schedule?.state.fetchStatus).toBe('fetching');
     expect((schedule?.state.data as { incomplete: boolean }).incomplete).toBe(true);
     finishClub?.([]); finishProfile?.([{ name: 'Cats', sport: [] }]);
