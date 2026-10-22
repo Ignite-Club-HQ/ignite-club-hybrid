@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ failed: false, calls: [] as Array<[string, string]> }));
+const state = vi.hoisted(() => ({ failed: false, calls: [] as Array<[string, string]>, clubWait: null as Promise<void> | null, teamStarted: null as (() => void) | null }));
 vi.mock('../contentRouting', () => ({ readContentInScope: async (_ctx: unknown, feature: string, scope: any, fn: any) => {
   const owner = scope.clubId ?? (scope.teamId === 'team-b' ? 'club-b' : scope.teamId === 'team-a' ? 'club-a' : 'shared');
   state.calls.push([feature, owner]);
@@ -9,8 +9,8 @@ vi.mock('../contentRouting', () => ({ readContentInScope: async (_ctx: unknown, 
 vi.mock('./membership', () => ({ getLiveMyRoleGrants: async () => ['a', 'b'].map(id => ({ role: 'player', club: [`club-${id}`], team: [`team-${id}`] })) }));
 vi.mock('./club', () => ({
   listLivePersonalTeams: async () => [],
-  getLiveClubProfile: async (ctx: any, id: string) => { if (ctx.target.alias !== id) throw new Error('wrong club group'); return [{ id, name: id, deleted_at_ms: [] }]; },
-  getLiveTeam: async (ctx: any, id: string) => { const club = id.replace('team', 'club'); if (ctx.target.alias !== club) throw new Error('wrong team group'); return [{ id, name: id, club_id: club, deleted_at_ms: [] }]; },
+  getLiveClubProfile: async (ctx: any, id: string) => { if (ctx.target.alias !== id) throw new Error('wrong club group'); await state.clubWait; return [{ id, name: id, deleted_at_ms: [] }]; },
+  getLiveTeam: async (ctx: any, id: string) => { state.teamStarted?.(); const club = id.replace('team', 'club'); if (ctx.target.alias !== club) throw new Error('wrong team group'); return [{ id, name: id, club_id: club, deleted_at_ms: [] }]; },
 }));
 vi.mock('./events', () => ({ listLiveEvents: async (ctx: any, club: string | null, team: string | null) => {
   const owner = club ?? team?.replace('team', 'club');
@@ -20,7 +20,17 @@ vi.mock('./events', () => ({ listLiveEvents: async (ctx: any, club: string | nul
 vi.mock('./vault', () => ({}));
 import { fetchLiveHomeFeed } from './homeFeed';
 describe('multi-club home content', () => {
-  beforeEach(() => { state.failed = false; state.calls = []; });
+  beforeEach(() => { state.failed = false; state.calls = []; state.clubWait = null; state.teamStarted = null; });
+  it('starts team validation before slower club validation completes', async () => {
+    let releaseClubs: (() => void) | undefined;
+    state.clubWait = new Promise<void>(resolve => { releaseClubs = resolve; });
+    const teamStarted = new Promise<void>(resolve => { state.teamStarted = resolve; });
+    const pending = fetchLiveHomeFeed({} as never);
+    try {
+      await Promise.race([teamStarted, new Promise((_, reject) => setTimeout(() => reject(new Error('Team reads waited for clubs')), 200))]);
+    } finally { releaseClubs?.(); }
+    expect((await pending).memberships.teamIds).toEqual(['team-a', 'team-b']);
+  });
   it('loads names, teams and events from each club group and deduplicates events', async () => {
     const feed = await fetchLiveHomeFeed({} as never);
     expect(feed.memberships.clubIds).toEqual(['club-a', 'club-b']);

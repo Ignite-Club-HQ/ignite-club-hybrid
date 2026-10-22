@@ -205,26 +205,30 @@ export async function fetchLiveHomeFeed(
   // Each club/team is checked in its own group; one slow or refusing club no
   // longer drops every club (only that one is left out). All failing throws.
   const activeClubIds = new Set<string>();
-  await settleAll(
+  const clubsDone = settleAll(
     candidateClubIds.map(async (clubId) => {
       const profile = await clubProfile(clubId);
       const club = profile[0];
       if (club && club.deleted_at_ms.length === 0) activeClubIds.add(clubId);
     }),
   );
-  const activeTeamIds = new Set<string>();
-  await settleAll(
+  const foundTeams = new Map<string, string>();
+  const teamsDone = settleAll(
     raw.teamIds.map(async (teamId) => {
       const teamOpt = (await teamRecord(teamId)) as unknown as Array<{
         club_id: string;
         deleted_at_ms: [] | [bigint];
       }>;
       const team = teamOpt[0];
-      if (team && team.deleted_at_ms.length === 0 && activeClubIds.has(team.club_id)) {
-        activeTeamIds.add(teamId);
+      if (team && team.deleted_at_ms.length === 0) {
+        foundTeams.set(teamId, team.club_id);
       }
     }),
   );
+  // Team and club tombstones are independent reads. Only their final
+  // intersection depends on both; avoid a whole extra network stage.
+  await Promise.all([clubsDone, teamsDone]);
+  const activeTeamIds = new Set([...foundTeams].filter(([, club]) => activeClubIds.has(club)).map(([id]) => id));
   // Personal (club-less) ICP teams have no club_domain role grant to surface
   // them, so they are fetched separately and merged in directly (no club
   // tombstone check applies — they have no club).

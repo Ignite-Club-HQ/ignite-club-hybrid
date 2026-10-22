@@ -6,7 +6,7 @@ import {
   type LiveBlobRef,
   type LiveMediaSource,
 } from "../mediaStorage";
-import { candidOpt, toNat64, unwrapCandid, unwrapCandidOpt } from "./candid";
+import { candidOpt, toNat64, unwrapCandid } from "./candid";
 
 /**
  * Media feature -> media_metadata canister.
@@ -141,7 +141,9 @@ export async function listLiveAssets(ctx: FeatureBackendContext, clubId: string)
 
 export async function getLiveAsset(ctx: FeatureBackendContext, assetId: string) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
-  return unwrapCandidOpt(await actor.get_asset(assetId), "Get asset");
+  // Ownership discovery asks multiple groups: absence in a non-owning group
+  // is expected, not a transport failure. Preserve actual rejected calls.
+  return (await actor.get_asset(assetId))[0] ?? null;
 }
 
 export async function deleteLiveAsset(ctx: FeatureBackendContext, assetId: string) {
