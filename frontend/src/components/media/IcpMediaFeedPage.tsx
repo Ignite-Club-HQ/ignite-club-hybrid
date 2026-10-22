@@ -231,11 +231,10 @@ function writeFeedSnapshot(principal: string, feed: LiveMediaFeed) {
 export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: LiveMediaFeed) => void): Promise<LiveMediaFeed> {
   // list_clubs returns every club on the canister, so scope it to the
   // caller's own role grants — same membership the Clubs page uses.
-  const grants = await getLiveMyRoleGrants(ctx);
+  const { clubDispatch } = await import('@/live/groupDispatch');
+  const [grants, verifiedIds] = await Promise.all([getLiveMyRoleGrants(ctx), clubDispatch.memberClubIds()]);
   const grantClubIds = new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c));
   const grantTeamIds = new Set(grants.map((g) => g.team[0]).filter((t): t is string => !!t));
-  const { clubDispatch } = await import('@/live/groupDispatch');
-  const verifiedIds = await clubDispatch.memberClubIds();
   await Promise.all(grants.filter(g => g.team[0] && !g.club[0]).map(async grant => {
     const teamId = grant.team[0];
     if (!teamId) return;
@@ -243,13 +242,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
     const clubId = teams[0]?.club_id;
     if (clubId) grantClubIds.add(clubId);
   }));
-  const clubProfiles = await readClubsInOwnGroups(ctx, [...new Set([...verifiedIds, ...grantClubIds])]);
-  const clubsRaw = clubProfiles.values as unknown as {
-    id: string;
-    name: string;
-    sport: [] | [string];
-    deleted_at_ms: [] | [bigint];
-  }[];
+  const clubIds = [...new Set([...verifiedIds, ...grantClubIds])];
 
   const options: LiveFilterOptions = { clubs: [], teams: [], miniLeagues: [], competitions: [] };
   const rawAssets: {
@@ -268,11 +261,13 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
     deleted: boolean;
   }[] = [];
 
-  const clubById = new Map(clubsRaw.map(club => [club.id, club]));
-  let sources: MediaSourceStatus[] = clubsRaw.map(club => ({ clubId: club.id, state: "loading" }));
-  const sourceRead = readMediaSources(clubsRaw.map(club => club.id), async clubId => {
-      const club = clubById.get(clubId);
-      if (!club) throw new Error('Club source unavailable');
+  let sources: MediaSourceStatus[] = clubIds.map(clubId => ({ clubId, state: "loading" }));
+  const sourceRead = readMediaSources(clubIds, async clubId => {
+      // Each profile gates only its own assets, never another club's source.
+      // Keep the authorized owning-group profile/tombstone check before media.
+      const profiles = await readClubsInOwnGroups(ctx, [clubId]);
+      const club = profiles.values[0];
+      if (!club) return;
       // Soft-deleted clubs keep their canister records (and assets) — never
       // surface them in the feed, the filter drawer, or the upload sheet.
       if (club.deleted_at_ms.length > 0) return;
@@ -384,7 +379,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
 
   posts.sort((a, b) => b.createdAtMs - a.createdAtMs);
   options.clubs.sort((a, b) => a.name.localeCompare(b.name));
-  return { posts, options: { clubs: [...options.clubs], teams: [...options.teams], miniLeagues: [...options.miniLeagues], competitions: [...options.competitions] }, sources: [...sources], incomplete: clubProfiles.failed > 0 || sources.some(source => source.state !== "ready") };
+  return { posts, options: { clubs: [...options.clubs], teams: [...options.teams], miniLeagues: [...options.miniLeagues], competitions: [...options.competitions] }, sources: [...sources], incomplete: sources.some(source => source.state !== "ready") };
   }
   await sourceRead;
   return buildFeed();
