@@ -55,6 +55,18 @@ describe('integrated deployment-bound group read session', () => {
     await expect(openGroupSession(f.ctx, f.transport)).rejects.toThrow('Club membership required');
     expect(f.transport.readMemberships).not.toHaveBeenCalled();
   });
+  it('a replaced directory instance discards provisional rows and uses complete discovery', async () => {
+    const f = fixture();
+    f.transport.readMembershipDirectory = async (_, continuation, fingerprint) => ({ caller: 'person', accountVersion: 1n,
+      generation: 1n, directoryRevision: 1n, instance: continuation === null ? 7n : 8n,
+      registryFingerprint: fingerprint, verifiedCurrent: true,
+      assignments: [{ clubId: 'phantom', groupId: 'a', revision: 1n }], legacyClubs: [],
+      next: continuation === null ? { instance: 7n, sequence: 1n } : null });
+    const s = await openGroupSession(f.ctx, f.transport);
+    expect(s.memberClubIds).toEqual(['club-a', 'club-b']);
+    expect(f.transport.readMemberships).toHaveBeenCalledTimes(2);
+    expect(f.transport.readAssignments).toHaveBeenCalledWith(['club-a', 'club-b'], 2n);
+  });
   it('routes when the on-chain deployment alias differs from the frontend target alias', async () => {
     const f = fixture();
     // The router knows its deployment as 'mainnet'; the frontend target is a
