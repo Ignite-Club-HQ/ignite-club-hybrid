@@ -40,10 +40,9 @@ try {
   const output=execFileSync(resolve(root,'target/debug/examples/check_membership_backfill'),subjects.map(p=>p.toText()),{input:sourceLines(edges),encoding:'utf8'});
   const rows=output.trim().split('\n').map(line=>line.split('\t'));
   const active=edges.filter(e=>'Club'in e&&!e.Club.deleted).map(e=>e.Club.id);
-  for(const subject of subjects){const name=subject.toText();const global=rows.some(r=>r[0]==='APP'&&r[1]===name&&r[2]==='true');
+  for(const subject of subjects){const name=subject.toText();
    for(const club of active){const indexed=rows.some(r=>r[0]==='PAIR'&&r[1]===name&&r[2]===club);
-    const excluded=edges.some(e=>'Excluded'in e&&e.Excluded.subject.toText()===name&&e.Excluded.club===club);
-    assert.equal(indexed||(global&&!excluded),await a.is_club_member(subject,club),`source parity ${name}/${club}`);
+    assert.equal(indexed,await a.is_club_member(subject,club),`source parity ${name}/${club}`);
    }
   }
   return rows;
@@ -78,5 +77,5 @@ try {
  a.setPrincipal(governor);ok(await a.soft_delete_club('club-b',false));
  const deletedRows=await parity();assert.ok(!deletedRows.some(r=>r[0]==='PAIR'&&r[2]==='club-b'));
  a.setPrincipal(governor);ok(await a.restore_club('club-b',false));await parity();
- console.log('PASS: populated legacy upgrade, durable source revision, 251 family edges in bounded pages, upgrade cursor preservation, operator-only reads, removal/restore invalidation and last-family-assignment removal preserving other club. No directory cutover.');
+ console.log('PASS: populated legacy upgrade and Rust reconstruction parity against real membership checks; 251 bounded family edges, app-wide roles, durable cursors, removal/restore, last-family-link loss, club deletion/restore. No directory cutover.');
 }finally{if(pic)await pic.tearDown();await server.stop();}

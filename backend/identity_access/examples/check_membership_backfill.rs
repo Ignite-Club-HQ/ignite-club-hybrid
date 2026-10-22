@@ -30,6 +30,6 @@ fn main(){
     while !b.status().complete{assert!(b.advance().expect("join progress")<=100);}
     for subject in std::env::args().skip(1){let p=Principal::from_text(&subject).expect("subject");
         println!("APP\t{}\t{}",subject,b.app_wide(p).expect("app role"));
-        let mut cursor=None;loop {let (clubs,next,scanned)=b.clubs_for(p,cursor).expect("pairs");assert!(scanned<=100);for club in clubs{println!("PAIR\t{subject}\t{club}");}cursor=next;if cursor.is_none(){break;}}
+        let mut cursor=None;loop {let (clubs,next,scanned)=b.effective_clubs_for(&binding,p,cursor).expect("pairs");assert!(scanned<=100);for club in clubs{println!("PAIR\t{subject}\t{club}");}cursor=next;if cursor.is_none(){break;}}
     }
 }
