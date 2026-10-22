@@ -10,6 +10,18 @@ const CAROUSEL_PREFIX = "ignite_my_teams_carousel_v2_";
  * membership belongs here.
  */
 const TEAM_LIST_KEY_PREFIXES = [
+  "clubs",
+  "home-data",
+  "home-feed",
+  "user-memberships-and-events",
+  "user-memberships-for-events",
+  "user-clubs-for-filter",
+  "user-memberships",
+  "icp-media-feed",
+  "user-clubs-for-upgrade",
+  "member-clubs-with-messages",
+  "my-teams-with-messages",
+  "my-chat-groups-with-messages",
   "my-teams-premium-v2",
   "team-next-events-premium",
   "team-photos-premium",

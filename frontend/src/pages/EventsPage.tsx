@@ -76,12 +76,15 @@ async function getLiveEventMemberships(
   accountId: string,
 ) {
   // Independent lookups run together instead of one after another.
-  const scopePromise = getLiveAccountRosterScope(ctx, accountId).catch(() => ({
+  const scopePromise = readContentInScope(ctx, 'events', { memberGroups: true, merge: (parts: Array<{ teamIds: string[]; clubIds: string[]; childIds: string[] }>) => ({
+    teamIds: [...new Set(parts.flatMap(p => p.teamIds))], clubIds: [...new Set(parts.flatMap(p => p.clubIds))], childIds: [...new Set(parts.flatMap(p => p.childIds))],
+  }) }, scoped => getLiveAccountRosterScope(scoped, accountId)).catch(() => ({
     teamIds: [] as string[],
     clubIds: [] as string[],
     childIds: [] as string[],
   }));
-  const miniLeaguesPromise = listMyLiveMiniLeagues(ctx).catch(() => [] as { id: string }[]);
+  // League membership can exist outside club membership; keep genuine discovery.
+  const miniLeaguesPromise = readContentInScope(ctx, 'mini_leagues', { everyGroup: true, merge: (parts: Array<Array<{ id: string }>>) => parts.flat() }, listMyLiveMiniLeagues).catch(() => [] as { id: string }[]);
   const grants = await getLiveMyRoleGrants(ctx);
   const roles = grants.map((g) => ({
     club_id: (g.club[0] ?? null) as string | null,
@@ -363,7 +366,7 @@ export default function EventsPage() {
           const scope = await getLiveAccountRosterScope(ctx, user!.id);
           return scope.teamIds;
         },
-      }, { everyGroup: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
+      }, { memberGroups: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
       childDerivedTeamIds.forEach((tid) => teamIds.add(tid));
       
       // Get clubs from teams
@@ -414,7 +417,7 @@ export default function EventsPage() {
             });
             return memberships;
           },
-        }, { everyGroup: true, merge: mergeMemberships });
+        }, { shared: 'person' });
       }
 
       // Proactively refresh JWT if it's near expiry — prevents an expired
@@ -495,7 +498,7 @@ export default function EventsPage() {
           const scope = await getLiveAccountRosterScope(ctx, user!.id);
           return scope.teamIds;
         },
-      }, { everyGroup: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
+      }, { memberGroups: true, merge: (parts: string[][]) => [...new Set(parts.flat())] });
       membershipDerivedTeamIds.forEach((tid) => {
         if (!teamIds.includes(tid)) teamIds.push(tid);
       });

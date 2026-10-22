@@ -16,6 +16,7 @@ import {
   type LiveTeamSubscription,
 } from "./club";
 import { fetchIcpEntitlements } from "@/live/identityEntitlements";
+import { readMembershipInScope } from '../membershipRouting';
 
 export interface LiveProFlags {
   is_pro: boolean;
@@ -75,7 +76,7 @@ export async function listLiveTeamSubscriptions(
   teamIds: readonly string[],
 ): Promise<Map<string, LiveTeamSubscription | null>> {
   const unique = [...new Set(teamIds)];
-  const rows = await Promise.all(unique.map((id) => getLiveTeamSubscription(ctx, id).catch(() => null)));
+  const rows = await Promise.all(unique.map((id) => readMembershipInScope(ctx, { teamId: id }, scoped => getLiveTeamSubscription(scoped, id)).catch(() => null)));
   return new Map(unique.map((id, index) => [id, rows[index] ?? null]));
 }
 
@@ -85,7 +86,7 @@ export async function listLiveClubSubscriptions(
   clubIds: readonly string[],
 ): Promise<Map<string, LiveClubSubscription | null>> {
   const unique = [...new Set(clubIds)];
-  const rows = await Promise.all(unique.map((id) => getLiveClubSubscription(ctx, id).catch(() => null)));
+  const rows = await Promise.all(unique.map((id) => readMembershipInScope(ctx, { clubId: id }, scoped => getLiveClubSubscription(scoped, id)).catch(() => null)));
   return new Map(unique.map((id, index) => [id, rows[index] ?? null]));
 }
 

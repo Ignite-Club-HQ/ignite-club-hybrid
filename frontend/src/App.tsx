@@ -286,6 +286,7 @@ export const appCacheReady: Promise<void> = import("@/lib/icpQueryCachePersist")
       } catch { return null; }
     };
     await m.restoreIcpQueryCache(queryClient, true, 400, scope);
+    (await import('@/live/membershipDiscoveryCache')).bindMembershipDiscovery(queryClient);
     m.startIcpQueryCachePersist(queryClient, true, scope);
   })
   .catch(() => undefined);

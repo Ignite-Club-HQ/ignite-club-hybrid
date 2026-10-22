@@ -1,4 +1,6 @@
 import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
+import { readMembershipInScope } from '@/live/membershipRouting';
+import { readContentInScope } from '@/live/contentRouting';
 import { mergeMiniLeagueRows } from "@/live/miniLeagueRouting";
 import { mergeLists } from "@/live/featureRouter";
 import { useState, useMemo, useEffect, useRef } from "react";
@@ -824,11 +826,11 @@ export default function HomePage() {
           // canister equivalent yet.
           const rows = await Promise.all(
             clubIds.map(async (id) => {
-              const profileOpt = await getLiveClubProfile(ctx, id);
+              const profileOpt = await readMembershipInScope(ctx, { clubId: id }, scoped => getLiveClubProfile(scoped, id));
               const profile = profileOpt.length ? profileOpt[0] : null;
               let pointsDisplayName: string | null = null;
               if (isFeatureRoutedToIcp("points")) {
-                const settings = await getLiveClubPointsSettings(ctx, id).catch(() => null);
+                const settings = await readContentInScope(ctx, 'points', { clubId: id }, scoped => getLiveClubPointsSettings(scoped, id)).catch(() => null);
                 pointsDisplayName = settings?.display_name[0] ?? null;
               }
               return {
@@ -844,7 +846,7 @@ export default function HomePage() {
             .filter((r) => r.name !== "")
             .sort((a, b) => a.name.localeCompare(b.name));
         },
-      }, { everyGroup: true, merge: mergeLists });
+      }, { shared: 'person' });
     },
     enabled: !!user && !!userMemberships && (userMemberships?.clubIds?.length ?? 0) > 0,
     staleTime: 5 * 60 * 1000,
@@ -891,7 +893,7 @@ export default function HomePage() {
             if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
             return fetchLiveCallerIapPro(ctx);
           },
-        }, { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) });
+        }, { memberGroups: true, merge: (parts: boolean[]) => parts.some(Boolean) });
       }
 
       // Check club subs, team subs, and teams table (for trial is_pro) in parallel
@@ -930,7 +932,7 @@ export default function HomePage() {
             if (clubIds.length === 0) return [];
             const [subs, profiles] = await Promise.all([
               listLiveClubSubscriptions(ctx, clubIds),
-              Promise.all(clubIds.map((clubId) => getLiveClubProfile(ctx, clubId).catch(() => null))),
+              Promise.all(clubIds.map((clubId) => readMembershipInScope(ctx, { clubId }, scoped => getLiveClubProfile(scoped, clubId)).catch(() => null))),
             ]);
             return clubIds.flatMap((clubId, index) => {
               const profile = profiles[index];
@@ -943,7 +945,7 @@ export default function HomePage() {
               }];
             });
           },
-        }, { everyGroup: true, merge: mergeLists });
+        }, { shared: 'person' });
       }
       if (activeClubFilter) {
         const [clubResult, subResult] = await Promise.all([
@@ -1330,7 +1332,7 @@ export default function HomePage() {
       if (error) throw error;
       return data as Club[];
     },
-    enabled: !!user && (teamDialogOpen || !!activeClubFilter),
+    enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1472,7 +1474,7 @@ export default function HomePage() {
                 };
               });
           },
-        }, { everyGroup: true, merge: mergeLists });
+        }, { memberGroups: true, merge: mergeLists });
       }
       // Only fetch teams where user is coach or team_admin (direct team edit access)
       const { data: userRoles, error: rolesError } = await supabase
@@ -1620,7 +1622,7 @@ export default function HomePage() {
                 };
               });
           },
-        }, { everyGroup: true, merge: mergeLists });
+        }, { memberGroups: true, merge: mergeLists });
       }
       // Get user's roles
       const { data: userRoles, error: rolesError } = await supabase

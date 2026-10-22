@@ -1,6 +1,6 @@
 import { readContentInScope } from "../contentRouting";
 import { settleAll } from "../crossGroupClubs";
-import { acrossLists } from "../featureScopes";
+import { memberLists } from "../featureScopes";
 import type { FeatureBackendContext } from "../featureRouter";
 import { getLiveClubProfile, getLiveTeam, listLivePersonalTeams } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
@@ -335,7 +335,7 @@ export async function fetchLiveHomeRsvps(
 ): Promise<{ event_id: string; status: string }[]> {
   if (eventIds.length === 0) return [];
   const visible = new Set(eventIds);
-  const rsvps = await readContentInScope(ctx, "events", acrossLists, listLiveMyRsvps);
+  const rsvps = await readContentInScope(ctx, "events", memberLists, listLiveMyRsvps);
   return rsvps
     .filter((rsvp) => visible.has(rsvp.event_id))
     .map((rsvp) => ({ event_id: rsvp.event_id, status: rsvp.state }));

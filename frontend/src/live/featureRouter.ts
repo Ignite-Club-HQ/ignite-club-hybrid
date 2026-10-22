@@ -55,6 +55,7 @@ export type ClubScope = ({ clubId: string } | { photoId: string } | { galleryCar
    * the shared canisters and every group the caller belongs to at the same
    * time, then combined with merge. Reads only. */
   | { everyGroup: true; merge: (parts: unknown[]) => unknown }
+  | { memberGroups: true; merge: (parts: unknown[]) => unknown }
 ) & { writeKey?: string; attempts?: number; /** internal: club not moved, use shared canisters */ legacy?: true };
 /** Combine list results from several groups (one array per group). */
 export const mergeLists = <T,>(parts: T[][]): T[] => parts.flat();
@@ -115,7 +116,11 @@ async function dispatchIcp<T>(feature: FeatureArea, providers: FeatureBackendPro
       if (scope.writeKey) throw new Error(`"${feature}" writes must name one club; group routing cannot fan them out.`);
       return clubDispatch.readAcross(feature, domain, async ctx => providers.icp(ctx), scope.merge) as Promise<T>;
     }
-    if (scope && domain && !('shared' in scope) && !('everyGroup' in scope) && !('inviteToken' in scope) && !('newClubId' in scope)) {
+    if (scope && domain && 'memberGroups' in scope) {
+      if (scope.writeKey) throw new Error(`"${feature}" writes must name one club.`);
+      return clubDispatch.readMemberGroups(feature, domain, async ctx => providers.icp(ctx), scope.merge) as Promise<T>;
+    }
+    if (scope && domain && !('shared' in scope) && !('everyGroup' in scope) && !('memberGroups' in scope) && !('inviteToken' in scope) && !('newClubId' in scope)) {
       return scope.writeKey
         ? clubDispatch.writeFor(feature, scope, domain, scope.writeKey, async ctx => providers.icp(ctx), scope.attempts)
         : clubDispatch.readFor(feature, scope, domain, async ctx => providers.icp(ctx));
