@@ -103,8 +103,11 @@ if (p.phase !== 'checked') throw new Error(`Stopped at ${p.phase}: ${p.error ?? 
   const store: any = Actor.createActor(blobIdl as any, { agent: await HttpAgent.create({ identity, host, shouldFetchRootKey: false }), canisterId: mediaBlobStore });
   const st = await store.stable_storage_status();
   if (!st.enabled) { const r = await store.enable_stable_media_storage(); if ('Err' in r) throw new Error(`Larger photo storage: ${r.Err}`); }
-  const size = BigInt(process.env.GROUP_PHOTO_STORE_GIB ?? '16') * 1_073_741_824n;
+  const { NEW_GROUP_PHOTO_STORE_GIB, capacityBytesFor } = await import('../../scripts/enlarge-photo-store-policy.mjs');
+  // Always full size at setup so a group never needs a later enlargement.
+  const size = capacityBytesFor(NEW_GROUP_PHOTO_STORE_GIB);
   const r = await store.set_capacity_limit(size); if ('Err' in r) throw new Error(`Photo store size: ${r.Err}`);
-  console.log(`Photo store size ${(await store.get_usage()).capacity_limit_bytes} bytes (larger mode)`);
+  const applied = (await store.get_usage()).capacity_limit_bytes; console.log(`Photo store size ${applied} bytes (larger mode)`);
+  if (applied < size) throw new Error(`Photo store size did not reach ${NEW_GROUP_PHOTO_STORE_GIB} GB; the store build lacks the larger-storage setting`);
 }
 console.log(`Group ${groupId} installed, configured and healthy. It stays CLOSED: not registered, receives no clubs.`);
