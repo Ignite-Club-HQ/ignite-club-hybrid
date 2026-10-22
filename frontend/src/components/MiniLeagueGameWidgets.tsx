@@ -273,7 +273,7 @@ export function MiniLeagueGameWidgets({ activeClubFilter }: MiniLeagueGameWidget
       return activeMatches;
         },
         icp: async ctx => (await import("@/live/leagueReads")).readLiveLeagueMatches(ctx, userLeagueMemberships?.allLeagueIds ?? [], activeClubFilter),
-      }, { everyGroup: true, merge: parts => [...new Map(parts.flat().map(row => [row.id, row])).values()] }),
+      }, activeClubFilter ? { clubId: activeClubFilter } : { everyGroup: true, merge: parts => [...new Map(parts.flat().map(row => [row.id, row])).values()] }),
     enabled: !!user && !!userLeagueMemberships?.allLeagueIds?.length,
     refetchInterval: 5000, // Refresh every 5 seconds to get updated timer states
   });

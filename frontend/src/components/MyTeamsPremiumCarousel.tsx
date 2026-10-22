@@ -614,7 +614,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
           // Unreachable: this branch only runs when ICP mode is active.
           supabase: async () => [] as TeamOrLeague[],
           icp: (ctx) => fetchIcpCarouselItems(ctx, activeClubFilter ?? null),
-        }, { everyGroup: true, merge: mergeLists });
+        }, activeClubFilter ? { clubId: activeClubFilter } : { everyGroup: true, merge: mergeLists });
       }
 
       const { data: roles, error: rolesError } = await supabase
@@ -811,7 +811,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
             await Promise.all(
               teamIds.map(async (teamId) => {
                 try {
-                  const events = (await listLiveEvents(ctx, null, teamId)) as any[];
+                  const events = (await (await import("@/live/contentRouting")).readContentInScope(ctx, "events", { teamId }, (s) => listLiveEvents(s, null, teamId))) as any[];
                   const next = events
                     .filter((e) => !e.deleted && !e.cancelled && Number(e.starts_at_ms) >= nowMs)
                     .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms))[0];
@@ -831,7 +831,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
               leagueItemIds.map(async (leagueId) => {
                 try {
                   const { listLiveSessions } = await import("@/live/features/miniLeagues");
-                  const sessions = (await listLiveSessions(ctx, leagueId)) as any[];
+                  const sessions = (await (await import("@/live/contentRouting")).readContentInScope(ctx, "mini_leagues", { miniLeagueId: leagueId }, (s) => listLiveSessions(s, leagueId))) as any[];
                   const next = sessions
                     .filter((s) => s.status !== "cancelled" && s.status !== "deleted")
                     .map((s) => ({ s, when: new Date(`${s.session_date}T${s.start_time}`) }))
@@ -850,7 +850,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
             );
             return map;
           },
-        }, { everyGroup: true, merge: (parts: Record<string, unknown>[]) => Object.assign({}, ...parts) });
+        }, { shared: "person" }); // each team/league is read from its own group above
       }
 
       // PER-SCOPE FAN-OUT: one `.in(...)` query with a global limit lets a
@@ -1025,13 +1025,13 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
             await Promise.all(
               teamIds.map(async (teamId) => {
                 try {
-                  const entries = (await listLiveEntriesByTeam(ctx, teamId)) as any[];
+                  const entries = (await (await import("@/live/contentRouting")).readContentInScope(ctx, "competitions", { teamId }, (s) => listLiveEntriesByTeam(s, teamId))) as any[];
                   for (const entry of entries || []) {
                     if (!entry?.competition_id || entry.status !== "active") continue;
                     let comps = compsByClub.get(entry.club_id);
                     if (!comps) {
                       try {
-                        comps = (await listLiveCompetitions(ctx, entry.club_id)) as any[];
+                        comps = (await (await import("@/live/contentRouting")).readContentInScope(ctx, "competitions", { clubId: entry.club_id }, (s) => listLiveCompetitions(s, entry.club_id))) as any[];
                       } catch {
                         comps = [];
                       }
@@ -1052,7 +1052,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
             );
             return rows;
           },
-        }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [`${row.team_id}:${row.competition_id}`, row])).values()] });
+        }, { shared: "person" }); // each team/club is read from its own group above
       }
 
       const { data, error } = await supabase.rpc("get_team_competition_names", {

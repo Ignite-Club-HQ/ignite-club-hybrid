@@ -211,7 +211,10 @@ export function useNextPitchBoardTarget(teamIds: string[], enabled: boolean) {
           supabase: async () => null,
           icp: async (ctx) => {
             const { listLiveEvents } = await import("@/live/features/events");
-            const events = await listLiveEvents(ctx, null, null);
+            const read = (await import("@/live/contentRouting")).readContentInScope;
+            const perTeam = await Promise.allSettled(teamIds.map((teamId) =>
+              read(ctx, "events", { teamId }, (s) => listLiveEvents(s, null, teamId))));
+            const events = perTeam.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
             const cutoff = Date.now() - 3 * 60 * 60 * 1000;
             const inScope = (events as Array<{ id: string; team_id: [] | [string]; event_type: string; cancelled: boolean; starts_at_ms: bigint }>)
               .filter((e) =>
@@ -225,7 +228,7 @@ export function useNextPitchBoardTarget(teamIds: string[], enabled: boolean) {
             const preferredTeamId = inScope[0]?.team_id[0] ?? teamIds[0];
             return preferredTeamId ? `/teams/${preferredTeamId}?openPitchBoard=1` : null;
           },
-        }, { everyGroup: true, merge: (parts: (string | null)[]) => parts.find(Boolean) ?? null });
+        }, { shared: "person" }); // each team read from its own group above
         return result;
       }
       const { data: events, error } = await supabase
