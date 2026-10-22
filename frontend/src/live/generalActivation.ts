@@ -16,7 +16,7 @@ import type { FeatureBackendContext } from './featureRouter';
 import { GROUP_DOMAINS } from './groupRouting';
 import { ROUTING_GATES_SNAPSHOT } from './generated/routingGates';
 import type { RemovalWiringEvidence } from './groupRemovalWiring';
-import { groupApprovalConfiguration } from './groupApproval';
+import { groupApprovalConfiguration, approvalConfigurationSha256 } from './groupApproval';
 
 export type RoutingGatesSnapshot = {
   approved: true;
@@ -98,10 +98,17 @@ async function compute(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   const { readPinnedGroupRegistry } = await import('./groupRegistryPager');
   // Two complete consensus reads; a registry that changes mid-read throws.
   const registry = await readPinnedGroupRegistry((rev, cursor, limit) => actor.read_group_registry_page(snapshot.targetAlias, rev, cursor, limit));
-  if (registry.configurationRevision === undefined || snapshot.configurationRevision === undefined || !snapshot.approvedConfiguration) {
+  if (registry.configurationRevision === undefined) {
     throw new Error('Group routing needs the updated router and a fresh approved snapshot before creating clubs');
   }
-  if (registry.configurationRevision !== BigInt(snapshot.configurationRevision)) throw new Error('Group configuration changed since approval; run snapshot and publish before creating clubs');
+  // The build-time snapshot only anchors the router and deployment alias. When
+  // the configuration has moved on (for example a new group was opened), the
+  // governor-recorded live approval on the router decides instead, with the
+  // same fail-closed comparison against the live registry.
+  if (snapshot.configurationRevision === undefined || !snapshot.approvedConfiguration ||
+      registry.configurationRevision !== BigInt(snapshot.configurationRevision)) {
+    return liveApprovalStatus(actor, snapshot, registry);
+  }
   const live = new Map(registry.groups.map(g => [g.id, { domains: g.domains.map(d => ({ domain: d.domain, canisterId: d.canister.toText() })), photoStore: g.photo_store[0]?.toText() ?? null }]));
   const approved = new Map(snapshot.groups.map(g => [g.id, { domains: g.domains, photoStore: g.photoStore }]));
   for (const [id, want] of approved) {
@@ -117,4 +124,32 @@ async function compute(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   const gates: ActivationGates = { operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true,
     routedDomains: [...GROUP_DOMAINS], registryRevision: registry.configurationRevision, approvedRevision: BigInt(snapshot.configurationRevision), removalWiring };
   return activationStatus(gates);
+}
+
+type LiveRegistry = Awaited<ReturnType<typeof import('./groupRegistryPager').readPinnedGroupRegistry>>;
+const STALE = 'Group configuration changed since approval; finish the group setup run before creating clubs';
+
+async function liveApprovalStatus(actor: { read_routing_approval?: (alias: string) => Promise<unknown> },
+  snapshot: RoutingGatesSnapshot, registry: LiveRegistry): Promise<RoutingStatus> {
+  let reply: { Ok: [] | [{ target_alias: string; configuration_revision: bigint; approved_configuration_sha256: string;
+    removal_wiring_group_ids: string[]; removal_checked_at_ms: bigint }] } | { Err: string };
+  try {
+    if (typeof actor.read_routing_approval !== 'function') throw new Error('unsupported');
+    reply = await actor.read_routing_approval(snapshot.targetAlias) as typeof reply;
+  } catch {
+    // An older router without live approvals: fall back to the old message.
+    throw new Error(STALE);
+  }
+  if ('Err' in reply) throw new Error(reply.Err);
+  const approval = reply.Ok[0];
+  if (!approval || approval.target_alias !== snapshot.targetAlias || approval.configuration_revision !== registry.configurationRevision) throw new Error(STALE);
+  const liveIds = registry.groups.map(g => g.id).sort();
+  const approvedIds = [...approval.removal_wiring_group_ids].sort();
+  if (liveIds.length === 0 || JSON.stringify(liveIds) !== JSON.stringify(approvedIds)) throw new Error('Registry group set changed since approval; re-verify before routing');
+  const digest = await approvalConfigurationSha256(groupApprovalConfiguration(registry.groups, registry.placements));
+  if (digest !== approval.approved_configuration_sha256) throw new Error('Group placement or policy changed since approval; finish the group setup run before creating clubs');
+  const removalWiring: RemovalWiringEvidence = { revision: approval.configuration_revision, groupIds: approvedIds,
+    checkedAtMs: Number(approval.removal_checked_at_ms) };
+  return activationStatus({ operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true,
+    routedDomains: [...GROUP_DOMAINS], registryRevision: approval.configuration_revision, approvedRevision: registry.configurationRevision!, removalWiring });
 }

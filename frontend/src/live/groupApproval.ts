@@ -25,3 +25,9 @@ export function groupApprovalConfiguration(groups: readonly ShardGroup[], placem
     };
   }));
 }
+
+/** Lowercase hex SHA-256 of the canonical approval text (browser and Node 20+). */
+export async function approvalConfigurationSha256(configuration: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(configuration));
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
