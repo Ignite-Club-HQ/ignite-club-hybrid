@@ -38,6 +38,7 @@ import MembershipPage "membershipPage";
 import MembershipIndex "membershipIndex";
 import MembershipDiscovery "membershipDiscovery";
 import MembershipSource "membershipSource";
+import MembershipDirectorySource "membershipDirectorySource";
 import SubscriptionPolicy "subscriptionPolicy";
 
 persistent actor class Main(governorInit : Principal) = this {
@@ -511,6 +512,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // on the next read. Candidates are always re-verified with isMember, so the
   // index can only accelerate, never grant. Rebuilt after upgrade (transient).
   var membershipDiscoveryJournal : MembershipDiscovery.Journal;
+  var membershipDirectorySource : MembershipDirectorySource.State;
   func membershipEpoch() : Nat = membershipDiscoveryJournal.revision;
   func bumpMembershipDiscovery() { MembershipDiscovery.bump(membershipDiscoveryJournal) };
   transient var memberIndexEpoch : ?Nat = null;
@@ -2750,10 +2752,9 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // Operator-only consensus source export. Bounded raw edges pin the durable
   // mutation revision; no member-index rebuild or resource permission grant.
-  public shared ({ caller }) func read_membership_source_page(cursor : ?MembershipSource.Cursor) : async { #Ok : MembershipSource.Page; #Err : Text } {
+  func membershipSourcePage(cursor : ?MembershipSource.Cursor) : { #Ok : MembershipSource.Page; #Err : Text } {
     // Source-wide personal relationship evidence is operator-only until the
     // separate exact central-reader binding/propagation release is verified.
-    if (not isGovernor(caller)) return #Err("Governor required");
     let sizes = [profiles.size(), acl.roles.size(), acl.children.size(), acl.guardians.size(), acl.teams.size(), teams.size(), acl.exclusions.size(), removedMembers.size()];
     func width(phase : Nat, offset : Nat) : Nat {
       if (phase == 2) acl.children[offset].teams.size() + 1 else 1
@@ -2777,6 +2778,58 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     MembershipSource.read(membershipEpoch(), cursor, sizes, width, edge)
   };
+
+  public shared ({ caller }) func read_membership_source_page(cursor : ?MembershipSource.Cursor) : async { #Ok : MembershipSource.Page; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    membershipSourcePage(cursor)
+  };
+
+  public shared ({ caller }) func configure_membership_directory_source(binding : MembershipDirectorySource.Binding) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    MembershipDirectorySource.configure(membershipDirectorySource, binding)
+  };
+
+  public shared ({ caller }) func disable_membership_directory_source() : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    membershipDirectorySource.enabled := false; #Ok
+  };
+
+  public shared ({ caller }) func read_membership_directory_source_binding() : async { #Ok : { binding : ?MembershipDirectorySource.Binding; enabled : Bool }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok({ binding = membershipDirectorySource.binding; enabled = membershipDirectorySource.enabled })
+  };
+
+  public shared ({ caller }) func read_directory_membership_status(binding : MembershipDirectorySource.Binding) : async { #Ok : { revision : Nat; acknowledged : Nat; pending : Bool }; #Err : Text } {
+    if (not MembershipDirectorySource.allowed(membershipDirectorySource, caller, binding)) return #Err("Directory identity and exact source binding required");
+    #Ok({ revision = membershipEpoch(); acknowledged = membershipDiscoveryJournal.acknowledged; pending = MembershipDiscovery.pending(membershipDiscoveryJournal) })
+  };
+
+  public shared ({ caller }) func read_directory_membership_source_page(binding : MembershipDirectorySource.Binding, cursor : ?MembershipSource.Cursor) : async { #Ok : MembershipSource.Page; #Err : Text } {
+    if (not MembershipDirectorySource.allowed(membershipDirectorySource, caller, binding)) return #Err("Directory identity and exact source binding required");
+    membershipSourcePage(cursor)
+  };
+
+  public shared ({ caller }) func acknowledge_directory_membership_source(binding : MembershipDirectorySource.Binding, revision : Nat) : async { #Ok; #Err : Text } {
+    if (not MembershipDirectorySource.allowed(membershipDirectorySource, caller, binding)) return #Err("Directory identity and exact source binding required");
+    if (not MembershipDiscovery.acknowledge(membershipDiscoveryJournal, revision)) return #Err("Membership source revision changed");
+    #Ok
+  };
+
+  // Local membership commits only bump the durable journal. Delivery runs
+  // separately, never rolls back membership, and never clears pending work.
+  transient var directoryNotificationInFlight = false;
+  func notifyMembershipDirectory() : async () {
+    if (directoryNotificationInFlight or not membershipDirectorySource.enabled or not MembershipDiscovery.pending(membershipDiscoveryJournal)) return;
+    let binding = switch (membershipDirectorySource.binding) { case (?b) b; case null return };
+    let revision = membershipEpoch();
+    let directory : actor {
+      invalidate_membership_directory_source : shared (MembershipDirectorySource.Binding, Nat) -> async { #Ok; #Err : Text }
+    } = actor(binding.identity.toText());
+    directoryNotificationInFlight := true;
+    try { ignore await (with timeout = 30) directory.invalidate_membership_directory_source(binding, revision) }
+    catch (_) {} finally { directoryNotificationInFlight := false }
+  };
+  transient let membershipDirectoryTimer = Timer.recurringTimer<system>(#seconds 30, notifyMembershipDirectory);
 
   public shared ({ caller }) func read_membership_discovery_status() : async { #Ok : { revision : Nat; acknowledged : Nat; pending : Bool }; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
