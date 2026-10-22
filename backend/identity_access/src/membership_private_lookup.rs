@@ -49,72 +49,82 @@ where F:FnMut(&Source,Principal,Option<String>)->Result<(Vec<String>,Option<Stri
     while at.source<sources.len()&&sources[at.source].eligible_aliases.as_ref().is_some_and(|aliases|!aliases.contains(&viewer.aliases[at.alias])){at.after=None;at.alias+=1;if at.alias==viewer.aliases.len(){at.alias=0;at.source+=1;}}
     let next=if at.source==sources.len(){None}else{Some(at)};Ok(Page{rows,next,scanned})
 }
-// Only opaque sequence numbers cross the future public boundary. Positions
-// stay server-owned; a client cannot skip a source or manufacture completion.
+// Positions remain server-owned. An instance survives upgrades and is never
+// reused after expiry/cleanup; consumer IDs only separate caller-owned tabs.
+#[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
+pub struct Continuation{pub instance:u64,pub sequence:u64}
 #[derive(Clone,Debug,Serialize,Deserialize)]
 struct Session{viewer:[u8;32],sources:[u8;32],sequence:u64,page:Page,
     #[serde(default)] seen:BTreeMap<String,(String,Principal)>,
-    #[serde(default)] expires_at:u64}
+    #[serde(default)] expires_at:u64,#[serde(default)] instance:u64}
 const MAX_SESSION_CLUBS:usize=1000;
 const MAX_SESSIONS:u64=10000;
+const MAX_CONSUMERS:usize=4;
 const SESSION_TTL_NS:u64=15*60*1_000_000_000;
+const COUNTER:&str="!instance";
 pub struct Sessions<M:Memory>{rows:StableBTreeMap<String,Vec<u8>,M>}
 impl<M:Memory> Sessions<M>{
     pub fn open(memory:M)->Self{Self{rows:StableBTreeMap::init(memory)}}
-    pub fn page<F>(&mut self,caller:Principal,viewer:Viewer,sources:Vec<Source>,sequence:u64,reader:F)->Result<(Page,Option<u64>),String>
+    /// Fresh identity eligibility and source completeness must precede EVERY
+    /// call, including persisted reply replay. No await occurs in this method.
+    pub fn page_at<F>(&mut self,caller:Principal,viewer:Viewer,sources:Vec<Source>,consumer:u64,continuation:Option<Continuation>,now:u64,reader:F)->Result<(Page,Option<Continuation>),String>
     where F:FnMut(&Source,Principal,Option<String>)->Result<(Vec<String>,Option<String>,usize),String>{
-        self.page_at(caller,viewer,sources,sequence,0,reader)
-    }
-    /// The runtime passes consensus time, and refreshes identity eligibility
-    /// before this method even for persisted reply replays.
-    pub fn page_at<F>(&mut self,caller:Principal,viewer:Viewer,sources:Vec<Source>,sequence:u64,now:u64,reader:F)->Result<(Page,Option<u64>),String>
-    where F:FnMut(&Source,Principal,Option<String>)->Result<(Vec<String>,Option<String>,usize),String>{
-        if sequence>50000{return Err("Lookup page budget reached".into());}
-        // Validate the initiating identity/inventory before a replay shortcut.
+        if continuation.as_ref().is_some_and(|c|c.instance==0||c.sequence>50000){return Err("Invalid lookup continuation or page budget".into());}
         read(caller,viewer.clone(),sources.clone(),None,|_,_,_|Ok((vec![],None,0)))?;
-        let viewer_hash=digest(&(caller,&viewer));let sources_hash=digest(&sources);let key=caller.to_text();
+        let viewer_hash=digest(&(caller,&viewer));let sources_hash=digest(&sources);
+        let prefix=format!("{}:",caller.to_text());let key=format!("{prefix}{consumer:020}");
         let prior=self.rows.get(&key).map(|b|ciborium::from_reader::<Session,_>(b.as_slice()).expect("lookup session"));
-        let same=prior.as_ref().filter(|s|s.viewer==viewer_hash&&s.sources==sources_hash&&s.expires_at>now);
-        if let Some(prior)=same {
-            if sequence==prior.sequence {
-                let next=if prior.page.next.is_some(){Some(sequence.checked_add(1).ok_or("Lookup sequence exhausted")?)}else{None};
-                return Ok((prior.page.clone(),next));
+        let same=prior.as_ref().filter(|s|s.instance>0&&s.viewer==viewer_hash&&s.sources==sources_hash&&s.expires_at>now);
+        let sequence=continuation.as_ref().map_or(0,|c|c.sequence);
+        if let Some(token)=&continuation{
+            let session=same.ok_or("Lookup account/inventory/session changed; restart required")?;
+            if token.instance!=session.instance{return Err("Lookup session instance changed".into());}
+        }
+        if let Some(session)=same{
+            if sequence==session.sequence{
+                let next=if session.page.next.is_some(){Some(Continuation{instance:session.instance,sequence:sequence.checked_add(1).ok_or("Lookup sequence exhausted")?})}else{None};
+                return Ok((session.page.clone(),next));
             }
         }
-        let cursor=if sequence==0 {if same.is_some(){return Err("Lookup restart requires changed binding".into());}None}else{
-            let prior=same.ok_or("Lookup account/inventory changed; restart required")?;
-            if sequence!=prior.sequence.checked_add(1).ok_or("Lookup sequence exhausted")?{return Err("Lookup sequence gap".into());}
-            Some(prior.page.next.clone().ok_or("Lookup already exhausted")?)
+        let cursor=if continuation.is_none(){
+            if same.is_some(){return Err("Lookup refresh requires a new consumer ID".into());}None
+        }else{
+            let session=same.ok_or("Lookup session expired")?;
+            if sequence!=session.sequence.checked_add(1).ok_or("Lookup sequence exhausted")?{return Err("Lookup sequence gap".into());}
+            Some(session.page.next.clone().ok_or("Lookup already exhausted")?)
         };
-        if prior.is_none()&&self.rows.len()>=MAX_SESSIONS{return Err("Lookup session capacity reached".into());}
-        let mut seen=if sequence==0{BTreeMap::new()}else{same.ok_or("Lookup session expired")?.seen.clone()};
-        let mut page=read(caller,viewer,sources,cursor,reader)?;
-        let mut unique=vec![];
-        for row in page.rows {
-            let owner=(row.source.clone(),row.authority);
-            match seen.get(&row.club){
-                Some(prior) if prior!=&owner=>return Err("Club claimed by multiple directory sources".into()),
-                Some(_)=>{},
-                None=>{if seen.len()>=MAX_SESSION_CLUBS{return Err("Lookup club budget reached".into());}seen.insert(row.club.clone(),owner);unique.push(row);},
-            }
+        // At most four active caller-owned consumers. Bounded local cleanup
+        // releases expired rows; it never resets the global instance counter.
+        if prior.is_none(){
+            let keys:Vec<_>=self.rows.range(prefix.clone()..).take_while(|e|e.key().starts_with(&prefix)).take(MAX_CONSUMERS+1).map(|e|(e.key().clone(),e.value())).collect();
+            let mut active=0;for (k,b) in keys{let state:Session=ciborium::from_reader(b.as_slice()).expect("lookup session");if state.expires_at<=now{self.rows.remove(&k);}else{active+=1;}}
+            if active>=MAX_CONSUMERS{return Err("Lookup caller session capacity reached".into());}
+            if self.rows.len()>=MAX_SESSIONS+u64::from(self.rows.get(&COUNTER.into()).is_some()){return Err("Lookup session capacity reached".into());}
         }
+        let (instance,expires_at)=if continuation.is_none(){
+            let previous=self.rows.get(&COUNTER.into()).map(|b|ciborium::from_reader::<u64,_>(b.as_slice()).expect("lookup counter")).unwrap_or(0);
+            (previous.checked_add(1).ok_or("Lookup instance exhausted")?,now.checked_add(SESSION_TTL_NS).ok_or("Lookup time exhausted")?)
+        }else{let state=same.ok_or("Lookup session expired")?;(state.instance,state.expires_at)};
+        let mut seen=if continuation.is_none(){BTreeMap::new()}else{same.ok_or("Lookup session expired")?.seen.clone()};
+        let mut page=read(caller,viewer,sources,cursor,reader)?;let mut unique=vec![];
+        for row in page.rows{let owner=(row.source.clone(),row.authority);match seen.get(&row.club){
+            Some(prior) if prior!=&owner=>return Err("Club claimed by multiple directory sources".into()),Some(_)=>{},
+            None=>{if seen.len()>=MAX_SESSION_CLUBS{return Err("Lookup club budget reached".into());}seen.insert(row.club.clone(),owner);unique.push(row);}
+        }}
         page.rows=unique;
-        let next=if page.next.is_some(){Some(sequence.checked_add(1).ok_or("Lookup sequence exhausted")?)}else{None};
-        let expires_at=if sequence==0{now.checked_add(SESSION_TTL_NS).ok_or("Lookup time exhausted")?}else{same.ok_or("Lookup session expired")?.expires_at};
-        let state=Session{viewer:viewer_hash,sources:sources_hash,sequence,page:page.clone(),seen,expires_at};let mut bytes=vec![];ciborium::into_writer(&state,&mut bytes).expect("lookup session");
+        let next=if page.next.is_some(){Some(Continuation{instance,sequence:sequence.checked_add(1).ok_or("Lookup sequence exhausted")?})}else{None};
+        let state=Session{viewer:viewer_hash,sources:sources_hash,sequence,page:page.clone(),seen,expires_at,instance};let mut bytes=vec![];ciborium::into_writer(&state,&mut bytes).expect("lookup session");
+        if continuation.is_none(){let mut counter=vec![];ciborium::into_writer(&instance,&mut counter).expect("lookup counter");self.rows.insert(COUNTER.into(),counter);}
         self.rows.insert(key,bytes);Ok((page,next))
     }
-    /// Bounded governor/timer cleanup. Never expire source publication intents.
     pub fn reclaim(&mut self,now:u64,after:Option<String>)->(usize,Option<String>){
         let mut at=after;let mut scanned=0;
         while scanned<100{
             let row=match &at{Some(c)=>self.rows.range((Excluded(c.clone()),Unbounded)).next(),None=>self.rows.iter().next()}.map(|e|(e.key().clone(),e.value()));
             let Some((key,bytes))=row else{return (scanned,None)};
-            let state:Session=ciborium::from_reader(bytes.as_slice()).expect("lookup session");
-            if state.expires_at<=now{self.rows.remove(&key);}
+            if key!=COUNTER{let state:Session=ciborium::from_reader(bytes.as_slice()).expect("lookup session");if state.expires_at<=now{self.rows.remove(&key);}}
             at=Some(key);scanned+=1;
-        }
-        (scanned,at)
+        }(scanned,at)
     }
 }
 #[cfg(test)]mod tests{
@@ -149,30 +159,39 @@ impl<M:Memory> Sessions<M>{
         let mut calls=0;let page=read(p(1),viewer(),inventory.clone(),None,|source,_,_|{calls+=1;assert_eq!(source.id,"g200");Ok((vec!["club".into()],None,1))}).unwrap();assert_eq!(calls,1);assert_eq!(page.scanned,1);assert!(page.next.is_none());
         inventory[80].complete=false;assert!(read(p(1),viewer(),inventory,None,|_,_,_|panic!("missing unrelated source cannot imply completion")).is_err());
     }
-    #[test]fn server_owned_cursor_rejects_skips_and_replays_after_reopen(){
+    #[test]fn instance_tokens_survive_reopen_reject_skips_and_foreign_consumers(){
         let memory=ic_stable_structures::VectorMemory::default();let mut s=Sessions::open(memory.clone());
-        assert!(s.page(p(1),viewer(),sources(),3,|_,_,_|panic!("forged skip")).is_err());
-        let (first,next)=s.page(p(1),viewer(),sources(),0,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();assert_eq!(next,Some(1));drop(s);
-        let mut s=Sessions::open(memory);let (replay,next)=s.page(p(1),viewer(),sources(),0,|_,_,_|panic!("replay should read persisted reply")).unwrap();assert_eq!(first.rows,replay.rows);assert_eq!(next,Some(1));
-        assert!(s.page(p(1),viewer(),sources(),2,|_,_,_|panic!("skip source")).is_err());
-        let mut changed=viewer();changed.version+=1;assert!(s.page(p(1),changed,sources(),1,|_,_,_|panic!("old account continuation")).is_err());
-        assert!(s.page(p(2),viewer(),sources(),1,|_,_,_|panic!("other caller continuation")).is_err());
-        let (second,_)=s.page(p(1),viewer(),sources(),1,|source,alias,_|{assert_eq!(source.id,"g1");assert_eq!(alias,p(2));Ok((vec![],None,0))}).unwrap();assert!(second.rows.is_empty());
+        let (first,next)=s.page_at(p(1),viewer(),sources(),10,None,1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();let token=next.unwrap();drop(s);
+        let mut s=Sessions::open(memory);let (replay,next)=s.page_at(p(1),viewer(),sources(),10,None,1,|_,_,_|panic!("persisted start replay")).unwrap();assert_eq!(first.rows,replay.rows);assert_eq!(next,Some(token.clone()));
+        let mut skipped=token.clone();skipped.sequence=2;assert!(s.page_at(p(1),viewer(),sources(),10,Some(skipped),1,|_,_,_|panic!("skip")).is_err());
+        assert!(s.page_at(p(1),viewer(),sources(),11,Some(token.clone()),1,|_,_,_|panic!("foreign consumer")).is_err());
+        assert!(s.page_at(p(2),viewer(),sources(),10,Some(token.clone()),1,|_,_,_|panic!("foreign caller")).is_err());
+        let mut changed=viewer();changed.version+=1;assert!(s.page_at(p(1),changed,sources(),10,Some(token.clone()),1,|_,_,_|panic!("account drift")).is_err());
+        let (second,_)=s.page_at(p(1),viewer(),sources(),10,Some(token.clone()),1,|_,_,_|Ok((vec![],None,0))).unwrap();assert!(second.rows.is_empty());
+        let (replay,_)=s.page_at(p(1),viewer(),sources(),10,Some(token),1,|_,_,_|panic!("page replay")).unwrap();assert!(replay.rows.is_empty());
     }
-    #[test]fn linked_alias_duplicates_are_removed_across_persisted_pages_but_conflicting_owners_reject(){
+    #[test]fn expired_token_cannot_advance_replacement_even_after_cleanup(){
         let memory=ic_stable_structures::VectorMemory::default();let mut s=Sessions::open(memory.clone());
-        s.page(p(1),viewer(),sources(),0,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();drop(s);
-        let mut s=Sessions::open(memory);let (page,next)=s.page(p(1),viewer(),sources(),1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();assert!(page.rows.is_empty());assert_eq!(next,Some(2));
-        assert!(s.page(p(1),viewer(),sources(),2,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap_err().contains("multiple"));
-        let (page,_)=s.page(p(1),viewer(),sources(),2,|_,_,_|Ok((vec!["b".into()],None,1))).unwrap();assert_eq!(page.rows[0].club,"b");
+        let (_,old)=s.page_at(p(1),viewer(),sources(),1,None,10,|_,_,_|Ok((vec!["old".into()],None,1))).unwrap();let old=old.unwrap();
+        s.reclaim(SESSION_TTL_NS+10,None);drop(s);let mut s=Sessions::open(memory);
+        let (_,new)=s.page_at(p(1),viewer(),sources(),1,None,SESSION_TTL_NS+10,|_,_,_|Ok((vec!["new".into()],None,1))).unwrap();let new=new.unwrap();assert!(new.instance>old.instance);
+        assert!(s.page_at(p(1),viewer(),sources(),1,Some(old),SESSION_TTL_NS+10,|_,_,_|panic!("expired instance accepted")).is_err());
+        s.page_at(p(1),viewer(),sources(),1,Some(new),SESSION_TTL_NS+10,|_,_,_|Ok((vec![],None,0))).unwrap();
     }
-    #[test]fn expired_sessions_restart_without_reusing_old_continuations_and_reclaim_is_bounded(){
+    #[test]fn concurrent_consumers_have_independent_deduplication_and_bounded_capacity(){
+        let mut s=Sessions::open(ic_stable_structures::VectorMemory::default());let mut tokens=vec![];
+        for consumer in 0..4{let (_,token)=s.page_at(p(1),viewer(),sources(),consumer,None,1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();tokens.push(token.unwrap());}
+        assert!(s.page_at(p(1),viewer(),sources(),4,None,1,|_,_,_|panic!("fifth consumer")).is_err());assert_ne!(tokens[0].instance,tokens[1].instance);
+        for consumer in 0..4{let (page,_)=s.page_at(p(1),viewer(),sources(),consumer,Some(tokens[consumer as usize].clone()),1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();assert!(page.rows.is_empty());}
+        s.page_at(p(1),viewer(),sources(),4,None,SESSION_TTL_NS+1,|_,_,_|Ok((vec![],None,0))).unwrap();
+        assert_eq!(s.rows.len(),2); // one session plus monotonic counter
+    }
+    #[test]fn conflicting_owners_and_changed_completeness_reject_before_reply_replay(){
         let mut s=Sessions::open(ic_stable_structures::VectorMemory::default());
-        s.page_at(p(1),viewer(),sources(),0,10,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();
-        assert!(s.page_at(p(1),viewer(),sources(),1,SESSION_TTL_NS+10,|_,_,_|panic!("expired cursor")).is_err());
-        let (page,_)=s.page_at(p(1),viewer(),sources(),0,SESSION_TTL_NS+10,|_,_,_|Ok((vec!["b".into()],None,1))).unwrap();assert_eq!(page.rows[0].club,"b");
-        assert_eq!(s.reclaim(SESSION_TTL_NS+11,None),(1,None));assert_eq!(s.rows.len(),1);
-        assert_eq!(s.reclaim(2*SESSION_TTL_NS+10,None),(1,None));assert_eq!(s.rows.len(),0);
-        assert!(s.page_at(p(1),viewer(),sources(),50001,0,|_,_,_|panic!("over budget")).is_err());
+        let (_,next)=s.page_at(p(1),viewer(),sources(),1,None,1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();
+        let (_,next)=s.page_at(p(1),viewer(),sources(),1,next,1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap();
+        assert!(s.page_at(p(1),viewer(),sources(),1,next.clone(),1,|_,_,_|Ok((vec!["a".into()],None,1))).unwrap_err().contains("multiple"));
+        let mut incomplete=sources();incomplete[1].complete=false;
+        assert!(s.page_at(p(1),viewer(),incomplete,1,next,1,|_,_,_|panic!("incomplete replay")).is_err());
     }
 }
