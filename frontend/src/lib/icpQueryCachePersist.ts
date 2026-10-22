@@ -86,7 +86,7 @@ export async function restoreIcpQueryCache(client: QueryClient, isIcp: boolean, 
   const owner = scope(); if (!owner) return;
   const epoch = generation; let cancelled = false;
   const valid = () => !cancelled && generation === epoch && scope() === owner;
-  const timeout = setTimeout(() => { cancelled = true; }, maxWaitMs);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
       (async () => {
@@ -101,7 +101,7 @@ export async function restoreIcpQueryCache(client: QueryClient, isIcp: boolean, 
           if (count % 4 === 0) await new Promise<void>(r => setTimeout(r, 0));
         }
       })(),
-      new Promise<void>(resolve => setTimeout(resolve, maxWaitMs)),
+      new Promise<void>(resolve => { timeout = setTimeout(() => { cancelled = true; resolve(); }, maxWaitMs); }),
     ]);
   } catch { /* best-effort cache */ }
   finally { cancelled = true; clearTimeout(timeout); }
@@ -114,6 +114,7 @@ export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, s
   let stopped = false; let timer: ReturnType<typeof setTimeout> | undefined;
   let idleHandle: number | undefined; let working = false;
   let owner = scope(); const epoch = generation;
+  let initializedOwner: string | null = null;
   const pending = new Map<string, Query | null>();
   const sizes = new Map<string, number>();
   const valid = () => !stopped && epoch === generation && !!owner && scope() === owner;
@@ -126,21 +127,32 @@ export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, s
     if (working || !valid()) { pending.clear(); return; }
     const next = pending.entries().next(); if (next.done) return;
     const [hash, query] = next.value; pending.delete(hash); working = true;
+    const writeOwner = owner;
+    const writeValid = () => valid() && owner === writeOwner;
     try {
+      if (initializedOwner !== writeOwner) {
+        const records = await transaction<Stored[]>('readonly', s => s.getAll(), writeValid);
+        if (!writeValid()) return;
+        for (const row of records ?? []) {
+          if (row.scope === writeOwner && Date.now() - row.savedAt <= MAX_AGE_MS) sizes.set(row.snapshot.queryHash, row.bytes);
+          else await transaction('readwrite', s => s.delete(row.snapshot.queryHash), writeValid);
+        }
+        initializedOwner = writeOwner;
+      }
       const value = query ? snapshotQuery(query) : null;
       if (!value) {
         sizes.delete(hash);
-        await transaction('readwrite', s => s.delete(hash), valid);
+        await transaction('readwrite', s => s.delete(hash), writeValid);
       } else {
         sizes.delete(hash); sizes.set(hash, value.bytes);
         let total = [...sizes.values()].reduce((a, b) => a + b, 0);
         while (sizes.size > MAX_QUERIES || total > MAX_TOTAL_BYTES) {
           const oldest = sizes.entries().next(); if (oldest.done) break;
           sizes.delete(oldest.value[0]); total -= oldest.value[1];
-          await transaction('readwrite', s => s.delete(oldest.value[0]), valid);
+          await transaction('readwrite', s => s.delete(oldest.value[0]), writeValid);
         }
-        const row: Stored = { scope: owner ?? '', savedAt: Date.now(), ...value };
-        await transaction('readwrite', s => s.put(row, hash), valid);
+        const row: Stored = { scope: writeOwner ?? '', savedAt: Date.now(), ...value };
+        await transaction('readwrite', s => s.put(row, hash), writeValid);
       }
     } catch { /* skip failed cache write; never impede the live result */ }
     finally { working = false; schedule(); }
@@ -176,6 +188,8 @@ export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, s
 
 export async function clearPersistedIcpQueryCache(): Promise<void> {
   generation++;
+  // Keep the subscriber alive for the next sign-in; old pending writes fail
+  // their generation guard. The auth provider reattaches after restoration.
   for (const stop of [...active.values()]) stop();
   if (typeof indexedDB === 'undefined') return;
   try { await transaction('readwrite', s => s.clear()); } catch { /* best effort */ }

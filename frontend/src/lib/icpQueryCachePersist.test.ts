@@ -33,7 +33,7 @@ describe('bounded ICP snapshots', () => {
   });
   it('installs only one subscription and teardown cancels queued work', () => {
     vi.useFakeTimers(); vi.stubGlobal('indexedDB', {});
-    const client = new QueryClient();
+    const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
     const subscribe = vi.spyOn(client.getQueryCache(), 'subscribe');
     const stop1 = startIcpQueryCachePersist(client, true, () => 'account:target');
     const stop2 = startIcpQueryCachePersist(client, true, () => 'account:target');

@@ -152,16 +152,22 @@ export function createClubDispatcher(deps: DispatchDeps) {
      * later (e.g. from a notification) needs no group probe. Free when off. */
     remember: async (kind: 'event' | 'conversation' | 'team' | 'miniLeague', pairs: ReadonlyArray<readonly [string, string]>): Promise<void> => {
       if (pairs.length === 0 || !await active()) return;
-      const { s, principal } = await sessionFor(deps);
+      let current = await sessionFor(deps);
+      const clubs = [...new Set(pairs.map(([, club]) => club))];
+      const unknown = clubs.find(club => !current.s.isAssigned(club) && !unplaced.has(club));
+      if (unknown) {
+        // One refresh checks the complete list, not one reopen per legacy club.
+        current = await sessionKnowing(deps, unknown);
+        for (const club of clubs) if (!current.s.isAssigned(club)) unplaced.add(club);
+      }
       // Only group-placed clubs: an original-group (unplaced) club's items live
       // on the shared canisters and must not be sent to the hosted lookup.
       for (const [id, club] of pairs) {
-        const { s: current } = await sessionKnowing(deps, club);
         // A successful list read identifies original-group items too. Keep
         // their shared route in memory only, never persist negative placement.
-        owners.set(`${kind}:${id}`, current.isAssigned(club) ? club : null);
+        owners.set(`${kind}:${id}`, current.s.isAssigned(club) ? club : null);
       }
-      persist(deps, principal);
+      persist(deps, current.principal);
     },
     /** Data spanning the caller's clubs: shared canisters + every group, asked
      * at the same time (load time = slowest group, not the sum). */
