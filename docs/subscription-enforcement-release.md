@@ -36,3 +36,11 @@ Local tests are not signed-in production upload or purchase acceptance.
 - Finalization now rechecks current allowance plus other pending uploads. Existing bytes are retained if an entitlement expires mid-upload.
 - Added an isolated PostgreSQL regression suite using the **actual migration SQL**, not a rewritten quota model. It covers Free pending/concurrent admission, team isolation, legacy/new amounts, null-size and wrong-team refusals, staff revocation, competition authority, expiry preservation, finalize rechecks, no double accounting, unknown-upload retention and RPC privileges.
 - Run with `nix shell nixpkgs#postgresql --command python3 scripts/measured-media-sql.test.py`; it never connects to production and creates/stops its own temporary database.
+
+## 07:36 ICP app release preparation
+
+- Added **Upgrade subscriptions (both ICP groups)**, a separate check/upgrade workflow targeting only both existing club/media pairs; neither the broad all-service deploy nor the closed thirteen-service Group 2 runner is used.
+- Preserves routing state, settings, original photo keys and Motoko memory; journals exact intents/readbacks and refuses ambiguous replay or a different active release. Refreshes the governor-verified routing snapshot automatically after successful upgrades.
+- 34 focused upgrade/key/journal tests and 27 plan/media regressions pass. YAML and runner imports/request validation pass; ICP guards and preview build OK. Anonymous certified reads confirm Group 1's pinned club/media subnet.
+- Exact workflow inputs and live acceptance checklist: `docs/subscription-icp-upgrade.md`.
+- Live execution still requires GitHub-held signing access. No upgrade, signed-in live acceptance or publication occurred in this sandbox. New purchases remain disabled.
