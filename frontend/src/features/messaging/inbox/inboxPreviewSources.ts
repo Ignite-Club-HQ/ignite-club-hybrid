@@ -18,6 +18,7 @@ import { readContentInScope } from "@/live/contentRouting";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { resolveInboxAuthorNames, toInboxPreviewMessage } from "./inboxPreviewHydration";
 import { uniqueGroupSummaries } from "./uniqueGroupSummaries";
+import { hideEmptyDefaultCopies } from "./hideEmptyDefaultCopies";
 
 async function getIcpFeatureBackendContext(): Promise<FeatureBackendContext> {
   const identity = await getCurrentInternetIdentity();
@@ -412,7 +413,7 @@ async function fetchIcpChatGroupsWithMessages() {
       } as unknown as InboxPreview;
     } catch { /* one unreadable chat must not blank the rest */ }
   }));
-  return { groups, latestMessages, setupErrors };
+  return { groups: hideEmptyDefaultCopies(groups, (id) => !!latestMessages[id]), latestMessages, setupErrors };
 }
 
 export async function fetchChatGroupsWithMessages(client: InboxDataClient, userId: string) {
