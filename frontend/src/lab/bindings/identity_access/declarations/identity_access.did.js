@@ -344,6 +344,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'authorize_group2_admission' : IDL.Func([Binding], [Result_2], []),
+    'authorize_group_admission' : IDL.Func([IDL.Text, Binding], [Result_2], []),
     'begin_account_removal' : IDL.Func([IDL.Text, IDL.Nat64], [Result_4], []),
     'begin_link' : IDL.Func([IDL.Principal], [Result_5], []),
     'bind_external_site' : IDL.Func(
