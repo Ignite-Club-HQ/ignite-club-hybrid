@@ -19,6 +19,7 @@ pub enum Edge {
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Progress {
+    pub binding: Option<Binding>,
     pub sequence: u64,
     pub terminal: bool,
     pub complete: bool,
@@ -29,6 +30,13 @@ pub struct Progress {
     pub team: Option<String>,
     pub team_active: bool,
     pub club: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Binding {
+    pub authority: Principal,
+    pub generation: u64,
+    pub revision: u64,
+    pub inventory_digest: [u8;32],
 }
 // Each new builder owns isolated memories for one pinned source generation
 // and revision. No old-generation tree is reused or cleared in a bulk loop.
@@ -59,8 +67,14 @@ impl<M: Memory> Builder<M> {
     }
     pub fn status(&self)->Progress {self.progress.get(&"progress".into()).map(|b|decode(&b)).unwrap_or_default()}
     fn save(&mut self,p:&Progress){self.progress.insert("progress".into(),encode(p));}
-    pub fn ingest(&mut self,sequence:u64,edges:Vec<Edge>,terminal:bool)->Result<(),String>{
+    pub fn begin(&mut self,binding:Binding)->Result<(),String>{
+        if !valid_subject(&binding.authority)||binding.generation==0||binding.revision==0||binding.inventory_digest==[0;32]{return Err("Invalid source binding".into());}
+        let mut p=self.status();if let Some(prior)=&p.binding{return if prior==&binding{Ok(())}else{Err("Source generation/revision replacement requires isolated staging".into())};}
+        p.binding=Some(binding);self.save(&p);Ok(())
+    }
+    pub fn ingest(&mut self,binding:&Binding,sequence:u64,edges:Vec<Edge>,terminal:bool)->Result<(),String>{
         let mut p=self.status();
+        if p.binding.as_ref()!=Some(binding){return Err("Source binding drift".into());}
         if edges.len()>BATCH {return Err("Source batch exceeds 100 edges".into());}
         for edge in &edges {
             let valid=match edge {
@@ -140,30 +154,59 @@ impl<M: Memory> Builder<M> {
         while scanned<BATCH {match after(&self.pairs,&at,Some(&prefix)){Some(k)=>{clubs.push(split(&k).1.to_string());at=Some(k);scanned+=1;},None=>return Ok((clubs,None,scanned))}}
         Ok((clubs,at,scanned))
     }
+    pub fn effective_clubs_for(&self,binding:&Binding,subject:Principal,cursor:Option<String>)->Result<(Vec<String>,Option<String>,usize),String>{
+        if self.status().binding.as_ref()!=Some(binding){return Err("Source binding drift".into());}
+        if !valid_subject(&subject){return Err("Invalid subject".into());}
+        if !self.app_wide(subject)?{return self.clubs_for(subject,cursor);}
+        if cursor.as_deref().is_some_and(|c|!valid_id(c)){return Err("Invalid active club cursor".into());}
+        let mut at=cursor;let mut out=vec![];let mut scanned=0;
+        while scanned<BATCH{match after(&self.clubs,&at,None){
+            Some(key)=>{if self.clubs.get(&key)==Some(1)&&self.exclusions.get(&pair(&subject.to_text(),&key)).is_none(){out.push(key.clone());}at=Some(key);scanned+=1;},
+            None=>return Ok((out,None,scanned)),
+        }}
+        Ok((out,at,scanned))
+    }
 }
 
 #[cfg(test)] mod tests {
     use super::*;
     use ic_stable_structures::{VectorMemory,memory_manager::{MemoryManager,MemoryId}};
     fn p(n:u8)->Principal {Principal::from_slice(&[n,1])}
+    fn binding()->Binding {Binding{authority:p(9),generation:1,revision:1,inventory_digest:[1;32]}}
     fn open(manager:&MemoryManager<VectorMemory>)->Builder<ic_stable_structures::memory_manager::VirtualMemory<VectorMemory>>{Builder::open(std::array::from_fn(|i|manager.get(MemoryId::new(i as u8))))}
     #[test] fn family_join_resumes_with_251_teams_and_preserves_or_exclusion_semantics(){
-        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);
-        b.ingest(0,vec![Edge::Club{id:"a".into(),deleted:false},Edge::Club{id:"b".into(),deleted:false},Edge::Club{id:"deleted".into(),deleted:true},Edge::Parent{child:"child".into(),subject:p(1)},Edge::Guardian{child:"child".into(),subject:p(2)},Edge::Role{subject:p(1),club:Some("b".into())},Edge::Excluded{subject:p(2),club:"a".into()},Edge::Role{subject:p(3),club:None}],false).unwrap();
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);b.begin(binding()).unwrap();
+        b.ingest(&binding(),0,vec![Edge::Club{id:"a".into(),deleted:false},Edge::Club{id:"b".into(),deleted:false},Edge::Club{id:"deleted".into(),deleted:true},Edge::Parent{child:"child".into(),subject:p(1)},Edge::Guardian{child:"child".into(),subject:p(2)},Edge::Role{subject:p(1),club:Some("b".into())},Edge::Excluded{subject:p(2),club:"a".into()},Edge::Role{subject:p(3),club:None}],false).unwrap();
         let mut edges=vec![];for i in 0..251{let team=format!("t{i}");edges.push(Edge::ChildTeam{child:"child".into(),team:team.clone()});edges.push(Edge::Team{id:team.clone(),club:"a".into(),deleted:true});edges.push(Edge::Team{id:team,club:"a".into(),deleted:false});}
-        let mut sequence=1;for chunk in edges.chunks(100){b.ingest(sequence,chunk.to_vec(),false).unwrap();sequence+=1;}
-        b.ingest(sequence,vec![],true).unwrap();assert!(b.clubs_for(p(1),None).is_err());assert_eq!(b.advance().unwrap(),100);drop(b);
+        let mut sequence=1;for chunk in edges.chunks(100){b.ingest(&binding(),sequence,chunk.to_vec(),false).unwrap();sequence+=1;}
+        b.ingest(&binding(),sequence,vec![],true).unwrap();assert!(b.clubs_for(p(1),None).is_err());assert_eq!(b.advance().unwrap(),100);drop(b);
         let mut b=open(&manager);let mut calls=0;while !b.status().complete{assert!(b.advance().unwrap()<=100);calls+=1;assert!(calls<100);}
         assert_eq!(b.clubs_for(p(1),None).unwrap().0,vec!["a","b"]);assert!(b.clubs_for(p(2),None).unwrap().0.is_empty());assert!(b.app_wide(p(3)).unwrap());assert!(b.clubs_for(p(3),None).unwrap().0.is_empty());
     }
     #[test] fn validation_and_exact_replay_leave_progress_unchanged(){
-        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);b.begin(binding()).unwrap();
         let edges=vec![Edge::Club{id:"a".into(),deleted:false},Edge::Role{subject:p(1),club:Some("a".into())}];
-        b.ingest(0,edges.clone(),true).unwrap();let before=b.status();b.ingest(0,edges,true).unwrap();assert_eq!(before,b.status());
-        assert!(b.ingest(0,vec![],true).is_err());assert!(b.ingest(2,vec![],true).is_err());while !b.status().complete{b.advance().unwrap();}
+        b.ingest(&binding(),0,edges.clone(),true).unwrap();let before=b.status();b.ingest(&binding(),0,edges,true).unwrap();assert_eq!(before,b.status());
+        assert!(b.ingest(&binding(),0,vec![],true).is_err());assert!(b.ingest(&binding(),2,vec![],true).is_err());while !b.status().complete{b.advance().unwrap();}
         assert_eq!(b.clubs_for(p(1),None).unwrap().0,vec!["a"]);assert!(b.clubs_for(p(2),Some(pair(&p(1).to_text(),"a"))).is_err());
-        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);
-        assert!(b.ingest(0,vec![Edge::Club{id:"bad\u{1f}id".into(),deleted:false}],false).is_err());assert_eq!(b.status(),Progress::default());
-        assert!(b.ingest(0,vec![Edge::Club{id:"a".into(),deleted:false};101],false).is_err());
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);b.begin(binding()).unwrap();let before=b.status();
+        assert!(b.ingest(&binding(),0,vec![Edge::Club{id:"bad\u{1f}id".into(),deleted:false}],false).is_err());assert_eq!(b.status(),before);
+        assert!(b.ingest(&binding(),0,vec![Edge::Club{id:"a".into(),deleted:false};101],false).is_err());
+    }
+    #[test] fn app_wide_scan_is_bounded_and_applies_active_clubs_and_exclusions(){
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);b.begin(binding()).unwrap();
+        let mut edges=vec![Edge::Role{subject:p(1),club:None},Edge::Excluded{subject:p(1),club:"c003".into()}];
+        for i in 0..205{edges.push(Edge::Club{id:format!("c{i:03}"),deleted:i==4});}
+        for (n,chunk) in edges.chunks(100).enumerate(){b.ingest(&binding(),n as u64,chunk.to_vec(),n==2).unwrap();}
+        while !b.status().complete{b.advance().unwrap();}
+        let (first,next,scanned)=b.effective_clubs_for(&binding(),p(1),None).unwrap();assert_eq!(scanned,100);assert_eq!(first.len(),98);
+        let (second,next,scanned)=b.effective_clubs_for(&binding(),p(1),next).unwrap();assert_eq!(scanned,100);assert_eq!(second.len(),100);
+        let (last,next,scanned)=b.effective_clubs_for(&binding(),p(1),next).unwrap();assert_eq!(scanned,5);assert_eq!(last.len(),5);assert!(next.is_none());
+        let mut drift=binding();drift.revision=2;let before=b.status();assert!(b.begin(drift.clone()).is_err());assert!(b.ingest(&drift,0,vec![],true).is_err());assert!(b.effective_clubs_for(&drift,p(1),None).is_err());assert_eq!(b.status(),before);
+    }
+    #[test] fn missing_or_deleted_team_never_establishes_family_membership(){
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);b.begin(binding()).unwrap();
+        b.ingest(&binding(),0,vec![Edge::Club{id:"a".into(),deleted:false},Edge::Parent{child:"child".into(),subject:p(1)},Edge::ChildTeam{child:"child".into(),team:"gone".into()},Edge::ChildTeam{child:"child".into(),team:"missing".into()},Edge::Team{id:"gone".into(),club:"a".into(),deleted:true},Edge::Role{subject:p(2),club:Some("a".into())},Edge::Excluded{subject:p(2),club:"a".into()}],true).unwrap();
+        while !b.status().complete{b.advance().unwrap();}assert!(b.clubs_for(p(1),None).unwrap().0.is_empty());assert!(b.clubs_for(p(2),None).unwrap().0.is_empty());
     }
 }
