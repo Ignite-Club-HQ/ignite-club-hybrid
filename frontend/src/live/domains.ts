@@ -88,10 +88,16 @@ async function connect<T>(
   idlFactory: Parameters<typeof createLiveActor<T>>[4],
 ): Promise<LiveDomainConnection<T>> {
   const connection = await createLiveActor<T>(target, identity, domainKey, DOMAIN_LABELS[domainKey] ?? domainKey, idlFactory);
-  // No live UI flag: remote targets and published builds retain original actors.
-  if (!import.meta.env.DEV || !isLoopbackRehearsalHost(target.host)) return connection;
-  if (typeof connection.actor !== 'object' || connection.actor === null) throw new Error('Invalid local rehearsal actor');
-  return { ...connection, actor: adaptLocalAccountReads(connection.actor, idlFactory({ IDL }), target.host) };
+  if (typeof connection.actor !== 'object' || connection.actor === null) throw new Error('Invalid actor');
+  // Local rehearsal: strict direct mapping to the protected consensus reads.
+  if (import.meta.env.DEV && isLoopbackRehearsalHost(target.host)) {
+    return { ...connection, actor: adaptLocalAccountReads(connection.actor, idlFactory({ IDL }), target.host) };
+  }
+  // Live groups with account admission enabled refuse legacy account-scoped
+  // queries; the adapter retries exactly those calls through their
+  // exact-signature read_account_ consensus twins and leaves every other
+  // canister (shared services, groups without the gate) untouched.
+  return { ...connection, actor: adaptRemoteAccountReads(connection.actor, idlFactory({ IDL }), connection.canisterId.toText()) };
 }
 
 export const connectLiveClubDomain = (target: IcpTargetConfig, identity: Identity) =>
