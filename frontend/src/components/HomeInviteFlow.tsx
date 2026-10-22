@@ -112,7 +112,7 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
           // round trip — no canister equivalent for that shape. ICP-routed
           // sessions see no scoped leagues rather than a partial result.
           icp: async () => [] as string[],
-        }, { everyGroup: true, merge: (parts: string[][]) => [...new Set(parts.flat())] }),
+        }, { shared: "person" }),
         supabase
           .from("competition_roles")
           .select("competition_id")
@@ -144,13 +144,14 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
               },
               icp: async (ctx) => {
                 const { getLiveTeam, getLiveClubProfile } = await import("@/live/features/club");
-                const teamOpts = await Promise.all(teamIds.map((id) => getLiveTeam(ctx, id)));
+                const read = (await import("@/live/contentRouting")).readContentInScope;
+                const teamOpts = await Promise.all(teamIds.map((id) => read(ctx, "membership", { teamId: id }, (s) => getLiveTeam(s, id)).catch(() => [] as any)));
                 const teams = teamOpts
                   .map((opt) => (opt.length ? opt[0] : null))
                   .filter((t): t is NonNullable<typeof t> => !!t && t.is_active);
                 const clubIds = [...new Set(teams.map((t: any) => t.club_id).filter(Boolean))] as string[];
                 const clubProfiles = clubIds.length
-                  ? await Promise.all(clubIds.map((id) => getLiveClubProfile(ctx, id)))
+                  ? await Promise.all(clubIds.map((id) => read(ctx, "membership", { clubId: id }, (s) => getLiveClubProfile(s, id)).catch(() => [] as any)))
                   : [];
                 const clubNameMap = new Map<string, string>();
                 clubProfiles.forEach((opt, i) => {
@@ -168,7 +169,7 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
                   })),
                 };
               },
-            }, { everyGroup: true, merge: (parts) => ({ data: [...new Map(parts.flatMap((part) => part.data ?? []).map((row) => [row.id, row])).values()] }) })
+            }, { shared: "person" })
           : Promise.resolve({ data: [] as any[] }),
         allClubIds.length
           ? withFeatureBackend("membership", {
@@ -178,7 +179,8 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
               },
               icp: async (ctx) => {
                 const { getLiveClubProfile } = await import("@/live/features/club");
-                const profiles = await Promise.all(allClubIds.map((id) => getLiveClubProfile(ctx, id)));
+                const read = (await import("@/live/contentRouting")).readContentInScope;
+                const profiles = await Promise.all(allClubIds.map((id) => read(ctx, "membership", { clubId: id }, (s) => getLiveClubProfile(s, id)).catch(() => [] as any)));
                 return {
                   data: profiles
                     .map((opt) => (opt.length ? opt[0] : null))
@@ -186,7 +188,7 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
                     .map((c) => ({ id: c.id, name: c.name })),
                 };
               },
-            }, { everyGroup: true, merge: (parts) => ({ data: [...new Map(parts.flatMap((part) => part.data ?? []).map((row) => [row.id, row])).values()] }) })
+            }, { shared: "person" })
           : Promise.resolve({ data: [] as any[] }),
         leagueAdminClubIds.length
           ? withFeatureBackend("mini_leagues", {
