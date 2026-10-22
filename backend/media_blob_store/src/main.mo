@@ -706,22 +706,18 @@ persistent actor MediaBlobStore {
     free_media_usage := kept.concat([{ club_id = clubId; cycle; category; count = count + 1; bytes = bytes + size }]);
   };
 
-  func clubIsPro(clubId : Text) : async Bool {
-    let ?cid = club_domain_canister else return false;
-    let clubDomain : actor {
-      get_club_subscription : shared query Text -> async { #Ok : ?{ is_pro : Bool; admin_pro_override : Bool; is_pro_football : Bool; admin_pro_football_override : Bool; is_trial : Bool; expires_at_ms : ?Nat64; trial_ends_at_ms : ?Nat64 }; #Err : Text };
-    } = actor (Principal.toText(cid));
-    try {
-      switch (await clubDomain.get_club_subscription(clubId)) {
-        case (#Ok(?sub)) {
-          let now = Nat64.fromNat(Int.abs(Time.now()) / 1_000_000);
-          let paid = (sub.is_pro or sub.is_pro_football) and (switch (sub.expires_at_ms) { case null true; case (?end) end > now });
-          let trial = sub.is_trial and (switch (sub.trial_ends_at_ms) { case null false; case (?end) end > now });
-          sub.admin_pro_override or sub.admin_pro_football_override or paid or trial
-        };
-        case _ { false };
-      }
-    } catch (_) { false }
+  type Allowance = { limit_bytes : Nat; base_bytes : Nat; team_scoped : Bool; premium : Bool };
+  func mediaTeam(path : Text) : ?Text {
+    let segs = pathSegments(path);
+    if (segs.size() >= 5 and segs[2] == "teams") return ?segs[3];
+    if (segs.size() >= 6 and segs[2] == "vault" and segs[3] == "teams") return ?segs[4];
+    null
+  };
+  func pathAllowance(path : Text) : async ?Allowance {
+    let ?club = clubIdFromPath(path) else return null;
+    let ?cid = club_domain_canister else return null;
+    let domain : actor { get_media_allowance : shared query (Text, ?Text) -> async { #Ok : Allowance; #Err : Text } } = actor(cid.toText());
+    try { switch (await domain.get_media_allowance(club, mediaTeam(path))) { case (#Ok(a)) ?a; case _ null } } catch (_) { null }
   };
 
   /// Returns an error message when a free club is over its cap.
@@ -767,18 +763,20 @@ persistent actor MediaBlobStore {
   /// Finalized + in-flight bytes under clubs/<club>/ across all categories
   /// (vault, gallery and chat combined). Branding-exempt assets also count:
   /// the club allowance is measured against everything the club stores.
-  func clubMediaBytes(clubId : Text) : (Nat, Nat) {
+  func scopedMediaBytes(clubId : Text, teamId : ?Text) : (Nat, Nat) {
     let prefix = "clubs/" # clubId # "/";
     var used = 0;
     label scan for ((path, r) in stable_blobs.entriesFrom(prefix)) {
       if (not path.startsWith(#text prefix)) break scan;
-      used += r.slice.length
+      if (categoryForPath(path) != null and (teamId == null or mediaTeam(path) == teamId)) used += r.slice.length
     };
-    for (r in blobs.values()) { if (r.path.startsWith(#text prefix) and stable_blobs.get(r.path) == null) used += r.bytes.size() };
+    for (r in blobs.values()) { if (r.path.startsWith(#text prefix) and stable_blobs.get(r.path) == null and categoryForPath(r.path) != null and (teamId == null or mediaTeam(r.path) == teamId)) used += r.bytes.size() };
     var pending = 0;
-    for (u in pending_uploads.values()) { if (u.path.startsWith(#text prefix)) pending += u.total_size.toNat() };
+    for (u in pending_uploads.values()) { if (u.path.startsWith(#text prefix) and categoryForPath(u.path) != null and (teamId == null or mediaTeam(u.path) == teamId)) pending += u.total_size.toNat() };
     (used, pending)
   };
+
+  func clubMediaBytes(clubId : Text) : (Nat, Nat) { scopedMediaBytes(clubId, null) };
 
   func clubMediaPurchasedGb(clubId : Text) : async ?Nat {
     let ?cid = club_domain_canister else return null;
@@ -998,13 +996,10 @@ persistent actor MediaBlobStore {
     // the next photo store. Existing blobs stay readable forever.
     if (not canReserve(total_size)) return #Err("StoreFull");
     if (quota_mode == #local and not isGovernor<system>(caller)) {
-      let isPro = switch (clubIdFromPath(path)) {
-        case (?clubId) { await clubIsPro(clubId) };
-        case null { false };
-      };
       let allowanceClub = if (categoryForPath(path) != null) clubIdFromPath(path) else null;
-      let purchasedGb : ?Nat = switch (allowanceClub) { case (?c) await clubMediaPurchasedGb(c); case null null };
-      if (allowanceClub != null and purchasedGb == null) return #Err("StorageAllowanceUnavailable");
+      let allowance = switch (allowanceClub) { case (?_) await pathAllowance(path); case null null };
+      if (allowanceClub != null and allowance == null) return #Err("StorageAllowanceUnavailable");
+      let isPro = switch (allowance) { case (?a) a.premium; case null false };
       if (accountAdmissionEnabled) await admitAccount(caller);
       try { await requireUploadMembership(caller, path) } catch (e) { return #Err(Error.message(e)) };
       // Check committed usage and outstanding reservations AFTER the await,
@@ -1014,10 +1009,10 @@ persistent actor MediaBlobStore {
         case null {};
       };
       // No await between this check and the reservation below.
-      switch (allowanceClub, purchasedGb) {
-        case (?c, ?gb) {
-          let (used, pending) = clubMediaBytes(c);
-          let limit = (if (isPro) 5_368_709_120 else UploadPolicy.freeMediaBaseBytes) + gb * 1_073_741_824; // Preserve legacy paid terms until versioned fulfillment.
+      switch (allowanceClub, allowance) {
+        case (?c, ?a) {
+          let (used, pending) = scopedMediaBytes(c, if (a.team_scoped) mediaTeam(path) else null);
+          let limit = a.limit_bytes;
           if (not UploadPolicy.withinMediaAllowance(used, pending, total_size.toNat(), limit)) return #Err("StorageAllowanceFull");
         };
         case _ {};
@@ -1476,7 +1471,7 @@ persistent actor MediaBlobStore {
       if (not mediaFenced(p) and Time.now() - r.uploaded_at > RETENTION_NS) {
         switch (categoryForPath(p), clubIdFromPath(p)) {
           case (?_, ?club) {
-            if ((await clubProStatus(club)) == ?false) {
+            if ((switch (await pathAllowance(p)) { case (?a) not a.premium; case null false })) {
               if (mediaFenced(p) or retainedBlocked() or quota_mode == #frozen) continue;
               switch (stable_blobs.get(p)) {
                 case (?current) { if (current.content_hash == r.content_hash and current.uploaded_at == r.uploaded_at and Time.now() - current.uploaded_at > RETENTION_NS) { ignore await deleteRetained(p) } };
@@ -1518,13 +1513,13 @@ persistent actor MediaBlobStore {
     legacy_retention_cursor := if (clubs.size() == 0) 0 else (legacy_retention_cursor + indices.size()) % clubs.size();
     for (index in indices.values()) {
         let (clubId, paths) = clubs[index];
-        if ((await clubProStatus(clubId)) == ?false) {
+        {
           if (media_transfer_fences.get(clubId) != null or retainedBlocked() or quota_mode == #frozen) continue;
           let doomed = Map.empty<Text, ()>();
           for (p in paths.values()) {
             // A replacement during subscription lookup must not be deleted.
             switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
-              case (?(_, stamp)) { if (Time.now() - stamp > RETENTION_NS) Map.add(doomed, Text.compare, p, ()) };
+              case (?(_, stamp)) { if (Time.now() - stamp > RETENTION_NS and (switch (await pathAllowance(p)) { case (?a) not a.premium; case null false })) Map.add(doomed, Text.compare, p, ()) };
               case null {}
             }
           };
