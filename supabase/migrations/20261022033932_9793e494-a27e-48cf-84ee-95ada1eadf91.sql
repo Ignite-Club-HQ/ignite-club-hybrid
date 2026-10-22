@@ -1,0 +1,1 @@
+ALTER FUNCTION public.subscription_media_allowance(uuid,uuid) SECURITY INVOKER;
