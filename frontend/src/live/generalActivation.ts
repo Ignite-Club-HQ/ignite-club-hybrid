@@ -43,7 +43,8 @@ export type RoutingStatus = { active: boolean; missing: string[] };
 const TTL_MS = 60_000;
 let cache: { key: string; value: RoutingStatus; atMs: number } | null = null;
 
-export function clearGeneralRoutingCache() { cache = null; }
+let inflight: { key: string; p: Promise<RoutingStatus> } | null = null;
+export function clearGeneralRoutingCache() { cache = null; inflight = null; }
 /** Sync view for call sites that cannot await (media URL parsing). Cold or
  * stale simply means not-yet-active; the async check always decides writes. */
 export function cachedGeneralRoutingActive(): boolean { return cache?.value.active ?? false; }
@@ -57,7 +58,12 @@ const safePrincipal = (ctx?: FeatureBackendContext) => {
 export async function generalRoutingStatus(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   const key = keyFor(ctx);
   if (cache && cache.key === key && Date.now() - cache.atMs < TTL_MS) return cache.value;
-  const value = await compute(ctx);
+  // Concurrent callers on page load share one check (it reads the registry twice).
+  if (inflight?.key !== key) {
+    const p = compute(ctx).finally(() => { if (inflight?.p === p) inflight = null; });
+    inflight = { key, p };
+  }
+  const value = await inflight.p;
   cache = { key, value, atMs: Date.now() };
   return value;
 }
