@@ -97,7 +97,8 @@ async function connect<T>(
   // queries; the adapter retries exactly those calls through their
   // exact-signature read_account_ consensus twins and leaves every other
   // canister (shared services, groups without the gate) untouched.
-  return { ...connection, actor: adaptRemoteAccountReads(connection.actor, idlFactory({ IDL }), connection.canisterId.toText()) };
+  const canisterId = typeof connection.canisterId === 'string' ? connection.canisterId : connection.canisterId.toText();
+  return { ...connection, actor: adaptRemoteAccountReads(connection.actor, idlFactory({ IDL }), canisterId) };
 }
 
 export const connectLiveClubDomain = (target: IcpTargetConfig, identity: Identity) =>
