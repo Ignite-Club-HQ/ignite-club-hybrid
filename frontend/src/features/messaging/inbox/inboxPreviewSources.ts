@@ -355,17 +355,23 @@ async function fetchIcpChatGroupsWithMessages() {
   const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
   const { listLiveGroupsByClub } = await import("@/live/features/messaging");
   const setupErrors: string[] = [];
+  const friendly = (err: unknown) => {
+    const m = err instanceof Error ? err.message : String(err);
+    if (/access forbidden|not authori|denied/i.test(m)) return "your access to this club's chats couldn't be confirmed";
+    if (/timeout|network|fetch failed|unavailable/i.test(m)) return "the club's chats didn't respond in time";
+    return m.slice(0, 160);
+  };
   await Promise.all(liveClubs.filter((c) => adminClubIds.has(c.id)).map(async (c) => {
     try {
       const failed = await readContentInScope(ctx, "messaging", { clubId: c.id }, (scoped) => ensureLiveDefaultClubChats(scoped, c.id));
       failed.forEach((f) => setupErrors.push(`${c.name}: ${f}`));
     } catch (err) {
-      setupErrors.push(`${c.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
+      setupErrors.push(`${c.name}: ${friendly(err)}`);
     }
   }));
   const perClub = await Promise.all(liveClubs.map(async (club) => {
     const rows = await readContentInScope(ctx, "messaging", { clubId: club.id }, (scoped) => listLiveGroupsByClub(scoped, club.id)).catch((err) => {
-      if (adminClubIds.has(club.id)) setupErrors.push(`${club.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
+      if (adminClubIds.has(club.id)) setupErrors.push(`${club.name}: ${friendly(err)}`);
       return [];
     });
     return rows
