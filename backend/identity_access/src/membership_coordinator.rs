@@ -42,6 +42,7 @@ pub fn verify_inventory(snapshot:&group_inventory::Snapshot,pin:&group_inventory
 impl<M:Memory+Clone> Coordinator<M>{
     pub fn open(metadata:M,pool:Pool<M>,journal_memory:M)->Self{Self{rows:StableBTreeMap::init(metadata),pool,journal:Journal::open(journal_memory)}}
     fn inventory(&self)->Outcome<Inventory>{self.rows.get(&"inventory".into()).map(|b|decode(&b)).ok_or("Directory inventory unverified".into())}
+    pub fn verified_generation(&self)->Outcome<u64>{Ok(self.inventory()?.generation)}
     fn build(&self,source:&str)->Option<Build>{self.rows.get(&format!("source:{source}")).map(|b|decode(&b))}
     fn save(&mut self,source:&str,b:&Build){self.rows.insert(format!("source:{source}"),encode(b));}
     pub fn bind_inventory(&mut self,verified:VerifiedInventory)->Outcome<()>{

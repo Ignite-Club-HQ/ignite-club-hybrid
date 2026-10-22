@@ -4,6 +4,7 @@
 use candid::{CandidType,Principal};
 use ic_stable_structures::{Memory,StableBTreeMap};
 use serde::{Serialize,Deserialize};
+use std::ops::Bound::{Excluded,Unbounded};
 use crate::{membership_coordinator::Coordinator,membership_materializer::{Binding,Edge}};
 #[derive(Clone,Debug,CandidType,Serialize,Deserialize,PartialEq,Eq)]
 pub struct Cursor {pub revision:u64,pub phase:u64,pub offset:u64,pub nested:u64}
@@ -13,6 +14,7 @@ pub struct SourcePage {pub revision:u64,pub edges:Vec<Edge>,pub next:Option<Curs
 enum Phase {Pull,Materialize,Published,Acknowledged}
 #[derive(Clone,Debug,Serialize,Deserialize)]
 struct Job {source:String,binding:Binding,sequence:u64,cursor:Option<Cursor>,phase:Phase}
+const MAX_WORKER_JOBS:u64=8192;
 pub struct Worker<M:Memory>{jobs:StableBTreeMap<String,Vec<u8>,M>}
 fn encode<T:Serialize>(v:&T)->Vec<u8>{let mut b=vec![];ciborium::into_writer(v,&mut b).expect("propagation encode");b}
 fn decode<T:for<'a>Deserialize<'a>>(b:&[u8])->T{ciborium::from_reader(b).expect("propagation decode")}
@@ -21,6 +23,7 @@ impl<M:Memory> Worker<M>{
     fn job(&self,source:&str)->Result<Job,String>{self.jobs.get(&source.into()).map(|b|decode(&b)).ok_or("Source propagation not started".into())}
     fn save(&mut self,j:&Job){self.jobs.insert(j.source.clone(),encode(j));}
     pub fn start<N:Memory+Clone>(&mut self,c:&mut Coordinator<N>,source:&str,authority:Principal,revision:u64)->Result<(),String>{
+        if !self.jobs.contains_key(&source.to_string())&&self.jobs.len()>=MAX_WORKER_JOBS{return Err("Source worker budget reached".into());}
         let binding=c.begin(source,authority,revision)?;
         if let Ok(prior)=self.job(source){if prior.binding==binding{return Ok(());}}
         self.save(&Job{source:source.into(),binding,sequence:0,cursor:None,phase:Phase::Pull});Ok(())
@@ -54,6 +57,17 @@ impl<M:Memory> Worker<M>{
         let mut j=self.job(source)?;if &j.binding!=captured||j.phase!=Phase::Published&&j.phase!=Phase::Acknowledged{return Err("Source acknowledgement changed".into());}
         c.acknowledge(source,captured,readback)?;j.phase=Phase::Acknowledged;self.save(&j);Ok(())
     }
+    /// Bounded cleanup uses the coordinator's verified generation, never a
+    /// caller-supplied generation that could discard current unknown work.
+    pub fn reclaim_obsolete<N:Memory+Clone>(&mut self,c:&Coordinator<N>,after:Option<String>)->Result<(usize,Option<String>),String>{
+        let generation=c.verified_generation()?;let mut at=after;let mut scanned=0;
+        while scanned<100{
+            let row=match &at{Some(key)=>self.jobs.range((Excluded(key.clone()),Unbounded)).next(),None=>self.jobs.iter().next()}.map(|e|(e.key().clone(),e.value()));
+            let Some((key,bytes))=row else{return Ok((scanned,None))};let j:Job=decode(&bytes);
+            if j.binding.generation<generation{self.jobs.remove(&key);}
+            at=Some(key);scanned+=1;
+        }Ok((scanned,at))
+    }
 }
 #[cfg(test)]mod tests{
     use super::*;use crate::{group_inventory,membership_coordinator::verify_inventory,membership_namespace::Pool};
@@ -76,5 +90,12 @@ impl<M:Memory> Worker<M>{
         assert!(w.accept(&mut c,"g0",&b,&cursor,SourcePage{revision:2,edges:vec![],next:None,scanned:0}).is_err());
         assert!(w.accept(&mut c,"g0",&b,&cursor,SourcePage{revision:1,edges:vec![],next:Some(Cursor{revision:1,phase:0,offset:1,nested:0}),scanned:0}).is_err());
         assert_eq!(w.request("g0").unwrap(),(b,cursor));
+    }
+    #[test]fn fenced_replacement_reclaims_old_jobs_and_retains_current_pending_after_reopen(){
+        let m=MemoryManager::init(VectorMemory::default());let mem=|n|m.get(MemoryId::new(n));let (mut s,mut p,a)=group_inventory::tests::fixture();
+        let mut c=Coordinator::open(mem(0),Pool::open(mem(1),mem(2),10000,16).unwrap(),mem(3));c.bind_inventory(verify_inventory(&s,&p,&a,1).unwrap()).unwrap();let mut w=Worker::open(mem(4));w.start(&mut c,"g0",a[0],1).unwrap();c.retire_source("g0").unwrap();while !c.reclaim_retired().unwrap().1{}
+        s.revision+=1;p.registry_revision=s.revision;s.groups[0].id="replacement".into();s.placements[0].group_id="replacement".into();c.bind_inventory(verify_inventory(&s,&p,&a,2).unwrap()).unwrap();w.start(&mut c,"replacement",a[0],1).unwrap();
+        assert_eq!(w.reclaim_obsolete(&c,None).unwrap(),(2,None));assert!(w.request("g0").is_err());let request=w.request("replacement").unwrap();drop(w);
+        let w=Worker::open(mem(4));assert_eq!(w.request("replacement").unwrap(),request);
     }
 }
