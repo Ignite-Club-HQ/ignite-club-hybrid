@@ -1298,7 +1298,8 @@ export default function ClubUpgradePage() {
                   </DialogHeader>
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
                     {teams.map((t) => (
-                      <button
+                      <Button
+                        variant="outline"
                         key={t.id}
                         onClick={() => {
                           setTeamSelectOpen(false);
