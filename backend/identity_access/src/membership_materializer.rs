@@ -30,6 +30,9 @@ pub struct Progress {
     pub team: Option<String>,
     pub team_active: bool,
     pub club: Option<String>,
+    /// Older completed builds have no subject markers and must not certify
+    /// an empty account/source index after an upgrade.
+    #[serde(default)] pub subject_index_version:u8,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Binding {
@@ -70,7 +73,7 @@ impl<M: Memory> Builder<M> {
     pub fn begin(&mut self,binding:Binding)->Result<(),String>{
         if !valid_subject(&binding.authority)||binding.generation==0||binding.revision==0||binding.inventory_digest==[0;32]{return Err("Invalid source binding".into());}
         let mut p=self.status();if let Some(prior)=&p.binding{return if prior==&binding{Ok(())}else{Err("Source generation/revision replacement requires isolated staging".into())};}
-        p.binding=Some(binding);self.save(&p);Ok(())
+        p.binding=Some(binding);p.subject_index_version=1;self.save(&p);Ok(())
     }
     pub fn ingest(&mut self,binding:&Binding,sequence:u64,edges:Vec<Edge>,terminal:bool)->Result<(),String>{
         let mut p=self.status();
@@ -143,7 +146,7 @@ impl<M: Memory> Builder<M> {
     /// Includes app-wide roles without expanding their club memberships.
     pub fn subjects(&self,binding:&Binding,cursor:Option<String>)->Result<(Vec<Principal>,Option<String>,usize),String>{
         let status=self.status();
-        if !status.complete||status.binding.as_ref()!=Some(binding){return Err("Incomplete subject index or binding drift".into());}
+        if !status.complete||status.binding.as_ref()!=Some(binding)||status.subject_index_version!=1{return Err("Incomplete subject index or binding drift; source rebuild required".into());}
         if cursor.as_ref().is_some_and(|c|!c.starts_with("subject:")){return Err("Foreign subject cursor".into());}
         let mut at=cursor;let mut subjects=vec![];
         while subjects.len()<BATCH{
@@ -223,5 +226,11 @@ impl<M: Memory> Builder<M> {
         let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);b.begin(binding()).unwrap();
         b.ingest(&binding(),0,vec![Edge::Club{id:"a".into(),deleted:false},Edge::Parent{child:"child".into(),subject:p(1)},Edge::ChildTeam{child:"child".into(),team:"gone".into()},Edge::ChildTeam{child:"child".into(),team:"missing".into()},Edge::Team{id:"gone".into(),club:"a".into(),deleted:true},Edge::Role{subject:p(2),club:Some("a".into())},Edge::Excluded{subject:p(2),club:"a".into()}],true).unwrap();
         while !b.status().complete{b.advance().unwrap();}assert!(b.clubs_for(p(1),None).unwrap().0.is_empty());assert!(b.clubs_for(p(2),None).unwrap().0.is_empty());
+    }
+    #[test]fn pre_index_completed_build_cannot_claim_empty_subject_coverage(){
+        let manager=MemoryManager::init(VectorMemory::default());let mut b=open(&manager);b.begin(binding()).unwrap();
+        b.ingest(&binding(),0,vec![Edge::Club{id:"a".into(),deleted:false},Edge::Role{subject:p(1),club:Some("a".into())}],true).unwrap();while !b.status().complete{b.advance().unwrap();}
+        let mut legacy=b.status();legacy.subject_index_version=0;b.save(&legacy);drop(b);
+        let b=open(&manager);assert_eq!(b.clubs_for(p(1),None).unwrap().0,vec!["a"]);assert!(b.subjects(&binding(),None).is_err());
     }
 }
