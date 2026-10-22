@@ -87,15 +87,11 @@ try {
   // between every page/materialization call. Old completion stays pending.
   const a=clubs[0].actor,grant=grants[0];
   a.setPrincipal(governor);
-  const oldAcl=await a.export_acl();
+  const oldAcl=ok(await a.export_acl());
   ok(await a.replace_acl(oldAcl.acl_version,{...oldAcl.acl,roles:[...oldAcl.acl.roles,...Array.from({length:350},(_,n)=>({user:p(100+n%100),role:'member',club:['club-0'],team:[]}))]}));
-  a.setPrincipal(identity.canisterId);
-  const baseline=ok(await a.read_directory_membership_status(grant));
-  const cursor={revision:baseline.revision,phase:0n,offset:0n,nested:0n};
-  const firstPage=ok(await a.read_directory_membership_source_page(grant,[cursor]));assert.ok(firstPage.next.length===1);
-  // Identity's first page must replay this captured generation exactly.
   identity.actor.setPrincipal(governor);
-  let historical,upgraded=false;
+  const initial=ok(await identity.actor.advance_membership_directory_source('g1'));assert.equal(initial.phase,'pull');
+  let historical=initial.revision,upgraded=false;
   for(let step=0;step<100;step++) {
     a.setPrincipal(governor);ok(await a.remove_member('club-0',member));ok(await a.restore_member('club-0',member));
     if(!upgraded&&step===2){
@@ -103,11 +99,8 @@ try {
       await pic.upgradeCanister({canisterId:identity.canisterId,wasm:process.env.IDENTITY_ACCESS_WASM,sender:governor,arg:init});upgraded=true;
     }
     const result=await identity.actor.advance_membership_directory_source('g1');
-    // A new job initially polling after our capture must not invent a newer
-    // source revision. The normal case is capture by the worker itself.
     if('Err' in result)throw new Error(result.Err);
     const progress=ok(result);assert.ok(progress.scanned<=100n);
-    if(historical===undefined)historical=progress.revision;
     assert.equal(progress.revision,historical,'ongoing writes must not replace retained job');
     if(progress.phase==='acknowledged')break;
     assert.ok(step<99,'historical reconstruction must finish under continuous writes');
