@@ -53,3 +53,8 @@ Local tests are not signed-in production upload or purchase acceptance.
 - 34 focused upgrade/key/journal tests and 27 plan/media regressions pass. YAML and runner imports/request validation pass; ICP guards and preview build OK. Anonymous certified reads confirm Group 1's pinned club/media subnet.
 - Exact workflow inputs and live acceptance checklist: `docs/subscription-icp-upgrade.md`.
 - Live execution still requires GitHub-held signing access. No upgrade, signed-in live acceptance or publication occurred in this sandbox. New purchases remain disabled.
+## 09:27 cutover (22 Oct 2026)
+
+- Receiver deployed via direct CLI; restrictive INSERT/UPDATE policies on `storage.objects` now refuse direct anon/authenticated writes to `clubs/*` in `photos`, `chat-attachments` and `competition-vault`. `MEASURED_MEDIA_UPLOAD_ENABLED = true`.
+- Live signed-in acceptance with a temporary user/club (removed afterwards; club soft-deleted because vault folders block hard delete): measured upload 200 with exact bytes, readback 200, direct browser write refused by RLS, reuse of a path refused, wrong-club path refused. Oversized (10 MiB + 1) live request timed out from the sandbox; bucket 10 MiB limit and unit tests cover it.
+- Older installed app versions that upload club media directly will be refused until updated. Purchases remain disabled.
