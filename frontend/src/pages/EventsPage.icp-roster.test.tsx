@@ -173,6 +173,25 @@ beforeEach(() => {
 });
 
 describe("EventsPage roster-derived team scope routing", () => {
+  it('renders ready Group 1 events before Group 2 or the Group 1 profile finishes', async () => {
+    eventsRoutedToIcp = true;
+    scheduleMocks.grants.mockResolvedValue([{ club: ['g1'], team: [], role: 'club_member' }, { club: ['g2'], team: [], role: 'club_member' }]);
+    const event = { id: 'g1-event', title: 'Ready training', event_type: 'training', starts_at_ms: BigInt(Date.now() + 86400000),
+      ends_at_ms: BigInt(Date.now() + 90000000), updated_at_ms: BigInt(Date.now()), deleted: false, club_id: 'g1', team_id: [],
+      address: [], location: [], mini_league_id: [], cancelled: false, series_id: [], opponent: [], description: '' };
+    let finishClub: ((value: unknown[]) => void) | undefined; let finishProfile: ((value: unknown[]) => void) | undefined;
+    scheduleMocks.events.mockImplementation((_ctx, clubId) => clubId === 'g1' ? Promise.resolve([event]) : new Promise(resolve => { finishClub = resolve; }));
+    scheduleMocks.profile.mockImplementation(() => new Promise(resolve => { finishProfile = resolve; }));
+    const client = renderPage();
+    await waitFor(() => expect(client.getQueryCache().getAll().some(query => query.queryKey[0] === 'events' &&
+      (query.state.data as { events?: { id: string }[] } | undefined)?.events?.some(row => row.id === 'g1-event'))).toBe(true));
+    expect(screen.getByText('Schedule')).toBeInTheDocument();
+    const schedule = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events' && query.queryKey[1] === 'icp-member-schedule');
+    expect(schedule?.state.fetchStatus).toBe('fetching');
+    expect((schedule?.state.data as { incomplete: boolean }).incomplete).toBe(true);
+    finishClub?.([]); finishProfile?.([{ name: 'Cats', sport: [] }]);
+    await waitFor(() => expect((schedule?.state.data as { incomplete: boolean }).incomplete).toBe(false));
+  });
   it('shows a ready public fixture while member club events are still pending', async () => {
     eventsRoutedToIcp = true;
     scheduleMocks.grants.mockResolvedValue([{ club: ['member-club'], team: [], role: 'club_member' }]);
