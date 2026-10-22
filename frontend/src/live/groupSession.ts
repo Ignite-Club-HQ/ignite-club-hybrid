@@ -5,10 +5,14 @@ import type { FeatureBackendContext } from './featureRouter';
 import type { GroupDescriptor, ClubAssignment, GroupDomain } from './groupRouting';
 import { GROUP_DOMAINS } from './groupRouting';
 import { resolveDeploymentClubDomain, groupRouteScope, type GroupDeployment, type GroupDeploymentBinding, type DeploymentBoundTable } from './groupDeployment';
+import { readCompleteMembershipDirectory, type DirectoryPage } from './membershipDirectoryDiscovery';
 
 export type GroupRegistry = { revision: bigint; groups: GroupDescriptor[]; deployment: GroupDeployment; bindings: GroupDeploymentBinding[] };
 export type GroupSessionTransport = {
   readRegistry(): Promise<GroupRegistry>;
+  /** Optional only after source propagation is verified; absence/failure keeps
+   * complete Stage A discovery. No live adapter is installed yet. */
+  readMembershipDirectory?(ctx: FeatureBackendContext, sequence: bigint, registryFingerprint: string): Promise<DirectoryPage>;
   readMemberships(ctx: FeatureBackendContext, offset: bigint, limit: number): Promise<{ clubs: string[]; next: bigint | null; aclRevision: bigint }>;
   readAssignments(clubs: string[], revision: bigint): Promise<ClubAssignment[]>;
   /** Required only where original shared clubs are not registered as a group. */
@@ -109,14 +113,29 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       after = page.next;
     }
   };
-  // Every group is asked at once: load time is the slowest group, not the sum.
-  // claim() still rejects a club claimed by two groups whichever answers first.
-  await Promise.all(registry.groups.map(group => transport.readMembershipsIndexed
+  const legacyClubs = new Set<string>();
+  let directoryUsed = false;
+  if (transport.readMembershipDirectory) {
+    try {
+      const directory = await readCompleteMembershipDirectory(principal, initialRegistry,
+        sequence => transport.readMembershipDirectory?.(context, sequence, initialRegistry) ?? Promise.reject(new Error('Directory unavailable')), sameIdentity);
+      // Validate the entire result before modifying any routing inventory.
+      if (directory.assignments.some(row => !routing.groups.has(row.groupId) || row.revision > registry.revision)) throw new Error('Foreign directory assignment');
+      for (const row of directory.assignments) claim(row.clubId, row.groupId);
+      for (const club of directory.legacyClubs) legacyClubs.add(club);
+      directoryUsed = true;
+    } catch {
+      sameIdentity();
+      clubs.clear(); routing.assignments.clear(); legacyClubs.clear();
+    }
+  }
+  // Without a complete verified directory, every source must answer. Failures
+  // never turn a partial discovery into a successful empty membership list.
+  if (!directoryUsed) await Promise.all(registry.groups.map(group => transport.readMembershipsIndexed
     ? indexedGroup(group, transport.readMembershipsIndexed.bind(transport))
     : scanGroup(group)));
-  const legacyClubs = new Set<string>();
   const sharedRegistered = registry.groups.some(g => g.domains.some(d => d.domain === 'club_domain' && d.canisterId === context.target.canisterIds.club_domain));
-  if (!sharedRegistered && transport.readLegacyMemberships) {
+  if (!directoryUsed && !sharedRegistered && transport.readLegacyMemberships) {
     let offset = 0n;
     for (let pageCount = 0; ; pageCount++) {
       if (pageCount >= MAX_PAGES) throw new Error('Legacy membership scan exceeds budget');
