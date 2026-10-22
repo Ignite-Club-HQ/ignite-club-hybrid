@@ -45,6 +45,7 @@ import { formatTimeShort } from "@/lib/formatTimeShort";
 import { mediaProfileDirectory } from "./mediaProfileDirectory";
 import { galleryCommentFromReceipt, mergeGalleryComments } from "./galleryComments";
 import { readMediaSources, type MediaSourceStatus } from './mediaSourceState';
+import { updateMemberReaction } from './reactionUpdates';
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -111,6 +112,7 @@ interface LiveMediaFeed {
   sources?: MediaSourceStatus[];
   incomplete?: boolean;
 }
+type LivePostDetails = Pick<LiveMediaPost, 'reactions' | 'comments' | 'ownerName' | 'ownerAvatarUrl'>;
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -316,7 +318,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: L
   // so the feed paints as soon as the post list is known instead of waiting
   // for every encrypted photo to download and decrypt.
   const assetViews = new Map<string, LiveAssetView>();
-  for (const asset of rawAssets) {
+  for (const asset of new Map(rawAssets.map(row => [row.id, row])).values()) {
     const isVideo = asset.kind === "video" || asset.mime.startsWith("video/");
     let sourceUrl: string | null = null;
     try {
@@ -341,7 +343,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: L
 
   // Group into posts by album_id (multi-photo uploads share one).
   const groups = new Map<string, typeof rawAssets>();
-  for (const asset of rawAssets) {
+  for (const asset of new Map(rawAssets.map(row => [row.id, row])).values()) {
     if (!assetViews.has(asset.id)) continue;
     const key = `${asset.club_id}:${asset.album_id[0] ?? asset.id}`;
     const group = groups.get(key) ?? [];
@@ -483,7 +485,9 @@ export function IcpMediaFeedPage() {
     retry: 1,
   });
 
+  const reactionEdits = useRef(new Map<string, number>());
   const reactionMutation = useMutation({
+    scope: { id: 'icp-gallery-reactions' },
     mutationFn: async ({ post, emoji, remove }: { post: LiveMediaPost; emoji: string; remove?: boolean }) =>
       withFeatureBackend("media", {
         supabase: async () => {
@@ -499,30 +503,40 @@ export function IcpMediaFeedPage() {
     // Instant on-screen update; the canister save finishes in the background.
     onMutate: async ({ post, emoji, remove }) => {
       const key = ["icp-media-feed", principal];
-      await queryClient.cancelQueries({ queryKey: key });
+      const detailsKey = ['icp-media-post-details', principal, post.clubId, post.representativeAssetId];
+      const edit = (reactionEdits.current.get(post.id) ?? 0) + 1;
+      reactionEdits.current.set(post.id, edit);
+      await Promise.all([queryClient.cancelQueries({ queryKey: key }), queryClient.cancelQueries({ queryKey: detailsKey })]);
       const previous = queryClient.getQueryData<LiveMediaFeed>(key);
+      const previousDetails = queryClient.getQueryData<LivePostDetails>(detailsKey);
+      const previousMine = post.reactions.filter(r => r.user_id === principal);
+      const mine: LiveReactionView[] = remove || !principal ? [] : [{ user_id: principal, reaction_type: emoji, profiles: { display_name: 'You', avatar_url: null } }];
+      if (principal) queryClient.setQueryData<LivePostDetails>(detailsKey, old => old && ({ ...old, reactions: updateMemberReaction(old.reactions, principal, mine) }));
       if (previous && principal) {
         queryClient.setQueryData<LiveMediaFeed>(key, {
           ...previous,
           posts: previous.posts.map((p) => {
             if (p.id !== post.id) return p;
-            const others = p.reactions.filter((r) => r.user_id !== principal);
             return {
               ...p,
-              reactions: remove
-                ? others
-                : [...others, { user_id: principal, reaction_type: emoji, profiles: { display_name: "You", avatar_url: null } }],
+              reactions: updateMemberReaction(p.reactions, principal, mine),
             };
           }),
         });
       }
-      return { previous, key };
+      return { previousMine, previousDetails, detailsKey, key, edit, postId: post.id };
     },
     onError: (err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(context.key, context.previous);
+      if (context && principal && reactionEdits.current.get(context.postId) === context.edit) {
+        queryClient.setQueryData<LiveMediaFeed>(context.key, old => old && ({ ...old, posts: old.posts.map(post => post.id === context.postId
+          ? { ...post, reactions: updateMemberReaction(post.reactions, principal, context.previousMine) } : post) }));
+        queryClient.setQueryData<LivePostDetails>(context.detailsKey, old => old && ({ ...old, reactions: updateMemberReaction(old.reactions, principal,
+          context.previousDetails?.reactions.filter(r => r.user_id === principal) ?? context.previousMine) }));
+      }
       toast.error(err instanceof Error ? err.message : "Reaction failed");
     },
-    onSettled: invalidate,
+    onSettled: () => { if (queryClient.isMutating({ mutationKey: ['icp-gallery-reaction'] }) <= 1) return invalidate(); },
+    mutationKey: ['icp-gallery-reaction'],
   });
 
   const commentMutation = useMutation({
@@ -578,7 +592,7 @@ export function IcpMediaFeedPage() {
         ...prev,
         [post.id]: (prev[post.id] ?? []).filter((c) => c.id !== context?.pendingId),
       }));
-      setCommentInput(text);
+      setCommentInput(current => current || text);
       setCommentError("Your comment wasn't posted. Please try sending it again.");
       toast.error(err instanceof Error ? err.message : "Comment failed");
     },
