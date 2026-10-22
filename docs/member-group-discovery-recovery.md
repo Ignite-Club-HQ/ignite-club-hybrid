@@ -16,7 +16,7 @@
 - Child assignment/unassignment, guardian links, member/child moves, bulk team additions, team removal/restore/deletion and alternate member removal/restore now clear shared display inventories only after confirmed success; refusal preserves the existing snapshot.
 
 ## Validation
-Full existing suites: Supabase 6208 passed/358 skipped; ICP 5806 passed/760 skipped. Request-counter tests cover 2/10/100 groups, coalesced discovery beyond 30 seconds, 15-minute external additions, legacy membership, suspended app, generation isolation and media source failure/denial. Additional behavior tests verify photos before delayed metadata, exact-ID duplicates, complete-boundary transitions, pending league discovery not gating club memberships, and acknowledged mutation refresh/refusal retention. ICP boundary guards and changed live-code lint pass; preview build OK.
+Latest full suites: Supabase 6236 passed/358 skipped; ICP 5834 passed/760 skipped. Request-counter tests cover 2/10/100 groups, coalesced discovery beyond 30 seconds, 15-minute external additions, legacy membership, suspended app, generation isolation and media source failure/denial. Additional behavior tests verify photos before delayed profiles/metadata, exact-ID duplicates, complete-boundary transitions, fixtures and member schedule completing independently, foreign/private host preservation, failed-source reporting, partial snapshot exclusion and 21 acknowledged mutation/refusal paths. ICP boundary guards and changed live-code lint pass; preview build OK.
 
 No usable signed-in Internet Identity session is available here. These results do not establish actual account data or Android navigation timing. No publication, live canister mutation, identity change, club move or payment change occurred.
 

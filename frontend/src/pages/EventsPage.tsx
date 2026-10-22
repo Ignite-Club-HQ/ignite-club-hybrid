@@ -1345,6 +1345,7 @@ export default function EventsPage() {
                 await Promise.all([
                   queryClient.invalidateQueries({ queryKey: ["user-memberships-for-events"] }),
                   queryClient.invalidateQueries({ queryKey: eventKeys.lists() }),
+                  ...(isIcpAuthBackend ? [queryClient.invalidateQueries({ queryKey: ['icp-schedule-fixtures'] })] : []),
                 ]);
               } finally {
                 setTimeout(() => setIsRefreshing(false), 600);
