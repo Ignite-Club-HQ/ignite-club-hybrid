@@ -1114,6 +1114,12 @@ persistent actor MediaBlobStore {
       case (null, ?op) op.path;
       case _ return #Err("Unknown upload")
     };
+    // Fetch the current allowance before taking the final upload snapshot.
+    // The synchronous recheck below charges malformed/legacy raw bytes in
+    // full instead of granting an unearned framing discount.
+    let needsAllowance = quota_mode == #local and categoryForPath(path) != null and clubIdFromPath(path) != null and not isGovernor<system>(caller);
+    let finalAllowance = if (needsAllowance) await pathAllowance(path) else null;
+    if (needsAllowance and finalAllowance == null) return #Err("StorageAllowanceUnavailable");
     bumpInventory();
     switch (quota_operations.get(upload_id)) {
       case (?op) {
@@ -1136,10 +1142,16 @@ persistent actor MediaBlobStore {
         if (Nat.toNat64(assembled.size()) != upload.total_size) {
           return #Err("Accumulated byte count does not match total_size");
         };
-        // The reserved framing discount is earned only by an actual versioned
-        // IBE envelope. Legacy/governor fixtures stay readable and are charged
-        // conservatively when they lack this envelope.
-        if (quota_mode == #local and categoryForPath(upload.path) != null and clubIdFromPath(upload.path) != null and not isGovernor<system>(caller) and not MediaByteAccounting.validFile(assembled)) return #Err("InvalidEncryptedMedia");
+        switch (finalAllowance, clubIdFromPath(upload.path)) {
+          case (?a, ?club) {
+            let actual = MediaByteAccounting.storedBytes(assembled, assembled.size());
+            if (actual > MediaByteAccounting.maxPlaintextBytes) return #Err("FileTooLarge");
+            let (used, pending) = scopedMediaBytes(club, if (a.team_scoped) mediaTeam(upload.path) else null);
+            let ownPending = MediaByteAccounting.pendingBytes(upload.total_size.toNat());
+            if (pending < ownPending or not UploadPolicy.withinMediaAllowance(used, pending - ownPending, actual, a.limit_bytes)) return #Err("StorageAllowanceFull");
+          };
+          case _ {}
+        };
         let content_hash = hexDigest(assembled);
         let record : BlobRecord = {
           path = upload.path;
