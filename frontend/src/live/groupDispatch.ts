@@ -9,7 +9,7 @@ import type { FeatureBackendContext } from './featureRouter';
 import type { GroupDomain, ClubAssignment } from './groupRouting';
 import { activationStatus, SHIPPED_GATES, type ActivationGates } from './groupActivation';
 import { generalRoutingStatus, generalRoutingDeploymentAlias } from './generalActivation';
-import { clearOwnerTestRouting, readOwnerTestRoute, readOwnerTestRouteCached } from './ownerTestRouting';
+import { clearOwnerTestRouting, readOwnerTestRouteCached } from './ownerTestRouting';
 import { markScopedContext } from './scopedContext';
 import { clearRoleGrantsMemo } from './roleGrantsMemo';
 
@@ -226,7 +226,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
-      const { s, principal, club } = await resolveScoped(deps, scope);
+      const { s, club } = await resolveScoped(deps, scope);
       if (club && !s.isAssigned(club) && !s.isLegacyMember?.(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
         return s.readHosted(club, domain, fn);
