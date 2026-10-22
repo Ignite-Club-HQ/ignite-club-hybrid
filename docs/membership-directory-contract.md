@@ -64,9 +64,18 @@ Every row requires actual helper/timer entry-point mapping and a regression befo
 - The disposable populated-canister test feeds real exported edges into the Rust builder and compares results to `is_club_member`, including parents, guardians, app-wide roles, removal/restore, last-assignment loss and club deletion/restore. Unit tests cover 251-team resume, live/deleted team overlap, missing teams, direct-role veto, ordered replay and a 205-club app-wide read in bounded pages.
 - 72 identity tests and 35 existing frontend membership/discovery tests pass; new Motoko discovery tests and existing membership index/page tests pass. All 17 interfaces match; ICP-mode guards and preview checks pass.
 
+### Automatic-update/private-reader continuation (20:56)
+
+- Added isolated stable source-update journals with exact authority/generation/inventory binding. New revisions stay pending until complete reconstruction is published and the exact revision is read back; unknown/stale acknowledgements cannot clear newer work. Reopen and exact retry are tested.
+- Added caller-private bounded account lookup aggregation, one local source/alias page and <=100 scanned rows per request. Fresh identity-owned account aliases are checked through existing suspension, denial, erasure, stale-index, unlink and deletion-ticket protections; no caller-supplied account ID or alias list becomes authority.
+- Continuations pin initiating caller, account binding/version/alias set and complete source inventory via compact digests. A stable session adapter owns traversal position and saved replies; future clients submit only sequential page numbers, not cursor positions. Skipped pages, foreign-alias continuations, inventory/account drift and nonadvancing source cursors reject. Exact reply replay survives reopening.
+- Full identity regressions: 78 passed. These modules remain offline with no production memory allocations, public endpoint, timer or live delivery enabled. Cross-page duplicate club/source aggregation and session reclamation/budgets remain integration requirements.
+
 ### Remaining integration and release gates
 
 No propagation worker, source acknowledgement endpoint, authenticated central reader or frontend directory cutover is installed. Bounded raw-source joins are locally parity-tested, but production integration still needs exact registry/placement bindings, shared account/source indexing, verified alias/version handling and rekey/merge/erasure acceptance. Production memory IDs have not been allocated. Builder stages currently use isolated test memories; a multi-source generation namespace and bounded reclamation/budgets are mandatory before production allocation.
+
+Source-binding investigation confirms `read_hosted_club_assignment` can verify assigned clubs at a pinned router revision, resolved against the matching group registry. It returns an error for missing assignments; that must not imply legacy Group 1 ownership. Legacy source coverage needs independently verified exact mappings. The directory coordinator must not repurpose membership checks, admission reader grants or registry location alone as completeness evidence.
 
 Rollback to older authority state is unsupported for directory cutover until an externally fenced replacement generation is bound into source cursors and propagation evidence. A restored local counter cannot discover the central high watermark. Ordinary upgrades must continue preserving revisions. Old staging-chunk reclamation and bounded storage budgets also remain required before enabling ingestion.
 
