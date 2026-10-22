@@ -599,7 +599,20 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
             let reply=ic_cdk::call::Call::bounded_wait(authority,"read_directory_membership_source_page").with_args(&(grant,wire_cursor)).await.map_err(|_|"Directory source page unavailable; request retained")?;
             recheck_directory(&config)?;
             let wire:membership_transport::Reply<membership_transport::WirePage>=reply.candid().map_err(|_|"Invalid directory source page")?;
-            let page=wire.result()?.checked()?;scanned=page.scanned as u64;
+            let wire=match wire.result(){
+                Ok(page)=>page,
+                Err(error) if error=="Retained source start changed"&&cursor.is_none()=>{
+                    // No snapshot was acquired: retry the exact first request
+                    // against a freshly observed revision, not an old cursor.
+                    let (latest,_,_)=directory_source_status(&config,&source,authority).await?;
+                    let unchanged=DIRECTORY_WORKER.with(|w|w.borrow().request(&source))?;
+                    if unchanged!=(captured.clone(),cursor.clone()){return Err("Source propagation callback changed".into());}
+                    DIRECTORY_COORDINATOR.with(|c|DIRECTORY_WORKER.with(|w|w.borrow_mut().start(&mut c.borrow_mut(),&source,authority,latest)))?;
+                    return Err("Membership changed before snapshot capture; exact start refreshed".into());
+                },
+                Err(error)=>return Err(error),
+            };
+            let page=wire.checked()?;scanned=page.scanned as u64;
             // Positive source Club edges are checked against the existing
             // router location API. Missing legacy assignments remain unproven
             // and cannot enable a public directory; publication stays local.

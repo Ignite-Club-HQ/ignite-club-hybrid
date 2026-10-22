@@ -104,6 +104,26 @@ impl<M:Memory> Worker<M>{
         assert!(w.accept(&mut c,"g0",&b,&cursor,SourcePage{revision:1,edges:vec![],next:Some(Cursor{revision:1,phase:0,offset:1,nested:0}),scanned:0}).is_err());
         assert_eq!(w.request("g0").unwrap(),(b,cursor));
     }
+    #[test]fn ongoing_mutations_finish_retained_job_but_never_certify_current_reads(){
+        let m=MemoryManager::init(VectorMemory::default());let mem=|n|m.get(MemoryId::new(n));let (s,p,a)=group_inventory::tests::fixture();
+        let mut c=Coordinator::open(mem(0),Pool::open(mem(1),mem(2),10000,16).unwrap(),mem(3));c.bind_inventory(verify_inventory(&s,&p,&a,1).unwrap()).unwrap();
+        let mut w=Worker::open(mem(4));w.resume_or_start(&mut c,"g0",a[0],1).unwrap();let (b,first)=w.request("g0").unwrap();
+        for n in 0..4 {
+            let mut newer=b.clone();newer.revision=10+n;c.observe_invalidation("g0",&newer).unwrap();
+            w.resume_or_start(&mut c,"g0",a[0],newer.revision).unwrap();let (captured,cursor)=w.request("g0").unwrap();assert_eq!(captured,b);
+            w.accept(&mut c,"g0",&b,&cursor,SourcePage{revision:1,edges:vec![Edge::Club{id:format!("club{n}"),deleted:false}],next:if n<3{Some(Cursor{revision:1,phase:0,offset:n+1,nested:0})}else{None},scanned:1}).unwrap();
+        }
+        drop(w);let mut w=Worker::open(mem(4));
+        for live in 20..100 {
+            w.resume_or_start(&mut c,"g0",a[0],live).unwrap();assert_eq!(w.phase("g0").unwrap().1,1);
+            if w.published("g0").is_ok(){break;}assert!(w.advance(&mut c,"g0").unwrap()<=100);
+        }
+        assert!(w.published("g0").is_ok());assert!(c.acknowledge("g0",&b,1).is_err());
+        w.acknowledge_readback(&mut c,"g0",&b,1).unwrap();assert_eq!(w.phase("g0").unwrap(),("acknowledged",1));assert!(c.sources().is_err());
+        w.resume_or_start(&mut c,"g0",a[0],100).unwrap();assert_eq!(w.request("g0").unwrap().0.revision,100);
+        assert!(w.accept(&mut c,"g0",&b,&first,SourcePage{revision:1,edges:vec![],next:None,scanned:0}).is_err());
+        assert!(w.resume_or_start(&mut c,"g0",a[0],99).is_err());
+    }
     #[test]fn fenced_replacement_reclaims_old_jobs_and_retains_current_pending_after_reopen(){
         let m=MemoryManager::init(VectorMemory::default());let mem=|n|m.get(MemoryId::new(n));let (mut s,mut p,a)=group_inventory::tests::fixture();
         let mut c=Coordinator::open(mem(0),Pool::open(mem(1),mem(2),10000,16).unwrap(),mem(3));c.bind_inventory(verify_inventory(&s,&p,&a,1).unwrap()).unwrap();let mut w=Worker::open(mem(4));w.start(&mut c,"g0",a[0],1).unwrap();c.retire_source("g0").unwrap();while !c.reclaim_retired().unwrap().1{}
