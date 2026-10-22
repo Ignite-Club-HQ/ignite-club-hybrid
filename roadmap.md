@@ -1,3 +1,9 @@
+# USD subscription structure — approved 22 October 2026
+- [ ] Add shared USD prices, club bands 3/5/10/20, Single Team pricing and paid additional teams; update purchase and display surfaces in both modes.
+- [ ] Enforce verified team entitlements atomically for creation, restore and reassignment, including payment before team 21; preserve existing teams and paid terms.
+- [ ] Enforce Free 250 MB, Single Team 1 GB and shared paid club 3 GB media limits in both modes, preserving existing files, paid add-ons, monthly limits and retention.
+- [ ] Verify dual-mode pricing/authorization/storage/payment regressions and document live release/payment-provider prerequisites.
+
 # Group 2 account-access repair
 - [x] Add isolated stable production eligibility release and governor-authorized exact Group 2 service readers derived from two pinned consensus registry reads; preserve removal and lifecycle gates.
 - [x] Add protected identity-only release and automatic verified snapshot refresh using existing immutable-commit journal tools. Passed 58 identity tests, 8 release/journal/workflow tests, 30 frontend regressions, 17-contract drift and a real local router/identity authorization/suspension/upgrade/disable rehearsal.
