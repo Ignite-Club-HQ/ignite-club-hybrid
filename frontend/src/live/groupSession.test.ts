@@ -24,7 +24,7 @@ describe('integrated deployment-bound group read session', () => {
   it('a verified complete directory skips membership searches but retains destination checks', async () => {
     const f = fixture();
     f.transport.readMembershipDirectory = vi.fn(async (_, sequence, fingerprint) => ({ caller: 'person', accountVersion: 1n,
-      generation: 1n, directoryRevision: 1n, registryFingerprint: fingerprint, verifiedCurrent: true,
+      generation: 1n, directoryRevision: 1n, instance: 1n, registryFingerprint: fingerprint, verifiedCurrent: true,
       assignments: f.assignments, legacyClubs: [], next: null }));
     const s = await openGroupSession(f.ctx, f.transport);
     expect(s.memberClubIds).toEqual(['club-a', 'club-b']);
@@ -37,7 +37,7 @@ describe('integrated deployment-bound group read session', () => {
       const f = fixture();
       f.transport.readMembershipDirectory = async (_, __, fingerprint) => {
         if (kind === 'unavailable') throw new Error('Directory unavailable');
-        return { caller: 'person', accountVersion: 1n, generation: 1n, directoryRevision: 1n,
+        return { caller: 'person', accountVersion: 1n, generation: 1n, directoryRevision: 1n, instance: 1n,
           registryFingerprint: fingerprint, verifiedCurrent: kind !== 'partial',
           assignments: [{ clubId: 'phantom', groupId: 'foreign', revision: 1n }], legacyClubs: [], next: null };
       };
@@ -49,7 +49,7 @@ describe('integrated deployment-bound group read session', () => {
   it('directory display hints do not bypass a revoked destination membership', async () => {
     const f = fixture();
     f.transport.readMembershipDirectory = async (_, __, fingerprint) => ({ caller: 'person', accountVersion: 1n,
-      generation: 1n, directoryRevision: 1n, registryFingerprint: fingerprint, verifiedCurrent: true,
+      generation: 1n, directoryRevision: 1n, instance: 1n, registryFingerprint: fingerprint, verifiedCurrent: true,
       assignments: f.assignments, legacyClubs: [], next: null });
     f.transport.readAssignments = async () => { throw new Error('Club membership required'); };
     await expect(openGroupSession(f.ctx, f.transport)).rejects.toThrow('Club membership required');

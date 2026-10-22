@@ -5,14 +5,14 @@ import type { FeatureBackendContext } from './featureRouter';
 import type { GroupDescriptor, ClubAssignment, GroupDomain } from './groupRouting';
 import { GROUP_DOMAINS } from './groupRouting';
 import { resolveDeploymentClubDomain, groupRouteScope, type GroupDeployment, type GroupDeploymentBinding, type DeploymentBoundTable } from './groupDeployment';
-import { readCompleteMembershipDirectory, type DirectoryPage } from './membershipDirectoryDiscovery';
+import { readCompleteMembershipDirectory, type DirectoryPage, type DirectoryContinuation } from './membershipDirectoryDiscovery';
 
 export type GroupRegistry = { revision: bigint; groups: GroupDescriptor[]; deployment: GroupDeployment; bindings: GroupDeploymentBinding[] };
 export type GroupSessionTransport = {
   readRegistry(): Promise<GroupRegistry>;
   /** Optional only after source propagation is verified; absence/failure keeps
    * complete Stage A discovery. No live adapter is installed yet. */
-  readMembershipDirectory?(ctx: FeatureBackendContext, sequence: bigint, registryFingerprint: string): Promise<DirectoryPage>;
+  readMembershipDirectory?(ctx: FeatureBackendContext, continuation: DirectoryContinuation | null, registryFingerprint: string): Promise<DirectoryPage>;
   readMemberships(ctx: FeatureBackendContext, offset: bigint, limit: number): Promise<{ clubs: string[]; next: bigint | null; aclRevision: bigint }>;
   readAssignments(clubs: string[], revision: bigint): Promise<ClubAssignment[]>;
   /** Required only where original shared clubs are not registered as a group. */
@@ -118,7 +118,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   if (transport.readMembershipDirectory) {
     try {
       const directory = await readCompleteMembershipDirectory(principal, initialRegistry,
-        sequence => transport.readMembershipDirectory?.(context, sequence, initialRegistry) ?? Promise.reject(new Error('Directory unavailable')), sameIdentity);
+        continuation => transport.readMembershipDirectory?.(context, continuation, initialRegistry) ?? Promise.reject(new Error('Directory unavailable')), sameIdentity);
       // Validate the entire result before modifying any routing inventory.
       if (directory.assignments.some(row => !routing.groups.has(row.groupId) || row.revision > registry.revision)) throw new Error('Foreign directory assignment');
       for (const row of directory.assignments) claim(row.clubId, row.groupId);
