@@ -1,0 +1,11 @@
+import Bytes "../src/mediaByteAccounting";
+let header : Blob = "IC IBE\00\01";
+assert Bytes.framingBytes == 136;
+assert Bytes.pendingBytes(1_136) == 1_000;
+assert Bytes.storedBytes(header, 1_136) == 1_000;
+assert Bytes.storedBytes("not-ibe!", 1_136) == 1_136;
+assert not Bytes.framed(header, 135);
+assert Bytes.pendingBytes(135) == 135;
+assert Bytes.pendingBytes(10_485_896) == 10_485_760;
+assert Bytes.pendingBytes(10_485_897) > Bytes.maxPlaintextBytes;
+assert not Bytes.validFile("plaintext");
