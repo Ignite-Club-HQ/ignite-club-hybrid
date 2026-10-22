@@ -20,7 +20,7 @@ import {
   removeLiveReaction,
 } from "@/live/features/media";
 import { readCachedIcpBlobObjectUrl, resolveIcpBlobObjectUrl, storedIcpPrincipal } from "@/live/mediaDecrypt";
-import { listLiveTeams } from "@/live/features/club";
+import { getLiveTeam, listLiveTeams } from "@/live/features/club";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { listLiveCompetitions } from "@/live/features/competitions";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
@@ -234,6 +234,13 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: L
   const grantTeamIds = new Set(grants.map((g) => g.team[0]).filter((t): t is string => !!t));
   const { clubDispatch } = await import('@/live/groupDispatch');
   const verifiedIds = await clubDispatch.memberClubIds();
+  await Promise.all(grants.filter(g => g.team[0] && !g.club[0]).map(async grant => {
+    const teamId = grant.team[0];
+    if (!teamId) return;
+    const teams = await readContentInScope(ctx, 'membership', { teamId }, scoped => getLiveTeam(scoped, teamId));
+    const clubId = teams[0]?.club_id;
+    if (clubId) grantClubIds.add(clubId);
+  }));
   const clubProfiles = await readClubsInOwnGroups(ctx, [...new Set([...verifiedIds, ...grantClubIds])]);
   const clubsRaw = clubProfiles.values as unknown as {
     id: string;
@@ -274,12 +281,18 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: L
         if (!clubTeams.some((t) => grantTeamIds.has(t.id))) return;
       }
       options.clubs.push({ id: club.id, name: club.name, sport: club.sport[0] ?? null });
-      const [assets, teams, miniLeagues, competitions] = await Promise.all([
-        readContentInScope(ctx, "media", { clubId: club.id }, scoped => listLiveAssets(scoped, club.id)),
+      const metadata = Promise.all([
         readContentInScope(ctx, "membership", { clubId: club.id }, scoped => listLiveTeams(scoped, club.id)),
         readContentInScope(ctx, "mini_leagues", { clubId: club.id }, scoped => listLiveMiniLeaguesByClub(scoped, club.id)),
         readContentInScope(ctx, "competitions", { clubId: club.id }, scoped => listLiveCompetitions(scoped, club.id)),
       ]);
+      metadata.catch(() => undefined);
+      const assets = await readContentInScope(ctx, "media", { clubId: club.id }, scoped => listLiveAssets(scoped, club.id));
+      for (const asset of assets as unknown as (typeof rawAssets)[number][]) {
+        if (!asset.deleted && (asset.kind === 'photo' || asset.kind === 'video')) rawAssets.push(asset);
+      }
+      onUpdate?.(buildFeed());
+      const [teams, miniLeagues, competitions] = await metadata;
       for (const team of teams as unknown as {
         id: string;
         name: string;
@@ -295,10 +308,6 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: L
       }
       for (const comp of competitions as unknown as { id: string; name: string; club_id: string }[]) {
         options.competitions.push({ id: comp.id, name: comp.name, club_id: comp.club_id });
-      }
-      for (const asset of assets as unknown as (typeof rawAssets)[number][]) {
-        if (asset.deleted) continue;
-        if (asset.kind === "photo" || asset.kind === "video") rawAssets.push(asset);
       }
     }, snapshot => { sources = snapshot.sources; onUpdate?.(buildFeed()); });
 
@@ -452,8 +461,10 @@ export function IcpMediaFeedPage() {
     },
   });
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["icp-media-feed"] });
+  const invalidate = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["icp-media-feed"] }),
+    queryClient.invalidateQueries({ queryKey: ["icp-media-post-details", principal] }),
+  ]);
 
   // Opening comments reads only this album, not the entire multi-group gallery.
   const commentQueryKey = ["icp-gallery-comments", principal, commentPost?.clubId, commentPost?.representativeAssetId];
