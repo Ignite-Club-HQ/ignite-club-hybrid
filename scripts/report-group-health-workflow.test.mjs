@@ -6,7 +6,7 @@ const runner = readFileSync(new URL('../frontend/scripts/report-group-health.ts'
 
 test('scheduled reporting is frequent enough for the two-hour health window', () => {
   assert.match(workflow, /schedule:/);
-  assert.match(workflow, /cron: '\*\/15 \* \* \* \*'/);
+  assert.match(workflow, /cron: '\*\/10 \* \* \* \*'/);
 });
 
 test('reporting is governor-signed, serialized and never leaves the key behind', () => {
