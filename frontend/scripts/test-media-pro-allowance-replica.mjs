@@ -1,6 +1,6 @@
 // Isolated PocketIC integration: the combined Pro media allowance (vault +
 // gallery + chat) is enforced by the photo store itself, and the club-bytes
-// query reports the same finalized + pending figures. The exact 5 GiB
+// query reports the same finalized + pending figures. The exact 3 GiB
 // boundary arithmetic is unit-tested in uploadPolicy.test.mo; a full fill is
 // not possible on a replica (pending reservations are heap-budgeted), so the
 // replica proves the wiring at small scale. Never mainnet.
@@ -75,10 +75,10 @@ try {
   assert.equal(bytes.pending, FILE);
   ok(await actor.abort_upload(pendingAgain));
   const branding = ok(await reserve('clubs/club-pro/logos/logo.png', 50n));
-  assert.equal((await actor.get_club_media_bytes('club-pro')).pending, 50n);
+  assert.equal((await actor.get_club_media_bytes('club-pro')).pending, 0n);
   ok(await actor.abort_upload(branding));
 
-  // Free clubs are not subject to the Pro allowance, only their cycle caps.
+  // Free clubs have a smaller combined allowance and their monthly caps.
   ok(await clubActor.create_club('club-free', 'Free Club', 'club-free', [], []));
   ok(await clubActor.add_role_grant(owner, 'club-free', 'player', []));
   ok(await clubActor.save_club_subscription({

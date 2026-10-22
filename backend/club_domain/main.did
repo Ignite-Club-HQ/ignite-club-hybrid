@@ -203,10 +203,15 @@ type RoleGrant =
    team: opt text;
    user: principal;
  };
-type Result__1 = 
+type Result__2 = 
  record {
    hasMore: bool;
    rows: vec Row;
+ };
+type Result__1 = 
+ variant {
+   Err: text;
+   Ok: Operation;
  };
 type Result = 
  variant {
@@ -231,7 +236,7 @@ type Request__1 =
  record {
    club: text;
    expected_revision: nat64;
-   operation: Operation;
+   operation: Operation__1;
    request_id: text;
  };
 type Request = 
@@ -356,7 +361,7 @@ type Page =
    revision: nat;
    scanned: nat;
  };
-type Operation = 
+type Operation__1 = 
  variant {
    Remove: record {id: text;};
    Reorder: record {
@@ -371,6 +376,28 @@ type Operation =
                 active: bool;
                 id: text;
               };
+ };
+type Operation = 
+ record {
+   bytes: nat;
+   club: text;
+   path: text;
+   previous: opt Object;
+   state: variant {
+            committed;
+            released;
+            "reserved";
+          };
+   store: principal;
+   token: text;
+ };
+type Object = 
+ record {
+   bytes: nat;
+   club: text;
+   path: text;
+   revision: nat;
+   store: principal;
  };
 type NewsPost = 
  record {
@@ -442,10 +469,18 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   acknowledge_retained_media: (token: text) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
    activate_media_quota: () -> (variant {
                                   Err: text;
                                   Ok;
                                 });
+   activate_media_retained_quota: () -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
    add_role_grant: (user: principal, club: text, role: text, team:
     opt text) -> (variant {
                     Err: text;
@@ -500,6 +535,8 @@ type Main =
                        });
    cancel_media_quota: (token: text, club_id: text, category: text, bytes:
     nat, cycle: nat) -> (Result);
+   cancel_retained_media: (token: text, club: text, path: text, bytes:
+    nat) -> (Result__1);
    /// Public: remaining cycles of any canister this canister controls
    /// (the frontend asset canister adds club_domain as a controller at deploy
    /// time so admin settings can show its balance too).
@@ -519,6 +556,17 @@ type Main =
        Ok: ClubSettings;
      });
    commit_media_quota: (token: text) -> (Result);
+   commit_retained_media: (token: text) -> (Result__1);
+   configure_media_growth: (usable: nat, unassigned: nat, free_bytes: 
+    nat, clubs: vec text) -> (variant {
+                                Err: text;
+                                Ok;
+                              });
+   configure_media_growth_router: (router: principal, group: text, target:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    create_child_for_parent_in_club: (club_id: text, parent: principal) ->
     (variant {
        Err: text;
@@ -586,6 +634,7 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   credit_deleted_retained_media: (token: text, entry: Object) -> (Result__1);
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
    delete_club_permanent: (id: text) -> (variant {
@@ -642,7 +691,7 @@ type Main =
                                  Err: text;
                                  Ok;
                                });
-   execute: (input: text) -> (Result__1) query;
+   execute: (input: text) -> (Result__2) query;
    export_acl: () -> (variant {
                         Err: text;
                         Ok: Config;
@@ -773,6 +822,17 @@ type Main =
                               Err: text;
                               Ok: Listing;
                             }) query;
+   get_media_allowance: (club_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          base_bytes: nat;
+          limit_bytes: nat;
+          premium: bool;
+          team_scoped: bool;
+        };
+     }) query;
    get_my_accessibility_prefs: () ->
     (variant {
        Err: text;
@@ -901,6 +961,11 @@ type Main =
                                                       Err: text;
                                                       Ok;
                                                     });
+   import_media_retained_store: (store: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    invite_stats: (club_id: text, since_ms: nat64, until_ms: nat64) ->
     (variant {
        Err: text;
@@ -1182,6 +1247,8 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   prepare_deleted_retained_media: (token: text, entry: Object) ->
+    (Result__1);
    prepare_media_quota_reservation: (store: principal, token: text, club_id:
     text, category: text, bytes: nat) -> (Result);
    profile_team_history: (profile_id: text) ->
@@ -1198,7 +1265,7 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
-   read_account_execute: (input: text) -> (Result__1);
+   read_account_execute: (input: text) -> (Result__2);
    read_account_find_pending_invite_by_email_hash: (club_id: text, hash:
     text) -> (variant {
                 Err: text;
@@ -1507,12 +1574,25 @@ type Main =
                    Err: text;
                    Ok: Page;
                  });
+   read_club_retained_media_bytes: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             finalized: nat;
+             pending: nat;
+           };
+     });
    read_competition_team_access: (team_id: text, user: principal) ->
     (record {
        can_manage: bool;
        club_id: opt text;
        is_member: bool;
      }) query;
+   /// Bounded consensus configuration evidence; never changes or grants access.
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    read_has_child_guardian: (user: principal, child_id: text) -> (bool);
    read_has_club_membership: (user: principal, club_id: text) -> (bool);
    read_has_club_staff_role: (user: principal, club_id: text) -> (bool);
@@ -1524,6 +1604,7 @@ type Main =
              stores: vec principal;
            };
      });
+   read_media_retained_ready: () -> (bool);
    read_my_club_memberships: (offset: nat, limit: nat16) ->
     (variant {
        Err: text;
@@ -1646,6 +1727,8 @@ type Main =
      });
    reserve_media_quota: (token: text, club_id: text, category: text, bytes:
     nat, cycle: nat) -> (Result);
+   reserve_retained_media: (token: text, path: text, bytes: nat) ->
+    (Result__1);
    resolve_invite_short_code: (code: text) ->
     (variant {
        Err: text;
@@ -1672,6 +1755,14 @@ type Main =
              removed: nat;
              reservation_cursor: text;
              usage_cursor: text;
+           };
+     });
+   retire_retained_media_records: (cursor: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             cursor: text;
+             removed: nat;
            };
      });
    revoke_identity: (target: principal, expected_version: nat64) ->
@@ -1774,6 +1865,11 @@ type Main =
        Ok: TeamSubscription;
      });
    schema: () -> (text) query;
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    send_fee_reminders: (club_id: text, payment_period: text, payment_type:
     text, message: text) -> (variant {
                                Err: text;
@@ -1909,6 +2005,13 @@ type Main =
        Err: text;
        Ok: Child;
      });
+   /// Independent deletion-only configuration for an empty owner-test group.
+   /// Does not release linked-account sync or register lifecycle receivers.
+   set_owner_test_deletion_identity: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_pending_invite_email_hash: (invite_id: text, club_id: text, hash:
     text) -> (variant {
                 Err: text;
@@ -1987,6 +2090,10 @@ type Main =
                                        Err: text;
                                        Ok;
                                      });
+   start_media_retained_cutover: () -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
    sync_my_linked_account: () -> (variant {
                                     Err: text;
                                     Ok;

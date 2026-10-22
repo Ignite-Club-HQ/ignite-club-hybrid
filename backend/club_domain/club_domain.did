@@ -822,6 +822,17 @@ type Main =
                               Err: text;
                               Ok: Listing;
                             }) query;
+   get_media_allowance: (club_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          base_bytes: nat;
+          limit_bytes: nat;
+          premium: bool;
+          team_scoped: bool;
+        };
+     }) query;
    get_my_accessibility_prefs: () ->
     (variant {
        Err: text;

@@ -1076,6 +1076,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_media_allowance' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'limit_bytes' : IDL.Nat,
+              'premium' : IDL.Bool,
+              'team_scoped' : IDL.Bool,
+              'base_bytes' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_my_accessibility_prefs' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],

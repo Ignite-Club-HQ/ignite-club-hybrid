@@ -5578,6 +5578,27 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(null)
   };
 
+  // Server-derived allowance; a team cannot borrow another club's entitlement.
+  public query func get_media_allowance(club_id : Text, team_id : ?Text) : async { #Ok : { limit_bytes : Nat; base_bytes : Nat; team_scoped : Bool; premium : Bool }; #Err : Text } {
+    if (not profiles.any(func(c) = c.id == club_id)) return #Err("Club not found");
+    let now = nowMs();
+    let sub = clubSubscriptions.find(func(s) = s.club_id == club_id);
+    let clubPro = SubscriptionPolicy.premium(sub, now);
+    var teamPro = false;
+    switch (team_id) {
+      case (?id) {
+        if (not teams.any(func(t) = t.id == id and t.club_id == club_id and t.deleted_at_ms == null)) return #Err("Team does not belong to club");
+        switch (teamSubscriptions.find(func(s) = s.team_id == id)) {
+          case (?raw) { let s = effectiveTeamSub(raw); teamPro := s.is_pro or s.is_pro_football or s.admin_pro_override or s.admin_pro_football_override or (s.is_trial and (switch (s.trial_ends_at_ms) { case (?end) end > now; case null false })) };
+          case null {}
+        }
+      }; case null {}
+    };
+    let teamScoped = not clubPro and teamPro;
+    let base = if (teamScoped) 1_073_741_824 else SubscriptionPolicy.mediaBase(sub, now);
+    #Ok({ base_bytes = base; limit_bytes = base + (if (teamScoped) 0 else clubStorageGb(club_id).toNat() * 1_073_741_824); team_scoped = teamScoped; premium = clubPro or teamPro })
+  };
+
   // Retained activation is intentionally local-only, independent of monthly quotas.
   public shared ({ caller }) func start_media_retained_cutover() : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or not retainedRehearsal) return #Err("Local retained rehearsal governor required");

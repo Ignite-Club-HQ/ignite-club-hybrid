@@ -1,4 +1,5 @@
 # USD subscription structure — approved 22 October 2026
+- [ ] Current batch: complete pre-store enforcement and preserve active Unlimited promos; leave all new purchases disabled until provider configuration.
 - [x] Approved USD catalog, bands 3/5/10/20, Single Team prices and extra-team quotes; unconfigured v2 products refuse charging.
 - [x] Atomic Supabase capacity guard and ICP creation/restore/approval/reassignment guard. Existing teams retained; ICP requires deployment.
 - [ ] Configure and verify v2 entity-scoped fulfillment with provider products: hosted checkout/verifiers absent from this checkout; global ICP entitlement cannot grant club-specific seats.

@@ -51,8 +51,8 @@ assert not Policy.canAdmitFor(34_359_738_368, 20_000_000_000, 0, 1_000, 0, false
 assert Policy.canAdmitFor(34_359_738_368, 27_487_790_693, 0, 1, 0, true);
 assert not Policy.canAdmitFor(34_359_738_368, 27_487_790_693, 1, 1, 0, true);
 assert not Policy.canAdmitFor(34_359_738_368, 0, 0, 10, Policy.heapBudget - 159, true);
-// Eight full base Pro commitments fit the byte-only large-store threshold;
-// nine do not. Allocator/metadata/processing headroom must be measured separately.
+// Eight new 3 GiB commitments fit this byte-only threshold; nine do not.
+// Allocator/metadata/processing headroom must be measured separately.
 assert Policy.proMediaBaseBytes * 8 <= Policy.thresholdFor(34_359_738_368, true);
 assert Policy.proMediaBaseBytes * 9 > Policy.thresholdFor(34_359_738_368, true);
 // Multi-bank rehearsal uses an explicit runtime-bound ceiling, never the

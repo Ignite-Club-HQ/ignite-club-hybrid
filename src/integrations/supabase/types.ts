@@ -13189,6 +13189,15 @@ export type Database = {
         Args: { p_event_at: string; p_subscription_id: string }
         Returns: boolean
       }
+      subscription_media_allowance: {
+        Args: { p_club: string; p_team?: string }
+        Returns: {
+          base_bytes: number
+          limit_bytes: number
+          premium: boolean
+          team_scoped: boolean
+        }[]
+      }
       suggest_eoi_teams: {
         Args: { _season_id: string }
         Returns: {
