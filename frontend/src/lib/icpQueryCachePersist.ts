@@ -16,7 +16,7 @@ const DB = "ignite-icp-query-cache";
 const STORE = "kv";
 const KEY = "cache-v2"; // v1 copies could hold dead photo links
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const SAVE_DEBOUNCE_MS = 1500;
+const SAVE_DEBOUNCE_MS = 5000;
 const SKIP_KEY = /media-feed|photos|signed|photo-url|blob|media-url|vetkey|secret|token|decrypt/i;
 
 interface Stored { owner: string; savedAt: number; state: ReturnType<typeof dehydrate> }
@@ -88,8 +88,20 @@ export async function restoreIcpQueryCache(client: QueryClient, isIcp: boolean, 
 export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean): void {
   if (!isIcp || typeof indexedDB === "undefined") return;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const save = () => {
+  let saving = false;
+  // Copying the whole cache is heavy main-thread work: only do it when the
+  // phone is idle so taps (bottom nav, menus) are never held up by it.
+  const idle = (fn: () => void) => {
+    const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    if (ric) ric(fn, { timeout: 10_000 }); else setTimeout(fn, 0);
+  };
+  const scheduleSave = () => {
     timer = null;
+    if (saving) { timer = setTimeout(scheduleSave, SAVE_DEBOUNCE_MS); return; }
+    saving = true;
+    idle(() => { try { save(); } finally { saving = false; } });
+  };
+  const save = () => {
     const owner = currentPrincipal();
     if (!owner) return;
     try {
@@ -102,12 +114,13 @@ export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean): 
   };
   client.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || event.action.type !== "success") return;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(save, SAVE_DEBOUNCE_MS);
+    if (timer) return; // throttle: one save per window, not reset on every reply
+    timer = setTimeout(scheduleSave, SAVE_DEBOUNCE_MS);
   });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && timer) {
       clearTimeout(timer);
+      timer = null;
       save();
     }
   });
