@@ -28,6 +28,15 @@
 
 Local tests are not signed-in production upload or purchase acceptance.
 
+## 08:49 owner-authorized Supabase retry
+
+- Retried deployment twice; both attempts returned the deployment tool's internal error and deployed no function.
+- The deployed `?job=media-upload` endpoint still parses a raw test body as legacy payment JSON (400), rather than rejecting the deliberately invalid token as the new receiver would (401). The new handler is therefore not live.
+- Function-local `deno.json` now isolates npm resolution from the preview's root/ frontend dependency tree. Deno dependency resolution and `deno check` succeed; this removes a local resolution problem but did not resolve the remote deployment failure.
+- Measured receiver, shared allowance and Vault regressions: 32 passed, 5 existing mode-specific skips. Preview reports build OK.
+- `SUPABASE_ACCESS_TOKEN` is absent and authentication is external/unmanaged, so an alternate authorized deployment and signed-in upload acceptance cannot be performed here. Service-role database access is not a Management API deployment credential and is not a real-user upload test.
+- Storage write policies and `MEASURED_MEDIA_UPLOAD_ENABLED` remain unchanged. Do not cut over until the receiver is deployed and authenticated readback passes; restricting writes now would break working uploads.
+
 ## 04:23 continuation
 
 - Another existing-function deployment attempt failed with the same internal error; the receiver remains undeployed and the release switch remains false.
