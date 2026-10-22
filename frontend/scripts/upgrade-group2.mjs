@@ -57,14 +57,14 @@ const observe = async service => {
 const router = Actor.createActor(routerIdl, { agent, canisterId: shared.shard_router });
 const closed = async () => {
   const reply = await router.read_group_registry('ic');
-  if ('Err' in reply) throw new Error('Shared router upgrade/configuration is required before g2 upgrade');
+  if ('Err' in reply) throw new Error(`Shared router upgrade/configuration is required before ${GROUP} upgrade`);
   const group = reply.Ok.groups.find(g => g.id === GROUP);
-  if (group?.accepting) throw new Error('Group 2 must remain closed');
+  if (group?.accepting) throw new Error(`Group ${NUM} must remain closed`);
   if (group && (group.domains.filter(d => d.domain !== 'secret_workload_identity').length !== 12 ||
     services.filter(s => s.name !== 'media_blob_store').some(s => !group.domains.some(d => d.domain === s.name && d.canister.toText() === s.canisterId)) ||
-    group.photo_store[0]?.toText() !== provision.dedicatedBlobStore.canisterId)) throw new Error('Registered g2 inventory differs');
+    group.photo_store[0]?.toText() !== provision.dedicatedBlobStore.canisterId)) throw new Error(`Registered ${GROUP} inventory differs`);
   const opening = await router.read_owner_test_deletion_required('ic');
-  if ('Err' in opening || opening.Ok) throw new Error('Group 2 owner opening already exists or cannot be verified; this initial closed upgrade refuses');
+  if ('Err' in opening || opening.Ok) throw new Error(`Group ${NUM} owner opening already exists or cannot be verified; this initial closed upgrade refuses`);
   return String(reply.Ok.revision);
 };
 const revision = await closed();
@@ -84,13 +84,13 @@ writeFileSync(mappingFile, JSON.stringify({ pii_access_control: provision.canist
 const keyGate = phase => {
   const result = spawnSync(process.execPath, [join(root, 'frontend/scripts/media-key-deploy-preflight.mjs'), phase, mappingFile, keyFile, 'mainnet', 'ic'], {
     env: { ...process.env, GOVERNOR: GROUP2_GOVERNOR, DEPLOYER_PEM_FILE: pemFile }, stdio: 'inherit' });
-  if (result.status !== 0) throw new Error('Original Group 2 photo-key attestation/preservation failed; no replay');
+  if (result.status !== 0) throw new Error(`Original Group ${NUM} photo-key attestation/preservation failed; no replay`);
 };
 const report = { groupId: GROUP, revision, release: process.env.GITHUB_SHA, authorizesOpening: false, services: publicObservations };
 writeFileSync(join(reportDirectory, 'upgrade-report.json'), JSON.stringify(report, null, 2));
 if (action === 'check') {
   keyGate('before');
-  console.log('All thirteen g2 services checked; no upgrades or opening performed.');
+  console.log(`All thirteen ${GROUP} services checked; no upgrades or opening performed.`);
 } else if (action === 'upgrade') {
   const repo = process.env.GITHUB_REPOSITORY, release = process.env.GITHUB_SHA;
   if (!repo || !release || !/^[a-f0-9]{40}$/.test(release)) throw new Error('GitHub release binding required');
@@ -108,7 +108,7 @@ if (action === 'check') {
   let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
   const binding = { release, governor: GROUP2_GOVERNOR, provisionHash: hash(provision), inventory: plans.map(({ file, ...p }) => p) };
   if (journal?.complete === true && JSON.stringify(journal.binding) !== JSON.stringify(binding)) {
-    throw new Error('Group 2 was already upgraded by an earlier release, so nothing was changed. To make saved settings take effect, choose action "reload" with confirmation RELOAD GROUP 2 SETTINGS');
+    throw new Error(`Group ${NUM} was already upgraded by an earlier release, so nothing was changed. To make saved settings take effect, choose action "reload" with confirmation RELOAD GROUP ${NUM} SETTINGS`);
   }
   if (journal) validateUpgradeJournal(journal, binding);
   const persist = () => {
@@ -146,7 +146,7 @@ if (action === 'check') {
   for (const plan of plans) verifyUpgradeStatus(plan, await observe(plan), GROUP2_GOVERNOR, plan.newHash);
   if (await closed() !== revision) throw new Error('Router changed during final verification');
   journal.complete = true; persist();
-  console.log('Thirteen Group 2 modules verified; settings and photo key preserved. Group 2 remains closed.');
+  console.log(`Thirteen Group ${NUM} modules verified; settings and photo key preserved. Group ${NUM} remains closed.`);
 }
 if (action === 'reload') {
   // Same-module reload: Motoko services read their service settings into
@@ -208,5 +208,5 @@ if (action === 'reload') {
   keyGate('after');
   if (await closed() !== revision) throw new Error('Router changed during final verification');
   journal.complete = true; persist();
-  console.log('Thirteen Group 2 services reloaded with identical modules; settings now active, fingerprints unchanged. Group 2 remains closed.');
+  console.log(`Thirteen Group ${NUM} services reloaded with identical modules; settings now active, fingerprints unchanged. Group ${NUM} remains closed.`);
 }
