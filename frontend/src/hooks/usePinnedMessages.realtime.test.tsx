@@ -90,7 +90,7 @@ describe.runIf(!supabaseMode)("usePinnedMessages ICP polling", () => {
 
   it("maps canister pins, polls, and never opens Supabase realtime", async () => {
     renderHook(() => usePinnedMessages("team", "team-1"));
-    expect(queryOptions.current.refetchInterval).toBe(3_000);
+    expect(queryOptions.current.refetchInterval).toBe(15_000);
 
     await expect(queryOptions.current.queryFn()).resolves.toEqual([{
       id: "pin-1",

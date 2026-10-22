@@ -1,3 +1,10 @@
+## Approved multi-group recovery — 22 October 2026
+- [x] First shared-layer recovery batch: one refreshed session for list ownership; bounded per-query account/target snapshots; generation-safe hydration/writes; sign-out memory/key/dispatch cleanup; exact-ID chat listing deduplication. Real-browser IndexedDB roundtrip/isolation pass; preview build OK; full ICP 5775 passed/760 skipped and Supabase 6177 passed/358 skipped.
+- [x] Default-chat audit: backend create is not cross-device idempotent; preserve distinct histories and require explicit default identity/provisioning contract rather than name-based cleanup. Evidence in docs/multi-group-recovery-status.md.
+- [ ] Progressive page/section loading and connected default-chat contract recovery: waiting on the approved signed-in baseline/expected-data gate before further behavior changes or selecting canister upgrades; no claim of restored production timing.
+- [ ] Signed-in data inventory and cold/warm timing acceptance for both groups, Peanut, Group 2 U9/chats, comments and navigation: blocked by unavailable Internet Identity session in this remote sandbox; CLI link requires a browser on the same machine.
+- [ ] Published/native release acceptance: requires signed-in evidence and explicit publication/upgrade approval.
+
 - [x] Home missing-asset error and latency: absent photos in non-owning groups return null without hiding rejected requests; club/team validation runs concurrently and ICP sections reveal independently. 60 focused tests pass; preview build OK. Public /index redirects to /auth without page errors.
 - [ ] Verify signed-in Home opening and timing for both groups: blocked by unavailable Internet Identity session.
 - [x] Gallery comments: known-club album reads/writes, direct comment refresh, acknowledged IDs update the visible feed/device snapshot, same-text comments remain distinct, and failed sends appear inside the sheet with the draft restored. 34 focused tests pass across both modes; preview build OK.

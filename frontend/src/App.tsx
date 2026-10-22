@@ -274,8 +274,19 @@ if (typeof window !== "undefined") {
 // canister reads refresh it (only when an Internet Identity session exists).
 export const appCacheReady: Promise<void> = import("@/lib/icpQueryCachePersist")
   .then(async (m) => {
-    await m.restoreIcpQueryCache(queryClient, true);
-    m.startIcpQueryCachePersist(queryClient, true);
+    const { getActiveIcpTarget } = await import('@/live/targetRegistry');
+    const scope = () => {
+      try {
+        const raw = localStorage.getItem('ignite_icp_internet_identity_session');
+        const principal = raw ? JSON.parse(raw).principal : null;
+        if (typeof principal !== 'string') return null;
+        const target = getActiveIcpTarget();
+        return JSON.stringify([principal, target.host, target.networkKind,
+          Object.entries(target.canisterIds ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
+      } catch { return null; }
+    };
+    await m.restoreIcpQueryCache(queryClient, true, 400, scope);
+    m.startIcpQueryCachePersist(queryClient, true, scope);
   })
   .catch(() => undefined);
 
