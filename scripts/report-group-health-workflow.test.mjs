@@ -11,7 +11,7 @@ test('scheduled reporting is frequent enough for the two-hour health window', ()
 
 test('reporting is governor-signed, serialized and never leaves the key behind', () => {
   assert.match(workflow, /secrets\.DEPLOYER_PEM/);
-  assert.match(workflow, /group: ignite-mainnet-governor-deployment/);
+  assert.match(workflow, /group: ignite-group-health-report/);
   assert.ok(workflow.indexOf('rm -f "$RUNNER_TEMP/operator.pem"') > workflow.indexOf('report-group-health.ts'));
   assert.match(workflow, /if: always\(\)/);
 });
