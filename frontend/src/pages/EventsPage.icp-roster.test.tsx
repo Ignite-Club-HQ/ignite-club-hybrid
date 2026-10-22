@@ -23,14 +23,17 @@ const competitionMocks = vi.hoisted(() => ({
   listLiveMyNewsCompetitions: vi.fn(),
 }));
 const getLiveTeamMock = vi.fn();
+const scheduleMocks = vi.hoisted(() => ({ events: vi.fn(), grants: vi.fn() }));
+vi.mock('@/live/contentRouting', () => ({ readContentInScope: (ctx: unknown, _feature: unknown, _scope: unknown, read: (ctx: unknown) => unknown) => read(ctx) }));
+vi.mock('@/live/membershipRouting', () => ({ readMembershipInScope: (ctx: unknown, _scope: unknown, read: (ctx: unknown) => unknown) => read(ctx) }));
 vi.mock("@/live/features/events", () => ({
   getLiveAccountRosterScope: (...args: unknown[]) => getLiveAccountRosterScopeMock(...args),
-  listLiveEvents: async () => [],
+  listLiveEvents: (...args: unknown[]) => scheduleMocks.events(...args),
   listLiveEventDutyTeams: async () => [],
 }));
 
 vi.mock("@/live/features/membership", () => ({
-  getLiveMyRoleGrants: async () => [],
+  getLiveMyRoleGrants: () => scheduleMocks.grants(),
 }));
 
 vi.mock("@/live/features/club", () => ({
@@ -145,6 +148,9 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  localStorage.clear();
+  scheduleMocks.events.mockReset(); scheduleMocks.events.mockResolvedValue([]);
+  scheduleMocks.grants.mockReset(); scheduleMocks.grants.mockResolvedValue([]);
   leagueDiscoveryMock.mockReset();
   leagueDiscoveryMock.mockResolvedValue([]);
   eventsRoutedToIcp = false;
@@ -165,6 +171,31 @@ beforeEach(() => {
 });
 
 describe("EventsPage roster-derived team scope routing", () => {
+  it('shows a ready public fixture while member club events are still pending', async () => {
+    eventsRoutedToIcp = true;
+    scheduleMocks.grants.mockResolvedValue([{ club: ['member-club'], team: [], role: 'club_member' }]);
+    let finish: ((value: unknown[]) => void) | undefined;
+    scheduleMocks.events.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    competitionMocks.listLivePublicCompetitions.mockResolvedValue([{ id: 'foreign-cup', club_id: 'foreign-host', name: 'Foreign Cup', status: 'open', visibility: 'public' }]);
+    competitionMocks.listLiveCompetitionMatches.mockResolvedValue([{ id: 'foreign-match', home_team: 'home', away_team: 'away', scheduled_at_ms: [BigInt(Date.now() + 86400000)], status: 'scheduled', venue: [] }]);
+    const client = renderPage();
+    expect(await screen.findByText('Foreign Cup', { exact: false })).toBeInTheDocument();
+    await waitFor(() => expect(scheduleMocks.events).toHaveBeenCalledWith(expect.anything(), 'member-club', null));
+    const members = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events' && query.state.fetchStatus === 'fetching');
+    expect(members?.state.fetchStatus).toBe('fetching');
+    expect(competitionMocks.listLiveCompetitionMatches).toHaveBeenCalledWith(expect.anything(), 'foreign-cup');
+    finish?.([]);
+    await waitFor(() => expect(members?.state.fetchStatus).toBe('idle'));
+  });
+  it('completes the member schedule without waiting for slow foreign-host discovery', async () => {
+    eventsRoutedToIcp = true;
+    let finish: ((value: unknown[]) => void) | undefined;
+    competitionMocks.listLivePublicCompetitions.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const client = renderPage();
+    await waitFor(() => expect(client.getQueryCache().getAll().some(query => query.queryKey[0] === 'events' && query.state.status === 'success')).toBe(true));
+    expect(client.getQueryCache().getAll().find(query => query.queryKey[0] === 'icp-schedule-fixtures')?.state.fetchStatus).toBe('fetching');
+    finish?.([]);
+  });
   it('loads ordinary club scope while independent league discovery is still pending', async () => {
     eventsRoutedToIcp = true;
     let finish: ((rows: unknown[]) => void) | undefined;

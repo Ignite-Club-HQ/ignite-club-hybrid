@@ -484,17 +484,17 @@ export async function liveClubWhoami(ctx: FeatureBackendContext) {
  */
 export async function softDeleteLiveTeam(ctx: FeatureBackendContext, teamId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.soft_delete_team(teamId), "Delete team");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.soft_delete_team(teamId), "Delete team"));
 }
 
 export async function restoreLiveTeam(ctx: FeatureBackendContext, teamId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.restore_team(teamId), "Restore team");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.restore_team(teamId), "Restore team"));
 }
 
 export async function deleteLiveTeamPermanent(ctx: FeatureBackendContext, teamId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.delete_team_permanent(teamId), "Permanently delete team");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.delete_team_permanent(teamId), "Permanently delete team"));
 }
 
 /**
@@ -742,7 +742,7 @@ export async function linkLiveGuardian(
   guardian: Parameters<ClubDomainActor["link_guardian"]>[1],
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.link_guardian(childId, guardian), "Link guardian");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.link_guardian(childId, guardian), "Link guardian"));
 }
 
 export async function unlinkLiveGuardian(
@@ -751,7 +751,7 @@ export async function unlinkLiveGuardian(
   guardian: Parameters<ClubDomainActor["unlink_guardian"]>[1],
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.unlink_guardian(childId, guardian), "Unlink guardian");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.unlink_guardian(childId, guardian), "Unlink guardian"));
 }
 
 /**
@@ -784,10 +784,10 @@ export async function adminLinkLiveChildToParent(
   parent: Parameters<ClubDomainActor["admin_link_child_to_parent"]>[1],
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  return afterMembershipAcknowledgement(unwrapCandid(
     actor.admin_link_child_to_parent(childId, parent),
     "Link child to parent",
-  );
+  ));
 }
 
 export async function createLiveChildForParentOnTeam(
@@ -797,10 +797,10 @@ export async function createLiveChildForParentOnTeam(
   parent: Parameters<ClubDomainActor["create_child_for_parent_on_team"]>[2],
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  return afterMembershipAcknowledgement(unwrapCandid(
     actor.create_child_for_parent_on_team(clubId, teamId, parent),
     "Create child for parent",
-  );
+  ));
 }
 
 /**
@@ -814,10 +814,10 @@ export async function moveLiveMemberToTeam(
   toTeamId: string,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  return afterMembershipAcknowledgement(unwrapCandid(
     actor.move_member_to_team(clubId, member, candidOpt(fromTeamId), toTeamId),
     "Move member to team",
-  );
+  ));
 }
 
 export async function moveLiveChildToTeam(
@@ -827,10 +827,10 @@ export async function moveLiveChildToTeam(
   toTeamId: string,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  return afterMembershipAcknowledgement(unwrapCandid(
     actor.move_child_to_team(childId, candidOpt(fromTeamId), toTeamId),
     "Move child to team",
-  );
+  ));
 }
 
 export async function bulkAddLiveTeamMembers(
@@ -841,10 +841,10 @@ export async function bulkAddLiveTeamMembers(
   members: Parameters<ClubDomainActor["bulk_add_team_members"]>[3],
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  return afterMembershipAcknowledgement(unwrapCandid(
     actor.bulk_add_team_members(clubId, teamId, role, members),
     "Bulk add team members",
-  );
+  ));
 }
 
 /**
@@ -1213,12 +1213,12 @@ export async function acceptLiveTeamInviteLink(ctx: FeatureBackendContext, token
 
 export async function removeLiveMember(ctx: FeatureBackendContext, clubId: string, user: Principal) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.remove_member(clubId, user), "Remove member");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.remove_member(clubId, user), "Remove member"));
 }
 
 export async function restoreLiveMember(ctx: FeatureBackendContext, clubId: string, user: Principal) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.restore_member(clubId, user), "Restore member");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.restore_member(clubId, user), "Restore member"));
 }
 
 export async function listLiveRemovedMembers(ctx: FeatureBackendContext, clubId: string) {
@@ -1277,10 +1277,10 @@ export async function createLiveChildForParentInClub(
   parent: Principal,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  return afterMembershipAcknowledgement(unwrapCandid(
     actor.create_child_for_parent_in_club(clubId, parent),
     "Create child for parent in club",
-  );
+  ));
 }
 
 /**
@@ -1462,11 +1462,11 @@ export async function createMyLiveChild(ctx: FeatureBackendContext) {
 }
 export async function deleteMyLiveChild(ctx: FeatureBackendContext, childId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.delete_own_child(childId), "Remove child");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.delete_own_child(childId), "Remove child"));
 }
 export async function setMyLiveChildTeam(ctx: FeatureBackendContext, childId: string, teamId: string, assigned: boolean) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.set_own_child_team(childId, teamId, assigned), "Update child team");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.set_own_child_team(childId, teamId, assigned), "Update child team"));
 }
 export async function listLiveChildGuardians(ctx: FeatureBackendContext, childId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
@@ -1474,7 +1474,7 @@ export async function listLiveChildGuardians(ctx: FeatureBackendContext, childId
 }
 export async function setMyLiveChildGuardian(ctx: FeatureBackendContext, childId: string, user: Principal, linked: boolean) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.set_own_child_guardian(childId, user, linked), "Update guardian");
+  return afterMembershipAcknowledgement(unwrapCandid(actor.set_own_child_guardian(childId, user, linked), "Update guardian"));
 }
 
 /** Competition / mini-league audience for a news post (null clears it). */

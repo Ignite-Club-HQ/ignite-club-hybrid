@@ -22,6 +22,10 @@ describe('bounded ICP snapshots', () => {
   it('respects explicit persistence opt-out', () => {
     expect(result(['private'], ['clubs'], { persist: false })).toBeNull();
   });
+  it('never persists incomplete fixture inventories but retains complete ones', () => {
+    expect(result({ events: [{ id: 'fixture' }], incomplete: true }, ['icp-schedule-fixtures'])).toBeNull();
+    expect(result({ events: [{ id: 'fixture' }], incomplete: false }, ['icp-schedule-fixtures'])).not.toBeNull();
+  });
   it('bounds individual strings and traversal breadth', () => {
     expect(result('x'.repeat(128 * 1024))).toBeNull();
     expect(result(Array.from({ length: 15000 }, () => 1))).toBeNull();
