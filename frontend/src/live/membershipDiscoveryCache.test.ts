@@ -18,6 +18,7 @@ describe('shared membership discovery', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['my-chat-groups-with-messages'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['user-memberships-for-events'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['icp-schedule-fixtures'] });
     clearMembershipDiscovery();
     expect(client.getQueryData(['icp-membership-discovery', 'account-target'])).toBeUndefined();
     client.clear();

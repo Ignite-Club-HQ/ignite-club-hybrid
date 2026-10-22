@@ -54,6 +54,10 @@ async function transaction<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore)
 /** Bounded traversal excludes keys/URLs/class instances and oversized results. */
 export function snapshotQuery(query: Query): { snapshot: Snapshot; bytes: number } | null {
   if (query.state.status !== 'success' || query.state.data === undefined || query.meta?.persist === false) return null;
+  // Progressive aggregate replies remain usable in memory, not as complete
+  // offline inventories (including successful-but-partial fixture discovery).
+  if (typeof query.state.data === 'object' && query.state.data !== null &&
+    'incomplete' in query.state.data && query.state.data.incomplete === true) return null;
   if (SKIP_KEY.test(query.queryHash)) return null;
   let nodes = 0; let bytes = 0;
   const visit = (value: unknown, depth = 0): boolean => {
