@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ active: true, dispatch: vi.fn() }));
+const state = vi.hoisted(() => ({ active: true, dispatch: vi.fn(), activation: vi.fn() }));
 vi.mock('./groupActivation', () => ({ SHIPPED_GATES: {}, activationStatus: () => ({ active: state.active }) }));
-vi.mock('./generalActivation', () => ({ routingActive: async () => state.active, generalRoutingStatus: async () => ({ active: state.active, missing: [] }), cachedGeneralRoutingActive: () => state.active, clearGeneralRoutingCache: () => {} }));
-import { createContentReader } from './contentRouting';
+vi.mock('./generalActivation', () => ({ routingActive: state.activation, generalRoutingStatus: async () => ({ active: state.active, missing: [] }), cachedGeneralRoutingActive: () => state.active, clearGeneralRoutingCache: () => {} }));
+vi.mock('./featureRouter', () => ({ withFeatureBackend: state.dispatch }));
+import { createContentReader, readContentInScope as productionRead } from './contentRouting';
 const readContentInScope = createContentReader(() => state.active, async () => state.dispatch);
 describe('club content routing', () => {
   beforeEach(() => { state.active = true; state.dispatch.mockReset(); });
@@ -29,5 +30,12 @@ describe('club content routing', () => {
     const reader = createContentReader(active, async () => state.dispatch);
     expect(await reader(context, 'messaging', { clubId: 'group-2-test' }, async ctx => ctx.target.alias)).toBe('group-2');
     expect(active).toHaveBeenCalledWith(context);
+  });
+  it('the production reader routes Group 2 with its caller context', async () => {
+    const context = { target: { alias: 'shared' } } as never;
+    state.activation.mockImplementation(async ctx => ctx === context);
+    state.dispatch.mockImplementation(async (_feature, providers) => providers.icp({ target: { alias: 'group-2' } }));
+    expect(await productionRead(context, 'messaging', { clubId: 'group-2-test' }, async ctx => ctx.target.alias)).toBe('group-2');
+    expect(state.activation).toHaveBeenCalledWith(context);
   });
 });

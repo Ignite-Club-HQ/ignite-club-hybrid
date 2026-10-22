@@ -15,16 +15,14 @@ describe('default club chat recovery', () => {
     expect(mocks.create).toHaveBeenCalledTimes(3);
   });
   it('shares concurrent setup and creates all three chats concurrently', async () => {
-    let finish: (() => void) | undefined;
-    mocks.create.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    const finishes: Array<() => void> = [];
+    mocks.create.mockImplementation(() => new Promise<void>(resolve => { finishes.push(resolve); }));
     const first = ensureLiveDefaultClubChats(ctx, 'concurrent');
     const second = ensureLiveDefaultClubChats(ctx, 'concurrent');
     await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(3));
-    // Resolve all outstanding writes, without waiting for one to start another.
-    mocks.create.mock.results.forEach(result => { void result; });
-    // Use independent resolvers for this test via settled follow-up below.
     expect(mocks.list).toHaveBeenCalledTimes(1);
-    void first; void second; void finish;
+    finishes.forEach(finish => finish());
+    expect(await Promise.all([first, second])).toEqual([[], []]);
   });
   it('retries a failed membership top-up instead of marking the club synced', async () => {
     mocks.list.mockResolvedValue(DEFAULT_CLUB_CHATS.map((def, i) => ({ name: def.name, conversationId: `chat-${i}`, teamId: null })));
