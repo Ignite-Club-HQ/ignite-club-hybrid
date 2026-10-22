@@ -1175,6 +1175,38 @@ fn assign_group_record(club_id: String, target_alias: String, expected_revision:
 mod tests {
     use super::*;
     #[test]
+    fn routing_approval_is_governor_only_revision_bound_and_does_not_move_revisions() {
+        let operator = Principal::from_slice(&[240, 1]);
+        init(Init { governor: operator });
+        let mut g = groups::tests::group("approval-g", 0);
+        g.target_alias = "approval-test".into();
+        save_group(&g);
+        let subnet = Principal::from_slice(&[241, 1]);
+        let placement = GroupPlacement { group_id: g.id.clone(), deployment_id: "mainnet".into(), deployment_revision: 1,
+            host: "https://icp-api.io".into(), network_kind: "public_mainnet".into(), primary_subnet: subnet,
+            approved_subnets: vec![subnet], additional_subnets_enabled: false,
+            domains: g.domains.iter().map(|d| discovery::DomainPlacement { domain: d.domain.clone(), canister: d.canister, subnet }).collect() };
+        GROUP_PLACEMENTS.with(|m| m.borrow_mut().insert(g.id.as_bytes().to_vec(), encode(&placement)));
+        let rev = configuration_revision();
+        let assignments = current_revision();
+        let approval = RoutingApproval { target_alias: g.target_alias.clone(), configuration_revision: rev,
+            approved_configuration_sha256: "c".repeat(64), removal_wiring_group_ids: vec![g.id.clone()],
+            removal_checked_at_ms: 1, evidence_sha256: "d".repeat(64) };
+        assert!(record_routing_approval_for(Principal::from_slice(&[242, 1]), approval.clone(), rev).is_err());
+        assert!(record_routing_approval_for(operator, approval.clone(), rev + 1).is_err());
+        assert_eq!(record_routing_approval_for(operator, approval.clone(), rev).unwrap(), approval);
+        assert_eq!(configuration_revision(), rev);
+        assert_eq!(current_revision(), assignments);
+        let stored = ROUTING_APPROVALS.with(|m| m.borrow().get(&g.target_alias).map(|b| decode::<RoutingApproval>(&b)));
+        assert_eq!(stored, Some(approval.clone()));
+        // A later configuration change leaves the stale approval in place; clients compare revisions and fail closed.
+        stop_group_placements_for(operator, g.id.clone(), g.target_alias.clone(), current_revision()).unwrap();
+        assert_eq!(configuration_revision(), rev + 1);
+        assert!(record_routing_approval_for(operator, approval, rev).is_err());
+        post_upgrade();
+        assert!(ROUTING_APPROVALS.with(|m| m.borrow().contains_key(&g.target_alias)));
+    }
+    #[test]
     fn consecutive_creator_reservations_preserve_configuration_and_upgrade() {
         let operator = Principal::from_slice(&[230, 1]);
         init(Init { governor: operator });
