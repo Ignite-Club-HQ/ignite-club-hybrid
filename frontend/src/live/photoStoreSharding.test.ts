@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- untyped Candid/Supabase payloads at this boundary */
+ 
 import { describe, expect, it } from "vitest";
 import { listBlobStoreCanisterIds, listBlobStoreKeys, orderBlobStoresForPath } from "./mediaStorage";
 import { parseIcpBlobUrl } from "./mediaDecrypt";

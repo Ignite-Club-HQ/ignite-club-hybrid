@@ -16,5 +16,5 @@ export function scheduleTargetScope(target: { chat_type: string; club_id?: strin
   throw new Error('Scheduled message scope required');
 }
 /** Merges caller-authorized results without hiding any failed group. */
-export const acrossLists: ClubScope = { everyGroup: true, merge: (parts: any[][]) => [...new Map(parts.flat().map(row => [row.id ?? JSON.stringify(row, (_, v) => typeof v === 'bigint' ? String(v) : v), row])).values()] };
+export const acrossLists: ClubScope = { everyGroup: true, merge: (parts: unknown[]) => [...new Map((parts as Array<Array<{ id?: unknown }>>).flat().map(row => [row.id ?? JSON.stringify(row, (_, v) => typeof v === 'bigint' ? String(v) : v), row])).values()] };
 export const acrossVoid: ClubScope = { everyGroup: true, merge: () => undefined };

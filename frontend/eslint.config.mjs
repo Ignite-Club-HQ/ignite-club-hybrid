@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "dist-live/**", "node_modules/**", ".vitest-cache/**"],
+    ignores: ["dist/**", "dist-live/**", "node_modules/**", ".vitest-cache/**", "src/live/generated/club_domain/**"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
@@ -32,6 +32,14 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
       ],
     },
+  },
+  {
+    files: ["src/**/*.test.{ts,tsx}", "src/**/*.rehearsal.test.{ts,tsx}"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+  {
+    files: ["src/**/*.mjs"],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
   {
     files: ["scripts/**/*.mjs", "*.config.ts", "*.config.mjs"],

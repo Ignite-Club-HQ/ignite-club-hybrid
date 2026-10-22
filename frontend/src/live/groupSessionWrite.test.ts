@@ -86,8 +86,8 @@ describe('routed group writes', () => {
 describe('remaining feature saves (roadmap 51)', () => {
   it('points, mini-league, competition and news saves pin the club group and only retry safe writes', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
-    const seen: string[] = []; const orig = s.writeClub;
-    (s as { writeClub: typeof orig }).writeClub = (async (club, domain, key, fn, attempts) => { seen.push(`${club}:${domain}:${attempts ?? 'd'}`); return 'ok'; }) as typeof orig;
+    const seen: string[] = []; const _orig = s.writeClub;
+    (s as { writeClub: typeof _orig }).writeClub = (async (club, domain, key, fn, attempts) => { seen.push(`${club}:${domain}:${attempts ?? 'd'}`); return 'ok'; }) as typeof _orig;
     const w = groupWriteFeatures(s);
     await w.awardPoints('club-b', 'k', {} as never, 'a', 's', 1, 'd');
     await w.createMiniLeague('club-b', 'k', {} as never);

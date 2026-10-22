@@ -51,7 +51,9 @@ export async function mainnetInstallCalls(host: string, identity: Identity): Pro
   const agent = await HttpAgent.create({ host, identity, shouldFetchRootKey: false });
   const owner = identity.getPrincipal();
   if (owner.isAnonymous()) throw new Error('Authenticated operator identity required');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
   const ledger = Actor.createActor(ledgerIdl as never, { agent, canisterId: CYCLES_LEDGER }) as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
   const mgmt = (id: string) => Actor.createActor(managementIdl as never, { agent, canisterId: Principal.fromText('aaaaa-aa'), effectiveCanisterId: Principal.fromText(id) }) as any;
   const pid = (id: string) => Principal.fromText(id);
   return {
@@ -84,6 +86,7 @@ export async function mainnetInstallCalls(host: string, identity: Identity): Pro
         wasm_module_hash: sha(wasm), arg, sender_canister_version: [] });
     },
     sha256Hex: async b => hex(sha(b)),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
     cyclesOf: async id => (Actor.createActor(cyclesIdl as never, { agent, canisterId: id }) as any).cycles_balance(),
   };
 }

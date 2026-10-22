@@ -54,7 +54,7 @@ export type ClubScope = ({ clubId: string } | { photoId: string } | { galleryCar
   /** Spans the caller's clubs (inbox, unread counts, "my events"): asked of
    * the shared canisters and every group the caller belongs to at the same
    * time, then combined with merge. Reads only. */
-  | { everyGroup: true; merge: (parts: any[]) => any }
+  | { everyGroup: true; merge: (parts: unknown[]) => unknown }
 ) & { writeKey?: string; attempts?: number; /** internal: club not moved, use shared canisters */ legacy?: true };
 /** Combine list results from several groups (one array per group). */
 export const mergeLists = <T,>(parts: T[][]): T[] => parts.flat();

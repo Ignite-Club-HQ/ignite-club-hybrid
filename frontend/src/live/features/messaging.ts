@@ -89,11 +89,13 @@ export async function listLiveMessagesPage(
 // predates open_conversation (fall back to separate calls).
 let openConversationSupported: boolean | null = null;
 const OPEN_BUNDLE_TTL_MS = 10_000;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
 const openBundleCache = new Map<string, { at: number; reactions: LiveReaction[] | null; pins: any[] | null }>();
 function takeBundled<K extends "reactions" | "pins">(conversationId: string, key: K) {
   const entry = openBundleCache.get(conversationId);
   if (!entry || Date.now() - entry.at > OPEN_BUNDLE_TTL_MS) return null;
   const value = entry[key];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
   entry[key] = null as any;
   return value;
 }
@@ -108,14 +110,17 @@ export async function listLiveLatestMessagesPage(
   if (before === null && openConversationSupported !== false) {
     try {
       const bundle = await unwrapCandid(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
         (actor as any).open_conversation(conversationId, limit),
         "Open conversation",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
       ) as any;
       openConversationSupported = true;
       const pins = Array.isArray(bundle.pins) && bundle.pins.length > 0 ? bundle.pins[0] : null;
       openBundleCache.set(conversationId, {
         at: Date.now(),
         reactions: bundle.reactions as LiveReaction[],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
         pins: pins as any[] | null,
       });
       return bundle.page;
