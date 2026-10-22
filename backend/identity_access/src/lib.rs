@@ -551,7 +551,16 @@ fn disable_membership_directory()->Outcome<()>{require_governor(&state(),ic_cdk:
 /// Only the exact configured source may notify; never accepts raw edges.
 #[ic_cdk::update]
 fn invalidate_membership_directory_source(binding:membership_transport::SourceBinding,revision:candid::Nat)->membership_transport::UnitReply {
-    let result=(||->Outcome<()>{let mut c=directory_config()?;c.invalidate(ic_cdk::api::canister_self(),ic_cdk::api::msg_caller(),&binding,membership_transport::number(&revision)?)?;save_directory_config(&c);Ok(())})();
+    let result=(||->Outcome<()>{
+        let mut c=directory_config()?;let revision=membership_transport::number(&revision)?;
+        // Validate against a local config copy first. Coordinator validation
+        // precedes all writes; no await can interleave the two durable saves.
+        c.invalidate(ic_cdk::api::canister_self(),ic_cdk::api::msg_caller(),&binding,revision)?;
+        let digest:[u8;32]=binding.inventory_digest.as_slice().try_into().map_err(|_|"Invalid directory inventory digest")?;
+        let observed=membership_materializer::Binding{authority:ic_cdk::api::msg_caller(),generation:binding.generation,revision:c.pending.get(&binding.group).copied().unwrap_or(revision),inventory_digest:digest};
+        DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().observe_invalidation(&binding.group,&observed))?;
+        save_directory_config(&c);Ok(())
+    })();
     match result{Ok(())=>membership_transport::UnitReply::Ok,Err(e)=>membership_transport::UnitReply::Err(e)}
 }
 async fn directory_source_status(config:&membership_runtime::Config,source:&str,authority:Principal)->Outcome<(u64,u64,bool)>{
@@ -560,7 +569,11 @@ async fn directory_source_status(config:&membership_runtime::Config,source:&str,
     recheck_directory(config)?;
     let status:membership_transport::Reply<membership_transport::Status>=reply.candid().map_err(|_|"Invalid directory source status reply")?;
     let result=status.result()?.checked()?;
-    directory_config()?.check_watermark(source,result.0)?;Ok(result)
+    directory_config()?.check_watermark(source,result.0)?;
+    let digest:[u8;32]=config.inventory_digest.as_slice().try_into().map_err(|_|"Invalid directory inventory digest")?;
+    let observed=membership_materializer::Binding{authority,generation:config.generation,revision:result.0,inventory_digest:digest};
+    DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().observe_invalidation(source,&observed))?;
+    Ok(result)
 }
 /// One exact source and one bounded unit per invocation; retries preserve
 /// requests/publications. Governor-only until live worker acceptance passes.

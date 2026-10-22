@@ -118,12 +118,31 @@ impl<M:Memory+Clone> Coordinator<M>{
     pub fn acknowledge(&mut self,source:&str,binding:&Binding,readback:u64)->Outcome<()>{
         let b=self.build(source).ok_or("Source missing")?;
         if !b.published||&b.binding!=binding{return Err("Unknown directory publication".into());}
+        self.check_observed_watermark(source,binding)?;
         self.journal.acknowledge(source,binding,readback)
+    }
+    /// An authenticated notification blocks private reads immediately, before
+    /// the asynchronous worker starts a replacement. Does not acknowledge,
+    /// mutate the publication journal or infer unseen source freshness.
+    pub fn observe_invalidation(&mut self,source:&str,binding:&Binding)->Outcome<()>{
+        let inventory=self.inventory()?;
+        if binding.revision==0||binding.generation!=inventory.generation||binding.inventory_digest!=inventory.digest||!inventory.sources.iter().any(|(id,authority)|id==source&&*authority==binding.authority){return Err("Exact observed source binding required".into());}
+        let key=format!("watermark:{source}");
+        let prior=self.rows.get(&key).map(|b|decode::<Binding>(&b)).filter(|b|b.generation==binding.generation&&b.inventory_digest==binding.inventory_digest&&b.authority==binding.authority);
+        if prior.is_none_or(|b|binding.revision>b.revision){self.rows.insert(key,encode(binding));}
+        Ok(())
+    }
+    fn check_observed_watermark(&self,source:&str,binding:&Binding)->Outcome<()>{
+        if let Some(bytes)=self.rows.get(&format!("watermark:{source}")){
+            let observed:Binding=decode(&bytes);
+            if observed.generation==binding.generation&&observed.inventory_digest==binding.inventory_digest&&observed.authority==binding.authority&&observed.revision>binding.revision{return Err("Source superseded by observed invalidation".into());}
+        }Ok(())
     }
     pub fn sources(&self)->Outcome<Vec<Source>>{
         let inv=self.inventory()?;let mut out=vec![];
         for (id,authority) in inv.sources{
             let b=self.build(&id).ok_or("Directory source incomplete")?;
+            self.check_observed_watermark(&id,&b.binding)?;
             if b.binding.authority!=authority||b.binding.generation!=inv.generation||b.binding.inventory_digest!=inv.digest||!b.published||!b.indexed||self.journal.pending(&id)?{return Err("Directory source incomplete".into());}
             out.push(Source{id,binding:b.binding,complete:true,eligible_aliases:None});
         }Ok(out)
@@ -257,5 +276,18 @@ impl<M:Memory+Clone> Coordinator<M>{
         let (global,next)=c.private_page(&mut sessions,user,linked,1,next,1).unwrap();assert_eq!(global.rows[0].club,"global");assert_eq!(next,None);
         assert!(c.rows.get(&format!("subject:{}:g0",excluded.to_text())).is_none());
         c.begin("g1",a[1],2).unwrap();assert!(c.private_page(&mut sessions,user,viewer(user),1,None,2).is_err());
+    }
+    #[test]fn unrelated_notification_blocks_replay_before_worker_and_old_ack_cannot_clear_it(){
+        let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
+        finish(&mut c,"g0",a[0],1,vec![Edge::Club{id:"member".into(),deleted:false},Edge::Role{subject:user,club:Some("member".into())}]);finish(&mut c,"g1",a[1],1,vec![]);
+        let mut sessions=Sessions::open(manager.get(MemoryId::new(4)));let (_,next)=c.private_page(&mut sessions,user,viewer(user),1,None,1).unwrap();assert!(next.is_none());
+        let old=c.build("g1").unwrap().binding;let mut newer=old.clone();newer.revision=2;
+        c.observe_invalidation("g1",&newer).unwrap();c.observe_invalidation("g1",&old).unwrap();
+        assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());assert!(c.acknowledge("g1",&old,1).is_err());assert_eq!(c.build("g1").unwrap().binding.revision,1);
+        drop(c);let mut c=open(&manager);assert!(c.sources().is_err());finish(&mut c,"g1",a[1],2,vec![]);
+        let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,2).unwrap();assert_eq!(page.rows[0].club,"member");assert!(next.is_none());
+        let mut foreign=newer.clone();foreign.authority=a[0];foreign.revision=100;assert!(c.observe_invalidation("g1",&foreign).is_err());assert!(c.sources().is_ok());
+        foreign=newer;foreign.generation+=1;assert!(c.observe_invalidation("g1",&foreign).is_err());assert!(c.sources().is_ok());
     }
 }
