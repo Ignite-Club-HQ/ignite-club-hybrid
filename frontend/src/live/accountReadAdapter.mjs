@@ -8,10 +8,8 @@ export function isLoopbackRehearsalHost(host) {
   } catch { return false; }
 }
 
-/** Bind only exact-signature additive consensus twins from the real Candid
- * service. Keep writes/control-plane methods intact; never retry/fallback. */
-export function adaptLocalAccountReads(actor, service, host) {
-  if (!isLoopbackRehearsalHost(host)) throw new Error('Protected-read rehearsal requires a loopback host');
+/** Exact-signature additive consensus twins from the real Candid service. */
+function exactSignatureTwins(service, onIncompatible) {
   const fields = new Map(service._fields);
   const mapped = new Map();
   for (const [name, signature] of fields) {
@@ -21,10 +19,19 @@ export function adaptLocalAccountReads(actor, service, host) {
     if (!legacy) continue;
     const types = sig => JSON.stringify([sig.argTypes.map(t => t.display()), sig.retTypes.map(t => t.display())]);
     if (types(signature) !== types(legacy) || signature.annotations.includes('query') || signature.annotations.includes('composite_query')) {
-      throw new Error(`Incompatible protected read: ${name}`);
+      onIncompatible(name);
+      continue;
     }
     mapped.set(legacyName, name);
   }
+  return mapped;
+}
+
+/** Bind only exact-signature additive consensus twins from the real Candid
+ * service. Keep writes/control-plane methods intact; never retry/fallback. */
+export function adaptLocalAccountReads(actor, service, host) {
+  if (!isLoopbackRehearsalHost(host)) throw new Error('Protected-read rehearsal requires a loopback host');
+  const mapped = exactSignatureTwins(service, name => { throw new Error(`Incompatible protected read: ${name}`); });
   return new Proxy(actor, {
     get(target, property) {
       const protectedName = mapped.get(property);
@@ -35,6 +42,46 @@ export function adaptLocalAccountReads(actor, service, host) {
       }
       const value = Reflect.get(target, property);
       return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+const PROTECTED_READ_TRAP = /protected consensus account read/i;
+/** Canister-level capability memory: once a canister tells us a legacy query
+ * needs the protected consensus read, go straight to the twin next time.
+ * Keyed by canister + method; never holds user data, so sign-out need not
+ * clear it. */
+const protectedReadDecisions = new Set();
+
+/** Live groups run with account admission enabled, which makes legacy
+ * account-scoped queries trap with "Use protected consensus account read".
+ * This adapter keeps the fast legacy query everywhere it still works and,
+ * only when the canister itself refuses, retries that one call through its
+ * exact-signature `read_account_` consensus twin (an update call). Canisters
+ * without the gate never trap, so their behavior is unchanged. Methods
+ * without an exact twin propagate the original error — no guessing. */
+export function adaptRemoteAccountReads(actor, service, canisterId) {
+  const mapped = exactSignatureTwins(service, () => {});
+  if (mapped.size === 0 || typeof canisterId !== 'string' || !canisterId) return actor;
+  return new Proxy(actor, {
+    get(target, property) {
+      const protectedName = mapped.get(property);
+      const value = Reflect.get(target, property);
+      if (!protectedName || typeof value !== 'function') {
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+      const twin = Reflect.get(target, protectedName);
+      if (typeof twin !== 'function') return value.bind(target);
+      if (protectedReadDecisions.has(`${canisterId}|${property}`)) return twin.bind(target);
+      return async (...args) => {
+        try {
+          return await value.apply(target, args);
+        } catch (e) {
+          if (!PROTECTED_READ_TRAP.test(String((e && e.message) || e))) throw e;
+          protectedReadDecisions.add(`${canisterId}|${property}`);
+          return twin.apply(target, args);
+        }
+      };
     },
   });
 }
