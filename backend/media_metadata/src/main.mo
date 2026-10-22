@@ -19,6 +19,7 @@ import Text "mo:core/Text";
 import Int "mo:core/Int";
 import Time "mo:core/Time";
 import Types "types";
+import AssetPaging "AssetPaging";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -63,6 +64,8 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   var assets : [Types.Asset];
+  var assetPageIndex : AssetPaging.Index;
+  var assetPageBuildPosition : Nat;
   var capabilities : [Types.Capability];
   var reactions : [Types.Reaction];
   var comments : [Types.Comment];
@@ -129,6 +132,9 @@ persistent actor class Main(governorInit : Principal) = this {
     let inA = func(k : Text) : Bool = rootA.any(func(x) = x.id == k);
     mediaEvidenceRevision += 1;
     assets := assets.filter(func(x) = not (x.club_id == c));
+    // Physical replacement changes locators; rebuild in bounded operator batches.
+    assetPageIndex := Map.empty<Text, Map.Map<Text, Nat>>();
+    assetPageBuildPosition := 0;
     capabilities := capabilities.filter(func(x) = not (inA(x.asset_id)));
     reactions := reactions.filter(func(x) = not (inA(x.asset_id)));
     comments := comments.filter(func(x) = not (inA(x.asset_id)));
@@ -290,6 +296,8 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     mediaEvidenceRevision += 1;
     assets := assets.concat([asset]);
+    AssetPaging.add(assetPageIndex, asset, assets.size() - 1);
+    if (assetPageBuildPosition == assets.size() - 1) assetPageBuildPosition += 1;
     #Ok(asset)
   
     } finally { removalReceiver.leave(caller) };
@@ -456,6 +464,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (principal.equal(Principal.anonymous()) or not validRoleAssignment(role, club_id, team_id)) return #Err("Invalid role assignment");
     if (not roles.any(func(grant) = grant.user.equal(principal) and grant.role == role and grant.club_id == club_id and grant.team_id == team_id)) {
       if (roles.size() >= MAX_ROLES) return #Err("Role limit reached");
+      mediaEvidenceRevision += 1;
       roles := roles.concat([{ user = principal; role; club_id; team_id }]);
     };
     #Ok
@@ -471,6 +480,41 @@ persistent actor class Main(governorInit : Principal) = this {
     Array.filter<Types.Asset>(assets, func(a) {
       not a.deleted and a.club_id == club_id and canView(caller, a)
     })
+  };
+
+  // Backfill is explicit, governor-only and restart-safe; never run on page open.
+  public shared ({ caller }) func build_asset_page_index() : async { #Ok : { scanned : Nat; complete : Bool }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    let start = assetPageBuildPosition;
+    let end = Nat.min(start + 200, assets.size());
+    for (position in Nat.range(start, end)) AssetPaging.add(assetPageIndex, assets[position], position);
+    assetPageBuildPosition := end;
+    #Ok({ scanned = end - start; complete = end == assets.size() })
+  };
+
+  func assetPage(caller : Principal, club_id : Text, cursor : ?AssetPaging.Cursor, limit : Nat) : AssetPaging.Result {
+    if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
+    if (assetPageBuildPosition != assets.size()) return #Err("Media page index not ready");
+    // Resolve club-role visibility once, rather than scanning roles per asset.
+    let member = isClubMember(caller, club_id);
+    let gov = isGovernor(caller);
+    let now = nowMs();
+    AssetPaging.read(assetPageIndex, assets, club_id, mediaEvidenceRevision, cursor, limit,
+      func a = a.expires_at_ms > now and (a.owner.equal(caller) or gov or a.visibility == "public" or member))
+  };
+
+  public query ({ caller }) func list_assets_page(club_id : Text, cursor : ?AssetPaging.Cursor, limit : Nat) : async AssetPaging.Result {
+    denyLegacyAccountQuery();
+    assetPage(caller, club_id, cursor, limit)
+  };
+
+  public shared ({ caller }) func read_account_list_assets_page(club_id : Text, cursor : ?AssetPaging.Cursor, limit : Nat) : async AssetPaging.Result {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      await admitAccount(caller);
+      if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback");
+      assetPage(caller, club_id, cursor, limit)
+    } finally { removalReceiver.leave(caller) }
   };
 
   public shared ({ caller }) func add_reaction(asset_id : Text, kind : Text, created_at_ms : Nat64) : async { #Ok : Types.Reaction; #Err : Text } {

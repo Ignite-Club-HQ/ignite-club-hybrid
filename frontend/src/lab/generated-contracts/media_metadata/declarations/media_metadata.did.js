@@ -92,6 +92,17 @@ export const idlFactory = ({ IDL }) => {
     'reactions' : IDL.Vec(Reaction),
     'roles' : IDL.Vec(RoleGrant),
   });
+  const Cursor = IDL.Record({
+    'before' : IDL.Text,
+    'revision' : IDL.Nat,
+    'club_id' : IDL.Text,
+  });
+  const Page__1 = IDL.Record({
+    'next' : IDL.Opt(Cursor),
+    'assets' : IDL.Vec(Asset),
+    'scanned' : IDL.Nat,
+  });
+  const Result = IDL.Variant({ 'Ok' : Page__1, 'Err' : IDL.Text });
   const Request = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
@@ -130,6 +141,16 @@ export const idlFactory = ({ IDL }) => {
     'add_reaction' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Reaction, 'Err' : IDL.Text })],
+        [],
+      ),
+    'build_asset_page_index' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'scanned' : IDL.Nat, 'complete' : IDL.Bool }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
@@ -185,6 +206,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_assets' : IDL.Func([IDL.Text], [IDL.Vec(Asset)], ['query']),
+    'list_assets_page' : IDL.Func(
+        [IDL.Text, IDL.Opt(Cursor), IDL.Nat],
+        [Result],
+        ['query'],
+      ),
     'list_comments' : IDL.Func([IDL.Text], [IDL.Vec(Comment)], ['query']),
     'list_gallery_chat_cards' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -225,6 +251,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_account_list_assets' : IDL.Func([IDL.Text], [IDL.Vec(Asset)], []),
+    'read_account_list_assets_page' : IDL.Func(
+        [IDL.Text, IDL.Opt(Cursor), IDL.Nat],
+        [Result],
+        [],
+      ),
     'read_account_list_comments' : IDL.Func([IDL.Text], [IDL.Vec(Comment)], []),
     'read_account_list_gallery_chat_cards' : IDL.Func(
         [IDL.Text, IDL.Text],

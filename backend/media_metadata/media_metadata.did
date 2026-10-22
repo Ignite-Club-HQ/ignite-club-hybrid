@@ -16,6 +16,11 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
+type Result = 
+ variant {
+   Err: text;
+   Ok: Page__1;
+ };
 type Request = 
  record {
    account_id: text;
@@ -44,6 +49,12 @@ type Reaction =
    kind: text;
    user: principal;
  };
+type Page__1 = 
+ record {
+   assets: vec Asset;
+   next: opt Cursor;
+   scanned: nat;
+ };
 type Page = 
  record {
    next: opt nat;
@@ -67,6 +78,14 @@ type Main =
     (variant {
        Err: text;
        Ok: Reaction;
+     });
+   build_asset_page_index: () ->
+    (variant {
+       Err: text;
+       Ok: record {
+             complete: bool;
+             scanned: nat;
+           };
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
@@ -114,6 +133,8 @@ type Main =
        Ok: vec principal;
      }) query;
    list_assets: (club_id: text) -> (vec Asset) query;
+   list_assets_page: (club_id: text, cursor: opt Cursor, limit: nat) ->
+    (Result) query;
    list_comments: (asset_id: text) -> (vec Comment) query;
    list_gallery_chat_cards: (club_id: text, team_id: text) ->
     (vec GalleryChatCard) query;
@@ -141,6 +162,8 @@ type Main =
    read_account_get_gallery_chat_card: (card_id: text) ->
     (opt GalleryChatCard);
    read_account_list_assets: (club_id: text) -> (vec Asset);
+   read_account_list_assets_page: (club_id: text, cursor: opt Cursor, limit:
+    nat) -> (Result);
    read_account_list_comments: (asset_id: text) -> (vec Comment);
    read_account_list_gallery_chat_cards: (club_id: text, team_id: text) ->
     (vec GalleryChatCard);
@@ -230,6 +253,12 @@ type GalleryChatCard =
    team_id: text;
    updated_at_ms: nat64;
    uploader_id: principal;
+ };
+type Cursor = 
+ record {
+   before: text;
+   club_id: text;
+   revision: nat;
  };
 type Comment = 
  record {

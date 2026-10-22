@@ -7,6 +7,7 @@ import {
   type LiveMediaSource,
 } from "../mediaStorage";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
+import { readCompatibleMediaPage, type MediaPageCursor } from '../mediaPaging';
 
 /**
  * Media feature -> media_metadata canister.
@@ -137,6 +138,20 @@ export function liveAssetSource(asset: LiveAssetLocation): LiveMediaSource {
 export async function listLiveAssets(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   return actor.list_assets(clubId);
+}
+
+/** One genuinely bounded owning-canister page; never silently drain a gallery. */
+export async function listLiveAssetsPage(ctx: FeatureBackendContext, clubId: string, cursor: MediaPageCursor | null = null) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  if (typeof actor.list_assets_page !== 'function') {
+    if (cursor) throw new Error('Media paging method unavailable during continuation');
+    return { assets: await actor.list_assets(clubId), next: null, bounded: false };
+  }
+  return readCompatibleMediaPage(
+    () => actor.list_assets_page(clubId, cursor ? [cursor] : [], 60n),
+    () => actor.list_assets(clubId),
+    cursor === null,
+  );
 }
 
 export async function getLiveAsset(ctx: FeatureBackendContext, assetId: string) {

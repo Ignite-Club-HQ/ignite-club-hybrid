@@ -55,6 +55,11 @@ export interface Comment {
   'created_at_ms' : bigint,
   'asset_id' : string,
 }
+export interface Cursor {
+  'before' : string,
+  'revision' : bigint,
+  'club_id' : string,
+}
 export interface GalleryChatCard {
   'id' : string,
   'uploader_id' : Principal,
@@ -85,6 +90,11 @@ export interface Main {
   'add_reaction' : ActorMethod<
     [string, string, bigint],
     { 'Ok' : Reaction } |
+      { 'Err' : string }
+  >,
+  'build_asset_page_index' : ActorMethod<
+    [],
+    { 'Ok' : { 'scanned' : bigint, 'complete' : boolean } } |
       { 'Err' : string }
   >,
   /**
@@ -131,6 +141,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_assets' : ActorMethod<[string], Array<Asset>>,
+  'list_assets_page' : ActorMethod<[string, [] | [Cursor], bigint], Result>,
   'list_comments' : ActorMethod<[string], Array<Comment>>,
   'list_gallery_chat_cards' : ActorMethod<
     [string, string],
@@ -162,6 +173,10 @@ export interface Main {
     [] | [GalleryChatCard]
   >,
   'read_account_list_assets' : ActorMethod<[string], Array<Asset>>,
+  'read_account_list_assets_page' : ActorMethod<
+    [string, [] | [Cursor], bigint],
+    Result
+  >,
   'read_account_list_comments' : ActorMethod<[string], Array<Comment>>,
   'read_account_list_gallery_chat_cards' : ActorMethod<
     [string, string],
@@ -256,6 +271,11 @@ export interface Page {
   'scanned' : bigint,
   'revision' : bigint,
 }
+export interface Page__1 {
+  'next' : [] | [Cursor],
+  'assets' : Array<Asset>,
+  'scanned' : bigint,
+}
 export interface Reaction {
   'kind' : string,
   'user' : Principal,
@@ -280,6 +300,8 @@ export interface Request {
   'subjects' : Array<Principal>,
   'generation' : bigint,
 }
+export type Result = { 'Ok' : Page__1 } |
+  { 'Err' : string };
 export interface RoleGrant {
   'role' : string,
   'user' : Principal,
