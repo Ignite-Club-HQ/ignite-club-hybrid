@@ -228,7 +228,7 @@ function writeFeedSnapshot(principal: string, feed: LiveMediaFeed) {
   }
 }
 
-async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: LiveMediaFeed) => void): Promise<LiveMediaFeed> {
+export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (feed: LiveMediaFeed) => void): Promise<LiveMediaFeed> {
   // list_clubs returns every club on the canister, so scope it to the
   // caller's own role grants — same membership the Clubs page uses.
   const grants = await getLiveMyRoleGrants(ctx);
