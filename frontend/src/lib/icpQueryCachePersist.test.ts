@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { snapshotQuery, startIcpQueryCachePersist } from './icpQueryCachePersist';
+import { snapshotQuery, startIcpQueryCachePersist, restoreIcpQueryCache, clearPersistedIcpQueryCache } from './icpQueryCachePersist';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 function result(data: unknown, key = ['clubs'], meta?: Record<string, unknown>) {
@@ -41,5 +41,89 @@ describe('bounded ICP snapshots', () => {
     expect(subscribe).toHaveBeenCalledTimes(2);
     stop1(); stop2();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+// Minimal transaction harness: completions are asynchronous, just like IDB.
+function storageHarness() {
+  const rows = new Map<string, unknown>();
+  const opens: Array<() => void> = [];
+  let hold = false;
+  const db = {
+    close: vi.fn(),
+    transaction: () => {
+      const tx: { oncomplete?: () => void; objectStore: () => unknown } = {
+        objectStore: () => ({
+          getAll: () => ({ result: [...rows.values()] }),
+          put: (row: unknown, key: string) => { rows.set(key, structuredClone(row)); return { result: key }; },
+          delete: (key: string) => { rows.delete(key); return { result: undefined }; },
+          clear: () => { rows.clear(); return { result: undefined }; },
+        }),
+      };
+      queueMicrotask(() => tx.oncomplete?.());
+      return tx;
+    },
+  };
+  vi.stubGlobal('indexedDB', { open: () => {
+    const req: { result: typeof db; onsuccess?: () => void } = { result: db };
+    const finish = () => req.onsuccess?.();
+    if (hold) opens.push(finish); else queueMicrotask(finish);
+    return req;
+  } });
+  return { rows, delay: () => { hold = true; }, release: () => { hold = false; opens.splice(0).forEach(f => f()); } };
+}
+describe('account and transaction lifecycle', () => {
+  it('writes a changed query and restores its exact bigint shape', async () => {
+    vi.useFakeTimers(); const storage = storageHarness();
+    const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+    const stop = startIcpQueryCachePersist(client, true, () => 'alice:target-a');
+    client.setQueryData(['clubs'], [{ id: 'g1', revision: 7n }]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(storage.rows.size).toBe(1);
+    const restored = new QueryClient();
+    await restoreIcpQueryCache(restored, true, 400, () => 'alice:target-a');
+    expect(restored.getQueryData(['clubs'])).toEqual([{ id: 'g1', revision: 7n }]);
+    stop();
+  });
+  it('does not hydrate another target or account', async () => {
+    const storage = storageHarness(); const value = result([{ id: 'private-club' }]);
+    if (!value) throw new Error('missing snapshot');
+    storage.rows.set('clubs', { ...value, scope: 'alice:target-a', savedAt: Date.now() });
+    const client = new QueryClient();
+    await restoreIcpQueryCache(client, true, 400, () => 'bob:target-a');
+    expect(client.getQueryData(['clubs'])).toBeUndefined();
+    await restoreIcpQueryCache(client, true, 400, () => 'alice:target-b');
+    expect(client.getQueryData(['clubs'])).toBeUndefined();
+  });
+  it('rejects hydration completing after an account change', async () => {
+    const storage = storageHarness(); const value = result(['private']);
+    if (!value) throw new Error('missing snapshot');
+    storage.rows.set('clubs', { ...value, scope: 'alice', savedAt: Date.now() });
+    storage.delay(); let owner = 'alice'; const client = new QueryClient();
+    const restoring = restoreIcpQueryCache(client, true, 400, () => owner);
+    owner = 'bob'; storage.release(); await restoring;
+    expect(client.getQueryData(['clubs'])).toBeUndefined();
+  });
+  it('rejects late hydration after the startup time budget expires', async () => {
+    vi.useFakeTimers(); const storage = storageHarness(); const value = result(['private']);
+    if (!value) throw new Error('missing snapshot');
+    storage.rows.set('clubs', { ...value, scope: 'alice', savedAt: Date.now() });
+    storage.delay(); const client = new QueryClient();
+    const restoring = restoreIcpQueryCache(client, true, 400, () => 'alice');
+    await vi.advanceTimersByTimeAsync(401); await restoring;
+    storage.release(); await Promise.resolve(); await Promise.resolve();
+    expect(client.getQueryData(['clubs'])).toBeUndefined();
+  });
+  it('clears old snapshots and still persists after a new sign-in', async () => {
+    vi.useFakeTimers(); const storage = storageHarness(); let owner: string | null = 'alice';
+    const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+    const stop = startIcpQueryCachePersist(client, true, () => owner);
+    client.setQueryData(['clubs'], ['alice-club']); await vi.advanceTimersByTimeAsync(100);
+    expect(storage.rows.size).toBe(1);
+    owner = null; client.clear(); await clearPersistedIcpQueryCache();
+    expect(storage.rows.size).toBe(0);
+    owner = 'bob'; client.setQueryData(['clubs'], ['bob-club']); await vi.advanceTimersByTimeAsync(100);
+    expect([...storage.rows.values()]).toEqual([expect.objectContaining({ scope: 'bob', snapshot: expect.objectContaining({ state: expect.objectContaining({ data: ['bob-club'] }) }) })]);
+    stop();
   });
 });
