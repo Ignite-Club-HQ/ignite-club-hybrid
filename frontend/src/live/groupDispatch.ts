@@ -49,9 +49,10 @@ const owners = new Map<string, string | null>(); // kind:id -> club (null = shar
 const inflight = new Map<string, Promise<string | null>>();
 let loadedFor: string | null = null;
 let cached: { principal: string; targetKey: string; session: Promise<Session> } | null = null;
-export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); reopening = null; }
+export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); hostedChecked.clear(); reopening = null; }
 // Clubs confirmed (after one reopen) to have no group assignment: legacy/shared.
 const unplaced = new Set<string>();
+const hostedChecked = new Set<string>();
 let reopening: Promise<void> | null = null;
 
 /** A club created or joined after the session opened is missing from it and
@@ -89,6 +90,26 @@ async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendCont
   if (!cached || cached.principal !== principal || cached.targetKey !== targetKey) { clearGroupDispatchCache(); cached = { principal, targetKey, session: deps.open(ctx) }; }
   hydrate(deps, principal);
   try { return { ctx, s: await cached.session, principal }; } catch (e) { cached = null; throw e; }
+}
+
+/** Resolve a scope to its club. A remembered owner (device cache) whose club
+ * this session doesn't place is re-checked: reopen once (newly created club),
+ * otherwise forget the cached answer and probe the groups as before, so an
+ * original-group club falls back to the shared canisters instead of failing. */
+async function resolveScoped(deps: DispatchDeps, scope: EntityScope) {
+  if ('clubId' in scope) { const r = await sessionKnowing(deps, scope.clubId); return { ...r, club: scope.clubId as string | null }; }
+  let r = await sessionFor(deps);
+  let club = await resolveClub(deps, r.s, r.principal, scope);
+  if (club && !r.s.isAssigned(club) && !hostedChecked.has(club)) {
+    r = await sessionKnowing(deps, club);
+    if (!r.s.isAssigned(club)) {
+      for (const [k, v] of owners) if (v === club) owners.delete(k);
+      persist(deps, r.principal);
+      club = await resolveClub(deps, r.s, r.principal, scope);
+      if (club) hostedChecked.add(club); // a group really claims it: hosted, keep
+    }
+  }
+  return { ...r, club };
 }
 
 /** Resolve an entity to its club by asking each of the member's groups at once.
@@ -129,8 +150,10 @@ export function createClubDispatcher(deps: DispatchDeps) {
      * later (e.g. from a notification) needs no group probe. Free when off. */
     remember: async (kind: 'event' | 'conversation' | 'team' | 'miniLeague', pairs: ReadonlyArray<readonly [string, string]>): Promise<void> => {
       if (pairs.length === 0 || !await active()) return;
-      const { principal } = await sessionFor(deps);
-      for (const [id, club] of pairs) owners.set(`${kind}:${id}`, club);
+      const { s, principal } = await sessionFor(deps);
+      // Only group-placed clubs: an original-group (unplaced) club's items live
+      // on the shared canisters and must not be sent to the hosted lookup.
+      for (const [id, club] of pairs) if (s.isAssigned(club)) owners.set(`${kind}:${id}`, club);
       persist(deps, principal);
     },
     /** Data spanning the caller's clubs: shared canisters + every group, asked
@@ -152,7 +175,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
     /** Scope by event, chat, team or club; resolves the owning club first. */
     readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
-      const { s, principal } = await sessionKnowing(deps, 'clubId' in scope ? scope.clubId : null); const club = await resolveClub(deps, s, principal, scope);
+      const { s, principal, club } = await resolveScoped(deps, scope);
       if (club && !s.isAssigned(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
         return s.readHosted(club, domain, fn);
@@ -161,7 +184,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
     },
     writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
-      const { s, principal } = await sessionKnowing(deps, 'clubId' in scope ? scope.clubId : null); const club = await resolveClub(deps, s, principal, scope);
+      const { s, club } = await resolveScoped(deps, scope);
       if (club && !s.isAssigned(club) && !('clubId' in scope)) {
         if (!s.readHosted) throw new Error('Hosted club lookup unavailable');
         // Location only, one attempt: the destination verifies the actual
